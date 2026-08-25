@@ -522,39 +522,58 @@ namespace RNAssistant.Office.Tools
 
         private static string SkillReadSchema()
         {
+            var properties = new JObject
+            {
+                ["id"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["description"] = "Exact skill id from RUNTIME_CONTEXT.skills; omit all arguments only to list metadata.",
+                    ["maxLength"] = 128
+                },
+                ["referencePath"] = new JObject
+                {
+                    ["type"] = "string",
+                    ["description"] = "Exact references/*.md path listed by a previously loaded skill.",
+                    ["maxLength"] = 260
+                },
+                ["offset"] = new JObject
+                {
+                    ["type"] = "integer",
+                    ["description"] = "Zero-based character offset for a reference chunk; valid only with referencePath.",
+                    ["minimum"] = 0
+                },
+                ["maxChars"] = new JObject
+                {
+                    ["type"] = "integer",
+                    ["description"] = "Maximum reference characters returned; valid only with referencePath.",
+                    ["minimum"] = 1,
+                    ["maximum"] = 50000
+                }
+            };
+            Func<IEnumerable<string>, IEnumerable<string>, JObject> variant = (allowed, required) =>
+            {
+                var selected = new JObject();
+                foreach (var name in allowed) selected[name] = properties[name].DeepClone();
+                return new JObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = selected,
+                    ["required"] = new JArray(required),
+                    ["additionalProperties"] = false
+                };
+            };
             return new JObject
             {
                 ["type"] = "object",
-                ["properties"] = new JObject
-                {
-                    ["id"] = new JObject
-                    {
-                        ["type"] = "string",
-                        ["description"] = "Exact skill id from RUNTIME_CONTEXT.skills; omit only to list metadata.",
-                        ["maxLength"] = 128
-                    },
-                    ["referencePath"] = new JObject
-                    {
-                        ["type"] = "string",
-                        ["description"] = "Exact references/*.md path listed by a previously loaded skill.",
-                        ["maxLength"] = 260
-                    },
-                    ["offset"] = new JObject
-                    {
-                        ["type"] = "integer",
-                        ["description"] = "Zero-based character offset for a reference chunk.",
-                        ["minimum"] = 0
-                    },
-                    ["maxChars"] = new JObject
-                    {
-                        ["type"] = "integer",
-                        ["description"] = "Maximum reference characters returned; use a smaller value after data.truncated=true.",
-                        ["minimum"] = 1,
-                        ["maximum"] = 50000
-                    }
-                },
+                ["properties"] = properties,
                 ["required"] = new JArray(),
-                ["additionalProperties"] = false
+                ["additionalProperties"] = false,
+                ["anyOf"] = new JArray
+                {
+                    variant(new string[0], new string[0]),
+                    variant(new[] { "id" }, new[] { "id" }),
+                    variant(new[] { "id", "referencePath", "offset", "maxChars" }, new[] { "id", "referencePath" })
+                }
             }.ToString(Formatting.None);
         }
 

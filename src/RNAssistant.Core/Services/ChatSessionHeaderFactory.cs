@@ -32,7 +32,6 @@ namespace RNAssistant.Core.Services
                 Title = session.Title,
                 Model = session.Model,
                 Mode = ChatModes.Normalize(session.Mode),
-                HtmlModeEnabled = session.HtmlModeEnabled,
                 ReasoningEnabled = session.ReasoningEnabled,
                 HasHtmlWorkspace = htmlFileCount > 0 || htmlDataSourceCount > 0,
                 HtmlFileCount = htmlFileCount,

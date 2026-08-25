@@ -27,13 +27,16 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(
                 "common.prompts_save",
                 "Common",
-                "Mutates settings: Update RNAssistant Agent, Chat, compaction, or title prompts after the user asks to edit them.",
+                "Mutates settings: Update any editable RNAssistant model prompt after the user asks to edit it. Agent general, tool-use, and skill-loading policies are separate fields but are composed into one instruction message at runtime. Compatibility probes remain fixed so their diagnostics stay trustworthy.",
                 "{\"type\":\"object\",\"properties\":{" +
-                    "\"systemPrompt\":{\"type\":\"string\",\"description\":\"Complete Agent-mode Markdown prompt.\",\"maxLength\":100000}," +
+                    "\"systemPrompt\":{\"type\":\"string\",\"description\":\"General Agent-mode Markdown: role, runtime context, response contract, and completion rules.\",\"maxLength\":100000}," +
+                    "\"agentToolsPrompt\":{\"type\":\"string\",\"description\":\"Agent-wide tool selection and execution policy; tool-specific input details remain in each tool schema.\",\"maxLength\":100000}," +
+                    "\"agentSkillsPrompt\":{\"type\":\"string\",\"description\":\"Agent skill discovery, mandatory loading evidence, reference reading, and precedence policy.\",\"maxLength\":100000}," +
                     "\"chatSystemPrompt\":{\"type\":\"string\",\"description\":\"Complete tool-free Chat-mode Markdown prompt.\",\"maxLength\":100000}," +
                     "\"systemPromptRole\":{\"type\":\"string\",\"description\":\"Message role used for prompt instructions.\",\"enum\":[\"developer\",\"system\",\"user\"]}," +
                     "\"contextCompactionPrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to compact completed history.\",\"maxLength\":100000}," +
-                    "\"chatTitlePrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to generate chat titles.\",\"maxLength\":100000}}," +
+                    "\"chatTitlePrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to generate chat titles.\",\"maxLength\":100000}," +
+                    "\"attachmentAnalysisPrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used by the auxiliary image/audio attachment analysis worker.\",\"maxLength\":100000}}," +
                     "\"required\":[],\"additionalProperties\":false}",
                 mutatesLocalState: true,
                 requiresConfirmation: true,
@@ -84,12 +87,17 @@ namespace RNAssistant.Office.Tools
             var source = _loadSettings() ?? new AppSettings();
             var settings = source.Clone();
             ApplyIfPresent(command, "systemPrompt", value => settings.SystemPrompt = value);
+            ApplyIfPresent(command, "agentToolsPrompt", value => settings.AgentToolsPrompt = value);
+            ApplyIfPresent(command, "agentSkillsPrompt", value => settings.AgentSkillsPrompt = value);
             ApplyIfPresent(command, "chatSystemPrompt", value => settings.ChatSystemPrompt = value);
             ApplyIfPresent(command, "systemPromptRole", value => settings.SystemPromptRole = NormalizePromptRole(value));
             ApplyIfPresent(command, "contextCompactionPrompt", value => settings.ContextCompactionPrompt = value);
             ApplyIfPresent(command, "chatTitlePrompt", value => settings.ChatTitlePrompt = value);
-            if (PromptTooLarge(settings.SystemPrompt) || PromptTooLarge(settings.ChatSystemPrompt) ||
-                PromptTooLarge(settings.ContextCompactionPrompt) || PromptTooLarge(settings.ChatTitlePrompt))
+            ApplyIfPresent(command, "attachmentAnalysisPrompt", value => settings.AttachmentAnalysisPrompt = value);
+            if (PromptTooLarge(settings.SystemPrompt) || PromptTooLarge(settings.AgentToolsPrompt) ||
+                PromptTooLarge(settings.AgentSkillsPrompt) || PromptTooLarge(settings.ChatSystemPrompt) ||
+                PromptTooLarge(settings.ContextCompactionPrompt) || PromptTooLarge(settings.ChatTitlePrompt) ||
+                PromptTooLarge(settings.AttachmentAnalysisPrompt))
             {
                 return ToolResult.Fail("Prompt template exceeds the 100000 character limit.", null, "prompt_too_large", false);
             }
@@ -121,10 +129,13 @@ namespace RNAssistant.Office.Tools
             {
                 format = "markdown",
                 systemPrompt = settings.SystemPrompt,
+                agentToolsPrompt = settings.AgentToolsPrompt,
+                agentSkillsPrompt = settings.AgentSkillsPrompt,
                 chatSystemPrompt = settings.ChatSystemPrompt,
                 systemPromptRole = settings.SystemPromptRole,
                 contextCompactionPrompt = settings.ContextCompactionPrompt,
-                chatTitlePrompt = settings.ChatTitlePrompt
+                chatTitlePrompt = settings.ChatTitlePrompt,
+                attachmentAnalysisPrompt = settings.AttachmentAnalysisPrompt
             };
         }
 

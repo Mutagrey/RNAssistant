@@ -547,12 +547,6 @@ namespace RNAssistant.Office.Contracts
         public string Mode { get; set; }
     }
 
-    public sealed class SetChatHtmlModePayload : ChatPayload
-    {
-        [JsonProperty("enabled")]
-        public bool? Enabled { get; set; }
-    }
-
     public sealed class SetChatReasoningPayload : ChatPayload
     {
         [JsonProperty("enabled")]
@@ -1741,9 +1735,6 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("activeChatMode")]
         public string ActiveChatMode { get; set; }
 
-        [JsonProperty("activeChatHtmlMode")]
-        public bool ActiveChatHtmlMode { get; set; }
-
         [JsonProperty("activeChatReasoning")]
         public bool ActiveChatReasoning { get; set; }
 
@@ -1803,9 +1794,6 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("activeChatMode")]
         public string ActiveChatMode { get; set; }
-
-        [JsonProperty("activeChatHtmlMode")]
-        public bool ActiveChatHtmlMode { get; set; }
 
         [JsonProperty("activeChatReasoning")]
         public bool ActiveChatReasoning { get; set; }

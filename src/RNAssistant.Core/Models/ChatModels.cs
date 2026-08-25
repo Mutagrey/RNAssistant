@@ -211,7 +211,6 @@ namespace RNAssistant.Core.Models
         public string Title { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }
-        public bool HtmlModeEnabled { get; set; }
         public bool ReasoningEnabled { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
@@ -291,7 +290,6 @@ namespace RNAssistant.Core.Models
         public string Title { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }
-        public bool HtmlModeEnabled { get; set; }
         public bool ReasoningEnabled { get; set; }
         public bool HasHtmlWorkspace { get; set; }
         public int HtmlFileCount { get; set; }
@@ -324,7 +322,6 @@ namespace RNAssistant.Core.Models
         public string Title { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }
-        public bool HtmlModeEnabled { get; set; }
         public bool ReasoningEnabled { get; set; }
         public bool HasHtmlWorkspace { get; set; }
         public int HtmlFileCount { get; set; }

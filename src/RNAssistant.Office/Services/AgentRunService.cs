@@ -214,7 +214,7 @@ namespace RNAssistant.Office.Services
                     Math.Min(AppSettings.MaximumAgentFormatRetries, configuredFormatRetries));
                 for (var retry = 1; !parsed.Success && retry <= maxFormatRetries; retry++)
                 {
-                    Report(progress, "thinking", "Модель исправляет формат ответа... (" + retry + "/" + maxFormatRetries + ")", null);
+                    Report(progress, "thinking", "Модель исправляет структуру ответа... (" + retry + "/" + maxFormatRetries + ")", null);
                     var repairMessages = new List<ChatMessage>(messages)
                     {
                         AgentJsonProtocol.CreateFormatRepairMessage(parsed.Error, retry, maxFormatRetries)

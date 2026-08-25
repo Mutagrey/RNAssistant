@@ -7,7 +7,7 @@ RNAssistant has two explicit modes.
 
 ## Agent context
 
-Every Agent request contains the editable Markdown `SystemPrompt` and one `RUNTIME_CONTEXT` JSON object. Its instruction role is selected independently as `developer` (default), `system`, or `user`:
+Every Agent request contains one stable editable instruction composed, in order, from general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown, followed by one dynamic `RUNTIME_CONTEXT` JSON object. Its instruction role is selected independently as `developer` (default), `system`, or `user`:
 
 - current host and document identity;
 - every enabled, schema-valid tool that the agent may run in this request;
@@ -18,7 +18,7 @@ Visible planning is optional data, not a protocol phase. `common.plan_create/rea
 
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
-When a catalog description matches the task, the model calls `common.skills_read` with the exact id. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. A revision is loaded only while that exact top-level evidence remains in active model context. Generic bounding replaces oversized data with top-level `truncated:true` and therefore cannot preserve a false loaded marker. Compaction or a revision mismatch requires another core read; an unchanged truncated core read is not retried.
+The catalog is metadata only: a listed name/description does not load or replace the skill Markdown. When the user names a skill or a catalog description clearly matches the task, the model calls `common.skills_read` with the exact id before skill-governed work. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. A revision is loaded only while that exact top-level evidence remains in active model context. Generic bounding replaces oversized data with top-level `truncated:true` and therefore cannot preserve a false loaded marker. Compaction or a revision mismatch requires another core read; an unchanged truncated core read is not retried.
 
 A custom skill package may contain up to 64 direct UTF-8 `references/*.md` files. Their paths, byte sizes, and content revisions are listed by the core read without bodies and are included in the package revision. The model reads only a needed reference through the same tool using exact `referencePath`; optional zero-based `offset` and `maxChars` produce bounded chunks with `nextOffset`. A reference chunk is ordinary context evidence but never loads the core skill. `common.skills_upsert` writes one reference when both `referencePath` and `referenceMarkdown` are supplied; `common.skills_delete` removes one when `referencePath` is supplied. Core and reference mutations are separate confirmed calls, and each reference mutation changes the package revision. Several clearly relevant skills may be read independently. There is no router or activation state.
 
@@ -86,11 +86,15 @@ Final answer or clarification:
 }
 ```
 
+An empty `tool_calls` array ends the run. It must not accompany an unfinished action promise. While runnable tools exist, the parser conservatively rejects short Russian or English progress-only messages such as “создаю…” or “checking…” with no call and sends them through the ordinary bounded format-repair path. A concrete answer, clarification, refusal, completion, or inability remains a valid terminal response.
+
 The parser accepts one or more calls, requires a non-empty user-facing `message` for every tool turn, requires call ids to be unique within that response, and checks each exact tool name. The executor validates every argument object against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. The pending id, cumulative iteration/tool-step counters, and execution fingerprint of that tool and its pipeline dependencies are persisted with the chat, so confirmation survives a WebView or Office restart but cannot execute a replaced definition. Cosmetic changes to unrelated tools do not invalidate it. A new request in that chat is blocked until the action is confirmed or cancelled. After confirmation, the model receives that result and chooses the remaining work normally using the remaining original budget. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
 
 If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A refusal remains valid user-facing content when returned in `message` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
+
+The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections plus `ChatSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
 
 ## Tool result
 
@@ -116,6 +120,7 @@ Chat-local plan/HTML mutations are serialized by the per-chat lease. HTML bindin
 
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.
 - Confirmation and mutation safety remain local executor rules.
+- HTML workspace is an ordinary Agent capability, not a separate chat mode or preference flag; the model chooses it from the request and tool catalog.
 - Agent mode remains available for an archived or closed document. Its request catalog keeps document-independent local tools, including HTML workspace tools, while Office/VBA tools and Office-backed HTML bindings are omitted until that document is open again.
 - Every Agent run pins both the stable document key and runtime COM identity. The UI/STA adapter accepts either matching identity so COM proxy changes and document-key migration do not create false switches; when neither matches, it returns non-retryable `active_document_changed` before starting the Office tool.
 - Maximum iterations and maximum tool steps bound execution.

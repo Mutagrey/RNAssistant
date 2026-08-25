@@ -31,7 +31,6 @@ namespace RNAssistant.Office.Services
                 Title = session.Title,
                 Model = session.Model,
                 Mode = session.Mode,
-                HtmlModeEnabled = session.HtmlModeEnabled,
                 ReasoningEnabled = session.ReasoningEnabled,
                 CreatedUtc = session.CreatedUtc,
                 UpdatedUtc = session.UpdatedUtc,

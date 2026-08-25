@@ -360,6 +360,90 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaInsertPatchPreservesCompleteLines()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "Option Explicit\r\nPublic Sub Run()\r\nDebug.Print 1\r\nEnd Sub";
+                var result = executor.Execute(
+                    Command(
+                        "common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(
+                            new JObject
+                            {
+                                ["op"] = "insertBefore",
+                                ["find"] = "Debug.Print",
+                                ["text"] = "\nDim value As Long\n"
+                            },
+                            new JObject
+                            {
+                                ["op"] = "insertAfter",
+                                ["find"] = "Debug.Print 1",
+                                ["text"] = "value = 2"
+                            })),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+
+                AssertTrue(result.Success, "partial-line anchors patch successfully");
+                AssertEqual(
+                    "Option Explicit\r\nPublic Sub Run()\r\nDim value As Long\r\nDebug.Print 1\r\nvalue = 2\r\nEnd Sub",
+                    adapter.VbaModuleCode,
+                    "insertions target whole lines and preserve CRLF");
+                AssertTrue(adapter.VbaModuleCode.IndexOf("Debug.Print\r\n", StringComparison.Ordinal) < 0,
+                    "partial anchor never splits its containing VBA statement");
+            });
+
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "A\r\nB\r\n";
+                var appended = executor.Execute(
+                    Command(
+                        "common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["op"] = "replaceLines",
+                            ["startLine"] = 3,
+                            ["deleteCount"] = 0,
+                            ["text"] = "C\r\n"
+                        })),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+
+                AssertTrue(appended.Success, "line insertion may append after the last logical line");
+                AssertEqual("A\r\nB\r\nC\r\n", adapter.VbaModuleCode,
+                    "replaceLines preserves one existing transport terminator without a phantom blank line");
+            });
+
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "A\r\n";
+                var appended = executor.Execute(
+                    Command(
+                        "common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["op"] = "insertAfter",
+                            ["find"] = "A",
+                            ["text"] = "B"
+                        })),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+
+                AssertTrue(appended.Success, "insertAfter may append to a terminated module");
+                AssertEqual("A\r\nB\r\n", adapter.VbaModuleCode,
+                    "insertAfter preserves the module's final transport terminator");
+            });
+        }
+
         private static void VbaInvalidStateBlocksWrite()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -584,7 +668,16 @@ namespace RNAssistant.Harness
                 skill.Id,
                 "common.vba_code_editing",
                 StringComparison.OrdinalIgnoreCase));
-            AssertContains(editing.BodyMarkdown, "Code-only runtime controls created from source are supported", "general VBA editing points to the focused profile");
+            AssertContains(editing.Description, "Use whenever a request changes VBA source", "catalog reliably triggers VBA editing guidance");
+            AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
+            AssertContains(editing.BodyMarkdown, "complete source line", "insertions preserve full VBA statements");
+            AssertContains(editing.BodyMarkdown, "never imitate rename with write plus delete", "skill forbids unsafe rename emulation");
+            AssertContains(editing.BodyMarkdown, "Option Explicit", "skill includes baseline VBA code quality");
+            AssertContains(editing.BodyMarkdown, "complete Option block", "skill preserves all leading Option directives");
+            AssertContains(editing.BodyMarkdown, "PtrSafe", "skill covers Office x64 declarations");
+            AssertContains(editing.BodyMarkdown, "VBE-equivalent source read-back", "skill describes normalized verification precisely");
+            AssertContains(editing.BodyMarkdown, "does not prove VBA compilation or runtime behavior", "read-back is not overstated as functional validation");
+            AssertContains(editing.BodyMarkdown, "common.vba_userform_authoring", "general VBA editing points to the focused UserForm profile");
         }
 
         private static void VbaReadLinesReturnsExactRange()

@@ -298,17 +298,30 @@ namespace RNAssistant.Harness
                         JObject schema;
                         string schemaError;
                         AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out schemaError), tool.Id + " schema: " + schemaError);
-                        var arguments = MinimalValidArguments(schema);
-                        string argumentError;
-                        AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError), tool.Id + " minimal arguments: " + argumentError);
-                        var command = new ToolCommand { ToolId = tool.Id };
-                        ToolArgumentNormalizer.AddProperties(arguments, command.Arguments);
-                        var result = executor.Execute(command, catalog.Value, new AppSettings { AutoConfirmToolActions = true }, false, true);
-                        AssertTrue(result == null || !string.Equals(result.ErrorCode, "unknown_tool", StringComparison.OrdinalIgnoreCase), tool.Id + " dispatch is registered");
-                        AssertTrue(result == null || !string.Equals(result.ErrorCode, "invalid_arguments", StringComparison.OrdinalIgnoreCase), tool.Id + " published schema reaches its handler");
+                        var variants = schema["anyOf"] is JArray
+                            ? ((JArray)schema["anyOf"]).OfType<JObject>().ToArray()
+                            : new[] { schema };
+                        foreach (var variant in variants)
+                        {
+                            var arguments = MinimalValidArguments(variant);
+                            string argumentError;
+                            AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError), tool.Id + " variant arguments: " + argumentError);
+                            var command = new ToolCommand { ToolId = tool.Id };
+                            ToolArgumentNormalizer.AddProperties(arguments, command.Arguments);
+                            var result = executor.Execute(command, catalog.Value, new AppSettings { AutoConfirmToolActions = true }, false, true);
+                            AssertTrue(result == null || !string.Equals(result.ErrorCode, "unknown_tool", StringComparison.OrdinalIgnoreCase), tool.Id + " dispatch is registered");
+                            AssertTrue(result == null || !string.Equals(result.ErrorCode, "invalid_arguments", StringComparison.OrdinalIgnoreCase), tool.Id + " published schema reaches its handler");
+                        }
                     }
                 });
             }
+
+            JObject readRangeSchema;
+            string readRangeSchemaError;
+            AssertTrue(ToolSchemaSupport.TryParse(FindTool(excel, "excel.read_range"), out readRangeSchema, out readRangeSchemaError), "excel.read_range schema parses");
+            string invalidRangeError;
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject { ["kind"] = "values" }, readRangeSchema, true, out invalidRangeError), "excel.read_range rejects foreign kind");
+            AssertContains(invalidRangeError, "kind", "excel.read_range invalid field diagnostic");
         }
 
         private static JObject MinimalValidArguments(JObject schema)
@@ -383,6 +396,23 @@ namespace RNAssistant.Harness
                 AssertTrue(prompt.IndexOf("\"optional\"", StringComparison.OrdinalIgnoreCase) < 0, "prompt has no literal optional args");
                 AssertContains(prompt, "common.tools_validate", "prompt includes tool validation");
                 AssertContains(prompt, "common.prompts_read", "prompt includes prompt reader");
+
+                var promptTools = AgentPromptComposer.BuildTools(tools);
+                var bindParameters = (JObject)promptTools.OfType<JObject>()
+                    .Single(item => string.Equals((string)item.SelectToken("function.name"), HtmlArtifactToolExecutor.BindDataToolId, StringComparison.OrdinalIgnoreCase))
+                    .SelectToken("function.parameters");
+                AssertTrue(bindParameters["properties"] == null && bindParameters["anyOf"] is JArray,
+                    "prompt removes the misleading HTML bind union envelope");
+                var rangeBranch = ((JArray)bindParameters["anyOf"]).OfType<JObject>().Single(item =>
+                    string.Equals((string)item.SelectToken("properties.sourceTool.enum[0]"), "excel.read_range", StringComparison.OrdinalIgnoreCase));
+                AssertTrue(rangeBranch.SelectToken("properties.sourceArguments.properties.kind") == null,
+                    "prompt does not advertise inspect.kind for bound excel.read_range");
+
+                var skillParameters = (JObject)promptTools.OfType<JObject>()
+                    .Single(item => string.Equals((string)item.SelectToken("function.name"), "common.skills_upsert", StringComparison.OrdinalIgnoreCase))
+                    .SelectToken("function.parameters");
+                AssertTrue(skillParameters["properties"] == null && ((JArray)skillParameters["anyOf"]).Count == 2,
+                    "prompt exposes separate skill core and reference calls without a mixed union envelope");
             });
         }
 

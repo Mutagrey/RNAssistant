@@ -89,6 +89,8 @@ namespace RNAssistant.Harness
                 false);
 
             AssertTrue(result.UsedTokens > 0, "inspector estimates prompt tokens");
+            AssertTrue(result.Sections.Any(section => section.Id == "tool_instructions"), "separate tool prompt cost is visible");
+            AssertTrue(result.Sections.Any(section => section.Id == "skill_instructions"), "separate skill prompt cost is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "tools"), "tool schemas are visible");
             AssertTrue(result.Sections.Any(section => section.Id == "skills"), "skill catalog is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "tool_history"), "tool protocol history is visible");

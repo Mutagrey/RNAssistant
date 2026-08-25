@@ -36,7 +36,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(ToolId("vba_read_module"), "Common", "Read-only: List VBA component metadata when moduleName is omitted, or read one component when it is supplied. Omit startLine/lineCount for the whole source. Runtime resolves case and safely normalizable names.", ReadModuleSchema());
             yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), "Common", "Read-only: Search literal or regex patterns across VBA component code. Use moduleName only to limit the search to one component.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1,\"maxLength\":2048},\"moduleName\":{\"type\":\"string\",\"description\":\"Optional VBA component name; safely normalizable names are resolved by runtime.\",\"maxLength\":255},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100,\"minimum\":1,\"maximum\":500},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80,\"minimum\":0,\"maximum\":1000}},\"required\":[\"query\"],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), "Common", "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted. Runtime snapshots current state before confirmation.", RestoreBackupSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document: The only public tool that creates a missing VBA component. Pass its complete source: mode=upsert creates when missing and replaces whole source when present. Runtime normalizes invalid new names, snapshots existing code, creates a rollback backup, and verifies read-back. componentType is used only on creation; MSForm means code-behind only.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document: The only public tool that creates a missing VBA component. Pass its complete source: mode=upsert creates when missing and replaces whole source when present. Runtime normalizes invalid new names, snapshots existing code, creates a rollback backup, and verifies read-back. componentType is used only on creation; MSForm means code-behind only. This tool does not rename components: a different missing moduleName creates a separate component, so never emulate rename with write+delete.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), "Common", "Mutates document: Patch an existing VBA component only; it never creates modules. Runtime reads and snapshots the target itself, so a separate read is optional and only needed to discover code. Combine known edits for one module into one native JSON patch array. Use common.vba_write_module with complete source when the module is missing.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), "Common", "Mutates document: Delete an existing StdModule or ClassModule. Runtime reads it, validates the type, and creates a rollback backup; no separate read call is required. Document modules and UserForms are not deleted.", ModuleNameSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
         }
@@ -632,10 +632,12 @@ namespace RNAssistant.Office.Tools
 
             VbaModuleState module;
             ToolResult error;
-            if (!TryReadVbaModule(moduleName, 1000000, out module, out error))
+            string resolvedModuleName;
+            if (!TryReadExistingModule(moduleName, out resolvedModuleName, out module, out error))
             {
                 return error;
             }
+            moduleName = resolvedModuleName;
 
             var code = module.Code;
             var currentHash = CodeSha256(code);
@@ -1340,18 +1342,45 @@ namespace RNAssistant.Office.Tools
 
         private static string ReadModuleSchema()
         {
-            return "{\"type\":\"object\",\"properties\":{" +
-                "\"moduleName\":{\"type\":\"string\",\"description\":\"Optional VBA component name; omit to list component metadata.\",\"minLength\":1,\"maxLength\":255}," +
-                "\"startLine\":{\"type\":\"integer\",\"description\":\"Optional one-based first line for range mode; omit for the whole module.\",\"minimum\":1}," +
-                "\"lineCount\":{\"type\":\"integer\",\"description\":\"Optional maximum consecutive lines; when supplied alone, range mode starts at line 1. Runtime uses 200 when only startLine is supplied.\",\"minimum\":1,\"maximum\":500}," +
-                "\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum source characters in whole-module mode.\",\"default\":30000,\"minimum\":1,\"maximum\":1000000}" +
-                "},\"required\":[],\"additionalProperties\":false}";
+            var properties = new JObject
+            {
+                ["moduleName"] = new JObject { ["type"] = "string", ["description"] = "Exact VBA component name. Omit all arguments to list component metadata.", ["minLength"] = 1, ["maxLength"] = 255 },
+                ["startLine"] = new JObject { ["type"] = "integer", ["description"] = "One-based first line for range mode; supplied alone it returns up to 200 lines.", ["minimum"] = 1 },
+                ["lineCount"] = new JObject { ["type"] = "integer", ["description"] = "Maximum consecutive lines in range mode; supplied alone the range starts at line 1.", ["minimum"] = 1, ["maximum"] = 500 },
+                ["maxChars"] = new JObject { ["type"] = "integer", ["description"] = "Maximum source characters in whole-module mode.", ["default"] = 30000, ["minimum"] = 1, ["maximum"] = 1000000 }
+            };
+            Func<IEnumerable<string>, IEnumerable<string>, JObject> variant = (allowed, required) =>
+            {
+                var selected = new JObject();
+                foreach (var name in allowed) selected[name] = properties[name].DeepClone();
+                return new JObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = selected,
+                    ["required"] = new JArray(required),
+                    ["additionalProperties"] = false
+                };
+            };
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = new JArray(),
+                ["additionalProperties"] = false,
+                ["anyOf"] = new JArray
+                {
+                    variant(new string[0], new string[0]),
+                    variant(new[] { "moduleName", "maxChars" }, new[] { "moduleName" }),
+                    variant(new[] { "moduleName", "startLine", "lineCount" }, new[] { "moduleName", "startLine" }),
+                    variant(new[] { "moduleName", "lineCount" }, new[] { "moduleName", "lineCount" })
+                }
+            }.ToString(Formatting.None);
         }
 
         private static string WriteModuleSchema()
         {
             return "{\"type\":\"object\",\"properties\":{" +
-                "\"moduleName\":{\"type\":\"string\",\"description\":\"Desired VBA component name. Invalid punctuation, a non-letter prefix, and names over the VBE limit of 31 characters are normalized deterministically when creating; the result returns the actual name.\",\"minLength\":1,\"maxLength\":255}," +
+                "\"moduleName\":{\"type\":\"string\",\"description\":\"Exact target component name, not a rename destination. Invalid punctuation, a non-letter prefix, and names over the VBE limit of 31 characters are normalized deterministically only when creating; the result returns the actual name.\",\"minLength\":1,\"maxLength\":255}," +
                 "\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source or MSForm code-behind. Empty text intentionally clears an existing component or creates an empty one.\"}," +
                 "\"componentType\":{\"type\":\"string\",\"description\":\"Type used only if the component must be created.\",\"default\":\"StdModule\",\"enum\":[\"StdModule\",\"ClassModule\",\"MSForm\"]}," +
                 "\"mode\":{\"type\":\"string\",\"description\":\"upsert updates or creates automatically; createOnly/updateOnly are optional strict modes.\",\"default\":\"upsert\",\"enum\":[\"upsert\",\"createOnly\",\"updateOnly\"]}" +
@@ -1413,13 +1442,13 @@ namespace RNAssistant.Office.Tools
                     new JObject { ["find"] = find.DeepClone(), ["text"] = text.DeepClone() }, "find", "text"),
                 PatchOperationSchema("replaceFirst", "Replace the first exact occurrence.",
                     new JObject { ["find"] = find.DeepClone(), ["text"] = text.DeepClone() }, "find", "text"),
-                PatchOperationSchema("insertBefore", "Insert a non-empty line-safe block before one unique anchor.",
+                PatchOperationSchema("insertBefore", "Insert a non-empty VBA block before the complete line containing one unique exact anchor; a partial-line anchor never splits that line.",
                     new JObject
                     {
                         ["find"] = find.DeepClone(),
                         ["text"] = new JObject { ["type"] = "string", ["description"] = "Non-empty VBA block to insert.", ["minLength"] = 1 }
                     }, "find", "text"),
-                PatchOperationSchema("insertAfter", "Insert a non-empty line-safe block after one unique anchor.",
+                PatchOperationSchema("insertAfter", "Insert a non-empty VBA block after the complete line containing one unique exact anchor; a partial-line anchor never splits that line.",
                     new JObject
                     {
                         ["find"] = find.DeepClone(),

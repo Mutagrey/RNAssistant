@@ -23,9 +23,7 @@ namespace RNAssistant.Office.Services
             int historyBudgetTokens = 0)
         {
             settings = settings ?? new AppSettings();
-            var instruction = string.IsNullOrWhiteSpace(settings.SystemPrompt)
-                ? new AppSettings().SystemPrompt
-                : settings.SystemPrompt.Trim();
+            var instruction = BuildInstruction(settings);
             var runtimeContext = BuildRuntimeContext(adapter, tools, skills, context, session, settings);
             var role = NormalizeInstructionRole(settings.SystemPromptRole);
             var messages = new List<ChatMessage>();
@@ -83,6 +81,31 @@ namespace RNAssistant.Office.Services
             return messages;
         }
 
+        internal static string BuildInstruction(AppSettings settings)
+        {
+            return string.Join("\n\n", new[]
+            {
+                ResolveGeneralPrompt(settings),
+                ResolveToolPrompt(settings),
+                ResolveSkillPrompt(settings)
+            }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
+        }
+
+        internal static string ResolveGeneralPrompt(AppSettings settings)
+        {
+            return ResolvePrompt(settings == null ? null : settings.SystemPrompt, AgentPromptDefaults.GeneralInstructions);
+        }
+
+        internal static string ResolveToolPrompt(AppSettings settings)
+        {
+            return ResolvePrompt(settings == null ? null : settings.AgentToolsPrompt, AgentPromptDefaults.ToolInstructions);
+        }
+
+        internal static string ResolveSkillPrompt(AppSettings settings)
+        {
+            return ResolvePrompt(settings == null ? null : settings.AgentSkillsPrompt, AgentPromptDefaults.SkillInstructions);
+        }
+
         internal static string BuildRuntimeContext(
             IOfficeApplicationAdapter adapter,
             IReadOnlyList<ToolDefinition> tools,
@@ -117,10 +140,6 @@ namespace RNAssistant.Office.Services
                     ["office_tool_policy"] = officeToolsAvailable
                         ? "Office object-model tools may target this open document."
                         : "The chat document is closed or inactive. Do not call Office object-model tools until it is opened; continue with non-Office tools such as the HTML workspace when useful."
-                },
-                ["chat"] = new JObject
-                {
-                    ["html_workspace_preferred"] = session != null && session.HtmlModeEnabled
                 },
                 ["tools"] = BuildTools(tools),
                 ["skills"] = BuildSkills(skills),
@@ -165,7 +184,7 @@ namespace RNAssistant.Office.Services
                     {
                         ["name"] = tool.Id,
                         ["description"] = BuildDescription(tool),
-                        ["parameters"] = schema
+                        ["parameters"] = ToolSchemaSupport.ForPrompt(schema)
                     },
                     ["safety"] = new JObject
                     {
@@ -222,6 +241,13 @@ namespace RNAssistant.Office.Services
             if (string.Equals(role, "system", StringComparison.OrdinalIgnoreCase)) return "system";
             if (string.Equals(role, "user", StringComparison.OrdinalIgnoreCase)) return "user";
             return "developer";
+        }
+
+        private static string ResolvePrompt(string value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                ? (fallback ?? string.Empty).Trim()
+                : value.Trim();
         }
     }
 }

@@ -595,7 +595,6 @@ namespace RNAssistant.Office.Services
                 Title = header.Title,
                 Model = header.Model,
                 Mode = ChatModes.Normalize(header.Mode),
-                HtmlModeEnabled = header.HtmlModeEnabled,
                 ReasoningEnabled = header.ReasoningEnabled,
                 HasHtmlWorkspace = header.HasHtmlWorkspace,
                 HtmlFileCount = header.HtmlFileCount,

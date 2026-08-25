@@ -109,8 +109,8 @@ namespace RNAssistant.Office.Tools
         private static ToolResult InsertAtUniqueMatch(string current, string find, string text, bool before, out string updated)
         {
             updated = current;
-            if (string.IsNullOrEmpty(find)) return ToolResult.Fail("Patch insertion requires a non-empty anchor.");
-            if (string.IsNullOrEmpty(text)) return ToolResult.Fail("Patch insertion requires non-empty text.", null, "vba_patch_invalid", true);
+            if (string.IsNullOrWhiteSpace(find)) return ToolResult.Fail("Patch insertion requires a non-empty code anchor.");
+            if (string.IsNullOrWhiteSpace(text)) return ToolResult.Fail("Patch insertion requires non-empty VBA code.", null, "vba_patch_invalid", true);
             var count = CountOccurrences(current, find);
             if (count == 0) return ToolResult.Fail("Patch insertion anchor was not found.");
             if (count != 1)
@@ -126,8 +126,14 @@ namespace RNAssistant.Office.Tools
                     true);
             }
             var index = current.IndexOf(find, StringComparison.Ordinal);
-            var insertionIndex = before ? index : index + find.Length;
             var newline = CurrentNewLine(current);
+            text = TrimOneBoundaryLineBreak(text, true);
+            text = TrimOneBoundaryLineBreak(text, false);
+            var insertionIndex = before
+                ? StartOfContainingLine(current, FirstCodeCharacter(index, find))
+                : EndOfContainingLine(current, index, find.Length);
+            var preserveFinalTerminator = insertionIndex == current.Length && insertionIndex > 0 &&
+                IsLineBreak(current[insertionIndex - 1]);
             if (insertionIndex > 0 && !IsLineBreak(current[insertionIndex - 1]) && !StartsWithLineBreak(text))
             {
                 text = newline + text;
@@ -136,8 +142,52 @@ namespace RNAssistant.Office.Tools
             {
                 text += newline;
             }
+            else if (preserveFinalTerminator && !EndsWithLineBreak(text))
+            {
+                text += newline;
+            }
             updated = current.Insert(insertionIndex, text);
-            return ToolResult.Ok("Inserted a line-safe block " + (before ? "before" : "after") + " the unique anchor.");
+            return ToolResult.Ok("Inserted a VBA block " + (before ? "before" : "after") + " the complete line containing the unique anchor.");
+        }
+
+        private static int FirstCodeCharacter(int index, string find)
+        {
+            var offset = 0;
+            while (offset < find.Length && IsLineBreak(find[offset])) offset++;
+            return index + offset;
+        }
+
+        private static int StartOfContainingLine(string value, int index)
+        {
+            var result = Math.Max(0, Math.Min(index, (value ?? string.Empty).Length));
+            while (result > 0 && !IsLineBreak(value[result - 1])) result--;
+            return result;
+        }
+
+        private static int EndOfContainingLine(string value, int index, int matchLength)
+        {
+            value = value ?? string.Empty;
+            var matchEnd = Math.Max(index, Math.Min(value.Length, index + matchLength));
+            while (matchEnd > index && IsLineBreak(value[matchEnd - 1])) matchEnd--;
+            while (matchEnd < value.Length && !IsLineBreak(value[matchEnd])) matchEnd++;
+            if (matchEnd < value.Length && value[matchEnd] == '\r' &&
+                matchEnd + 1 < value.Length && value[matchEnd + 1] == '\n')
+            {
+                return matchEnd + 2;
+            }
+            return matchEnd < value.Length && IsLineBreak(value[matchEnd]) ? matchEnd + 1 : matchEnd;
+        }
+
+        private static string TrimOneBoundaryLineBreak(string value, bool leading)
+        {
+            if (string.IsNullOrEmpty(value)) return value;
+            if (leading)
+            {
+                if (value.StartsWith("\r\n", StringComparison.Ordinal)) return value.Substring(2);
+                return IsLineBreak(value[0]) ? value.Substring(1) : value;
+            }
+            if (value.EndsWith("\r\n", StringComparison.Ordinal)) return value.Substring(0, value.Length - 2);
+            return IsLineBreak(value[value.Length - 1]) ? value.Substring(0, value.Length - 1) : value;
         }
 
         private static string ReplaceFirst(string current, string find, string replacement)
@@ -189,8 +239,13 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("replaceLines requires startLine >= 1 and deleteCount >= 0.");
             }
 
-            var newline = current.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "\r\n" : "\n";
-            var lines = current.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
+            var newline = CurrentNewLine(current);
+            var normalized = (current ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            var hadFinalTerminator = normalized.EndsWith("\n", StringComparison.Ordinal);
+            if (hadFinalTerminator) normalized = normalized.Substring(0, normalized.Length - 1);
+            var lines = normalized.Length == 0
+                ? new System.Collections.Generic.List<string>()
+                : normalized.Split('\n').ToList();
             var index = startLine - 1;
             if (index > lines.Count)
             {
@@ -217,6 +272,7 @@ namespace RNAssistant.Office.Tools
             }
 
             updated = string.Join(newline, lines.ToArray());
+            if (hadFinalTerminator && updated.Length > 0) updated += newline;
             return ToolResult.Ok("Replaced lines at " + startLine + " deleting " + deleteCount + ".");
         }
 

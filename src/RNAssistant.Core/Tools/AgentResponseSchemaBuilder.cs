@@ -54,12 +54,13 @@ namespace RNAssistant.Core.Tools
                     {
                         ["type"] = "string",
                         ["minLength"] = 1,
-                        ["description"] = "Visible progress for a tool turn or the user-facing final answer."
+                        ["description"] = "Visible progress paired with actual calls in this response, or a completed final answer when tool_calls is empty."
                     },
                     ["tool_calls"] = new JObject
                     {
                         ["type"] = "array",
                         ["items"] = callItems,
+                        ["description"] = "Exact actions to execute now. An empty array is terminal and cannot accompany promised or unfinished progress.",
                         ["maxItems"] = callOptions.Count > 0 ? 32 : 0
                     }
                 },

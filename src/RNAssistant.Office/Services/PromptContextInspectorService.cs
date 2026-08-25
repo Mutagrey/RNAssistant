@@ -225,13 +225,17 @@ namespace RNAssistant.Office.Services
                 : 0;
 
             string instruction;
+            string agentGeneralInstruction = string.Empty;
+            string agentToolInstruction = string.Empty;
+            string agentSkillInstruction = string.Empty;
             string instructionEnvelope;
             string runtimeJson = string.Empty;
             if (mode == ChatModes.Agent)
             {
-                instruction = string.IsNullOrWhiteSpace(settings.SystemPrompt)
-                    ? new AppSettings().SystemPrompt
-                    : settings.SystemPrompt.Trim();
+                agentGeneralInstruction = AgentPromptComposer.ResolveGeneralPrompt(settings);
+                agentToolInstruction = AgentPromptComposer.ResolveToolPrompt(settings);
+                agentSkillInstruction = AgentPromptComposer.ResolveSkillPrompt(settings);
+                instruction = AgentPromptComposer.BuildInstruction(settings);
                 runtimeJson = AgentPromptComposer.BuildRuntimeContext(
                     _adapter,
                     tools,
@@ -256,7 +260,9 @@ namespace RNAssistant.Office.Services
             if (mode == ChatModes.Agent)
             {
                 AddAllocatedSections(sections, BuildAgentRuntimeSeeds(
-                    instruction,
+                    agentGeneralInstruction,
+                    agentToolInstruction,
+                    agentSkillInstruction,
                     runtimeJson,
                     sourceSession), runtimeBudget);
             }
@@ -368,7 +374,12 @@ namespace RNAssistant.Office.Services
             return included;
         }
 
-        private List<SectionSeed> BuildAgentRuntimeSeeds(string instruction, string runtimeJson, ChatSession session)
+        private List<SectionSeed> BuildAgentRuntimeSeeds(
+            string generalInstruction,
+            string toolInstruction,
+            string skillInstruction,
+            string runtimeJson,
+            ChatSession session)
         {
             var root = string.IsNullOrWhiteSpace(runtimeJson) ? new JObject() : JObject.Parse(runtimeJson);
             var tools = root["tools"] as JArray ?? new JArray();
@@ -383,7 +394,7 @@ namespace RNAssistant.Office.Services
             var baseItems = new List<PromptContextItemDto>
             {
                 Item("agent-system-prompt", "instruction", "Agent system prompt", string.Empty,
-                    EstimateTextTokens(instruction), instruction),
+                    EstimateTextTokens(generalInstruction), generalInstruction),
                 Item("runtime-document", "runtime", "Документ и host", string.Empty,
                     EstimateTextTokens(baseJson), baseJson)
             };
@@ -392,13 +403,46 @@ namespace RNAssistant.Office.Services
                 new SectionSeed
                 {
                     Id = "instructions",
-                    Title = "Инструкции и runtime",
-                    Detail = "System prompt, document identity и JSON-обвязка",
+                    Title = "Общие инструкции и runtime",
+                    Detail = "Agent general prompt, document identity и JSON-обвязка",
                     RawTokens = Math.Max(1, baseItems.Sum(item => item.Tokens) + 8),
                     Count = baseItems.Count,
                     Items = baseItems
                 }
             };
+
+            if (!string.IsNullOrWhiteSpace(toolInstruction))
+            {
+                seeds.Add(new SectionSeed
+                {
+                    Id = "tool_instructions",
+                    Title = "Правила tools",
+                    Detail = "Отдельный AgentToolsPrompt",
+                    RawTokens = Math.Max(1, EstimateTextTokens(toolInstruction)),
+                    Count = 1,
+                    Items = new List<PromptContextItemDto>
+                    {
+                        Item("agent-tools-prompt", "instruction", "Agent tools prompt", string.Empty,
+                            EstimateTextTokens(toolInstruction), toolInstruction)
+                    }
+                });
+            }
+            if (!string.IsNullOrWhiteSpace(skillInstruction))
+            {
+                seeds.Add(new SectionSeed
+                {
+                    Id = "skill_instructions",
+                    Title = "Правила skills",
+                    Detail = "Отдельный AgentSkillsPrompt",
+                    RawTokens = Math.Max(1, EstimateTextTokens(skillInstruction)),
+                    Count = 1,
+                    Items = new List<PromptContextItemDto>
+                    {
+                        Item("agent-skills-prompt", "instruction", "Agent skills prompt", string.Empty,
+                            EstimateTextTokens(skillInstruction), skillInstruction)
+                    }
+                });
+            }
 
             if (tools.Count > 0)
             {

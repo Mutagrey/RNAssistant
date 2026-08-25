@@ -1,10 +1,13 @@
 (function () {
   var promptLibraryBaseline = "";
   var promptDefinitions = [
-    { key: "systemPrompt", label: "Агент", group: "Основные", source: "root", field: "SystemPrompt", description: "Главные правила Agent-потока, tools и skills." },
+    { key: "systemPrompt", label: "Агент · общие", group: "Основные", source: "root", field: "SystemPrompt", description: "Роль, runtime context, формат ответа и условие завершения Agent-потока." },
+    { key: "agentToolsPrompt", label: "Агент · tools", group: "Основные", source: "root", field: "AgentToolsPrompt", description: "Общие правила выбора и выполнения tools; конкретные аргументы остаются в схемах tools." },
+    { key: "agentSkillsPrompt", label: "Агент · skills", group: "Основные", source: "root", field: "AgentSkillsPrompt", description: "Правила выбора, обязательного чтения и повторной загрузки skills." },
     { key: "chatSystemPrompt", label: "Чат", group: "Основные", source: "root", field: "ChatSystemPrompt", description: "Прямой ответ без локальных tools." },
     { key: "contextCompactionPrompt", label: "Сжатие контекста", group: "Служебные", source: "root", field: "ContextCompactionPrompt", description: "Правила создания checkpoint активной истории." },
-    { key: "chatTitlePrompt", label: "Название чата", group: "Служебные", source: "root", field: "ChatTitlePrompt", description: "Короткий запрос для генерации названия." }
+    { key: "chatTitlePrompt", label: "Название чата", group: "Служебные", source: "root", field: "ChatTitlePrompt", description: "Короткий запрос для генерации названия." },
+    { key: "attachmentAnalysisPrompt", label: "Анализ вложений", group: "Служебные", source: "root", field: "AttachmentAnalysisPrompt", description: "Инструкции вспомогательной модели для изображений и аудио." }
   ];
 
   function promptValue(settings, def) {
@@ -378,9 +381,12 @@
     syncSelectedPromptFromEditor();
     var result = {
       SystemPrompt: state.promptDrafts.systemPrompt || "",
+      AgentToolsPrompt: state.promptDrafts.agentToolsPrompt || "",
+      AgentSkillsPrompt: state.promptDrafts.agentSkillsPrompt || "",
       ChatSystemPrompt: state.promptDrafts.chatSystemPrompt || "",
       ContextCompactionPrompt: state.promptDrafts.contextCompactionPrompt || "",
-      ChatTitlePrompt: state.promptDrafts.chatTitlePrompt || ""
+      ChatTitlePrompt: state.promptDrafts.chatTitlePrompt || "",
+      AttachmentAnalysisPrompt: state.promptDrafts.attachmentAnalysisPrompt || ""
     };
     return result;
   }

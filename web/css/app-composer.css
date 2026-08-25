@@ -265,66 +265,6 @@
   font-weight: var(--title-font-weight);
 }
 
-.composer-option-field {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-  color: var(--composer-muted);
-  font-size: 11px;
-  font-weight: var(--label-font-weight);
-}
-
-.composer-option-field select {
-  width: 100%;
-  height: 32px;
-  min-width: 0;
-  border: 1px solid #d7dee8;
-  border-radius: 8px;
-  padding: 0 28px 0 9px;
-  background: #f8fafc;
-  color: var(--text);
-  font-size: 12px;
-  text-overflow: ellipsis;
-}
-
-.composer-option-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.composer-option-button {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  min-width: 0;
-  height: 34px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 0 8px;
-  background: #f6f8fb;
-  color: #526174;
-  font-size: 11px;
-  justify-content: flex-start;
-}
-
-.composer-option-button svg {
-  width: 15px;
-  height: 15px;
-}
-
-.composer-option-button:hover {
-  border-color: #d5deea;
-  background: #eef2f7;
-}
-
-.composer-option-button.active {
-  border-color: var(--button-accent-border);
-  background: var(--button-accent-bg);
-  color: var(--accent-strong);
-}
-
 .composer-options-panel .model-capability-indicator {
   justify-self: start;
   margin: -2px 0 0;
@@ -792,7 +732,6 @@
 .chatbar select:focus,
 .composer-mode select:focus,
 .composer-model select:focus,
-.composer-option-field select:focus,
 .form-grid textarea:focus,
 .form-grid input:focus,
 .form-grid select:focus {

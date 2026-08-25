@@ -114,10 +114,15 @@ namespace RNAssistant.Office.Tools
                     break;
                 case "excel.find_cells":
                     SetStringLimit(schema, "query", 2048);
+                    Property(schema, "sheet")["description"] = "Optional worksheet for sheet/range scope; omit to use the active worksheet.";
+                    Property(schema, "scope")["description"] = "Optional scope. When omitted, address selects range, sheet selects that sheet, otherwise the workbook is searched.";
                     break;
                 case "excel.replace_cells":
                     SetStringLimit(schema, "find", 2048);
                     Property(schema, "maxReplacements")["maximum"] = 10000;
+                    Property(schema, "sheet")["description"] = "Optional worksheet for sheet/range scope; omit to use the active worksheet.";
+                    Property(schema, "scope").Remove("default");
+                    Property(schema, "scope")["description"] = "Optional scope. When omitted, address selects range, sheet selects that sheet, otherwise the current selection is used.";
                     break;
                 case "excel.write_range":
                     tool.Description = "Mutates document: Write exactly one scalar value, one non-empty Excel formula, or one non-empty 2D table. kind selects and requires the matching value/formula/values argument.";
@@ -149,7 +154,7 @@ namespace RNAssistant.Office.Tools
                     break;
                 case "word.read_text":
                     SetDiscriminatorVariants(schema, "source",
-                        Variant("document", new[] { "source", "maxChars" }, "source"),
+                        Variant("document", new[] { "source", "maxChars" }),
                         Variant("selection", new[] { "source", "maxChars" }, "source"),
                         Variant("range", new[] { "source", "start", "end", "maxChars" }, "source", "start", "end"));
                     break;
@@ -215,8 +220,6 @@ namespace RNAssistant.Office.Tools
                     break;
             }
             tool.ArgumentSchemaJson = schema.ToString(Formatting.None);
-            tool.UseWhen = tool.MutatesDocument ? "Use when the requested Office document change matches this exact operation." : "Use when this exact bounded Office read is needed.";
-            tool.DoNotUseWhen = tool.MutatesDocument ? "Do not use for inspection or when a narrower non-mutating tool answers the request." : "Do not use to mutate the Office document.";
             return tool;
         }
 
@@ -314,7 +317,7 @@ namespace RNAssistant.Office.Tools
                 ? new[] { "find", "replace", "scope", "includeNotes", "mode", "matchCase", "wholeWord", "replaceAll", "maxReplacements" }
                 : new[] { "query", "scope", "includeNotes", "mode", "matchCase", "wholeWord", "maxResults", "contextChars" };
             var required = replacement ? new[] { "find" } : new[] { "query" };
-            var deck = ObjectVariant(schema, common, required.Concat(new[] { "scope" }).ToArray());
+            var deck = ObjectVariant(schema, common, required);
             Property(deck, "scope")["enum"] = new JArray("deck");
             var slide = ObjectVariant(schema, common.Concat(new[] { "slideIndex" }).ToArray(), required.Concat(new[] { "scope", "slideIndex" }).ToArray());
             Property(slide, "scope")["enum"] = new JArray("slide");

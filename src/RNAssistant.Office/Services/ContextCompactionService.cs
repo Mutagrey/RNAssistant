@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Services
             var inputBudget = Math.Max(1024, ModelContextBudget.InputBudgetTokens(settings));
             var activeCheckpoint = ActiveCheckpoint(session);
             var instructionTokens = Math.Max(
-                ModelContextBudget.EstimateTextTokens(settings.SystemPrompt, settings),
+                ModelContextBudget.EstimateTextTokens(AgentPromptComposer.BuildInstruction(settings), settings),
                 ModelContextBudget.EstimateTextTokens(settings.ChatSystemPrompt, settings));
             var projected = ModelContextBudget.EstimateMessagesTokens(window, settings) +
                 ModelContextBudget.EstimateTextTokens(activeCheckpoint == null ? null : activeCheckpoint.SummaryMarkdown, settings) +

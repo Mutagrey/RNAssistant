@@ -20,10 +20,10 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=unified-ui-20260821-1">
+  <link rel="stylesheet" href="css/app.css?v=html-workspace-auto-20260825-1">
   <link rel="stylesheet" href="css/app-chat.css?v=agent-reliability-20260819-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=message-edit-20260806-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=html-workspace-auto-20260825-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=media-routing-20260824-1">
@@ -40,7 +40,7 @@
   <link rel="stylesheet" href="css/app-responsive.css?v=skill-references-20260825-1">
   <link rel="stylesheet" href="css/app-agent.css?v=compaction-divider-20260825-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
-  <link rel="stylesheet" href="css/app-theme.css?v=media-routing-20260824-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=html-workspace-auto-20260825-1">
 </head>
 <body>
   <div class="shell">
@@ -152,13 +152,7 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h2"/><path d="M10 17h10"/><circle cx="8" cy="17" r="2"/></svg>
                 </summary>
                 <div class="composer-options-panel">
-                  <div class="composer-options-title">Контекст</div>
-                  <div class="composer-option-actions">
-                    <button type="button" class="composer-option-button context-toggle-button html-mode-toggle-button" id="toggleHtmlModeButton" title="Предпочитать HTML для отчётов и визуализаций в этом чате">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 5-4 14"/></svg>
-                      <span>HTML workspace</span>
-                    </button>
-                  </div>
+                  <div class="composer-options-title">Возможности модели</div>
                   <span class="model-capability-indicator" id="modelCapabilityIndicator" title="Мультимодальность модели" aria-label="Мультимодальность модели"></span>
                 </div>
               </details>
@@ -932,23 +926,23 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=library-sync-20260825-1"></script>
+  <script src="js/app-core.js?v=html-workspace-auto-20260825-1"></script>
   <script src="js/app-utils.js?v=runtime-20260807-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-settings.js?v=attachment-limits-20260825-1"></script>
+  <script src="js/app-settings.js?v=prompt-sections-20260825-1"></script>
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=diagnostics-ui-20260825-1"></script>
   <script src="js/app-trajectory.js?v=diagnostics-ui-20260825-1"></script>
-  <script src="js/app-prompts.js?v=library-dirty-20260825-1"></script>
+  <script src="js/app-prompts.js?v=prompt-sections-20260825-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
   <script src="js/app-model-capabilities.js?v=attachment-limit-20260824-1"></script>
   <script src="js/app-model-render.js?v=media-routing-20260824-1"></script>
   <script src="js/app-models.js?v=chat-binding-20260824-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=library-sync-20260825-1"></script>
+  <script src="js/app-chat-state.js?v=html-workspace-auto-20260825-1"></script>
   <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
   <script src="js/app-tools-structured.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-tools-actions.js?v=library-dirty-20260825-1"></script>
@@ -979,10 +973,10 @@
   <script src="js/app-messages.js?v=compaction-divider-20260825-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=chat-binding-20260824-1"></script>
-  <script src="js/app-chat-session.js?v=library-sync-20260825-1"></script>
-  <script src="js/app-chat-composer.js?v=message-replay-20260824-1"></script>
+  <script src="js/app-chat-session.js?v=html-workspace-auto-20260825-1"></script>
+  <script src="js/app-chat-composer.js?v=html-workspace-auto-20260825-1"></script>
   <script src="js/app-chat-run.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-chat.js?v=chat-binding-20260824-1"></script>
+  <script src="js/app-chat.js?v=html-workspace-auto-20260825-1"></script>
   <script src="js/app-chat-edit.js?v=message-edit-submit-20260825-1"></script>
   <script src="js/app.js?v=excel-runtime-fix-20260824-1"></script>
 </body>

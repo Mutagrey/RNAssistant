@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -40,9 +41,7 @@ namespace RNAssistant.Core.Tools
             var callsToken = root["tool_calls"];
             if (callsToken == null || callsToken.Type == JTokenType.Null)
             {
-                return string.IsNullOrWhiteSpace(response.Message)
-                    ? AgentResponseParseResult.Fail("Final agent response requires a non-empty message.")
-                    : AgentResponseParseResult.Ok(response);
+                return ValidateFinalResponse(response, tools);
             }
 
             var calls = callsToken as JArray;
@@ -52,9 +51,7 @@ namespace RNAssistant.Core.Tools
             }
             if (calls.Count == 0)
             {
-                return string.IsNullOrWhiteSpace(response.Message)
-                    ? AgentResponseParseResult.Fail("Final agent response requires a non-empty message.")
-                    : AgentResponseParseResult.Ok(response);
+                return ValidateFinalResponse(response, tools);
             }
             if (string.IsNullOrWhiteSpace(response.Message))
             {
@@ -105,6 +102,47 @@ namespace RNAssistant.Core.Tools
                     "Return exactly one tool call and wait for its TOOL_RESULT before choosing the next action.");
             }
             return AgentResponseParseResult.Ok(response);
+        }
+
+        private static AgentResponseParseResult ValidateFinalResponse(
+            AgentResponse response,
+            IEnumerable<ToolDefinition> tools)
+        {
+            if (response == null || string.IsNullOrWhiteSpace(response.Message))
+            {
+                return AgentResponseParseResult.Fail("Final agent response requires a non-empty message.");
+            }
+            if ((tools ?? new ToolDefinition[0]).Any(item => item != null && item.Enabled) &&
+                LooksLikeUnexecutedAction(response.Message))
+            {
+                return AgentResponseParseResult.Fail(
+                    "An empty tool_calls array is terminal, but message looks like unfinished progress. " +
+                    "Return the promised action as an exact tool call now, or replace message with a completed outcome, clarification, refusal, or concrete inability.");
+            }
+            return AgentResponseParseResult.Ok(response);
+        }
+
+        private static bool LooksLikeUnexecutedAction(string message)
+        {
+            var value = (message ?? string.Empty).Trim();
+            if (value.Length == 0 || value.Length > 240 || value.IndexOf('?') >= 0 || value.IndexOf(':') >= 0) return false;
+            var lower = value.ToLowerInvariant();
+            var terminalMarkers = new[]
+            {
+                "готово", "завершено", "создано", "создан ", "создана ", "обновлено", "исправлено",
+                "не могу", "невозможно", "нужно уточнить", "требуется уточнить",
+                "done", "completed", "created", "updated", "fixed", "cannot", "can't", "unable"
+            };
+            if (terminalMarkers.Any(marker => lower.IndexOf(marker, StringComparison.Ordinal) >= 0)) return false;
+
+            return Regex.IsMatch(
+                       value,
+                       "^(?:сейчас\\s+)?(?:создаю|создам|обновляю|обновлю|исправляю|исправлю|проверяю|проверю|читаю|прочитаю|добавляю|добавлю|удаляю|удалю|переименовываю|переименую|применяю|применю|запускаю|запущу|выполняю|выполню|привязываю|привяжу|сохраняю|сохраню|редактирую|отредактирую|анализирую|проанализирую|пробую|попробую|начинаю|приступаю)(?:\\b|\\s|[.…])",
+                       RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+                   Regex.IsMatch(
+                       value,
+                       "^(?:now\\s+)?(?:creating|updating|fixing|checking|reading|adding|deleting|renaming|applying|running|executing|binding|saving|editing|analyzing|trying|starting|working\\s+on)(?:\\b|\\s|[.…])|^(?:let\\s+me|i(?:'|’)ll|i\\s+will)\\s+(?:create|update|fix|check|read|inspect|add|delete|rename|apply|run|execute|bind|save|edit|analyze|try|start|write|build)(?:\\b|\\s|[.…])",
+                       RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
     }
 }

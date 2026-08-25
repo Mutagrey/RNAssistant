@@ -51,7 +51,6 @@ function renderChatSessions() {
   if ($("chatModeSelect")) {
     $("chatModeSelect").value = state.activeChatMode || "agent";
   }
-  renderHtmlModeToggle();
   renderSendControls();
 }
 
@@ -182,9 +181,6 @@ function applyChatState(response) {
   }
   if (response.activeChatMode !== undefined || response.ActiveChatMode !== undefined) {
     state.activeChatMode = response.activeChatMode || response.ActiveChatMode || "agent";
-  }
-  if (response.activeChatHtmlMode !== undefined || response.ActiveChatHtmlMode !== undefined) {
-    state.activeChatHtmlMode = !!(response.activeChatHtmlMode || response.ActiveChatHtmlMode);
   }
   if (response.activeChatReasoning !== undefined || response.ActiveChatReasoning !== undefined) {
     state.activeChatReasoning = !!(response.activeChatReasoning || response.ActiveChatReasoning);
@@ -556,35 +552,6 @@ function buildChatStorageTooltip(chat, warningLevel) {
   lines.push("Общие CAS blobs учитываются в каждом ссылающемся чате.");
   lines.push("Автоматическое удаление истории отключено.");
   return lines.join("\n");
-}
-
-function renderHtmlModeToggle() {
-  var button = $("toggleHtmlModeButton");
-  if (!button) {
-    return;
-  }
-
-  button.classList.toggle("active", !!state.activeChatHtmlMode);
-  button.setAttribute("aria-pressed", state.activeChatHtmlMode ? "true" : "false");
-  button.title = state.activeChatHtmlMode
-    ? "HTML-предпочтение включено: агент будет чаще создавать отчёты и визуализации в workspace"
-    : "Предпочитать HTML для отчётов и визуализаций в этом чате";
-}
-
-function chatHasHtml(chat) {
-  return !!(chat && (chat.hasHtmlWorkspace || chat.HasHtmlWorkspace || chatHtmlModeEnabled(chat)));
-}
-
-function chatHtmlModeEnabled(chat) {
-  return !!(chat && (chat.htmlModeEnabled || chat.HtmlModeEnabled));
-}
-
-function chatHtmlFileCount(chat) {
-  return Number((chat && (chat.htmlFileCount || chat.HtmlFileCount)) || 0);
-}
-
-function chatHtmlDataSourceCount(chat) {
-  return Number((chat && (chat.htmlDataSourceCount || chat.HtmlDataSourceCount)) || 0);
 }
 
 function logToolResult(prefix, toolId, result) {

@@ -143,8 +143,9 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "\"referenceCount\":0", "skill reference count present");
             AssertTrue(prompt.IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0, "full skill is not in catalog");
             AssertContains(prompt, "common.skills_read", "skill loading guidance present");
+            AssertContains(prompt, "metadata only", "catalog is not mistaken for loaded skill instructions");
             AssertContains(prompt, "`loaded=true`", "skill loading state is explicit");
-            AssertContains(prompt, "several tool_calls", "multi-tool guidance present");
+            AssertContains(prompt, "Return several calls", "multi-tool guidance present");
             AssertContains(prompt, "data.truncated=true", "bounded tool-result guidance present");
             AssertTrue(prompt.IndexOf("ROUTE:", StringComparison.OrdinalIgnoreCase) < 0, "no route wrapper");
             AssertTrue(prompt.IndexOf("NEXT_ACTION_POLICY", StringComparison.OrdinalIgnoreCase) < 0, "no action heuristic");
@@ -337,15 +338,36 @@ namespace RNAssistant.Harness
 
         private static void ControllerToolCatalogUsesStrictSchemas()
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
             {
-                foreach (var tool in executor.GetControllerTools())
+                WithTempExecutor(FakeOfficeAdapter.ForHost(host), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
-                    Newtonsoft.Json.Linq.JObject schema;
-                    string error;
-                    AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out error), tool.Id + ": " + error);
-                }
-            });
+                    var catalog = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                    var session = NewSession(adapter);
+                    foreach (var tool in executor.GetControllerTools())
+                    {
+                        Newtonsoft.Json.Linq.JObject schema;
+                        string error;
+                        AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out error), host + "/" + tool.Id + ": " + error);
+                        var variants = schema["anyOf"] is Newtonsoft.Json.Linq.JArray
+                            ? ((Newtonsoft.Json.Linq.JArray)schema["anyOf"]).OfType<Newtonsoft.Json.Linq.JObject>().ToArray()
+                            : new[] { schema };
+                        foreach (var variant in variants)
+                        {
+                            var arguments = MinimalValidArguments(variant);
+                            string argumentError;
+                            AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError), host + "/" + tool.Id + " variant: " + argumentError);
+                            var command = new ToolCommand { ToolId = tool.Id };
+                            ToolArgumentNormalizer.AddProperties(arguments, command.Arguments);
+                            var result = executor.Execute(command, catalog, new AppSettings { AutoConfirmToolActions = true }, true, true, session);
+                            AssertTrue(result == null || !string.Equals(result.ErrorCode, "unknown_tool", StringComparison.OrdinalIgnoreCase), host + "/" + tool.Id + " dispatch is registered");
+                            AssertTrue(result == null || !string.Equals(result.ErrorCode, "invalid_arguments", StringComparison.OrdinalIgnoreCase), host + "/" + tool.Id + " published branch reaches its handler");
+                        }
+                        var responseSchema = AgentResponseSchemaBuilder.Build(new[] { tool });
+                        AssertTrue(!string.IsNullOrWhiteSpace(responseSchema), host + "/" + tool.Id + " structured response schema");
+                    }
+                });
+            }
         }
 
         private static void SimpleAgentExecutesToolAndReceivesJsonResult()
@@ -397,8 +419,12 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
-                session.HtmlModeEnabled = true;
-                var settings = new AppSettings { SystemPrompt = "SYSTEM_PROMPT_SENTINEL" };
+                var settings = new AppSettings
+                {
+                    SystemPrompt = "SYSTEM_PROMPT_SENTINEL",
+                    AgentToolsPrompt = "TOOLS_PROMPT_SENTINEL",
+                    AgentSkillsPrompt = "SKILLS_PROMPT_SENTINEL"
+                };
                 var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
                     "List sheets.", session, NewContext(adapter), settings,
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
@@ -413,12 +439,24 @@ namespace RNAssistant.Harness
                     AssertEqual(1, request.Count(message =>
                         (message.Content ?? string.Empty).IndexOf("RUNTIME_CONTEXT:", StringComparison.Ordinal) >= 0),
                         "runtime context appears once per request");
+                    var materialized = FlattenSimple(request);
+                    var generalIndex = materialized.IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal);
+                    var toolsIndex = materialized.IndexOf("TOOLS_PROMPT_SENTINEL", StringComparison.Ordinal);
+                    var skillsIndex = materialized.IndexOf("SKILLS_PROMPT_SENTINEL", StringComparison.Ordinal);
+                    var runtimeIndex = materialized.IndexOf("RUNTIME_CONTEXT:", StringComparison.Ordinal);
+                    AssertTrue(generalIndex >= 0 && generalIndex < toolsIndex && toolsIndex < skillsIndex && skillsIndex < runtimeIndex,
+                        "general, tool, skill, and runtime prompt sections keep stable order");
                     AssertTrue(request.Any(message =>
-                        (message.Content ?? string.Empty).IndexOf("\"html_workspace_preferred\":true", StringComparison.Ordinal) >= 0),
-                        "runtime context exposes HTML preference");
+                        (message.Content ?? string.Empty).IndexOf("\"office_tools_available\":true", StringComparison.Ordinal) >= 0),
+                        "runtime context exposes document availability");
+                    AssertTrue(!request.Any(message =>
+                        (message.Content ?? string.Empty).IndexOf("html_workspace_preferred", StringComparison.Ordinal) >= 0),
+                        "runtime context has no separate HTML preference");
                 }
                 AssertTrue(!session.Messages.Any(message =>
                     (message.Content ?? string.Empty).IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
+                    (message.Content ?? string.Empty).IndexOf("TOOLS_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
+                    (message.Content ?? string.Empty).IndexOf("SKILLS_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
                     (message.Content ?? string.Empty).IndexOf("RUNTIME_CONTEXT:", StringComparison.Ordinal) >= 0),
                     "prompt is not persisted in chat history");
             });
@@ -457,6 +495,51 @@ namespace RNAssistant.Harness
                     (message.Content ?? string.Empty).IndexOf("FORMAT_REPAIR", StringComparison.Ordinal) >= 0 ||
                     (message.ReasoningContent ?? string.Empty).IndexOf("INVALID_REASONING_SENTINEL", StringComparison.Ordinal) >= 0),
                     "invalid completion and repair instruction are not persisted");
+            });
+        }
+
+        private static void SimpleAgentRepairsProgressOnlyFinal()
+        {
+            var inspect = new ToolDefinition { Id = "excel.inspect" };
+            var invalid = new AgentResponseParser().Parse(
+                "{\"message\":\"Проверяю листы...\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(!invalid.Success, "unfinished progress is not accepted as final");
+            AssertContains(invalid.Error, "terminal", "progress diagnostic explains empty tool_calls");
+            var completed = new AgentResponseParser().Parse(
+                "{\"message\":\"Проверка не требуется: список уже дан пользователем.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(completed.Success, "concrete final explanation remains valid");
+            var explanation = new AgentResponseParser().Parse(
+                "{\"message\":\"I'll explain: patch requires existing source, while write creates it.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(explanation.Success, "explanatory final is not mistaken for progress");
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                const string progressOnly = "{\"message\":\"Проверяю листы...\",\"tool_calls\":[]}";
+                var responses = new Queue<string>(new[]
+                {
+                    progressOnly,
+                    "{\"message\":\"Проверяю листы.\",\"tool_calls\":[{\"id\":\"call_inspect\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"message\":\"Список листов проверен.\",\"tool_calls\":[]}"
+                });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var session = NewSession(adapter);
+                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                    "Проверь листы.", session, NewContext(adapter), new AppSettings(),
+                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+
+                AssertEqual(3, requests.Count, "semantic repair then tool continuation");
+                AssertContains(requests[1].Last().Content, "unfinished progress", "repair identifies semantic failure");
+                AssertEqual("Список листов проверен.", result.AssistantText, "run completes after the actual tool call");
+                AssertTrue(!session.Messages.Any(message => string.Equals(message.Content, progressOnly, StringComparison.Ordinal)),
+                    "rejected progress-only response is not persisted");
             });
         }
 

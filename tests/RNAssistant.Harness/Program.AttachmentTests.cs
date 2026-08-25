@@ -219,6 +219,8 @@ namespace RNAssistant.Harness
             AssertEqual("vision", helperSettings.Model, "helper uses vision model");
             AssertEqual(123, helperSettings.MaxTokens, "helper output limit comes from settings");
             AssertEqual(2, helperMessages.Count, "helper receives only instruction and current request");
+            AssertEqual("developer", helperMessages[0].Role, "helper uses configured instruction role");
+            AssertContains(helperMessages[0].Content, "# Attachment analysis", "helper uses editable attachment prompt");
             AssertTrue(helperMessages.All(message =>
                 (message.Content ?? string.Empty).IndexOf("HISTORY_MUST_NOT_REACH_VISION", StringComparison.Ordinal) < 0),
                 "helper excludes conversation history");
@@ -252,6 +254,17 @@ namespace RNAssistant.Harness
                 null,
                 CancellationToken.None);
             AssertEqual(1, calls, "confirmation continuation reuses persisted analysis");
+
+            routing.Settings.AttachmentAnalysisPrompt = "# Custom attachment worker\n\nReturn CUSTOM_EVIDENCE.";
+            await service.EnsureAsync(
+                sourceMessage.Content,
+                session,
+                sourceMessage,
+                routing,
+                null,
+                CancellationToken.None);
+            AssertEqual(2, calls, "changing attachment prompt invalidates cached analysis");
+            AssertContains(helperMessages[0].Content, "CUSTOM_EVIDENCE", "custom attachment prompt reaches helper model");
         }
 
         private static void AttachmentAnalysisLimitsAreConfigurable()

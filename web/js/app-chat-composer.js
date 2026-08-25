@@ -127,15 +127,12 @@ function renderSendControls() {
   if ($("addSelectionContextButton")) {
     $("addSelectionContextButton").disabled = isSending || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
   }
-  if ($("toggleHtmlModeButton")) {
-    $("toggleHtmlModeButton").disabled = isSending || isEditing || state.bridgeUnavailable || !state.activeChatId;
-  }
   if ($("attachFileButton")) {
     $("attachFileButton").disabled = isSending || approvalPending || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }
   var optionsMenu = $("composerOptionsMenu");
   if (optionsMenu) {
-    var optionsDisabled = isSending || isEditing || state.bridgeUnavailable || !state.activeChatId;
+    var optionsDisabled = state.bridgeUnavailable || !state.activeChatId;
     optionsMenu.classList.toggle("is-disabled", optionsDisabled);
     if (optionsDisabled) {
       optionsMenu.open = false;
@@ -145,9 +142,6 @@ function renderSendControls() {
       optionsSummary.setAttribute("aria-disabled", optionsDisabled ? "true" : "false");
       optionsSummary.tabIndex = optionsDisabled ? -1 : 0;
     }
-  }
-  if (typeof renderHtmlModeToggle === "function") {
-    renderHtmlModeToggle();
   }
   if (typeof renderPromptContextInspectorAvailability === "function") {
     renderPromptContextInspectorAvailability();

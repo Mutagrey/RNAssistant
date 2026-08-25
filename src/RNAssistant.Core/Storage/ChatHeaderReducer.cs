@@ -30,7 +30,6 @@ namespace RNAssistant.Core.Storage
         private string _title;
         private string _model;
         private string _mode;
-        private bool _htmlModeEnabled;
         private bool _reasoningEnabled;
         private DateTime _createdUtc;
         private DateTime _updatedUtc;
@@ -129,7 +128,6 @@ namespace RNAssistant.Core.Storage
                 _title = _title,
                 _model = _model,
                 _mode = _mode,
-                _htmlModeEnabled = _htmlModeEnabled,
                 _reasoningEnabled = _reasoningEnabled,
                 _createdUtc = _createdUtc,
                 _updatedUtc = _updatedUtc,
@@ -187,7 +185,6 @@ namespace RNAssistant.Core.Storage
                 Title = title,
                 Model = _model,
                 Mode = ChatModes.Normalize(_mode),
-                HtmlModeEnabled = _htmlModeEnabled,
                 ReasoningEnabled = _reasoningEnabled,
                 HasHtmlWorkspace = fileCount > 0 || dataSourceCount > 0,
                 HtmlFileCount = fileCount,
@@ -319,7 +316,6 @@ namespace RNAssistant.Core.Storage
             _title = StringValue(root["Title"]);
             _model = StringValue(root["Model"]);
             _mode = StringValue(root["Mode"]);
-            _htmlModeEnabled = BooleanValue(root["HtmlModeEnabled"]);
             _reasoningEnabled = BooleanValue(root["ReasoningEnabled"]);
             _createdUtc = DateTimeValue(root["CreatedUtc"]);
             _updatedUtc = DateTimeValue(root["UpdatedUtc"]);
@@ -400,7 +396,6 @@ namespace RNAssistant.Core.Storage
                     case "Title": _title = StringValue(property.Value); break;
                     case "Model": _model = StringValue(property.Value); break;
                     case "Mode": _mode = StringValue(property.Value); break;
-                    case "HtmlModeEnabled": _htmlModeEnabled = BooleanValue(property.Value); break;
                     case "ReasoningEnabled": _reasoningEnabled = BooleanValue(property.Value); break;
                     case "CreatedUtc": _createdUtc = DateTimeValue(property.Value); break;
                     case "UpdatedUtc": _updatedUtc = DateTimeValue(property.Value); break;

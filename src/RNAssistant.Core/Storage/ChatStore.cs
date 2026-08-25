@@ -49,7 +49,7 @@ namespace RNAssistant.Core.Storage
         {
             "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId",
             "Host", "DocumentKey", "DocumentTitle", "DocumentPath",
-            "Title", "Model", "Mode", "HtmlModeEnabled", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc"
+            "Title", "Model", "Mode", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc"
         };
 
         private readonly AppDataPaths _paths;

@@ -53,6 +53,9 @@ namespace RNAssistant.Harness
 
                 var command = new ToolCommand { ToolId = "common.prompts_save" };
                 command.Arguments["systemPrompt"] = "New prompt";
+                command.Arguments["agentToolsPrompt"] = "New tool prompt";
+                command.Arguments["agentSkillsPrompt"] = "New skill prompt";
+                command.Arguments["attachmentAnalysisPrompt"] = "New attachment prompt";
 
                 var result = executor.Execute(
                     command,
@@ -63,6 +66,9 @@ namespace RNAssistant.Harness
 
                 AssertTrue(result.Success, "prompt save succeeds");
                 AssertEqual("New prompt", global.SystemPrompt, "global prompt updated");
+                AssertEqual("New tool prompt", global.AgentToolsPrompt, "tool prompt updated");
+                AssertEqual("New skill prompt", global.AgentSkillsPrompt, "skill prompt updated");
+                AssertEqual("New attachment prompt", global.AttachmentAnalysisPrompt, "attachment prompt updated");
                 AssertEqual("global-model", global.Model, "per-chat model is not copied into global settings");
             });
         }
@@ -70,7 +76,7 @@ namespace RNAssistant.Harness
         private static void SettingsMigrateLegacySkillLoadingPolicy()
         {
             var settings = new AppSettings();
-            var legacy = settings.SystemPrompt.Replace(
+            var legacy = settings.AgentSkillsPrompt.Replace(
                 AgentSkillPromptPolicy.CurrentInstructions,
                 AgentSkillPromptPolicy.LegacyInstructions);
             AssertContains(legacy, AgentSkillPromptPolicy.LegacyInstructions,
@@ -82,7 +88,7 @@ namespace RNAssistant.Harness
             AssertTrue(upgraded.IndexOf(AgentSkillPromptPolicy.LegacyInstructions, StringComparison.Ordinal) < 0,
                 "legacy policy is removed after upgrade");
 
-            var revisionPolicy = settings.SystemPrompt.Replace(
+            var revisionPolicy = settings.AgentSkillsPrompt.Replace(
                 AgentSkillPromptPolicy.CurrentInstructions,
                 AgentSkillPromptPolicy.RevisionInstructions);
             AssertContains(AgentSkillPromptPolicy.Upgrade(revisionPolicy), AgentSkillPromptPolicy.CurrentInstructions,
@@ -91,6 +97,31 @@ namespace RNAssistant.Harness
             const string custom = "Custom prompt without the default skill policy.";
             AssertEqual(custom, AgentSkillPromptPolicy.Upgrade(custom),
                 "custom prompt without legacy policy is preserved");
+
+            var evidencePolicy = settings.AgentSkillsPrompt.Replace(
+                AgentSkillPromptPolicy.CurrentInstructions,
+                AgentSkillPromptPolicy.LoadedEvidenceInstructions);
+            AssertContains(AgentSkillPromptPolicy.Upgrade(evidencePolicy), AgentSkillPromptPolicy.CurrentInstructions,
+                "previous loaded-evidence policy is upgraded to metadata-only wording");
+
+            var oldCombined = AgentPromptDefaults.LegacyCombinedInstructions.Replace(
+                AgentSkillPromptPolicy.CurrentInstructions,
+                AgentSkillPromptPolicy.LoadedEvidenceInstructions);
+            AssertContains(AgentPromptDefaults.LegacyCombinedInstructions, "chat.html_workspace_preferred=true",
+                "legacy combined fixture retains the previous runtime wording");
+            AssertEqual(AgentPromptDefaults.GeneralInstructions,
+                AgentPromptDefaults.UpgradeGeneralInstructions(oldCombined),
+                "known legacy combined default migrates to the general Agent prompt");
+
+            var customCombined = oldCombined + "\n\n## Custom\n\nKeep this user rule.";
+            var customUpgraded = AgentPromptDefaults.UpgradeGeneralInstructions(customCombined);
+            AssertTrue(customUpgraded.IndexOf("html_workspace_preferred", StringComparison.Ordinal) < 0,
+                "custom legacy prompt drops the removed HTML preference reference");
+            AssertTrue(customUpgraded.IndexOf("## Tools", StringComparison.Ordinal) < 0 &&
+                customUpgraded.IndexOf("## Skills", StringComparison.Ordinal) < 0,
+                "custom legacy prompt does not duplicate split tool and skill policies");
+            AssertContains(customUpgraded, "Keep this user rule.",
+                "custom legacy prompt content is preserved");
         }
     }
 }

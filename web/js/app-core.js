@@ -20,7 +20,6 @@ var state = {
   activeChatId: "",
   activeChatModel: "",
   activeChatMode: "agent",
-  activeChatHtmlMode: false,
   activeChatReasoning: false,
   bridgeToken: "",
   messages: [],

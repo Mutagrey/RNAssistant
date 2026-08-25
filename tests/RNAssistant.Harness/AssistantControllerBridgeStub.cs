@@ -114,7 +114,6 @@ namespace RNAssistant.Office
             state.ActiveChatMode = mode;
             return state;
         }
-        public ChatStateResponse SetChatHtmlMode(string chatId, bool enabled) { return ChatState(enabled ? "html" : string.Empty, chatId); }
         public ChatStateResponse SetChatReasoning(string chatId, bool enabled)
         {
             LastChatId = chatId;

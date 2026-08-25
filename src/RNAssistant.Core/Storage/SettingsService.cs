@@ -151,7 +151,10 @@ namespace RNAssistant.Core.Storage
             {
                 settings.SystemPrompt = defaults.SystemPrompt;
             }
-            settings.SystemPrompt = AgentSkillPromptPolicy.Upgrade(settings.SystemPrompt);
+            settings.SystemPrompt = AgentPromptDefaults.UpgradeGeneralInstructions(settings.SystemPrompt);
+            settings.AgentToolsPrompt = DefaultIfBlank(settings.AgentToolsPrompt, defaults.AgentToolsPrompt);
+            settings.AgentSkillsPrompt = AgentSkillPromptPolicy.Upgrade(
+                DefaultIfBlank(settings.AgentSkillsPrompt, defaults.AgentSkillsPrompt));
             if (string.IsNullOrWhiteSpace(settings.ChatSystemPrompt))
             {
                 settings.ChatSystemPrompt = defaults.ChatSystemPrompt;
@@ -176,6 +179,9 @@ namespace RNAssistant.Core.Storage
             }
             settings.ChatTitlePrompt = DefaultIfBlank(settings.ChatTitlePrompt, defaults.ChatTitlePrompt);
             settings.ContextCompactionPrompt = DefaultIfBlank(settings.ContextCompactionPrompt, defaults.ContextCompactionPrompt);
+            settings.AttachmentAnalysisPrompt = DefaultIfBlank(
+                settings.AttachmentAnalysisPrompt,
+                defaults.AttachmentAnalysisPrompt);
             if (settings.MaxTokens <= 0)
             {
                 settings.MaxTokens = defaults.MaxTokens;

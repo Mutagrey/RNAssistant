@@ -557,7 +557,10 @@ namespace RNAssistant.OfficeHosts
         {
             var sheetFilter = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
             var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
-            var scope = ToolArgumentReader.String(command.Arguments, "scope", string.IsNullOrWhiteSpace(sheetFilter) ? "workbook" : "sheet");
+            var inferredScope = !string.IsNullOrWhiteSpace(address)
+                ? "range"
+                : string.IsNullOrWhiteSpace(sheetFilter) ? "workbook" : "sheet";
+            var scope = ToolArgumentReader.String(command.Arguments, "scope", inferredScope);
             var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
             var lookIn = ToolArgumentReader.String(command.Arguments, "lookIn", "values");
             var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 50)));
@@ -617,9 +620,12 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult ReplaceCells(ToolCommand command)
         {
-            var scope = ToolArgumentReader.String(command.Arguments, "scope", "range");
             var sheet = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
             var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            var inferredScope = !string.IsNullOrWhiteSpace(address)
+                ? "range"
+                : string.IsNullOrWhiteSpace(sheet) ? "selection" : "sheet";
+            var scope = ToolArgumentReader.String(command.Arguments, "scope", inferredScope);
             var find = ToolArgumentReader.String(command.Arguments, "find", string.Empty);
             var replacement = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
             var lookIn = ToolArgumentReader.String(command.Arguments, "lookIn", "values");
@@ -664,7 +670,8 @@ namespace RNAssistant.OfficeHosts
 
                 var verifyCommand = new ToolCommand { ToolId = "excel.find_cells" };
                 verifyCommand.Arguments["query"] = find;
-                foreach (var name in new[] { "sheet", "address", "scope", "mode", "matchCase", "wholeWord", "lookIn" })
+                verifyCommand.Arguments["scope"] = scope;
+                foreach (var name in new[] { "sheet", "address", "mode", "matchCase", "wholeWord", "lookIn" })
                     if (command.Arguments.ContainsKey(name)) verifyCommand.Arguments[name] = command.Arguments[name];
                 verifyCommand.Arguments["maxResults"] = 500;
                 verifyCommand.Arguments["contextChars"] = 80;

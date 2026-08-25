@@ -24,6 +24,7 @@ namespace RNAssistant.Office.Services
                     "Return a new response to the current user request as exactly one JSON object with message and tool_calls. " +
                     "Do not use Markdown, fences, or surrounding prose. To answer, clarify, refuse, or report inability, " +
                     "put the user-facing text in message and return an empty tool_calls array. " +
+                    "An empty tool_calls array is terminal and must not contain unfinished progress or a promised action. " +
                     "To use tools, return calls with unique id, exact name, and object arguments."
             };
             return new ChatMessage

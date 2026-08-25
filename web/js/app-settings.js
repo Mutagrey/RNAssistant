@@ -258,7 +258,7 @@ function readSettings() {
   }
   var promptSettings = typeof readPromptSettings === "function"
     ? readPromptSettings()
-    : { SystemPrompt: "", ChatSystemPrompt: "", ContextCompactionPrompt: "", ChatTitlePrompt: "" };
+    : { SystemPrompt: "", AgentToolsPrompt: "", AgentSkillsPrompt: "", ChatSystemPrompt: "", ContextCompactionPrompt: "", ChatTitlePrompt: "", AttachmentAnalysisPrompt: "" };
   var reasoningRequestMode = $("reasoningRequestModeInput").value;
   var reasoningCustomJson = readReasoningCustomJson(reasoningRequestMode);
   return {
@@ -295,10 +295,13 @@ function readSettings() {
     ToolResultRole: $("toolResultRoleInput").value,
     FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
     SystemPrompt: promptSettings.SystemPrompt,
+    AgentToolsPrompt: promptSettings.AgentToolsPrompt,
+    AgentSkillsPrompt: promptSettings.AgentSkillsPrompt,
     ChatSystemPrompt: promptSettings.ChatSystemPrompt,
     SystemPromptRole: $("systemPromptRoleInput").value,
     ContextCompactionPrompt: promptSettings.ContextCompactionPrompt,
     ChatTitlePrompt: promptSettings.ChatTitlePrompt,
+    AttachmentAnalysisPrompt: promptSettings.AttachmentAnalysisPrompt,
     ModelImageSupportOverrides: modelImageSupportOverrides(),
     ModelAudioSupportOverrides: modelAudioSupportOverrides(),
     ModelCapabilities: modelCapabilitiesForSettings(),

@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Tools
                 ["resourceType"] = new JObject { ["type"] = "string", ["enum"] = new JArray("file", "data"), ["description"] = "Resource selector; omit resourceType and name together to read the compact workspace manifest." },
                 ["name"] = new JObject { ["type"] = "string", ["description"] = "Exact file path or data-source name for resourceType.", ["minLength"] = 1, ["maxLength"] = 260 },
                 ["startLine"] = new JObject { ["type"] = "integer", ["description"] = "One-based first line for a bounded file read; omit for the whole file.", ["minimum"] = 1 },
-                ["lineCount"] = new JObject { ["type"] = "integer", ["description"] = "Maximum consecutive file lines; alone it starts at line 1, and with startLine omitted runtime uses the whole file.", ["minimum"] = 1, ["maximum"] = 500 }
+                ["lineCount"] = new JObject { ["type"] = "integer", ["description"] = "Maximum consecutive file lines. Supplied alone it starts at line 1; when only startLine is supplied runtime returns up to 200 lines.", ["minimum"] = 1, ["maximum"] = 500 }
             };
             return new JObject
             {

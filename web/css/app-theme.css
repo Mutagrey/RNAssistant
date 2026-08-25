@@ -456,18 +456,6 @@ html[data-theme="dark"] .composer-options-panel {
   box-shadow: 0 16px 38px rgba(0, 0, 0, .46);
 }
 
-html[data-theme="dark"] .composer-option-field select,
-html[data-theme="dark"] .composer-option-button {
-  border-color: #39434f;
-  background: #2d3540;
-  color: #c1cad6;
-}
-
-html[data-theme="dark"] .composer-option-button:hover {
-  border-color: #4a5665;
-  background: #363f4b;
-}
-
 html[data-theme="dark"] .composer-model-badge.is-reasoning {
   background: #493b20;
   color: #f0c56b;

@@ -15,23 +15,6 @@ async function runQuickAction(action) {
   switchTab("chat");
 }
 
-async function toggleChatHtmlMode() {
-  if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend() || hasActiveMessageEdit()) {
-    return;
-  }
-
-  var targetChatId = state.activeChatId;
-  try {
-    var applied = applyChatStateForChat(await send("setChatHtmlMode", {
-      chatId: targetChatId,
-      enabled: !state.activeChatHtmlMode
-    }), targetChatId);
-    if (applied) log(state.activeChatHtmlMode ? "HTML mode включен." : "HTML mode выключен.");
-  } catch (error) {
-    log(error.detail || error.message, "error");
-  }
-}
-
 async function saveChatMode(mode) {
   if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend() || hasActiveMessageEdit()) {
     return;
@@ -107,7 +90,6 @@ function bindChatActions() {
       $("toggleChatSearchButton").focus();
     }
   });
-  $("toggleHtmlModeButton").addEventListener("click", toggleChatHtmlMode);
   $("chatModeSelect").addEventListener("change", function () {
     saveChatMode($("chatModeSelect").value);
   });

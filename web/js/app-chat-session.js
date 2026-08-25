@@ -289,7 +289,6 @@ function applyInitState(init) {
   state.activeChatId = nextChatId;
   state.activeChatModel = init.activeChatModel || "";
   state.activeChatMode = init.activeChatMode || init.ActiveChatMode || "agent";
-  state.activeChatHtmlMode = !!(init.activeChatHtmlMode || init.ActiveChatHtmlMode);
   state.activeChatReasoning = !!(init.activeChatReasoning || init.ActiveChatReasoning);
   state.chats = init.chats || [];
   state.documents = init.documents || init.Documents || [];
@@ -340,7 +339,6 @@ function applyBridgeUnavailableState(error) {
   state.chats = [];
   state.documents = [];
   state.activeChatId = "";
-  state.activeChatHtmlMode = false;
   state.activeChatReasoning = false;
   state.messages = [];
   state.liveActivity = null;

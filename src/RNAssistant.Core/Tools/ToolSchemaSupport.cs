@@ -116,6 +116,13 @@ namespace RNAssistant.Core.Tools
             return clone;
         }
 
+        public static JObject ForPrompt(JObject schema)
+        {
+            var clone = schema == null ? EmptyObjectSchema() : (JObject)schema.DeepClone();
+            CollapseObjectAnyOfConstraints(clone);
+            return clone;
+        }
+
         public static void RemoveOptionalNulls(JToken value, JObject schema)
         {
             if (value == null || schema == null) return;
