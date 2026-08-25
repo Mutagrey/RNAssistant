@@ -140,6 +140,7 @@ namespace RNAssistant.Office.Services
             int initialToolStepsUsed = 0)
         {
             settings = settings ?? new AppSettings();
+            ReleaseHydratedArtifactMedia(session == null ? null : session.Messages);
             var availableTools = PrepareToolsForRun(tools);
             availableTools = _toolExecutor.AvailableAgentToolsForSession(availableTools, session);
             var enabledSkills = (skills ?? new SkillDefinition[0]).Where(skill => skill != null && skill.Enabled).ToList();
@@ -152,6 +153,8 @@ namespace RNAssistant.Office.Services
             var runCache = new LlmRunCache();
             var responseMode = AgentResponseModes.Normalize(settings.AgentResponseMode);
 
+            try
+            {
             if (initialCommand != null && initialResult != null)
             {
                 var confirmed = CreateBoundedToolResultMessage(initialCommand, initialResult, messages, settings);
@@ -179,22 +182,29 @@ namespace RNAssistant.Office.Services
                 LlmCompletionResult completion;
                 try
                 {
-                    completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
-                }
-                catch (LlmRequestException ex) when (
-                    ex.Kind == LlmFailureKind.ResponseFormatUnsupported &&
-                    string.Equals(responseMode, AgentResponseModes.JsonSchema, StringComparison.Ordinal) &&
-                    settings.FallbackToJsonObject)
-                {
-                    responseMode = AgentResponseModes.JsonObject;
-                    options = BuildRequestOptions(responseMode, availableTools, session, runCache);
-                    Report(progress, "thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
-                    if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
+                    try
                     {
-                        return FinishWithDiagnostic(session, results, contextUsage, budgetError,
-                            "Контекст переполнен", "prompt_budget_exceeded");
+                        completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
                     }
-                    completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
+                    catch (LlmRequestException ex) when (
+                        ex.Kind == LlmFailureKind.ResponseFormatUnsupported &&
+                        string.Equals(responseMode, AgentResponseModes.JsonSchema, StringComparison.Ordinal) &&
+                        settings.FallbackToJsonObject)
+                    {
+                        responseMode = AgentResponseModes.JsonObject;
+                        options = BuildRequestOptions(responseMode, availableTools, session, runCache);
+                        Report(progress, "thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
+                        if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
+                        {
+                            return FinishWithDiagnostic(session, results, contextUsage, budgetError,
+                                "Контекст переполнен", "prompt_budget_exceeded");
+                        }
+                        completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    ReleaseHydratedArtifactMedia(messages);
                 }
                 contextUsage = ContextUsageEstimator.FromPrompt(messages, settings,
                     completion == null ? null : completion.PromptTokens, options);
@@ -245,7 +255,6 @@ namespace RNAssistant.Office.Services
                         "Ответ агента не выполнен после " + maxFormatRetries + " попыток исправить формат: " + parsed.Error);
                 }
 
-                ReleaseHydratedArtifactMedia(messages);
                 var response = parsed.Response;
                 if (response.ToolCalls.Count == 0)
                 {
@@ -384,6 +393,11 @@ namespace RNAssistant.Office.Services
             var limitText = "Агент остановлен: достигнут лимит шагов.";
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(limitText, null));
             return Result(limitText, results, contextUsage, false);
+            }
+            finally
+            {
+                ReleaseHydratedArtifactMedia(messages);
+            }
         }
 
         internal static LlmRequestOptions BuildRequestOptions(
@@ -713,6 +727,7 @@ namespace RNAssistant.Office.Services
                 if (message == null || !message.ProtocolMessage ||
                     !(message.Content ?? string.Empty).StartsWith("ARTIFACT_MEDIA_INPUT", StringComparison.Ordinal)) continue;
                 message.Attachments = new List<ChatAttachment>();
+                message.ExcludeFromModelContext = true;
             }
         }
 

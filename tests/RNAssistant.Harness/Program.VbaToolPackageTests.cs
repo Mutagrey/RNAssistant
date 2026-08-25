@@ -33,6 +33,13 @@ namespace RNAssistant.Harness
             var invalid = tool.Code.Replace("As String\n    Echo =", "As Variant\n    Echo =");
             var invalidResult = new VbaToolManifestParser().Parse("RNA_Echo", invalid);
             AssertEqual("entry_signature", invalidResult.ErrorCode, "String return is mandatory");
+
+            var duplicateSafety = tool.Code.Replace(
+                "\"requiresConfirmation\":true}",
+                "\"requiresConfirmation\":true,\"requiresConfirmation\":false}");
+            AssertEqual("manifest_invalid_json",
+                new VbaToolManifestParser().Parse("RNA_Echo", duplicateSafety).ErrorCode,
+                "duplicate manifest safety fields are rejected");
         }
 
         private static void VbaToolStoreRoundTripsPackageSources()
@@ -50,6 +57,32 @@ namespace RNAssistant.Harness
                 AssertTrue(File.Exists(Path.Combine(saved.StoragePath, "src", "RNA_Echo.bas")), "entry .bas stored");
                 AssertTrue(File.Exists(Path.Combine(saved.StoragePath, "src", "RNA_EchoService.cls")), "class .cls stored");
                 AssertTrue(!File.Exists(Path.Combine(saved.StoragePath, "src", "wrong-extension.bas")), "component filename derived from name and type");
+                AssertTrue(!File.Exists(Path.Combine(saved.StoragePath, "pipeline.json")), "VBA package does not persist an unrelated pipeline sidecar");
+
+                var metadataPath = Path.Combine(saved.StoragePath, "tool.json");
+                var metadata = JObject.Parse(File.ReadAllText(metadataPath));
+                ((JArray)metadata["Components"]).RemoveAt(1);
+                File.WriteAllText(metadataPath, metadata.ToString());
+                AssertTrue(!store.Load().Any(candidate => string.Equals(candidate.Id, tool.Id, StringComparison.OrdinalIgnoreCase)),
+                    "VBA package with manifest/component drift is excluded from the catalog");
+                store.SaveOne(tool);
+
+                var supportingSource = Path.Combine(saved.StoragePath, "src", "RNA_EchoService.cls");
+                File.Delete(supportingSource);
+                AssertTrue(!store.Load().Any(candidate => string.Equals(candidate.Id, tool.Id, StringComparison.OrdinalIgnoreCase)),
+                    "VBA package with a missing declared source is excluded from the catalog");
+                store.SaveOne(tool);
+                var unexpectedSource = Path.Combine(saved.StoragePath, "src", "Unexpected.bas");
+                File.WriteAllText(unexpectedSource, "Option Explicit");
+                AssertTrue(!store.Load().Any(candidate => string.Equals(candidate.Id, tool.Id, StringComparison.OrdinalIgnoreCase)),
+                    "VBA package with an undeclared source is excluded from the catalog");
+                store.SaveOne(tool);
+                var legacyForm = Path.Combine(saved.StoragePath, "src", "Legacy.frm");
+                File.WriteAllText(legacyForm, "VERSION 5.00");
+                AssertTrue(!store.Load().Any(candidate => string.Equals(candidate.Id, tool.Id, StringComparison.OrdinalIgnoreCase)),
+                    "VBA package with a forbidden exported form is excluded from the catalog");
+                store.SaveOne(tool);
+                AssertTrue(!File.Exists(legacyForm), "saving a code-only package removes the forbidden legacy form sidecar");
 
                 tool.Components.RemoveAt(1);
                 tool.Code = tool.Code.Replace(",\"RNA_EchoService\"", string.Empty);

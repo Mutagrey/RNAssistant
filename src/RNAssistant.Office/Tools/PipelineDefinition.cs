@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -33,11 +34,30 @@ namespace RNAssistant.Office.Tools
             JObject root;
             try
             {
-                root = JObject.Parse(json ?? string.Empty);
+                root = JObject.Parse(json ?? string.Empty, new JsonLoadSettings
+                {
+                    DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error
+                });
             }
             catch (JsonException ex)
             {
                 error = "Invalid pipeline JSON for " + (ownerId ?? string.Empty) + ": " + ex.Message;
+                return false;
+            }
+
+            var unknownRoot = root.Properties().FirstOrDefault(property =>
+                !string.Equals(property.Name, "version", StringComparison.Ordinal) &&
+                !string.Equals(property.Name, "steps", StringComparison.Ordinal));
+            if (unknownRoot != null)
+            {
+                error = "Pipeline contains unsupported root property: " + unknownRoot.Name + ".";
+                return false;
+            }
+            var version = root["version"];
+            if (version != null &&
+                (version.Type != JTokenType.Integer || !string.Equals(version.ToString(Formatting.None), "1", StringComparison.Ordinal)))
+            {
+                error = "Pipeline version must be the JSON integer 1.";
                 return false;
             }
 
@@ -64,14 +84,43 @@ namespace RNAssistant.Office.Tools
                     return false;
                 }
 
-                var toolId = ((string)step["toolId"] ?? string.Empty).Trim();
+                var unknownStep = step.Properties().FirstOrDefault(property =>
+                    !string.Equals(property.Name, "id", StringComparison.Ordinal) &&
+                    !string.Equals(property.Name, "toolId", StringComparison.Ordinal) &&
+                    !string.Equals(property.Name, "arguments", StringComparison.Ordinal));
+                if (unknownStep != null)
+                {
+                    error = "Pipeline step " + (index + 1) + " contains unsupported property: " + unknownStep.Name + ".";
+                    return false;
+                }
+
+                var toolIdToken = step["toolId"];
+                var toolId = toolIdToken != null && toolIdToken.Type == JTokenType.String
+                    ? ((string)toolIdToken ?? string.Empty).Trim()
+                    : string.Empty;
                 if (string.IsNullOrWhiteSpace(toolId))
                 {
                     error = "Pipeline step has no toolId: " + (index + 1) + ".";
                     return false;
                 }
 
-                var id = ((string)step["id"] ?? toolId).Trim();
+                var idToken = step["id"];
+                if (idToken != null && idToken.Type != JTokenType.String)
+                {
+                    error = "Pipeline step id must be a JSON string: " + (index + 1) + ".";
+                    return false;
+                }
+                var id = ((string)idToken ?? toolId).Trim();
+                if (string.IsNullOrWhiteSpace(id))
+                {
+                    error = "Pipeline step id cannot be blank: " + (index + 1) + ".";
+                    return false;
+                }
+                if (id.Length > 128 || toolId.Length > 128)
+                {
+                    error = "Pipeline step id and toolId must not exceed 128 characters: " + (index + 1) + ".";
+                    return false;
+                }
                 if (!ids.Add(id))
                 {
                     error = "Pipeline step id must be unique: " + id;
@@ -84,12 +133,24 @@ namespace RNAssistant.Office.Tools
                     error = "Pipeline step arguments must be a JSON object: " + id;
                     return false;
                 }
+                var arguments = argumentsToken as JObject;
+                var duplicateArgument = arguments == null
+                    ? null
+                    : arguments.Properties()
+                        .GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase)
+                        .FirstOrDefault(group => group.Count() > 1);
+                if (duplicateArgument != null)
+                {
+                    error = "Pipeline step arguments contain duplicate names that differ only by case: " +
+                        duplicateArgument.Key + ".";
+                    return false;
+                }
 
                 result.Steps.Add(new PipelineStepDefinition
                 {
                     Id = id,
                     ToolId = toolId,
-                    Arguments = argumentsToken as JObject ?? new JObject()
+                    Arguments = arguments ?? new JObject()
                 });
             }
 

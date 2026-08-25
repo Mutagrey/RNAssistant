@@ -229,6 +229,104 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void CasMaintenanceRejectsReparsePointTraversal()
+        {
+            WithTempPaths(paths =>
+            {
+                var external = Path.Combine(Path.GetTempPath(), "RNAssistant.Harness.External." + Guid.NewGuid().ToString("N"));
+                var link = Path.Combine(paths.ChatBlobDirectory, "aa");
+                Directory.CreateDirectory(external);
+                try
+                {
+                    try
+                    {
+                        Directory.CreateSymbolicLink(link, external);
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PlatformNotSupportedException)
+                    {
+                        return;
+                    }
+
+                    var externalBlob = Path.Combine(external, new string('a', 64) + ".blob");
+                    File.WriteAllText(externalBlob, "outside-cas");
+                    var service = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None);
+
+                    var report = service.Audit();
+                    AssertTrue(!report.ReachabilityComplete, "CAS reparse point blocks reachability");
+                    AssertTrue(!report.CanGarbageCollect, "CAS reparse point blocks GC");
+                    AssertTrue(report.Issues.Any(item => item.Kind == CasHealthIssueKinds.BlobUnreadable && item.BlocksGarbageCollection),
+                        "CAS reparse point is reported as blocking");
+                    AssertTrue(!service.Collect().Completed, "GC refuses storage reached through a reparse point");
+                    AssertTrue(File.Exists(externalBlob), "GC never deletes through a reparse point");
+                }
+                finally
+                {
+                    try { if (Directory.Exists(link)) Directory.Delete(link); } catch (IOException) { }
+                    if (Directory.Exists(external)) Directory.Delete(external, true);
+                }
+            });
+        }
+
+        private static void ManagedStorageRejectsReparseRoots()
+        {
+            WithTempPaths(paths =>
+            {
+                var external = Path.Combine(Path.GetTempPath(), "RNAssistant.Harness.ExternalRoot." + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(external);
+                Directory.Delete(paths.ChatBlobDirectory);
+                try
+                {
+                    try
+                    {
+                        Directory.CreateSymbolicLink(paths.ChatBlobDirectory, external);
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is PlatformNotSupportedException)
+                    {
+                        Directory.CreateDirectory(paths.ChatBlobDirectory);
+                        return;
+                    }
+
+                    var externalBlob = Path.Combine(external, new string('b', 64) + ".blob");
+                    File.WriteAllText(externalBlob, "outside-managed-root");
+                    var service = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None);
+                    var report = service.Audit();
+                    AssertTrue(!report.CanGarbageCollect, "reparse CAS root blocks GC");
+                    AssertTrue(report.Issues.Any(item => item.Kind == CasHealthIssueKinds.BlobUnreadable && item.BlocksGarbageCollection),
+                        "reparse CAS root is reported");
+
+                    var ensureRejected = false;
+                    try { paths.Ensure(); }
+                    catch (IOException) { ensureRejected = true; }
+                    AssertTrue(ensureRejected, "managed reparse root is rejected during ensure");
+
+                    var resetRejected = false;
+                    try { paths.ClearRuntimeData(); }
+                    catch (IOException) { resetRejected = true; }
+                    AssertTrue(resetRejected, "runtime reset refuses a managed reparse root");
+                    AssertTrue(File.Exists(externalBlob), "managed operations never traverse the reparse root");
+
+                    var deleteRoot = Path.Combine(paths.AttachmentDirectory, "safe-delete");
+                    Directory.CreateDirectory(deleteRoot);
+                    Directory.CreateSymbolicLink(Path.Combine(deleteRoot, "external"), external);
+                    AssertTrue(StorageFileSystem.TryDeleteDirectory(deleteRoot), "safe recursive delete removes the local tree");
+                    AssertTrue(File.Exists(externalBlob), "safe recursive delete never traverses a child reparse point");
+                }
+                finally
+                {
+                    try
+                    {
+                        if (Directory.Exists(paths.ChatBlobDirectory) && StorageFileSystem.IsReparsePoint(paths.ChatBlobDirectory))
+                        {
+                            Directory.Delete(paths.ChatBlobDirectory);
+                        }
+                    }
+                    catch (IOException) { }
+                    if (!Directory.Exists(paths.ChatBlobDirectory)) Directory.CreateDirectory(paths.ChatBlobDirectory);
+                    if (Directory.Exists(external)) Directory.Delete(external, true);
+                }
+            });
+        }
+
         private static CasMaintenanceService CasService(
             AppDataPaths paths,
             ChatStore chats,

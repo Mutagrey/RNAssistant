@@ -90,7 +90,7 @@ namespace RNAssistant.Harness
                     PipelineJson = "{" +
                         "\"steps\":[" +
                         "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +
-                        "{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"{{args.sheet}}\",\"address\":\"A1\",\"values\":\"[[\\\"Month\\\",\\\"Sales\\\"]]\"}}" +
+                        "{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"{{args.sheet}}\",\"address\":\"A1\",\"values\":[[\"Month\",\"Sales\"]]}}" +
                         "]}"
                 }
             };

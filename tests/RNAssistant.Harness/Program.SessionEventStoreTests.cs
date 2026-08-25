@@ -799,6 +799,31 @@ namespace RNAssistant.Harness
                 AssertEqual(0, store.List(session.Host, session.DocumentKey, session.DocumentTitle).Count,
                     "corrupt stream is excluded from listing");
             });
+
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "shape-doc", "Shape.xlsx", "Shape");
+                var path = SessionEventFile(paths, session);
+                var lines = File.ReadAllLines(path);
+                var first = JObject.Parse(lines[0]);
+                first["UnhashedExtension"] = "must-not-be-ignored";
+                lines[0] = first.ToString(Newtonsoft.Json.Formatting.None);
+                File.WriteAllLines(path, lines);
+
+                AssertTrue(store.Load(session.Host, session.DocumentKey, session.Id) == null,
+                    "unknown unhashed event fields reject the stream");
+            });
+
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "blank-doc", "Blank.xlsx", "Blank");
+                var path = SessionEventFile(paths, session);
+                File.AppendAllText(path, "\n");
+                AssertTrue(store.Load(session.Host, session.DocumentKey, session.Id) == null,
+                    "blank canonical JSONL records reject the stream");
+            });
         }
 
         private static void SessionEventHmacRequiresMatchingKey()

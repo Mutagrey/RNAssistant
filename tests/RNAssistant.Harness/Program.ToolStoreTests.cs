@@ -439,7 +439,8 @@ namespace RNAssistant.Harness
                 edited.Name = "Updated report";
                 edited.RequiresConfirmation = true;
                 edited.MutatesDocument = true;
-                edited.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"Report\",\"address\":\"A1\",\"values\":\"[[\\\"A\\\"]]\"}}]}";
+                edited.RiskLevel = 2;
+                edited.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"Report\",\"address\":\"A1\",\"values\":[[\"A\"]]}}]}";
                 store.Save(new[] { edited }, "Excel");
 
                 var loaded = store.Load();
@@ -458,11 +459,24 @@ namespace RNAssistant.Harness
             {
                 var validDirectory = Path.Combine(paths.ToolsDirectory, "excel", "valid");
                 var brokenDirectory = Path.Combine(paths.ToolsDirectory, "excel", "broken");
+                var oversizedDirectory = Path.Combine(paths.ToolsDirectory, "excel", "oversized");
+                var duplicateDirectory = Path.Combine(paths.ToolsDirectory, "excel", "duplicate");
+                var invalidUtf8Directory = Path.Combine(paths.ToolsDirectory, "excel", "invalid_utf8");
                 Directory.CreateDirectory(validDirectory);
                 Directory.CreateDirectory(brokenDirectory);
+                Directory.CreateDirectory(oversizedDirectory);
+                Directory.CreateDirectory(duplicateDirectory);
+                Directory.CreateDirectory(invalidUtf8Directory);
                 File.WriteAllText(Path.Combine(validDirectory, "tool.json"), JsonConvert.SerializeObject(CustomTool("Excel", "excel.valid")));
                 File.WriteAllText(Path.Combine(validDirectory, "pipeline.json"), "{\"steps\":[]}");
                 File.WriteAllText(Path.Combine(brokenDirectory, "tool.json"), "{ broken");
+                File.WriteAllText(Path.Combine(oversizedDirectory, "tool.json"), JsonConvert.SerializeObject(CustomTool("Excel", "excel.oversized")));
+                File.WriteAllText(Path.Combine(oversizedDirectory, "pipeline.json"), new string('x', 1100001));
+                var duplicateJson = JsonConvert.SerializeObject(CustomTool("Excel", "excel.duplicate"));
+                File.WriteAllText(Path.Combine(duplicateDirectory, "tool.json"),
+                    duplicateJson.Insert(1, "\"Id\":\"excel.shadow\","));
+                File.WriteAllBytes(Path.Combine(invalidUtf8Directory, "tool.json"),
+                    new byte[] { 0xef, 0xbb, 0xbf, 0xc3, 0x28 });
 
                 var loaded = new ToolStore(paths).Load();
 
@@ -847,6 +861,25 @@ namespace RNAssistant.Harness
                     "---\nid: common.invalid\nhost: Common\nname: Invalid\ndescription: " +
                     new string('x', 4001) + "\n---\nBody");
                 AssertEqual(2, store.Load().Count, "invalid external skill metadata is skipped");
+
+                var unclosedDirectory = Path.Combine(paths.SkillsDirectory, "common", "unclosed_external");
+                Directory.CreateDirectory(unclosedDirectory);
+                File.WriteAllText(Path.Combine(unclosedDirectory, "SKILL.md"),
+                    "---\nid: common.unclosed\nhost: Common\nname: Unclosed\ndescription: Invalid front matter.\nBody");
+                var invalidUtf8Directory = Path.Combine(paths.SkillsDirectory, "common", "invalid_utf8_external");
+                Directory.CreateDirectory(invalidUtf8Directory);
+                File.WriteAllBytes(Path.Combine(invalidUtf8Directory, "SKILL.md"), new byte[] { 0xef, 0xbb, 0xbf, 0xc3, 0x28 });
+                AssertEqual(2, store.Load().Count, "malformed front matter and non-UTF8 skill bodies are skipped");
+
+                var excessReferencesDirectory = Path.Combine(paths.SkillsDirectory, "common", "excess_references_external");
+                Directory.CreateDirectory(Path.Combine(excessReferencesDirectory, "references"));
+                File.WriteAllText(Path.Combine(excessReferencesDirectory, "SKILL.md"),
+                    "---\nid: common.excess_refs\nhost: Common\nname: Excess refs\ndescription: Too many references.\n---\nBody");
+                for (var index = 0; index < 65; index++)
+                {
+                    File.WriteAllText(Path.Combine(excessReferencesDirectory, "references", "ref" + index + ".md"), "Reference");
+                }
+                AssertEqual(2, store.Load().Count, "skill packages above the documented reference limit are skipped");
                 var whitespaceIdRejected = false;
                 try
                 {

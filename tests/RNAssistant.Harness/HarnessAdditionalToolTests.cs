@@ -44,6 +44,24 @@ namespace RNAssistant.Harness
                 AssertTrue(!emptyResult.Success, "empty pipeline should fail");
                 AssertContains(emptyResult.Message, "Pipeline has no steps", "empty pipeline message");
                 AssertEqual(0, adapter.Executed.Count, "empty pipeline adapter count");
+
+                var ambiguous = CustomTool("Excel", "excel.ambiguous_pipeline");
+                ambiguous.PipelineJson = "{\"version\":1,\"steps\":[{\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\",\"Kind\":\"selection\"}}]}";
+                var ambiguousValidation = executor.ValidateToolDefinition(ambiguous);
+                AssertTrue(!ambiguousValidation.Success, "case-insensitive duplicate pipeline arguments are rejected");
+                AssertContains(ambiguousValidation.Message, "duplicate", "ambiguous pipeline diagnostic");
+
+                var unsupported = CustomTool("Excel", "excel.unsupported_pipeline");
+                unsupported.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.inspect\",\"arguments\":{},\"retry\":true}]}";
+                var unsupportedValidation = executor.ValidateToolDefinition(unsupported);
+                AssertTrue(!unsupportedValidation.Success, "unsupported pipeline control fields are rejected");
+                AssertContains(unsupportedValidation.Message, "unsupported", "unsupported pipeline diagnostic");
+
+                var blankId = CustomTool("Excel", "excel.blank_step_id");
+                blankId.PipelineJson = "{\"steps\":[{\"id\":\" \",\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}";
+                var blankIdValidation = executor.ValidateToolDefinition(blankId);
+                AssertTrue(!blankIdValidation.Success, "blank pipeline step id is rejected");
+                AssertContains(blankIdValidation.Message, "cannot be blank", "blank pipeline step id diagnostic");
             });
         }
 

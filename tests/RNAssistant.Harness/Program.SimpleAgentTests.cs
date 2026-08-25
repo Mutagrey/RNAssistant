@@ -27,12 +27,40 @@ namespace RNAssistant.Harness
         {
             var tool = new ToolDefinition { Id = "excel.add_sheet" };
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
+                "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"values\":[[\"A\"]]}}]}",
                 new[] { tool });
             AssertTrue(parsed.Success, "tool response parses");
             AssertEqual(1, parsed.Response.ToolCalls.Count, "one tool parsed");
             AssertEqual("excel.add_sheet", parsed.Response.ToolCalls[0].Name, "tool name");
             AssertEqual("Report", Convert.ToString(parsed.Response.ToolCalls[0].Arguments["name"]), "tool argument");
+            AssertTrue(parsed.Response.ToolCalls[0].Arguments["values"] is Newtonsoft.Json.Linq.JArray,
+                "structured tool argument remains native JSON");
+        }
+
+        private static void SimpleAgentRequiresCompleteUniqueEnvelope()
+        {
+            var parser = new AgentResponseParser();
+            var tool = new ToolDefinition { Id = "excel.inspect" };
+            var missingCalls = parser.Parse("{\"message\":\"Готово.\"}", new[] { tool });
+            AssertTrue(!missingCalls.Success, "tool_calls is required");
+            AssertContains(missingCalls.Error, "tool_calls", "missing tool_calls diagnostic");
+
+            var duplicate = parser.Parse(
+                "{\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\",\"Kind\":\"selection\"}}]}",
+                new[] { tool });
+            AssertTrue(!duplicate.Success, "case-insensitive duplicate arguments are rejected");
+            AssertContains(duplicate.Error, "duplicate", "duplicate argument diagnostic");
+
+            var duplicateJson = parser.Parse(
+                "{\"message\":\"First.\",\"message\":\"Second.\",\"tool_calls\":[]}",
+                new[] { tool });
+            AssertTrue(!duplicateJson.Success, "duplicate JSON properties are rejected");
+
+            var unsupportedCallField = parser.Parse(
+                "{\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{},\"retry\":true}]}",
+                new[] { tool });
+            AssertTrue(!unsupportedCallField.Success, "unsupported tool-call fields are rejected");
+            AssertContains(unsupportedCallField.Error, "unsupported field", "unsupported tool-call field diagnostic");
         }
 
         private static void SimpleAgentParsesMultipleToolCalls()
@@ -334,6 +362,29 @@ namespace RNAssistant.Harness
             tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}";
             AssertTrue(!ToolSchemaSupport.TryParse(tool, out schema, out error), "undocumented argument is rejected");
             AssertContains(error, "description", "missing description diagnostic");
+
+            tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Count.\",\"minimum\":\"bad\"}},\"required\":[],\"additionalProperties\":false}";
+            AssertTrue(!ToolSchemaSupport.TryParse(tool, out schema, out error), "malformed numeric constraint is rejected at catalog load");
+            AssertContains(error, "minimum", "malformed constraint diagnostic");
+
+            tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"mode\":{\"type\":\"string\",\"description\":\"Mode.\",\"const\":\"safe\"}},\"required\":[\"mode\"],\"additionalProperties\":false}";
+            AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out error), "const schema parses");
+            arguments = new Newtonsoft.Json.Linq.JObject { ["mode"] = "unsafe" };
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error), "const is enforced at runtime");
+
+            tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"number\",\"description\":\"Finite value.\"}},\"required\":[\"value\"],\"additionalProperties\":false}";
+            AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out error), "finite number schema parses");
+            arguments = new Newtonsoft.Json.Linq.JObject { ["value"] = double.NaN };
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error), "non-finite numbers are rejected");
+
+            tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name.\",\"pattern\":\"^[a-z]+$\"}},\"required\":[\"name\"],\"additionalProperties\":false}";
+            AssertTrue(!ToolSchemaSupport.TryParse(tool, out schema, out error), "unsupported schema assertions are rejected instead of being ignored locally");
+            AssertContains(error, "unsupported schema keyword", "unsupported schema keyword diagnostic");
+
+            tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name.\"},\"Name\":{\"type\":\"string\",\"description\":\"Ambiguous name.\"}},\"required\":[],\"additionalProperties\":false}";
+            AssertTrue(!ToolSchemaSupport.TryParse(tool, out schema, out error), "case-colliding schema properties are rejected");
+            AssertContains(error, "differ only by case", "case-colliding schema diagnostic");
+
         }
 
         private static void ControllerToolCatalogUsesStrictSchemas()

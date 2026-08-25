@@ -73,6 +73,23 @@ namespace RNAssistant.Harness
                 AssertEqual("added sheet Report", adapter.CellValue("Report", "A1"), "step message placeholder");
                 AssertEqual("True", adapter.CellValue("Report", "B1"), "step success placeholder");
 
+                var dotted = new ToolDefinition
+                {
+                    Id = "excel.dotted_placeholder",
+                    Host = "Excel",
+                    Name = "Dotted placeholder",
+                    Executor = "pipeline",
+                    Enabled = true,
+                    ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
+                    PipelineJson = "{\"steps\":[" +
+                        "{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Dotted\"}}," +
+                        "{\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"value\",\"sheet\":\"Dotted\",\"address\":\"A1\",\"value\":\"{{steps.excel.add_sheet.message}}\"}}]}"
+                };
+                var dottedTools = adapter.GetBuiltInTools().Concat(new[] { dotted }).ToList();
+                var dottedResult = executor.Execute(new ToolCommand { ToolId = dotted.Id }, dottedTools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(dottedResult.Success, "default dotted step id placeholder result: " + dottedResult.Message);
+                AssertEqual("added sheet Dotted", adapter.CellValue("Dotted", "A1"), "default dotted step id resolves");
+
                 var nested = new ToolDefinition
                 {
                     Id = "excel.nested_placeholder",
@@ -87,6 +104,28 @@ namespace RNAssistant.Harness
                 var nestedResult = executor.Execute(Command(nested.Id, "header", "Revenue"), nestedTools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(nestedResult.Success, "nested pipeline placeholder result");
                 AssertEqual("Revenue", adapter.CellValue("Nested", "A1"), "nested pipeline placeholder value");
+            });
+        }
+
+        private static void PipelineRejectsUnresolvedPlaceholders()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var pipeline = CustomTool("Excel", "excel.unresolved_placeholder");
+                pipeline.PipelineJson = "{\"steps\":[{\"id\":\"write\",\"toolId\":\"excel.write_range\",\"arguments\":{" +
+                    "\"kind\":\"scalar\",\"sheet\":\"Report\",\"address\":\"A1\",\"value\":\"{{args.missing}}\"}}]}";
+
+                var result = executor.Execute(
+                    new ToolCommand { ToolId = pipeline.Id },
+                    adapter.GetBuiltInTools().Concat(new[] { pipeline }).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+
+                AssertTrue(!result.Success, "unresolved placeholder fails");
+                AssertEqual("invalid_pipeline_placeholder", result.ErrorCode, "unresolved placeholder error code");
+                AssertContains(result.Message, "Unresolved pipeline placeholder", "unresolved placeholder diagnostic");
+                AssertEqual(0, adapter.Executed.Count, "unresolved placeholder does not execute adapter");
             });
         }
 

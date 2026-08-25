@@ -112,5 +112,25 @@ namespace RNAssistant.Harness
             AssertEqual(AgentPromptDefaults.GeneralInstructions, current.SystemPrompt,
                 "unknown Agent prompt schema is not treated as current");
         }
+
+        private static void SettingsNormalizeInvalidNumericValues()
+        {
+            var settings = new AppSettings
+            {
+                Temperature = double.NaN,
+                TopP = double.PositiveInfinity,
+                UiFontScale = double.NegativeInfinity
+            };
+            settings.NormalizeSamplingAndUiValues();
+            AssertEqual(0.2, settings.Temperature, "non-finite temperature uses the default");
+            AssertEqual(1.0, settings.TopP, "non-finite top-p uses the default");
+            AssertEqual(1.0, settings.UiFontScale, "non-finite UI scale uses the default");
+
+            settings.Temperature = 10;
+            settings.UiFontScale = 10;
+            settings.NormalizeSamplingAndUiValues();
+            AssertEqual(2.0, settings.Temperature, "temperature is clamped to the supported endpoint range");
+            AssertEqual(1.30, settings.UiFontScale, "UI scale is clamped to the rendered range");
+        }
     }
 }

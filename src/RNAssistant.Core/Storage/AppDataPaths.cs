@@ -54,14 +54,14 @@ namespace RNAssistant.Core.Storage
 
         public void Ensure()
         {
-            Directory.CreateDirectory(Root);
-            Directory.CreateDirectory(ToolsDirectory);
-            Directory.CreateDirectory(SkillsDirectory);
-            Directory.CreateDirectory(VbaJournalDirectory);
-            Directory.CreateDirectory(ChatDirectory);
-            Directory.CreateDirectory(ChatBlobDirectory);
-            Directory.CreateDirectory(AttachmentDirectory);
-            Directory.CreateDirectory(WebViewUserDataDirectory);
+            EnsureManagedDirectory(Root);
+            EnsureManagedDirectory(ToolsDirectory);
+            EnsureManagedDirectory(SkillsDirectory);
+            EnsureManagedDirectory(VbaJournalDirectory);
+            EnsureManagedDirectory(ChatDirectory);
+            EnsureManagedDirectory(ChatBlobDirectory);
+            EnsureManagedDirectory(AttachmentDirectory);
+            EnsureManagedDirectory(WebViewUserDataDirectory);
         }
 
         public void ClearRuntimeData()
@@ -94,6 +94,10 @@ namespace RNAssistant.Core.Storage
             {
                 return;
             }
+            if (StorageFileSystem.IsReparsePoint(directory))
+            {
+                throw new IOException("Managed storage directory cannot be a reparse point: " + directory);
+            }
 
             foreach (var file in Directory.GetFiles(directory))
             {
@@ -102,8 +106,13 @@ namespace RNAssistant.Core.Storage
 
             foreach (var child in Directory.GetDirectories(directory))
             {
-                TryDeleteDirectory(child);
+                StorageFileSystem.TryDeleteDirectory(child);
             }
+        }
+
+        private static void EnsureManagedDirectory(string directory)
+        {
+            StorageFileSystem.EnsureRegularDirectory(directory);
         }
 
         private static void TryDeleteFile(string path)
@@ -120,18 +129,5 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static void TryDeleteDirectory(string path)
-        {
-            try
-            {
-                Directory.Delete(path, true);
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
-        }
     }
 }

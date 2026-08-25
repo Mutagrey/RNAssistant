@@ -293,9 +293,17 @@ namespace RNAssistant.Harness
                             Content = "{\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"id\":\"call_media\",\"name\":\"common.artifacts_read\",\"arguments\":{\"artifactId\":\"attachment_historic-image\",\"representation\":\"media\"}}]}"
                         });
                     }
-                    AssertEqual(1, mediaMessages.Count, "media is hydrated for the next model step only");
-                    AssertTrue(mediaMessages[0].ArtifactIds.Contains("attachment_historic-image"),
-                        "hydrated media retains artifact provenance");
+                    if (calls == 2)
+                    {
+                        AssertEqual(1, mediaMessages.Count, "media is hydrated for the next model step only");
+                        AssertTrue(mediaMessages[0].ArtifactIds.Contains("attachment_historic-image"),
+                            "hydrated media retains artifact provenance");
+                        return Task.FromResult(new LlmCompletionResult { Content = "invalid envelope" });
+                    }
+                    AssertEqual(0, mediaMessages.Count, "format repair does not resend one-shot media");
+                    AssertTrue(!messages.Any(message => message != null && !message.ExcludeFromModelContext &&
+                        (message.Content ?? string.Empty).StartsWith("ARTIFACT_MEDIA_INPUT", StringComparison.Ordinal)),
+                        "consumed media marker is excluded from later model context");
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = "{\"message\":\"Изображение прочитано.\",\"tool_calls\":[]}"
@@ -311,7 +319,7 @@ namespace RNAssistant.Harness
                     (Action<string, string, ChatActivity>)null).GetAwaiter().GetResult();
 
                 AssertEqual("Изображение прочитано.", result.AssistantText, "agent completes after lazy media read");
-                AssertEqual(2, calls, "artifact media read requires one follow-up model step");
+                AssertEqual(3, calls, "artifact media read plus one format repair completes");
                 AssertTrue(session.Messages.Where(message => message != null && message.ProtocolMessage)
                     .All(message => (message.Attachments ?? new List<ChatAttachment>()).Count == 0),
                     "hydrated media is released after the following model step");

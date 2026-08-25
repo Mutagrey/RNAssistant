@@ -61,7 +61,13 @@ namespace RNAssistant.Core.Tools
 
             var manifestText = StripCommentPrefixes(code.Substring(start + OpenMarker.Length, end - start - OpenMarker.Length));
             JObject manifest;
-            try { manifest = JObject.Parse(manifestText); }
+            try
+            {
+                manifest = JObject.Parse(manifestText, new JsonLoadSettings
+                {
+                    DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error
+                });
+            }
             catch (JsonException ex) { return VbaToolManifestParseResult.Fail("manifest_invalid_json", ex.Message); }
 
             var allowed = new HashSet<string>(new[]

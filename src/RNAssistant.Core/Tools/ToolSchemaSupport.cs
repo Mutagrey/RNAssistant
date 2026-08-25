@@ -9,6 +9,14 @@ namespace RNAssistant.Core.Tools
 {
     public static class ToolSchemaSupport
     {
+        private static readonly HashSet<string> SupportedSchemaKeywords = new HashSet<string>(
+            new[]
+            {
+                "type", "description", "properties", "required", "additionalProperties", "items", "anyOf",
+                "enum", "const", "default", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"
+            },
+            StringComparer.Ordinal);
+
         public static bool TryParse(ToolDefinition tool, out JObject schema, out string error)
         {
             schema = null;
@@ -22,7 +30,9 @@ namespace RNAssistant.Core.Tools
             JObject parsed;
             try
             {
-                parsed = JObject.Parse(string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson);
+                parsed = JObject.Parse(
+                    string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson,
+                    new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
             }
             catch (JsonException ex)
             {
@@ -57,7 +67,15 @@ namespace RNAssistant.Core.Tools
             }
 
             var properties = (JObject)parsed["properties"];
-            var requiredNames = new HashSet<string>(StringComparer.Ordinal);
+            var ambiguousProperty = properties.Properties()
+                .GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Count() > 1);
+            if (ambiguousProperty != null)
+            {
+                error = "argumentSchemaJson.properties contains names that differ only by case: " + ambiguousProperty.Key + ".";
+                return false;
+            }
+            var requiredNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var name in required.Values<string>())
             {
                 if (!requiredNames.Add(name))
@@ -100,6 +118,11 @@ namespace RNAssistant.Core.Tools
                     error = "argumentSchemaJson.properties." + property.Name + ".default has the wrong JSON type.";
                     return false;
                 }
+            }
+
+            if (!ValidateSchemaNode(parsed, "argumentSchemaJson", out error))
+            {
+                return false;
             }
 
             schema = (JObject)parsed.DeepClone();
@@ -182,7 +205,15 @@ namespace RNAssistant.Core.Tools
         {
             arguments = arguments ?? new JObject();
             schema = schema ?? EmptyObjectSchema();
-            return ValidateValue(arguments, schema, "$", applyDefaults, out error);
+            try
+            {
+                return ValidateValue(arguments, schema, "$", applyDefaults, out error);
+            }
+            catch (Exception ex) when (ex is FormatException || ex is OverflowException || ex is InvalidCastException)
+            {
+                error = "Tool schema contains an invalid constraint: " + ex.Message;
+                return false;
+            }
         }
 
         private static JObject EmptyObjectSchema()
@@ -240,10 +271,21 @@ namespace RNAssistant.Core.Tools
                 error = path + " is not one of the allowed values.";
                 return false;
             }
+            var constant = schema["const"];
+            if (constant != null && !JToken.DeepEquals(constant, value))
+            {
+                error = path + " does not match the required constant value.";
+                return false;
+            }
 
             if (value != null && (value.Type == JTokenType.Integer || value.Type == JTokenType.Float))
             {
                 var number = value.Value<double>();
+                if (double.IsNaN(number) || double.IsInfinity(number))
+                {
+                    error = path + " must be a finite JSON number.";
+                    return false;
+                }
                 if (schema["minimum"] != null && number < schema["minimum"].Value<double>())
                 {
                     error = path + " is below the minimum value.";
@@ -423,7 +465,9 @@ namespace RNAssistant.Core.Tools
             var types = typeToken.Type == JTokenType.Array
                 ? ((JArray)typeToken).Values<string>().ToArray()
                 : new[] { typeToken.Type == JTokenType.String ? (string)typeToken : null };
-            return types.Length > 0 && types.All(type =>
+            return types.Length > 0 &&
+                types.Distinct(StringComparer.OrdinalIgnoreCase).Count() == types.Length &&
+                types.All(type =>
                 string.Equals(type, "null", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, "object", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, "array", StringComparison.OrdinalIgnoreCase) ||
@@ -431,6 +475,244 @@ namespace RNAssistant.Core.Tools
                 string.Equals(type, "boolean", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, "integer", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, "number", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool ValidateSchemaNode(JObject node, string path, out string error)
+        {
+            error = null;
+            if (node == null)
+            {
+                error = path + " must be a schema object.";
+                return false;
+            }
+
+            var unsupported = node.Properties().FirstOrDefault(property => !SupportedSchemaKeywords.Contains(property.Name));
+            if (unsupported != null)
+            {
+                error = path + " contains unsupported schema keyword " + unsupported.Name + ".";
+                return false;
+            }
+            var description = node["description"];
+            if (description != null && description.Type != JTokenType.String)
+            {
+                error = path + ".description must be a JSON string.";
+                return false;
+            }
+
+            var type = node["type"];
+            if (type != null && !HasValidType(type))
+            {
+                error = path + ".type is invalid.";
+                return false;
+            }
+
+            var anyOfToken = node["anyOf"];
+            if (anyOfToken != null)
+            {
+                var alternatives = anyOfToken as JArray;
+                if (alternatives == null || alternatives.Count == 0 || alternatives.Any(item => !(item is JObject)))
+                {
+                    error = path + ".anyOf must be a non-empty array of schema objects.";
+                    return false;
+                }
+                for (var i = 0; i < alternatives.Count; i++)
+                {
+                    if (!ValidateSchemaNode((JObject)alternatives[i], path + ".anyOf[" + i + "]", out error)) return false;
+                }
+            }
+
+            var propertiesToken = node["properties"];
+            if (propertiesToken != null && !(propertiesToken is JObject))
+            {
+                error = path + ".properties must be an object.";
+                return false;
+            }
+            var properties = propertiesToken as JObject;
+            if (properties != null)
+            {
+                var ambiguousProperty = properties.Properties()
+                    .GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault(group => group.Count() > 1);
+                if (ambiguousProperty != null)
+                {
+                    error = path + ".properties contains names that differ only by case: " + ambiguousProperty.Key + ".";
+                    return false;
+                }
+                foreach (var property in properties.Properties())
+                {
+                    var propertySchema = property.Value as JObject;
+                    if (propertySchema == null || !ValidateSchemaNode(propertySchema, path + ".properties." + property.Name, out error))
+                    {
+                        if (error == null) error = path + ".properties." + property.Name + " must be a schema object.";
+                        return false;
+                    }
+                }
+            }
+
+            var requiredToken = node["required"];
+            if (requiredToken != null)
+            {
+                var required = requiredToken as JArray;
+                if (required == null || required.Any(item => item.Type != JTokenType.String))
+                {
+                    error = path + ".required must be an array of property names.";
+                    return false;
+                }
+                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var name in required.Values<string>())
+                {
+                    if (!names.Add(name))
+                    {
+                        error = path + ".required contains duplicate property " + name + ".";
+                        return false;
+                    }
+                    if (properties != null && properties[name] == null)
+                    {
+                        error = path + ".required references unknown property " + name + ".";
+                        return false;
+                    }
+                }
+            }
+
+            var additionalProperties = node["additionalProperties"];
+            if (additionalProperties != null &&
+                (additionalProperties.Type != JTokenType.Boolean || additionalProperties.Value<bool>()))
+            {
+                error = path + ".additionalProperties must be false when declared.";
+                return false;
+            }
+
+            if (ContainsType(type, "array"))
+            {
+                var items = node["items"] as JObject;
+                if (items == null)
+                {
+                    error = path + ".items is required for arrays.";
+                    return false;
+                }
+                if (!ValidateSchemaNode(items, path + ".items", out error)) return false;
+            }
+
+            var enumToken = node["enum"];
+            if (enumToken != null)
+            {
+                var values = enumToken as JArray;
+                if (values == null || values.Count == 0)
+                {
+                    error = path + ".enum must be a non-empty array.";
+                    return false;
+                }
+                if (type != null && values.Any(value => !MatchesType(value, type)))
+                {
+                    error = path + ".enum contains a value with the wrong JSON type.";
+                    return false;
+                }
+                for (var i = 0; i < values.Count; i++)
+                {
+                    if (values.Take(i).Any(value => JToken.DeepEquals(value, values[i])))
+                    {
+                        error = path + ".enum contains duplicate values.";
+                        return false;
+                    }
+                }
+            }
+
+            var constant = node["const"];
+            if (constant != null && type != null && !MatchesType(constant, type))
+            {
+                error = path + ".const has the wrong JSON type.";
+                return false;
+            }
+            if (constant != null && enumToken is JArray && !((JArray)enumToken).Any(value => JToken.DeepEquals(value, constant)))
+            {
+                error = path + ".const is not present in enum.";
+                return false;
+            }
+
+            double minimum;
+            double maximum;
+            if (!TryReadFiniteNumber(node["minimum"], out minimum))
+            {
+                error = path + ".minimum must be a finite JSON number.";
+                return false;
+            }
+            if (!TryReadFiniteNumber(node["maximum"], out maximum))
+            {
+                error = path + ".maximum must be a finite JSON number.";
+                return false;
+            }
+            if (node["minimum"] != null && node["maximum"] != null && minimum > maximum)
+            {
+                error = path + ".minimum must not exceed maximum.";
+                return false;
+            }
+
+            int minLength;
+            int maxLength;
+            int minItems;
+            int maxItems;
+            if (!TryReadNonNegativeInt(node["minLength"], out minLength) ||
+                !TryReadNonNegativeInt(node["maxLength"], out maxLength) ||
+                !TryReadNonNegativeInt(node["minItems"], out minItems) ||
+                !TryReadNonNegativeInt(node["maxItems"], out maxItems))
+            {
+                error = path + " length and item limits must be non-negative JSON integers.";
+                return false;
+            }
+            if (node["minLength"] != null && node["maxLength"] != null && minLength > maxLength)
+            {
+                error = path + ".minLength must not exceed maxLength.";
+                return false;
+            }
+            if (node["minItems"] != null && node["maxItems"] != null && minItems > maxItems)
+            {
+                error = path + ".minItems must not exceed maxItems.";
+                return false;
+            }
+
+            var defaultValue = node["default"];
+            if (defaultValue != null)
+            {
+                string defaultError;
+                if (!ValidateValue(defaultValue.DeepClone(), node, path + ".default", false, out defaultError))
+                {
+                    error = path + ".default is invalid: " + defaultError;
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TryReadFiniteNumber(JToken token, out double value)
+        {
+            value = 0;
+            if (token == null) return true;
+            if (token.Type != JTokenType.Integer && token.Type != JTokenType.Float) return false;
+            try
+            {
+                value = token.Value<double>();
+                return !double.IsNaN(value) && !double.IsInfinity(value);
+            }
+            catch (Exception ex) when (ex is FormatException || ex is OverflowException || ex is InvalidCastException)
+            {
+                return false;
+            }
+        }
+
+        private static bool TryReadNonNegativeInt(JToken token, out int value)
+        {
+            value = 0;
+            if (token == null) return true;
+            if (token.Type != JTokenType.Integer) return false;
+            try
+            {
+                value = token.Value<int>();
+                return value >= 0;
+            }
+            catch (Exception ex) when (ex is FormatException || ex is OverflowException || ex is InvalidCastException)
+            {
+                return false;
+            }
         }
 
         private static bool ContainsType(JToken typeToken, string expected)

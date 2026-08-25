@@ -328,7 +328,7 @@ namespace RNAssistant.Harness
             AssertContains(controller.LastArgumentsJson, "Report", "tool args");
             AssertEqual(2, JObject.Parse(controller.LastArgumentsJson)["count"].Value<int>(), "integer tool arg");
             AssertEqual(true, JObject.Parse(controller.LastArgumentsJson)["enabled"].Value<bool>(), "bool tool arg");
-            AssertEqual("[[\"A\"]]", JObject.Parse(controller.LastArgumentsJson)["values"].Value<string>(), "nested tool arg");
+            AssertEqual("A", JObject.Parse(controller.LastArgumentsJson)["values"][0][0].Value<string>(), "nested tool arg");
             AssertTrue(controller.LastDryRun, "dry run");
             AssertEqual(1, progressMessages.Count, "progress count");
             AssertEqual("progress", JObject.Parse(progressMessages[0])["type"].Value<string>(), "progress type");

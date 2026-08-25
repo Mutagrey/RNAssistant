@@ -179,14 +179,7 @@ namespace RNAssistant.Core.Storage
             {
                 settings.MaxTokens = defaults.MaxTokens;
             }
-            if (settings.TopP <= 0)
-            {
-                settings.TopP = defaults.TopP;
-            }
-            if (settings.TopP > 1)
-            {
-                settings.TopP = 1;
-            }
+            settings.NormalizeSamplingAndUiValues();
             if (settings.RequestTimeoutSeconds <= 0)
             {
                 settings.RequestTimeoutSeconds = defaults.RequestTimeoutSeconds;
@@ -298,23 +291,12 @@ namespace RNAssistant.Core.Storage
 
         private bool HasCanonicalHistory()
         {
-            try
-            {
-                return Directory.Exists(_paths.ChatDirectory) &&
-                        Directory.EnumerateFiles(_paths.ChatDirectory, "*.events.jsonl", SearchOption.AllDirectories).Any() ||
-                    Directory.Exists(_paths.VbaJournalDirectory) &&
-                        Directory.EnumerateFiles(_paths.VbaJournalDirectory, "*.events.jsonl", SearchOption.AllDirectories).Any() ||
-                    Directory.Exists(_paths.ChatBlobDirectory) &&
-                        Directory.EnumerateFiles(_paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Any();
-            }
-            catch (IOException)
-            {
-                return true;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return true;
-            }
+            var skipped = false;
+            Action<string, string> markSkipped = (path, message) => skipped = true;
+            return StorageFileSystem.GetFilesRecursive(_paths.ChatDirectory, "*.events.jsonl", markSkipped).Any() ||
+                StorageFileSystem.GetFilesRecursive(_paths.VbaJournalDirectory, "*.events.jsonl", markSkipped).Any() ||
+                StorageFileSystem.GetFilesRecursive(_paths.ChatBlobDirectory, "*.blob", markSkipped).Any() ||
+                skipped;
         }
 
         private byte[] LoadOrCreateProtectionSalt()

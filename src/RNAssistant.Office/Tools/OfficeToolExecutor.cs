@@ -403,7 +403,7 @@ namespace RNAssistant.Office.Tools
             try
             {
                 arguments = JObject.FromObject(command.Arguments ?? new Dictionary<string, object>());
-                CoerceStructuredStrings(arguments, schema);
+                RejectStringifiedStructuredArguments(arguments, schema);
                 ToolSchemaSupport.RemoveOptionalNulls(arguments, schema);
             }
             catch (JsonException ex)
@@ -422,7 +422,7 @@ namespace RNAssistant.Office.Tools
             return null;
         }
 
-        private static void CoerceStructuredStrings(JObject arguments, JObject schema)
+        private static void RejectStringifiedStructuredArguments(JObject arguments, JObject schema)
         {
             var properties = schema == null ? null : schema["properties"] as JObject;
             if (arguments == null || properties == null) return;
@@ -433,28 +433,10 @@ namespace RNAssistant.Office.Tools
                 if (value == null || value.Type != JTokenType.String || propertySchema == null) continue;
                 var type = Convert.ToString(propertySchema["type"]);
                 if (!string.Equals(type, "array", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(type, "object", StringComparison.OrdinalIgnoreCase))
-                {
-                    var raw = value.Value<string>();
-                    bool boolean;
-                    long integer;
-                    double number;
-                    if (string.Equals(type, "boolean", StringComparison.OrdinalIgnoreCase) && bool.TryParse(raw, out boolean)) arguments[property.Name] = boolean;
-                    else if (string.Equals(type, "integer", StringComparison.OrdinalIgnoreCase) && long.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out integer)) arguments[property.Name] = integer;
-                    else if (string.Equals(type, "number", StringComparison.OrdinalIgnoreCase) && double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out number)) arguments[property.Name] = number;
-                    continue;
-                }
-                try
-                {
-                    arguments[property.Name] = JToken.Parse(value.Value<string>());
-                }
-                catch (JsonException ex)
-                {
-                    throw new JsonException(
-                        "$." + property.Name + " must be a native JSON " + type +
-                        ", not quoted/stringified JSON. The supplied string could not be parsed: " + ex.Message,
-                        ex);
-                }
+                    !string.Equals(type, "object", StringComparison.OrdinalIgnoreCase)) continue;
+                throw new JsonException(
+                    "$." + property.Name + " must be a native JSON " + type +
+                    ", not quoted/stringified JSON.");
             }
         }
 

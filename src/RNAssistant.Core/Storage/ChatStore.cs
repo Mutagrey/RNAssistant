@@ -44,6 +44,14 @@ namespace RNAssistant.Core.Storage
             ContractResolver = new ChatProjectionContractResolver(),
             DateTimeZoneHandling = DateTimeZoneHandling.Utc
         };
+        private static readonly HashSet<string> SessionEventProperties = new HashSet<string>(
+            new[]
+            {
+                "SchemaVersion", "SessionId", "Sequence", "EventId", "CreatedUtc", "Type",
+                "RunId", "TurnId", "StepId", "PreviousHash", "HashAlgorithm", "ProtectionKeyId",
+                "Hash", "Data", "EncryptedData", "Payload"
+            },
+            StringComparer.Ordinal);
 
         private static readonly string[] MetadataProperties =
         {
@@ -385,22 +393,14 @@ namespace RNAssistant.Core.Storage
         internal void ScanCasReferences(CasReachabilityScan scan)
         {
             if (scan == null) throw new ArgumentNullException("scan");
-            string[] paths;
-            try
-            {
-                paths = Directory.Exists(_paths.ChatDirectory)
-                    ? Directory.GetFiles(_paths.ChatDirectory, "*" + EventFileSuffix, SearchOption.AllDirectories)
-                    : new string[0];
-            }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-            {
-                scan.AddSourceIssue(
+            var paths = StorageFileSystem.GetFilesRecursive(
+                _paths.ChatDirectory,
+                "*" + EventFileSuffix,
+                (path, message) => scan.AddSourceIssue(
                     CasHealthIssueKinds.SourceUnreadable,
                     "chat",
-                    "chats",
-                    "Chat event streams could not be enumerated: " + ex.Message);
-                return;
-            }
+                    CasMaintenanceService.RelativePath(_paths.ChatDirectory, path),
+                    message)).ToArray();
 
             foreach (var path in paths.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
             {
@@ -679,7 +679,7 @@ namespace RNAssistant.Core.Storage
                 using (AcquireDocumentLock(host, documentKey))
                 {
                     if (!Directory.Exists(directory)) return false;
-                    Directory.Delete(directory, true);
+                    if (!StorageFileSystem.TryDeleteDirectory(directory)) return false;
                     ClearProjectionCache();
                     ClearHeaderCache();
                 }
@@ -1782,13 +1782,17 @@ namespace RNAssistant.Core.Storage
                     {
                         if (string.IsNullOrWhiteSpace(line.Text))
                         {
-                            if (!line.Terminated) result.HasIncompleteTail = true;
-                            continue;
+                            if (!line.Terminated)
+                            {
+                                result.HasIncompleteTail = true;
+                                break;
+                            }
+                            throw new ChatConcurrencyException("The chat event log contains a blank record.");
                         }
                         SessionEvent sessionEvent;
                         try
                         {
-                            sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line.Text);
+                            sessionEvent = ParseSessionEvent(line.Text);
                         }
                         catch (JsonException)
                         {
@@ -1864,13 +1868,17 @@ namespace RNAssistant.Core.Storage
                     {
                         if (string.IsNullOrWhiteSpace(line.Text))
                         {
-                            if (!line.Terminated) result.HasIncompleteTail = true;
-                            continue;
+                            if (!line.Terminated)
+                            {
+                                result.HasIncompleteTail = true;
+                                break;
+                            }
+                            throw new ChatConcurrencyException("The chat event log contains a blank record.");
                         }
                         SessionEvent sessionEvent;
                         try
                         {
-                            sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line.Text);
+                            sessionEvent = ParseSessionEvent(line.Text);
                         }
                         catch (JsonException)
                         {
@@ -2140,7 +2148,7 @@ namespace RNAssistant.Core.Storage
                         string.IsNullOrWhiteSpace(line.Text)) return null;
                 }
 
-                var sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line.Text);
+                var sessionEvent = ParseSessionEvent(line.Text);
                 var protector = Protection();
                 if (sessionEvent == null || sessionEvent.SchemaVersion != SessionEvent.CurrentSchemaVersion ||
                     sessionEvent.Sequence != expectedRevision ||
@@ -2440,6 +2448,20 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        private static SessionEvent ParseSessionEvent(string text)
+        {
+            var root = JObject.Parse(text, new JsonLoadSettings
+            {
+                DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error
+            });
+            var unknown = root.Properties().FirstOrDefault(property => !SessionEventProperties.Contains(property.Name));
+            if (unknown != null)
+            {
+                throw new JsonSerializationException("Unsupported session event property: " + unknown.Name + ".");
+            }
+            return root.ToObject<SessionEvent>();
+        }
+
         private static string ComputeHash(SessionEvent sessionEvent, StorageProtector protector)
         {
             var canonical = new JObject
@@ -2638,28 +2660,19 @@ namespace RNAssistant.Core.Storage
 
         private static IEnumerable<string> SafeGetDirectories(string directory)
         {
-            try { return Directory.GetDirectories(directory); }
-            catch (IOException) { return new string[0]; }
-            catch (UnauthorizedAccessException) { return new string[0]; }
+            return StorageFileSystem.GetDirectories(directory);
         }
 
         private static IEnumerable<string> SafeGetSessionFiles(string directory)
         {
-            try { return Directory.GetFiles(directory, "*" + EventFileSuffix); }
-            catch (IOException) { return new string[0]; }
-            catch (UnauthorizedAccessException) { return new string[0]; }
+            return StorageFileSystem.GetFiles(directory, "*" + EventFileSuffix);
         }
 
         private IEnumerable<string> SafeFindSessionFiles(string sessionId)
         {
             if (!Directory.Exists(_paths.ChatDirectory)) return new string[0];
             var fileName = AppDataPaths.SafeFileName(sessionId ?? string.Empty) + EventFileSuffix;
-            try
-            {
-                return Directory.GetFiles(_paths.ChatDirectory, fileName, SearchOption.AllDirectories);
-            }
-            catch (IOException) { return new string[0]; }
-            catch (UnauthorizedAccessException) { return new string[0]; }
+            return StorageFileSystem.GetFilesRecursive(_paths.ChatDirectory, fileName);
         }
 
         private static string CurrentRunId(ChatSession session)

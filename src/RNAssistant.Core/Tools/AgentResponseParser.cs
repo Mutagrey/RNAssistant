@@ -25,7 +25,10 @@ namespace RNAssistant.Core.Tools
             JObject root;
             try
             {
-                root = JObject.Parse(raw);
+                root = JObject.Parse(raw, new JsonLoadSettings
+                {
+                    DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error
+                });
             }
             catch (JsonException ex)
             {
@@ -33,21 +36,26 @@ namespace RNAssistant.Core.Tools
             }
 
             var messageToken = root["message"];
-            if (messageToken != null && messageToken.Type != JTokenType.Null && messageToken.Type != JTokenType.String)
+            if (messageToken == null || messageToken.Type != JTokenType.String)
             {
-                return AgentResponseParseResult.Fail("message must be a string or null.");
+                return AgentResponseParseResult.Fail("Agent response requires a string message field.");
             }
-            var response = new AgentResponse { Message = (string)messageToken ?? string.Empty };
+            var response = new AgentResponse { Message = (string)messageToken };
             var callsToken = root["tool_calls"];
-            if (callsToken == null || callsToken.Type == JTokenType.Null)
+            if (callsToken == null)
             {
-                return ValidateFinalResponse(response, tools);
+                return AgentResponseParseResult.Fail("Agent response requires a tool_calls array.");
             }
 
             var calls = callsToken as JArray;
             if (calls == null)
             {
-                return AgentResponseParseResult.Fail("tool_calls must be an array or null.");
+                return AgentResponseParseResult.Fail("tool_calls must be an array.");
+            }
+            if (calls.Count > AgentResponseSchemaBuilder.MaximumToolCalls)
+            {
+                return AgentResponseParseResult.Fail(
+                    "tool_calls exceeds the maximum of " + AgentResponseSchemaBuilder.MaximumToolCalls + " calls per response.");
             }
             if (calls.Count == 0)
             {
@@ -66,6 +74,15 @@ namespace RNAssistant.Core.Tools
             foreach (var token in calls)
             {
                 var call = token as JObject;
+                var unsupportedCallField = call == null ? null : call.Properties().FirstOrDefault(property =>
+                    !string.Equals(property.Name, "id", StringComparison.Ordinal) &&
+                    !string.Equals(property.Name, "name", StringComparison.Ordinal) &&
+                    !string.Equals(property.Name, "arguments", StringComparison.Ordinal));
+                if (unsupportedCallField != null)
+                {
+                    return AgentResponseParseResult.Fail(
+                        "Tool call contains unsupported field: " + unsupportedCallField.Name + ".");
+                }
                 var idToken = call == null ? null : call["id"];
                 var nameToken = call == null ? null : call["name"];
                 var id = idToken != null && idToken.Type == JTokenType.String ? (string)idToken : null;
@@ -86,8 +103,23 @@ namespace RNAssistant.Core.Tools
                 }
                 containsConfirmationCall |= tool.RequiresConfirmation;
 
+                var duplicateArgument = arguments.Properties()
+                    .GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault(group => group.Count() > 1);
+                if (duplicateArgument != null)
+                {
+                    return AgentResponseParseResult.Fail(
+                        "Tool arguments must not contain duplicate names that differ only by case: " + duplicateArgument.Key + ".");
+                }
                 var parsedArguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-                ToolArgumentNormalizer.AddProperties(arguments, parsedArguments);
+                try
+                {
+                    ToolArgumentNormalizer.AddProperties(arguments, parsedArguments);
+                }
+                catch (Exception ex) when (ex is FormatException || ex is OverflowException || ex is ArgumentException)
+                {
+                    return AgentResponseParseResult.Fail("Tool arguments could not be normalized: " + ex.Message);
+                }
                 response.ToolCalls.Add(new AgentToolCall
                 {
                     Id = id,

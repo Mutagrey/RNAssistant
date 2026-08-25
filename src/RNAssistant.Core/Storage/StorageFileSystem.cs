@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security;
 using System.Text;
 
 namespace RNAssistant.Core.Storage
@@ -34,6 +35,10 @@ namespace RNAssistant.Core.Storage
             {
                 throw new ArgumentNullException("writeTempFile");
             }
+            if (File.Exists(path) && IsReparsePoint(path))
+            {
+                throw new IOException("Storage file cannot be a reparse point: " + path);
+            }
 
             var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
@@ -57,9 +62,57 @@ namespace RNAssistant.Core.Storage
 
         public static IEnumerable<string> GetFilesRecursive(string directory, string pattern)
         {
+            return GetFilesRecursive(directory, pattern, null);
+        }
+
+        public static IEnumerable<string> GetFilesRecursive(
+            string directory,
+            string pattern,
+            Action<string, string> onSkipped)
+        {
             var files = new List<string>();
-            AddFiles(directory, pattern, files);
+            AddFiles(directory, pattern, files, onSkipped, true);
             return files;
+        }
+
+        public static IEnumerable<string> GetFiles(string directory, string pattern)
+        {
+            var files = new List<string>();
+            if (string.IsNullOrWhiteSpace(directory) || IsReparsePoint(directory)) return files;
+            string[] candidates;
+            try
+            {
+                candidates = Directory.GetFiles(directory, string.IsNullOrWhiteSpace(pattern) ? "*" : pattern);
+            }
+            catch (Exception ex) when (IsFileSystemException(ex))
+            {
+                return files;
+            }
+            foreach (var candidate in candidates)
+            {
+                if (!IsReparsePoint(candidate)) files.Add(candidate);
+            }
+            return files;
+        }
+
+        public static IEnumerable<string> GetDirectories(string directory)
+        {
+            var directories = new List<string>();
+            if (string.IsNullOrWhiteSpace(directory) || IsReparsePoint(directory)) return directories;
+            string[] candidates;
+            try
+            {
+                candidates = Directory.GetDirectories(directory);
+            }
+            catch (Exception ex) when (IsFileSystemException(ex))
+            {
+                return directories;
+            }
+            foreach (var candidate in candidates)
+            {
+                if (!IsReparsePoint(candidate)) directories.Add(candidate);
+            }
+            return directories;
         }
 
         public static string SafeSegment(string value, string fallback)
@@ -70,51 +123,180 @@ namespace RNAssistant.Core.Storage
             return string.IsNullOrWhiteSpace(result) ? fallback : result;
         }
 
-        public static void TryDeleteDirectory(string path)
+        public static void EnsureRegularDirectory(string path)
         {
-            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Directory path is required.", "path");
+            Directory.CreateDirectory(path);
+            FileAttributes attributes;
+            try
             {
-                return;
+                attributes = File.GetAttributes(path);
+            }
+            catch (Exception ex) when (IsFileSystemException(ex))
+            {
+                throw new IOException("Managed storage directory could not be verified: " + path, ex);
+            }
+            if ((attributes & FileAttributes.Directory) == 0 || (attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new IOException("Managed storage directory must be a regular directory: " + path);
+            }
+        }
+
+        public static bool IsRegularDirectory(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            try
+            {
+                var attributes = File.GetAttributes(path);
+                return (attributes & FileAttributes.Directory) != 0 &&
+                    (attributes & FileAttributes.ReparsePoint) == 0;
+            }
+            catch (Exception ex) when (IsFileSystemException(ex))
+            {
+                return false;
+            }
+        }
+
+        public static bool TryDeleteDirectory(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
             }
 
             try
             {
-                Directory.Delete(path, true);
+                var attributes = File.GetAttributes(path);
+                if ((attributes & FileAttributes.Directory) == 0) return false;
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    Directory.Delete(path, false);
+                    return !Directory.Exists(path);
+                }
+                foreach (var file in Directory.GetFiles(path))
+                {
+                    File.Delete(file);
+                }
+                foreach (var directory in Directory.GetDirectories(path))
+                {
+                    if (!TryDeleteDirectory(directory)) return false;
+                }
+                Directory.Delete(path, false);
+                return !Directory.Exists(path);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return true;
+            }
+            catch (FileNotFoundException)
+            {
+                return true;
             }
             catch (IOException)
             {
+                return false;
             }
             catch (UnauthorizedAccessException)
             {
+                return false;
+            }
+            catch (SecurityException)
+            {
+                return false;
             }
         }
 
-        private static void AddFiles(string directory, string pattern, ICollection<string> files)
+        internal static bool IsReparsePoint(string path)
         {
+            if (string.IsNullOrWhiteSpace(path)) return true;
+            try
+            {
+                return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+            }
+            catch (Exception ex) when (IsFileSystemException(ex))
+            {
+                return true;
+            }
+        }
+
+        private static void AddFiles(
+            string directory,
+            string pattern,
+            ICollection<string> files,
+            Action<string, string> onSkipped,
+            bool root)
+        {
+            if (string.IsNullOrWhiteSpace(directory)) return;
+            FileAttributes attributes;
+            try
+            {
+                attributes = File.GetAttributes(directory);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                if (!root) ReportSkipped(onSkipped, directory, "A discovered directory disappeared before it could be read.");
+                return;
+            }
+            catch (FileNotFoundException)
+            {
+                if (!root) ReportSkipped(onSkipped, directory, "A discovered directory disappeared before it could be read.");
+                return;
+            }
+            catch (Exception ex) when (IsFileSystemException(ex))
+            {
+                ReportSkipped(onSkipped, directory, "Directory attributes could not be read: " + ex.Message);
+                return;
+            }
+            if ((attributes & FileAttributes.Directory) == 0)
+            {
+                ReportSkipped(onSkipped, directory, "Storage traversal root is not a directory.");
+                return;
+            }
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                ReportSkipped(onSkipped, directory, "Directory reparse points are not traversed.");
+                return;
+            }
+
             string[] localFiles;
             string[] childDirectories;
             try
             {
-                localFiles = Directory.GetFiles(directory, pattern);
+                localFiles = Directory.GetFiles(directory, string.IsNullOrWhiteSpace(pattern) ? "*" : pattern);
                 childDirectories = Directory.GetDirectories(directory);
             }
-            catch (IOException)
+            catch (Exception ex) when (IsFileSystemException(ex))
             {
-                return;
-            }
-            catch (UnauthorizedAccessException)
-            {
+                ReportSkipped(onSkipped, directory, "Directory could not be enumerated: " + ex.Message);
                 return;
             }
 
             foreach (var file in localFiles)
             {
-                files.Add(file);
+                if (IsReparsePoint(file))
+                {
+                    ReportSkipped(onSkipped, file, "File reparse points are not read as storage records.");
+                }
+                else
+                {
+                    files.Add(file);
+                }
             }
             foreach (var childDirectory in childDirectories)
             {
-                AddFiles(childDirectory, pattern, files);
+                AddFiles(childDirectory, pattern, files, onSkipped, false);
             }
+        }
+
+        private static bool IsFileSystemException(Exception ex)
+        {
+            return ex is IOException || ex is UnauthorizedAccessException || ex is SecurityException ||
+                ex is ArgumentException || ex is NotSupportedException;
+        }
+
+        private static void ReportSkipped(Action<string, string> onSkipped, string path, string message)
+        {
+            if (onSkipped != null) onSkipped(path, message);
         }
 
         private static void TryDeleteFile(string path)

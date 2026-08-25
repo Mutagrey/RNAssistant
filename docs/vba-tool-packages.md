@@ -16,7 +16,7 @@ tools/excel/excel.echo_vba/
   README.md
 ```
 
-`tool.json` хранит metadata и component list, а исходники живут отдельными `.bas`/`.cls`/`.form.vba` файлами. Package protocol v1 поддерживает standard modules, class modules и пустые code-only `MSForm`. `.form.vba` содержит только code-behind; exported `.frm`, `.frx`, document modules и другие host-owned components не поддерживаются.
+`tool.json` хранит metadata и component list, а исходники живут отдельными `.bas`/`.cls`/`.form.vba` файлами. При загрузке глобального пакета runtime до публикации в catalog сверяет точное множество объявленных имён с manifest и source directory, проверяет допустимые storage types, требует entry source первым `StdModule` и отклоняет отсутствующий, лишний, дублированный или нечитаемый component. `pipeline.json` к VBA executor не относится и не сохраняется как совместимый sidecar. Package protocol v1 поддерживает standard modules, class modules и пустые code-only `MSForm`. `.form.vba` содержит только code-behind; exported `.frm`, `.frx`, document modules и другие host-owned components не поддерживаются.
 
 RNAssistant также читает VBA project активного документа через Office object model. Валидный manifest превращает такой код в tool со scope `document`; он доступен только этому документу и не копируется в глобальную библиотеку автоматически.
 
@@ -73,7 +73,7 @@ End Function
 - Entry function принимает не более 30 позиционных аргументов.
 - Необязательный параметр имеет `default` в schema, потому что `Application.Run` получает позиционные аргументы.
 - Entry point всегда `Public Function ... As String`. `Sub`, `Variant` и object return запрещены.
-- Manifest — источник истины для id, версии, схемы и safety metadata. Код supporting modules не содержит второго manifest.
+- Manifest — источник истины для id, версии, схемы и safety metadata; duplicate JSON fields отклоняются. Код supporting modules не содержит второго manifest.
 
 Рекомендуемые имена: entry module `RNA_<Tool>`, entry function `RNATool_<Tool>`, зависимости `RNA_<Tool>_<Role>`. Используйте `Option Explicit`, явные ссылки на workbook/document/presentation и восстанавливайте изменённые application-wide настройки в error handler.
 

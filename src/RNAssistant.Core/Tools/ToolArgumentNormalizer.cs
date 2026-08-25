@@ -7,25 +7,6 @@ namespace RNAssistant.Core.Tools
 {
     public static class ToolArgumentNormalizer
     {
-        public static Dictionary<string, object> ParseObject(string argumentsJson)
-        {
-            var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrWhiteSpace(argumentsJson))
-            {
-                return result;
-            }
-
-            try
-            {
-                AddProperties(JObject.Parse(argumentsJson), result);
-            }
-            catch (JsonException)
-            {
-            }
-
-            return result;
-        }
-
         public static Dictionary<string, object> NormalizeDictionary(IDictionary<string, object> arguments)
         {
             var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
@@ -90,7 +71,7 @@ namespace RNAssistant.Core.Tools
 
             if (token.Type == JTokenType.Object || token.Type == JTokenType.Array)
             {
-                return token.ToString(Formatting.None);
+                return token.DeepClone();
             }
 
             var value = token as JValue;

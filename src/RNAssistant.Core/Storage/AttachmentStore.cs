@@ -602,6 +602,5 @@ namespace RNAssistant.Core.Storage
         }
         private static bool IsSafeId(string id) { return !string.IsNullOrWhiteSpace(id) && id.Length <= 64 && id.All(char.IsLetterOrDigit); }
         private static void SafeDeleteFile(string path) { try { if (File.Exists(path)) File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
-        private static void SafeDeleteDirectory(string path) { try { if (Directory.Exists(path)) Directory.Delete(path, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
 }

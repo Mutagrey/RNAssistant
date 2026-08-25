@@ -40,9 +40,32 @@ namespace RNAssistant.Office.Tools
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var nested = new ToolCommand { ToolId = step.ToolId };
-                foreach (var property in step.Arguments.Properties())
+                try
                 {
-                    nested.Arguments[property.Name] = ResolvePipelineValue(property.Value, command.Arguments, stepResults);
+                    foreach (var property in step.Arguments.Properties())
+                    {
+                        nested.Arguments[property.Name] = ResolvePipelineValue(property.Value, command.Arguments, stepResults);
+                    }
+                }
+                catch (PipelinePlaceholderException ex)
+                {
+                    var hadCompletedSteps = output.Count > 0;
+                    var failureMessage = "Pipeline step failed: " + step.Id + ". " + ex.Message;
+                    output.Add(new
+                    {
+                        id = step.Id,
+                        toolId = step.ToolId,
+                        success = false,
+                        status = "failed",
+                        errorCode = "invalid_pipeline_placeholder",
+                        retryable = false,
+                        message = ex.Message,
+                        dataJson = string.Empty
+                    });
+                    var failureData = JsonConvert.SerializeObject(new { toolId = tool.Id, dryRun = dryRun, steps = output });
+                    return hadCompletedSteps
+                        ? ToolResult.PartialFailure(failureMessage, failureData, "pipeline_partial_failure")
+                        : ToolResult.Fail(failureMessage, failureData, "invalid_pipeline_placeholder", false);
                 }
 
                 var result = runCommand(nested, depth + 1, dryRun, manualRun, cancellationToken) ?? ToolResult.Fail("Pipeline step returned no result.");
@@ -114,13 +137,15 @@ namespace RNAssistant.Office.Tools
             if (whole.Success)
             {
                 object resolved;
-                if (TryResolvePlaceholder(whole.Groups[1].Value.Trim(), inputArgs, stepResults, out resolved))
+                var key = whole.Groups[1].Value.Trim();
+                if (TryResolvePlaceholder(key, inputArgs, stepResults, out resolved))
                 {
                     var resolvedToken = resolved as JToken;
                     return resolvedToken == null
                         ? (resolved == null ? JValue.CreateNull() : JToken.FromObject(resolved))
                         : resolvedToken.DeepClone();
                 }
+                if (IsRuntimePlaceholder(key)) throw UnresolvedPlaceholder(key);
             }
 
             return new JValue(ReplacePlaceholders(value, inputArgs, stepResults));
@@ -137,9 +162,12 @@ namespace RNAssistant.Office.Tools
             {
                 var key = match.Groups[1].Value.Trim();
                 object resolved;
-                return TryResolvePlaceholder(key, inputArgs, stepResults, out resolved)
-                    ? Convert.ToString(resolved, CultureInfo.InvariantCulture)
-                    : match.Value;
+                if (TryResolvePlaceholder(key, inputArgs, stepResults, out resolved))
+                {
+                    return Convert.ToString(resolved, CultureInfo.InvariantCulture);
+                }
+                if (IsRuntimePlaceholder(key)) throw UnresolvedPlaceholder(key);
+                return match.Value;
             });
         }
 
@@ -151,14 +179,36 @@ namespace RNAssistant.Office.Tools
                 return inputArgs != null && inputArgs.TryGetValue(key.Substring(5), out value);
             }
             if (!key.StartsWith("steps.", StringComparison.OrdinalIgnoreCase)) return false;
-            var parts = key.Split('.');
+            var suffix = key.Substring(6);
+            var fieldSeparator = suffix.LastIndexOf('.');
+            if (fieldSeparator <= 0 || fieldSeparator >= suffix.Length - 1) return false;
+            var stepId = suffix.Substring(0, fieldSeparator);
+            var field = suffix.Substring(fieldSeparator + 1);
             ToolResult step;
-            if (parts.Length < 3 || stepResults == null || !stepResults.TryGetValue(parts[1], out step)) return false;
-            if (string.Equals(parts[2], "message", StringComparison.OrdinalIgnoreCase)) value = step.Message ?? string.Empty;
-            else if (string.Equals(parts[2], "dataJson", StringComparison.OrdinalIgnoreCase)) value = step.DataJson ?? string.Empty;
-            else if (string.Equals(parts[2], "success", StringComparison.OrdinalIgnoreCase)) value = step.Success;
+            if (stepResults == null || !stepResults.TryGetValue(stepId, out step)) return false;
+            if (string.Equals(field, "message", StringComparison.OrdinalIgnoreCase)) value = step.Message ?? string.Empty;
+            else if (string.Equals(field, "dataJson", StringComparison.OrdinalIgnoreCase)) value = step.DataJson ?? string.Empty;
+            else if (string.Equals(field, "success", StringComparison.OrdinalIgnoreCase)) value = step.Success;
             else return false;
             return true;
+        }
+
+        private static bool IsRuntimePlaceholder(string key)
+        {
+            return (key ?? string.Empty).StartsWith("args.", StringComparison.OrdinalIgnoreCase) ||
+                (key ?? string.Empty).StartsWith("steps.", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static PipelinePlaceholderException UnresolvedPlaceholder(string key)
+        {
+            key = key ?? string.Empty;
+            if (key.Length > 256) key = key.Substring(0, 256) + "...";
+            return new PipelinePlaceholderException("Unresolved pipeline placeholder: {{" + key + "}}.");
+        }
+
+        private sealed class PipelinePlaceholderException : InvalidOperationException
+        {
+            public PipelinePlaceholderException(string message) : base(message) { }
         }
     }
 }

@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace RNAssistant.Office.Tools
 {
@@ -13,7 +16,22 @@ namespace RNAssistant.Office.Tools
                 return fallback;
             }
 
-            return Convert.ToString(value);
+            var token = value as JToken;
+            if (token == null)
+            {
+                return Convert.ToString(value, CultureInfo.InvariantCulture);
+            }
+            if (token.Type == JTokenType.Null || token.Type == JTokenType.Undefined)
+            {
+                return fallback;
+            }
+            if (token.Type == JTokenType.Object || token.Type == JTokenType.Array)
+            {
+                return token.ToString(Formatting.None);
+            }
+
+            var scalar = token as JValue;
+            return Convert.ToString(scalar == null ? token.ToString(Formatting.None) : scalar.Value, CultureInfo.InvariantCulture);
         }
 
         public static int Int32(IDictionary<string, object> args, string name, int fallback = 0)

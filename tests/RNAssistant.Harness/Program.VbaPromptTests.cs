@@ -1046,6 +1046,20 @@ namespace RNAssistant.Harness
                 AssertEqual(2, store.ReadEvents("Excel", "doc").Count, "journal sequence remains contiguous");
 
                 var lines = File.ReadAllLines(journal);
+                var unknown = JObject.Parse(lines[0]);
+                unknown["UnhashedExtension"] = "must-not-be-ignored";
+                var unknownLines = lines.ToArray();
+                unknownLines[0] = unknown.ToString(Formatting.None);
+                File.WriteAllLines(journal, unknownLines);
+                try
+                {
+                    store.List("Excel", "doc");
+                    throw new InvalidOperationException("VBA journal with an unknown field was accepted");
+                }
+                catch (VbaJournalException)
+                {
+                }
+
                 var tampered = JObject.Parse(lines[0]);
                 tampered["Data"]["ModuleName"] = "Tampered";
                 lines[0] = tampered.ToString(Formatting.None);

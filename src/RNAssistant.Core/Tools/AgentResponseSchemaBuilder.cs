@@ -8,6 +8,7 @@ namespace RNAssistant.Core.Tools
     public static class AgentResponseSchemaBuilder
     {
         public const string SchemaName = "rnassistant_agent_response";
+        public const int MaximumToolCalls = 32;
 
         public static string Build(IEnumerable<ToolDefinition> tools)
         {
@@ -61,7 +62,7 @@ namespace RNAssistant.Core.Tools
                         ["type"] = "array",
                         ["items"] = callItems,
                         ["description"] = "Exact actions to execute now. An empty array is terminal and cannot accompany promised or unfinished progress.",
-                        ["maxItems"] = callOptions.Count > 0 ? 32 : 0
+                        ["maxItems"] = callOptions.Count > 0 ? MaximumToolCalls : 0
                     }
                 },
                 ["required"] = new JArray("message", "tool_calls"),

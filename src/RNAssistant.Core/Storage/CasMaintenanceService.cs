@@ -254,25 +254,18 @@ namespace RNAssistant.Core.Storage
 
         private List<StoredCasBlob> EnumerateStoredBlobs(ICollection<CasHealthIssue> issues)
         {
-            string[] paths;
-            try
-            {
-                paths = Directory.Exists(_paths.ChatBlobDirectory)
-                    ? Directory.GetFiles(_paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories)
-                    : new string[0];
-            }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-            {
+            var paths = StorageFileSystem.GetFilesRecursive(
+                _paths.ChatBlobDirectory,
+                "*.blob",
+                (path, message) =>
                 issues.Add(new CasHealthIssue
                 {
                     Kind = CasHealthIssueKinds.BlobUnreadable,
                     SourceType = "cas",
-                    SourceId = "chat-blobs",
-                    Message = "The CAS directory could not be enumerated: " + ex.Message,
+                    SourceId = RelativePath(_paths.ChatBlobDirectory, path),
+                    Message = message,
                     BlocksGarbageCollection = true
-                });
-                return new List<StoredCasBlob>();
-            }
+                })).ToArray();
 
             var result = new List<StoredCasBlob>();
             foreach (var path in paths)

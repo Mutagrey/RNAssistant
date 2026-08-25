@@ -237,7 +237,7 @@ To answer, clarify, or refuse, the model returns `{"message":"...","tool_calls":
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. Tool-result data is bounded and oversized data is replaced by a structured preview; the prompt budget is checked before every model request. Excel value/formula/profile reads reject ranges above 100000 cells before loading COM `Value2`. The runtime also enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 
-The model-facing catalog groups uniform intents behind selectors: Excel inspect/read/write/chart-upsert/format, Word read/inspect/write/format, PowerPoint read/list/set-text/add-object, and Outlook read/draft/update/collect. Superseded fine-grained ids remain execution aliases for saved pipelines but are not shown to the model.
+The model-facing catalog groups uniform intents behind selectors: Excel inspect/read/write/chart-upsert/format, Word read/inspect/write/format, PowerPoint read/list/set-text/add-object, and Outlook read/draft/update/collect. Superseded public ids are removed completely: they are neither shown to the model nor rewritten when encountered in a saved pipeline.
 
 For complex work, the model can explicitly create and maintain one visible plan through `common.plan_create/read/update/delete`. Each update creates a chat-artifact revision and the UI shows the active goal, progress count, and step statuses. The runtime never infers a plan, maps tool calls to steps, or changes statuses automatically.
 
@@ -275,14 +275,14 @@ Each tool is a folder with editable files:
 ```text
 tools/<host>/<tool-name>/
   tool.json
-  pipeline.json
+  pipeline.json                 # pipeline executor only
   src/
     EntryModule.bas
     SupportingClass.cls
   README.md
 ```
 
-`tool.json` contains metadata shown to the LLM and the task pane. `pipeline.json` can call existing built-in tools in sequence. VBA packages keep each standard/class component in `src/*.bas` or `src/*.cls`; their complete contract is documented in `docs/vba-tool-packages.md`.
+Tool package text files are strict UTF-8. `tool.json` contains metadata shown to the LLM and the task pane; duplicate JSON properties invalidate it. `pipeline.json` can call existing built-in tools in sequence. VBA packages keep each standard/class component in `src/*.bas` or `src/*.cls`; their complete contract is documented in `docs/vba-tool-packages.md`.
 Tools marked `requiresConfirmation` require manual Run or the `Auto-confirm tool actions` setting.
 Tool and skill updates are written per item and atomically; unrelated hosts, unrecognized entries, and additional user files are not removed.
 
@@ -301,13 +301,13 @@ Pipeline tools use:
 }
 ```
 
-Each pipeline step must set `toolId`; step `id` values must be unique. `id` is only the step label used for placeholders. Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`.
+Pipeline version may be omitted or equal `1`; the root accepts only `version` and `steps`, with at most 50 steps. Each step accepts only `id`, `toolId`, and `arguments`. `toolId` is required; an explicit `id` must be non-empty and unique case-insensitively, while an omitted id defaults to the exact tool id, including dots. Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`. Every `args`/`steps` placeholder must resolve before its call; an unresolved placeholder fails the pipeline instead of being passed as literal input.
 
 The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves pipeline steps without changing the Office document. `Run` is treated as explicit user confirmation.
 
 For Excel, Word, and PowerPoint, `executor: "vba"` uses a strict comment manifest and a `Public Function ... As String` entry point with typed positional arguments. A global package is injected for one run and cleaned in `finally`; explicit persistent installation is allowed only in macro-enabled documents. RNAssistant also discovers valid document-local tools through the VBA project object model. Both paths require Trust Access to the VBA project object model.
 
-Agent mode manages custom tools through `common.tools_read/validate/upsert/delete`; `tools_read` without id lists compact metadata. Upsert creates a missing id or preserves omitted fields while updating an existing one, then validates the effective definition automatically. Optional `createOnly`/`updateOnly` modes retain strict existence semantics; `tools_validate` is only a no-save preflight. In strict Agent output, `parameterDefinitions` and `pipelineSteps` provide compact native name/value arrays which runtime compiles to canonical strict `parameters` and keyed `pipeline` objects. Advanced callers may still pass `parameters` and `pipeline` directly; VBA `components` remains a native array. None of these forms is an escaped JSON string. Upsert/delete requires confirmation unless auto-confirm is enabled. Built-in, controller, and compatibility-alias ids are reserved; an older stored collision remains on disk for manual recovery but is omitted from the runnable catalog. The catalog refreshes after confirmation or on the next user run.
+Agent mode manages custom tools through `common.tools_read/validate/upsert/delete`; `tools_read` without id lists compact metadata. Upsert creates a missing id or preserves omitted fields while updating an existing one, then validates the effective definition automatically. Optional `createOnly`/`updateOnly` modes retain strict existence semantics; `tools_validate` is only a no-save preflight. In strict Agent output, `parameterDefinitions` and `pipelineSteps` provide compact native name/value arrays which runtime compiles to canonical strict `parameters` and keyed `pipeline` objects. Advanced callers may still pass `parameters` and `pipeline` directly; VBA `components` remains a native array. None of these forms is an escaped JSON string. The supported schema dialect is closed to `type`, `description`, `properties`, `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `const`, `default`, `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, and `maxItems`; unsupported assertion keywords are rejected instead of being advertised to the endpoint while ignored locally. Upsert/delete requires confirmation unless auto-confirm is enabled. Built-in, controller, and private backend ids are reserved; an older stored collision remains on disk for manual recovery but is omitted from the runnable catalog. The catalog refreshes after confirmation or on the next user run.
 
 ## Skill Library
 
@@ -315,7 +315,7 @@ Markdown skills are stored under:
 
 `%AppData%\RNAssistant\skills`
 
-Each custom skill is a concise `SKILL.md` guidance file with simple metadata (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Optional detailed UTF-8 Markdown references live directly under the same package's `references/` directory and can be created, edited, or deleted in the Skill Library. Every enabled visible skill contributes `id`, `name`, `description`, package `revision`, `bodyChars`, and `referenceCount` to `RUNTIME_CONTEXT.skills`; the revision covers the core body and reference manifest. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` with an exact id for each clearly relevant catalog entry; omitting id lists metadata. Agent authoring is `common.skills_read/upsert/delete`; `skills_upsert` uses `referencePath` plus `referenceMarkdown` for a reference-only mutation, and `skills_delete` uses `referencePath` to delete one reference. Core and reference mutations are separate calls. Upsert/delete requires confirmation unless auto-confirm is enabled.
+Each custom skill is a concise UTF-8 `SKILL.md` guidance file with front matter (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Optional detailed UTF-8 Markdown references live directly under the same package's `references/` directory and can be created, edited, or deleted in the Skill Library. A package may contain at most 64 direct `.md` references; malformed UTF-8/front matter, unreadable or reparse-point content, case-colliding names, and an over-limit reference set make the whole package unavailable instead of exposing a partial revision. Every enabled visible skill contributes `id`, `name`, `description`, package `revision`, `bodyChars`, and `referenceCount` to `RUNTIME_CONTEXT.skills`; the revision covers the core body and reference manifest. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.skills_read` with an exact id for each clearly relevant catalog entry; omitting id lists metadata. Agent authoring is `common.skills_read/upsert/delete`; `skills_upsert` uses `referencePath` plus `referenceMarkdown` for a reference-only mutation, and `skills_delete` uses `referencePath` to delete one reference. Core and reference mutations are separate calls. Upsert/delete requires confirmation unless auto-confirm is enabled.
 
 ```markdown
 ---

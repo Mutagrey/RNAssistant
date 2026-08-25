@@ -38,6 +38,14 @@ namespace RNAssistant.Core.Storage
         private const string MutationCursorPrefix = "vba:";
         private static readonly object PersistenceSync = new object();
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
+        private static readonly HashSet<string> JournalEventProperties = new HashSet<string>(
+            new[]
+            {
+                "SchemaVersion", "Host", "DocumentKey", "Sequence", "EventId", "CreatedUtc", "Type",
+                "MutationId", "RunId", "TurnId", "StepId", "ToolCallId", "PreviousHash",
+                "HashAlgorithm", "ProtectionKeyId", "Hash", "Data", "EncryptedData"
+            },
+            StringComparer.Ordinal);
 
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
@@ -563,22 +571,14 @@ namespace RNAssistant.Core.Storage
         internal void ScanCasReferences(CasReachabilityScan scan)
         {
             if (scan == null) throw new ArgumentNullException("scan");
-            string[] paths;
-            try
-            {
-                paths = Directory.Exists(_paths.VbaJournalDirectory)
-                    ? Directory.GetFiles(_paths.VbaJournalDirectory, JournalFileName, SearchOption.AllDirectories)
-                    : new string[0];
-            }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-            {
-                scan.AddSourceIssue(
+            var paths = StorageFileSystem.GetFilesRecursive(
+                _paths.VbaJournalDirectory,
+                JournalFileName,
+                (path, message) => scan.AddSourceIssue(
                     CasHealthIssueKinds.SourceUnreadable,
                     "vba",
-                    "vba-journals",
-                    "VBA mutation journals could not be enumerated: " + ex.Message);
-                return;
-            }
+                    CasMaintenanceService.RelativePath(_paths.VbaJournalDirectory, path),
+                    message)).ToArray();
 
             foreach (var path in paths.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
             {
@@ -1045,13 +1045,17 @@ namespace RNAssistant.Core.Storage
                     {
                         if (string.IsNullOrWhiteSpace(line.Text))
                         {
-                            if (!line.Terminated) result.HasIncompleteTail = true;
-                            continue;
+                            if (!line.Terminated)
+                            {
+                                result.HasIncompleteTail = true;
+                                break;
+                            }
+                            throw new VbaJournalException("The VBA mutation journal contains a blank record.");
                         }
                         VbaJournalEvent journalEvent;
                         try
                         {
-                            journalEvent = JsonConvert.DeserializeObject<VbaJournalEvent>(line.Text);
+                            journalEvent = ParseJournalEvent(line.Text);
                         }
                         catch (JsonException ex)
                         {
@@ -1080,6 +1084,20 @@ namespace RNAssistant.Core.Storage
                 throw new VbaJournalException("The VBA mutation journal could not be read.", ex);
             }
             return result;
+        }
+
+        private static VbaJournalEvent ParseJournalEvent(string text)
+        {
+            var root = JObject.Parse(text, new JsonLoadSettings
+            {
+                DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error
+            });
+            var unknown = root.Properties().FirstOrDefault(property => !JournalEventProperties.Contains(property.Name));
+            if (unknown != null)
+            {
+                throw new JsonSerializationException("Unsupported VBA journal event property: " + unknown.Name + ".");
+            }
+            return root.ToObject<VbaJournalEvent>();
         }
 
         private static void ValidateEvent(

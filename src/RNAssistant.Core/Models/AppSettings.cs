@@ -359,6 +359,23 @@ namespace RNAssistant.Core.Models
             AgentSkillsPrompt = DefaultPrompt(AgentSkillsPrompt, AgentPromptDefaults.SkillInstructions);
         }
 
+        internal void NormalizeSamplingAndUiValues()
+        {
+            var defaults = new AppSettings();
+            Temperature = FiniteOrDefault(Temperature, defaults.Temperature);
+            Temperature = Math.Max(0, Math.Min(2, Temperature));
+            TopP = FiniteOrDefault(TopP, defaults.TopP);
+            if (TopP <= 0) TopP = defaults.TopP;
+            TopP = Math.Min(1, TopP);
+            UiFontScale = FiniteOrDefault(UiFontScale, defaults.UiFontScale);
+            UiFontScale = Math.Max(0.85, Math.Min(1.30, UiFontScale));
+        }
+
+        private static double FiniteOrDefault(double value, double fallback)
+        {
+            return double.IsNaN(value) || double.IsInfinity(value) ? fallback : value;
+        }
+
         private static string DefaultPrompt(string value, string fallback)
         {
             return string.IsNullOrWhiteSpace(value) ? fallback : value;
