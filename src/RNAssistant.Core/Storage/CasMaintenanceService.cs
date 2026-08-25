@@ -138,7 +138,7 @@ namespace RNAssistant.Core.Storage
                     });
                     continue;
                 }
-                if (_blobs.ReadBytes(reference.Reference) == null)
+                if (!_blobs.HasVerifiedReference(reference.Reference))
                 {
                     corrupt += 1;
                     issues.Add(new CasHealthIssue

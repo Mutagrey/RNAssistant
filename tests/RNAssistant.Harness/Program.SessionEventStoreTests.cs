@@ -865,6 +865,25 @@ namespace RNAssistant.Harness
                     "protected envelope length is exact at plaintext size " + length);
                 AssertTrue(plaintext.SequenceEqual(protector.Unprotect(stored, "block-boundary")),
                     "protected payload roundtrips at plaintext size " + length);
+
+                byte[] streamed;
+                using (var input = new MemoryStream(plaintext, false))
+                using (var output = new MemoryStream())
+                {
+                    protector.ProtectStream(input, output, "block-boundary");
+                    streamed = output.ToArray();
+                }
+                AssertEqual(protector.StoredByteLength(plaintext.LongLength), streamed.LongLength,
+                    "streamed protected envelope length is exact at plaintext size " + length);
+                AssertTrue(plaintext.SequenceEqual(protector.Unprotect(streamed, "block-boundary")),
+                    "byte-array reader accepts streamed ciphertext at plaintext size " + length);
+                using (var input = new MemoryStream(stored, false))
+                using (var output = new MemoryStream())
+                {
+                    protector.UnprotectToStream(input, output, "block-boundary");
+                    AssertTrue(plaintext.SequenceEqual(output.ToArray()),
+                        "stream reader accepts byte-array ciphertext at plaintext size " + length);
+                }
             }
 
             var tampered = protector.Protect(Encoding.UTF8.GetBytes("authenticated"), "tamper-test");
@@ -1128,6 +1147,66 @@ namespace RNAssistant.Harness
                     new VbaJournalStore(paths, protection),
                     protection).Audit();
                 AssertEqual(0, health.CorruptBlobCount, "CAS audit verifies compressed ciphertext");
+            });
+        }
+
+        private static void FileCasStreamsHashCompressionAndEncryption()
+        {
+            var bytes = Encoding.UTF8.GetBytes("{\"rows\":\"" + new string('ж', 256 * 1024) + "\"}");
+            WithTempPaths(paths =>
+            {
+                var sourcePath = Path.Combine(paths.Root, "stream-source.json");
+                File.WriteAllBytes(sourcePath, bytes);
+                var blobs = new ChatBlobStore(paths);
+                var reference = blobs.StoreFile(sourcePath, "application/json");
+                var blobPath = blobs.PathFor(reference.Sha256);
+
+                AssertEqual((long)bytes.Length, reference.ByteLength, "streamed file reference keeps plaintext length");
+                AssertTrue(blobs.HasVerifiedReference(reference), "streaming verifier accepts streamed plaintext CAS");
+                AssertTrue(bytes.SequenceEqual(blobs.ReadBytes(reference)),
+                    "byte-array reader accepts streamed compressed CAS");
+                AssertEqual("RNACAS01", Encoding.ASCII.GetString(File.ReadAllBytes(blobPath), 0, 8),
+                    "streamed compressible file uses the existing CAS envelope");
+                var arrayReference = blobs.StoreBytes(bytes, "application/json");
+                AssertEqual(reference.Sha256, arrayReference.Sha256,
+                    "streamed and byte-array writers retain identical CAS identity");
+                AssertEqual(0, Directory.GetFiles(paths.Root, "*.tmp", SearchOption.AllDirectories).Length,
+                    "streaming plaintext write leaves no temporary files");
+            });
+
+            WithTempPaths(paths =>
+            {
+                var protector = new StorageProtector(
+                    HistoryIntegrityModes.Sha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256,
+                    "streaming CAS secret",
+                    Enumerable.Range(121, 32).Select(value => (byte)value).ToArray());
+                Func<StorageProtector> protection = () => protector;
+                var sourcePath = Path.Combine(paths.Root, "stream-protected.json");
+                File.WriteAllBytes(sourcePath, bytes);
+                var blobs = new ChatBlobStore(paths, protection);
+                var reference = blobs.StoreFile(sourcePath, "application/json");
+                var blobPath = blobs.PathFor(reference.Sha256);
+                var stored = File.ReadAllBytes(blobPath);
+
+                AssertTrue(StorageProtector.IsProtectedPayload(stored),
+                    "streamed file uses the existing authenticated encryption envelope");
+                AssertTrue(blobs.HasVerifiedReference(reference),
+                    "streaming verifier authenticates and hashes streamed ciphertext");
+                AssertTrue(bytes.SequenceEqual(blobs.ReadBytes(reference)),
+                    "byte-array reader decrypts streamed file ciphertext");
+
+                var arrayBytes = Encoding.UTF8.GetBytes("array-to-stream-verifier");
+                var arrayReference = blobs.StoreBytes(arrayBytes, "text/plain");
+                AssertTrue(blobs.HasVerifiedReference(arrayReference),
+                    "streaming verifier accepts byte-array writer ciphertext");
+
+                stored[stored.Length - 1] ^= 0x01;
+                File.WriteAllBytes(blobPath, stored);
+                AssertTrue(!blobs.HasVerifiedReference(reference),
+                    "streaming verifier rejects an invalid authentication tag");
+                AssertEqual(0, Directory.GetFiles(paths.Root, "*.tmp", SearchOption.AllDirectories).Length,
+                    "streaming encrypted verification leaves no plaintext temporary files");
             });
         }
 

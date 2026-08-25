@@ -52,9 +52,59 @@ namespace RNAssistant.Core.Storage
             return StoreBytes(bytes, contentType, hash, protector);
         }
 
+        public ChatBlobReference StoreFile(string sourcePath, string contentType)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath)) throw new ArgumentException("Source path is required.", "sourcePath");
+            long byteLength;
+            var hash = Sha256File(sourcePath, out byteLength);
+            var protector = Protection();
+            var path = PathFor(hash);
+            var verified = Matches(path, hash, byteLength, protector);
+            if (!verified)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                try
+                {
+                    StorageFileSystem.WriteAtomic(path, tempPath =>
+                    {
+                        CasBlobCodec.EncodeFile(
+                            sourcePath,
+                            byteLength,
+                            contentType,
+                            protector,
+                            BlobPurpose(hash, byteLength),
+                            tempPath);
+                        if (!Matches(tempPath, hash, byteLength, protector))
+                        {
+                            throw new IOException("Streamed CAS payload does not match its source hash.");
+                        }
+                    });
+                    verified = true;
+                }
+                catch (IOException)
+                {
+                    verified = Matches(path, hash, byteLength, protector);
+                    if (!verified) throw;
+                }
+            }
+            if (!verified)
+            {
+                throw new IOException("Content-addressed blob could not be verified after writing.");
+            }
+            return CreateReference(hash, byteLength, contentType, protector);
+        }
+
         internal bool HasStoredReference(ChatBlobReference reference)
         {
             return HasStoredReference(reference, Protection());
+        }
+
+        internal bool HasVerifiedReference(ChatBlobReference reference)
+        {
+            if (!ValidReference(reference)) return false;
+            var protector = Protection();
+            return ProtectionMatches(reference, protector) &&
+                Matches(PathFor(reference.Sha256), reference.Sha256, reference.ByteLength, protector);
         }
 
         internal bool TryGetStoredByteLength(string sha256, out long byteLength)
@@ -124,10 +174,7 @@ namespace RNAssistant.Core.Storage
             var path = PathFor(reference.Sha256);
             if (!File.Exists(path)) return null;
             var protector = Protection();
-            if (!string.IsNullOrWhiteSpace(reference.Encryption) &&
-                !string.Equals(HistoryEncryptionModes.Normalize(reference.Encryption), protector.EncryptionMode, StringComparison.Ordinal)) return null;
-            if (!string.IsNullOrWhiteSpace(reference.ProtectionKeyId) &&
-                !string.Equals(reference.ProtectionKeyId, protector.KeyId, StringComparison.OrdinalIgnoreCase)) return null;
+            if (!ProtectionMatches(reference, protector)) return null;
             try
             {
                 var stored = File.ReadAllBytes(path);
@@ -212,41 +259,36 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        private static string Sha256File(string path, out long byteLength)
+        {
+            using (var stream = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
+            using (var sha = SHA256.Create())
+            {
+                byteLength = stream.Length;
+                var hash = sha.ComputeHash(stream);
+                if (stream.Position != byteLength)
+                {
+                    throw new IOException("CAS source file changed while it was being hashed.");
+                }
+                return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
         private bool Matches(string path, string expectedHash, long expectedLength, StorageProtector protector)
         {
-            try
-            {
-                if (!File.Exists(path)) return false;
-                var stored = File.ReadAllBytes(path);
-                var bytes = CasBlobCodec.Decode(
-                    stored,
-                    expectedLength,
-                    protector,
-                    BlobPurpose(expectedHash, expectedLength));
-                return bytes.LongLength == expectedLength &&
-                    string.Equals(Sha256(bytes), expectedHash, StringComparison.OrdinalIgnoreCase);
-            }
-            catch (IOException)
-            {
-                return false;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return false;
-            }
-            catch (CryptographicException)
-            {
-                return false;
-            }
+            return CasBlobCodec.VerifyFile(
+                path,
+                expectedLength,
+                expectedHash,
+                protector,
+                BlobPurpose(expectedHash, expectedLength));
         }
 
         private bool HasStoredReference(ChatBlobReference reference, StorageProtector protector)
         {
             if (!ValidReference(reference)) return false;
-            if (!string.IsNullOrWhiteSpace(reference.Encryption) &&
-                !string.Equals(HistoryEncryptionModes.Normalize(reference.Encryption), protector.EncryptionMode, StringComparison.Ordinal)) return false;
-            if (!string.IsNullOrWhiteSpace(reference.ProtectionKeyId) &&
-                !string.Equals(reference.ProtectionKeyId, protector.KeyId, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!ProtectionMatches(reference, protector)) return false;
             try
             {
                 var file = new FileInfo(PathFor(reference.Sha256));
@@ -263,6 +305,18 @@ namespace RNAssistant.Core.Storage
             {
                 return false;
             }
+        }
+
+        private static bool ProtectionMatches(ChatBlobReference reference, StorageProtector protector)
+        {
+            return reference != null && protector != null &&
+                (string.IsNullOrWhiteSpace(reference.Encryption) ||
+                    string.Equals(
+                        HistoryEncryptionModes.Normalize(reference.Encryption),
+                        protector.EncryptionMode,
+                        StringComparison.Ordinal)) &&
+                (string.IsNullOrWhiteSpace(reference.ProtectionKeyId) ||
+                    string.Equals(reference.ProtectionKeyId, protector.KeyId, StringComparison.OrdinalIgnoreCase));
         }
 
         private static ChatBlobReference CreateReference(

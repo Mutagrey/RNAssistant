@@ -173,13 +173,13 @@ namespace RNAssistant.Core.Storage
             foreach (var attachment in message.Attachments.Where(item => item != null))
             {
                 var source = AbsolutePath(attachment.RelativePath);
-                var content = _blobs.StoreBytes(File.ReadAllBytes(source), attachment.ContentType);
+                var content = _blobs.StoreFile(source, attachment.ContentType);
                 attachment.ContentSha256 = content.Sha256;
                 attachment.ContentByteLength = content.ByteLength;
                 var extractedSource = ExtractedTextAbsolutePath(attachment);
                 if (!string.IsNullOrWhiteSpace(extractedSource) && File.Exists(extractedSource))
                 {
-                    var extracted = _blobs.StoreBytes(File.ReadAllBytes(extractedSource), "text/plain; charset=utf-8");
+                    var extracted = _blobs.StoreFile(extractedSource, "text/plain; charset=utf-8");
                     attachment.ExtractedTextSha256 = extracted.Sha256;
                     attachment.ExtractedTextByteLength = extracted.ByteLength;
                 }
