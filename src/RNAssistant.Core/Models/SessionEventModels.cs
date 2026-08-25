@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace RNAssistant.Core.Models
@@ -62,6 +63,8 @@ namespace RNAssistant.Core.Models
         public JToken Data { get; set; }
         public string EncryptedData { get; set; }
         public ChatBlobReference Payload { get; set; }
+        [JsonIgnore]
+        internal long StorageByteOffset { get; set; }
 
         public SessionEvent()
         {

@@ -33,7 +33,6 @@ namespace RNAssistant.Core.Storage
         private const string EventFileSuffix = ".events.jsonl";
         private static readonly object PersistenceSync = new object();
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
-        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly JsonSerializerSettings ProjectionJsonSettings = new JsonSerializerSettings
         {
             ContractResolver = new ChatProjectionContractResolver(),
@@ -189,11 +188,13 @@ namespace RNAssistant.Core.Storage
                         session.StorageHeadHash,
                         session.StorageByteLength,
                         session.StorageLastWriteUtcTicks,
+                        session.StorageTailByteOffset,
                         pending,
                         null);
                     var tail = appended[appended.Count - 1];
                     session.Revision = tail.Sequence;
                     session.StorageHeadHash = tail.Hash;
+                    session.StorageTailByteOffset = tail.StorageByteOffset;
                     CaptureStorageState(session, path);
                     return appended.First(item => string.Equals(item.EventId, trace.EventId, StringComparison.Ordinal));
                 }
@@ -239,11 +240,13 @@ namespace RNAssistant.Core.Storage
                             session.StorageHeadHash,
                             session.StorageByteLength,
                             session.StorageLastWriteUtcTicks,
+                            session.StorageTailByteOffset,
                             pending,
                             log);
                         var tail = appended[appended.Count - 1];
                         session.Revision = tail.Sequence;
                         session.StorageHeadHash = tail.Hash;
+                        session.StorageTailByteOffset = tail.StorageByteOffset;
                         CaptureStorageState(session, path);
                     }
                     return open.Count;
@@ -745,12 +748,14 @@ namespace RNAssistant.Core.Storage
                     stored == null ? null : stored.StorageHeadHash,
                     0,
                     0,
+                    0,
                     pending,
                     log);
                 var tail = appended[appended.Count - 1];
                 durableRevision = tail.Sequence;
                 session.Revision = durableRevision;
                 session.StorageHeadHash = tail.Hash;
+                session.StorageTailByteOffset = tail.StorageByteOffset;
                 CaptureStorageState(session, path);
                 RebuildHtmlWorkspaceProjection(session);
                 RebuildContextCheckpointProjection(session);
@@ -766,6 +771,7 @@ namespace RNAssistant.Core.Storage
                         var recoveredTail = LastEvent(recovered);
                         durableRevision = recoveredTail == null ? 0 : recoveredTail.Sequence;
                         session.StorageHeadHash = recoveredTail == null ? null : recoveredTail.Hash;
+                        session.StorageTailByteOffset = recoveredTail == null ? 0 : recoveredTail.StorageByteOffset;
                         CaptureStorageState(session, path);
                     }
                 }
@@ -786,6 +792,7 @@ namespace RNAssistant.Core.Storage
             string expectedHeadHash,
             long expectedByteLength,
             long expectedLastWriteUtcTicks,
+            long expectedTailByteOffset,
             IReadOnlyList<PendingSessionEvent> pending,
             EventLogReadResult validatedLog)
         {
@@ -796,7 +803,7 @@ namespace RNAssistant.Core.Storage
             if (log == null && expectedRevision > 0 && !string.IsNullOrWhiteSpace(expectedHeadHash))
             {
                 previous = ReadValidatedTail(path, sessionId, expectedRevision, expectedHeadHash,
-                    expectedByteLength, expectedLastWriteUtcTicks);
+                    expectedByteLength, expectedLastWriteUtcTicks, expectedTailByteOffset);
             }
             if (previous == null && (expectedRevision > 0 || File.Exists(path)))
             {
@@ -841,14 +848,27 @@ namespace RNAssistant.Core.Storage
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            using (var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read))
-            using (var writer = new StreamWriter(stream, Utf8))
+            var appendOffset = File.Exists(path) ? new FileInfo(path).Length : 0;
+            var serialized = new List<byte[]>();
+            foreach (var sessionEvent in appended)
             {
-                foreach (var sessionEvent in appended)
+                sessionEvent.StorageByteOffset = appendOffset;
+                var bytes = Utf8.GetBytes(JsonConvert.SerializeObject(sessionEvent, Formatting.None));
+                serialized.Add(bytes);
+                appendOffset += bytes.LongLength + 1;
+            }
+
+            using (var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read))
+            {
+                if (stream.Length != appended[0].StorageByteOffset)
                 {
-                    writer.WriteLine(JsonConvert.SerializeObject(sessionEvent, Formatting.None));
+                    throw new ChatConcurrencyException("Chat was changed while the append batch was being prepared.");
                 }
-                writer.Flush();
+                foreach (var bytes in serialized)
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.WriteByte((byte)'\n');
+                }
                 stream.Flush(true);
             }
             return appended;
@@ -982,6 +1002,7 @@ namespace RNAssistant.Core.Storage
             var tail = LastEvent(log);
             session.Revision = tail.Sequence;
             session.StorageHeadHash = tail.Hash;
+            session.StorageTailByteOffset = tail.StorageByteOffset;
             if (rebuildDerivedProjections)
             {
                 RebuildHtmlWorkspaceProjection(session);
@@ -1609,49 +1630,47 @@ namespace RNAssistant.Core.Storage
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
             var result = new EventLogReadResult();
             var protector = Protection();
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            try
             {
-                var hasTerminatedFinalLine = HasTerminatedFinalLine(stream);
-                stream.Position = 0;
-                try
+                using (var reader = new JsonlByteReader(path))
                 {
-                    using (var reader = new StreamReader(stream, StrictUtf8, false, 8192, false))
+                    JsonlByteLine line;
+                    while ((line = reader.ReadLine()) != null)
                     {
-                        string line;
-                        while ((line = reader.ReadLine()) != null)
+                        if (string.IsNullOrWhiteSpace(line.Text))
                         {
-                            if (string.IsNullOrWhiteSpace(line)) continue;
-                            SessionEvent sessionEvent;
-                            try
+                            if (!line.Terminated) result.HasIncompleteTail = true;
+                            continue;
+                        }
+                        SessionEvent sessionEvent;
+                        try
+                        {
+                            sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line.Text);
+                        }
+                        catch (JsonException)
+                        {
+                            if (!line.Terminated && line.NextOffset == reader.Length)
                             {
-                                sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line);
+                                result.HasIncompleteTail = true;
+                                break;
                             }
-                            catch (JsonException)
-                            {
-                                if (reader.EndOfStream && !hasTerminatedFinalLine)
-                                {
-                                    result.HasIncompleteTail = true;
-                                    break;
-                                }
-                                throw new ChatConcurrencyException("The chat event log contains an invalid record.");
-                            }
-                            ValidateEvent(result.Events, sessionEvent, protector);
-                            HydrateEventData(sessionEvent, protector);
-                            result.Events.Add(sessionEvent);
+                            throw new ChatConcurrencyException("The chat event log contains an invalid record.");
+                        }
+                        ValidateEvent(result.Events, sessionEvent, protector);
+                        HydrateEventData(sessionEvent, protector);
+                        sessionEvent.StorageByteOffset = line.Offset;
+                        result.Events.Add(sessionEvent);
+                        if (!line.Terminated)
+                        {
+                            result.HasIncompleteTail = true;
+                            break;
                         }
                     }
                 }
-                catch (DecoderFallbackException)
-                {
-                    throw new ChatConcurrencyException("The chat event log contains invalid UTF-8.");
-                }
-
-                // A complete JSON object without its line terminator must be normalized before
-                // another append, otherwise the next object would be concatenated to it.
-                if (!hasTerminatedFinalLine && !result.HasIncompleteTail)
-                {
-                    result.HasIncompleteTail = true;
-                }
+            }
+            catch (DecoderFallbackException)
+            {
+                throw new ChatConcurrencyException("The chat event log contains invalid UTF-8.");
             }
             return result;
         }
@@ -1662,20 +1681,27 @@ namespace RNAssistant.Core.Storage
             long expectedRevision,
             string expectedHeadHash,
             long expectedByteLength,
-            long expectedLastWriteUtcTicks)
+            long expectedLastWriteUtcTicks,
+            long expectedTailByteOffset)
         {
-            if (expectedByteLength <= 0 || expectedLastWriteUtcTicks <= 0) return null;
-            var file = new FileInfo(path);
-            if (!file.Exists || file.Length != expectedByteLength ||
-                file.LastWriteTimeUtc.Ticks != expectedLastWriteUtcTicks)
-            {
-                return null;
-            }
             try
             {
-                string line;
-                if (!TryReadLastTerminatedLine(path, out line)) return null;
-                var sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line);
+                if (expectedByteLength <= 0 || expectedLastWriteUtcTicks <= 0 ||
+                    expectedTailByteOffset < 0 || expectedTailByteOffset >= expectedByteLength) return null;
+                var file = new FileInfo(path);
+                if (!file.Exists || file.Length != expectedByteLength ||
+                    file.LastWriteTimeUtc.Ticks != expectedLastWriteUtcTicks) return null;
+
+                JsonlByteLine line;
+                using (var reader = new JsonlByteReader(path, expectedTailByteOffset))
+                {
+                    if (reader.Length != expectedByteLength) return null;
+                    line = reader.ReadLine();
+                    if (line == null || !line.Terminated || line.NextOffset != reader.Length ||
+                        string.IsNullOrWhiteSpace(line.Text)) return null;
+                }
+
+                var sessionEvent = JsonConvert.DeserializeObject<SessionEvent>(line.Text);
                 var protector = Protection();
                 if (sessionEvent == null || sessionEvent.SchemaVersion != SessionEvent.CurrentSchemaVersion ||
                     sessionEvent.Sequence != expectedRevision ||
@@ -1688,71 +1714,15 @@ namespace RNAssistant.Core.Storage
                 {
                     return null;
                 }
+                sessionEvent.StorageByteOffset = line.Offset;
                 return sessionEvent;
             }
-            catch (Exception ex) when (ex is JsonException || ex is DecoderFallbackException || ex is CryptographicException)
+            catch (Exception ex) when (
+                ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentOutOfRangeException ||
+                ex is JsonException || ex is DecoderFallbackException || ex is CryptographicException)
             {
                 return null;
             }
-        }
-
-        private static bool TryReadLastTerminatedLine(string path, out string line)
-        {
-            line = null;
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            {
-                if (!HasTerminatedFinalLine(stream) || stream.Length == 0) return false;
-                var reversed = new List<byte>();
-                var buffer = new byte[8192];
-                var cursor = stream.Length;
-                var collecting = false;
-                while (cursor > 0)
-                {
-                    var count = (int)Math.Min(buffer.Length, cursor);
-                    cursor -= count;
-                    stream.Position = cursor;
-                    var read = 0;
-                    while (read < count)
-                    {
-                        var next = stream.Read(buffer, read, count - read);
-                        if (next <= 0) break;
-                        read += next;
-                    }
-                    for (var index = read - 1; index >= 0; index--)
-                    {
-                        var value = buffer[index];
-                        if (!collecting)
-                        {
-                            if (value == (byte)'\n' || value == (byte)'\r' || value == (byte)' ' || value == (byte)'\t') continue;
-                            collecting = true;
-                            reversed.Add(value);
-                            continue;
-                        }
-                        if (value == (byte)'\n')
-                        {
-                            reversed.Reverse();
-                            line = StrictUtf8.GetString(reversed.ToArray());
-                            return !string.IsNullOrWhiteSpace(line);
-                        }
-                        reversed.Add(value);
-                    }
-                }
-                if (!collecting) return false;
-                reversed.Reverse();
-                line = StrictUtf8.GetString(reversed.ToArray());
-                return !string.IsNullOrWhiteSpace(line);
-            }
-        }
-
-        private static bool HasTerminatedFinalLine(FileStream stream)
-        {
-            if (stream == null || stream.Length == 0) return true;
-            var position = stream.Position;
-            stream.Position = stream.Length - 1;
-            var value = stream.ReadByte();
-            stream.Position = position;
-            return value == '\n' || value == '\r';
         }
 
         private static void CaptureStorageState(ChatSession session, string path)

@@ -103,6 +103,7 @@ namespace RNAssistant.Harness
 
                 Test("storage: chat roundtrip", CreatesAndListsChatsInTempRoot),
                 Test("storage: json save remains atomic", JsonFileStoreWritesAtomicUtf8),
+                Test("storage: jsonl byte offsets are exact", JsonlByteOffsetsAreExact),
                 Test("storage: event log is canonical", SessionEventLogIsCanonical),
                 Test("storage: natural list changes omit reorder", NaturalListChangesOmitReorder),
                 Test("storage: headers use artifact metadata", ChatHeadersUseArtifactMetadata),

@@ -129,6 +129,8 @@ namespace RNAssistant.Core.Models
         internal long StorageByteLength { get; set; }
         [JsonIgnore]
         internal long StorageLastWriteUtcTicks { get; set; }
+        [JsonIgnore]
+        internal long StorageTailByteOffset { get; set; }
         public string Id { get; set; }
         public string ParentSessionId { get; set; }
         public long? ParentSessionRevision { get; set; }

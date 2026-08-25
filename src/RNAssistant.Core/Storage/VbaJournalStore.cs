@@ -1034,40 +1034,50 @@ namespace RNAssistant.Core.Storage
         private JournalReadResult ReadEventLogUnbound(string path)
         {
             if (!File.Exists(path)) return null;
-            string[] lines;
-            try
-            {
-                lines = File.ReadAllLines(path, Utf8);
-            }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-            {
-                throw new VbaJournalException("The VBA mutation journal could not be read.", ex);
-            }
-
-            var hasTerminatedFinalLine = StorageFileSystem.HasTerminatedFinalLine(path);
             var result = new JournalReadResult();
             var protector = Protection();
-            for (var index = 0; index < lines.Length; index++)
+            try
             {
-                if (string.IsNullOrWhiteSpace(lines[index])) continue;
-                VbaJournalEvent journalEvent;
-                try
+                using (var reader = new JsonlByteReader(path))
                 {
-                    journalEvent = JsonConvert.DeserializeObject<VbaJournalEvent>(lines[index]);
-                }
-                catch (JsonException ex)
-                {
-                    if (index == lines.Length - 1 && !hasTerminatedFinalLine)
+                    JsonlByteLine line;
+                    while ((line = reader.ReadLine()) != null)
                     {
-                        result.HasIncompleteTail = true;
-                        break;
+                        if (string.IsNullOrWhiteSpace(line.Text))
+                        {
+                            if (!line.Terminated) result.HasIncompleteTail = true;
+                            continue;
+                        }
+                        VbaJournalEvent journalEvent;
+                        try
+                        {
+                            journalEvent = JsonConvert.DeserializeObject<VbaJournalEvent>(line.Text);
+                        }
+                        catch (JsonException ex)
+                        {
+                            if (!line.Terminated && line.NextOffset == reader.Length)
+                            {
+                                result.HasIncompleteTail = true;
+                                break;
+                            }
+                            throw new VbaJournalException("The VBA mutation journal contains an invalid record.", ex);
+                        }
+                        ValidateEvent(result.Events, journalEvent, protector);
+                        HydrateEventData(journalEvent, protector);
+                        ValidateIdentityChange(result.Events, journalEvent);
+                        result.Events.Add(journalEvent);
+                        if (!line.Terminated)
+                        {
+                            result.HasIncompleteTail = true;
+                            break;
+                        }
                     }
-                    throw new VbaJournalException("The VBA mutation journal contains an invalid record.", ex);
                 }
-                ValidateEvent(result.Events, journalEvent, protector);
-                HydrateEventData(journalEvent, protector);
-                ValidateIdentityChange(result.Events, journalEvent);
-                result.Events.Add(journalEvent);
+            }
+            catch (Exception ex) when (
+                ex is IOException || ex is UnauthorizedAccessException || ex is DecoderFallbackException)
+            {
+                throw new VbaJournalException("The VBA mutation journal could not be read.", ex);
             }
             return result;
         }

@@ -19,6 +19,48 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void JsonlByteOffsetsAreExact()
+        {
+            WithTempPaths(paths =>
+            {
+                var path = Path.Combine(paths.Root, "offset-reader.jsonl");
+                var firstText = "{\"value\":\"" + new string('x', 8181) + "я\"}";
+                var thirdText = "{\"value\":3}";
+                var firstBytes = Encoding.UTF8.GetByteCount(firstText);
+                var thirdOffset = firstBytes + 3L;
+                var content = firstText + "\r\n\n" + thirdText;
+                File.WriteAllBytes(path, Encoding.UTF8.GetBytes(content));
+
+                using (var reader = new JsonlByteReader(path))
+                {
+                    var first = reader.ReadLine();
+                    AssertEqual(0L, first.Offset, "first record starts at byte zero");
+                    AssertEqual(firstBytes + 2L, first.NextOffset, "CRLF counts as two bytes");
+                    AssertTrue(first.Terminated, "CRLF record is terminated");
+                    AssertEqual(firstText, first.Text, "UTF-8 split across buffers decodes exactly");
+
+                    var blank = reader.ReadLine();
+                    AssertEqual(first.NextOffset, blank.Offset, "blank record keeps its byte offset");
+                    AssertEqual(thirdOffset, blank.NextOffset, "blank LF advances one byte");
+                    AssertTrue(blank.Terminated, "blank LF record is terminated");
+
+                    var third = reader.ReadLine();
+                    AssertEqual(thirdOffset, third.Offset, "final record offset is exact");
+                    AssertEqual(Encoding.UTF8.GetByteCount(content), third.NextOffset, "final byte position is exact");
+                    AssertTrue(!third.Terminated, "unterminated final record is explicit");
+                    AssertEqual(thirdText, third.Text, "unterminated content is preserved");
+                    AssertTrue(reader.ReadLine() == null, "reader stops at the captured file length");
+                }
+
+                using (var reader = new JsonlByteReader(path, thirdOffset))
+                {
+                    var third = reader.ReadLine();
+                    AssertEqual(thirdText, third.Text, "reader seeks directly to a known record offset");
+                    AssertEqual(thirdOffset, third.Offset, "seek preserves absolute offsets");
+                }
+            });
+        }
+
         private static void SessionEventLogIsCanonical()
         {
             WithTempPaths(paths =>
@@ -688,6 +730,20 @@ namespace RNAssistant.Harness
                 AssertEqual(SessionEventTypes.LlmResponse, events[3].Type, "response shares session stream");
                 AssertEqual(SessionEventTypes.StepEnded, events[4].Type, "step end shares session stream");
                 AssertEqual("request-1", events[4].StepId, "step correlation survives terminal event");
+
+                var raw = File.ReadAllBytes(SessionEventFile(paths, session));
+                long expectedOffset = 0;
+                foreach (var sessionEvent in events)
+                {
+                    AssertEqual(expectedOffset, sessionEvent.StorageByteOffset,
+                        "replayed event exposes its exact byte offset");
+                    var lineEnd = Array.IndexOf(raw, (byte)'\n', checked((int)expectedOffset));
+                    AssertTrue(lineEnd >= 0, "every durable event has a terminator");
+                    expectedOffset = lineEnd + 1L;
+                }
+                AssertEqual(raw.LongLength, expectedOffset, "event offsets cover the complete stream");
+                AssertEqual(events.Last().StorageByteOffset, session.StorageTailByteOffset,
+                    "session caches the exact tail offset");
             });
         }
 
@@ -875,6 +931,21 @@ namespace RNAssistant.Harness
                 AssertTrue(text.EndsWith("\n", StringComparison.Ordinal), "recovered stream ends with a line terminator");
                 AssertEqual(2, File.ReadAllLines(path).Length, "next commit does not concatenate JSON objects");
                 AssertEqual("After valid tail", store.Load(loaded.Id).Title, "recovered valid tail replays");
+
+                var journal = new VbaJournalStore(paths);
+                journal.Save("Word", "tail-valid-vba", "Tail.docx", "Module1", "StdModule", "Sub One()\nEnd Sub");
+                var journalPath = Path.Combine(
+                    paths.VbaJournalDirectory,
+                    AppDataPaths.SafeFileName("Word|tail-valid-vba"),
+                    "mutations.events.jsonl");
+                File.WriteAllText(journalPath, File.ReadAllText(journalPath).TrimEnd('\r', '\n'), new UTF8Encoding(false));
+                AssertEqual(1, journal.List("Word", "tail-valid-vba").Count,
+                    "unterminated valid VBA record remains readable");
+                journal.Save("Word", "tail-valid-vba", "Tail.docx", "Module2", "StdModule", "Sub Two()\nEnd Sub");
+                AssertEqual(2, File.ReadAllLines(journalPath).Length,
+                    "next VBA append does not concatenate JSON objects");
+                AssertEqual(2, journal.List("Word", "tail-valid-vba").Count,
+                    "recovered VBA tail replays");
             });
         }
 

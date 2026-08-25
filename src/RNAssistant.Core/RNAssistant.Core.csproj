@@ -127,6 +127,7 @@
     <Compile Include="Storage\ChatBlobStore.cs" />
     <Compile Include="Storage\CasMaintenanceService.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />
+    <Compile Include="Storage\JsonlByteReader.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />
     <Compile Include="Storage\StorageProtection.cs" />
