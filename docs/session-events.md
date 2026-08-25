@@ -15,6 +15,8 @@ RNAssistant uses one append-only event stream per chat as its durable source of 
 
 `ChatSession` is an in-memory projection rebuilt by replay. Its `Revision` is the last durable event sequence, not an independently stored counter.
 
+Cold projection reads validate and replay the complete stream. Within one running process, up to 16 recently used canonical projection roots are cached in memory (maximum about 4 million characters each and 16 million in total). A same-head read verifies the exact final record at its byte offset. Append-only growth verifies the cached boundary and hash chain, then reads and applies only the new suffix. Shrink, replacement, malformed/incomplete tail, protection mismatch, or changed metadata invalidates the entry and falls back to a complete replay. This cache is disposable, is never written as another index/snapshot, and is not used by trajectory export, CAS reachability, or other operations that require a fresh complete stream scan.
+
 ## Event contract
 
 Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence`, `EventId`, UTC time, type, optional run/turn/step correlation, `PreviousHash`, hash algorithm/key metadata, `Hash`, JSON data or encrypted data, and an optional content-addressed payload reference.
@@ -66,7 +68,7 @@ Current history encryption does not cover transient attachment staging, settings
 - Each append is flushed to stable storage before returning.
 - Adjacent lifecycle and trace/commit records remain separate hash-linked lines but share one locked durable append batch.
 - A parse-incomplete final JSONL row is ignored; a valid but unterminated final row remains readable. The next successful append normalizes either tail before adding another record.
-- Sequence continuity and the hash-chain are validated on every load. A corrupt stream is not projected or listed.
+- A cold load validates sequence continuity and the complete hash-chain. A warm cached load reuses only its previously validated prefix, revalidates the byte boundary/head, and validates every appended event; a non-append change forces complete validation. A corrupt stream is not projected or listed.
 - Startup recovery marks tool effect as unknown only when the stream contains `tool.execution.started` without the matching `tool.execution.finished` for that run.
 - Recovery closes open model steps with `step.ended { Status: "interrupted", Synthetic: true }`, then closes the logical turn through the normal persisted run transition.
 - Missing or corrupt CAS content leaves its metadata visible but is never hydrated as trusted content.

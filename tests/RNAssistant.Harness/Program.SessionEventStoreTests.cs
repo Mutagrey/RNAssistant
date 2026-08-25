@@ -61,6 +61,57 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ProjectionCacheReplaysAppendedSuffix()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var created = writer.Create("Word", "projection-cache", "Cache.docx", "Initial");
+                created.Messages.Add(new ChatMessage { Role = "user", Content = "seed" });
+                writer.Save(created);
+
+                var reader = new ChatStore(paths);
+                var loaded = reader.Load(created.Host, created.DocumentKey, created.Id);
+                AssertEqual(1L, reader.ProjectionFullReplayCount, "first load validates the complete stream");
+                AssertEqual("seed", loaded.Messages.Single().Content, "full replay seeds the cached projection");
+
+                loaded.Title = "Reader save";
+                reader.Save(loaded);
+                AssertEqual(1L, reader.ProjectionFullReplayCount,
+                    "save uses the verified baseline instead of replaying the complete stream");
+                AssertEqual("Reader save", reader.Load(loaded.Id).Title, "same-head cache hit projects current state");
+                AssertEqual(1L, reader.ProjectionFullReplayCount, "same-head cache hit avoids a full replay");
+
+                var external = new ChatStore(paths);
+                var externalSession = external.Load(created.Id);
+                externalSession.Title = "External append";
+                external.Save(externalSession);
+
+                var refreshed = reader.Load(created.Id);
+                AssertEqual("External append", refreshed.Title, "new commit replays from the cached byte boundary");
+                AssertEqual(1L, reader.ProjectionFullReplayCount, "append-only growth does not rescan the prefix");
+                AssertEqual(1L, reader.ProjectionIncrementalReplayCount, "one appended suffix was replayed");
+
+                external.AppendTrace(externalSession, SessionEventTypes.AssistantChunk,
+                    new { chunkCount = 1 }, null, null, "run-cache", "turn-cache", "step-cache");
+                refreshed = reader.Load(created.Id);
+                AssertEqual("External append", refreshed.Title, "trace-only suffix leaves canonical state unchanged");
+                AssertEqual(externalSession.Revision, refreshed.Revision, "trace-only suffix advances stream revision");
+                AssertEqual(2L, reader.ProjectionIncrementalReplayCount, "trace-only suffix also uses incremental replay");
+
+                refreshed.Title = "Saved after trace";
+                reader.Save(refreshed);
+                AssertEqual(1L, reader.ProjectionFullReplayCount,
+                    "save after incremental trace replay still uses the verified baseline");
+
+                var path = SessionEventFile(paths, refreshed);
+                File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-10));
+                AssertEqual("Saved after trace", reader.Load(created.Id).Title,
+                    "metadata rewrite falls back to a complete verified replay");
+                AssertEqual(2L, reader.ProjectionFullReplayCount, "non-append change invalidates the cache");
+            });
+        }
+
         private static void SessionEventLogIsCanonical()
         {
             WithTempPaths(paths =>

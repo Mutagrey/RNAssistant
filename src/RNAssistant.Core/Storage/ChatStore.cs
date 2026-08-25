@@ -31,6 +31,9 @@ namespace RNAssistant.Core.Storage
     public sealed class ChatStore
     {
         private const string EventFileSuffix = ".events.jsonl";
+        private const int MaxProjectionCacheEntries = 16;
+        private const long MaxProjectionCacheCharacters = 4L * 1024 * 1024;
+        private const long MaxProjectionCacheTotalCharacters = 16L * 1024 * 1024;
         private static readonly object PersistenceSync = new object();
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
         private static readonly JsonSerializerSettings ProjectionJsonSettings = new JsonSerializerSettings
@@ -49,6 +52,23 @@ namespace RNAssistant.Core.Storage
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
         private readonly Func<StorageProtector> _protectionProvider;
+        private readonly object _projectionCacheSync = new object();
+        private readonly Dictionary<string, ProjectionCacheEntry> _projectionCache =
+            new Dictionary<string, ProjectionCacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private long _projectionCacheClock;
+        private long _projectionCacheCharacters;
+        private long _projectionFullReplayCount;
+        private long _projectionIncrementalReplayCount;
+
+        internal long ProjectionFullReplayCount
+        {
+            get { return Interlocked.Read(ref _projectionFullReplayCount); }
+        }
+
+        internal long ProjectionIncrementalReplayCount
+        {
+            get { return Interlocked.Read(ref _projectionIncrementalReplayCount); }
+        }
 
         public ChatStore(AppDataPaths paths)
             : this(paths, null)
@@ -191,6 +211,8 @@ namespace RNAssistant.Core.Storage
                         session.StorageTailByteOffset,
                         pending,
                         null);
+                    AdvanceProjectionCache(path, session.Id, session.Revision, session.StorageHeadHash,
+                        session.StorageByteLength, appended);
                     var tail = appended[appended.Count - 1];
                     session.Revision = tail.Sequence;
                     session.StorageHeadHash = tail.Hash;
@@ -243,6 +265,8 @@ namespace RNAssistant.Core.Storage
                             session.StorageTailByteOffset,
                             pending,
                             log);
+                        AdvanceProjectionCache(path, session.Id, session.Revision, session.StorageHeadHash,
+                            session.StorageByteLength, appended);
                         var tail = appended[appended.Count - 1];
                         session.Revision = tail.Sequence;
                         session.StorageHeadHash = tail.Hash;
@@ -495,6 +519,7 @@ namespace RNAssistant.Core.Storage
                             }
                             Directory.CreateDirectory(Path.GetDirectoryName(newPath));
                             File.Move(oldPath, newPath);
+                            MoveProjectionCache(oldPath, newPath);
                         }
                     }
                 }
@@ -561,6 +586,7 @@ namespace RNAssistant.Core.Storage
                 {
                     if (!File.Exists(path)) return false;
                     File.Delete(path);
+                    RemoveProjectionCache(path);
                 }
             }
             if (string.Equals(LoadActiveSessionId(host, documentKey), sessionId, StringComparison.OrdinalIgnoreCase))
@@ -580,6 +606,7 @@ namespace RNAssistant.Core.Storage
                 {
                     if (!Directory.Exists(directory)) return false;
                     Directory.Delete(directory, true);
+                    ClearProjectionCache();
                 }
             }
             return true;
@@ -700,8 +727,8 @@ namespace RNAssistant.Core.Storage
             EnsureWorkspaceArtifact(session);
             ExternalizeArtifacts(session);
             var exists = File.Exists(path);
-            var log = exists ? ReadEventLog(path) : null;
-            var stored = exists ? Project(log, false) : null;
+            EventLogReadResult log = null;
+            var stored = exists ? ReadProjectedSession(path, false, false, out log) : null;
             var storedRevision = stored == null ? 0 : stored.Revision;
             if (exists && stored == null)
             {
@@ -746,9 +773,9 @@ namespace RNAssistant.Core.Storage
                     session.Id,
                     storedRevision,
                     stored == null ? null : stored.StorageHeadHash,
-                    0,
-                    0,
-                    0,
+                    stored == null ? 0 : stored.StorageByteLength,
+                    stored == null ? 0 : stored.StorageLastWriteUtcTicks,
+                    stored == null ? 0 : stored.StorageTailByteOffset,
                     pending,
                     log);
                 var tail = appended[appended.Count - 1];
@@ -757,6 +784,7 @@ namespace RNAssistant.Core.Storage
                 session.StorageHeadHash = tail.Hash;
                 session.StorageTailByteOffset = tail.StorageByteOffset;
                 CaptureStorageState(session, path);
+                StoreProjectionCache(path, ToProjectionToken(session), session);
                 RebuildHtmlWorkspaceProjection(session);
                 RebuildContextCheckpointProjection(session);
                 RebuildChartActivityProjection(session);
@@ -878,7 +906,8 @@ namespace RNAssistant.Core.Storage
         {
             try
             {
-                var session = Project(ReadEventLog(path), hydrateActiveArtifacts);
+                EventLogReadResult ignored;
+                var session = ReadProjectedSession(path, hydrateActiveArtifacts, true, out ignored);
                 if (session == null) return null;
                 NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
                 CaptureStorageState(session, path);
@@ -898,8 +927,8 @@ namespace RNAssistant.Core.Storage
         {
             try
             {
-                var log = ReadEventLog(path);
-                var session = Project(log, false, false);
+                EventLogReadResult ignored;
+                var session = ReadProjectedSession(path, false, false, out ignored);
                 if (session == null) return null;
                 NormalizeSession(
                     session,
@@ -911,7 +940,7 @@ namespace RNAssistant.Core.Storage
                 int dataSourceCount;
                 if (!TryReadWorkspaceCounts(session, out fileCount, out dataSourceCount))
                 {
-                    session = Project(log, false, true);
+                    session = ReadProjectedSession(path, false, true, out ignored);
                     if (session == null) return null;
                     NormalizeSession(
                         session,
@@ -977,9 +1006,44 @@ namespace RNAssistant.Core.Storage
         private ChatSession Project(EventLogReadResult log, bool hydrateActiveArtifacts, bool rebuildDerivedProjections)
         {
             if (log == null || log.Events.Count == 0) return null;
-            JObject root = null;
-            ProjectionReplayState replay = null;
-            foreach (var sessionEvent in log.Events)
+            var root = ReplayProjectionRoot(log.Events, null);
+            var tail = LastEvent(log);
+            return Project(root, tail.Sequence, tail.Hash, tail.StorageByteOffset,
+                log.ByteLength, log.LastWriteUtcTicks, hydrateActiveArtifacts, rebuildDerivedProjections);
+        }
+
+        private ChatSession ReadProjectedSession(
+            string path,
+            bool hydrateActiveArtifacts,
+            bool rebuildDerivedProjections,
+            out EventLogReadResult validatedLog)
+        {
+            validatedLog = null;
+            ProjectionCacheEntry cached;
+            if (TryReadProjectionCache(path, out cached))
+            {
+                return Project(cached.Root, cached.Sequence, cached.HeadHash, cached.TailByteOffset,
+                    cached.ByteLength, cached.LastWriteUtcTicks,
+                    hydrateActiveArtifacts, rebuildDerivedProjections);
+            }
+
+            validatedLog = ReadEventLog(path);
+            if (validatedLog == null || validatedLog.Events.Count == 0) return null;
+            var root = ReplayProjectionRoot(validatedLog.Events, null);
+            var tail = LastEvent(validatedLog);
+            Interlocked.Increment(ref _projectionFullReplayCount);
+            var session = Project(root, tail.Sequence, tail.Hash, tail.StorageByteOffset,
+                validatedLog.ByteLength, validatedLog.LastWriteUtcTicks,
+                hydrateActiveArtifacts, rebuildDerivedProjections);
+            if (CanCacheProjection(validatedLog)) StoreProjectionCache(path, root, session);
+            return session;
+        }
+
+        private static JObject ReplayProjectionRoot(IEnumerable<SessionEvent> events, JObject seedRoot)
+        {
+            var root = seedRoot == null ? null : (JObject)seedRoot.DeepClone();
+            var replay = root == null ? null : new ProjectionReplayState(root);
+            foreach (var sessionEvent in events ?? new List<SessionEvent>())
             {
                 if (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
                     string.Equals(sessionEvent.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal))
@@ -998,11 +1062,26 @@ namespace RNAssistant.Core.Storage
             }
             if (root == null || replay == null) return null;
             replay.Materialize(root);
+            return root;
+        }
+
+        private ChatSession Project(
+            JObject root,
+            long sequence,
+            string headHash,
+            long tailByteOffset,
+            long byteLength,
+            long lastWriteUtcTicks,
+            bool hydrateActiveArtifacts,
+            bool rebuildDerivedProjections)
+        {
+            if (root == null) return null;
             var session = root.ToObject<ChatSession>();
-            var tail = LastEvent(log);
-            session.Revision = tail.Sequence;
-            session.StorageHeadHash = tail.Hash;
-            session.StorageTailByteOffset = tail.StorageByteOffset;
+            session.Revision = sequence;
+            session.StorageHeadHash = headHash;
+            session.StorageTailByteOffset = tailByteOffset;
+            session.StorageByteLength = byteLength;
+            session.StorageLastWriteUtcTicks = lastWriteUtcTicks;
             if (rebuildDerivedProjections)
             {
                 RebuildHtmlWorkspaceProjection(session);
@@ -1627,13 +1706,20 @@ namespace RNAssistant.Core.Storage
 
         private EventLogReadResult ReadEventLog(string path)
         {
+            return ReadEventLog(path, 0, null);
+        }
+
+        private EventLogReadResult ReadEventLog(string path, long startByteOffset, SessionEvent previousEvent)
+        {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
             var result = new EventLogReadResult();
             var protector = Protection();
+            var before = CaptureStorageFileState(path);
             try
             {
-                using (var reader = new JsonlByteReader(path))
+                using (var reader = new JsonlByteReader(path, startByteOffset))
                 {
+                    result.ByteLength = reader.Length;
                     JsonlByteLine line;
                     while ((line = reader.ReadLine()) != null)
                     {
@@ -1656,10 +1742,12 @@ namespace RNAssistant.Core.Storage
                             }
                             throw new ChatConcurrencyException("The chat event log contains an invalid record.");
                         }
-                        ValidateEvent(result.Events, sessionEvent, protector);
+                        ValidateEvent(previousEvent, sessionEvent, protector);
                         HydrateEventData(sessionEvent, protector);
                         sessionEvent.StorageByteOffset = line.Offset;
                         result.Events.Add(sessionEvent);
+                        result.TailNextByteOffset = line.NextOffset;
+                        previousEvent = sessionEvent;
                         if (!line.Terminated)
                         {
                             result.HasIncompleteTail = true;
@@ -1667,6 +1755,11 @@ namespace RNAssistant.Core.Storage
                         }
                     }
                 }
+                var after = CaptureStorageFileState(path);
+                result.IsStableSnapshot = before != null && after != null &&
+                    before.ByteLength == result.ByteLength && after.ByteLength == result.ByteLength &&
+                    before.LastWriteUtcTicks == after.LastWriteUtcTicks;
+                result.LastWriteUtcTicks = result.IsStableSnapshot ? after.LastWriteUtcTicks : 0;
             }
             catch (DecoderFallbackException)
             {
@@ -1691,13 +1784,34 @@ namespace RNAssistant.Core.Storage
                 var file = new FileInfo(path);
                 if (!file.Exists || file.Length != expectedByteLength ||
                     file.LastWriteTimeUtc.Ticks != expectedLastWriteUtcTicks) return null;
+                return ReadValidatedEventAtOffset(path, sessionId, expectedRevision, expectedHeadHash,
+                    expectedTailByteOffset, expectedByteLength, expectedByteLength);
+            }
+            catch (Exception ex) when (
+                ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentOutOfRangeException ||
+                ex is JsonException || ex is DecoderFallbackException || ex is CryptographicException)
+            {
+                return null;
+            }
+        }
 
+        private SessionEvent ReadValidatedEventAtOffset(
+            string path,
+            string sessionId,
+            long expectedRevision,
+            string expectedHeadHash,
+            long expectedByteOffset,
+            long expectedNextByteOffset,
+            long expectedSnapshotLength)
+        {
+            try
+            {
                 JsonlByteLine line;
-                using (var reader = new JsonlByteReader(path, expectedTailByteOffset))
+                using (var reader = new JsonlByteReader(path, expectedByteOffset))
                 {
-                    if (reader.Length != expectedByteLength) return null;
+                    if (reader.Length != expectedSnapshotLength) return null;
                     line = reader.ReadLine();
-                    if (line == null || !line.Terminated || line.NextOffset != reader.Length ||
+                    if (line == null || !line.Terminated || line.NextOffset != expectedNextByteOffset ||
                         string.IsNullOrWhiteSpace(line.Text)) return null;
                 }
 
@@ -1740,8 +1854,278 @@ namespace RNAssistant.Core.Storage
             session.StorageLastWriteUtcTicks = file.LastWriteTimeUtc.Ticks;
         }
 
+        private static StorageFileState CaptureStorageFileState(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            var file = new FileInfo(path);
+            file.Refresh();
+            return file.Exists
+                ? new StorageFileState
+                {
+                    ByteLength = file.Length,
+                    LastWriteUtcTicks = file.LastWriteTimeUtc.Ticks
+                }
+                : null;
+        }
+
+        private static bool CanCacheProjection(EventLogReadResult log)
+        {
+            return log != null && log.Events.Count > 0 && !log.HasIncompleteTail &&
+                log.IsStableSnapshot && log.TailNextByteOffset == log.ByteLength;
+        }
+
+        private bool TryReadProjectionCache(string path, out ProjectionCacheEntry result)
+        {
+            result = null;
+            ProjectionCacheEntry cached;
+            if (!TryGetProjectionCache(path, out cached)) return false;
+
+            var current = CaptureStorageFileState(path);
+            if (current == null || current.ByteLength < cached.ByteLength ||
+                current.ByteLength == cached.ByteLength &&
+                current.LastWriteUtcTicks != cached.LastWriteUtcTicks)
+            {
+                RemoveProjectionCache(path);
+                return false;
+            }
+
+            var boundary = ReadValidatedEventAtOffset(
+                path,
+                cached.SessionId,
+                cached.Sequence,
+                cached.HeadHash,
+                cached.TailByteOffset,
+                cached.ByteLength,
+                current.ByteLength);
+            if (boundary == null)
+            {
+                RemoveProjectionCache(path);
+                return false;
+            }
+
+            if (current.ByteLength == cached.ByteLength)
+            {
+                result = cached;
+                return true;
+            }
+
+            EventLogReadResult suffix;
+            try
+            {
+                suffix = ReadEventLog(path, cached.ByteLength, boundary);
+            }
+            catch
+            {
+                RemoveProjectionCache(path);
+                throw;
+            }
+            if (!CanCacheProjection(suffix))
+            {
+                RemoveProjectionCache(path);
+                return false;
+            }
+
+            var root = suffix.Events.Any(IsProjectionEvent)
+                ? ReplayProjectionRoot(suffix.Events, cached.Root)
+                : cached.Root;
+            if (root == null)
+            {
+                RemoveProjectionCache(path);
+                return false;
+            }
+            var tail = LastEvent(suffix);
+            result = StoreProjectionCache(path, root, tail.SessionId, tail.Sequence, tail.Hash,
+                tail.StorageByteOffset, suffix.ByteLength, suffix.LastWriteUtcTicks);
+            Interlocked.Increment(ref _projectionIncrementalReplayCount);
+            return result != null;
+        }
+
+        private static bool IsProjectionEvent(SessionEvent sessionEvent)
+        {
+            return sessionEvent != null &&
+                (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
+                 string.Equals(sessionEvent.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal) ||
+                 string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal));
+        }
+
+        private bool TryGetProjectionCache(string path, out ProjectionCacheEntry entry)
+        {
+            entry = null;
+            var key = ProjectionCacheKey(path);
+            lock (_projectionCacheSync)
+            {
+                if (!_projectionCache.TryGetValue(key, out entry)) return false;
+                entry.LastAccess = ++_projectionCacheClock;
+                return true;
+            }
+        }
+
+        private void StoreProjectionCache(string path, JObject root, ChatSession session)
+        {
+            if (session == null) return;
+            StoreProjectionCache(path, root, session.Id, session.Revision, session.StorageHeadHash,
+                session.StorageTailByteOffset, session.StorageByteLength, session.StorageLastWriteUtcTicks);
+        }
+
+        private ProjectionCacheEntry StoreProjectionCache(
+            string path,
+            JObject root,
+            string sessionId,
+            long sequence,
+            string headHash,
+            long tailByteOffset,
+            long byteLength,
+            long lastWriteUtcTicks)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(sessionId) || sequence <= 0 ||
+                string.IsNullOrWhiteSpace(headHash) || tailByteOffset < 0 ||
+                byteLength <= tailByteOffset || lastWriteUtcTicks <= 0) return null;
+            var key = ProjectionCacheKey(path);
+            var estimatedCharacters = EstimateProjectionCharacters(root, MaxProjectionCacheCharacters + 1);
+            var entry = new ProjectionCacheEntry
+            {
+                SessionId = sessionId,
+                Sequence = sequence,
+                HeadHash = headHash,
+                TailByteOffset = tailByteOffset,
+                ByteLength = byteLength,
+                LastWriteUtcTicks = lastWriteUtcTicks,
+                Root = root,
+                EstimatedCharacters = estimatedCharacters
+            };
+            lock (_projectionCacheSync)
+            {
+                ProjectionCacheEntry replaced;
+                if (_projectionCache.TryGetValue(key, out replaced))
+                {
+                    _projectionCacheCharacters -= replaced.EstimatedCharacters;
+                    _projectionCache.Remove(key);
+                }
+                if (estimatedCharacters > MaxProjectionCacheCharacters) return entry;
+                entry.LastAccess = ++_projectionCacheClock;
+                _projectionCache[key] = entry;
+                _projectionCacheCharacters += estimatedCharacters;
+                while (_projectionCache.Count > MaxProjectionCacheEntries ||
+                    _projectionCacheCharacters > MaxProjectionCacheTotalCharacters)
+                {
+                    var oldest = _projectionCache.OrderBy(item => item.Value.LastAccess).First();
+                    _projectionCacheCharacters -= oldest.Value.EstimatedCharacters;
+                    _projectionCache.Remove(oldest.Key);
+                }
+            }
+            return entry;
+        }
+
+        private static long EstimateProjectionCharacters(JToken root, long stopAfter)
+        {
+            long total = 0;
+            var pending = new Stack<JToken>();
+            pending.Push(root);
+            while (pending.Count > 0 && total <= stopAfter)
+            {
+                var token = pending.Pop();
+                var objectValue = token as JObject;
+                if (objectValue != null)
+                {
+                    foreach (var property in objectValue.Properties())
+                    {
+                        total += property.Name.Length + 4L;
+                        pending.Push(property.Value);
+                    }
+                    continue;
+                }
+                var arrayValue = token as JArray;
+                if (arrayValue != null)
+                {
+                    total += arrayValue.Count;
+                    foreach (var value in arrayValue) pending.Push(value);
+                    continue;
+                }
+                var scalar = token as JValue;
+                var text = scalar == null || scalar.Value == null ? null : scalar.Value as string;
+                total += text == null ? 32L : text.Length + 2L;
+            }
+            return total;
+        }
+
+        private void AdvanceProjectionCache(
+            string path,
+            string sessionId,
+            long expectedRevision,
+            string expectedHeadHash,
+            long expectedByteLength,
+            IReadOnlyList<SessionEvent> appended)
+        {
+            if (appended == null || appended.Count == 0) return;
+            ProjectionCacheEntry cached;
+            if (!TryGetProjectionCache(path, out cached) ||
+                cached.Sequence != expectedRevision || cached.ByteLength != expectedByteLength ||
+                !string.Equals(cached.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(cached.HeadHash, expectedHeadHash, StringComparison.OrdinalIgnoreCase)) return;
+            var state = CaptureStorageFileState(path);
+            if (state == null) return;
+            var root = appended.Any(IsProjectionEvent)
+                ? ReplayProjectionRoot(appended, cached.Root)
+                : cached.Root;
+            var tail = appended[appended.Count - 1];
+            if (root == null || tail.StorageByteOffset >= state.ByteLength)
+            {
+                RemoveProjectionCache(path);
+                return;
+            }
+            StoreProjectionCache(path, root, tail.SessionId, tail.Sequence, tail.Hash,
+                tail.StorageByteOffset, state.ByteLength, state.LastWriteUtcTicks);
+        }
+
+        private void RemoveProjectionCache(string path)
+        {
+            var key = ProjectionCacheKey(path);
+            lock (_projectionCacheSync)
+            {
+                ProjectionCacheEntry removed;
+                if (!_projectionCache.TryGetValue(key, out removed)) return;
+                _projectionCacheCharacters -= removed.EstimatedCharacters;
+                _projectionCache.Remove(key);
+            }
+        }
+
+        private void ClearProjectionCache()
+        {
+            lock (_projectionCacheSync)
+            {
+                _projectionCache.Clear();
+                _projectionCacheCharacters = 0;
+            }
+        }
+
+        private void MoveProjectionCache(string oldPath, string newPath)
+        {
+            var oldKey = ProjectionCacheKey(oldPath);
+            var newKey = ProjectionCacheKey(newPath);
+            lock (_projectionCacheSync)
+            {
+                ProjectionCacheEntry entry;
+                if (!_projectionCache.TryGetValue(oldKey, out entry)) return;
+                ProjectionCacheEntry replaced;
+                if (!string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase) &&
+                    _projectionCache.TryGetValue(newKey, out replaced))
+                {
+                    _projectionCacheCharacters -= replaced.EstimatedCharacters;
+                    _projectionCache.Remove(newKey);
+                }
+                _projectionCache.Remove(oldKey);
+                entry.LastAccess = ++_projectionCacheClock;
+                _projectionCache[newKey] = entry;
+            }
+        }
+
+        private static string ProjectionCacheKey(string path)
+        {
+            return Path.GetFullPath(path ?? string.Empty);
+        }
+
         private static void ValidateEvent(
-            IReadOnlyList<SessionEvent> previousEvents,
+            SessionEvent previous,
             SessionEvent sessionEvent,
             StorageProtector protector)
         {
@@ -1753,7 +2137,6 @@ namespace RNAssistant.Core.Storage
             {
                 throw new ChatConcurrencyException("The chat event log contains an unsupported record.");
             }
-            var previous = previousEvents.Count == 0 ? null : previousEvents[previousEvents.Count - 1];
             var expectedSequence = previous == null ? 1 : previous.Sequence + 1;
             var expectedPreviousHash = previous == null ? null : previous.Hash;
             if (sessionEvent.Sequence != expectedSequence ||
@@ -2212,11 +2595,34 @@ namespace RNAssistant.Core.Storage
         {
             public List<SessionEvent> Events { get; private set; }
             public bool HasIncompleteTail { get; set; }
+            public bool IsStableSnapshot { get; set; }
+            public long ByteLength { get; set; }
+            public long LastWriteUtcTicks { get; set; }
+            public long TailNextByteOffset { get; set; }
 
             public EventLogReadResult()
             {
                 Events = new List<SessionEvent>();
             }
+        }
+
+        private sealed class StorageFileState
+        {
+            public long ByteLength { get; set; }
+            public long LastWriteUtcTicks { get; set; }
+        }
+
+        private sealed class ProjectionCacheEntry
+        {
+            public string SessionId { get; set; }
+            public long Sequence { get; set; }
+            public string HeadHash { get; set; }
+            public long TailByteOffset { get; set; }
+            public long ByteLength { get; set; }
+            public long LastWriteUtcTicks { get; set; }
+            public JObject Root { get; set; }
+            public long EstimatedCharacters { get; set; }
+            public long LastAccess { get; set; }
         }
 
         private sealed class PendingSessionEvent
