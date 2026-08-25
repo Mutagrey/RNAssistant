@@ -131,7 +131,9 @@
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\ChatStore.Artifacts.cs" />
     <Compile Include="Storage\ChatStore.Caching.cs" />
+    <Compile Include="Storage\ChatStore.EventLog.cs" />
     <Compile Include="Storage\ChatStore.SessionProjection.cs" />
+    <Compile Include="Storage\ChatStore.TraceLifecycle.cs" />
     <Compile Include="Storage\ChatBlobStore.cs" />
     <Compile Include="Storage\CasMaintenanceService.cs" />
     <Compile Include="Storage\DisposablePair.cs" />
@@ -147,6 +149,7 @@
     <Compile Include="Storage\StorageFileSystem.cs" />
     <Compile Include="Storage\ToolStore.cs" />
     <Compile Include="Storage\VbaJournalStore.cs" />
+    <Compile Include="Storage\VbaJournalStore.EventLog.cs" />
     <Compile Include="Storage\VbaJournalStore.Projection.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
