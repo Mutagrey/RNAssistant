@@ -1,3 +1,5 @@
+var skillReferenceLoadSequence = 0;
+
 function skillEditorValue() {
   return typeof getCodeEditorValue === "function"
     ? getCodeEditorValue("skillBodyInput")
@@ -19,6 +21,7 @@ function ensureSkillReferenceState(skill) {
   if (!skill._referenceDrafts) skill._referenceDrafts = {};
   if (!skill._referenceLoaded) skill._referenceLoaded = {};
   if (!skill._referenceLoading) skill._referenceLoading = {};
+  if (!skill._referenceLoadTokens) skill._referenceLoadTokens = {};
   if (!skill._referenceDirty) skill._referenceDirty = {};
   if (!skill._selectedReferencePath) skill._selectedReferencePath = "";
 }
@@ -34,6 +37,7 @@ function captureSelectedSkillResource(skill) {
   var value = skillEditorValue();
   var path = selectedSkillReferencePath(skill);
   if (path) {
+    if (skill._referenceLoading[path] && !skill._referenceLoaded[path]) return;
     if (!skill._referenceLoaded[path] || skill._referenceDrafts[path] !== value) {
       skill._referenceDirty[path] = true;
     }
@@ -67,6 +71,7 @@ function preserveSkillReferenceState(skills) {
       drafts: skill._referenceDrafts,
       loaded: skill._referenceLoaded,
       loading: skill._referenceLoading,
+      loadTokens: skill._referenceLoadTokens,
       dirty: skill._referenceDirty,
       pending: (skill.References || []).filter(function (item) { return !!item.Pending; })
     };
@@ -79,6 +84,7 @@ function preserveSkillReferenceState(skills) {
     skill._referenceDrafts = saved.drafts;
     skill._referenceLoaded = saved.loaded;
     skill._referenceLoading = saved.loading;
+    skill._referenceLoadTokens = saved.loadTokens;
     skill._referenceDirty = saved.dirty;
     saved.pending.forEach(function (reference) {
       var path = skillReferencePath(reference);
@@ -88,6 +94,21 @@ function preserveSkillReferenceState(skills) {
     });
   });
   return skills || [];
+}
+
+function hasPendingSkillReferenceLoad() {
+  return (state.skills || []).some(function (skill) {
+    ensureSkillReferenceState(skill);
+    return Object.keys(skill._referenceLoading).some(function (path) {
+      return !!skill._referenceLoading[path];
+    });
+  });
+}
+
+function updateSkillSaveButton() {
+  if ($("saveSkillsButton")) {
+    $("saveSkillsButton").disabled = !!state.bridgeUnavailable || hasPendingSkillReferenceLoad();
+  }
 }
 
 function renderSkills() {
@@ -144,13 +165,20 @@ async function loadSelectedSkillReference(skill, path) {
     skill._referenceLoaded[path] = true;
     return;
   }
-  skill._referenceLoading[path] = true;
-  if ($("saveSkillsButton")) $("saveSkillsButton").disabled = true;
+  var requestId = ++skillReferenceLoadSequence;
+  skill._referenceLoading[path] = requestId;
+  skill._referenceLoadTokens[path] = requestId;
+  updateSkillSaveButton();
   if (selectedSkillReferencePath(skill) === path && typeof setCodeEditorReadOnly === "function") {
     setCodeEditorReadOnly("skillBodyInput", true);
   }
   try {
     var response = await send("readSkillReference", { skillId: skill.Id || "", path: path });
+    if (skill._referenceLoadTokens[path] !== requestId || skill._referenceLoading[path] !== requestId ||
+      !(skill.References || []).some(function (item) {
+        return skillReferencePath(item).toLowerCase() === path.toLowerCase();
+      })) return;
+    if (skill._referenceDirty[path]) return;
     skill._referenceDrafts[path] = (response && response.content) || "";
     skill._referenceLoaded[path] = true;
     delete skill._referenceDirty[path];
@@ -160,13 +188,14 @@ async function loadSelectedSkillReference(skill, path) {
       renderSkillPreview();
     }
   } catch (error) {
-    log(error.detail || error.message, "error");
+    if (skill._referenceLoadTokens[path] === requestId) log(error.detail || error.message, "error");
   } finally {
-    skill._referenceLoading[path] = false;
+    if (skill._referenceLoading[path] === requestId) delete skill._referenceLoading[path];
     if (state.skills[state.selectedSkillIndex] === skill && typeof setCodeEditorReadOnly === "function") {
-      setCodeEditorReadOnly("skillBodyInput", !!skill.BuiltIn);
+      var selectedPath = selectedSkillReferencePath(skill);
+      setCodeEditorReadOnly("skillBodyInput", !!skill.BuiltIn || !!(selectedPath && skill._referenceLoading[selectedPath]));
     }
-    if ($("saveSkillsButton")) $("saveSkillsButton").disabled = !!state.bridgeUnavailable;
+    updateSkillSaveButton();
   }
 }
 
@@ -208,7 +237,7 @@ function renderSkillEditor() {
   $("copySkillContextButton").disabled = disabled;
   $("askSkillBuilderButton").disabled = disabled;
   $("addSkillButton").disabled = !!state.bridgeUnavailable;
-  $("saveSkillsButton").disabled = !!state.bridgeUnavailable;
+  updateSkillSaveButton();
   if (referencePath && !skill._referenceLoaded[referencePath]) loadSelectedSkillReference(skill, referencePath);
 }
 
@@ -393,6 +422,9 @@ async function deleteSelectedSkillReference() {
   var reference = (skill.References || []).filter(function (item) {
     return skillReferencePath(item).toLowerCase() === path.toLowerCase();
   })[0];
+  delete skill._referenceLoading[path];
+  delete skill._referenceLoadTokens[path];
+  updateSkillSaveButton();
   if (reference && reference.Pending) {
     skill.References = skill.References.filter(function (item) { return skillReferencePath(item) !== path; });
   } else {
@@ -402,6 +434,7 @@ async function deleteSelectedSkillReference() {
   delete skill._referenceDrafts[path];
   delete skill._referenceLoaded[path];
   delete skill._referenceLoading[path];
+  delete skill._referenceLoadTokens[path];
   delete skill._referenceDirty[path];
   skill._selectedReferencePath = "";
   renderSkillEditor();

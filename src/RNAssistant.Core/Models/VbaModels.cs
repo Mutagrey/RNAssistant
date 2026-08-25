@@ -12,6 +12,7 @@ namespace RNAssistant.Core.Models
         public const string MutationTerminal = "mutation.terminal";
         public const string PackageMutationPrepared = "package.mutation.prepared";
         public const string PackageMutationTerminal = "package.mutation.terminal";
+        public const string DocumentIdentityChanged = "document.identity.changed";
     }
 
     public static class VbaMutationStatuses
@@ -86,6 +87,17 @@ namespace RNAssistant.Core.Models
         {
             return !string.IsNullOrWhiteSpace(EncryptedData);
         }
+    }
+
+    public sealed class VbaDocumentIdentityChange
+    {
+        public string PreviousHost { get; set; }
+        public string PreviousDocumentKey { get; set; }
+        public string Host { get; set; }
+        public string DocumentKey { get; set; }
+        public string RuntimeDocumentKey { get; set; }
+        public string DocumentTitle { get; set; }
+        public DateTime CreatedUtc { get; set; }
     }
 
     public sealed class VbaMutationPreparation

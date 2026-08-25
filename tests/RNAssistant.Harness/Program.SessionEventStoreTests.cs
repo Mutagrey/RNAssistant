@@ -573,6 +573,26 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PlaintextCasAcceptsEnvelopePrefix()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "cas-magic", "Magic.docx", "Magic");
+                session.Artifacts.Add(new ChatArtifact
+                {
+                    Kind = ChatArtifactKinds.Markdown,
+                    MimeType = "text/markdown",
+                    InlineText = "RNAENC01-plain-cas-body"
+                });
+
+                store.Save(session);
+
+                AssertEqual("RNAENC01-plain-cas-body", store.Load(session.Id).Artifacts.Single().InlineText,
+                    "plaintext CAS body is not mistaken for an encrypted envelope");
+            });
+        }
+
         private static void ModelTraceSharesSessionStream()
         {
             WithTempPaths(paths =>
@@ -766,6 +786,46 @@ namespace RNAssistant.Harness
                 store.Save(loaded);
                 AssertEqual("After recovery", store.Load(loaded.Id).Title, "next commit removes incomplete tail");
                 AssertEqual(2, File.ReadAllLines(path).Length, "stream contains only valid records");
+            });
+        }
+
+        private static void TerminatedCorruptTailsAreRejected()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "tail-corrupt", "Tail.docx", "Before corruption");
+                File.AppendAllText(SessionEventFile(paths, session), "{not-json}\n");
+                AssertTrue(store.Load(session.Id) == null, "terminated corrupt chat stream is not projected");
+                var chatRejected = false;
+                try
+                {
+                    session.Title = "Must not overwrite corruption";
+                    store.Save(session);
+                }
+                catch (ChatConcurrencyException)
+                {
+                    chatRejected = true;
+                }
+                AssertTrue(chatRejected, "terminated corrupt chat record is rejected");
+
+                var journal = new VbaJournalStore(paths);
+                journal.Save("Word", "tail-corrupt", "Tail.docx", "Module1", "StdModule", "Sub Before()\nEnd Sub");
+                var journalPath = Path.Combine(
+                    paths.VbaJournalDirectory,
+                    AppDataPaths.SafeFileName("Word|tail-corrupt"),
+                    "mutations.events.jsonl");
+                File.AppendAllText(journalPath, "{not-json}\n");
+                var journalRejected = false;
+                try
+                {
+                    journal.List("Word", "tail-corrupt");
+                }
+                catch (VbaJournalException)
+                {
+                    journalRejected = true;
+                }
+                AssertTrue(journalRejected, "terminated corrupt VBA journal record is rejected");
             });
         }
 

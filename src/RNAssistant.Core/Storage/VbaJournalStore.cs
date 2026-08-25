@@ -438,6 +438,77 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public bool MoveDocument(
+            string oldHost,
+            string oldDocumentKey,
+            string newHost,
+            string newDocumentKey,
+            string runtimeDocumentKey,
+            string documentTitle)
+        {
+            var oldPath = JournalPath(oldHost, oldDocumentKey);
+            var newPath = JournalPath(newHost, newDocumentKey);
+            if (string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase)) return false;
+
+            lock (PersistenceSync)
+            {
+                using (AcquireTwoJournalLocks(oldPath, newPath))
+                {
+                    JournalReadResult log;
+                    if (File.Exists(oldPath))
+                    {
+                        if (File.Exists(newPath))
+                        {
+                            throw new VbaJournalException("The destination already contains a VBA mutation journal.");
+                        }
+                        log = ReadEventLog(oldPath, oldHost, oldDocumentKey);
+                        EnsureJournalHasIdentity(log);
+                        Directory.CreateDirectory(Path.GetDirectoryName(newPath));
+                        File.Move(oldPath, newPath);
+                    }
+                    else if (File.Exists(newPath))
+                    {
+                        log = ReadEventLogUnbound(newPath);
+                        var current = LastEvent(log);
+                        if (SameIdentity(current, newHost, newDocumentKey)) return false;
+                        if (!SameIdentity(current, oldHost, oldDocumentKey))
+                        {
+                            throw new VbaJournalException("The VBA mutation journal has an unexpected document identity.");
+                        }
+                        EnsureJournalHasIdentity(log);
+                    }
+                    else
+                    {
+                        return false;
+                    }
+
+                    var change = new VbaDocumentIdentityChange
+                    {
+                        PreviousHost = oldHost ?? string.Empty,
+                        PreviousDocumentKey = oldDocumentKey ?? string.Empty,
+                        Host = newHost ?? string.Empty,
+                        DocumentKey = newDocumentKey ?? string.Empty,
+                        RuntimeDocumentKey = runtimeDocumentKey ?? string.Empty,
+                        DocumentTitle = documentTitle ?? string.Empty,
+                        CreatedUtc = DateTime.UtcNow
+                    };
+                    AppendLocked(
+                        newPath,
+                        newHost,
+                        newDocumentKey,
+                        log,
+                        VbaJournalEventTypes.DocumentIdentityChanged,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        JObject.FromObject(change));
+                    return true;
+                }
+            }
+        }
+
         public VbaMutationQueryPage QueryMutations(string host, string documentKey, VbaMutationQueryRequest request)
         {
             request = request ?? new VbaMutationQueryRequest();
@@ -519,14 +590,7 @@ namespace RNAssistant.Core.Storage
                     {
                         using (AcquireJournalPathLock(path))
                         {
-                            var identity = ReadFirstEvent(path);
-                            if (identity == null)
-                            {
-                                scan.AddSourceIssue(CasHealthIssueKinds.SourceInvalid, "vba", sourceId,
-                                    "The VBA mutation journal is empty or invalid.");
-                                continue;
-                            }
-                            var log = ReadEventLog(path, identity.Host, identity.DocumentKey);
+                            var log = ReadEventLogUnbound(path);
                             if (log == null || log.Events.Count == 0)
                             {
                                 scan.AddSourceIssue(CasHealthIssueKinds.SourceInvalid, "vba", sourceId,
@@ -556,6 +620,7 @@ namespace RNAssistant.Core.Storage
                                 }
                             }
 
+                            var identity = log.Events[log.Events.Count - 1];
                             var canonicalPath = JournalPath(identity.Host, identity.DocumentKey);
                             if (!string.Equals(Path.GetFullPath(path), Path.GetFullPath(canonicalPath), StringComparison.OrdinalIgnoreCase))
                             {
@@ -957,6 +1022,17 @@ namespace RNAssistant.Core.Storage
 
         private JournalReadResult ReadEventLog(string path, string host, string documentKey)
         {
+            var result = ReadEventLogUnbound(path);
+            var current = LastEvent(result);
+            if (current != null && !SameIdentity(current, host, documentKey))
+            {
+                throw new VbaJournalException("The VBA mutation journal has an unexpected document identity.");
+            }
+            return result;
+        }
+
+        private JournalReadResult ReadEventLogUnbound(string path)
+        {
             if (!File.Exists(path)) return null;
             string[] lines;
             try
@@ -968,6 +1044,7 @@ namespace RNAssistant.Core.Storage
                 throw new VbaJournalException("The VBA mutation journal could not be read.", ex);
             }
 
+            var hasTerminatedFinalLine = StorageFileSystem.HasTerminatedFinalLine(path);
             var result = new JournalReadResult();
             var protector = Protection();
             for (var index = 0; index < lines.Length; index++)
@@ -980,35 +1057,24 @@ namespace RNAssistant.Core.Storage
                 }
                 catch (JsonException ex)
                 {
-                    if (index == lines.Length - 1)
+                    if (index == lines.Length - 1 && !hasTerminatedFinalLine)
                     {
                         result.HasIncompleteTail = true;
                         break;
                     }
                     throw new VbaJournalException("The VBA mutation journal contains an invalid record.", ex);
                 }
-                ValidateEvent(result.Events, journalEvent, host, documentKey, protector);
+                ValidateEvent(result.Events, journalEvent, protector);
                 HydrateEventData(journalEvent, protector);
+                ValidateIdentityChange(result.Events, journalEvent);
                 result.Events.Add(journalEvent);
             }
             return result;
         }
 
-        private static VbaJournalEvent ReadFirstEvent(string path)
-        {
-            foreach (var line in File.ReadLines(path, Utf8))
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                return JsonConvert.DeserializeObject<VbaJournalEvent>(line);
-            }
-            return null;
-        }
-
         private static void ValidateEvent(
             IReadOnlyList<VbaJournalEvent> previousEvents,
             VbaJournalEvent journalEvent,
-            string host,
-            string documentKey,
             StorageProtector protector)
         {
             if (journalEvent == null || journalEvent.SchemaVersion != VbaJournalEvent.CurrentSchemaVersion ||
@@ -1020,9 +1086,7 @@ namespace RNAssistant.Core.Storage
                   string.Equals(journalEvent.Type, VbaJournalEventTypes.PackageMutationTerminal, StringComparison.Ordinal)) &&
                     string.IsNullOrWhiteSpace(journalEvent.MutationId)) ||
                 !string.IsNullOrWhiteSpace(journalEvent.EncryptedData) && journalEvent.Data != null ||
-                !ProtectionMatches(journalEvent, protector) ||
-                !string.Equals(journalEvent.Host ?? string.Empty, host ?? string.Empty, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(journalEvent.DocumentKey ?? string.Empty, documentKey ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                !ProtectionMatches(journalEvent, protector))
             {
                 throw new VbaJournalException("The VBA mutation journal contains an unsupported record.");
             }
@@ -1032,6 +1096,44 @@ namespace RNAssistant.Core.Storage
                 !string.Equals(journalEvent.Hash, ComputeHash(journalEvent, protector), StringComparison.OrdinalIgnoreCase))
             {
                 throw new VbaJournalException("The VBA mutation journal integrity check failed.");
+            }
+        }
+
+        private static void ValidateIdentityChange(
+            IReadOnlyList<VbaJournalEvent> previousEvents,
+            VbaJournalEvent journalEvent)
+        {
+            var previous = previousEvents.Count == 0 ? null : previousEvents[previousEvents.Count - 1];
+            var isChange = string.Equals(
+                journalEvent.Type,
+                VbaJournalEventTypes.DocumentIdentityChanged,
+                StringComparison.Ordinal);
+            if (previous == null)
+            {
+                if (isChange) throw new VbaJournalException("The VBA mutation journal starts with an invalid identity change.");
+                return;
+            }
+
+            var sameIdentity = SameIdentity(previous, journalEvent.Host, journalEvent.DocumentKey);
+            if (!isChange)
+            {
+                if (!sameIdentity)
+                {
+                    throw new VbaJournalException("The VBA mutation journal changes document identity without a migration event.");
+                }
+                return;
+            }
+
+            var change = journalEvent.Data == null
+                ? null
+                : journalEvent.Data.ToObject<VbaDocumentIdentityChange>();
+            if (sameIdentity || change == null || change.CreatedUtc == default(DateTime) ||
+                !string.Equals(previous.Host ?? string.Empty, change.PreviousHost ?? string.Empty, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(previous.DocumentKey ?? string.Empty, change.PreviousDocumentKey ?? string.Empty, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(journalEvent.Host ?? string.Empty, change.Host ?? string.Empty, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(journalEvent.DocumentKey ?? string.Empty, change.DocumentKey ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new VbaJournalException("The VBA mutation journal contains an invalid identity change.");
             }
         }
 
@@ -1346,6 +1448,17 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        private IDisposable AcquireTwoJournalLocks(string firstPath, string secondPath)
+        {
+            if (string.Equals(firstPath, secondPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return AcquireJournalPathLock(firstPath);
+            }
+            return string.Compare(firstPath, secondPath, StringComparison.OrdinalIgnoreCase) < 0
+                ? new CompositeDisposable(AcquireJournalPathLock(firstPath), AcquireJournalPathLock(secondPath))
+                : new CompositeDisposable(AcquireJournalPathLock(secondPath), AcquireJournalPathLock(firstPath));
+        }
+
         private string JournalPath(string host, string documentKey)
         {
             return Path.Combine(
@@ -1373,7 +1486,8 @@ namespace RNAssistant.Core.Storage
                 string.Equals(value, VbaJournalEventTypes.MutationPrepared, StringComparison.Ordinal) ||
                 string.Equals(value, VbaJournalEventTypes.MutationTerminal, StringComparison.Ordinal) ||
                 string.Equals(value, VbaJournalEventTypes.PackageMutationPrepared, StringComparison.Ordinal) ||
-                string.Equals(value, VbaJournalEventTypes.PackageMutationTerminal, StringComparison.Ordinal);
+                string.Equals(value, VbaJournalEventTypes.PackageMutationTerminal, StringComparison.Ordinal) ||
+                string.Equals(value, VbaJournalEventTypes.DocumentIdentityChanged, StringComparison.Ordinal);
         }
 
         private static bool ValidHashAlgorithm(string value)
@@ -1405,6 +1519,26 @@ namespace RNAssistant.Core.Storage
             return prefix + "_" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N").Substring(0, 8);
         }
 
+        private static VbaJournalEvent LastEvent(JournalReadResult log)
+        {
+            return log == null || log.Events.Count == 0 ? null : log.Events[log.Events.Count - 1];
+        }
+
+        private static bool SameIdentity(VbaJournalEvent journalEvent, string host, string documentKey)
+        {
+            return journalEvent != null &&
+                string.Equals(journalEvent.Host ?? string.Empty, host ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(journalEvent.DocumentKey ?? string.Empty, documentKey ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void EnsureJournalHasIdentity(JournalReadResult log)
+        {
+            if (log == null || log.Events.Count == 0)
+            {
+                throw new VbaJournalException("The VBA mutation journal is empty and cannot change document identity.");
+            }
+        }
+
         private sealed class MutationCursor
         {
             public long SnapshotSequence { get; set; }
@@ -1419,6 +1553,24 @@ namespace RNAssistant.Core.Storage
             public JournalReadResult()
             {
                 Events = new List<VbaJournalEvent>();
+            }
+        }
+
+        private sealed class CompositeDisposable : IDisposable
+        {
+            private readonly IDisposable _first;
+            private readonly IDisposable _second;
+
+            public CompositeDisposable(IDisposable first, IDisposable second)
+            {
+                _first = first;
+                _second = second;
+            }
+
+            public void Dispose()
+            {
+                if (_second != null) _second.Dispose();
+                if (_first != null) _first.Dispose();
             }
         }
     }

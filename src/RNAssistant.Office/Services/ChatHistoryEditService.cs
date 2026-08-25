@@ -63,11 +63,17 @@ namespace RNAssistant.Office.Services
             {
                 _loadArtifactBody(session, workspaceCheckpoint);
             }
-            if (string.IsNullOrWhiteSpace(workspaceCheckpoint) ||
-                !HtmlWorkspaceArtifactService.Restore(session, workspaceCheckpoint))
+            if (string.IsNullOrWhiteSpace(workspaceCheckpoint))
             {
                 session.HtmlWorkspace = new HtmlWorkspace();
                 session.ActiveHtmlArtifactId = null;
+                HtmlWorkspaceArtifactService.RebuildNavigation(session);
+            }
+            else if (!HtmlWorkspaceArtifactService.Restore(session, workspaceCheckpoint))
+            {
+                session.HtmlWorkspace = new HtmlWorkspace();
+                session.ActiveHtmlArtifactId = workspaceCheckpoint;
+                HtmlWorkspaceArtifactService.RebuildNavigation(session);
             }
 
             var removedMessages = new List<ChatMessage>();

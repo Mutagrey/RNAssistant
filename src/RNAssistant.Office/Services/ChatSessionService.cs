@@ -12,6 +12,7 @@ namespace RNAssistant.Office.Services
     {
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly ChatStore _chatStore;
+        private readonly VbaJournalStore _vbaJournalStore;
         private string _activeSessionId;
         private string _activeHost;
         private string _activeDocumentKey;
@@ -34,9 +35,15 @@ namespace RNAssistant.Office.Services
         internal Func<IDisposable> MaintenanceLeaseProvider { get; set; }
 
         public ChatSessionService(IOfficeApplicationAdapter adapter, ChatStore chatStore)
+            : this(adapter, chatStore, null)
+        {
+        }
+
+        public ChatSessionService(IOfficeApplicationAdapter adapter, ChatStore chatStore, VbaJournalStore vbaJournalStore)
         {
             _adapter = adapter;
             _chatStore = chatStore;
+            _vbaJournalStore = vbaJournalStore;
         }
 
         public void ReconcileInterruptedRuns(string runtimeId)
@@ -258,6 +265,16 @@ namespace RNAssistant.Office.Services
                 if (activeDocumentKeyChanged && !migrationDeferred)
                 {
                     var oldDocumentKey = _activeDocumentKey;
+                    if (_vbaJournalStore != null)
+                    {
+                        _vbaJournalStore.MoveDocument(
+                            _activeHost,
+                            oldDocumentKey,
+                            host,
+                            documentKey,
+                            runtimeKey,
+                            title);
+                    }
                     if (_chatStore.IsPersisted(_activeSession))
                     {
                         var activeSessionId = _activeSessionId;

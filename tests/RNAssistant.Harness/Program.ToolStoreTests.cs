@@ -617,6 +617,21 @@ namespace RNAssistant.Harness
                 AssertTrue(!string.Equals(bodyOnlyRevision, SkillRevision.Compute(stored), StringComparison.Ordinal),
                     "reference manifest changes package revision");
 
+                stored.Host = "Excel";
+                stored = store.SaveOne(stored);
+                AssertEqual("Excel", stored.Host, "skill host updated");
+                AssertEqual(1, stored.References.Count, "host move preserves skill references");
+                string movedContent;
+                SkillReferenceMetadata movedMetadata;
+                string movedError;
+                AssertTrue(store.TryReadReference(
+                    stored,
+                    "references/details.md",
+                    out movedContent,
+                    out movedMetadata,
+                    out movedError), "moved skill reference remains readable: " + movedError);
+                AssertContains(movedContent, "ABCDEFGHIJ", "moved reference content preserved");
+
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();

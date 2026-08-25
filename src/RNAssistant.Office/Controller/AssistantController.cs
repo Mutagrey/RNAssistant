@@ -90,7 +90,7 @@ namespace RNAssistant.Office
                 _paths,
                 () => _settingsService.LoadStorageProtector(),
                 _trajectoryQuery);
-            _chatSessions = new ChatSessionService(_adapter, _chatStore);
+            _chatSessions = new ChatSessionService(_adapter, _chatStore, _vbaJournalStore);
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;
             _chatSessions.RunStatusProvider = _chatRuns.GetStatus;

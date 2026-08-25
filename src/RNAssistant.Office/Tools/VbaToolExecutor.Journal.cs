@@ -20,8 +20,8 @@ namespace RNAssistant.Office.Tools
                     if (record == null || record.Prepared == null) continue;
                     var assessment = InspectMutation(record.Prepared);
                     _vbaJournalStore.CompleteMutation(
-                        record.Prepared.Host,
-                        record.Prepared.DocumentKey,
+                        _adapter.HostName,
+                        _adapter.DocumentKey,
                         record.Prepared.MutationId,
                         assessment.Status,
                         assessment.ActualExists,
@@ -36,8 +36,8 @@ namespace RNAssistant.Office.Tools
                     if (record == null || record.Prepared == null) continue;
                     var assessment = InspectPackageMutation(record.Prepared, null, null);
                     _vbaJournalStore.CompletePackageMutation(
-                        record.Prepared.Host,
-                        record.Prepared.DocumentKey,
+                        _adapter.HostName,
+                        _adapter.DocumentKey,
                         record.Prepared.MutationId,
                         assessment.Status,
                         assessment.Components,

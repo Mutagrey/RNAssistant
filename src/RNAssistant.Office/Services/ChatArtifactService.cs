@@ -106,11 +106,6 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) activeArtifactIds.Add(session.ActiveHtmlArtifactId);
             if (!string.IsNullOrWhiteSpace(session.ActivePlanArtifactId)) activeArtifactIds.Add(session.ActivePlanArtifactId);
             session.Artifacts = ReachableForMessages(session.Artifacts, session.Messages, activeArtifactIds);
-            if (!string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId) &&
-                !session.Artifacts.Any(artifact => string.Equals(artifact.Id, session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase)))
-            {
-                session.ActiveHtmlArtifactId = null;
-            }
             if (!string.IsNullOrWhiteSpace(session.ActivePlanArtifactId) &&
                 !session.Artifacts.Any(artifact => string.Equals(artifact.Id, session.ActivePlanArtifactId, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(artifact.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase)))

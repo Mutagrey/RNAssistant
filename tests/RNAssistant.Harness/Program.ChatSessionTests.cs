@@ -158,10 +158,24 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, store);
+                var journal = new VbaJournalStore(paths);
+                var service = new ChatSessionService(adapter, store, journal);
                 var session = service.LoadSession(null);
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "before save" });
                 store.Save(session);
+                var backup = journal.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Option Explicit");
+                var interrupted = journal.PrepareMutation(new VbaMutationPreparation
+                {
+                    Operation = "write",
+                    Host = "Excel",
+                    DocumentKey = "doc",
+                    RuntimeDocumentKey = adapter.RuntimeDocumentKey,
+                    DocumentTitle = "Harness.xlsx",
+                    ModuleName = "PendingModule",
+                    ComponentType = "StdModule",
+                    BeforeExists = false,
+                    IntendedAfterExists = true
+                }, string.Empty, "Sub Pending()\nEnd Sub");
                 var otherSession = store.Create("Excel", "doc", "Harness.xlsx", "Other running chat");
                 otherSession.DocumentPath = "C:\\Demo\\MockWorkbook.xlsx";
                 store.Save(otherSession);
@@ -186,6 +200,34 @@ namespace RNAssistant.Harness
                 AssertEqual(2, migratedSessions.Count, "new document sessions");
                 AssertTrue(migratedSessions.All(item => item.DocumentPath == "C:\\Demo\\SavedWorkbook.xlsx"),
                     "all migrated chats use the current full path");
+                AssertEqual(0, journal.List("Excel", "doc").Count, "old VBA journal moved");
+                var migratedBackups = journal.List("Excel", "saved-doc");
+                AssertEqual(1, migratedBackups.Count, "VBA journal follows document identity");
+                AssertEqual(backup.BackupId, migratedBackups[0].BackupId, "VBA backup identity preserved");
+                AssertTrue(journal.ReadEvents("Excel", "saved-doc").Any(item =>
+                    item.Type == VbaJournalEventTypes.DocumentIdentityChanged), "VBA identity migration is append-only");
+
+                var executor = new OfficeToolExecutor(
+                    adapter,
+                    journal,
+                    new SkillStore(paths),
+                    null,
+                    null,
+                    null,
+                    paths);
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var reconciled = executor.Execute(
+                    Command("common.vba_list_backups"),
+                    tools,
+                    new AppSettings(),
+                    false,
+                    false,
+                    migrated);
+                AssertTrue(reconciled.Success, "interrupted VBA mutation reconciles after identity migration");
+                AssertEqual(VbaMutationStatuses.NotApplied,
+                    journal.ListMutations("Excel", "saved-doc").Single(item =>
+                        item.Prepared.MutationId == interrupted.MutationId).Terminal.Status,
+                    "migrated open mutation closes in the new journal");
             });
         }
 

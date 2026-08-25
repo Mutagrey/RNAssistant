@@ -62,6 +62,17 @@ namespace RNAssistant.Core.Storage
             return files;
         }
 
+        public static bool HasTerminatedFinalLine(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                if (stream.Length == 0) return true;
+                stream.Seek(-1, SeekOrigin.End);
+                var value = stream.ReadByte();
+                return value == '\n' || value == '\r';
+            }
+        }
+
         public static string SafeSegment(string value, string fallback)
         {
             var chars = (value ?? fallback).Select(c =>

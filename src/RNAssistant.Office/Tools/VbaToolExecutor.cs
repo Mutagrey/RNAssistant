@@ -61,8 +61,11 @@ namespace RNAssistant.Office.Tools
         public ToolResult ExecuteControllerTool(ToolCommand command, bool dryRun, ChatSession session, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var reconciliationError = ReconcilePendingMutations();
-            if (reconciliationError != null) return reconciliationError;
+            if (!dryRun)
+            {
+                var reconciliationError = ReconcilePendingMutations();
+                if (reconciliationError != null) return reconciliationError;
+            }
             if (string.Equals(command.ToolId, ToolId("vba_list_backups"), StringComparison.OrdinalIgnoreCase))
             {
                 return ListBackups();
@@ -125,8 +128,6 @@ namespace RNAssistant.Office.Tools
         public ToolResult PrepareControllerTool(ToolCommand command, ChatSession session)
         {
             if (command == null || !string.IsNullOrWhiteSpace(command.RuntimeGuardJson)) return null;
-            var reconciliationError = ReconcilePendingMutations();
-            if (reconciliationError != null) return reconciliationError;
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             if (IsExistingModuleMutation(command.ToolId))
             {

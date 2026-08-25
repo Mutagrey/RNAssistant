@@ -7,6 +7,8 @@
   var activeView = "raw";
   var correlationFilter = {};
   var trajectoryChatId = null;
+  var trajectoryRequestId = 0;
+  var detailRequestId = 0;
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
@@ -43,12 +45,23 @@
   }
 
   function resetLazyDetail() {
+    detailRequestId += 1;
     $("trajectoryEventPayload").textContent = "";
     $("trajectoryEventPayload").classList.add("hidden");
     $("trajectoryVbaDiff").replaceChildren();
     $("trajectoryVbaDiff").classList.add("hidden");
     $("loadTrajectoryPayloadButton").classList.add("hidden");
     $("loadVbaMutationButton").classList.add("hidden");
+  }
+
+  function setTrajectoryBusy(busy) {
+    $("refreshTrajectoryButton").disabled = !!busy;
+    $("loadMoreTrajectoryButton").disabled = !!busy;
+  }
+
+  function invalidateTrajectoryRequest() {
+    trajectoryRequestId += 1;
+    setTrajectoryBusy(false);
   }
 
   function unique(values) {
@@ -434,7 +447,6 @@
   }
 
   async function refreshTrajectory(append) {
-    var button = $("refreshTrajectoryButton");
     var requestedView = $("trajectoryViewInput").value || "raw";
     var vba = requestedView === "vba-mutations";
     var chatId = trajectoryChatId || state.activeChatId;
@@ -442,19 +454,21 @@
       $("trajectoryStatus").textContent = "Нет активного чата.";
       return;
     }
+    var requestId = ++trajectoryRequestId;
     try {
-      button.disabled = true;
-      $("loadMoreTrajectoryButton").disabled = true;
+      setTrajectoryBusy(true);
       $("trajectoryStatus").textContent = vba ? "Читаю VBA mutation journal…" : "Читаю event stream…";
       var response = await send(vba ? "getVbaMutations" : "getChatTrajectory", queryPayload(chatId, append ? nextCursor : null));
-      if (!vba && (trajectoryChatId || state.activeChatId) !== chatId) return;
+      if (requestId !== trajectoryRequestId ||
+        requestedView !== ($("trajectoryViewInput").value || "raw") ||
+        (!vba && (trajectoryChatId || state.activeChatId) !== chatId)) return;
       renderEvents(response, !!append);
     } catch (error) {
+      if (requestId !== trajectoryRequestId) return;
       $("trajectoryStatus").textContent = "Не удалось прочитать диагностику: " + error.message;
       $("trajectoryWorkspace").classList.add("hidden");
     } finally {
-      button.disabled = false;
-      $("loadMoreTrajectoryButton").disabled = false;
+      if (requestId === trajectoryRequestId) setTrajectoryBusy(false);
     }
   }
 
@@ -465,22 +479,24 @@
     var button = $("loadTrajectoryPayloadButton");
     var target = $("trajectoryEventPayload");
     var selectedId = eventId(selected);
+    var requestId = ++detailRequestId;
     try {
       button.disabled = true;
       button.textContent = "Загружаю…";
       var response = await send("getChatEventPayload", { chatId: chatId, eventId: selectedId });
-      if (!selected || eventId(selected) !== selectedId) return;
+      if (requestId !== detailRequestId || !selected || eventId(selected) !== selectedId) return;
       var text = value(response, "Text", "text", "");
       target.textContent = prettyJson(text) +
         (value(response, "TextTruncated", "textTruncated", false) ? "\n\n[preview truncated; full payload remains in CAS]" : "");
       target.classList.remove("hidden");
       button.textContent = "Payload загружен";
     } catch (error) {
+      if (requestId !== detailRequestId) return;
       target.textContent = "Не удалось загрузить payload: " + error.message;
       target.classList.remove("hidden");
       button.textContent = "Повторить";
     } finally {
-      button.disabled = false;
+      if (requestId === detailRequestId) button.disabled = false;
     }
   }
 
@@ -574,20 +590,22 @@
     if (!isVbaView() || !selected) return;
     var button = $("loadVbaMutationButton");
     var selectedId = mutationId(selected);
+    var requestId = ++detailRequestId;
     try {
       button.disabled = true;
       button.textContent = "Проверяю CAS…";
       var response = await send("getVbaMutationDetail", { mutationId: selectedId });
-      if (!selected || mutationId(selected) !== selectedId) return;
+      if (requestId !== detailRequestId || !selected || mutationId(selected) !== selectedId) return;
       renderVbaMutationDetail(response);
       button.textContent = "Before / after загружен";
     } catch (error) {
+      if (requestId !== detailRequestId) return;
       var target = $("trajectoryVbaDiff");
       target.textContent = "Не удалось прочитать CAS source: " + error.message;
       target.classList.remove("hidden");
       button.textContent = "Повторить";
     } finally {
-      button.disabled = false;
+      if (requestId === detailRequestId) button.disabled = false;
     }
   }
 
@@ -624,6 +642,7 @@
     if (exportButton) exportButton.addEventListener("click", exportTrajectory);
     ["trajectorySearchInput", "trajectoryTypeInput"].forEach(function (id) {
       $(id).addEventListener("input", function () {
+        invalidateTrajectoryRequest();
         nextCursor = null;
         $("loadMoreTrajectoryButton").classList.add("hidden");
       });

@@ -27,7 +27,7 @@ namespace RNAssistant.Office.Tools
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
         private readonly string _mutationLockDirectory;
-        private readonly object _fallbackMutationGate = new object();
+        private static readonly object FallbackMutationGate = new object();
 
         public OfficeToolExecutor(
             IOfficeApplicationAdapter adapter,
@@ -367,14 +367,18 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Tool execution budget exceeded (including nested pipeline steps).", null, "tool_step_limit_exceeded", false);
             }
 
-            if (depth == 0 && !dryRun && (safety.MutatesDocument || safety.MutatesLocalState))
+            var needsMutationScope = !dryRun && context.MutationScopeDepth == 0 &&
+                (depth == 0 && (safety.MutatesDocument || safety.MutatesLocalState) || isVbaController);
+            if (needsMutationScope)
             {
                 return ExecuteMutation(
                     context.Session,
                     safety.MutatesLocalState && !string.Equals(tool.Scope, "session", StringComparison.OrdinalIgnoreCase),
-                    safety.MutatesDocument,
+                    safety.MutatesDocument || isVbaController,
                     cancellationToken,
-                    () => ExecuteResolvedCommand(command, context, depth, dryRun, manualRun, cancellationToken, customTool));
+                    () => ExecuteInMutationScope(
+                        context,
+                        () => ExecuteResolvedCommand(command, context, depth, dryRun, manualRun, cancellationToken, customTool)));
             }
 
             return ExecuteResolvedCommand(command, context, depth, dryRun, manualRun, cancellationToken, customTool);
@@ -605,7 +609,7 @@ namespace RNAssistant.Office.Tools
                 }
                 if (string.IsNullOrWhiteSpace(_mutationLockDirectory))
                 {
-                    EnterMutationGate(_fallbackMutationGate, cancellationToken);
+                    EnterMutationGate(FallbackMutationGate, cancellationToken);
                     try
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -614,7 +618,7 @@ namespace RNAssistant.Office.Tools
                     }
                     finally
                     {
-                        Monitor.Exit(_fallbackMutationGate);
+                        Monitor.Exit(FallbackMutationGate);
                     }
                 }
 
@@ -645,6 +649,19 @@ namespace RNAssistant.Office.Tools
                 null,
                 exception.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable",
                 exception.Retryable);
+        }
+
+        private static ToolResult ExecuteInMutationScope(ToolExecutionContext context, Func<ToolResult> action)
+        {
+            context.MutationScopeDepth += 1;
+            try
+            {
+                return action();
+            }
+            finally
+            {
+                context.MutationScopeDepth -= 1;
+            }
         }
 
         private sealed class MutationLockException : InvalidOperationException
@@ -905,6 +922,8 @@ namespace RNAssistant.Office.Tools
             public IReadOnlyList<SkillDefinition> SkillCatalog { get; private set; }
 
             public int RemainingSteps { get; private set; }
+
+            public int MutationScopeDepth { get; set; }
 
             public bool TryConsumeStep()
             {

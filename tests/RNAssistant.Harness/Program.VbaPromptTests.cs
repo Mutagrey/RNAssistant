@@ -1171,6 +1171,66 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaReconciliationWaitsForActiveMutation()
+        {
+            WithTempPaths(paths =>
+            {
+                const string before = "Sub Main()\nDebug.Print \"before\"\nEnd Sub";
+                const string after = "Sub Main()\nDebug.Print \"after\"\nEnd Sub";
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = before };
+                var enteredWrite = new ManualResetEventSlim(false);
+                var releaseWrite = new ManualResetEventSlim(false);
+                adapter.VbaWriteTransform = code =>
+                {
+                    enteredWrite.Set();
+                    if (!releaseWrite.Wait(5000)) throw new InvalidOperationException("test write was not released");
+                    return code;
+                };
+                var journal = new VbaJournalStore(paths);
+                var first = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var second = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var tools = adapter.GetBuiltInTools().Concat(first.GetControllerTools()).ToList();
+                var settings = new AppSettings { AutoConfirmToolActions = true };
+                var session = NewSession(adapter);
+
+                var writeTask = Task.Run(() => first.Execute(
+                    Command("common.vba_write_module", "moduleName", "Module1", "code", after),
+                    tools, settings, false, false, session));
+                AssertTrue(enteredWrite.Wait(5000), "first mutation reached the active effect window");
+                var readStarted = new ManualResetEventSlim(false);
+                var readTask = Task.Run(() =>
+                {
+                    readStarted.Set();
+                    return second.Execute(
+                        Command("common.vba_read_module", "moduleName", "Module1"),
+                        tools, settings, false, false, session);
+                });
+                AssertTrue(readStarted.Wait(5000), "second VBA access started");
+
+                var prematureTerminal = false;
+                var deadline = DateTime.UtcNow.AddMilliseconds(500);
+                while (DateTime.UtcNow < deadline)
+                {
+                    var record = journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
+                    if (record.Terminal != null)
+                    {
+                        prematureTerminal = true;
+                        break;
+                    }
+                    Thread.Sleep(10);
+                }
+                releaseWrite.Set();
+                var write = writeTask.GetAwaiter().GetResult();
+                var read = readTask.GetAwaiter().GetResult();
+                var terminal = journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal;
+
+                AssertTrue(write.Success && read.Success, "both VBA operations complete");
+                AssertEqual(VbaMutationStatuses.Committed, terminal.Status,
+                    "journal terminal agrees with the verified committed effect");
+                AssertTrue(!prematureTerminal, "reconciliation does not close a mutation that owns the document lock");
+            });
+        }
+
         private static void VbaJournalUsesHistoryProtection()
         {
             WithTempPaths(delegate(AppDataPaths paths)

@@ -341,8 +341,64 @@ namespace RNAssistant.Core.Storage
         private void SaveSkill(SkillDefinition skill)
         {
             var directory = SkillDirectory(skill);
+            MoveSkillPackage(skill == null ? null : skill.StoragePath, directory);
             Directory.CreateDirectory(directory);
             StorageFileSystem.WriteAllTextAtomic(Path.Combine(directory, "SKILL.md"), Serialize(skill), Encoding.UTF8);
+            skill.StoragePath = directory;
+        }
+
+        private static void MoveSkillPackage(string sourceDirectory, string targetDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(sourceDirectory) || string.IsNullOrWhiteSpace(targetDirectory) ||
+                string.Equals(sourceDirectory, targetDirectory, StringComparison.OrdinalIgnoreCase) ||
+                !Directory.Exists(sourceDirectory))
+            {
+                return;
+            }
+            if ((File.GetAttributes(sourceDirectory) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new IOException("Skill package directory cannot be a symbolic link.");
+            }
+            if (Directory.Exists(targetDirectory))
+            {
+                CopySkillReferences(sourceDirectory, targetDirectory);
+                return;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(targetDirectory));
+            Directory.Move(sourceDirectory, targetDirectory);
+        }
+
+        private static void CopySkillReferences(string sourceDirectory, string targetDirectory)
+        {
+            var sourceReferences = Path.Combine(sourceDirectory, "references");
+            if (!Directory.Exists(sourceReferences)) return;
+            if ((File.GetAttributes(sourceReferences) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new IOException("Skill references directory cannot be a symbolic link.");
+            }
+            var targetReferences = Path.Combine(targetDirectory, "references");
+            if (Directory.Exists(targetReferences) &&
+                (File.GetAttributes(targetReferences) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new IOException("Skill references directory cannot be a symbolic link.");
+            }
+            Directory.CreateDirectory(targetReferences);
+            foreach (var reference in LoadReferences(sourceDirectory))
+            {
+                var sourcePath = Path.Combine(sourceReferences, Path.GetFileName(reference.Path));
+                var targetPath = Path.Combine(targetReferences, Path.GetFileName(reference.Path));
+                var bytes = File.ReadAllBytes(sourcePath);
+                if (!string.Equals(Sha256(bytes), reference.Revision, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new IOException("Skill reference changed while its package was moving: " + reference.Path);
+                }
+                if (File.Exists(targetPath) && (File.GetAttributes(targetPath) & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new IOException("Skill reference cannot be a symbolic link: " + reference.Path);
+                }
+                StorageFileSystem.WriteAtomic(targetPath, tempPath => File.WriteAllBytes(tempPath, bytes));
+            }
         }
 
         private string SkillDirectory(SkillDefinition skill)

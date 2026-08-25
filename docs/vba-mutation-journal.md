@@ -8,6 +8,7 @@ The Office document remains authoritative for current live VBA. RNAssistant keep
 - VBA source bodies are immutable `text/x-vba` blobs in the shared SHA-256 `chat-blobs` CAS. Journal events contain only hash, byte length, content type, encryption metadata, and key id.
 - The backup list is a projection of `backup.created` and retained `before` sides of module/package preparations. There are no mutable backup JSON files or inline source copies.
 - Each event has a contiguous sequence, previous hash, and SHA-256 or optional HMAC-SHA256 integrity chain. A partial final JSONL row is removed before the next append; corruption elsewhere fails closed.
+- When the same live Office document receives a new stable key after first save or Save As, the journal moves to the new canonical path and appends `document.identity.changed`. Earlier events and hashes are not rewritten; an interrupted preparation remains recoverable under the live identity.
 
 History protection applies to the VBA journal and its CAS bodies exactly as it does to chat history. HMAC and authenticated encryption are independent and disabled by default. The key comes from the DPAPI-protected API key or a separate DPAPI-protected custom secret; no secret is written to settings, events, or blobs.
 

@@ -255,6 +255,38 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void EditingWithUnavailableHtmlCheckpointFailsClosed()
+        {
+            var session = new ChatSession();
+            var broken = new ChatArtifact
+            {
+                Kind = ChatArtifactKinds.HtmlWorkspace,
+                Title = "Unavailable workspace",
+                MimeType = "application/vnd.rnassistant.html-workspace+json",
+                InlineText = null
+            };
+            session.Artifacts.Add(broken);
+            var user = new ChatMessage
+            {
+                Role = "user",
+                Content = "Пересобери страницу",
+                HtmlWorkspaceCheckpointId = broken.Id
+            };
+            session.Messages.Add(user);
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Готово" });
+
+            var service = new ChatHistoryEditService(delegate { }, delegate { }, (current, artifactId) => false);
+            service.RewriteUserMessage(session, session.Id, user.Id, -1, "Сделай иначе");
+
+            AssertEqual(broken.Id, session.ActiveHtmlArtifactId, "broken checkpoint identity is preserved");
+            AssertEqual(HtmlWorkspaceRecoveryStatuses.Degraded, session.HtmlWorkspaceRecovery.Status,
+                "unavailable checkpoint enters recovery mode");
+            AssertEqual(HtmlWorkspaceRecoveryIssues.ActiveBodyUnavailable, session.HtmlWorkspaceRecovery.Issue,
+                "missing checkpoint body is reported");
+            AssertTrue(!session.HtmlWorkspaceRecovery.CanMutate, "HTML mutation stays blocked until explicit recovery");
+            AssertTrue(session.Artifacts.Any(item => item.Id == broken.Id), "broken checkpoint metadata remains reachable");
+        }
+
         private static void EditingMessageValidationErrorsAreReported()
         {
             WithTempPaths(delegate(AppDataPaths paths)

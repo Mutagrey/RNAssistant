@@ -1471,6 +1471,7 @@ namespace RNAssistant.Core.Storage
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
             var lines = File.ReadAllLines(path, Utf8);
+            var hasTerminatedFinalLine = StorageFileSystem.HasTerminatedFinalLine(path);
             var result = new EventLogReadResult();
             var protector = Protection();
             for (var index = 0; index < lines.Length; index++)
@@ -1483,7 +1484,7 @@ namespace RNAssistant.Core.Storage
                 }
                 catch (JsonException)
                 {
-                    if (index == lines.Length - 1)
+                    if (index == lines.Length - 1 && !hasTerminatedFinalLine)
                     {
                         result.HasIncompleteTail = true;
                         break;

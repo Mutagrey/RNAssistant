@@ -920,7 +920,7 @@ namespace RNAssistant.Harness
             AssertTrue(request.IndexOf("\"goals\"", StringComparison.Ordinal) < 0, "no fixed summary sections");
             AssertContains(
                 ContextCompactionService.BuildActiveWindow(session)[0].Content,
-                "Full skill bodies present only in compacted earlier context are not loaded",
+                "Skill bodies or reference chunks present only in compacted earlier context are unavailable",
                 "compacted context invalidates skill body loading");
         }
 

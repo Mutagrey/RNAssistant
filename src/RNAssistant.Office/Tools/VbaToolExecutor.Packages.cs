@@ -12,8 +12,11 @@ namespace RNAssistant.Office.Tools
     {
         public ToolResult ExecuteCustomTool(ToolDefinition tool, ToolCommand command, AppSettings settings, bool dryRun, bool manualRun, ChatSession session)
         {
-            var reconciliationError = ReconcilePendingMutations();
-            if (reconciliationError != null) return reconciliationError;
+            if (!dryRun)
+            {
+                var reconciliationError = ReconcilePendingMutations();
+                if (reconciliationError != null) return reconciliationError;
+            }
             ToolDefinition package;
             ToolResult validationError;
             if (!TryPreparePackage(tool, out package, out validationError)) return validationError;
@@ -53,7 +56,7 @@ namespace RNAssistant.Office.Tools
             ToolResult installResult = null;
             if (probe.Status == "not_installed")
             {
-                installResult = InstallCustomTool(package, true, false, session, command);
+                installResult = InstallCustomTool(package, true, false, session, command, false);
                 if (!installResult.Success) return installResult;
                 sessionInstalled = true;
             }
@@ -74,7 +77,7 @@ namespace RNAssistant.Office.Tools
             }
             finally
             {
-                if (sessionInstalled) cleanupResult = RemoveCustomTool(package, true, session, command);
+                if (sessionInstalled) cleanupResult = RemoveCustomTool(package, true, session, command, false);
             }
 
             var output = ExtractMacroOutput(runResult);
@@ -97,10 +100,19 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Ok(output, dataJson);
         }
 
-        public ToolResult InstallCustomTool(ToolDefinition tool, bool sessionOnly, bool dryRun, ChatSession session = null, ToolCommand command = null)
+        public ToolResult InstallCustomTool(
+            ToolDefinition tool,
+            bool sessionOnly,
+            bool dryRun,
+            ChatSession session = null,
+            ToolCommand command = null,
+            bool reconcile = true)
         {
-            var reconciliationError = ReconcilePendingMutations();
-            if (reconciliationError != null) return reconciliationError;
+            if (reconcile && !dryRun)
+            {
+                var reconciliationError = ReconcilePendingMutations();
+                if (reconciliationError != null) return reconciliationError;
+            }
             ToolDefinition package;
             ToolResult validationError;
             if (!TryPreparePackage(tool, out package, out validationError)) return validationError;
@@ -163,10 +175,18 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Ok(installed.Message, installed.DataJson ?? PackageData(package));
         }
 
-        public ToolResult RemoveCustomTool(ToolDefinition tool, bool sessionOnly = false, ChatSession session = null, ToolCommand command = null)
+        public ToolResult RemoveCustomTool(
+            ToolDefinition tool,
+            bool sessionOnly = false,
+            ChatSession session = null,
+            ToolCommand command = null,
+            bool reconcile = true)
         {
-            var reconciliationError = ReconcilePendingMutations();
-            if (reconciliationError != null) return reconciliationError;
+            if (reconcile)
+            {
+                var reconciliationError = ReconcilePendingMutations();
+                if (reconciliationError != null) return reconciliationError;
+            }
             ToolDefinition package;
             ToolResult validationError;
             if (!TryPreparePackage(tool, out package, out validationError)) return validationError;

@@ -119,17 +119,10 @@ namespace RNAssistant.Core.Storage
         public byte[] Unprotect(byte[] stored, string purpose)
         {
             stored = stored ?? new byte[0];
+            if (!Encrypts) return stored;
             if (!IsProtectedPayload(stored))
             {
-                if (Encrypts)
-                {
-                    throw new CryptographicException("Encrypted history contains an unprotected payload.");
-                }
-                return stored;
-            }
-            if (!Encrypts)
-            {
-                throw new CryptographicException("History payload is encrypted, but encryption is disabled or its key is unavailable.");
+                throw new CryptographicException("Encrypted history contains an unprotected payload.");
             }
             var minimum = Magic.Length + KeyIdLength + IvLength + 16 + TagLength;
             if (stored.Length < minimum)
