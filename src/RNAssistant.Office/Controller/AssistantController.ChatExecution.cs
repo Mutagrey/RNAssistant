@@ -32,7 +32,7 @@ namespace RNAssistant.Office
 
             var settings = _settingsService.Load();
             var session = LoadAddressedSession(chatId);
-            var selectedArtifactIds = _artifactGateway.ResolveSelectedIds(session, artifactIds);
+            var selectedArtifactIds = _resourceGateway.ResolveSelectedArtifactIds(session, artifactIds);
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
             var attachments = _attachmentStore.LoadDrafts(attachmentIds);
             var invalidAttachment = attachments.FirstOrDefault(a => a != null && a.Status == "error");
@@ -311,8 +311,8 @@ namespace RNAssistant.Office
                 input = input ?? new ChatTurnInput();
                 var text = input.Text ?? string.Empty;
                 var attachments = input.Attachments ?? new ChatAttachment[0];
-                var selectedArtifactIds = _artifactGateway.ResolveSelectedIds(session, input.ArtifactIds);
-                var referencedMedia = _artifactGateway.ResolveModelAttachments(session, selectedArtifactIds);
+                var selectedArtifactIds = _resourceGateway.ResolveSelectedArtifactIds(session, input.ArtifactIds);
+                var referencedMedia = _resourceGateway.ResolveModelAttachments(session, selectedArtifactIds);
                 var routedAttachments = attachments
                     .Concat(referencedMedia)
                     .Where(attachment => attachment != null)
@@ -470,10 +470,10 @@ namespace RNAssistant.Office
                         attachmentRouting,
                         runProgress,
                         runCancellation.Token).ConfigureAwait(false);
-                    var artifactEvidence = _artifactGateway.BuildSelectedEvidence(
+                    var artifactEvidence = _resourceGateway.BuildSelectedEvidence(
                         session,
                         selectedArtifactIds.Except(
-                            _artifactGateway.ResolveDirectMediaArtifactIds(
+                            _resourceGateway.ResolveDirectMediaArtifactIds(
                                 session,
                                 selectedArtifactIds,
                                 attachmentRouting.PrimaryAttachments),
@@ -483,7 +483,7 @@ namespace RNAssistant.Office
                             ModelContextBudget.InputBudgetTokens(settings) / 8)),
                         settings);
                     var primaryText = AttachmentAnalysisService.BuildPrimaryRequest(
-                        ArtifactGatewayService.AppendSelectedEvidence(text, artifactEvidence),
+                        ResourceGatewayService.AppendSelectedEvidence(text, artifactEvidence),
                         attachmentAnalysis);
                     var primaryAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
                     try

@@ -171,7 +171,7 @@ namespace RNAssistant.Harness
                 Artifacts = artifacts.ToList(),
                 ActiveHtmlArtifactId = "html-2"
             }, 1000);
-            AssertContains(artifactPrompt, "CHAT_ARTIFACT_INDEX", "prompt exposes artifact metadata index");
+            AssertContains(artifactPrompt, "CHAT_RESOURCE_INDEX", "prompt exposes resource metadata index");
             AssertContains(artifactPrompt, "html-2", "prompt exposes active html artifact reference");
             AssertTrue(artifactPrompt.IndexOf("large-v2", StringComparison.Ordinal) < 0, "prompt does not inline html snapshot bodies");
         }

@@ -13,7 +13,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void ArtifactGatewayReadsSearchesAndPages()
+        private static void ResourceGatewayReadsSearchesAndPages()
         {
             var attachment = new ChatAttachment
             {
@@ -46,41 +46,44 @@ namespace RNAssistant.Harness
                 Messages = new List<ChatMessage> { message },
                 Artifacts = new List<ChatArtifact> { artifact }
             };
-            var gateway = new ArtifactGatewayService();
+            var gateway = new ResourceGatewayService();
+            var resourceUri = ChatArtifactResourceProvider.CreateRevisionUri(session, artifact);
 
-            var listed = gateway.List(session, null, null, 10);
-            AssertEqual(1, listed["items"].Count(), "artifact list count");
-            AssertTrue(listed["items"][0]["modelContextPolicy"] == null,
-                "artifact descriptors have no legacy context policy");
-            AssertTrue(listed["items"][0]["representations"].Values<string>().Contains("text"),
+            var listed = gateway.List(session, null, null, null, 10);
+            AssertEqual(1, listed.Items.Count, "resource list count");
+            AssertEqual(resourceUri, listed.Items[0].Reference.Uri, "resource list uses canonical URI");
+            AssertTrue(listed.Items[0].Representations.Contains("text"),
                 "artifact list advertises extracted text");
 
-            var first = gateway.Read(session, artifact.Id, "text", 0, 128).Data;
-            AssertEqual(128, first["returnedCharacters"].Value<int>(), "artifact read is bounded");
-            AssertTrue(first["truncated"].Value<bool>(), "artifact read exposes truncation");
-            var second = gateway.Read(session, artifact.Id, "text",
-                int.Parse(first["nextCursor"].Value<string>()), 128).Data;
-            AssertTrue(second["offset"].Value<int>() > 0, "artifact cursor advances");
+            var resolved = gateway.Resolve(session, resourceUri);
+            AssertEqual(resourceUri, resolved.Resource.Reference.Uri, "resource resolve is exact");
 
-            var search = gateway.Search(session, "NEEDLE", null, 10, 256);
-            AssertEqual(1, search["matchCount"].Value<int>(), "artifact text search count");
-            AssertEqual(artifact.Id, search["matches"][0]["artifactId"].Value<string>(), "artifact search id");
-            AssertContains(search["matches"][0]["snippet"].Value<string>(), "NEEDLE", "artifact search snippet");
+            var first = gateway.Read(session, resourceUri, "text", 0, 128).Result;
+            AssertEqual(128, first.ReturnedCharacters, "resource read is bounded");
+            AssertTrue(!first.Complete && first.Truncated, "resource read exposes truncation");
+            var second = gateway.Read(session, resourceUri, "text",
+                int.Parse(first.NextCursor), 128).Result;
+            AssertTrue(second.Offset > 0, "resource cursor advances");
+
+            var search = gateway.Search(session, null, "NEEDLE", null, 10, 256);
+            AssertEqual(1, search.Matches.Count, "resource text search count");
+            AssertEqual(resourceUri, search.Matches[0].Reference.Uri, "resource search URI");
+            AssertContains(search.Matches[0].Snippet, "NEEDLE", "resource search snippet");
 
             var invalidRepresentationRejected = false;
             try
             {
-                gateway.Read(session, artifact.Id, "legacy", 0, 128);
+                gateway.Read(session, resourceUri, "legacy", 0, 128);
             }
             catch (InvalidOperationException)
             {
                 invalidRepresentationRejected = true;
             }
-            AssertTrue(invalidRepresentationRejected, "artifact reads reject unknown legacy representations");
+            AssertTrue(invalidRepresentationRejected, "resource reads reject unknown representations");
 
             var evidence = gateway.BuildSelectedEvidence(session, new[] { artifact.Id }, 256, new AppSettings());
-            AssertContains(evidence, "SELECTED_ARTIFACT_EVIDENCE", "selected artifact evidence marker");
-            AssertContains(evidence, artifact.Id, "selected artifact evidence citation");
+            AssertContains(evidence, "SELECTED_RESOURCE_EVIDENCE", "selected resource evidence marker");
+            AssertContains(evidence, resourceUri, "selected resource evidence citation");
 
             var imageAttachment = new ChatAttachment
             {
@@ -120,7 +123,12 @@ namespace RNAssistant.Harness
             var implicitAttachmentMappingRejected = false;
             try
             {
-                gateway.Read(session, "attachment_unmapped", "media", 0, 128);
+                gateway.Read(
+                    session,
+                    ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last()),
+                    "media",
+                    0,
+                    128);
             }
             catch (InvalidOperationException)
             {
@@ -201,12 +209,12 @@ namespace RNAssistant.Harness
             AssertTrue(FlattenSimple(prompt).IndexOf("HISTORICAL_BODY_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,
                 "historical extracted text is not copied into every prompt");
             AssertTrue(FlattenSimple(prompt).IndexOf("HISTORICAL_ANALYSIS_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,
-                "historical media analysis is read through the artifact gateway instead of every prompt");
+                "historical query-specific media analysis is not replayed into every prompt");
             var usage = JObject.FromObject(ContextUsageEstimator.FromSession(session, new AppSettings()));
             AssertTrue(usage["usedChars"].Value<int>() < 1000,
                 "session usage estimates the virtualized reference rather than the historical body");
 
-            var gateway = new ArtifactGatewayService();
+            var gateway = new ResourceGatewayService();
             session.Artifacts.Add(new ChatArtifact
             {
                 Id = "attachment_old-text",
@@ -214,8 +222,10 @@ namespace RNAssistant.Harness
                 SourceMessageId = session.Messages[0].Id,
                 MetadataJson = "{\"attachmentId\":\"old-text\"}"
             });
-            AssertContains(gateway.Read(session, "attachment_old-text", "analysis", 0, 256).Data["content"].Value<string>(),
-                "HISTORICAL_ANALYSIS_MUST_NOT_REPLAY", "historical analysis remains available on demand");
+            var historicUri = ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last());
+            var descriptor = gateway.Resolve(session, historicUri).Resource;
+            AssertTrue(!descriptor.Representations.Contains("analysis"),
+                "query-specific helper analysis is not exposed as a reusable resource representation");
 
             string compactionInput = null;
             LlmCompletionDelegate completion = (requestSettings, messages, options, stream, cancellationToken) =>
@@ -271,6 +281,7 @@ namespace RNAssistant.Harness
                     SourceMessageId = source.Id,
                     MetadataJson = "{\"attachmentId\":\"historic-image\"}"
                 });
+                var resourceUri = ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last());
                 var settings = new AppSettings { Model = "omni" };
                 settings.ModelCapabilities["omni"] = new ModelCapabilitySettings
                 {
@@ -290,19 +301,20 @@ namespace RNAssistant.Harness
                         AssertEqual(0, mediaMessages.Count, "historical media is absent before explicit read");
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"id\":\"call_media\",\"name\":\"common.artifacts_read\",\"arguments\":{\"artifactId\":\"attachment_historic-image\",\"representation\":\"media\"}}]}"
+                            Content = "{\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"id\":\"call_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     if (calls == 2)
                     {
                         AssertEqual(1, mediaMessages.Count, "media is hydrated for the next model step only");
+                        AssertContains(FlattenSimple(messages), resourceUri, "hydrated media retains resource URI provenance");
                         AssertTrue(mediaMessages[0].ArtifactIds.Contains("attachment_historic-image"),
                             "hydrated media retains artifact provenance");
                         return Task.FromResult(new LlmCompletionResult { Content = "invalid envelope" });
                     }
                     AssertEqual(0, mediaMessages.Count, "format repair does not resend one-shot media");
                     AssertTrue(!messages.Any(message => message != null && !message.ExcludeFromModelContext &&
-                        (message.Content ?? string.Empty).StartsWith("ARTIFACT_MEDIA_INPUT", StringComparison.Ordinal)),
+                        (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal)),
                         "consumed media marker is excluded from later model context");
                     return Task.FromResult(new LlmCompletionResult
                     {
@@ -359,6 +371,7 @@ namespace RNAssistant.Harness
                     SourceMessageId = source.Id,
                     MetadataJson = "{\"attachmentId\":\"helper-image\"}"
                 });
+                var resourceUri = ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last());
                 var settings = new AppSettings { Model = "text-only" };
                 settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings
                 {
@@ -389,11 +402,11 @@ namespace RNAssistant.Harness
                     {
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю скан.\",\"tool_calls\":[{\"id\":\"call_helper_media\",\"name\":\"common.artifacts_read\",\"arguments\":{\"artifactId\":\"attachment_helper-image\",\"representation\":\"media\"}}]}"
+                            Content = "{\"message\":\"Читаю скан.\",\"tool_calls\":[{\"id\":\"call_helper_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     var evidenceMessage = messages.First(message => message != null && message.ProtocolMessage &&
-                        (message.Content ?? string.Empty).StartsWith("ARTIFACT_MEDIA_INPUT", StringComparison.Ordinal));
+                        (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal));
                     AssertTrue(evidenceMessage.AttachmentAnalysis != null, "helper evidence is attached to the protocol message");
                     AssertContains(evidenceMessage.AttachmentAnalysis.Content, "total of 42", "helper evidence reaches primary context");
                     var rawRead = false;

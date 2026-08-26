@@ -32,6 +32,7 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 ## Tool/Agent Protocol
 
 - Целевая архитектура ресурсов и поэтапный hard cutover зафиксированы в `docs/resource-fabric.md`. Не расширяй legacy artifact readers, `PlainChatService` или ручной attachment-selection новыми responsibilities; переносимый срез должен удалять заменённый путь без alias/dual-write.
+- Model-facing чтение ресурсов использует только `common.resources_list/resolve/search/read` и canonical revision-pinned `rna://` URI. `common.artifacts_*` удалены и не canonicalize.
 
 - Поддерживаются только режимы `agent` и `chat`; новый chat создается в `agent`. Agent может отвечать без tools, отдельного auto-router режима нет.
 - Chat mode отправляет обычную историю с `ChatSystemPrompt`; tools и skills в его контекст не попадают и ничего локально не исполняется.

@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Tools
         private readonly SkillToolExecutor _skillExecutor;
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
         private readonly PromptToolExecutor _promptToolExecutor;
-        private readonly ArtifactToolExecutor _artifactExecutor;
+        private readonly ResourceToolExecutor _resourceExecutor;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
         private readonly PlanToolExecutor _planToolExecutor;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
@@ -49,7 +49,7 @@ namespace RNAssistant.Office.Tools
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
-            _artifactExecutor = new ArtifactToolExecutor(new ArtifactGatewayService(loadArtifactBody, readAttachmentText));
+            _resourceExecutor = new ResourceToolExecutor(new ResourceGatewayService(loadArtifactBody, readAttachmentText));
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(_adapter, _adapterTools);
             _planToolExecutor = new PlanToolExecutor();
             _mutationLockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
@@ -59,7 +59,7 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools, _skillExecutor.GetControllerTools(), ControllerExecutorKind.Skill);
             RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
             RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
-            RegisterControllerTools(controllerTools, _artifactExecutor.GetControllerTools(), ControllerExecutorKind.Artifact);
+            RegisterControllerTools(controllerTools, _resourceExecutor.GetControllerTools(), ControllerExecutorKind.Resource);
             RegisterControllerTools(controllerTools, _htmlArtifactExecutor.GetControllerTools(), ControllerExecutorKind.HtmlArtifact);
             RegisterControllerTools(controllerTools, _planToolExecutor.GetControllerTools(), ControllerExecutorKind.Plan);
             _controllerTools = controllerTools.ToArray();
@@ -710,8 +710,8 @@ namespace RNAssistant.Office.Tools
                     return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
                 case ControllerExecutorKind.Prompt:
                     return _promptToolExecutor.ExecuteControllerTool(command, dryRun);
-                case ControllerExecutorKind.Artifact:
-                    return _artifactExecutor.ExecuteControllerTool(command, context.Session);
+                case ControllerExecutorKind.Resource:
+                    return _resourceExecutor.ExecuteControllerTool(command, context.Session);
                 case ControllerExecutorKind.HtmlArtifact:
                     return _htmlArtifactExecutor.ExecuteControllerTool(command, context.Session, dryRun, cancellationToken);
                 case ControllerExecutorKind.Plan:
@@ -973,7 +973,7 @@ namespace RNAssistant.Office.Tools
             Skill,
             ToolAuthoring,
             Prompt,
-            Artifact,
+            Resource,
             HtmlArtifact,
             Plan
         }

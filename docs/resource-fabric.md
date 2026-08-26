@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Status: accepted target architecture; implementation is delivered in vertical slices. Legacy readers are removed when their provider enters the fabric, not retained as aliases.
+Status: accepted target architecture. Core contracts/canonical URIs and the chat resource provider with `common.resources_*` are implemented. Remaining slices are delivered vertically; replaced readers are removed, not retained as aliases.
 
 ## Goals
 
@@ -85,8 +85,8 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 
 ## Delivery order
 
-1. Core resource contracts and canonical URI validation.
-2. Provider registry plus chat-artifact provider; replace `common.artifacts_*` with `common.resources_*`.
+1. **Done:** Core resource contracts and canonical URI validation.
+2. **Done:** Provider registry plus chat-artifact provider; `common.artifacts_*` removed and replaced by `common.resources_*` without aliases.
 3. Unified `ConversationRunService`; enable read-only resource loop in Chat.
 4. Automatic UI ingestion and durable message references; remove explicit selection mechanics.
 5. Office, VBA, HTML, and plan providers; remove duplicated read tools.

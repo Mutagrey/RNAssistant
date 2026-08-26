@@ -187,7 +187,7 @@ namespace RNAssistant.Harness
                 Test("attachments: extracts pdf text", AttachmentExtractsPdfText),
                 Test("attachments: accepts text formats and encodings", AttachmentAcceptsTextFormatsAndEncodings),
                 Test("attachments: stores extracted text sidecar", AttachmentStoresExtractedTextSidecar),
-                Test("artifacts: gateway reads searches and pages", ArtifactGatewayReadsSearchesAndPages),
+                Test("resources: gateway reads searches resolves and pages", ResourceGatewayReadsSearchesAndPages),
                 Test("artifacts: prompt uses bounded working set", ArtifactPromptUsesBoundedWorkingSet),
                 Test("artifacts: historical attachments stay reference-only", HistoricalAttachmentsStayReferenceOnly),
                 Test("attachments: visual pdf payload", AttachmentBuildsVisualPdfPayload),
@@ -303,6 +303,9 @@ namespace RNAssistant.Harness
                 Test("resources: canonical URI roundtrip", ResourceUriRoundTripsCanonicalAddress),
                 Test("resources: rejects ambiguous URI", ResourceUriRejectsAmbiguousAddresses),
                 Test("resources: separates head and revision", ResourceContractsSeparateHeadAndRevision),
+                Test("resources: registry rejects duplicate providers", ResourceRegistryRejectsDuplicateProviders),
+                Test("resources: gateway discovers providers", ResourceGatewayDiscoversProvidersBeforeListing),
+                Test("resources: hard cutover artifact tools", ResourceToolsHardCutoverArtifactTools),
                 Test("chart: default config", ChartArtifactBuildsDefaultConfig),
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
 

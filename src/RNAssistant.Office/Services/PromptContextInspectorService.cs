@@ -628,7 +628,7 @@ namespace RNAssistant.Office.Services
                 content = content.Substring(prefix.Length);
             }
 
-            var artifactMarker = content.IndexOf("CHAT_ARTIFACT_INDEX", StringComparison.Ordinal);
+            var artifactMarker = content.IndexOf("CHAT_RESOURCE_INDEX", StringComparison.Ordinal);
             var artifactText = artifactMarker < 0 ? string.Empty : content.Substring(artifactMarker);
             var withoutArtifacts = artifactMarker < 0 ? content : content.Substring(0, artifactMarker).TrimEnd();
             var contextMarker = withoutArtifacts.IndexOf("USER_ADDED_CONTEXT:", StringComparison.Ordinal);

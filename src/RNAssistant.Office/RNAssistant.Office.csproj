@@ -94,7 +94,9 @@
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatArtifactService.cs" />
-    <Compile Include="Services\ArtifactGatewayService.cs" />
+    <Compile Include="Services\ChatArtifactResourceProvider.cs" />
+    <Compile Include="Services\ResourceGatewayService.cs" />
+    <Compile Include="Services\ResourceProviderRegistry.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\AgentRunService.cs" />
     <Compile Include="Services\AgentJsonProtocol.cs" />
@@ -137,7 +139,7 @@
     <Compile Include="Tools\ToolAuthoringExecutor.Schemas.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.Validation.cs" />
     <Compile Include="Tools\PromptToolExecutor.cs" />
-    <Compile Include="Tools\ArtifactToolExecutor.cs" />
+    <Compile Include="Tools\ResourceToolExecutor.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.DataBinding.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.Diagnostics.cs" />
