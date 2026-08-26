@@ -5,6 +5,19 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
+    internal sealed class ResourceRequestException : InvalidOperationException
+    {
+        public string ErrorCode { get; private set; }
+        public bool Retryable { get; private set; }
+
+        public ResourceRequestException(string message, string errorCode, bool retryable)
+            : base(message)
+        {
+            ErrorCode = string.IsNullOrWhiteSpace(errorCode) ? "resource_request_invalid" : errorCode;
+            Retryable = retryable;
+        }
+    }
+
     internal sealed class ResourceReadSelection
     {
         public ResourceReadResult Result { get; set; }
@@ -27,6 +40,10 @@ namespace RNAssistant.Office.Services
         ResourceDescriptor Resolve(ChatSession session, string resourceUri);
         ResourceSearchResult Search(ChatSession session, string query, string kind, int limit, int maxCharsPerMatch);
         ResourceReadSelection Read(ChatSession session, string resourceUri, string representation, int offset, int maxChars);
+    }
+
+    internal interface ILiveOfficeResourceProvider : IResourceProvider
+    {
     }
 
     internal sealed class ResourceProviderRegistry

@@ -198,8 +198,6 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
-                    case "outlook.get_context":
-                        return ToolResult.Ok("Outlook context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
                     case "outlook.read_mail":
                         return ReadMail(command);
                     case "outlook.search_mail":

@@ -252,14 +252,10 @@ namespace RNAssistant.Harness
                     tool.Components[0].Type);
                 var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
 
-                var read = executor.Execute(
-                    Command("common.vba_read_module", "moduleName", tool.Components[0].Name),
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
-                    new AppSettings(),
-                    false,
-                    false);
+                var read = ReadVbaSource(executor, NewSession(adapter), tool.Components[0].Name);
 
-                AssertTrue(read.Success, "safe VBA access continues after package reconciliation");
+                AssertContains(read.Text, "RNAssistantPackage",
+                    "safe VBA resource access continues after package reconciliation");
                 var record = journal.ListPackageMutations("Excel", "doc").Single(item =>
                     string.Equals(item.Prepared.MutationId, prepared.MutationId, StringComparison.OrdinalIgnoreCase));
                 AssertEqual("unknown", record.Terminal.Status, "mixed interrupted package state is never auto-replayed");

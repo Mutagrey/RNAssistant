@@ -233,6 +233,104 @@ namespace RNAssistant.Harness
                 "HTML structure does not copy member bodies");
         }
 
+        private static void LiveOfficeAndVbaResourcesAreBoundedAndGuarded()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.SetVbaModule(
+                    "ResourceModule",
+                    "Option Explicit\nSub ResourceNeedle()\n" + new string('x', 220) + "\nEnd Sub",
+                    "StdModule");
+                var session = NewSession(adapter);
+                var gateway = executor.ResourceGateway;
+
+                var discovery = gateway.List(session, null, null, null, 20);
+                AssertEqual("chat,document,vba", string.Join(",", discovery.Providers.ToArray()),
+                    "resource discovery exposes the registered providers only");
+
+                var document = gateway.List(
+                    session,
+                    LiveDocumentResourceProvider.ProviderName,
+                    LiveDocumentResourceProvider.DocumentKind,
+                    null,
+                    20).Items.Single();
+                AssertTrue(document.Reference.Uri.StartsWith("rna://document/", StringComparison.Ordinal),
+                    "live document uses a canonical resource URI");
+                AssertTrue(document.Reference.Uri.IndexOf("MockWorkbook", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    document.Reference.Uri.IndexOf("C:", StringComparison.OrdinalIgnoreCase) < 0,
+                    "live document URI does not expose its title or path");
+
+                var documentText = gateway.Read(
+                    session,
+                    document.Reference.Uri,
+                    ResourceRepresentations.Text,
+                    0,
+                    128).Result;
+                AssertTrue(!string.IsNullOrWhiteSpace(documentText.Text), "live document text is readable on demand");
+                AssertTrue(!string.IsNullOrWhiteSpace(documentText.ContentSha256) &&
+                    string.Equals(
+                        documentText.ContentSha256,
+                        documentText.Resource.Reference.Revision,
+                        StringComparison.Ordinal),
+                    "live document read carries exact revision evidence");
+
+                var selection = gateway.List(
+                    session,
+                    LiveDocumentResourceProvider.ProviderName,
+                    LiveDocumentResourceProvider.SelectionKind,
+                    null,
+                    20).Items.Single();
+                var selectionSearch = gateway.Search(
+                    session,
+                    LiveDocumentResourceProvider.ProviderName,
+                    "Sales",
+                    LiveDocumentResourceProvider.SelectionKind,
+                    10,
+                    128);
+                AssertEqual(selection.Reference.Uri, selectionSearch.Matches.Single().Reference.Uri,
+                    "selection search returns its exact live resource URI");
+
+                var component = VbaComponent(executor, session, "ResourceModule");
+                AssertTrue(component.Reference.Uri.IndexOf("ResourceModule", StringComparison.OrdinalIgnoreCase) < 0,
+                    "VBA component URI does not expose the module name");
+                var firstSource = gateway.Read(
+                    session,
+                    component.Reference.Uri,
+                    ResourceRepresentations.Source,
+                    0,
+                    128).Result;
+                AssertEqual(128, firstSource.ReturnedCharacters, "VBA source read is bounded");
+                AssertTrue(firstSource.Truncated && !string.IsNullOrWhiteSpace(firstSource.NextCursor),
+                    "VBA source read exposes continuation");
+                AssertTrue(!string.IsNullOrWhiteSpace(firstSource.Resource.Reference.Revision),
+                    "VBA source read carries exact revision evidence");
+
+                var sourceSearch = SearchVbaSource(executor, session, "ResourceNeedle");
+                AssertTrue(sourceSearch.Matches.Any(match =>
+                    string.Equals(match.Title, "ResourceModule", StringComparison.OrdinalIgnoreCase)),
+                    "VBA resource search finds source text");
+                var metadataSearch = SearchVbaSource(executor, session, "ResourceModule");
+                AssertEqual(ResourceRepresentations.Metadata, metadataSearch.Matches.Single().Representation,
+                    "VBA resource search discovers component metadata without reading its body");
+
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                adapter.DocumentKeyValue = "other-document";
+                adapter.RuntimeDocumentKeyValue = "runtime-other-document";
+                var blocked = executor.Execute(
+                    Command(
+                        ResourceToolExecutor.ReadToolId,
+                        "uri", document.Reference.Uri,
+                        "representation", ResourceRepresentations.Text),
+                    tools,
+                    new AppSettings(),
+                    false,
+                    false,
+                    session);
+                AssertEqual("active_document_changed", blocked.ErrorCode,
+                    "live resource read refuses a different active document");
+            });
+        }
+
         private static void ArtifactPromptUsesBoundedWorkingSet()
         {
             var session = new ChatSession();

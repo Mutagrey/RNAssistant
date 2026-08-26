@@ -41,10 +41,8 @@ namespace RNAssistant.Office
 
         public VbaProjectResponse GetVbaProject()
         {
-            var settings = _settingsService.Load();
             var session = OfficeToolExecutor.CreateIsolatedManualSession(LoadSession(null));
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_read_module") };
-            var result = _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true, session);
+            var result = _toolExecutor.ReadVbaProjectForEditor(session);
             return new VbaProjectResponse
             {
                 Result = result,
@@ -55,12 +53,8 @@ namespace RNAssistant.Office
         public ToolResult GetVbaModule(string moduleName)
         {
             const int editorReadLimit = 1000000;
-            var settings = _settingsService.Load();
             var session = OfficeToolExecutor.CreateIsolatedManualSession(LoadSession(null));
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_read_module") };
-            command.Arguments["moduleName"] = moduleName;
-            command.Arguments["maxChars"] = editorReadLimit;
-            var result = _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true, session);
+            var result = _toolExecutor.ReadVbaModuleForEditor(session, moduleName, editorReadLimit);
             if (result == null || !result.Success || string.IsNullOrWhiteSpace(result.DataJson))
             {
                 return result ?? ToolResult.Fail("VBA module read returned no result.", null, "vba_editor_read_missing", true);

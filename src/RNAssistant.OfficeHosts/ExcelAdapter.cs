@@ -312,10 +312,6 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
-                    case "excel.get_context":
-                        return GetContextTool();
-                    case "excel.get_selection":
-                        return GetSelectionTool();
                     case "excel.inspect":
                         return InspectWorkbook(command);
                     case "excel.read_range":
@@ -381,33 +377,6 @@ namespace RNAssistant.OfficeHosts
                     .IndexOf(".vba_", StringComparison.OrdinalIgnoreCase) >= 0;
                 return ToolResult.Fail(ex.Message, null, isVba ? "vba_access_error" : "office_tool_error", !isVba);
             }
-        }
-
-        private ToolResult GetContextTool()
-        {
-            return ToolResult.Ok("Excel context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
-        }
-
-        private ToolResult GetSelectionTool()
-        {
-            var workbook = RequireWorkbook();
-            var range = ResolveSelectionRange(workbook);
-            if (range == null)
-            {
-                return ToolResult.Fail("Select an Excel range first.");
-            }
-
-            var sizeError = ValidateReadableRange(range, "Selection");
-            if (sizeError != null) return sizeError;
-
-            var sheet = range.Worksheet as Excel.Worksheet;
-            return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new
-            {
-                workbook = workbook.Name,
-                sheet = sheet == null ? string.Empty : sheet.Name,
-                address = range.Address[false, false],
-                values = RangeToRows(range)
-            }));
         }
 
         private ToolResult WorkbookSummary()

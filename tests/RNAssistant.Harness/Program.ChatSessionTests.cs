@@ -215,15 +215,9 @@ namespace RNAssistant.Harness
                     null,
                     null,
                     paths);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var reconciled = executor.Execute(
-                    Command("common.vba_list_backups"),
-                    tools,
-                    new AppSettings(),
-                    false,
-                    false,
-                    migrated);
-                AssertTrue(reconciled.Success, "interrupted VBA mutation reconciles after identity migration");
+                var reconciled = ListVbaComponents(executor, migrated);
+                AssertTrue(reconciled.Items.Count > 0,
+                    "VBA resource access reconciles interrupted mutation after identity migration");
                 AssertEqual(VbaMutationStatuses.NotApplied,
                     journal.ListMutations("Excel", "saved-doc").Single(item =>
                         item.Prepared.MutationId == interrupted.MutationId).Terminal.Status,

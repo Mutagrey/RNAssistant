@@ -4,6 +4,21 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office
 {
+    internal sealed class OfficeDocumentGuardException : InvalidOperationException
+    {
+        public string ErrorCode { get; private set; }
+        public bool Retryable { get; private set; }
+
+        public OfficeDocumentGuardException(ToolResult mismatch)
+            : base(mismatch == null ? "The active Office document could not be verified." : mismatch.Message)
+        {
+            ErrorCode = mismatch == null || string.IsNullOrWhiteSpace(mismatch.ErrorCode)
+                ? "document_identity_unavailable"
+                : mismatch.ErrorCode;
+            Retryable = mismatch != null && mismatch.Retryable == true;
+        }
+    }
+
     internal sealed class OfficeDocumentExecutionExpectation
     {
         public string Host { get; set; }
@@ -68,6 +83,14 @@ namespace RNAssistant.Office
                     "document_identity_unavailable",
                     false);
             }
+        }
+
+        public static void ThrowIfMismatch(
+            IOfficeApplicationAdapter adapter,
+            OfficeDocumentExecutionExpectation expectation)
+        {
+            var mismatch = Validate(adapter, expectation);
+            if (mismatch != null) throw new OfficeDocumentGuardException(mismatch);
         }
 
         internal static bool IdentityMatches(

@@ -18,24 +18,28 @@ namespace RNAssistant.Office
             _dispatcher = dispatcher ?? throw new ArgumentNullException("dispatcher");
         }
 
-        public string HostName { get { return _dispatcher.Invoke(delegate { return _inner.HostName; }); } }
-        public string DocumentKey { get { return _dispatcher.Invoke(delegate { return _inner.DocumentKey; }); } }
-        public string RuntimeDocumentKey { get { return _dispatcher.Invoke(delegate { return _inner.RuntimeDocumentKey; }); } }
-        public string DocumentTitle { get { return _dispatcher.Invoke(delegate { return _inner.DocumentTitle; }); } }
+        public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
+        public string DocumentKey { get { return ReadExpected(delegate { return _inner.DocumentKey; }); } }
+        public string RuntimeDocumentKey { get { return ReadExpected(delegate { return _inner.RuntimeDocumentKey; }); } }
+        public string DocumentTitle { get { return ReadExpected(delegate { return _inner.DocumentTitle; }); } }
 
         public string GetDocumentSnapshot(int maxChars)
         {
-            return _dispatcher.Invoke(delegate { return _inner.GetDocumentSnapshot(maxChars); });
+            return ReadExpected(delegate { return _inner.GetDocumentSnapshot(maxChars); });
         }
 
         public void PrepareForContextCapture()
         {
-            _dispatcher.Invoke(delegate { _inner.PrepareForContextCapture(); });
+            ReadExpected(delegate
+            {
+                _inner.PrepareForContextCapture();
+                return true;
+            });
         }
 
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
-            return _dispatcher.Invoke(delegate { return _inner.CaptureSelectionContext(mode, maxChars); });
+            return ReadExpected(delegate { return _inner.CaptureSelectionContext(mode, maxChars); });
         }
 
         public IEnumerable<ToolDefinition> GetBuiltInTools()
@@ -60,10 +64,20 @@ namespace RNAssistant.Office
 
         public OfficeContext GetOfficeContext()
         {
-            return _dispatcher.Invoke(delegate
+            return ReadExpected(delegate
             {
                 var provider = _inner as IOfficeContextProvider;
                 return provider == null ? null : provider.GetOfficeContext();
+            });
+        }
+
+        private T ReadExpected<T>(Func<T> action)
+        {
+            var expectation = _documentGuard.Current;
+            return _dispatcher.Invoke(delegate
+            {
+                OfficeDocumentExecutionGuardState.ThrowIfMismatch(_inner, expectation);
+                return action();
             });
         }
 

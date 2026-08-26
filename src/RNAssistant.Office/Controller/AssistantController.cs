@@ -25,7 +25,6 @@ namespace RNAssistant.Office
         private readonly ModelTracePersistenceService _modelTracePersistence;
         private readonly AttachmentStore _attachmentStore;
         private readonly ChatResourceIngestionService _chatResourceIngestion;
-        private readonly ResourceGatewayService _resourceGateway;
         private readonly ToolStore _toolStore;
         private readonly SkillStore _skillStore;
         private readonly VbaJournalStore _vbaJournalStore;
@@ -69,9 +68,6 @@ namespace RNAssistant.Office
             _modelTracePersistence = new ModelTracePersistenceService(_chatStore);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore);
-            _resourceGateway = new ResourceGatewayService(
-                _chatStore.LoadArtifactBody,
-                (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
             _toolStore = new ToolStore(_paths);
             _skillStore = new SkillStore(_paths);
             _vbaJournalStore = new VbaJournalStore(_paths, () => _settingsService.LoadStorageProtector());

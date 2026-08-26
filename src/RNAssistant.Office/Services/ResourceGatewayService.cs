@@ -3,21 +3,44 @@ using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Services
 {
     internal sealed class ResourceGatewayService
     {
         private readonly ResourceProviderRegistry _registry;
+        private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
 
         public ResourceGatewayService(
             Func<ChatSession, string, bool> loadArtifactBody = null,
             Func<ChatAttachment, int, string> readAttachmentText = null)
+            : this(null, null, null, loadArtifactBody, readAttachmentText, null)
         {
-            _registry = new ResourceProviderRegistry(new IResourceProvider[]
+        }
+
+        internal ResourceGatewayService(
+            IOfficeApplicationAdapter adapter,
+            IVbaResourceSource vbaSource,
+            VbaJournalStore vbaJournalStore,
+            Func<ChatSession, string, bool> loadArtifactBody = null,
+            Func<ChatAttachment, int, string> readAttachmentText = null,
+            Func<ChatSession, IDisposable> beginLiveOfficeRead = null)
+        {
+            var providers = new List<IResourceProvider>
             {
                 new ChatArtifactResourceProvider(loadArtifactBody, readAttachmentText)
-            });
+            };
+            if (adapter != null)
+            {
+                providers.Add(new LiveDocumentResourceProvider(adapter));
+                if (vbaSource != null && VbaResourceProvider.SupportsHost(adapter.HostName))
+                {
+                    providers.Add(new VbaResourceProvider(adapter, vbaSource, vbaJournalStore));
+                }
+            }
+            _registry = new ResourceProviderRegistry(providers);
+            _beginLiveOfficeRead = beginLiveOfficeRead;
         }
 
         internal ResourceGatewayService(IEnumerable<IResourceProvider> providers)
@@ -41,7 +64,10 @@ namespace RNAssistant.Office.Services
                 };
             }
             var provider = SelectProvider(providerId);
-            var result = provider.List(session, kind, cursor, limit);
+            var result = WithProvider(provider, session, delegate
+            {
+                return provider.List(session, kind, cursor, limit);
+            });
             result.Provider = provider.Id;
             result.Providers = providers.Select(item => item.Id).ToList();
             return result;
@@ -49,11 +75,15 @@ namespace RNAssistant.Office.Services
 
         public ResourceResolveResult Resolve(ChatSession session, string resourceUri)
         {
-            return new ResourceResolveResult
+            var provider = ProviderFor(resourceUri);
+            return WithProvider(provider, session, delegate
             {
-                Resource = ProviderFor(resourceUri).Resolve(session, resourceUri),
-                Complete = true
-            };
+                return new ResourceResolveResult
+                {
+                    Resource = provider.Resolve(session, resourceUri),
+                    Complete = true
+                };
+            });
         }
 
         public ResourceSearchResult Search(
@@ -65,7 +95,10 @@ namespace RNAssistant.Office.Services
             int maxCharsPerMatch)
         {
             var provider = SelectProvider(providerId);
-            var result = provider.Search(session, query, kind, limit, maxCharsPerMatch);
+            var result = WithProvider(provider, session, delegate
+            {
+                return provider.Search(session, query, kind, limit, maxCharsPerMatch);
+            });
             result.Provider = provider.Id;
             return result;
         }
@@ -77,7 +110,23 @@ namespace RNAssistant.Office.Services
             int offset,
             int maxChars)
         {
-            return ProviderFor(resourceUri).Read(session, resourceUri, representation, offset, maxChars);
+            var provider = ProviderFor(resourceUri);
+            return WithProvider(provider, session, delegate
+            {
+                return provider.Read(session, resourceUri, representation, offset, maxChars);
+            });
+        }
+
+        private T WithProvider<T>(IResourceProvider provider, ChatSession session, Func<T> action)
+        {
+            if (!(provider is ILiveOfficeResourceProvider) || _beginLiveOfficeRead == null)
+            {
+                return action();
+            }
+            using (_beginLiveOfficeRead(session))
+            {
+                return action();
+            }
         }
 
         private IResourceProvider SelectProvider(string providerId)

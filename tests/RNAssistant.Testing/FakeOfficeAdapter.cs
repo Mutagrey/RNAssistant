@@ -546,16 +546,6 @@ namespace RNAssistant.Harness
 
         private ToolResult ExecuteExcelTool(ToolCommand command)
         {
-            if (string.Equals(command.ToolId, "excel.get_context", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("context", JsonConvert.SerializeObject(GetOfficeContext()));
-            }
-
-            if (string.Equals(command.ToolId, "excel.get_selection", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("selection", JsonConvert.SerializeObject(new { sheet = "Data", address = "A1:B4", values = ReadRange("Data", "A1:B4") }));
-            }
-
             if (string.Equals(command.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase))
             {
                 var name = Argument(command, "name", "Sheet" + (_sheets.Count + 1));
@@ -803,8 +793,7 @@ namespace RNAssistant.Harness
 
         private ToolResult ExecutePowerPointTool(ToolCommand command)
         {
-            if (string.Equals(command.ToolId, "powerpoint.get_selection", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.read_slides", StringComparison.OrdinalIgnoreCase) ||
+            if (string.Equals(command.ToolId, "powerpoint.read_slides", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(command.ToolId, "powerpoint.list_objects", StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Ok("read slides", JsonConvert.SerializeObject(_slides.Select(s => new { title = s.Title, body = s.Body, notes = s.Notes }).ToArray()));

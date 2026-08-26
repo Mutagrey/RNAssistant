@@ -162,6 +162,20 @@ namespace RNAssistant.Harness
                         var blocked = dispatched.ExecuteTool(new ToolCommand { ToolId = toolId });
                         AssertEqual("active_document_changed", blocked.ErrorCode,
                             host + " guard blocks a different Office document");
+                        var readBlocked = false;
+                        try
+                        {
+                            dispatched.GetDocumentSnapshot(128);
+                        }
+                        catch (OfficeDocumentGuardException ex)
+                        {
+                            readBlocked = string.Equals(
+                                ex.ErrorCode,
+                                "active_document_changed",
+                                StringComparison.Ordinal);
+                        }
+                        AssertTrue(readBlocked,
+                            host + " guard also blocks live document reads after dispatch");
                         AssertEqual(2, guardedAdapter.Executed.Count,
                             host + " blocked tool never reaches Office adapter");
                     }

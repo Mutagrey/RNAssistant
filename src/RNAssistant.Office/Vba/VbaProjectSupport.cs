@@ -490,7 +490,9 @@ namespace RNAssistant.Office
                     expectedCodeSha256 = expectedCodeSha256,
                     actualExists = actualExists,
                     actualCodeSha256 = actualCodeSha256,
-                    inspectTool = "common.vba_read_module"
+                    inspectTool = "common.resources_read",
+                    resourceProvider = "vba",
+                    resourceKind = "vba-component"
                 }),
                 "stale_vba_module",
                 true);

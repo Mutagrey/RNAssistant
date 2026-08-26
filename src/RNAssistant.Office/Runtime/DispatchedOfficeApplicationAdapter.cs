@@ -27,22 +27,22 @@ namespace RNAssistant.Office
 
         public string HostName
         {
-            get { return _dispatcher.Invoke(delegate { return Inner.HostName; }); }
+            get { return ReadExpected(delegate { return Inner.HostName; }); }
         }
 
         public string DocumentKey
         {
-            get { return _dispatcher.Invoke(delegate { return Inner.DocumentKey; }); }
+            get { return ReadExpected(delegate { return Inner.DocumentKey; }); }
         }
 
         public string RuntimeDocumentKey
         {
-            get { return _dispatcher.Invoke(delegate { return Inner.RuntimeDocumentKey; }); }
+            get { return ReadExpected(delegate { return Inner.RuntimeDocumentKey; }); }
         }
 
         public string DocumentTitle
         {
-            get { return _dispatcher.Invoke(delegate { return Inner.DocumentTitle; }); }
+            get { return ReadExpected(delegate { return Inner.DocumentTitle; }); }
         }
 
         private IOfficeApplicationAdapter Inner
@@ -60,17 +60,21 @@ namespace RNAssistant.Office
 
         public string GetDocumentSnapshot(int maxChars)
         {
-            return _dispatcher.Invoke(delegate { return Inner.GetDocumentSnapshot(maxChars); });
+            return ReadExpected(delegate { return Inner.GetDocumentSnapshot(maxChars); });
         }
 
         public void PrepareForContextCapture()
         {
-            _dispatcher.Invoke(delegate { Inner.PrepareForContextCapture(); });
+            ReadExpected(delegate
+            {
+                Inner.PrepareForContextCapture();
+                return true;
+            });
         }
 
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
-            return _dispatcher.Invoke(delegate { return Inner.CaptureSelectionContext(mode, maxChars); });
+            return ReadExpected(delegate { return Inner.CaptureSelectionContext(mode, maxChars); });
         }
 
         public IEnumerable<ToolDefinition> GetBuiltInTools()
@@ -105,10 +109,20 @@ namespace RNAssistant.Office
 
         public OfficeContext GetOfficeContext()
         {
-            return _dispatcher.Invoke(delegate
+            return ReadExpected(delegate
             {
                 var provider = Inner as IOfficeContextProvider;
                 return provider == null ? null : provider.GetOfficeContext();
+            });
+        }
+
+        private T ReadExpected<T>(Func<T> action)
+        {
+            var expectation = _documentGuard.Current;
+            return _dispatcher.Invoke(delegate
+            {
+                OfficeDocumentExecutionGuardState.ThrowIfMismatch(Inner, expectation);
+                return action();
             });
         }
 

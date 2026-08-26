@@ -15,43 +15,6 @@ namespace RNAssistant.Office.Tools
                 "},\"required\":[\"moduleName\"],\"additionalProperties\":false}";
         }
 
-        private static string ReadModuleSchema()
-        {
-            var properties = new JObject
-            {
-                ["moduleName"] = new JObject { ["type"] = "string", ["description"] = "Exact VBA component name. Omit all arguments to list component metadata.", ["minLength"] = 1, ["maxLength"] = 255 },
-                ["startLine"] = new JObject { ["type"] = "integer", ["description"] = "One-based first line for range mode; supplied alone it returns up to 200 lines.", ["minimum"] = 1 },
-                ["lineCount"] = new JObject { ["type"] = "integer", ["description"] = "Maximum consecutive lines in range mode; supplied alone the range starts at line 1.", ["minimum"] = 1, ["maximum"] = 500 },
-                ["maxChars"] = new JObject { ["type"] = "integer", ["description"] = "Maximum source characters in whole-module mode.", ["default"] = 30000, ["minimum"] = 1, ["maximum"] = 1000000 }
-            };
-            Func<IEnumerable<string>, IEnumerable<string>, JObject> variant = (allowed, required) =>
-            {
-                var selected = new JObject();
-                foreach (var name in allowed) selected[name] = properties[name].DeepClone();
-                return new JObject
-                {
-                    ["type"] = "object",
-                    ["properties"] = selected,
-                    ["required"] = new JArray(required),
-                    ["additionalProperties"] = false
-                };
-            };
-            return new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = new JArray(),
-                ["additionalProperties"] = false,
-                ["anyOf"] = new JArray
-                {
-                    variant(new string[0], new string[0]),
-                    variant(new[] { "moduleName", "maxChars" }, new[] { "moduleName" }),
-                    variant(new[] { "moduleName", "startLine", "lineCount" }, new[] { "moduleName", "startLine" }),
-                    variant(new[] { "moduleName", "lineCount" }, new[] { "moduleName", "lineCount" })
-                }
-            }.ToString(Formatting.None);
-        }
-
         private static string WriteModuleSchema()
         {
             var moduleName = new JObject
@@ -145,7 +108,7 @@ namespace RNAssistant.Office.Tools
                 ["backupId"] = new JObject
                 {
                     ["type"] = "string",
-                    ["description"] = "Exact rollback backup identifier from common.vba_list_backups.",
+                    ["description"] = "Exact rollback backup identifier from provider vba, kind vba-backup resource metadata.",
                     ["minLength"] = 1
                 },
                 ["moduleName"] = new JObject

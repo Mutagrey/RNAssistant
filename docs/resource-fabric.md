@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Status: accepted target architecture. Core resource contracts, the chat provider, `common.resources_*`, the unified Chat/Agent loop, and automatic chat resource ingestion are implemented. Remaining slices are delivered vertically; replaced paths are removed, not retained as aliases.
+Status: accepted target architecture. Core contracts, chat/HTML/plan/live-document/VBA providers, `common.resources_*`, the unified Chat/Agent loop, and automatic chat resource ingestion are implemented. Remaining slices are delivered vertically; replaced paths are removed, not retained as aliases.
 
 ## Goals
 
@@ -68,7 +68,7 @@ The append-only session event stream remains the durable source of truth. Events
 
 Compaction preserves user intent, decisions, tool protocol pairs, and resource references. It may remove hydrated bodies and old read results. A later read reconstructs evidence from the provider. CAS garbage collection derives reachability from verified event streams and journals as before.
 
-Live Office/VBA resources are read from the document and carry identity/version evidence. Mutations keep domain-specific guards, confirmations, journals, and read-back verification; Resource Fabric does not bypass them.
+Live Office/VBA resources are bound to the chat's document identity and carry content-hash revision evidence on materialized reads. Their provider calls share the document mutation gate, so journal reconciliation and source reads cannot observe an in-flight VBA mutation. Mutations keep domain-specific guards, confirmations, journals, and read-back verification; Resource Fabric does not bypass them.
 
 ## Removed architecture
 
@@ -89,7 +89,7 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 2. **Done:** Provider registry plus chat-artifact provider; `common.artifacts_*` removed and replaced by `common.resources_*` without aliases.
 3. **Done:** Unified `ConversationRunService`; read-only resource loop in Chat; removed `PlainChatService` and `ChatContextWindowBuilder`.
 4. **Done:** Automatic chat-scoped UI ingestion and durable pre-dispatch message references; explicit `artifactIds`/“В запрос” selection removed.
-5. **In progress:** plan and HTML reads use canonical `chat` resources and their duplicated public read/search tools are removed. Live Office document and VBA providers remain.
+5. **Done:** plan/HTML reads use canonical `chat` resources; live Office document/selection and VBA project/component/backup providers are registered. Duplicated plan/HTML/VBA reads plus host `get_context/get_selection` tools are removed without aliases; domain-specific range/slide/mail reads remain typed tools.
 6. Progressive tool discovery and bounded working-set eviction.
 7. Hard cutover of events/projections, deletion of obsolete services and tests, reset-only handling for old data.
 

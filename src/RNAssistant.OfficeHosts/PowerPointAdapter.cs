@@ -329,10 +329,6 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
-                    case "powerpoint.get_context":
-                        return ToolResult.Ok("PowerPoint context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
-                    case "powerpoint.get_selection":
-                        return GetSelection();
                     case "powerpoint.read_slides":
                         return ReadSlidesOrSlide(command);
                     case "powerpoint.list_objects":
@@ -444,50 +440,6 @@ namespace RNAssistant.OfficeHosts
                 return ListShapes(command);
             }
             return ToolResult.Fail("kind must be slides or shapes.");
-        }
-
-        private ToolResult GetSelection()
-        {
-            try
-            {
-                var selection = TryGetSelection();
-                if (selection == null)
-                {
-                    return ToolResult.Ok("No PowerPoint selection.", "{}");
-                }
-
-                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes && selection.ShapeRange.Count > 0)
-                {
-                    var shape = selection.ShapeRange[1];
-                    return ToolResult.Ok("Shape selection read.", JsonConvert.SerializeObject(new
-                    {
-                        type = "shape",
-                        name = shape.Name,
-                        text = ShapeText(shape),
-                        left = shape.Left,
-                        top = shape.Top,
-                        width = shape.Width,
-                        height = shape.Height
-                    }));
-                }
-
-                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides && selection.SlideRange.Count > 0)
-                {
-                    var slide = selection.SlideRange[1];
-                    return ToolResult.Ok("Slide selection read.", JsonConvert.SerializeObject(new
-                    {
-                        type = "slide",
-                        index = slide.SlideIndex,
-                        text = ReadSlideText(slide)
-                    }));
-                }
-
-                return ToolResult.Ok("Selection read.", JsonConvert.SerializeObject(new { type = selection.Type.ToString() }));
-            }
-            catch
-            {
-                return ToolResult.Ok("No PowerPoint selection.", "{}");
-            }
         }
 
         private ToolResult ReadSlide(ToolCommand command)

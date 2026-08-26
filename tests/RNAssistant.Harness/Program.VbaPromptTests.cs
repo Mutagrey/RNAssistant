@@ -169,9 +169,11 @@ namespace RNAssistant.Harness
                 AssertTrue(repeated.Success, "same invalid name deterministically updates the normalized module");
                 AssertEqual(false, (bool)JObject.Parse(repeated.DataJson ?? "{}")["created"], "repeated write is an update, not a duplicate create");
                 AssertContains(adapter.GetVbaModuleCode(actualName), "As String", "normalized module is updated in place");
-                var listed = executor.Execute(Command("common.vba_read_module"), tools, new AppSettings(), false, false);
-                AssertEqual(1, (JObject.Parse(listed.DataJson)["modules"] as JArray).OfType<JObject>()
-                    .Count(item => string.Equals((string)item["name"], actualName, StringComparison.OrdinalIgnoreCase)),
+                var listed = ListVbaComponents(executor, session);
+                AssertEqual(1, listed.Items.Count(item => string.Equals(
+                        item.Title,
+                        actualName,
+                        StringComparison.OrdinalIgnoreCase)),
                     "normalization remains idempotent");
 
                 adapter.SetVbaModule("SafeName", "Sub KeepMe()\nEnd Sub", "StdModule");
@@ -188,13 +190,8 @@ namespace RNAssistant.Harness
                 AssertContains(adapter.GetVbaModuleCode("SafeName"), "KeepMe", "normalization does not overwrite a colliding valid module");
 
                 adapter.SetVbaModule("ObservedModule", "Sub Original()\nEnd Sub", "StdModule");
-                AssertTrue(executor.Execute(
-                    Command("common.vba_read_module", "moduleName", "ObservedModule"),
-                    tools,
-                    new AppSettings(),
-                    false,
-                    false,
-                    session).Success, "whole-source edit observation read");
+                AssertContains(ReadVbaSource(executor, session, "ObservedModule").Text, "Original",
+                    "whole-source resource read records the edit observation");
                 adapter.SetVbaModule("ObservedModule", "Sub ExternalChange()\nEnd Sub", "StdModule");
                 var observedWrite = Command(
                     "common.vba_write_module",
@@ -357,13 +354,8 @@ namespace RNAssistant.Harness
                 AssertEqual(1, backupStore.List("Excel", "doc").Count, "delete keeps one rollback backup");
 
                 adapter.SetVbaModule("Module2", "Sub BeforeRead()\nEnd Sub", "StdModule");
-                AssertTrue(executor.Execute(
-                    Command("common.vba_read_module", "moduleName", "Module2"),
-                    tools,
-                    new AppSettings(),
-                    false,
-                    false,
-                    session).Success, "optional delete observation read");
+                AssertContains(ReadVbaSource(executor, session, "Module2").Text, "BeforeRead",
+                    "optional resource read records the delete observation");
                 adapter.SetVbaModule("Module2", "Sub ChangedAfterRead()\nEnd Sub", "StdModule");
                 var deleteObserved = Command("common.vba_delete_module", "moduleName", "Module2");
                 var stale = executor.Execute(deleteObserved, tools, settings, false, false, session);
@@ -374,13 +366,8 @@ namespace RNAssistant.Harness
                 AssertEqual(2, backupStore.List("Excel", "doc").Count, "retried delete keeps the current source backup");
 
                 adapter.SetVbaModule("Module3", "Sub SeenInFirstChat()\nEnd Sub", "StdModule");
-                AssertTrue(executor.Execute(
-                    Command("common.vba_read_module", "moduleName", "Module3"),
-                    tools,
-                    new AppSettings(),
-                    false,
-                    false,
-                    session).Success, "first chat records its optional observation");
+                AssertContains(ReadVbaSource(executor, session, "Module3").Text, "SeenInFirstChat",
+                    "first chat records its optional resource observation");
                 adapter.SetVbaModule("Module3", "Sub ChangedForSecondChat()\nEnd Sub", "StdModule");
                 var secondSession = NewSession(adapter);
                 var secondChatDelete = executor.Execute(
@@ -631,13 +618,8 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "A\nB\nC";
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var session = NewSession(adapter);
-                AssertTrue(executor.Execute(
-                    Command("common.vba_read_module", "moduleName", "Module1", "startLine", 1, "lineCount", 3),
-                    tools,
-                    new AppSettings(),
-                    false,
-                    false,
-                    session).Success, "initial line snapshot read");
+                AssertEqual("A\nB\nC", ReadVbaSource(executor, session, "Module1").Text,
+                    "initial source resource snapshot read");
 
                 var first = executor.Execute(
                     Command(
@@ -915,32 +897,42 @@ namespace RNAssistant.Harness
             AssertContains(editing.BodyMarkdown, "common.vba_userform_authoring", "general VBA editing points to the focused UserForm profile");
         }
 
-        private static void VbaReadLinesReturnsExactRange()
+        private static void VbaResourcesReadBoundedSource()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                adapter.VbaModuleCode = "one\ntwo\nthree\nfour";
-                var result = executor.Execute(
-                    Command("common.vba_read_module", "moduleName", "Module1", "startLine", 2, "lineCount", 2),
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
-                    new AppSettings(),
-                    false,
-                    false);
-                var data = JObject.Parse(result.DataJson);
-                AssertTrue(result.Success, "read lines result");
-                AssertEqual("two\nthree", (string)data["code"], "exact line range");
-                AssertEqual(2, (int)data["returnedLineCount"], "returned line count");
-                AssertEqual(4, (int)data["totalLineCount"], "total line count");
-                AssertEqual(VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode), (string)data["codeSha256"], "full module live hash");
+                adapter.VbaModuleCode = string.Join("\n", Enumerable.Range(1, 80)
+                    .Select(index => "line" + index).ToArray());
+                var session = NewSession(adapter);
+                var component = VbaComponent(executor, session, "Module1");
+                AssertTrue(component.Reference.Uri.StartsWith("rna://vba/", StringComparison.Ordinal),
+                    "VBA component uses the canonical provider URI");
+                AssertTrue(component.Reference.Uri.IndexOf("Module1", StringComparison.OrdinalIgnoreCase) < 0,
+                    "VBA component URI does not expose its module name");
 
-                var firstTwo = executor.Execute(
-                    Command("common.vba_read_module", "moduleName", "Module1", "lineCount", 2),
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
-                    new AppSettings(),
-                    false,
-                    false);
-                AssertEqual("one\ntwo", (string)JObject.Parse(firstTwo.DataJson)["code"],
-                    "lineCount alone selects a bounded range from line one");
+                var first = executor.ResourceGateway.Read(
+                    session,
+                    component.Reference.Uri,
+                    ResourceRepresentations.Source,
+                    0,
+                    128).Result;
+                AssertEqual(adapter.VbaModuleCode.Substring(0, 128), first.Text,
+                    "VBA resource returns the exact first bounded chunk");
+                AssertEqual(128, first.ReturnedCharacters, "VBA resource read obeys maxChars");
+                AssertTrue(first.Truncated && !string.IsNullOrWhiteSpace(first.NextCursor),
+                    "VBA resource read exposes a continuation cursor");
+                AssertEqual(VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode), first.ContentSha256,
+                    "VBA resource read carries the full live source hash");
+
+                var second = executor.ResourceGateway.Read(
+                    session,
+                    component.Reference.Uri,
+                    ResourceRepresentations.Source,
+                    int.Parse(first.NextCursor),
+                    128).Result;
+                AssertEqual(128, second.Offset, "VBA continuation starts at the exact prior cursor");
+                AssertEqual(adapter.VbaModuleCode.Substring(128, 128), second.Text,
+                    "VBA continuation returns the next exact source chunk");
 
                 var removed = executor.Execute(
                     Command("excel.vba_read_lines", "moduleName", "Module1", "startLine", 3, "lineCount", 1),
@@ -950,19 +942,21 @@ namespace RNAssistant.Harness
                     false);
                 AssertEqual("unknown_tool", removed.ErrorCode, "removed range-read id is rejected");
 
-                adapter.VbaModuleCode = string.Join("\n", Enumerable.Range(1, 250).Select(index => "line" + index).ToArray());
-                var wholeCommand = Command("common.vba_read_module", "moduleName", "Module1");
-                wholeCommand.Arguments["startLine"] = null;
-                wholeCommand.Arguments["lineCount"] = null;
-                wholeCommand.Arguments["maxChars"] = null;
-                var whole = executor.Execute(
-                    wholeCommand,
+                var removedFacade = executor.Execute(
+                    Command("common.vba_read_module", "moduleName", "Module1"),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings(),
                     false,
-                    false);
-                AssertTrue(whole.Success, "whole read accepts nullable strict-schema optionals");
-                AssertContains((string)JObject.Parse(whole.DataJson)["code"], "line250", "default read mode returns the whole bounded module, not 200 lines");
+                    false,
+                    session);
+                AssertEqual("unknown_tool", removedFacade.ErrorCode,
+                    "removed public VBA read facade is rejected without an alias");
+
+                adapter.VbaModuleCode = string.Join("\n", Enumerable.Range(1, 250).Select(index => "line" + index).ToArray());
+                var whole = ReadVbaSource(executor, session, "Module1", 0, 32000);
+                AssertTrue(whole.Complete, "bounded resource read reports complete source when it fits");
+                AssertContains(whole.Text, "line250",
+                    "resource source read returns the complete module when it fits the bound");
             });
         }
 
@@ -1231,27 +1225,36 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = Command(executor.VbaToolId("vba_restore_backup"), "backupId", backup.BackupId, "moduleName", "Module1");
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var session = NewSession(adapter);
 
-                var listedBackups = executor.Execute(
-                    Command(executor.VbaToolId("vba_list_backups")),
-                    tools,
-                    new AppSettings(),
-                    false,
-                    false);
-                var listedData = JObject.Parse(listedBackups.DataJson ?? "{}");
-                var listedBackup = ((JArray)listedData["backups"]).OfType<JObject>().Single();
-                AssertEqual(backup.BackupId, (string)listedBackup["backupId"], "backup metadata exposes restore id");
-                AssertTrue(listedBackup["code"] == null, "backup listing does not duplicate source code into model context");
+                var listedBackup = executor.ResourceGateway.List(
+                    session,
+                    VbaResourceProvider.ProviderName,
+                    VbaResourceProvider.BackupKind,
+                    null,
+                    20).Items.Single();
+                AssertEqual(backup.BackupId, listedBackup.Metadata["backupId"],
+                    "backup resource metadata exposes restore id");
+                AssertTrue(!listedBackup.Metadata.Values.Any(value =>
+                    value != null && value.IndexOf("Restored", StringComparison.Ordinal) >= 0),
+                    "backup listing does not duplicate source code into model context");
+                AssertContains(executor.ResourceGateway.Read(
+                    session,
+                    listedBackup.Reference.Uri,
+                    ResourceRepresentations.Source,
+                    0,
+                    32000).Result.Text, "Restored", "backup source is read only on demand");
 
                 var missingSelector = executor.Execute(
                     Command(executor.VbaToolId("vba_restore_backup")),
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
-                    false);
+                    false,
+                    session);
                 AssertEqual("invalid_arguments", missingSelector.ErrorCode, "restore requires an explicit backup or module selector");
 
-                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
 
                 AssertTrue(result.Success, "restore result");
                 AssertContains(adapter.VbaModuleCode, "Restored", "restored module code");
@@ -1263,13 +1266,12 @@ namespace RNAssistant.Harness
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
-                    false);
+                    false,
+                    session);
                 AssertTrue(classRestore.Success, "missing class module restore result");
-                var modules = executor.Execute(Command(executor.VbaToolId("vba_read_module")), tools, new AppSettings(), false, false);
-                var restoredClass = (JObject.Parse(modules.DataJson ?? "{}")["modules"] as JArray ?? new JArray())
-                    .OfType<JObject>()
-                    .First(item => string.Equals((string)item["name"], "RestoredClass", StringComparison.OrdinalIgnoreCase));
-                AssertEqual("ClassModule", (string)restoredClass["type"], "restore preserves class module type");
+                var restoredClass = VbaComponent(executor, session, "RestoredClass");
+                AssertEqual("ClassModule", restoredClass.Metadata["componentType"],
+                    "restore preserves class module type");
             });
         }
 
@@ -1520,11 +1522,11 @@ namespace RNAssistant.Harness
                     IntendedAfterExists = true
                 }, before, after);
                 var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var session = NewSession(adapter);
 
-                var list = executor.Execute(Command("common.vba_list_backups"), tools, new AppSettings(), false, false);
+                var list = ListVbaComponents(executor, session);
 
-                AssertTrue(list.Success, "safe VBA access continues after reconciliation");
+                AssertTrue(list.Items.Count > 0, "safe VBA resource access continues after reconciliation");
                 AssertEqual(VbaMutationStatuses.Committed,
                     store.ListMutations("Excel", "doc").Single(item => item.Prepared.MutationId == applied.MutationId).Terminal.Status,
                     "live intended state reconciles as committed");
@@ -1542,7 +1544,7 @@ namespace RNAssistant.Harness
                     BeforeExists = true,
                     IntendedAfterExists = true
                 }, after, "Sub LaterState()\nEnd Sub");
-                executor.Execute(Command("common.vba_list_backups"), tools, new AppSettings(), false, false);
+                ListVbaComponents(executor, session);
                 AssertEqual(VbaMutationStatuses.NotApplied,
                     store.ListMutations("Excel", "doc").Single(item => item.Prepared.MutationId == notApplied.MutationId).Terminal.Status,
                     "live before state reconciles as not applied");
@@ -1559,7 +1561,7 @@ namespace RNAssistant.Harness
                     IntendedAfterExists = true
                 }, after, "Sub UnknownTarget()\nEnd Sub");
                 adapter.QueueResult("excel.vba_read_module", ToolResult.Fail("VBA access denied.", null, "vba_access_error", false));
-                executor.Execute(Command("common.vba_list_backups"), tools, new AppSettings(), false, false);
+                ListVbaComponents(executor, session);
                 AssertEqual(VbaMutationStatuses.Unknown,
                     store.ListMutations("Excel", "doc").Single(item => item.Prepared.MutationId == unknown.MutationId).Terminal.Status,
                     "unreadable live state reconciles as unknown");
@@ -1596,9 +1598,7 @@ namespace RNAssistant.Harness
                 var readTask = Task.Run(() =>
                 {
                     readStarted.Set();
-                    return second.Execute(
-                        Command("common.vba_read_module", "moduleName", "Module1"),
-                        tools, settings, false, false, session);
+                    return ReadVbaSource(second, session, "Module1");
                 });
                 AssertTrue(readStarted.Wait(5000), "second VBA access started");
 
@@ -1619,7 +1619,8 @@ namespace RNAssistant.Harness
                 var read = readTask.GetAwaiter().GetResult();
                 var terminal = journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal;
 
-                AssertTrue(write.Success && read.Success, "both VBA operations complete");
+                AssertTrue(write.Success && read != null && !string.IsNullOrWhiteSpace(read.Text),
+                    "mutation and concurrent VBA resource read both complete");
                 AssertEqual(VbaMutationStatuses.Committed, terminal.Status,
                     "journal terminal agrees with the verified committed effect");
                 AssertTrue(!prematureTerminal, "reconciliation does not close a mutation that owns the document lock");

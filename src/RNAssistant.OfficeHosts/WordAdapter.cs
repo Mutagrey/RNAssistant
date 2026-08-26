@@ -271,8 +271,6 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
-                    case "word.get_context":
-                        return ToolResult.Ok("Word context collected.", JsonConvert.SerializeObject(GetOfficeContext()));
                     case "word.read_text":
                         return ReadText(command);
                     case "word.find_text":

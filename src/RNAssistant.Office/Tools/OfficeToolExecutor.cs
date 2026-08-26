@@ -23,12 +23,14 @@ namespace RNAssistant.Office.Tools
         private readonly SkillToolExecutor _skillExecutor;
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
         private readonly PromptToolExecutor _promptToolExecutor;
+        private readonly ResourceGatewayService _resourceGateway;
         private readonly ResourceToolExecutor _resourceExecutor;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
         private readonly PlanToolExecutor _planToolExecutor;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
         private readonly string _mutationLockDirectory;
+        private readonly AsyncLocal<int> _documentAccessDepth = new AsyncLocal<int>();
         private static readonly object FallbackMutationGate = new object();
 
         public OfficeToolExecutor(
@@ -49,10 +51,17 @@ namespace RNAssistant.Office.Tools
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
-            _resourceExecutor = new ResourceToolExecutor(new ResourceGatewayService(loadArtifactBody, readAttachmentText));
+            _mutationLockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
+            _resourceGateway = new ResourceGatewayService(
+                adapter,
+                _vbaExecutor,
+                vbaJournalStore,
+                loadArtifactBody,
+                readAttachmentText,
+                BeginLiveOfficeRead);
+            _resourceExecutor = new ResourceToolExecutor(_resourceGateway);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(_adapter, _adapterTools);
             _planToolExecutor = new PlanToolExecutor();
-            _mutationLockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
             var controllerTools = new List<ToolDefinition>();
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
             RegisterControllerTools(controllerTools, _vbaExecutor.GetControllerTools(), ControllerExecutorKind.Vba);
@@ -74,6 +83,8 @@ namespace RNAssistant.Office.Tools
         {
             return _controllerTools;
         }
+
+        internal ResourceGatewayService ResourceGateway { get { return _resourceGateway; } }
 
         internal List<ToolDefinition> AvailableConversationToolsForSession(
             IEnumerable<ToolDefinition> tools,
@@ -191,6 +202,38 @@ namespace RNAssistant.Office.Tools
         public void ObserveVbaHash(ChatSession session, string moduleName, string codeSha256)
         {
             _vbaExecutor.ObserveExpectedHash(session, moduleName, codeSha256);
+        }
+
+        internal ToolResult ReadVbaProjectForEditor(ChatSession session)
+        {
+            return ExecuteLiveVbaEditorRead(
+                session,
+                () => ((IVbaResourceSource)_vbaExecutor).ListResourceModules());
+        }
+
+        internal ToolResult ReadVbaModuleForEditor(ChatSession session, string moduleName, int maxChars)
+        {
+            return ExecuteLiveVbaEditorRead(
+                session,
+                () => ((IVbaResourceSource)_vbaExecutor).ReadResourceModule(
+                    session,
+                    moduleName,
+                    maxChars));
+        }
+
+        private ToolResult ExecuteLiveVbaEditorRead(ChatSession session, Func<ToolResult> action)
+        {
+            try
+            {
+                using (BeginLiveOfficeRead(session))
+                {
+                    return ExecuteForExpectedDocument(session, true, action);
+                }
+            }
+            catch (ResourceRequestException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+            }
         }
 
         public ToolResult RunVbaMacro(
@@ -626,7 +669,7 @@ namespace RNAssistant.Office.Tools
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         actionStarted = true;
-                        return action();
+                        return InDocumentAccessScope(mutatesDocument, action);
                     }
                     finally
                     {
@@ -641,7 +684,7 @@ namespace RNAssistant.Office.Tools
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     actionStarted = true;
-                    return action();
+                    return InDocumentAccessScope(mutatesDocument, action);
                 }
             }
             catch (OperationCanceledException) when (actionStarted)
@@ -651,6 +694,53 @@ namespace RNAssistant.Office.Tools
                     null,
                     "tool_effect_uncertain",
                     false);
+            }
+        }
+
+        private IDisposable BeginLiveOfficeRead(ChatSession session)
+        {
+            if (_documentAccessDepth.Value > 0) return new ActionLease(null);
+            try
+            {
+                IDisposable lockLease;
+                if (string.IsNullOrWhiteSpace(_mutationLockDirectory))
+                {
+                    EnterMutationGate(FallbackMutationGate, CancellationToken.None);
+                    lockLease = new ActionLease(delegate { Monitor.Exit(FallbackMutationGate); });
+                }
+                else
+                {
+                    lockLease = AcquireMutationFileLock(
+                        "document_" + AppDataPaths.SafeFileName(DocumentMutationKey(session)),
+                        CancellationToken.None);
+                }
+                _documentAccessDepth.Value += 1;
+                return new ActionLease(delegate
+                {
+                    _documentAccessDepth.Value = Math.Max(0, _documentAccessDepth.Value - 1);
+                    if (lockLease != null) lockLease.Dispose();
+                });
+            }
+            catch (MutationLockException ex)
+            {
+                throw new ResourceRequestException(
+                    ex.Message,
+                    ex.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable",
+                    ex.Retryable);
+            }
+        }
+
+        private ToolResult InDocumentAccessScope(bool enabled, Func<ToolResult> action)
+        {
+            if (!enabled) return action();
+            _documentAccessDepth.Value += 1;
+            try
+            {
+                return action();
+            }
+            finally
+            {
+                _documentAccessDepth.Value = Math.Max(0, _documentAccessDepth.Value - 1);
             }
         }
 
@@ -685,6 +775,22 @@ namespace RNAssistant.Office.Tools
             }
 
             public bool Retryable { get; private set; }
+        }
+
+        private sealed class ActionLease : IDisposable
+        {
+            private Action _dispose;
+
+            public ActionLease(Action dispose)
+            {
+                _dispose = dispose;
+            }
+
+            public void Dispose()
+            {
+                var dispose = Interlocked.Exchange(ref _dispose, null);
+                if (dispose != null) dispose();
+            }
         }
 
         private static string DeepestMessage(Exception exception)

@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
@@ -316,7 +317,9 @@ namespace RNAssistant.Office.Tools
                         actualTargetExists = targetExists,
                         actualTargetCodeSha256 = targetHash,
                         retrySameTool = true,
-                        inspectTool = ToolId("vba_read_module")
+                        inspectTool = "common.resources_read",
+                        resourceProvider = VbaResourceProvider.ProviderName,
+                        resourceKind = VbaResourceProvider.ComponentKind
                     }),
                     "stale_vba_module",
                     true);
@@ -465,7 +468,9 @@ namespace RNAssistant.Office.Tools
                     retrySameTool = !editor,
                     reloadEditor = editor,
                     reconcileBeforeOverwrite = wholeWrite,
-                    inspectTool = ToolId("vba_read_module")
+                    inspectTool = "common.resources_read",
+                    resourceProvider = VbaResourceProvider.ProviderName,
+                    resourceKind = VbaResourceProvider.ComponentKind
                 }),
                 "stale_vba_module",
                 true);

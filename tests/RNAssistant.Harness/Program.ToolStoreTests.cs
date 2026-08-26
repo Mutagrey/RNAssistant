@@ -119,15 +119,19 @@ namespace RNAssistant.Harness
                     var adapter = FakeOfficeAdapter.ForHost(host);
                     var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
                     var tools = executor.GetControllerTools().ToList();
-                    AssertTrue(HasTool(tools, "common.vba_read_module"), host + " exposes common VBA read");
+                    AssertTrue(HasTool(tools, "common.resources_read") && HasTool(tools, "common.resources_search"),
+                        host + " exposes shared resource reads");
                     AssertTrue(HasTool(tools, "common.vba_write_module"), host + " exposes common VBA upsert");
                     AssertTrue(HasTool(tools, "common.vba_apply_patch"), host + " exposes common VBA patch");
-                    AssertTrue(!HasTool(tools, "common.vba_read_lines") &&
+                    AssertTrue(!HasTool(tools, "common.vba_read_module") &&
+                        !HasTool(tools, "common.vba_search_code") &&
+                        !HasTool(tools, "common.vba_list_backups") &&
+                        !HasTool(tools, "common.vba_read_lines") &&
                         !HasTool(tools, "common.vba_list_modules") &&
                         !HasTool(tools, "common.vba_replace_text") &&
                         !HasTool(tools, "common.vba_create_module"), host + " omits redundant public aliases");
                     var vbaTools = tools.Where(tool => (tool.Id ?? string.Empty).StartsWith("common.vba_", StringComparison.OrdinalIgnoreCase)).ToList();
-                    AssertEqual(7, vbaTools.Count, host + " exposes the compact seven-tool VBA facade");
+                    AssertEqual(4, vbaTools.Count, host + " exposes only the four mutation-specific VBA tools");
                     AssertTrue(vbaTools.All(tool => string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)), host + " VBA facade is host-neutral");
                     AssertTrue(!HasTool(tools, host.ToLowerInvariant() + ".vba_apply_patch"), host + " does not publish a host-specific patch facade");
                     var hostPrefix = host.ToLowerInvariant() + ".";
@@ -256,8 +260,11 @@ namespace RNAssistant.Harness
             AssertTrue(HasTool(excel, "excel.add_table"), "excel add table visible");
             AssertTrue(HasTool(excel, "excel.upsert_chart"), "excel chart upsert facade visible");
             AssertTrue(FindTool(excel, "excel.clear_range").RequiresConfirmation, "excel clear requires confirmation");
+            AssertTrue(!HasTool(excel, "excel.get_context") && !HasTool(excel, "excel.get_selection"),
+                "generic Excel context and selection reads use document resources");
 
             var word = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Word").GetBuiltInTools());
+            AssertTrue(!HasTool(word, "word.get_context"), "generic Word context uses document resources");
             AssertTrue(HasTool(word, "word.read_text"), "word text reader facade visible");
             AssertTrue(HasTool(word, "word.inspect"), "word inspection facade visible");
             AssertTrue(HasTool(word, "word.find_text"), "word find text visible");
@@ -267,11 +274,15 @@ namespace RNAssistant.Harness
             AssertTrue(HasTool(word, "word.add_table"), "word add table visible");
 
             var powerpoint = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("PowerPoint").GetBuiltInTools());
+            AssertTrue(!HasTool(powerpoint, "powerpoint.get_context") &&
+                !HasTool(powerpoint, "powerpoint.get_selection"),
+                "generic PowerPoint context and selection reads use document resources");
             AssertTrue(HasTool(powerpoint, "powerpoint.list_objects"), "powerpoint list facade visible");
             AssertTrue(HasTool(powerpoint, "powerpoint.set_text") && HasTool(powerpoint, "powerpoint.add_object"), "powerpoint mutation facades visible");
             AssertTrue(FindTool(powerpoint, "powerpoint.move_slide").RequiresConfirmation, "powerpoint move requires confirmation");
 
             var outlook = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Outlook").GetBuiltInTools());
+            AssertTrue(!HasTool(outlook, "outlook.get_context"), "generic Outlook context uses document resources");
             AssertTrue(HasTool(outlook, "outlook.search_mail"), "outlook search visible");
             AssertTrue(HasTool(outlook, "outlook.create_draft"), "outlook draft facade visible");
             AssertTrue(FindTool(outlook, "outlook.update_mail").AgentCanRun, "outlook mail updates remain runnable");
@@ -283,10 +294,10 @@ namespace RNAssistant.Harness
                 { "PowerPoint", powerpoint },
                 { "Outlook", outlook }
             };
-            AssertEqual(17, excel.Count, "complete Excel tool count");
-            AssertEqual(10, word.Count, "complete Word tool count");
-            AssertEqual(11, powerpoint.Count, "complete PowerPoint tool count");
-            AssertEqual(6, outlook.Count, "complete Outlook tool count");
+            AssertEqual(15, excel.Count, "complete Excel tool count");
+            AssertEqual(9, word.Count, "complete Word tool count");
+            AssertEqual(9, powerpoint.Count, "complete PowerPoint tool count");
+            AssertEqual(5, outlook.Count, "complete Outlook tool count");
             foreach (var catalog in catalogs)
             {
                 AssertEqual(catalog.Value.Count, catalog.Value.Select(tool => tool.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count(), catalog.Key + " ids are unique");

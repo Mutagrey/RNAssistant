@@ -97,6 +97,12 @@
     <Compile Include="Services\ChatArtifactResourceProvider.cs" />
     <Compile Include="Services\ChatHtmlResourceCatalog.cs" />
     <Compile Include="Services\ChatHtmlResourceCatalog.Read.cs" />
+    <Compile Include="Services\IVbaResourceSource.cs" />
+    <Compile Include="Services\LiveOfficeResourceScope.cs" />
+    <Compile Include="Services\LiveDocumentResourceProvider.cs" />
+    <Compile Include="Services\LiveDocumentResourceProvider.Read.cs" />
+    <Compile Include="Services\VbaResourceProvider.cs" />
+    <Compile Include="Services\VbaResourceProvider.Read.cs" />
     <Compile Include="Services\ChatResourceIngestionService.cs" />
     <Compile Include="Services\ResourceGatewayService.cs" />
     <Compile Include="Services\ResourceProviderRegistry.cs" />

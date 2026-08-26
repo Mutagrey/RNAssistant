@@ -7,12 +7,12 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed partial class VbaToolExecutor
+    internal sealed partial class VbaToolExecutor : IVbaResourceSource
     {
-        private const int MaxListedBackups = 100;
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly VbaJournalStore _vbaJournalStore;
         private readonly object _observedModulesSync = new object();
@@ -31,9 +31,6 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerToolDefinition.Create(ToolId("vba_list_backups"), "Common", "Read-only: List up to 100 latest RNAssistant VBA rollback backups for the active document as metadata without duplicating source code.", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
-            yield return ControllerToolDefinition.Create(ToolId("vba_read_module"), "Common", "Read-only: List VBA component metadata when moduleName is omitted, or read one component when it is supplied. Omit startLine/lineCount for the whole source. Runtime resolves case and safely normalizable names.", ReadModuleSchema());
-            yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), "Common", "Read-only: Search literal or regex patterns across VBA component code. Use moduleName only to limit the search to one component.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1,\"maxLength\":2048},\"moduleName\":{\"type\":\"string\",\"description\":\"Optional VBA component name; safely normalizable names are resolved by runtime.\",\"maxLength\":255},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100,\"minimum\":1,\"maximum\":500},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80,\"minimum\":0,\"maximum\":1000}},\"required\":[\"query\"],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), "Common", "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted. Runtime snapshots current state before confirmation.", RestoreBackupSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document with two strict branches. Whole-source write requires moduleName+code and uses mode=upsert/createOnly/updateOnly; componentType applies only on creation. Atomic rename requires moduleName+newModuleName+mode=rename and accepts no code/componentType. Runtime guards both names, normalizes a new destination, rejects collisions, journals both identities, and verifies read-back. Rename preserves the component but does not rewrite textual references to its old name.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), "Common", "Mutates document: Apply ordered exact unique source-block replacements to an existing VBA component. There are no line-number, fuzzy, first-match, regex, or implicit insertion modes. Runtime patches one current full-module snapshot in memory, then performs one guarded whole-module write. Use common.vba_write_module with complete source when the module is missing.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
@@ -65,25 +62,6 @@ namespace RNAssistant.Office.Tools
                 var reconciliationError = ReconcilePendingMutations();
                 if (reconciliationError != null) return reconciliationError;
             }
-            if (string.Equals(command.ToolId, ToolId("vba_list_backups"), StringComparison.OrdinalIgnoreCase))
-            {
-                return ListBackups();
-            }
-
-            if (string.Equals(command.ToolId, ToolId("vba_read_module"), StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty)))
-                {
-                    if (command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount"))
-                    {
-                        return ToolResult.Fail("moduleName is required when startLine or lineCount is supplied.", null, "invalid_arguments", true);
-                    }
-                    return ListModules();
-                }
-                return ReadModule(command, session);
-            }
-            if (string.Equals(command.ToolId, ToolId("vba_search_code"), StringComparison.OrdinalIgnoreCase)) return SearchCode(command, session);
-
             if (string.Equals(command.ToolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
             {
                 return RestoreVbaBackup(command, dryRun, session, cancellationToken);
@@ -98,30 +76,6 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(command.ToolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase)) return DeleteModule(command, dryRun, session);
 
             return ToolResult.Fail("Unknown VBA controller tool: " + command.ToolId);
-        }
-
-        private ToolResult ListBackups()
-        {
-            var all = _vbaJournalStore.List(_adapter.HostName, _adapter.DocumentKey);
-            var backups = all.Take(MaxListedBackups).Select(backup => new
-            {
-                backupId = backup.BackupId,
-                moduleName = backup.ModuleName,
-                componentType = backup.ComponentType,
-                createdUtc = backup.CreatedUtc,
-                codeByteLength = backup.CodeByteLength,
-                codeSha256 = backup.CodeSha256,
-                mutationId = backup.MutationId
-            }).ToList();
-            return ToolResult.Ok(
-                "VBA backup metadata listed: " + backups.Count + (all.Count > backups.Count ? " (truncated)." : "."),
-                JsonConvert.SerializeObject(new
-                {
-                    totalCount = all.Count,
-                    returnedCount = backups.Count,
-                    truncated = all.Count > backups.Count,
-                    backups = backups
-                }));
         }
 
         public ToolResult PrepareControllerTool(ToolCommand command, ChatSession session)
@@ -194,6 +148,26 @@ namespace RNAssistant.Office.Tools
                 ToolResult.Fail("VBA macro returned no result.", null, "vba_macro_missing_result", true);
         }
 
+        ToolResult IVbaResourceSource.ListResourceModules()
+        {
+            var reconciliationError = ReconcilePendingMutations();
+            if (reconciliationError != null) return reconciliationError;
+            return ListModules();
+        }
+
+        ToolResult IVbaResourceSource.ReadResourceModule(
+            ChatSession session,
+            string moduleName,
+            int maxChars)
+        {
+            var reconciliationError = ReconcilePendingMutations();
+            if (reconciliationError != null) return reconciliationError;
+            var command = new ToolCommand();
+            command.Arguments["moduleName"] = moduleName;
+            command.Arguments["maxChars"] = Math.Max(1, Math.Min(1000000, maxChars));
+            return ReadModule(command, session);
+        }
+
         private ToolResult ReadModule(ToolCommand command, ChatSession session)
         {
             var requestedModuleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
@@ -249,90 +223,6 @@ namespace RNAssistant.Office.Tools
                 }
                 return ToolResult.Ok("VBA modules listed: " + modules.Count + ".", JsonConvert.SerializeObject(new { modules = modules }));
             }
-            catch (JsonException ex) { return ToolResult.Fail("Could not parse VBA project: " + ex.Message, null, "vba_read_invalid", true); }
-        }
-
-        private ToolResult SearchCode(ToolCommand command, ChatSession session)
-        {
-            var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
-            if (string.IsNullOrWhiteSpace(query)) return ToolResult.Fail("query is required.");
-            var requestedModuleFilter = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty).Trim();
-            var moduleFilter = requestedModuleFilter;
-            var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 100)));
-            var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
-            var read = new ToolCommand { ToolId = BackendToolId("vba_list_project_components_internal") };
-            var project = _adapter.ExecuteTool(read);
-            if (project == null || !project.Success) return project ?? ToolResult.Fail("VBA project returned no result.");
-            try
-            {
-                var rows = new List<object>();
-                var observedMatches = 0;
-                var truncated = false;
-                var modules = (JObject.Parse(project.DataJson ?? "{}")["modules"] as JArray ?? new JArray()).OfType<JObject>().ToList();
-                if (!string.IsNullOrWhiteSpace(moduleFilter) && !modules.Any(module =>
-                    string.Equals((string)module["name"], moduleFilter, StringComparison.OrdinalIgnoreCase)))
-                {
-                    var normalizedFilter = NormalizeModuleName(moduleFilter);
-                    var normalizedMatch = modules.FirstOrDefault(module =>
-                        string.Equals((string)module["name"], normalizedFilter, StringComparison.OrdinalIgnoreCase));
-                    if (normalizedMatch != null)
-                    {
-                        moduleFilter = (string)normalizedMatch["name"] ?? normalizedFilter;
-                        command.Arguments["moduleName"] = moduleFilter;
-                    }
-                }
-                var matchedModule = string.IsNullOrWhiteSpace(moduleFilter);
-                foreach (var module in modules)
-                {
-                    var name = (string)module["name"] ?? string.Empty;
-                    if (!string.IsNullOrWhiteSpace(moduleFilter) && !string.Equals(name, moduleFilter, StringComparison.OrdinalIgnoreCase)) continue;
-                    matchedModule = true;
-                    VbaModuleState moduleState;
-                    ToolResult readError;
-                    if (!TryReadVbaModule(name, 1000000, out moduleState, out readError))
-                    {
-                        return readError ?? ToolResult.Fail("VBA module could not be read: " + name, null, "vba_read_invalid", true);
-                    }
-                    var code = moduleState.Code;
-                    var moduleHash = CodeSha256(code);
-                    var found = TextPatternEngine.Find(code, query, new TextPatternOptions { Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"), MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false), WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false) }, Math.Max(1, maxResults - rows.Count), contextChars);
-                    observedMatches += found.MatchCount;
-                    var returnedForModule = false;
-                    var scannedIndex = 0;
-                    var currentLine = 1;
-                    foreach (var match in found.Matches)
-                    {
-                        if (rows.Count >= maxResults) break;
-                        while (scannedIndex < match.Index && scannedIndex < code.Length)
-                        {
-                            if (code[scannedIndex] == '\n' ||
-                                (code[scannedIndex] == '\r' && (scannedIndex + 1 >= code.Length || code[scannedIndex + 1] != '\n'))) currentLine++;
-                            scannedIndex++;
-                        }
-                        rows.Add(new { moduleName = name, componentType = moduleState.ComponentType, line = currentLine, start = match.Index, end = match.Index + match.Length, preview = match.Preview, codeSha256 = moduleHash });
-                        returnedForModule = true;
-                    }
-                    if (returnedForModule) RecordObservation(session, name, moduleHash);
-                }
-                if (!matchedModule)
-                {
-                    return ToolResult.Fail(
-                        "VBA module not found: " + requestedModuleFilter + ".",
-                        JsonConvert.SerializeObject(new
-                        {
-                            requestedModuleName = requestedModuleFilter,
-                            normalizedModuleName = NormalizeModuleName(requestedModuleFilter),
-                            discoveryTool = ToolId("vba_read_module")
-                        }),
-                        "vba_module_not_found",
-                        true);
-                }
-                truncated = observedMatches > rows.Count;
-                return ToolResult.Ok(
-                    "VBA code matches returned: " + rows.Count + (truncated ? " (results truncated)." : "."),
-                    JsonConvert.SerializeObject(new { matchCount = observedMatches, matchCountIsExact = true, returnedCount = rows.Count, truncated = truncated, matches = rows }));
-            }
-            catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
             catch (JsonException ex) { return ToolResult.Fail("Could not parse VBA project: " + ex.Message, null, "vba_read_invalid", true); }
         }
 
@@ -917,12 +807,14 @@ namespace RNAssistant.Office.Tools
                     ? "."
                     : ". Runtime also tried the normalized name " + normalizedName + ".") +
                 " To create it, call common.vba_write_module with moduleName, complete code, and mode=upsert. " +
-                "Call common.vba_read_module without moduleName only when the existing target name is unknown.",
+                "When the existing target name is unknown, list provider vba with kind vba-component.",
                 JsonConvert.SerializeObject(new
                 {
                     requestedModuleName = requestedModuleName,
                     normalizedModuleName = normalizedName,
-                    discoveryTool = ToolId("vba_read_module"),
+                    discoveryTool = "common.resources_list",
+                    resourceProvider = VbaResourceProvider.ProviderName,
+                    resourceKind = VbaResourceProvider.ComponentKind,
                     creationTool = ToolId("vba_write_module"),
                     creationMode = "upsert"
                 }),

@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
@@ -36,7 +37,9 @@ namespace RNAssistant.Office.Tools
                     JsonConvert.SerializeObject(new
                     {
                         findSha256 = TextPatternEngine.Sha256(find),
-                        inspectTool = "common.vba_read_module",
+                        inspectTool = "common.resources_read",
+                        resourceProvider = VbaResourceProvider.ProviderName,
+                        resourceKind = VbaResourceProvider.ComponentKind,
                         retrySamePatch = false
                     }),
                     "vba_patch_stale_source",
@@ -50,7 +53,9 @@ namespace RNAssistant.Office.Tools
                     {
                         matchCount = exactCount,
                         findSha256 = TextPatternEngine.Sha256(find),
-                        inspectTool = "common.vba_read_module",
+                        inspectTool = "common.resources_read",
+                        resourceProvider = VbaResourceProvider.ProviderName,
+                        resourceKind = VbaResourceProvider.ComponentKind,
                         retrySamePatch = false
                     }),
                     "vba_patch_ambiguous",

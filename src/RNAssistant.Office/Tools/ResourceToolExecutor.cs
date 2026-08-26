@@ -113,6 +113,10 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolResult.Fail(ex.Message, null, "resource_not_found", false);
             }
+            catch (ResourceRequestException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+            }
             catch (InvalidOperationException ex)
             {
                 return ToolResult.Fail(ex.Message, null, "resource_request_invalid", true);

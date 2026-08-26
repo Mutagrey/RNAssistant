@@ -150,29 +150,21 @@ namespace RNAssistant.Harness
 
                 AssertTrue(!executor.RequiresSessionLeaseForManualRun(readPipeline.Id, tools),
                     "nested read-only pipeline can run beside an active chat");
+                AssertTrue(!executor.RequiresSessionLeaseForManualRun("common.resources_read", tools),
+                    "resource reads can run beside an active chat");
                 AssertTrue(executor.RequiresSessionLeaseForManualRun(writePipeline.Id, tools),
                     "nested mutation cannot hide from the manual-run policy");
 
                 adapter.VbaModuleCode = "A";
                 var agentSession = NewSession(adapter);
-                AssertTrue(executor.Execute(
-                    Command("common.vba_read_module", "moduleName", "Module1"),
-                    tools,
-                    new AppSettings(),
-                    false,
-                    false,
-                    agentSession).Success, "agent observes the original VBA source");
+                AssertEqual("A", ReadVbaSource(executor, agentSession, "Module1").Text,
+                    "agent observes the original VBA source through resources");
                 adapter.VbaModuleCode = "B";
                 var manualSnapshot = OfficeToolExecutor.CreateIsolatedManualSession(agentSession);
                 AssertTrue(!string.Equals(agentSession.Id, manualSnapshot.Id, StringComparison.OrdinalIgnoreCase),
                     "manual read snapshot has an isolated observation identity");
-                AssertTrue(executor.Execute(
-                    Command("common.vba_read_module", "moduleName", "Module1"),
-                    tools,
-                    new AppSettings(),
-                    false,
-                    true,
-                    manualSnapshot).Success, "manual library read succeeds on current VBA source");
+                AssertEqual("B", ReadVbaSource(executor, manualSnapshot, "Module1").Text,
+                    "manual library resource read succeeds on current VBA source");
                 var staleAgent = executor.Execute(
                     Command("common.vba_apply_patch", "moduleName", "Module1", "patch", new JArray(new JObject
                     {
@@ -261,10 +253,10 @@ namespace RNAssistant.Harness
         {
             var expectedHostCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
-                { "Excel", 17 },
-                { "Word", 10 },
-                { "PowerPoint", 11 },
-                { "Outlook", 6 }
+                { "Excel", 15 },
+                { "Word", 9 },
+                { "PowerPoint", 9 },
+                { "Outlook", 5 }
             };
             foreach (var pair in expectedHostCounts)
             {
@@ -274,10 +266,10 @@ namespace RNAssistant.Harness
 
             var removedByHost = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
             {
-                { "Excel", new[] { "excel.list_sheets", "excel.write_table", "excel.add_chart" } },
-                { "Word", new[] { "word.read_document", "word.insert_text", "word.apply_style" } },
-                { "PowerPoint", new[] { "powerpoint.list_slides", "powerpoint.set_shape_text", "powerpoint.add_picture" } },
-                { "Outlook", new[] { "outlook.read_current_mail", "outlook.create_mail_draft", "outlook.mark_as_read" } }
+                { "Excel", new[] { "excel.get_context", "excel.get_selection", "excel.list_sheets", "excel.write_table", "excel.add_chart" } },
+                { "Word", new[] { "word.get_context", "word.read_document", "word.insert_text", "word.apply_style" } },
+                { "PowerPoint", new[] { "powerpoint.get_context", "powerpoint.get_selection", "powerpoint.list_slides", "powerpoint.set_shape_text", "powerpoint.add_picture" } },
+                { "Outlook", new[] { "outlook.get_context", "outlook.read_current_mail", "outlook.create_mail_draft", "outlook.mark_as_read" } }
             };
             foreach (var pair in removedByHost)
             {

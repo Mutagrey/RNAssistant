@@ -49,19 +49,22 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
 
-                var listed = executor.Execute(Command("common.vba_read_module"), tools, settings, false, false);
-                var read = executor.Execute(Command("common.vba_read_module", "moduleName", "Module1"), tools, settings, false, false);
-                var searched = executor.Execute(Command("common.vba_search_code", "query", "old(Value)", "mode", "regex", "matchCase", true), tools, settings, false, false);
-                AssertTrue(listed.Success, "VBA module list succeeds");
-                AssertTrue(!listed.DataJson.Contains("Option Explicit"), "VBA module list omits source code");
-                AssertContains(read.DataJson, "codeSha256", "VBA module read returns code hash");
-                AssertContains(searched.DataJson, "Module1", "VBA regex search returns module");
+                var session = NewSession(adapter);
+                var listed = ListVbaComponents(executor, session);
+                var read = ReadVbaSource(executor, session, "Module1");
+                var searched = SearchVbaSource(executor, session, "oldValue");
+                AssertTrue(listed.Items.Count >= 2, "VBA resource list succeeds");
+                AssertTrue(listed.Items.All(item => item.Metadata.ContainsKey("name")),
+                    "VBA resource list returns metadata without source bodies");
+                AssertTrue(!listed.Items.Any(item => item.Metadata.Values.Any(value =>
+                    value != null && value.IndexOf("Option Explicit", System.StringComparison.Ordinal) >= 0)),
+                    "VBA resource list omits source code");
+                AssertTrue(!string.IsNullOrWhiteSpace(read.ContentSha256), "VBA resource read returns code hash");
+                AssertTrue(searched.Matches.Count >= 1 && searched.Matches.All(match => match.Title == "Module1"),
+                    "VBA literal search returns the matching module");
 
-                var limitedSearch = executor.Execute(Command("common.vba_search_code", "query", "Sub", "maxResults", 1), tools, settings, false, false);
-                var limitedData = JObject.Parse(limitedSearch.DataJson ?? "{}");
-                AssertEqual(4, (int)limitedData["matchCount"], "VBA truncated search counts all modules");
-                AssertEqual(true, (bool)limitedData["matchCountIsExact"], "VBA truncated count is exact");
-                AssertEqual(true, (bool)limitedData["truncated"], "VBA search result list is truncated");
+                var limitedSearch = SearchVbaSource(executor, session, "Sub", 1);
+                AssertEqual(1, limitedSearch.Matches.Count, "VBA resource search obeys its result bound");
 
                 var patch = new JArray(new JObject
                 {
@@ -70,7 +73,7 @@ namespace RNAssistant.Harness
                     ["text"] = "Dim newValue As Long\nnewValue = 1"
                 });
                 var patched = executor.Execute(Command("common.vba_apply_patch", "moduleName", "Module1", "patch", patch), tools, settings, false, false);
-                AssertTrue(patched.Success, "VBA exact patch succeeds after regex discovery");
+                AssertTrue(patched.Success, "VBA exact patch succeeds after resource discovery");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "newValue", "VBA exact patch updates discovered source");
 
                 var blockedDelete = executor.Execute(Command("common.vba_delete_module", "moduleName", "ThisWorkbook"), tools, settings, false, false);

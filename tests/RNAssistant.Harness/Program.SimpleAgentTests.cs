@@ -817,8 +817,9 @@ namespace RNAssistant.Harness
                     .GetAwaiter().GetResult();
 
                 var prompt = FlattenSimple(request);
-                AssertContains(prompt, "\"name\":\"common.vba_read_module\"", "common VBA read exposed");
-                AssertContains(prompt, "\"name\":\"common.vba_search_code\"", "common VBA search exposed");
+                AssertContains(prompt, "\"name\":\"common.resources_list\"", "resource discovery exposed");
+                AssertContains(prompt, "\"name\":\"common.resources_read\"", "resource reads exposed");
+                AssertContains(prompt, "\"name\":\"common.resources_search\"", "resource search exposed");
                 AssertContains(prompt, "\"name\":\"common.vba_apply_patch\"", "common safe VBA patch exposed");
                 AssertContains(prompt, "\"name\":\"common.vba_write_module\"", "common VBA upsert exposed");
                 AssertContains(prompt, "\"name\":\"common.vba_delete_module\"", "common VBA delete exposed");
@@ -827,7 +828,11 @@ namespace RNAssistant.Harness
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_replace_text\"", StringComparison.Ordinal) < 0,
                     "redundant replace alias is hidden from the model");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_read_lines\"", StringComparison.Ordinal) < 0,
-                    "range reads use the single read_module contract");
+                    "VBA range-read alias is removed");
+                AssertTrue(prompt.IndexOf("\"name\":\"common.vba_read_module\"", StringComparison.Ordinal) < 0 &&
+                    prompt.IndexOf("\"name\":\"common.vba_search_code\"", StringComparison.Ordinal) < 0 &&
+                    prompt.IndexOf("\"name\":\"common.vba_list_backups\"", StringComparison.Ordinal) < 0,
+                    "VBA discovery and reads use only the shared resource contract");
                 AssertTrue(prompt.IndexOf("\"expectedCodeSha256\"", StringComparison.Ordinal) < 0,
                     "model-facing VBA schemas do not require a hash argument");
                 AssertTrue(prompt.IndexOf("\"name\":\"excel.vba_read_module\"", StringComparison.Ordinal) < 0,
