@@ -768,8 +768,7 @@ namespace RNAssistant.Office.Services
             var used = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             var availableForData = Math.Max(0, inputBudget - used - ToolResultEnvelopeReserveTokens);
             var toolId = command == null ? null : command.ToolId;
-            var maxDataTokens = string.Equals(toolId, "common.skills_read", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, HtmlArtifactToolExecutor.ReadWorkspaceToolId, StringComparison.OrdinalIgnoreCase)
+            var maxDataTokens = string.Equals(toolId, "common.skills_read", StringComparison.OrdinalIgnoreCase)
                     ? availableForData
                     : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
             return AgentJsonProtocol.CreateToolResultMessage(command, result, maxDataTokens, settings.ToolResultRole, settings);

@@ -20,6 +20,7 @@ namespace RNAssistant.Office.Services
 
         private readonly Func<ChatSession, string, bool> _loadArtifactBody;
         private readonly Func<ChatAttachment, int, string> _readAttachmentText;
+        private readonly ChatHtmlResourceCatalog _htmlResources;
 
         public ChatArtifactResourceProvider(
             Func<ChatSession, string, bool> loadArtifactBody = null,
@@ -27,12 +28,17 @@ namespace RNAssistant.Office.Services
         {
             _loadArtifactBody = loadArtifactBody;
             _readAttachmentText = readAttachmentText;
+            _htmlResources = new ChatHtmlResourceCatalog(loadArtifactBody);
         }
 
         public string Id { get { return ProviderName; } }
 
         public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
         {
+            if (ChatHtmlResourceCatalog.SupportsKind(kind))
+            {
+                return _htmlResources.List(session, kind, cursor, limit);
+            }
             limit = Math.Max(1, Math.Min(MaximumListItems, limit <= 0 ? 20 : limit));
             var offset = ParseCursor(cursor);
             var filtered = OrderedArtifacts(session)
@@ -55,6 +61,8 @@ namespace RNAssistant.Office.Services
 
         public ResourceDescriptor Resolve(ChatSession session, string resourceUri)
         {
+            ResourceDescriptor htmlResource;
+            if (_htmlResources.TryResolve(session, resourceUri, out htmlResource)) return htmlResource;
             var artifact = FindByUri(session, resourceUri);
             if (artifact == null)
             {
@@ -77,9 +85,18 @@ namespace RNAssistant.Office.Services
             var matches = new List<ResourceSearchMatch>();
             var scannedCharacters = 0;
             var scanTruncated = false;
+            if (string.IsNullOrWhiteSpace(kind) || ChatHtmlResourceCatalog.SupportsKind(kind))
+            {
+                var html = _htmlResources.Search(session, query, kind, limit, maxCharsPerMatch);
+                if (ChatHtmlResourceCatalog.SupportsKind(kind)) return html;
+                matches.AddRange(html.Matches);
+                scannedCharacters += html.ScannedCharacters;
+                scanTruncated = html.ScanTruncated;
+            }
 
             foreach (var artifact in OrderedArtifacts(session))
             {
+                if (matches.Count >= limit) break;
                 if (!string.IsNullOrWhiteSpace(kind) &&
                     !string.Equals(artifact.Kind, kind, StringComparison.OrdinalIgnoreCase)) continue;
 
@@ -98,6 +115,10 @@ namespace RNAssistant.Office.Services
                 }
                 else
                 {
+                    if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
                     var remaining = MaximumSearchCharacters - scannedCharacters;
                     if (remaining <= 0)
                     {
@@ -113,7 +134,6 @@ namespace RNAssistant.Office.Services
                         matches.Add(SearchMatch(session, artifact, "text", text, textIndex, query.Length, maxCharsPerMatch));
                     }
                 }
-                if (matches.Count >= limit) break;
             }
 
             return new ResourceSearchResult
@@ -132,6 +152,14 @@ namespace RNAssistant.Office.Services
             int offset,
             int maxChars)
         {
+            ResourceReadSelection htmlSelection;
+            if (_htmlResources.TryRead(
+                session,
+                resourceUri,
+                representation,
+                offset,
+                maxChars,
+                out htmlSelection)) return htmlSelection;
             var artifact = FindByUri(session, resourceUri);
             if (artifact == null)
             {
@@ -181,6 +209,12 @@ namespace RNAssistant.Office.Services
                     ResourceUris = new[] { exactUri }
                 };
             }
+            if (representation == ResourceRepresentations.Structure)
+            {
+                var structure = _htmlResources.ReadStructure(session, artifact, offset, maxChars);
+                structure.Result.Resource = Describe(session, artifact, false);
+                return structure;
+            }
 
             var content = ReadText(session, artifact, int.MaxValue);
             if (string.IsNullOrWhiteSpace(content))
@@ -220,7 +254,11 @@ namespace RNAssistant.Office.Services
         {
             var attachment = FindAttachment(session, artifact);
             var representations = new List<string> { "metadata" };
-            if (HasTextHint(artifact, attachment)) representations.Add("text");
+            if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+            {
+                representations.Add(ResourceRepresentations.Structure);
+            }
+            else if (HasTextHint(artifact, attachment)) representations.Add("text");
             if (IsModelMedia(attachment)) representations.Add("media");
             var result = new ResourceDescriptor
             {
@@ -250,13 +288,27 @@ namespace RNAssistant.Office.Services
                 result.SourceMessageId = artifact.SourceMessageId;
                 result.ContentSha256 = artifact.ContentSha256;
             }
+            if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Metadata["memberKinds"] = ChatHtmlResourceCatalog.FileKind + "," + ChatHtmlResourceCatalog.DataKind;
+                result.Metadata["memberDiscovery"] = "List this provider with an exact member kind.";
+            }
             return result;
         }
 
         private string NormalizeRepresentation(string value, ChatSession session, ChatArtifact artifact)
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
-            if (value == "metadata" || value == "text" || value == "media") return value;
+            var htmlWorkspace = string.Equals(
+                artifact == null ? null : artifact.Kind,
+                ChatArtifactKinds.HtmlWorkspace,
+                StringComparison.OrdinalIgnoreCase);
+            if (value == ResourceRepresentations.Metadata) return value;
+            if (htmlWorkspace && (value.Length == 0 || value == "auto" || value == ResourceRepresentations.Structure))
+            {
+                return ResourceRepresentations.Structure;
+            }
+            if (!htmlWorkspace && (value == "text" || value == "media")) return value;
             if (value.Length > 0 && value != "auto")
             {
                 throw new InvalidOperationException("Unknown resource representation: " + value);

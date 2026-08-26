@@ -10,7 +10,6 @@ namespace RNAssistant.Office.Tools
     internal sealed class PlanToolExecutor
     {
         public const string CreateToolId = "common.plan_create";
-        public const string ReadToolId = "common.plan_read";
         public const string UpdateToolId = "common.plan_update";
         public const string DeleteToolId = "common.plan_delete";
 
@@ -23,9 +22,6 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(CreateToolId, "Common",
                 "Plan: Create a new visible multi-step plan for the active chat and make it active. Use only when a visible plan materially helps the task.",
                 CreateSchema(), mutatesLocalState: true, name: "plan_create", scope: "session");
-            yield return ControllerToolDefinition.Create(ReadToolId, "Common",
-                "Read-only: Read the latest revision of a plan by stable plan id or any artifact revision id. Omit id to read the active chat plan.",
-                ReadSchema(), name: "plan_read", scope: "session");
             yield return ControllerToolDefinition.Create(UpdateToolId, "Common",
                 "Plan: Update the goal and/or replace the complete steps of an existing plan. Omitted fields are preserved and a new artifact revision is created.",
                 UpdateSchema(), mutatesLocalState: true, name: "plan_update", scope: "session");
@@ -45,10 +41,6 @@ namespace RNAssistant.Office.Tools
                 if (string.Equals(command.ToolId, CreateToolId, StringComparison.OrdinalIgnoreCase))
                 {
                     return Create(command, session, dryRun);
-                }
-                if (string.Equals(command.ToolId, ReadToolId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Read(command, session);
                 }
                 if (string.Equals(command.ToolId, UpdateToolId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -89,16 +81,6 @@ namespace RNAssistant.Office.Tools
             session.Artifacts.Add(artifact);
             session.ActivePlanArtifactId = artifact.Id;
             return ToolResult.Ok("Plan created: " + plan.Goal, Payload(plan, artifact).ToString(Formatting.None));
-        }
-
-        private static ToolResult Read(ToolCommand command, ChatSession session)
-        {
-            var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
-            ChatPlan plan;
-            var artifact = FindRevision(session, id, out plan);
-            return artifact == null
-                ? ToolResult.Fail(string.IsNullOrWhiteSpace(id) ? "The active chat has no plan." : "Plan not found: " + id, null, "plan_not_found", false)
-                : ToolResult.Ok("Plan read: " + plan.Goal, Payload(plan, artifact).ToString(Formatting.None));
         }
 
         private static ToolResult Update(ToolCommand command, ChatSession session, bool dryRun)
@@ -300,7 +282,7 @@ namespace RNAssistant.Office.Tools
         {
             var properties = new JObject
             {
-                ["id"] = new JObject { ["type"] = "string", ["description"] = "Stable plan id returned by plan_create/read, or any artifact revision id; the latest revision is updated." },
+                ["id"] = new JObject { ["type"] = "string", ["description"] = "Stable plan id returned by plan_create or stored in the plan resource body, or any artifact revision id; the latest revision is updated." },
                 ["goal"] = new JObject { ["type"] = "string", ["description"] = "Concise user-visible goal for the plan.", ["minLength"] = 1, ["maxLength"] = MaxGoalChars },
                 ["steps"] = new JObject
                 {
@@ -330,11 +312,6 @@ namespace RNAssistant.Office.Tools
                 ["required"] = update ? new JArray("id") : new JArray("goal", "steps"),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
-        }
-
-        private static string ReadSchema()
-        {
-            return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Stable plan id or any artifact revision id; omit to read the active plan. The latest revision is returned.\"}},\"required\":[],\"additionalProperties\":false}";
         }
 
         private static string DeleteSchema()

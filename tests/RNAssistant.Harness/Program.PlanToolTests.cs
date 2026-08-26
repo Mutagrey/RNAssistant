@@ -18,7 +18,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 AssertTrue(tools.Any(tool => tool.Id == PlanToolExecutor.CreateToolId), "plan create exposed to Agent");
-                AssertTrue(tools.Any(tool => tool.Id == PlanToolExecutor.ReadToolId), "plan read exposed to Agent");
+                AssertTrue(tools.All(tool => tool.Id != "common.plan_read"), "duplicated plan read is removed");
                 AssertTrue(tools.Any(tool => tool.Id == PlanToolExecutor.UpdateToolId), "plan update exposed to Agent");
                 AssertTrue(tools.Any(tool => tool.Id == PlanToolExecutor.DeleteToolId), "plan delete exposed to Agent");
                 var planningSkill = BuiltInSkillProvider.GetSkills(adapter).Single(skill => skill.Id == "common.task_planning");
@@ -60,9 +60,12 @@ namespace RNAssistant.Harness
                 ChatArtifactService.LinkMessageArtifacts(session, 1);
                 AssertTrue(updateMessage.ArtifactIds.Contains(secondArtifactId), "updated plan linked to tool result message");
 
-                var read = executor.Execute(Command(PlanToolExecutor.ReadToolId), tools, new AppSettings(), false, false, session);
-                AssertTrue(read.Success, "active plan read succeeds");
-                AssertContains(read.DataJson, "Prepare verified workbook report", "active revision returned");
+                var updatedArtifact = session.Artifacts.Single(item => item.Id == secondArtifactId);
+                var planUri = ChatArtifactResourceProvider.CreateRevisionUri(session, updatedArtifact);
+                var read = new ResourceGatewayService().Read(session, planUri, "text", 0, 32000).Result;
+                AssertContains(read.Text, "Prepare verified workbook report", "active plan revision reads through resources");
+                var removedRead = executor.Execute(Command("common.plan_read"), tools, new AppSettings(), false, false, session);
+                AssertEqual("unknown_tool", removedRead.ErrorCode, "removed plan read id stays unknown");
 
                 session.Messages.Remove(updateMessage);
                 ChatArtifactService.RestoreActivePlanFromMessages(session);

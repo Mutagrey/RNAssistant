@@ -664,24 +664,6 @@ namespace RNAssistant.Office.Tools
             return string.Equals(value, "manual", StringComparison.OrdinalIgnoreCase) ? "manual" : "on_preview";
         }
 
-        private static object BindingManifest(HtmlWorkspaceDataBinding binding)
-        {
-            if (binding == null) return null;
-            return new
-            {
-                binding.ToolId,
-                binding.Transform,
-                binding.Headers,
-                binding.RefreshPolicy,
-                binding.Host,
-                binding.DocumentTitle,
-                binding.Status,
-                binding.LastError,
-                binding.LastRefreshUtc,
-                binding.UpdatedUtc
-            };
-        }
-
         private static object BindingDetails(HtmlWorkspaceDataBinding binding)
         {
             if (binding == null) return null;

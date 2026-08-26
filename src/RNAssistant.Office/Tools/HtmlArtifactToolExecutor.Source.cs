@@ -11,44 +11,6 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class HtmlArtifactToolExecutor
     {
-        private static string ReadWorkspaceSchema()
-        {
-            var properties = new JObject
-            {
-                ["resourceType"] = new JObject { ["type"] = "string", ["enum"] = new JArray("file", "data"), ["description"] = "Resource selector; omit resourceType and name together to read the compact workspace manifest." },
-                ["name"] = new JObject { ["type"] = "string", ["description"] = "Exact file path or data-source name for resourceType.", ["minLength"] = 1, ["maxLength"] = 260 },
-                ["startLine"] = new JObject { ["type"] = "integer", ["description"] = "One-based first line for a bounded file read; omit for the whole file.", ["minimum"] = 1 },
-                ["lineCount"] = new JObject { ["type"] = "integer", ["description"] = "Maximum consecutive file lines. Supplied alone it starts at line 1; when only startLine is supplied runtime returns up to 200 lines.", ["minimum"] = 1, ["maximum"] = 500 }
-            };
-            return new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = new JArray(),
-                ["additionalProperties"] = false,
-                ["anyOf"] = new JArray
-                {
-                    HtmlResourceVariant(properties, new[] { "resourceType", "name", "startLine", "lineCount" }, new[] { "resourceType", "name" }, "file"),
-                    HtmlResourceVariant(properties, new[] { "resourceType", "name" }, new[] { "resourceType", "name" }, "data"),
-                    HtmlResourceVariant(properties, new string[0], new string[0])
-                }
-            }.ToString(Formatting.None);
-        }
-
-        private static string SearchWorkspaceSchema()
-        {
-            return "{\"type\":\"object\",\"properties\":{" +
-                "\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression query.\",\"minLength\":1,\"maxLength\":2048}," +
-                "\"name\":{\"type\":\"string\",\"description\":\"Optional exact workspace-relative file path.\",\"maxLength\":260}," +
-                "\"kind\":{\"type\":\"string\",\"description\":\"Optional file-kind filter.\",\"enum\":[\"html\",\"css\",\"script\"]}," +
-                "\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]}," +
-                "\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false}," +
-                "\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false}," +
-                "\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100,\"minimum\":1,\"maximum\":500}," +
-                "\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80,\"minimum\":0,\"maximum\":1000}" +
-                "},\"required\":[\"query\"],\"additionalProperties\":false}";
-        }
-
         private static string UpsertWorkspaceSchema()
         {
             var properties = new JObject
@@ -230,85 +192,6 @@ namespace RNAssistant.Office.Tools
             return null;
         }
 
-        private static ToolResult SearchWorkspace(ChatSession session, ToolCommand command, CancellationToken cancellationToken)
-        {
-            var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
-            if (string.IsNullOrWhiteSpace(query)) return ToolResult.Fail("query is required.", null, "invalid_arguments", true);
-            var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty).Trim();
-            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty).Trim().ToLowerInvariant();
-            var maxResults = Math.Max(1, Math.Min(TextPatternEngine.MaxResults, ToolArgumentReader.Int32(command.Arguments, "maxResults", 100)));
-            var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
-            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
-            var files = string.IsNullOrWhiteSpace(name)
-                ? workspace.Files.Where(item => item != null).ToList()
-                : new List<HtmlWorkspaceFile> { FindFile(workspace, name, false) };
-            if (!string.IsNullOrWhiteSpace(kind))
-            {
-                files = files.Where(item => string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase)).ToList();
-            }
-
-            try
-            {
-                var rows = new JArray();
-                var matchCount = 0;
-                foreach (var file in files)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var source = file.Content ?? string.Empty;
-                    var found = TextPatternEngine.Find(
-                        source,
-                        query,
-                        new TextPatternOptions
-                        {
-                            Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"),
-                            MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false),
-                            WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false)
-                        },
-                        Math.Max(1, maxResults - rows.Count),
-                        contextChars);
-                    matchCount += found.MatchCount;
-                    var lineStarts = SourceLineStarts(source);
-                    foreach (var match in found.Matches)
-                    {
-                        if (rows.Count >= maxResults) break;
-                        int line;
-                        int column;
-                        SourcePosition(lineStarts, match.Index, out line, out column);
-                        rows.Add(new JObject
-                        {
-                            ["name"] = file.Path,
-                            ["kind"] = file.Kind,
-                            ["line"] = line,
-                            ["column"] = column,
-                            ["start"] = match.Index,
-                            ["end"] = match.Index + match.Length,
-                            ["preview"] = match.Preview,
-                            ["contentSha256"] = TextPatternEngine.Sha256(source)
-                        });
-                    }
-                }
-
-                var truncated = matchCount > rows.Count;
-                return ToolResult.Ok(
-                    "HTML workspace matches returned: " + rows.Count + (truncated ? " (results truncated)." : "."),
-                    new JObject
-                    {
-                        ["type"] = "rnassistant.htmlWorkspaceSearch",
-                        ["version"] = 1,
-                        ["revisionArtifactId"] = session.ActiveHtmlArtifactId,
-                        ["matchCount"] = matchCount,
-                        ["matchCountIsExact"] = true,
-                        ["returnedCount"] = rows.Count,
-                        ["truncated"] = truncated,
-                        ["matches"] = rows
-                    }.ToString(Formatting.None));
-            }
-            catch (TextPatternException ex)
-            {
-                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false);
-            }
-        }
-
         private static ToolResult ApplyWorkspacePatch(
             ChatSession session,
             ToolCommand command,
@@ -407,21 +290,6 @@ namespace RNAssistant.Office.Tools
         private static int SourceLineCount(string source)
         {
             return SourceLineStarts(source).Count;
-        }
-
-        private static string ReadSourceLines(string source, int startLine, int lineCount)
-        {
-            if (startLine < 1 || lineCount < 1)
-            {
-                throw new InvalidOperationException("startLine and lineCount must be positive.");
-            }
-            source = source ?? string.Empty;
-            var lines = source.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-            if (startLine > lines.Length)
-            {
-                throw new InvalidOperationException("startLine is outside the HTML workspace file.");
-            }
-            return string.Join(CurrentSourceNewLine(source), lines.Skip(startLine - 1).Take(lineCount).ToArray());
         }
 
         private static List<int> SourceLineStarts(string source)

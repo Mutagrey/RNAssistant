@@ -295,7 +295,16 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                foreach (var id in new[] { "common.skills_list", "common.tools_create", "common.prompts_read_defaults", "common.html_workspace_upsert_file" })
+                foreach (var id in new[]
+                {
+                    "common.skills_list",
+                    "common.tools_create",
+                    "common.prompts_read_defaults",
+                    "common.html_workspace_upsert_file",
+                    "common.plan_read",
+                    "common.html_workspace_read",
+                    "common.html_workspace_search"
+                })
                 {
                     var result = executor.Execute(new ToolCommand { ToolId = id }, tools, new AppSettings(), false, false);
                     AssertEqual("unknown_tool", result.ErrorCode, id + " is removed");
@@ -325,8 +334,9 @@ namespace RNAssistant.Harness
                 drySession.HtmlWorkspace.Files = null;
                 drySession.HtmlWorkspace.DataSources = null;
                 drySession.HtmlWorkspace.UpdatedUtc = default(DateTime);
-                var dryRead = executor.Execute(new ToolCommand { ToolId = "common.html_workspace_read" }, tools, new AppSettings(), true, false, drySession);
-                AssertTrue(dryRead.Success, "html workspace dry read succeeds");
+                var dryResources = new ResourceGatewayService()
+                    .List(drySession, ChatArtifactResourceProvider.ProviderName, ChatHtmlResourceCatalog.FileKind, null, 10);
+                AssertEqual(0, dryResources.Items.Count, "empty html workspace has no file resources");
                 AssertTrue(drySession.HtmlWorkspace.Files == null, "html dry run does not normalize files in place");
                 AssertTrue(drySession.HtmlWorkspace.DataSources == null, "html dry run does not normalize data in place");
                 AssertEqual(default(DateTime), drySession.HtmlWorkspace.UpdatedUtc, "html dry run keeps timestamp");
@@ -360,20 +370,29 @@ namespace RNAssistant.Harness
                 AssertTrue(dataResult.Success, "html workspace data save succeeds");
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data count");
 
-                var readResult = executor.Execute(new ToolCommand
-                {
-                    ToolId = "common.html_workspace_read",
-                    Arguments = { ["resourceType"] = "data", ["name"] = "rows" }
-                }, tools, new AppSettings(), false, false, session);
-                AssertTrue(readResult.Success, "html workspace read succeeds");
-                AssertContains(readResult.DataJson, "rnassistant.htmlWorkspace", "workspace result type");
-                AssertContains(readResult.DataJson, "items", "workspace data included");
+                var gateway = new ResourceGatewayService();
+                var dataResource = gateway
+                    .List(session, ChatArtifactResourceProvider.ProviderName, ChatHtmlResourceCatalog.DataKind, null, 10)
+                    .Items.Single(item => item.Title == "rows");
+                var readResult = gateway.Read(session, dataResource.Reference.Uri, "text", 0, 8000).Result;
+                AssertContains(readResult.Text, "items", "html data reads through the resource gateway");
 
-                var incompleteRead = new ToolCommand { ToolId = "common.html_workspace_read" };
-                incompleteRead.Arguments["name"] = "rows";
-                var incompleteResult = executor.Execute(incompleteRead, tools, new AppSettings(), false, false, session);
-                AssertTrue(!incompleteResult.Success, "HTML read rejects incomplete selector");
-                AssertContains(incompleteResult.Message, "resourceType is required", "HTML selector diagnostic");
+                var removedRead = executor.Execute(
+                    new ToolCommand { ToolId = "common.html_workspace_read" },
+                    tools,
+                    new AppSettings(),
+                    false,
+                    false,
+                    session);
+                var removedSearch = executor.Execute(
+                    new ToolCommand { ToolId = "common.html_workspace_search" },
+                    tools,
+                    new AppSettings(),
+                    false,
+                    false,
+                    session);
+                AssertEqual("unknown_tool", removedRead.ErrorCode, "removed HTML read id stays unknown");
+                AssertEqual("unknown_tool", removedSearch.ErrorCode, "removed HTML search id stays unknown");
 
                 var deleteScript = new ToolCommand { ToolId = "common.html_workspace_delete" };
                 deleteScript.Arguments["resourceType"] = "file";
@@ -512,29 +531,28 @@ namespace RNAssistant.Harness
                 HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "one\ntwo\nthree\nfour", true);
                 HtmlArtifactToolExecutor.UpsertFile(session, "app.js", "script", "alpha\nconst beta = 1;\nalpha beta;", false);
 
-                var rangedRead = new ToolCommand { ToolId = HtmlArtifactToolExecutor.ReadWorkspaceToolId };
-                rangedRead.Arguments["resourceType"] = "file";
-                rangedRead.Arguments["name"] = "index.html";
-                rangedRead.Arguments["startLine"] = 2;
-                rangedRead.Arguments["lineCount"] = 2;
-                var readResult = executor.Execute(rangedRead, tools, new AppSettings(), false, false, session);
-                AssertTrue(readResult.Success, "bounded HTML read succeeds");
-                var readFile = JObject.Parse(readResult.DataJson)["file"] as JObject;
-                AssertEqual("two\nthree", (string)readFile["Content"], "bounded HTML read returns exact lines");
-                AssertEqual(4, (int)readFile["totalLines"], "bounded HTML read reports total lines");
-                AssertTrue((bool)readFile["truncated"], "bounded HTML read reports truncation");
+                var gateway = new ResourceGatewayService();
+                var files = gateway.List(
+                    session,
+                    ChatArtifactResourceProvider.ProviderName,
+                    ChatHtmlResourceCatalog.FileKind,
+                    null,
+                    10);
+                var indexResource = files.Items.Single(item => item.Title == "index.html");
+                var readResult = gateway.Read(session, indexResource.Reference.Uri, "source", 0, 128).Result;
+                AssertEqual("one\ntwo\nthree\nfour", readResult.Text, "HTML source reads through canonical resource URI");
+                AssertEqual(ResourceRepresentations.Source, readResult.Representation, "HTML file advertises source representation");
 
-                var search = new ToolCommand { ToolId = HtmlArtifactToolExecutor.SearchWorkspaceToolId };
-                search.Arguments["query"] = "beta";
-                search.Arguments["kind"] = "script";
-                search.Arguments["maxResults"] = 1;
-                var searchResult = executor.Execute(search, tools, new AppSettings(), false, false, session);
-                AssertTrue(searchResult.Success, "HTML source search succeeds");
-                var searchData = JObject.Parse(searchResult.DataJson);
-                AssertEqual(2, (int)searchData["matchCount"], "HTML search counts all matches");
-                AssertEqual(1, (int)searchData["returnedCount"], "HTML search bounds returned matches");
-                AssertTrue((bool)searchData["truncated"], "HTML search reports truncation");
-                AssertEqual(2, (int)searchData["matches"][0]["line"], "HTML search reports source line");
+                var searchResult = gateway.Search(
+                    session,
+                    ChatArtifactResourceProvider.ProviderName,
+                    "beta",
+                    ChatHtmlResourceCatalog.FileKind,
+                    1,
+                    128);
+                AssertEqual(1, searchResult.Matches.Count, "HTML source search is bounded");
+                AssertEqual("app.js", searchResult.Matches[0].Title, "HTML search identifies the exact source resource");
+                AssertContains(searchResult.Matches[0].Snippet, "beta", "HTML search returns a bounded snippet");
 
                 var patch = new ToolCommand { ToolId = HtmlArtifactToolExecutor.ApplyPatchToolId };
                 patch.Arguments["name"] = "app.js";
@@ -698,26 +716,33 @@ namespace RNAssistant.Harness
             AssertTrue(bridgeJson.IndexOf("CURRENT_FIRST", StringComparison.Ordinal) < 0, "bridge workspace omits old snapshot bodies");
             AssertTrue(bridgeJson.IndexOf("HISTORY_SECOND", StringComparison.Ordinal) < 0, "bridge workspace history contains metadata only");
 
-            var manifestResult = new HtmlArtifactToolExecutor().ExecuteControllerTool(
-                new ToolCommand { ToolId = HtmlArtifactToolExecutor.ReadWorkspaceToolId },
+            var gateway = new ResourceGatewayService();
+            var activeArtifact = transportSession.Artifacts.Single(item => item.Id == transportSession.ActiveHtmlArtifactId);
+            var manifestResult = gateway.Read(
                 transportSession,
-                false);
-            AssertTrue(manifestResult.Success, "html workspace manifest read succeeds");
-            AssertContains(manifestResult.DataJson, "contentCharacters", "html workspace manifest contains sizes");
-            AssertTrue(manifestResult.DataJson.IndexOf("CURRENT_THIRD", StringComparison.Ordinal) < 0, "html workspace manifest omits file bodies");
+                ChatArtifactResourceProvider.CreateRevisionUri(transportSession, activeArtifact),
+                ResourceRepresentations.Structure,
+                0,
+                8000).Result;
+            AssertContains(manifestResult.Text, "resources", "html structure contains the resource manifest");
+            AssertContains(manifestResult.Text, "index.html", "html structure identifies current members");
+            AssertTrue(manifestResult.Text.IndexOf("CURRENT_THIRD", StringComparison.Ordinal) < 0, "html structure omits file bodies");
 
-            var toolResult = new HtmlArtifactToolExecutor().ExecuteControllerTool(
-                new ToolCommand
-                {
-                    ToolId = HtmlArtifactToolExecutor.ReadWorkspaceToolId,
-                    Arguments = { ["resourceType"] = "file", ["name"] = "index.html" }
-                },
+            var fileResource = gateway.List(
                 transportSession,
-                false);
-            AssertTrue(toolResult.Success, "html workspace compact read succeeds");
-            AssertContains(toolResult.DataJson, "CURRENT_THIRD", "tool workspace includes current file content");
-            AssertTrue(toolResult.DataJson.IndexOf("CURRENT_FIRST", StringComparison.Ordinal) < 0, "tool workspace omits old snapshot bodies");
-            AssertTrue(toolResult.DataJson.IndexOf("HISTORY_SECOND", StringComparison.Ordinal) < 0, "tool workspace omits latest history body");
+                ChatArtifactResourceProvider.ProviderName,
+                ChatHtmlResourceCatalog.FileKind,
+                null,
+                10).Items.Single(item => item.Title == "index.html");
+            var sourceResult = gateway.Read(
+                transportSession,
+                fileResource.Reference.Uri,
+                ResourceRepresentations.Source,
+                0,
+                8000).Result;
+            AssertContains(sourceResult.Text, "CURRENT_THIRD", "resource read includes current file content");
+            AssertTrue(sourceResult.Text.IndexOf("CURRENT_FIRST", StringComparison.Ordinal) < 0, "resource read omits old snapshot bodies");
+            AssertTrue(sourceResult.Text.IndexOf("HISTORY_SECOND", StringComparison.Ordinal) < 0, "resource read omits latest history body");
         }
 
         private static void ToolValidateChecksPayloadWithoutSaving()

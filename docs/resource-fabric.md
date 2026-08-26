@@ -89,7 +89,7 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 2. **Done:** Provider registry plus chat-artifact provider; `common.artifacts_*` removed and replaced by `common.resources_*` without aliases.
 3. **Done:** Unified `ConversationRunService`; read-only resource loop in Chat; removed `PlainChatService` and `ChatContextWindowBuilder`.
 4. **Done:** Automatic chat-scoped UI ingestion and durable pre-dispatch message references; explicit `artifactIds`/“В запрос” selection removed.
-5. Office, VBA, HTML, and plan providers; remove duplicated read tools.
+5. **In progress:** plan and HTML reads use canonical `chat` resources and their duplicated public read/search tools are removed. Live Office document and VBA providers remain.
 6. Progressive tool discovery and bounded working-set eviction.
 7. Hard cutover of events/projections, deletion of obsolete services and tests, reset-only handling for old data.
 

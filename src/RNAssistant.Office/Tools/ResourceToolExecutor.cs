@@ -168,7 +168,7 @@ namespace RNAssistant.Office.Tools
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"uri\":{\"type\":\"string\",\"description\":\"Exact canonical URI from resources_list/search/resolve.\",\"minLength\":1,\"maxLength\":1000}," +
-                "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read; auto prefers text and then media.\",\"enum\":[\"auto\",\"metadata\",\"text\",\"media\"],\"default\":\"auto\"}," +
+                "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read; auto selects the provider's preferred bounded form.\",\"enum\":[\"auto\",\"metadata\",\"text\",\"structure\",\"source\",\"media\"],\"default\":\"auto\"}," +
                 "\"cursor\":{\"type\":\"string\",\"description\":\"nextCursor from a previous text read.\",\"maxLength\":32}," +
                 "\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum text characters returned.\",\"minimum\":128,\"maximum\":32000,\"default\":8000}" +
                 "},\"required\":[\"uri\"],\"additionalProperties\":false}";

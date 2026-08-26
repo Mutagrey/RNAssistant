@@ -135,6 +135,102 @@ namespace RNAssistant.Harness
             }
             AssertTrue(implicitAttachmentMappingRejected,
                 "artifact media requires explicit attachmentId metadata instead of a legacy id convention");
+
+            var htmlSession = new ChatSession();
+            HtmlArtifactToolExecutor.UpsertFile(
+                htmlSession,
+                "index.html",
+                "html",
+                "<main>Dashboard</main>",
+                true);
+            var oldScript = new string('x', 180) + " OLD_NEEDLE";
+            HtmlArtifactToolExecutor.UpsertFile(
+                htmlSession,
+                "scripts/nested/app.js",
+                "script",
+                oldScript,
+                false);
+            HtmlArtifactToolExecutor.UpsertDataSource(htmlSession, "rows", "{\"items\":[1,2]}");
+
+            var htmlGateway = new ResourceGatewayService();
+            var oldScriptResource = htmlGateway.List(
+                htmlSession,
+                ChatArtifactResourceProvider.ProviderName,
+                ChatHtmlResourceCatalog.FileKind,
+                null,
+                10).Items.Single(item => item.Title == "scripts/nested/app.js");
+            AssertTrue(oldScriptResource.Reference.Uri.IndexOf("scripts", StringComparison.OrdinalIgnoreCase) < 0,
+                "HTML member URI does not expose a nested workspace path");
+            AssertEqual(ResourceRepresentations.Source, oldScriptResource.Representations.Last(),
+                "HTML files advertise source representation");
+
+            var boundedSource = htmlGateway.Read(
+                htmlSession,
+                oldScriptResource.Reference.Uri,
+                ResourceRepresentations.Source,
+                0,
+                128).Result;
+            AssertEqual(128, boundedSource.ReturnedCharacters, "HTML member read obeys the common bound");
+            AssertTrue(boundedSource.Truncated && !string.IsNullOrWhiteSpace(boundedSource.NextCursor),
+                "HTML member read exposes the common continuation cursor");
+
+            var dataResource = htmlGateway.List(
+                htmlSession,
+                ChatArtifactResourceProvider.ProviderName,
+                ChatHtmlResourceCatalog.DataKind,
+                null,
+                10).Items.Single();
+            AssertContains(
+                htmlGateway.Read(htmlSession, dataResource.Reference.Uri, ResourceRepresentations.Text, 0, 128).Result.Text,
+                "items",
+                "HTML data is an independently readable text resource");
+
+            HtmlArtifactToolExecutor.UpsertFile(
+                htmlSession,
+                "scripts/nested/app.js",
+                "script",
+                "const CURRENT_NEEDLE = true;",
+                false);
+            var currentScriptResource = htmlGateway.List(
+                htmlSession,
+                ChatArtifactResourceProvider.ProviderName,
+                ChatHtmlResourceCatalog.FileKind,
+                null,
+                10).Items.Single(item => item.Title == "scripts/nested/app.js");
+            AssertTrue(!string.Equals(
+                    oldScriptResource.Reference.Uri,
+                    currentScriptResource.Reference.Uri,
+                    StringComparison.Ordinal),
+                "HTML mutation creates a new revision-pinned member URI");
+            AssertContains(
+                htmlGateway.Read(htmlSession, oldScriptResource.Reference.Uri, ResourceRepresentations.Source, 0, 8000).Result.Text,
+                "OLD_NEEDLE",
+                "historical HTML member URI remains pinned to its original revision");
+            AssertContains(
+                htmlGateway.Read(htmlSession, currentScriptResource.Reference.Uri, ResourceRepresentations.Source, 0, 8000).Result.Text,
+                "CURRENT_NEEDLE",
+                "current HTML member URI reads the new revision");
+
+            var htmlSearch = htmlGateway.Search(
+                htmlSession,
+                ChatArtifactResourceProvider.ProviderName,
+                "CURRENT_NEEDLE",
+                ChatHtmlResourceCatalog.FileKind,
+                10,
+                128);
+            AssertEqual(currentScriptResource.Reference.Uri, htmlSearch.Matches.Single().Reference.Uri,
+                "HTML search returns the exact current member URI");
+
+            var activeHtmlArtifact = htmlSession.Artifacts.Single(item => item.Id == htmlSession.ActiveHtmlArtifactId);
+            var structure = htmlGateway.Read(
+                htmlSession,
+                ChatArtifactResourceProvider.CreateRevisionUri(htmlSession, activeHtmlArtifact),
+                ResourceRepresentations.Structure,
+                0,
+                8000).Result;
+            AssertContains(structure.Text, "scripts/nested/app.js", "HTML structure lists member metadata");
+            AssertTrue(structure.Text.IndexOf("CURRENT_NEEDLE", StringComparison.Ordinal) < 0,
+                "HTML structure does not copy member bodies");
         }
 
         private static void ArtifactPromptUsesBoundedWorkingSet()

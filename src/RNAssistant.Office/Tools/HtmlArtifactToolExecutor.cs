@@ -13,8 +13,6 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class HtmlArtifactToolExecutor
     {
-        public const string ReadWorkspaceToolId = "common.html_workspace_read";
-        public const string SearchWorkspaceToolId = "common.html_workspace_search";
         public const string InspectWorkspaceToolId = "common.html_workspace_inspect";
         public const string UpsertToolId = "common.html_workspace_upsert";
         public const string ApplyPatchToolId = "common.html_workspace_apply_patch";
@@ -48,8 +46,6 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return ControllerToolDefinition.Create(ReadWorkspaceToolId, "Common", "Read-only: List the active chat HTML workspace when called without arguments, or read one exact file/data source. File reads support bounded line ranges.", ReadWorkspaceSchema(), name: "html_workspace_read", scope: "session");
-            yield return ControllerToolDefinition.Create(SearchWorkspaceToolId, "Common", "Read-only: Search literal or regex text across HTML workspace files, optionally limited to one exact path or file kind.", SearchWorkspaceSchema(), name: "html_workspace_search", scope: "session");
             yield return ControllerToolDefinition.Create(InspectWorkspaceToolId, "Common", "Read-only: Run bounded static preflight diagnostics for one HTML entry and the CSS, classic scripts, and data injected into it. Does not execute JavaScript or render WebView.", InspectWorkspaceSchema(), name: "html_workspace_inspect", scope: "session");
             yield return ControllerToolDefinition.Create(UpsertToolId, "Common", "Workspace: Write the complete content of one file or JSON data source. File kind is inferred from its extension; default upsert creates or updates, while strict modes can require one state.", UpsertWorkspaceSchema(), mutatesLocalState: true, name: "html_workspace_upsert", scope: "session");
             yield return ControllerToolDefinition.Create(ApplyPatchToolId, "Common", "Workspace: Apply ordered structured text edits atomically to one existing HTML/CSS/JavaScript file. Runtime reads current source and records one recoverable workspace revision.", ApplyPatchSchema(), mutatesLocalState: true, name: "html_workspace_apply_patch", scope: "session");
@@ -81,16 +77,6 @@ namespace RNAssistant.Office.Tools
                 if (session == null)
                 {
                     return ToolResult.Fail("HTML workspace requires an active chat session.");
-                }
-
-                if (string.Equals(command.ToolId, ReadWorkspaceToolId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Ok("HTML workspace read.", ReadWorkspaceDataJson(session, command));
-                }
-
-                if (string.Equals(command.ToolId, SearchWorkspaceToolId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return SearchWorkspace(session, command, cancellationToken);
                 }
 
                 if (string.Equals(command.ToolId, InspectWorkspaceToolId, StringComparison.OrdinalIgnoreCase))
@@ -468,130 +454,6 @@ namespace RNAssistant.Office.Tools
             restored.Id = branch.Id;
             restored.CreatedUtc = branch.CreatedUtc;
             return restored;
-        }
-
-        private static string ReadWorkspaceDataJson(ChatSession session, ToolCommand command)
-        {
-            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
-            var resourceType = ToolArgumentReader.String(command.Arguments, "resourceType", string.Empty);
-            var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
-            var rangeRequested = command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount");
-            if (string.IsNullOrWhiteSpace(resourceType) && !string.IsNullOrWhiteSpace(name))
-            {
-                throw new InvalidOperationException("resourceType is required when name is supplied.");
-            }
-            if (!string.IsNullOrWhiteSpace(resourceType) && string.IsNullOrWhiteSpace(name))
-            {
-                throw new InvalidOperationException("name is required when resourceType is supplied.");
-            }
-            if (rangeRequested && (!string.Equals(resourceType, "file", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(name)))
-            {
-                throw new InvalidOperationException("File resourceType and name are required when startLine or lineCount is supplied.");
-            }
-            if (string.Equals(resourceType, "file", StringComparison.OrdinalIgnoreCase))
-            {
-                var file = FindFile(workspace, name, false);
-                var content = file.Content ?? string.Empty;
-                var totalLines = SourceLineCount(content);
-                var startLine = rangeRequested ? ToolArgumentReader.Int32(command.Arguments, "startLine", 1) : 1;
-                var requestedLineCount = rangeRequested ? ToolArgumentReader.Int32(command.Arguments, "lineCount", 200) : totalLines;
-                var returnedContent = rangeRequested
-                    ? ReadSourceLines(content, startLine, requestedLineCount)
-                    : content;
-                var returnedLineCount = rangeRequested
-                    ? Math.Min(requestedLineCount, totalLines - startLine + 1)
-                    : totalLines;
-                return JsonConvert.SerializeObject(new
-                {
-                    type = "rnassistant.htmlWorkspaceFile",
-                    version = 1,
-                    revisionArtifactId = session.ActiveHtmlArtifactId,
-                    file = new
-                    {
-                        file.Id,
-                        file.Path,
-                        file.Kind,
-                        Content = returnedContent,
-                        startLine,
-                        endLine = startLine + returnedLineCount - 1,
-                        returnedLineCount,
-                        totalLines,
-                        truncated = rangeRequested && (startLine > 1 || startLine + returnedLineCount - 1 < totalLines),
-                        contentSha256 = TextPatternEngine.Sha256(content),
-                        file.CreatedUtc,
-                        file.UpdatedUtc
-                    }
-                });
-            }
-            if (string.Equals(resourceType, "data", StringComparison.OrdinalIgnoreCase))
-            {
-                var data = FindDataSource(workspace, name);
-                return JsonConvert.SerializeObject(new
-                {
-                    type = "rnassistant.htmlWorkspaceData",
-                    version = 1,
-                    revisionArtifactId = session.ActiveHtmlArtifactId,
-                    data = new { data.Id, data.Name, data.Json, contentSha256 = TextPatternEngine.Sha256(data.Json), binding = BindingDetails(data.Binding), data.CreatedUtc, data.UpdatedUtc }
-                });
-            }
-            if (!string.IsNullOrWhiteSpace(resourceType))
-            {
-                throw new InvalidOperationException("resourceType must be file or data.");
-            }
-
-            return JsonConvert.SerializeObject(new
-            {
-                type = "rnassistant.htmlWorkspaceManifest",
-                version = 1,
-                revisionArtifactId = session.ActiveHtmlArtifactId,
-                activeFileId = workspace.ActiveFileId,
-                updatedUtc = workspace.UpdatedUtc,
-                recovery = RecoveryManifest(session.HtmlWorkspaceRecovery),
-                files = workspace.Files.Where(file => file != null).Select(file => new
-                {
-                    file.Id,
-                    file.Path,
-                    file.Kind,
-                    contentCharacters = (file.Content ?? string.Empty).Length,
-                    lineCount = SourceLineCount(file.Content),
-                    active = string.Equals(file.Id, workspace.ActiveFileId, StringComparison.OrdinalIgnoreCase),
-                    file.UpdatedUtc
-                }),
-                dataSources = workspace.DataSources.Where(data => data != null).Select(data => new
-                {
-                    data.Id,
-                    data.Name,
-                    jsonCharacters = (data.Json ?? string.Empty).Length,
-                    binding = BindingManifest(data.Binding),
-                    data.UpdatedUtc
-                })
-            });
-        }
-
-        private static object RecoveryManifest(HtmlWorkspaceRecoveryState recovery)
-        {
-            recovery = recovery ?? new HtmlWorkspaceRecoveryState();
-            return new
-            {
-                recovery.Status,
-                recovery.Issue,
-                recovery.Message,
-                recovery.ActiveArtifactId,
-                recovery.ProblemArtifactId,
-                recovery.CanMutate,
-                candidates = (recovery.Candidates ?? new List<HtmlWorkspaceRecoveryCandidate>())
-                    .Where(item => item != null)
-                    .Select(item => new
-                    {
-                        item.Id,
-                        item.ParentArtifactId,
-                        item.Label,
-                        item.Revision,
-                        item.FileCount,
-                        item.DataSourceCount,
-                        item.CreatedUtc
-                    })
-            };
         }
 
         private static string WorkspaceMutationJson(ChatSession session, string itemType, string itemId)
