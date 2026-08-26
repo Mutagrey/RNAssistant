@@ -24,9 +24,10 @@ namespace RNAssistant.Harness
             var settings = new AppSettings();
             AssertTrue(settings.SystemPrompt.StartsWith("# RNAssistant Agent", StringComparison.Ordinal), "agent prompt Markdown heading");
             AssertContains(settings.SystemPrompt, "## Response contract", "agent prompt structured section");
-            AssertContains(settings.SystemPrompt, "empty `tool_calls` array ends the run", "agent prompt rejects progress-only finals");
+            AssertContains(settings.SystemPrompt, "`status` is required", "agent prompt requires explicit status");
+            AssertContains(settings.SystemPrompt, "`awaiting_user`", "agent prompt distinguishes clarification status");
             AssertTrue(settings.AgentToolsPrompt.StartsWith("# Agent tool policy", StringComparison.Ordinal), "tool prompt is separate Markdown");
-            AssertContains(settings.AgentToolsPrompt, "matching call", "tool prompt couples progress to execution");
+            AssertContains(settings.AgentToolsPrompt, "status=in_progress", "tool prompt couples explicit status to execution");
             AssertContains(settings.AgentToolsPrompt, "optional exact `resources`", "tool prompt explains externalized results");
             AssertTrue(settings.AgentSkillsPrompt.StartsWith("# Agent skill policy", StringComparison.Ordinal), "skill prompt is separate Markdown");
             AssertContains(settings.AgentSkillsPrompt, "metadata only", "skill catalog is explicitly not loaded guidance");
@@ -60,6 +61,8 @@ namespace RNAssistant.Harness
 
         private static void AgentSupportsSelectableResponseFormats()
         {
+            AssertEqual(2, AgentResponseProtocol.CurrentVersion,
+                "conversation response protocol cutover version");
             var settings = new AppSettings { StreamResponses = false };
             var messages = new List<object> { new { role = "user", content = "test" } };
             var objectBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions
@@ -94,6 +97,20 @@ namespace RNAssistant.Harness
                     "},\"required\":[\"range\"],\"additionalProperties\":false}"
             };
             var schema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { tool }));
+            var rootRequired = schema["required"] as JArray;
+            AssertTrue(rootRequired != null && rootRequired.Values<string>().Contains("status"),
+                "strict response schema requires status");
+            var statuses = schema.SelectToken("properties.status.enum") as JArray;
+            AssertTrue(statuses != null &&
+                statuses.Values<string>().SequenceEqual(new[]
+                {
+                    AgentResponseStatuses.InProgress,
+                    AgentResponseStatuses.Completed,
+                    AgentResponseStatuses.AwaitingUser,
+                    AgentResponseStatuses.Blocked,
+                    AgentResponseStatuses.Refused,
+                    AgentResponseStatuses.Planned
+                }), "strict response schema exposes the closed status enum");
             var call = schema.SelectToken("properties.tool_calls.items.anyOf[0]");
             AssertEqual("excel.read_range", (string)call.SelectToken("properties.name.const"), "exact tool name in schema");
             AssertEqual("string", (string)call.SelectToken("properties.arguments.properties.range.type"), "tool argument schema copied");
@@ -181,6 +198,11 @@ namespace RNAssistant.Harness
                 var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, role);
                 var resultMessage = AgentJsonProtocol.CreateToolResultMessage(command, result, role);
                 AssertTrue(callMessage.ToolCalls.Count == 0, role + " uses JSON envelope history");
+                AssertContains(callMessage.Content, "\"status\":\"in_progress\"", role + " replays response status");
+                AssertEqual(AgentResponseProtocol.CurrentVersion, callMessage.ResponseProtocolVersion,
+                    role + " stores response protocol version");
+                AssertEqual(AgentResponseStatuses.InProgress, callMessage.ResponseStatus,
+                    role + " stores response status");
                 AssertEqual(role, resultMessage.Role, role + " result role");
                 AssertContains(resultMessage.Content, "TOOL_RESULT:", role + " result prefix");
             }
@@ -191,6 +213,10 @@ namespace RNAssistant.Harness
             var assistant = (JObject)api.Messages[0];
             var toolMessage = (JObject)api.Messages[1];
             AssertEqual("assistant", (string)assistant["role"], "native call role");
+            AssertEqual(AgentResponseProtocol.CurrentVersion, nativeCall.ResponseProtocolVersion,
+                "native call stores response protocol version");
+            AssertEqual(AgentResponseStatuses.InProgress, nativeCall.ResponseStatus,
+                "native call stores response status");
             AssertEqual("call_1", (string)assistant.SelectToken("tool_calls[0].id"), "native call id");
             AssertEqual("tool", (string)toolMessage["role"], "native result role");
             AssertEqual("call_1", (string)toolMessage["tool_call_id"], "native result matches call");
@@ -211,7 +237,7 @@ namespace RNAssistant.Harness
                     }
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"Done.\",\"tool_calls\":[]}"
+                        Content = "{\"status\":\"completed\",\"message\":\"Done.\",\"tool_calls\":[]}"
                     });
                 };
                 var settings = new AppSettings
@@ -365,7 +391,7 @@ namespace RNAssistant.Harness
                     "chart UI projection rehydrates the body from CAS");
             });
 
-            var skillCommand = new ToolCommand { ToolId = "common.skills_read", ToolCallId = "call_skill_large" };
+            var skillCommand = new ToolCommand { ToolId = CapabilityDiscoveryExecutor.ReadToolId, ToolCallId = "call_skill_large" };
             var skillData = JsonConvert.SerializeObject(new { kind = "skill", loaded = true, bodyMarkdown = new string('x', 50000) });
             var boundedSkill = JObject.Parse(AgentJsonProtocol.BuildToolResult(skillCommand, ToolResult.Ok("read", skillData), 256));
             AssertEqual(true, (bool)boundedSkill.SelectToken("data.truncated"), "oversized skill data is marked truncated");
@@ -397,8 +423,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.inspect", "schema_large_inspect"),
-                    "{\"message\":\"Читаю.\",\"tool_calls\":[{\"id\":\"call_large\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Диапазон результата нужно сузить.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Читаю.\",\"tool_calls\":[{\"id\":\"call_large\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Диапазон результата нужно сузить.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -435,8 +461,8 @@ namespace RNAssistant.Harness
             var responses = new Queue<string>(new[]
             {
                 "ROLE_OK",
-                "{\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}",
-                "{\"message\":\"RESULT_OK\",\"tool_calls\":[]}"
+                "{\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}",
+                "{\"status\":\"completed\",\"message\":\"RESULT_OK\",\"tool_calls\":[]}"
             });
             var requests = new List<Tuple<List<ChatMessage>, LlmRequestOptions>>();
             LlmCompletionDelegate completion = (providerSettings, messages, options, stream, cancellationToken) =>
@@ -471,8 +497,8 @@ namespace RNAssistant.Harness
             var responses = new Queue<string>(new[]
             {
                 "Any non-empty response",
-                "{\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"WRONG\"}}]}",
-                "{\"message\":\"Any final message\",\"tool_calls\":[]}"
+                "{\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"WRONG\"}}]}",
+                "{\"status\":\"completed\",\"message\":\"Any final message\",\"tool_calls\":[]}"
             });
             LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });

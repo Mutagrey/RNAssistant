@@ -3,8 +3,39 @@ using System.Collections.Generic;
 
 namespace RNAssistant.Core.Models
 {
+    public static class AgentResponseProtocol
+    {
+        public const int CurrentVersion = 2;
+    }
+
+    public static class AgentResponseStatuses
+    {
+        public const string InProgress = "in_progress";
+        public const string Completed = "completed";
+        public const string AwaitingUser = "awaiting_user";
+        public const string Blocked = "blocked";
+        public const string Refused = "refused";
+        public const string Planned = "planned";
+
+        public static bool IsKnown(string value)
+        {
+            return string.Equals(value, InProgress, StringComparison.Ordinal) ||
+                string.Equals(value, Completed, StringComparison.Ordinal) ||
+                string.Equals(value, AwaitingUser, StringComparison.Ordinal) ||
+                string.Equals(value, Blocked, StringComparison.Ordinal) ||
+                string.Equals(value, Refused, StringComparison.Ordinal) ||
+                string.Equals(value, Planned, StringComparison.Ordinal);
+        }
+
+        public static bool IsTerminal(string value)
+        {
+            return IsKnown(value) && !string.Equals(value, InProgress, StringComparison.Ordinal);
+        }
+    }
+
     public sealed class AgentResponse
     {
+        public string Status { get; set; }
         public string Message { get; set; }
         public List<AgentToolCall> ToolCalls { get; set; }
 

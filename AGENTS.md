@@ -31,18 +31,18 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 ### Conversation и resources
 
 - Поддерживаются только `agent` и `chat`; новый chat создаётся в `agent`. Оба режима используют один `ConversationRunService`.
-- Model-facing чтение идёт только через `common.resources_list/resolve/search/read` и revision-pinned `rna://` URI. Durable ссылки — только `ResourceRef`; internal artifact ids не являются вторым transport.
+- Model-facing чтение документов/артефактов идёт только через `common.resources_list/resolve/search/read` и revision-pinned `rna://` URI. Durable ссылки — только `ResourceRef`; internal artifact ids не являются вторым transport.
 - Paste/drop/скрепка используют chat-scoped `stageChatResource`; `sendChat` принимает только `resourceDraftIds`. CAS/resource revision и связь с user turn сохраняются до network dispatch. Не возвращай ручные `artifactIds`, «В запрос», legacy readers, aliases или dual-write.
 - Pre-cutover chat/context streams не мигрируются: только reset/skip.
-- Chat получает только read-only `common.resources_*`, пустой skill catalog и не может confirmation/mutation tools.
-- Agent хранит полный runnable catalog только как local execution authority. Модель начинает с bootstrap resource/tool-discovery tools; точные схемы загружаются через revision-matched `common.tools_read` в bounded LRU working set. Не возвращай full-catalog injection или скрытый router/planner state.
-- Skill body загружается только через полный revision-matched `common.skills_read`; после compaction/truncation/revision change требуется повторное чтение. References читаются bounded chunks.
+- Chat получает только read-only `common.resources_*`, пустой capability catalog и не может confirmation/mutation tools.
+- Agent хранит полный runnable catalog только как local execution authority. Модель сразу получает компактный каталог точных tool/skill ids с явным kind и bootstrap `common.capabilities_search/read`; точные схемы загружаются через revision-matched `common.capabilities_read` в bounded LRU working set. Не возвращай full-schema catalog injection или скрытый router/planner state.
+- Skill body загружается через тот же полный revision-matched `common.capabilities_read` по точному id; после compaction/truncation/revision change требуется повторное чтение. References читаются bounded chunks тем же reader.
 - Ответ модели — один JSON object `message + tool_calls`. Никаких fences/prose/legacy envelopes. Невалидные attempts не входят в replay/history; runtime не делает automatic tool retry или отдельную verification phase.
 - `json_schema` строится только из текущего callable set; разрешён один request-local fallback в `json_object` при явном endpoint rejection и включённом `FallbackToJsonObject`.
 - Tool result role и Markdown instruction role настраиваются независимо. Provider reasoning хранится отдельно от conversation JSON/history.
 - Tool safety определяется `ToolDefinition` (`MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`), не suffix-списками. Confirmation-required и VBA mutations подтверждаются при выключенном auto-confirm.
 - Pipeline вызывает существующие tool ids только через `OfficeToolExecutor`, без прямого доступа к adapters.
-- Discovery `common.tools_list/search/read` не смешивается с authoring `common.tools_definition_read/validate/upsert/delete`. Skills authoring использует `common.skills_upsert/delete`.
+- Unified discovery/read `common.capabilities_search/read` не смешивается с authoring `common.tools_definition_read/validate/upsert/delete`. Skills authoring использует `common.skills_upsert/delete`.
 - HTML и plan читаются через `common.resources_*`; mutations остаются отдельными tools. Не возвращай удалённые read ids.
 
 ### Storage и trajectory

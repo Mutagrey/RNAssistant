@@ -292,10 +292,34 @@ namespace RNAssistant.Harness
                 "HTML search returns the exact current member URI");
 
             var activeHtmlArtifact = htmlSession.Artifacts.Single(item => item.Id == htmlSession.ActiveHtmlArtifactId);
+            var activeHtmlUri = ArtifactUri(htmlSession, activeHtmlArtifact);
+            var activeHtmlDescriptor = htmlGateway.Resolve(htmlSession, activeHtmlUri).Resource;
+            AssertEqual("metadata,structure", string.Join(",", activeHtmlDescriptor.Representations.ToArray()),
+                "HTML root descriptor does not advertise unsupported text reads");
+            var unsupportedHtmlTextRejected = false;
+            try
+            {
+                ReadResource(
+                    htmlGateway,
+                    htmlSession,
+                    activeHtmlUri,
+                    ResourceRepresentations.Text,
+                    null,
+                    8000);
+            }
+            catch (ResourceRequestException ex)
+            {
+                unsupportedHtmlTextRejected = string.Equals(
+                    ex.ErrorCode,
+                    "resource_representation_unavailable",
+                    StringComparison.Ordinal);
+            }
+            AssertTrue(unsupportedHtmlTextRejected,
+                "unsupported HTML root text reads return a stable actionable error");
             var structure = ReadResource(
                 htmlGateway,
                 htmlSession,
-                ArtifactUri(htmlSession, activeHtmlArtifact),
+                activeHtmlUri,
                 ResourceRepresentations.Structure,
                 null,
                 8000).Result;
@@ -744,7 +768,7 @@ namespace RNAssistant.Harness
                         AssertEqual(0, mediaMessages.Count, "historical media is absent before explicit read");
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"id\":\"call_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
+                            Content = "{\"status\":\"in_progress\",\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"id\":\"call_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     if (calls == 2)
@@ -765,7 +789,7 @@ namespace RNAssistant.Harness
                         "consumed media marker is excluded from later model context");
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"Изображение прочитано.\",\"tool_calls\":[]}"
+                        Content = "{\"status\":\"completed\",\"message\":\"Изображение прочитано.\",\"tool_calls\":[]}"
                     });
                 };
                 var tools = executor.GetControllerTools().ToList();
@@ -850,7 +874,7 @@ namespace RNAssistant.Harness
                     {
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю скан.\",\"tool_calls\":[{\"id\":\"call_helper_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
+                            Content = "{\"status\":\"in_progress\",\"message\":\"Читаю скан.\",\"tool_calls\":[{\"id\":\"call_helper_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     var evidenceMessage = messages.First(message => message != null && message.ProtocolMessage &&
@@ -866,7 +890,7 @@ namespace RNAssistant.Harness
                     AssertTrue(!rawRead, "text-only primary does not reload helper-routed raw media");
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"На скане указано 42.\",\"tool_calls\":[]}"
+                        Content = "{\"status\":\"completed\",\"message\":\"На скане указано 42.\",\"tool_calls\":[]}"
                     });
                 };
 

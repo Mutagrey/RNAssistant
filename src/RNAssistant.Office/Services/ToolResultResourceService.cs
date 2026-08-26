@@ -135,8 +135,7 @@ namespace RNAssistant.Office.Services
         {
             var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
             return id.StartsWith("common.resources_", StringComparison.OrdinalIgnoreCase) ||
-                id.StartsWith("common.tools_", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(id, "common.skills_read", StringComparison.OrdinalIgnoreCase);
+                id.StartsWith("common.capabilities_", StringComparison.OrdinalIgnoreCase);
         }
 
         private static int EstimateProtocolDataTokens(string data, AppSettings settings)

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -16,9 +18,10 @@ namespace RNAssistant.Harness
         private static void SimpleAgentParsesFinalJson()
         {
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Готово.\",\"tool_calls\":[]}",
+                "{\"status\":\"completed\",\"message\":\"Готово.\",\"tool_calls\":[]}",
                 new ToolDefinition[0]);
             AssertTrue(parsed.Success, "final response parses");
+            AssertEqual(AgentResponseStatuses.Completed, parsed.Response.Status, "final status");
             AssertEqual("Готово.", parsed.Response.Message, "final message");
             AssertEqual(0, parsed.Response.ToolCalls.Count, "final has no tool");
         }
@@ -28,9 +31,10 @@ namespace RNAssistant.Harness
         {
             var tool = new ToolDefinition { Id = "excel.add_sheet" };
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"values\":[[\"A\"]]}}]}",
+                "{\"status\":\"in_progress\",\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"values\":[[\"A\"]]}}]}",
                 new[] { tool });
             AssertTrue(parsed.Success, "tool response parses");
+            AssertEqual(AgentResponseStatuses.InProgress, parsed.Response.Status, "tool response status");
             AssertEqual(1, parsed.Response.ToolCalls.Count, "one tool parsed");
             AssertEqual("excel.add_sheet", parsed.Response.ToolCalls[0].Name, "tool name");
             AssertEqual("Report", Convert.ToString(parsed.Response.ToolCalls[0].Arguments["name"]), "tool argument");
@@ -42,23 +46,27 @@ namespace RNAssistant.Harness
         {
             var parser = new AgentResponseParser();
             var tool = new ToolDefinition { Id = "excel.inspect" };
-            var missingCalls = parser.Parse("{\"message\":\"Готово.\"}", new[] { tool });
+            var missingStatus = parser.Parse("{\"message\":\"Готово.\",\"tool_calls\":[]}", new[] { tool });
+            AssertTrue(!missingStatus.Success, "status is required");
+            AssertContains(missingStatus.Error, "status", "missing status diagnostic");
+
+            var missingCalls = parser.Parse("{\"status\":\"completed\",\"message\":\"Готово.\"}", new[] { tool });
             AssertTrue(!missingCalls.Success, "tool_calls is required");
             AssertContains(missingCalls.Error, "tool_calls", "missing tool_calls diagnostic");
 
             var duplicate = parser.Parse(
-                "{\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\",\"Kind\":\"selection\"}}]}",
+                "{\"status\":\"in_progress\",\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\",\"Kind\":\"selection\"}}]}",
                 new[] { tool });
             AssertTrue(!duplicate.Success, "case-insensitive duplicate arguments are rejected");
             AssertContains(duplicate.Error, "duplicate", "duplicate argument diagnostic");
 
             var duplicateJson = parser.Parse(
-                "{\"message\":\"First.\",\"message\":\"Second.\",\"tool_calls\":[]}",
+                "{\"status\":\"completed\",\"message\":\"First.\",\"message\":\"Second.\",\"tool_calls\":[]}",
                 new[] { tool });
             AssertTrue(!duplicateJson.Success, "duplicate JSON properties are rejected");
 
             var unsupportedCallField = parser.Parse(
-                "{\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{},\"retry\":true}]}",
+                "{\"status\":\"in_progress\",\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{},\"retry\":true}]}",
                 new[] { tool });
             AssertTrue(!unsupportedCallField.Success, "unsupported tool-call fields are rejected");
             AssertContains(unsupportedCallField.Error, "unsupported field", "unsupported tool-call field diagnostic");
@@ -72,7 +80,7 @@ namespace RNAssistant.Harness
                 new ToolDefinition { Id = "excel.read_range" }
             };
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Inspecting.\",\"tool_calls\":[" +
+                "{\"status\":\"in_progress\",\"message\":\"Inspecting.\",\"tool_calls\":[" +
                 "{\"id\":\"call_sheets\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}," +
                 "{\"id\":\"call_range\",\"name\":\"excel.read_range\",\"arguments\":{}}]}",
                 tools);
@@ -89,7 +97,7 @@ namespace RNAssistant.Harness
                 RequiresConfirmation = true
             };
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Applying patches.\",\"tool_calls\":[" +
+                "{\"status\":\"in_progress\",\"message\":\"Applying patches.\",\"tool_calls\":[" +
                 "{\"id\":\"call_patch_1\",\"name\":\"common.vba_apply_patch\",\"arguments\":{}}," +
                 "{\"id\":\"call_patch_2\",\"name\":\"common.vba_apply_patch\",\"arguments\":{}}]}",
                 new[] { tool });
@@ -102,7 +110,7 @@ namespace RNAssistant.Harness
         private static void SimpleAgentRejectsToolCallWithoutMessage()
         {
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                "{\"status\":\"in_progress\",\"message\":\"\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                 new[] { new ToolDefinition { Id = "excel.inspect" } });
             AssertTrue(!parsed.Success, "tool step without visible message is rejected");
             AssertContains(parsed.Error, "non-empty message", "missing step message diagnostic");
@@ -111,7 +119,7 @@ namespace RNAssistant.Harness
         private static void SimpleAgentRejectsDuplicateToolCallIds()
         {
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Inspecting.\",\"tool_calls\":[" +
+                "{\"status\":\"in_progress\",\"message\":\"Inspecting.\",\"tool_calls\":[" +
                 "{\"id\":\"call_same\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}," +
                 "{\"id\":\"call_same\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                 new[] { new ToolDefinition { Id = "excel.inspect" } });
@@ -119,7 +127,7 @@ namespace RNAssistant.Harness
             AssertContains(parsed.Error, "unique", "duplicate id diagnostic");
 
             var reused = new AgentResponseParser().Parse(
-                "{\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_same\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                "{\"status\":\"in_progress\",\"message\":\"Inspecting.\",\"tool_calls\":[{\"id\":\"call_same\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                 new[] { new ToolDefinition { Id = "excel.inspect" } });
             AssertTrue(reused.Success, "call ids may be reused in a later response");
         }
@@ -127,7 +135,7 @@ namespace RNAssistant.Harness
         private static void SimpleAgentRequiresExactToolNames()
         {
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Working.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"Excel.Inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                "{\"status\":\"in_progress\",\"message\":\"Working.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"Excel.Inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                 new[] { new ToolDefinition { Id = "excel.inspect" } });
             AssertTrue(!parsed.Success, "case aliases are rejected");
             AssertContains(parsed.Error, "Unknown tool", "exact name diagnostic");
@@ -136,7 +144,7 @@ namespace RNAssistant.Harness
         private static void SimpleAgentRejectsMissingToolCallId()
         {
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Working.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{}}]}",
+                "{\"status\":\"in_progress\",\"message\":\"Working.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{}}]}",
                 new[] { new ToolDefinition { Id = "excel.add_sheet" } });
             AssertTrue(!parsed.Success, "tool call id is required");
             AssertContains(parsed.Error, "id, name", "missing id diagnostic");
@@ -172,7 +180,8 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "\"bodyChars\":27", "skill body size present");
             AssertContains(prompt, "\"referenceCount\":0", "skill reference count present");
             AssertTrue(prompt.IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0, "full skill is not in catalog");
-            AssertContains(prompt, "common.skills_read", "skill loading guidance present");
+            AssertContains(prompt, "common.capabilities_read", "unified capability loading guidance present");
+            AssertContains(prompt, "\"kind\":\"skill\"", "skill kind is explicit in compact catalog");
             AssertContains(prompt, "metadata only", "catalog is not mistaken for loaded skill instructions");
             AssertContains(prompt, "`loaded=true`", "skill loading state is explicit");
             AssertContains(prompt, "Return several calls", "multi-tool guidance present");
@@ -198,8 +207,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.html_workspace_upsert", "schema_html"),
-                    "{\"message\":\"Создаю локальный HTML.\",\"tool_calls\":[{\"id\":\"call_html\",\"name\":\"common.html_workspace_upsert\",\"arguments\":{\"resourceType\":\"file\",\"name\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
-                    "{\"message\":\"Локальный HTML готов.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Создаю локальный HTML.\",\"tool_calls\":[{\"id\":\"call_html\",\"name\":\"common.html_workspace_upsert\",\"arguments\":{\"resourceType\":\"file\",\"name\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Локальный HTML готов.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -227,7 +236,8 @@ namespace RNAssistant.Harness
                 var prompt = FlattenSimple(calls[0]);
                 AssertContains(prompt, "\"key\":\"closed-doc\"", "archived document identity in prompt");
                 AssertContains(prompt, "\"office_tools_available\":false", "Office availability in prompt");
-                AssertContains(prompt, "\"id\":\"common.html\"", "local HTML namespace remains discoverable");
+                AssertContains(prompt, "\"id\":\"common.html_workspace_upsert\"",
+                    "exact local HTML capability remains discoverable");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.html_workspace_upsert\"", StringComparison.OrdinalIgnoreCase) < 0,
                     "local HTML schema is not injected before discovery");
                 AssertContains(FlattenSimple(calls[1]), "\"name\":\"common.html_workspace_upsert\"",
@@ -266,8 +276,8 @@ namespace RNAssistant.Harness
                 };
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю подходящий skill.\",\"tool_calls\":[{\"id\":\"call_skill\",\"name\":\"common.skills_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
-                    "{\"message\":\"Инструкции учтены.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Читаю подходящий skill.\",\"tool_calls\":[{\"id\":\"call_skill\",\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Инструкции учтены.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -438,8 +448,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet", "schema_add_sheet"),
-                    "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_add\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    "{\"message\":\"Лист Report создан.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_add\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Лист Report создан.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -458,7 +468,8 @@ namespace RNAssistant.Harness
                 AssertEqual("Лист Report создан.", result.AssistantText, "final response");
                 AssertTrue(adapter.HasSheet("Report"), "tool executed");
                 AssertEqual(3, calls.Count, "schema read, execution, and final model turns");
-                AssertTrue(FlattenSimple(calls[0]).IndexOf("\"name\":\"excel.add_sheet\"", StringComparison.Ordinal) < 0,
+                AssertTrue(FlattenSimple(calls[0]).IndexOf(
+                    "\"function\":{\"name\":\"excel.add_sheet\"", StringComparison.Ordinal) < 0,
                     "domain schema is absent before discovery");
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "schema evidence reaches model");
                 var finalRequest = FlattenSimple(calls[2]);
@@ -476,8 +487,8 @@ namespace RNAssistant.Harness
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю листы.\",\"tool_calls\":[{\"id\":\"call_sheets\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Готово.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Читаю листы.\",\"tool_calls\":[{\"id\":\"call_sheets\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Готово.\",\"tool_calls\":[]}"
                 });
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
@@ -537,7 +548,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<LlmCompletionResult>(new[]
                 {
                     new LlmCompletionResult { Content = invalid, ReasoningContent = "INVALID_REASONING_SENTINEL" },
-                    new LlmCompletionResult { Content = "{\"message\":\"Не могу выполнить этот запрос.\",\"tool_calls\":[]}" }
+                    new LlmCompletionResult { Content = "{\"status\":\"refused\",\"message\":\"Не могу выполнить этот запрос.\",\"tool_calls\":[]}" }
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -553,6 +564,7 @@ namespace RNAssistant.Harness
 
                 AssertEqual(2, requests.Count, "one repair request");
                 AssertEqual("Не могу выполнить этот запрос.", result.AssistantText, "formatted refusal accepted");
+                AssertEqual(AgentResponseStatuses.Refused, result.ResponseStatus, "formatted refusal status");
                 var repair = requests[1].Last();
                 AssertContains(repair.Content, "FORMAT_REPAIR", "repair instruction added");
                 AssertContains(repair.Content, "refuse", "refusal can remain a final answer");
@@ -566,48 +578,63 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SimpleAgentRepairsProgressOnlyFinal()
+        private static void SimpleAgentUsesExplicitResponseStatus()
         {
             var inspect = new ToolDefinition { Id = "excel.inspect" };
-            var invalid = new AgentResponseParser().Parse(
-                "{\"message\":\"Проверяю листы...\",\"tool_calls\":[]}",
+            var progressWithoutCall = new AgentResponseParser().Parse(
+                "{\"status\":\"in_progress\",\"message\":\"Проверяю листы...\",\"tool_calls\":[]}",
                 new[] { inspect });
-            AssertTrue(!invalid.Success, "unfinished progress is not accepted as final");
-            AssertContains(invalid.Error, "terminal", "progress diagnostic explains empty tool_calls");
-            var completed = new AgentResponseParser().Parse(
-                "{\"message\":\"Проверка не требуется: список уже дан пользователем.\",\"tool_calls\":[]}",
+            AssertTrue(!progressWithoutCall.Success, "in_progress requires a call");
+            AssertContains(progressWithoutCall.Error, "at least one", "missing call diagnostic");
+
+            var terminalWithCall = new AgentResponseParser().Parse(
+                "{\"status\":\"completed\",\"message\":\"Проверяю листы.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{}}]}",
                 new[] { inspect });
-            AssertTrue(completed.Success, "concrete final explanation remains valid");
-            var explanation = new AgentResponseParser().Parse(
-                "{\"message\":\"I'll explain: patch requires existing source, while write creates it.\",\"tool_calls\":[]}",
+            AssertTrue(!terminalWithCall.Success, "terminal status rejects calls");
+            AssertContains(terminalWithCall.Error, "empty", "terminal status mismatch diagnostic");
+
+            var unknown = new AgentResponseParser().Parse(
+                "{\"status\":\"done\",\"message\":\"Готово.\",\"tool_calls\":[]}",
                 new[] { inspect });
-            AssertTrue(explanation.Success, "explanatory final is not mistaken for progress");
-            var assessment = new AgentResponseParser().Parse(
-                "{\"message\":\"Проверяю расчёт — формула корректна.\",\"tool_calls\":[]}",
+            AssertTrue(!unknown.Success, "unknown status is rejected");
+
+            var proseIsNotAuthority = new AgentResponseParser().Parse(
+                "{\"status\":\"completed\",\"message\":\"Проверяю листы...\",\"tool_calls\":[]}",
                 new[] { inspect });
-            AssertTrue(assessment.Success, "completed assessment is not mistaken for progress");
-            var englishAssessment = new AgentResponseParser().Parse(
-                "{\"message\":\"Checking the result shows it is correct.\",\"tool_calls\":[]}",
-                new[] { inspect });
-            AssertTrue(englishAssessment.Success, "English assessment is not mistaken for progress");
-            var futurePromise = new AgentResponseParser().Parse(
-                "{\"message\":\"Проверю листы.\",\"tool_calls\":[]}",
-                new[] { inspect });
-            AssertTrue(!futurePromise.Success, "explicit future promise still requires a tool call");
+            AssertTrue(proseIsNotAuthority.Success, "message wording does not override explicit status");
             var delayedReport = new AgentResponseParser().Parse(
-                "{\"message\":\"Анализ проекта завершен. Подготавливаю отчет о найденных проблемах и исправлениях.\",\"tool_calls\":[]}",
+                "{\"status\":\"completed\",\"message\":\"Анализ проекта завершен. Подготавливаю отчет о найденных проблемах и исправлениях.\",\"tool_calls\":[]}",
                 new[] { inspect });
-            AssertTrue(!delayedReport.Success, "completed prefix cannot hide a promised final report");
+            AssertTrue(delayedReport.Success, "mixed-language progress wording is not scanned");
+            var awaiting = new AgentResponseParser().Parse(
+                "{\"status\":\"awaiting_user\",\"message\":\"Укажите нужный лист\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(awaiting.Success, "awaiting_user needs no punctuation heuristic");
+            var blocked = new AgentResponseParser().Parse(
+                "{\"status\":\"blocked\",\"message\":\"Документ недоступен.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(blocked.Success, "blocked terminal status parses");
+            var refused = new AgentResponseParser().Parse(
+                "{\"status\":\"refused\",\"message\":\"Не могу помочь с этим запросом.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(refused.Success, "refused terminal status parses");
+            var planned = new AgentResponseParser().Parse(
+                "{\"status\":\"planned\",\"message\":\"План готов.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(!planned.Success, "planned is unavailable without runtime planning mode");
+            AssertTrue(new AgentResponseParser().Parse(
+                "{\"status\":\"planned\",\"message\":\"План готов.\",\"tool_calls\":[]}",
+                new[] { inspect }, true).Success, "runtime-selected planning mode may accept planned");
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                const string progressOnly = "{\"message\":\"Проверяю листы...\",\"tool_calls\":[]}";
+                const string invalidPair = "{\"status\":\"in_progress\",\"message\":\"Проверяю листы...\",\"tool_calls\":[]}";
                 var responses = new Queue<string>(new[]
                 {
-                    progressOnly,
+                    invalidPair,
                     LoadToolSchemaResponse("excel.inspect", "schema_inspect_after_repair"),
-                    "{\"message\":\"Проверяю листы.\",\"tool_calls\":[{\"id\":\"call_inspect\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Список листов проверен.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Проверяю листы.\",\"tool_calls\":[{\"id\":\"call_inspect\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Список листов проверен.\",\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -621,11 +648,80 @@ namespace RNAssistant.Harness
                     "Проверь листы.", session, NewContext(adapter), new AppSettings(),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
-                AssertEqual(4, requests.Count, "semantic repair, schema discovery, and tool continuation");
-                AssertContains(requests[1].Last().Content, "unfinished progress", "repair identifies semantic failure");
+                AssertEqual(4, requests.Count, "structural repair, schema discovery, and tool continuation");
+                AssertContains(requests[1].Last().Content, "at least one tool call", "repair identifies status mismatch");
                 AssertEqual("Список листов проверен.", result.AssistantText, "run completes after the actual tool call");
-                AssertTrue(!session.Messages.Any(message => string.Equals(message.Content, progressOnly, StringComparison.Ordinal)),
-                    "rejected progress-only response is not persisted");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "terminal result status is explicit");
+                AssertEqual(AgentResponseProtocol.CurrentVersion, session.Messages.Last().ResponseProtocolVersion,
+                    "terminal response protocol version is persisted");
+                AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus,
+                    "terminal response status is persisted");
+                AssertTrue(!session.Messages.Any(message => string.Equals(message.Content, invalidPair, StringComparison.Ordinal)),
+                    "rejected status mismatch is not persisted");
+
+                var terminalCases = new[]
+                {
+                    new { Status = AgentResponseStatuses.AwaitingUser, Message = "Укажите лист" },
+                    new { Status = AgentResponseStatuses.Blocked, Message = "Документ недоступен." },
+                    new { Status = AgentResponseStatuses.Refused, Message = "Не могу выполнить запрос." }
+                };
+                foreach (var terminalCase in terminalCases)
+                {
+                    var terminalSession = NewSession(adapter);
+                    var terminalService = new ConversationRunService(
+                        adapter,
+                        executor,
+                        (settings, messages, options, stream, cancellationToken) => Task.FromResult(
+                            new LlmCompletionResult
+                            {
+                                Content = JsonConvert.SerializeObject(new
+                                {
+                                    status = terminalCase.Status,
+                                    message = terminalCase.Message,
+                                    tool_calls = new object[0]
+                                })
+                            }));
+                    var terminalResult = terminalService.ExecuteAsync(
+                        ChatModes.Agent,
+                        "Продолжай.",
+                        terminalSession,
+                        NewContext(adapter),
+                        new AppSettings(),
+                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                        null).GetAwaiter().GetResult();
+                    AssertEqual(terminalCase.Status, terminalResult.ResponseStatus,
+                        terminalCase.Status + " reaches the turn result");
+                    AssertEqual(terminalCase.Status, terminalResult.RunStatus,
+                        terminalCase.Status + " reaches the run projection");
+                    AssertEqual(AgentResponseProtocol.CurrentVersion, terminalResult.ResponseProtocolVersion,
+                        terminalCase.Status + " carries response protocol version");
+                    AssertEqual(terminalCase.Status, terminalSession.Messages.Last().ResponseStatus,
+                        terminalCase.Status + " is stored with the assistant message");
+                }
+
+                var limitedSession = NewSession(adapter);
+                var limitedService = new ConversationRunService(
+                    adapter,
+                    executor,
+                    (settings, messages, options, stream, cancellationToken) => Task.FromResult(
+                        new LlmCompletionResult
+                        {
+                            Content = "{\"status\":\"in_progress\",\"message\":\"Проверяю ресурсы.\",\"tool_calls\":[{\"id\":\"limit_call\",\"name\":\"common.resources_list\",\"arguments\":{}}]}"
+                        }));
+                var limitedResult = limitedService.ExecuteAsync(
+                    ChatModes.Agent,
+                    "Проверяй до лимита.",
+                    limitedSession,
+                    NewContext(adapter),
+                    new AppSettings { MaxAgentIterations = 1 },
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    null).GetAwaiter().GetResult();
+                AssertEqual("failed", limitedResult.RunStatus,
+                    "runtime step limit is not projected as model-declared completion");
+                AssertTrue(string.IsNullOrWhiteSpace(limitedResult.ResponseStatus),
+                    "runtime step limit has no synthetic model response status");
+                AssertEqual("step_limit_reached", limitedSession.Messages.Last().Activity.ExecutionStatus,
+                    "runtime step limit is stored as a diagnostic outcome");
             });
         }
 
@@ -689,28 +785,38 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 IReadOnlyList<ChatMessage> request = null;
+                LlmRequestOptions requestOptions = null;
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     request = messages.ToList();
-                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Готово.\",\"tool_calls\":[]}" });
+                    requestOptions = options;
+                    return Task.FromResult(new LlmCompletionResult { Content = "{\"status\":\"completed\",\"message\":\"Готово.\",\"tool_calls\":[]}" });
                 };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 new ConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Inspect VBA.", NewSession(adapter), NewContext(adapter), new AppSettings(), tools, null)
+                    "Inspect VBA.", NewSession(adapter), NewContext(adapter),
+                    new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema }, tools, null, null,
+                    BuiltInSkillProvider.GetSkills(adapter))
                     .GetAwaiter().GetResult();
 
                 var prompt = FlattenSimple(request);
                 AssertContains(prompt, "\"name\":\"common.resources_list\"", "resource discovery exposed");
                 AssertContains(prompt, "\"name\":\"common.resources_read\"", "resource reads exposed");
                 AssertContains(prompt, "\"name\":\"common.resources_search\"", "resource search exposed");
-                AssertContains(prompt, "\"name\":\"common.tools_list\"", "tool namespace discovery exposed");
-                AssertContains(prompt, "\"name\":\"common.tools_search\"", "tool metadata search exposed");
-                AssertContains(prompt, "\"name\":\"common.tools_read\"", "exact schema loading exposed");
-                AssertContains(prompt, "\"id\":\"common.vba\"", "VBA mutation namespace is discoverable");
-                AssertTrue(prompt.IndexOf("\"name\":\"common.vba_apply_patch\"", StringComparison.Ordinal) < 0 &&
-                    prompt.IndexOf("\"name\":\"common.vba_write_module\"", StringComparison.Ordinal) < 0 &&
-                    prompt.IndexOf("\"name\":\"common.vba_delete_module\"", StringComparison.Ordinal) < 0,
+                AssertContains(prompt, "\"name\":\"common.capabilities_search\"", "unified capability search exposed");
+                AssertContains(prompt, "\"name\":\"common.capabilities_read\"", "unified exact capability loading exposed");
+                AssertContains(prompt, "\"id\":\"common.vba_apply_patch\"", "exact VBA mutation id is in compact catalog");
+                AssertContains(prompt, "\"id\":\"common.vba_code_editing\"", "exact VBA skill id is in compact catalog");
+                AssertTrue(prompt.IndexOf("\"id\":\"common.vba_inspect\"", StringComparison.Ordinal) < 0,
+                    "invented VBA capability id is absent from the authoritative catalog");
+                var callableNames = JObject.Parse(requestOptions.ResponseSchemaJson)
+                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
+                    .Select(token => (string)token)
+                    .ToList();
+                AssertTrue(!callableNames.Contains("common.vba_apply_patch", StringComparer.OrdinalIgnoreCase) &&
+                    !callableNames.Contains("common.vba_write_module", StringComparer.OrdinalIgnoreCase) &&
+                    !callableNames.Contains("common.vba_delete_module", StringComparer.OrdinalIgnoreCase),
                     "VBA mutation schemas are not eagerly injected");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_create_module\"", StringComparison.Ordinal) < 0,
                     "redundant create alias is hidden from the model");
@@ -739,8 +845,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Запускаю макрос напрямую.\",\"tool_calls\":[{\"id\":\"call_macro\",\"name\":\"excel.run_macro\",\"arguments\":{\"macroName\":\"MigrateApiKey\"}}]}",
-                    "{\"message\":\"Скрытый backend недоступен; нужен безопасный публичный инструмент.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Запускаю макрос напрямую.\",\"tool_calls\":[{\"id\":\"call_macro\",\"name\":\"excel.run_macro\",\"arguments\":{\"macroName\":\"MigrateApiKey\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Скрытый backend недоступен; нужен безопасный публичный инструмент.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -768,10 +874,10 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet", "schema_add_sheet_batch"),
-                    "{\"message\":\"Создаю два независимых листа.\",\"tool_calls\":[" +
+                    "{\"status\":\"in_progress\",\"message\":\"Создаю два независимых листа.\",\"tool_calls\":[" +
                     "{\"id\":\"call_first\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}," +
                     "{\"id\":\"call_second\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
-                    "{\"message\":\"Оба листа созданы.\",\"tool_calls\":[]}"
+                    "{\"status\":\"completed\",\"message\":\"Оба листа созданы.\",\"tool_calls\":[]}"
                 });
                 IReadOnlyList<ChatMessage> secondTurn = null;
                 var progressActivities = new List<ChatActivity>();
@@ -826,9 +932,9 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.skills_upsert", "schema_skills_upsert"),
-                    "{\"message\":\"Создаю skill.\",\"tool_calls\":[" +
+                    "{\"status\":\"in_progress\",\"message\":\"Создаю skill.\",\"tool_calls\":[" +
                     "{\"id\":\"call_skill\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Skill сохранён.\",\"tool_calls\":[]}"
+                    "{\"status\":\"completed\",\"message\":\"Skill сохранён.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -917,8 +1023,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.skills_upsert", "schema_skills_upsert_failure"),
-                    "{\"message\":\"Создаю skill.\",\"tool_calls\":[{\"id\":\"call_skill_failure\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.failure_test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Skill уже существует; выберу другой id.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Создаю skill.\",\"tool_calls\":[{\"id\":\"call_skill_failure\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.failure_test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Skill уже существует; выберу другой id.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -983,6 +1089,10 @@ namespace RNAssistant.Harness
                     "Restricted request.", agentSession, NewContext(adapter), new AppSettings(),
                     new ToolDefinition[0], (Action<string, string, ChatActivity>)null).GetAwaiter().GetResult();
                 AssertEqual("Запрос отклонён провайдером.", agent.AssistantText, "agent refusal text");
+                AssertEqual(AgentResponseStatuses.Refused, agent.ResponseStatus,
+                    "provider refusal maps from explicit transport metadata");
+                AssertEqual(AgentResponseProtocol.CurrentVersion, agentSession.Messages.Last().ResponseProtocolVersion,
+                    "provider refusal stores the current response protocol version");
                 AssertEqual(1, calls, "agent refusal does not enter format repair");
 
                 var chatSession = NewSession(adapter);
@@ -993,6 +1103,8 @@ namespace RNAssistant.Harness
                     executor.GetControllerTools().ToList(), (Action<string, string, ChatActivity>)null)
                     .GetAwaiter().GetResult();
                 AssertEqual("Запрос отклонён провайдером.", chat.AssistantText, "chat refusal text");
+                AssertEqual(AgentResponseStatuses.Refused, chat.ResponseStatus,
+                    "Chat provider refusal uses the same explicit terminal status");
                 AssertEqual(2, calls, "chat refusal does not enter format repair");
 
                 var emptyCalls = 0;
@@ -1020,8 +1132,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Проверяю доступные ресурсы.\",\"tool_calls\":[{\"id\":\"chat_resources\",\"name\":\"common.resources_list\",\"arguments\":{}}]}",
-                    "{\"message\":\"Ресурсы доступны.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Проверяю доступные ресурсы.\",\"tool_calls\":[{\"id\":\"chat_resources\",\"name\":\"common.resources_list\",\"arguments\":{}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Ресурсы доступны.\",\"tool_calls\":[]}"
                 });
                 var captured = new List<IReadOnlyList<ChatMessage>>();
                 var capturedOptions = new List<LlmRequestOptions>();
@@ -1070,9 +1182,10 @@ namespace RNAssistant.Harness
                 AssertContains(firstPrompt, "common.resources_read", "chat receives resource reads");
                 AssertTrue(firstPrompt.IndexOf("excel.inspect", StringComparison.OrdinalIgnoreCase) < 0,
                     "chat excludes Office tools");
-                AssertTrue(firstPrompt.IndexOf("common.skills_read", StringComparison.OrdinalIgnoreCase) < 0,
-                    "chat excludes skill tools");
-                AssertContains(firstPrompt, "\"skills\":[]", "chat has no skill catalog");
+                AssertTrue(firstPrompt.IndexOf("common.capabilities_read", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    firstPrompt.IndexOf("common.capabilities_search", StringComparison.OrdinalIgnoreCase) < 0,
+                    "chat excludes capability discovery");
+                AssertContains(firstPrompt, "\"capabilities\":{\"items\":[]", "chat has no capability catalog");
                 AssertContains(FlattenSimple(captured[1]), "TOOL_RESULT:", "resource result is replayed");
                 AssertEqual(ChatModes.Chat, capturedOptions[0].TracePurpose, "chat trace purpose");
                 AssertEqual(LlmResponseFormats.JsonObject, capturedOptions[0].ResponseFormat,
@@ -1099,10 +1212,10 @@ namespace RNAssistant.Harness
                 var uri = ArtifactUri(session, artifact);
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю заметку.\",\"tool_calls\":[{\"id\":\"read_first\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
-                    "{\"message\":\"Первый ответ.\",\"tool_calls\":[]}",
-                    "{\"message\":\"Перечитываю заметку.\",\"tool_calls\":[{\"id\":\"read_second\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
-                    "{\"message\":\"Второй ответ.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Читаю заметку.\",\"tool_calls\":[{\"id\":\"read_first\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Первый ответ.\",\"tool_calls\":[]}",
+                    "{\"status\":\"in_progress\",\"message\":\"Перечитываю заметку.\",\"tool_calls\":[{\"id\":\"read_second\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Второй ответ.\",\"tool_calls\":[]}"
                 });
                 var captured = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>

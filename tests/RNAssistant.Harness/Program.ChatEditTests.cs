@@ -85,6 +85,8 @@ namespace RNAssistant.Harness
                     ReasoningContent = "stale",
                     ReasoningTokens = 3,
                     ReasoningTruncated = true,
+                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                    ResponseStatus = AgentResponseStatuses.Completed,
                     RunId = "old-run",
                     Sequence = 4,
                     HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, workspaceBeforeTarget)
@@ -146,6 +148,8 @@ namespace RNAssistant.Harness
                 AssertTrue(target.PromptTokens == null && target.CompletionTokens == null && target.TotalTokens == null, "edited usage cleared");
                 AssertTrue(target.UsageJson == null && target.ReasoningContent == null && target.ReasoningTokens == null, "edited reasoning cleared");
                 AssertTrue(!target.ReasoningTruncated && target.RunId == null && target.Sequence == null, "edited run metadata cleared");
+                AssertTrue(target.ResponseProtocolVersion == 0 && string.IsNullOrWhiteSpace(target.ResponseStatus),
+                    "edited user message clears stale response metadata");
                 AssertEqual(1, session.HtmlWorkspace.Files.Count, "html files restored to exact pre-turn revision");
                 AssertEqual("<h1>Before edited turn</h1>", session.HtmlWorkspace.Files[0].Content, "pre-turn html content restored");
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data restored to exact pre-turn revision");
@@ -209,7 +213,7 @@ namespace RNAssistant.Harness
                         captured = new List<ChatMessage>(messages ?? new ChatMessage[0]);
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Обновленный ответ.\",\"tool_calls\":[]}",
+                            Content = "{\"status\":\"completed\",\"message\":\"Обновленный ответ.\",\"tool_calls\":[]}",
                             PromptTokens = 10,
                             CompletionTokens = 2,
                             TotalTokens = 12

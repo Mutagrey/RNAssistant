@@ -58,7 +58,8 @@ namespace RNAssistant.Office
         public static ChatMessage CreateAssistantMessage(
             string content,
             LlmCompletionResult completion,
-            ChatActivity activity = null)
+            ChatActivity activity = null,
+            string responseStatus = null)
         {
             var reasoning = completion == null ? null : completion.ReasoningContent;
             var transcriptReasoningTruncated = !string.IsNullOrEmpty(reasoning) && reasoning.Length > MaxTranscriptReasoningChars;
@@ -67,6 +68,10 @@ namespace RNAssistant.Office
                 Role = "assistant",
                 Content = content ?? string.Empty,
                 ExcludeFromModelContext = activity != null,
+                ResponseProtocolVersion = AgentResponseStatuses.IsKnown(responseStatus)
+                    ? AgentResponseProtocol.CurrentVersion
+                    : 0,
+                ResponseStatus = AgentResponseStatuses.IsKnown(responseStatus) ? responseStatus : null,
                 Activity = activity,
                 PromptTokens = completion == null ? null : completion.PromptTokens,
                 CompletionTokens = completion == null ? null : completion.CompletionTokens,

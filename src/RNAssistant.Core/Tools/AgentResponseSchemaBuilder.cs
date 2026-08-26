@@ -7,7 +7,7 @@ namespace RNAssistant.Core.Tools
 {
     public static class AgentResponseSchemaBuilder
     {
-        public const string SchemaName = "rnassistant_agent_response";
+        public const string SchemaName = "rnassistant_conversation_response_v2";
         public const int MaximumToolCalls = 32;
 
         public static string Build(IEnumerable<ToolDefinition> tools)
@@ -49,23 +49,36 @@ namespace RNAssistant.Core.Tools
             var root = new JObject
             {
                 ["type"] = "object",
+                ["description"] = "Conversation response v2. status=in_progress requires one or more tool calls; every other status requires an empty tool_calls array. Cross-field consistency is also enforced locally.",
                 ["properties"] = new JObject
                 {
+                    ["status"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JArray(
+                            AgentResponseStatuses.InProgress,
+                            AgentResponseStatuses.Completed,
+                            AgentResponseStatuses.AwaitingUser,
+                            AgentResponseStatuses.Blocked,
+                            AgentResponseStatuses.Refused,
+                            AgentResponseStatuses.Planned),
+                        ["description"] = "Explicit run state. Use in_progress only with executable calls; use completed, awaiting_user, blocked, or refused only with no calls. planned is reserved for a runtime-selected planning mode."
+                    },
                     ["message"] = new JObject
                     {
                         ["type"] = "string",
                         ["minLength"] = 1,
-                        ["description"] = "Visible progress paired with actual calls in this response, or a completed final answer when tool_calls is empty."
+                        ["description"] = "User-facing progress, answer, clarification, blocker, or refusal. Its wording never determines status."
                     },
                     ["tool_calls"] = new JObject
                     {
                         ["type"] = "array",
                         ["items"] = callItems,
-                        ["description"] = "Exact actions to execute now. An empty array is terminal and cannot accompany promised or unfinished progress.",
+                        ["description"] = "Exact actions to execute now. Must be non-empty for in_progress and empty for every terminal status.",
                         ["maxItems"] = callOptions.Count > 0 ? MaximumToolCalls : 0
                     }
                 },
-                ["required"] = new JArray("message", "tool_calls"),
+                ["required"] = new JArray("status", "message", "tool_calls"),
                 ["additionalProperties"] = false
             };
             return root.ToString(Formatting.None);

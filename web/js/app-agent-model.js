@@ -17,6 +17,22 @@ function activityStatusFromPhase(phase) {
   return "running";
 }
 
+function conversationResponseStatus(value) {
+  value = String(value || "").toLowerCase();
+  return value === "completed" || value === "awaiting_user" || value === "blocked" ||
+    value === "refused" || value === "planned" ? value : "";
+}
+
+function conversationOutcomeLabel(status) {
+  status = conversationResponseStatus(status);
+  if (status === "awaiting_user") return "Ожидает ответа";
+  if (status === "blocked") return "Заблокировано";
+  if (status === "refused") return "Отказ";
+  if (status === "planned") return "План готов";
+  if (status === "completed") return "Готово";
+  return "";
+}
+
 function normalizeProgressActivity(progress) {
   progress = progress || {};
   var activity = progress.activity || progress.Activity;
@@ -257,7 +273,7 @@ function agentRunElapsedText(items) {
   return formatElapsedTime(Math.max.apply(Math, dates) - Math.min.apply(Math, dates));
 }
 
-function agentRunStats(items, finished) {
+function agentRunStats(items, finished, terminalStatus) {
   var counts = { total: 0 };
   var activities = collectRunActivities(items || []);
   activities.forEach(function (activity) {
@@ -266,12 +282,13 @@ function agentRunStats(items, finished) {
   var current = currentRunActivity(activities, !!finished);
   var elapsed = agentRunElapsedText(items || []);
 
+  var declaredStatus = conversationResponseStatus(terminalStatus);
   return {
     current: current,
     counts: counts,
     elapsed: elapsed,
     status: finished
-      ? "completed"
+      ? (declaredStatus || "unknown")
       : (current ? activityStatus(current) : "completed")
   };
 }

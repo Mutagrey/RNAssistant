@@ -757,6 +757,28 @@
   text-overflow: ellipsis;
 }
 
+.message-outcome {
+  font-weight: 600;
+}
+
+.message-outcome.status-awaiting_user {
+  color: #b54708;
+}
+
+.message-outcome.status-blocked,
+.message-outcome.status-refused {
+  color: #b42318;
+}
+
+.message-outcome.status-planned {
+  color: #027a48;
+}
+
+.message-outcome.status-unknown {
+  color: var(--muted);
+  font-weight: 500;
+}
+
 .message-actions {
   display: inline-flex;
   align-items: center;

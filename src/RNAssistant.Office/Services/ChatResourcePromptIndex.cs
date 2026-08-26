@@ -87,7 +87,14 @@ namespace RNAssistant.Office.Services
         private static string RepresentationHints(ChatArtifact artifact)
         {
             var values = new List<string> { "metadata" };
-            if (HasTextRepresentation(artifact)) values.Add("text");
+            if (artifact != null && string.Equals(
+                artifact.Kind,
+                ChatArtifactKinds.HtmlWorkspace,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                values.Add(ResourceRepresentations.Structure);
+            }
+            else if (HasTextRepresentation(artifact)) values.Add(ResourceRepresentations.Text);
             if (artifact != null &&
                 (string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
@@ -106,7 +113,6 @@ namespace RNAssistant.Office.Services
                  artifact.MimeType.IndexOf("csv", StringComparison.OrdinalIgnoreCase) >= 0)) return true;
             return string.Equals(artifact.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(artifact.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase);

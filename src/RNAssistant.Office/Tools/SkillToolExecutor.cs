@@ -22,7 +22,6 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return ControllerToolDefinition.Create("common.skills_read", "Common", "Read-only: Load one complete Markdown skill or a bounded chunk of one listed references/*.md file. Only a non-truncated skill result with data.loaded=true loads the skill; reference chunks never replace that evidence. Omit id only to list metadata.", SkillReadSchema());
             yield return ControllerToolDefinition.Create("common.skills_upsert", "Common", "Mutates settings: Create/update either one custom skill core or one direct references/*.md file per call. Never mix core fields with referencePath/referenceMarkdown. Omitted core fields are preserved; use strict mode only when existence itself matters.", SkillUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.skills_delete", "Common", "Mutates settings: Delete a custom skill, or delete one direct Markdown reference when referencePath is supplied.", SkillDeleteSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
@@ -34,17 +33,6 @@ namespace RNAssistant.Office.Tools
             bool manualRun,
             IReadOnlyList<SkillDefinition> runtimeSkills)
         {
-            if (string.Equals(command.ToolId, "common.skills_read", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "id", string.Empty)))
-                {
-                    return HasArgument(command, "referencePath") || HasArgument(command, "offset") || HasArgument(command, "maxChars")
-                        ? ToolResult.Fail("Skill id is required when reading a reference.", null, "skill_id_required", false)
-                        : ListSkills(manualRun, runtimeSkills);
-                }
-                return ReadSkill(command, manualRun, runtimeSkills);
-            }
-
             if (string.Equals(command.ToolId, "common.skills_upsert", StringComparison.OrdinalIgnoreCase))
             {
                 return UpsertSkill(command, settings, dryRun, manualRun);
@@ -58,23 +46,24 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Fail("Unknown skill controller tool: " + command.ToolId);
         }
 
-        private ToolResult ListSkills(bool manualRun, IReadOnlyList<SkillDefinition> runtimeSkills)
+        internal ToolResult ReadCapability(
+            ToolCommand command,
+            bool manualRun,
+            IReadOnlyList<SkillDefinition> runtimeSkills)
         {
-            var source = RuntimeSkillSource(manualRun, runtimeSkills);
-            var skills = source.Select(s => new
+            var id = ToolArgumentReader.String(command == null ? null : command.Arguments, "id", string.Empty);
+            if (string.IsNullOrWhiteSpace(id))
             {
-                id = s.Id,
-                host = s.Host,
-                name = s.Name,
-                description = s.Description,
-                version = s.Version,
-                revision = SkillRevision.Compute(s),
-                bodyChars = (s.BodyMarkdown ?? string.Empty).Length,
-                referenceCount = (s.References ?? new List<SkillReferenceMetadata>()).Count,
-                builtIn = s.BuiltIn,
-                enabled = s.Enabled
-            }).ToArray();
-            return ToolResult.Ok("Skills listed.", JsonConvert.SerializeObject(skills));
+                return ToolResult.Fail("Capability id is required.", null, "capability_id_required", false);
+            }
+            return ReadSkill(command, manualRun, runtimeSkills);
+        }
+
+        internal IReadOnlyList<SkillDefinition> CapabilityCatalog(
+            bool manualRun,
+            IReadOnlyList<SkillDefinition> runtimeSkills)
+        {
+            return RuntimeSkillSource(manualRun, runtimeSkills);
         }
 
         private ToolResult ReadSkill(ToolCommand command, bool manualRun, IReadOnlyList<SkillDefinition> runtimeSkills)
@@ -517,63 +506,6 @@ namespace RNAssistant.Office.Tools
                 },
                 ["required"] = new JArray("id"),
                 ["additionalProperties"] = false
-            }.ToString(Formatting.None);
-        }
-
-        private static string SkillReadSchema()
-        {
-            var properties = new JObject
-            {
-                ["id"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["description"] = "Exact skill id from RUNTIME_CONTEXT.skills; omit all arguments only to list metadata.",
-                    ["maxLength"] = 128
-                },
-                ["referencePath"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["description"] = "Exact references/*.md path listed by a previously loaded skill.",
-                    ["maxLength"] = 260
-                },
-                ["offset"] = new JObject
-                {
-                    ["type"] = "integer",
-                    ["description"] = "Zero-based character offset for a reference chunk; valid only with referencePath.",
-                    ["minimum"] = 0
-                },
-                ["maxChars"] = new JObject
-                {
-                    ["type"] = "integer",
-                    ["description"] = "Maximum reference characters returned; valid only with referencePath.",
-                    ["minimum"] = 1,
-                    ["maximum"] = 50000
-                }
-            };
-            Func<IEnumerable<string>, IEnumerable<string>, JObject> variant = (allowed, required) =>
-            {
-                var selected = new JObject();
-                foreach (var name in allowed) selected[name] = properties[name].DeepClone();
-                return new JObject
-                {
-                    ["type"] = "object",
-                    ["properties"] = selected,
-                    ["required"] = new JArray(required),
-                    ["additionalProperties"] = false
-                };
-            };
-            return new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = new JArray(),
-                ["additionalProperties"] = false,
-                ["anyOf"] = new JArray
-                {
-                    variant(new string[0], new string[0]),
-                    variant(new[] { "id" }, new[] { "id" }),
-                    variant(new[] { "id", "referencePath", "offset", "maxChars" }, new[] { "id", "referencePath" })
-                }
             }.ToString(Formatting.None);
         }
 

@@ -167,6 +167,20 @@ function appendMessageFooter(node, message, index, activity) {
     usageNode.textContent = message.Failed ? "Не отправлено" : usage;
     meta.appendChild(usageNode);
   }
+  var responseStatus = messageResponseStatus(message);
+  if (responseStatus && responseStatus !== "completed" && responseStatus !== "in_progress") {
+    var outcome = document.createElement("span");
+    outcome.className = "message-outcome status-" + responseStatus;
+    outcome.textContent = conversationOutcomeLabel(responseStatus);
+    if (outcome.textContent) meta.appendChild(outcome);
+  } else if (!responseStatus && messageRole(message) === "assistant" &&
+      !messageProtocolMessage(message) && !activity && !message.Pending && !message.Failed && !message.Local &&
+      messageResponseProtocolVersion(message) < 2) {
+    var legacyOutcome = document.createElement("span");
+    legacyOutcome.className = "message-outcome status-unknown";
+    legacyOutcome.textContent = "Статус неизвестен · старый формат";
+    meta.appendChild(legacyOutcome);
+  }
 
   var actions = document.createElement("div");
   actions.className = "message-actions";
@@ -306,7 +320,9 @@ function renderCompactionArticle(message, activity) {
 
 function renderMessageArticle(message, index) {
   var node = document.createElement("article");
-  node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") + (message.Failed ? " failed" : "");
+  var responseStatus = messageResponseStatus(message);
+  node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") +
+    (message.Failed ? " failed" : "") + (responseStatus ? " response-status-" + responseStatus : "");
   var activity = messageActivity(message);
   if (activity) {
     if (activityKind(activity) === "compaction" && activityStatus(activity) === "completed") {

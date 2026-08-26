@@ -314,7 +314,11 @@ namespace RNAssistant.Office.Services
             if (!htmlWorkspace && (value == "text" || value == "media")) return value;
             if (value.Length > 0 && value != "auto")
             {
-                throw new InvalidOperationException("Unknown resource representation: " + value);
+                throw new ResourceRequestException(
+                    "Resource representation is unavailable: " + value + ". Use one advertised by the resource descriptor" +
+                        (htmlWorkspace ? " (metadata or structure)." : "."),
+                    "resource_representation_unavailable",
+                    true);
             }
             if (HasTextHint(artifact, FindAttachment(session, artifact))) return "text";
             if (IsModelMedia(FindAttachment(session, artifact))) return "media";

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -10,7 +9,10 @@ namespace RNAssistant.Core.Tools
 {
     public sealed class AgentResponseParser
     {
-        public AgentResponseParseResult Parse(string content, IEnumerable<ToolDefinition> tools)
+        public AgentResponseParseResult Parse(
+            string content,
+            IEnumerable<ToolDefinition> tools,
+            bool allowPlanned = false)
         {
             var raw = (content ?? string.Empty).Trim();
             if (raw.Length == 0)
@@ -35,12 +37,28 @@ namespace RNAssistant.Core.Tools
                 return AgentResponseParseResult.Fail("Agent response is invalid JSON: " + ex.Message);
             }
 
+            var statusToken = root["status"];
+            if (statusToken == null || statusToken.Type != JTokenType.String)
+            {
+                return AgentResponseParseResult.Fail("Agent response requires a string status field.");
+            }
+            var status = (string)statusToken;
+            if (!AgentResponseStatuses.IsKnown(status))
+            {
+                return AgentResponseParseResult.Fail("Agent response status is not supported: " + status + ".");
+            }
+            if (string.Equals(status, AgentResponseStatuses.Planned, StringComparison.Ordinal) && !allowPlanned)
+            {
+                return AgentResponseParseResult.Fail(
+                    "Agent response status planned is unavailable because runtime did not select planning mode.");
+            }
+
             var messageToken = root["message"];
             if (messageToken == null || messageToken.Type != JTokenType.String)
             {
                 return AgentResponseParseResult.Fail("Agent response requires a string message field.");
             }
-            var response = new AgentResponse { Message = (string)messageToken };
+            var response = new AgentResponse { Status = status, Message = (string)messageToken };
             var callsToken = root["tool_calls"];
             if (callsToken == null)
             {
@@ -59,7 +77,17 @@ namespace RNAssistant.Core.Tools
             }
             if (calls.Count == 0)
             {
-                return ValidateFinalResponse(response, tools);
+                if (string.Equals(response.Status, AgentResponseStatuses.InProgress, StringComparison.Ordinal))
+                {
+                    return AgentResponseParseResult.Fail(
+                        "Agent response status in_progress requires at least one tool call.");
+                }
+                return ValidateFinalResponse(response);
+            }
+            if (!string.Equals(response.Status, AgentResponseStatuses.InProgress, StringComparison.Ordinal))
+            {
+                return AgentResponseParseResult.Fail(
+                    "Agent response status " + response.Status + " requires an empty tool_calls array.");
             }
             if (string.IsNullOrWhiteSpace(response.Message))
             {
@@ -136,62 +164,13 @@ namespace RNAssistant.Core.Tools
             return AgentResponseParseResult.Ok(response);
         }
 
-        private static AgentResponseParseResult ValidateFinalResponse(
-            AgentResponse response,
-            IEnumerable<ToolDefinition> tools)
+        private static AgentResponseParseResult ValidateFinalResponse(AgentResponse response)
         {
             if (response == null || string.IsNullOrWhiteSpace(response.Message))
             {
                 return AgentResponseParseResult.Fail("Final agent response requires a non-empty message.");
             }
-            if ((tools ?? new ToolDefinition[0]).Any(item => item != null && item.Enabled) &&
-                LooksLikeUnexecutedAction(response.Message))
-            {
-                return AgentResponseParseResult.Fail(
-                    "An empty tool_calls array is terminal, but message looks like unfinished progress. " +
-                    "Return the promised action as an exact tool call now, or replace message with a completed outcome, clarification, refusal, or concrete inability.");
-            }
             return AgentResponseParseResult.Ok(response);
-        }
-
-        private static bool LooksLikeUnexecutedAction(string message)
-        {
-            var value = (message ?? string.Empty).Trim();
-            if (value.Length == 0) return false;
-            var candidate = Regex.Split(value, "(?:[.!?…]\\s+|\\r?\\n)+")
-                .LastOrDefault(part => !string.IsNullOrWhiteSpace(part));
-            candidate = (candidate ?? value).Trim();
-            if (candidate.Length == 0 || candidate.Length > 240 || candidate.IndexOf('?') >= 0 ||
-                candidate.IndexOf(':') >= 0 || candidate.IndexOf(';') >= 0 || candidate.IndexOf('—') >= 0) return false;
-            var lower = candidate.ToLowerInvariant();
-            var terminalMarkers = new[]
-            {
-                "готово", "завершено", "создано", "создан ", "создана ", "обновлено", "исправлено",
-                "не могу", "невозможно", "нужно уточнить", "требуется уточнить",
-                "done", "completed", "created", "updated", "fixed", "cannot", "can't", "unable"
-            };
-            if (terminalMarkers.Any(marker => lower.IndexOf(marker, StringComparison.Ordinal) >= 0)) return false;
-
-            var ellipsis = candidate.EndsWith("...", StringComparison.Ordinal) ||
-                candidate.EndsWith("…", StringComparison.Ordinal);
-            var explicitIntent = Regex.IsMatch(
-                    candidate,
-                    "^(?:(?:подготавливаю|готовлю|формирую|составляю)|сейчас\\s+(?:создаю|обновляю|исправляю|проверяю|читаю|добавляю|удаляю|переименовываю|применяю|запускаю|выполняю|привязываю|сохраняю|редактирую|анализирую|пробую|подготавливаю|готовлю|формирую|составляю)|создам|обновлю|исправлю|проверю|прочитаю|добавлю|удалю|переименую|применю|запущу|выполню|привяжу|сохраню|отредактирую|проанализирую|попробую|подготовлю|сформирую|составлю|начинаю|приступаю)(?:\\b|\\s|[.…])",
-                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
-                Regex.IsMatch(
-                    candidate,
-                    "^(?:(?:preparing|drafting|compiling)|now\\s+(?:creating|updating|fixing|checking|reading|adding|deleting|renaming|applying|running|executing|binding|saving|editing|analyzing|trying|starting|preparing|drafting|compiling|working\\s+on)|(?:let\\s+me|i(?:'|’)ll|i\\s+will)\\s+(?:create|update|fix|check|read|inspect|add|delete|rename|apply|run|execute|bind|save|edit|analyze|try|start|write|build|prepare|draft|compile))(?:\\b|\\s|[.…])",
-                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            if (!ellipsis && !explicitIntent) return false;
-
-            return Regex.IsMatch(
-                       candidate,
-                       "^(?:сейчас\\s+)?(?:создаю|создам|обновляю|обновлю|исправляю|исправлю|проверяю|проверю|читаю|прочитаю|добавляю|добавлю|удаляю|удалю|переименовываю|переименую|применяю|применю|запускаю|запущу|выполняю|выполню|привязываю|привяжу|сохраняю|сохраню|редактирую|отредактирую|анализирую|проанализирую|пробую|попробую|подготавливаю|подготовлю|готовлю|формирую|сформирую|составляю|составлю|начинаю|приступаю)(?:\\b|\\s|[.…])",
-                       RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
-                   Regex.IsMatch(
-                       candidate,
-                       "^(?:now\\s+)?(?:creating|updating|fixing|checking|reading|adding|deleting|renaming|applying|running|executing|binding|saving|editing|analyzing|trying|starting|preparing|drafting|compiling|working\\s+on)(?:\\b|\\s|[.…])|^(?:let\\s+me|i(?:'|’)ll|i\\s+will)\\s+(?:create|update|fix|check|read|inspect|add|delete|rename|apply|run|execute|bind|save|edit|analyze|try|start|write|build|prepare|draft|compile)(?:\\b|\\s|[.…])",
-                       RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
     }
 }

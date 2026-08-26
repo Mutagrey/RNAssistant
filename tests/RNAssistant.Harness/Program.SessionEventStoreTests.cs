@@ -588,6 +588,7 @@ namespace RNAssistant.Harness
                                 ["Value"] = new JObject
                                 {
                                     ["Id"] = "message-1",
+                                    ["ResponseStatus"] = AgentResponseStatuses.AwaitingUser,
                                     ["ResourceRefs"] = new JArray(new JObject { ["uri"] = resourceUri, ["revision"] = "1" }),
                                     ["Activity"] = new JObject { ["ToolCallId"] = "tool-call-old", ["Status"] = "running" }
                                 }
@@ -657,6 +658,9 @@ namespace RNAssistant.Harness
                 "seed and live projection mutations are current");
             AssertEqual(2L, query.Query(events, new TrajectoryQueryRequest { ToolCallId = "tool-call-old" }).Records.Single().Event.Sequence,
                 "tool-call correlation filter searches event data");
+            AssertEqual(2L, query.Query(events, new TrajectoryQueryRequest
+                { Status = AgentResponseStatuses.AwaitingUser }).Records.Single().Event.Sequence,
+                "response status participates in trajectory status filters");
             var resourceRecord = query.Query(events, new TrajectoryQueryRequest { ResourceUri = resourceUri }).Records.Single();
             AssertEqual(2L, resourceRecord.Event.Sequence, "resource filter resolves canonical message references");
             AssertEqual("1", resourceRecord.ResourceRefs.Single().Revision, "resource projection preserves revision evidence");
@@ -749,6 +753,24 @@ namespace RNAssistant.Harness
             AssertEqual(14, turn.TotalTokens, "turn usage aggregates model steps");
             AssertEqual(0.002m, turn.CostUsd, "turn cost aggregates provider usage");
             AssertTrue(turn.SourceEventSeqs.SequenceEqual(Enumerable.Range(1, 9).Select(value => (long)value)), "turn row retains complete event lineage");
+
+            var declaredOutcomes = new List<SessionEvent>
+            {
+                TrajectoryEvent(1, SessionEventTypes.TurnStarted, started, "run-blocked", "turn-blocked", null,
+                    new JObject { ["Status"] = "running" }),
+                TrajectoryEvent(2, SessionEventTypes.TurnEnded, started.AddSeconds(1), "run-blocked", "turn-blocked", null,
+                    new JObject { ["Status"] = AgentResponseStatuses.Blocked }),
+                TrajectoryEvent(3, SessionEventTypes.TurnStarted, started.AddSeconds(2), "run-awaiting", "turn-awaiting", null,
+                    new JObject { ["Status"] = "running" }),
+                TrajectoryEvent(4, SessionEventTypes.TurnEnded, started.AddSeconds(3), "run-awaiting", "turn-awaiting", null,
+                    new JObject { ["Status"] = AgentResponseStatuses.AwaitingUser })
+            };
+            var declaredFailures = query.QueryView(declaredOutcomes,
+                new TrajectoryViewQueryRequest { View = TrajectoryViews.FailureRetries }).Rows;
+            AssertEqual(1, declaredFailures.Count,
+                "blocked outcome is diagnosable while awaiting_user is not mislabeled as failure");
+            AssertEqual(AgentResponseStatuses.Blocked, declaredFailures.Single().Status,
+                "declared blocked outcome is preserved in failure diagnostics");
         }
 
         private static void TrajectoryExportRedactsAndVerifiesBundle()
@@ -1506,6 +1528,7 @@ namespace RNAssistant.Harness
                 {
                     RunId = "run-1",
                     TurnId = "turn-1",
+                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     Status = "running",
                     Phase = "starting",
                     StartedUtc = DateTime.UtcNow
@@ -1516,11 +1539,15 @@ namespace RNAssistant.Harness
                 AssertEqual(SessionEventTypes.SessionCreated, events[0].Type, "session seed precedes turn");
                 AssertEqual(SessionEventTypes.TurnStarted, events[1].Type, "turn start is first-class");
                 AssertEqual("turn-1", events[1].TurnId, "turn id is independent from run id");
+                AssertEqual(AgentResponseProtocol.CurrentVersion,
+                    (int)events[1].Data["ResponseProtocolVersion"],
+                    "turn start records the response protocol version");
 
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = "run-2",
                     TurnId = "turn-1",
+                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     Status = "running",
                     Phase = "executing",
                     StartedUtc = session.LastRun.StartedUtc
@@ -1532,14 +1559,67 @@ namespace RNAssistant.Harness
                 AssertEqual(0, events.Count(item => item.Type == SessionEventTypes.TurnEnded),
                     "confirmation continuation keeps logical turn open");
 
-                session.LastRun.Status = "failed";
-                session.LastRun.Phase = "failed";
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "Нужны дополнительные данные.",
+                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                    ResponseStatus = AgentResponseStatuses.AwaitingUser,
+                    RunId = "run-2"
+                });
+                session.Messages.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "Подготавливаю старый ответ без метаданных.",
+                    RunId = "legacy-run"
+                });
+                session.LastRun.Status = AgentResponseStatuses.AwaitingUser;
+                session.LastRun.Phase = AgentResponseStatuses.AwaitingUser;
                 store.Save(session);
                 events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(SessionEventTypes.TurnEnded, events.Last().Type, "terminal run closes turn");
-                AssertEqual("failed", (string)events.Last().Data["Status"], "turn terminal status recorded");
+                AssertEqual(AgentResponseStatuses.AwaitingUser, (string)events.Last().Data["Status"],
+                    "declared terminal status is recorded without inspecting message text");
+                AssertEqual(AgentResponseProtocol.CurrentVersion,
+                    (int)events.Last().Data["ResponseProtocolVersion"],
+                    "turn end records the response protocol version");
                 AssertEqual("run-2", events.Last().RunId, "turn end records the final continuation run");
                 AssertEqual(events.Last().Sequence, session.Revision, "turn event advances canonical revision");
+
+                var loaded = store.Load(session.Id);
+                var current = loaded.Messages.Single(item => item.RunId == "run-2");
+                AssertEqual(AgentResponseProtocol.CurrentVersion, current.ResponseProtocolVersion,
+                    "accepted response protocol version replays with the assistant message");
+                AssertEqual(AgentResponseStatuses.AwaitingUser, current.ResponseStatus,
+                    "accepted response status replays with the assistant message");
+                var legacy = loaded.Messages.Single(item => item.RunId == "legacy-run");
+                AssertEqual(0, legacy.ResponseProtocolVersion,
+                    "legacy messages remain explicitly unversioned");
+                AssertTrue(string.IsNullOrWhiteSpace(legacy.ResponseStatus),
+                    "legacy prose is not backfilled with an inferred status");
+                AssertEqual(AgentResponseProtocol.CurrentVersion, loaded.LastRun.ResponseProtocolVersion,
+                    "run response protocol version replays");
+                AssertEqual(AgentResponseStatuses.AwaitingUser, loaded.LastRun.Status,
+                    "declared terminal run status replays");
+
+                loaded.LastRun = new ChatRunRecord
+                {
+                    RunId = "run-3",
+                    TurnId = "turn-3",
+                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                    Status = "running",
+                    Phase = "executing",
+                    StartedUtc = DateTime.UtcNow
+                };
+                store.Save(loaded);
+                loaded.LastRun.Status = "failed";
+                loaded.LastRun.Phase = "failed";
+                store.Save(loaded);
+                var failedTurn = store.ReadEvents(loaded.Host, loaded.DocumentKey, loaded.Id).Last();
+                AssertEqual(SessionEventTypes.TurnEnded, failedTurn.Type,
+                    "runtime-owned failure still closes a later turn");
+                AssertEqual("failed", (string)failedTurn.Data["Status"],
+                    "runtime-owned terminal status remains durable");
             });
         }
 

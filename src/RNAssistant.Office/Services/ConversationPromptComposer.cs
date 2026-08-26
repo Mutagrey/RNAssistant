@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -23,13 +24,13 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatAttachment> attachments,
             bool replayCurrentUserInHistory = false,
             int historyBudgetTokens = 0,
-            JObject toolDiscovery = null)
+            JObject capabilityCatalog = null)
         {
             settings = settings ?? new AppSettings();
             mode = ChatModes.Normalize(mode);
             var instruction = BuildInstruction(mode, settings);
             var runtimeContext = BuildRuntimeContext(
-                mode, adapter, tools, skills, context, session, settings, toolDiscovery);
+                mode, adapter, tools, skills, context, session, settings, capabilityCatalog);
             var role = NormalizeInstructionRole(settings.SystemPromptRole);
             var messages = new List<ChatMessage>();
             if (!string.Equals(role, "user", StringComparison.Ordinal))
@@ -131,7 +132,7 @@ namespace RNAssistant.Office.Services
             DocumentContext context,
             ChatSession session,
             AppSettings settings = null,
-            JObject toolDiscovery = null)
+            JObject capabilityCatalog = null)
         {
             mode = ChatModes.Normalize(mode);
             var adapterHost = SafeAdapterValue(adapter, item => item.HostName);
@@ -165,13 +166,17 @@ namespace RNAssistant.Office.Services
                             : "The chat document is closed or inactive. Do not call Office object-model tools until it is opened; continue with non-Office tools such as the HTML workspace when useful."
                 },
                 ["tools"] = BuildTools(tools),
-                ["skills"] = BuildSkills(skills),
+                ["capabilities"] = string.Equals(mode, ChatModes.Agent, StringComparison.Ordinal)
+                    ? (JToken)(capabilityCatalog ?? CapabilityDiscoveryExecutor.BuildPromptCatalog(tools, skills, tools))
+                    : new JObject
+                    {
+                        ["items"] = new JArray(),
+                        ["shown"] = 0,
+                        ["total"] = 0,
+                        ["truncated"] = false
+                    },
                 ["user_context"] = BuildUserContext(context)
             };
-            if (toolDiscovery != null)
-            {
-                root["tool_discovery"] = toolDiscovery.DeepClone();
-            }
             var artifactBudget = Math.Max(
                 192,
                 Math.Min(600, ModelContextBudget.InputBudgetTokens(settings) / 20));
@@ -239,21 +244,6 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(tool.DoNotUseWhen)) parts.Add("Do not use when: " + tool.DoNotUseWhen.Trim());
             if (!string.IsNullOrWhiteSpace(tool.Limitations)) parts.Add("Limitations: " + tool.Limitations.Trim());
             return string.Join(" ", parts.ToArray());
-        }
-
-        private static JArray BuildSkills(IEnumerable<SkillDefinition> skills)
-        {
-            return new JArray((skills ?? new SkillDefinition[0])
-                .Where(skill => skill != null && skill.Enabled)
-                .Select(skill => new JObject
-                {
-                    ["id"] = skill.Id ?? string.Empty,
-                    ["name"] = skill.Name ?? string.Empty,
-                    ["description"] = skill.Description ?? string.Empty,
-                    ["revision"] = SkillRevision.Compute(skill),
-                    ["bodyChars"] = (skill.BodyMarkdown ?? string.Empty).Length,
-                    ["referenceCount"] = (skill.References ?? new List<SkillReferenceMetadata>()).Count
-                }));
         }
 
         private static JArray BuildUserContext(DocumentContext context)

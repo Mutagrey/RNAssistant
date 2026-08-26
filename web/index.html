@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/app.css?v=html-workspace-auto-20260825-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=agent-reliability-20260819-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=response-status-20260826-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=composer-polish-20260826-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
@@ -37,7 +37,7 @@
   <link rel="stylesheet" href="css/app-artifacts.css?v=utility-dock-20260826-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=resource-navigation-20260826-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=composer-polish-20260826-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=utility-dock-20260826-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=response-status-20260826-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
   <link rel="stylesheet" href="css/app-theme.css?v=model-capability-inline-20260826-1">
 </head>
@@ -694,7 +694,7 @@
                         <option value="json_object">json_object — совместимый</option>
                         <option value="json_schema">json_schema — строгий</option>
                       </select>
-                      <small>В обоих режимах ответ — объект message + tool_calls.</small>
+                      <small>В обоих режимах ответ — объект status + message + tool_calls.</small>
                     </label>
                     <label class="agent-protocol-control">
                       <span>Роль результата tool</span>
@@ -711,7 +711,7 @@
                     </label>
                   </div>
                   <div class="agent-protocol-facts">
-                    <div class="agent-protocol-fact"><span>Conversation envelope</span><code>message + tool_calls[]</code></div>
+                    <div class="agent-protocol-fact"><span>Conversation envelope</span><code>status + message + tool_calls[]</code></div>
                     <div class="agent-protocol-fact"><span>Аргументы tools</span><code>strict JSON Schema</code></div>
                   </div>
                 </div>
@@ -946,7 +946,7 @@
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
   <script src="js/app-core.js?v=resource-navigation-20260826-1"></script>
-  <script src="js/app-utils.js?v=resource-navigation-20260826-1"></script>
+  <script src="js/app-utils.js?v=response-status-20260826-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
@@ -981,14 +981,14 @@
   <script src="js/app-context.js?v=context-close-20260825-1"></script>
   <script src="js/app-context-inspector.js?v=resource-ingestion-20260826-1"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>
-  <script src="js/app-agent-model.js?v=run-summary-20260826-1"></script>
+  <script src="js/app-agent-model.js?v=response-status-20260826-1"></script>
   <script src="js/app-chart-artifacts.js?v=log-filters-20260824-1"></script>
   <script src="js/app-artifacts.js?v=utility-dock-20260826-1"></script>
   <script src="js/app-plan.js?v=utility-dock-20260826-1"></script>
   <script src="js/app-agent-activity.js?v=run-summary-20260826-3"></script>
   <script src="js/app-agent-approval.js?v=agent-modules-20260823-2"></script>
-  <script src="js/app-agent.js?v=run-summary-20260826-3"></script>
-  <script src="js/app-messages.js?v=resource-navigation-20260826-1"></script>
+  <script src="js/app-agent.js?v=response-status-20260826-1"></script>
+  <script src="js/app-messages.js?v=response-status-20260826-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=resource-ingestion-20260826-1"></script>
   <script src="js/app-chat-session.js?v=html-workspace-auto-20260825-1"></script>

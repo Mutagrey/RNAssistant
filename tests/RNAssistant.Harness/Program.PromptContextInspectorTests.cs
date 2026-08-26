@@ -92,11 +92,13 @@ namespace RNAssistant.Harness
             AssertTrue(result.UsedTokens > 0, "inspector estimates prompt tokens");
             AssertTrue(result.Sections.Any(section => section.Id == "tool_instructions"), "separate tool prompt cost is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "skill_instructions"), "separate skill prompt cost is visible");
-            AssertTrue(result.Sections.Any(section => section.Id == "tool_discovery"),
-                "compact tool namespaces are visible without eager schemas");
+            AssertTrue(result.Sections.Any(section => section.Id == "capabilities"),
+                "compact exact-id capability catalog is visible without eager schemas");
             AssertTrue(!result.Sections.Any(section => section.Id == "tools"),
                 "unread domain schemas are absent from the active working set");
-            AssertTrue(result.Sections.Any(section => section.Id == "skills"), "skill catalog is visible");
+            var capabilities = result.Sections.Single(section => section.Id == "capabilities");
+            AssertTrue(capabilities.Items.Any(item => item.Kind == "tool"), "tool ids are visible in the unified catalog");
+            AssertTrue(capabilities.Items.Any(item => item.Kind == "skill"), "skill ids are visible in the unified catalog");
             AssertTrue(result.Sections.Any(section => section.Id == "tool_history"), "tool protocol history is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "document_context"), "document context is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "artifacts"), "artifact index is visible");

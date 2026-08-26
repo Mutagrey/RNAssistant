@@ -22,10 +22,8 @@ namespace RNAssistant.Office.Services
                 ResourceToolExecutor.ResolveToolId,
                 ResourceToolExecutor.SearchToolId,
                 ResourceToolExecutor.ReadToolId,
-                ToolDiscoveryExecutor.ListToolId,
-                ToolDiscoveryExecutor.SearchToolId,
-                ToolDiscoveryExecutor.ReadToolId,
-                "common.skills_read"
+                CapabilityDiscoveryExecutor.SearchToolId,
+                CapabilityDiscoveryExecutor.ReadToolId
             },
             StringComparer.OrdinalIgnoreCase);
 
@@ -107,19 +105,14 @@ namespace RNAssistant.Office.Services
             get { return _catalog; }
         }
 
-        public JObject DiscoveryContext()
+        public JObject CapabilityContext(IEnumerable<SkillDefinition> skills)
         {
             if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return null;
-            return new JObject
-            {
-                ["policy"] = "progressive",
-                ["catalogRevision"] = ToolDiscoveryExecutor.CatalogRevision(_catalog),
-                ["maxDynamicSchemas"] = MaximumDynamicSchemas,
-                ["dynamicSchemaBudgetTokens"] = _dynamicSchemaBudgetTokens,
-                ["namespaces"] = ToolDiscoveryExecutor.BuildNamespaces(_catalog),
-                ["instruction"] =
-                    "Only schemas in tools are callable now. Use common.tools_list/search for schema-free discovery and common.tools_read for an exact schema."
-            };
+            var result = CapabilityDiscoveryExecutor.BuildPromptCatalog(_catalog, skills, Tools);
+            result["policy"] = "progressive";
+            result["maxDynamicSchemas"] = MaximumDynamicSchemas;
+            result["dynamicSchemaBudgetTokens"] = _dynamicSchemaBudgetTokens;
+            return result;
         }
 
         public bool ObserveReadResult(ChatMessage message, out IReadOnlyList<string> evicted)
@@ -152,17 +145,17 @@ namespace RNAssistant.Office.Services
                 ProtocolMessage = true,
                 Content = "TOOL_WORKING_SET:\n" + new JObject
                 {
-                    ["catalogRevision"] = ToolDiscoveryExecutor.CatalogRevision(_catalog),
+                    ["catalogRevision"] = CapabilityDiscoveryExecutor.ToolCatalogRevision(_catalog),
                     ["activeDynamicSchemas"] = new JArray(_dynamicLru.Select(id => new JObject
                     {
                         ["id"] = id,
-                        ["revision"] = ToolDiscoveryExecutor.Revision(_catalogById[id])
+                        ["revision"] = CapabilityDiscoveryExecutor.Revision(_catalogById[id])
                     })),
                     ["evicted"] = new JArray(removed),
                     ["maxDynamicSchemas"] = MaximumDynamicSchemas,
                     ["dynamicSchemaBudgetTokens"] = _dynamicSchemaBudgetTokens,
                     ["instruction"] =
-                        "Only bootstrap tools and activeDynamicSchemas are callable. Read an evicted schema again before calling it."
+                        "Only bootstrap tools and activeDynamicSchemas are callable. Read an evicted tool capability again with common.capabilities_read before calling it."
                 }.ToString(Formatting.None)
             };
         }
@@ -261,7 +254,7 @@ namespace RNAssistant.Office.Services
         private int DynamicSchemaTokens()
         {
             return _dynamicLru.Sum(id => ModelContextBudget.EstimateTextTokens(
-                ToolDiscoveryExecutor.Descriptor(_catalogById[id]).ToString(Formatting.None),
+                CapabilityDiscoveryExecutor.Descriptor(_catalogById[id]).ToString(Formatting.None),
                 _settings));
         }
 
@@ -284,7 +277,7 @@ namespace RNAssistant.Office.Services
                 return false;
             }
             if ((bool?)root["ok"] != true ||
-                !string.Equals((string)root["name"], ToolDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase))
+                !string.Equals((string)root["name"], CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
@@ -301,9 +294,9 @@ namespace RNAssistant.Office.Services
             ToolDefinition tool;
             if (string.IsNullOrWhiteSpace(id) || !_catalogById.TryGetValue(id, out tool)) return false;
             var revision = (string)data["revision"] ?? string.Empty;
-            if (!string.Equals(revision, ToolDiscoveryExecutor.Revision(tool), StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(revision, CapabilityDiscoveryExecutor.Revision(tool), StringComparison.OrdinalIgnoreCase)) return false;
             var descriptor = data["descriptor"] as JObject;
-            return descriptor != null && JToken.DeepEquals(descriptor, ToolDiscoveryExecutor.Descriptor(tool));
+            return descriptor != null && JToken.DeepEquals(descriptor, CapabilityDiscoveryExecutor.Descriptor(tool));
         }
     }
 }

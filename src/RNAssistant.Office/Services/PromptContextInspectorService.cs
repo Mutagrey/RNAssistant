@@ -10,6 +10,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -91,26 +92,28 @@ namespace RNAssistant.Office.Services
             var policy = ConversationRunPolicy.For(mode);
             var runnableCatalog = ConversationRunService.PrepareToolsForMode(mode, tools);
             var enabledSkills = policy.SelectSkills(skills);
+            CapabilityDiscoveryExecutor.ThrowOnCollision(runnableCatalog, enabledSkills);
+            CapabilityDiscoveryExecutor.BindReadSchema(runnableCatalog, enabledSkills);
             var workingSet = ProgressiveToolWorkingSet.Create(
                 mode,
                 runnableCatalog,
                 settings,
                 ContextCompactionService.BuildActiveWindow(previewSession));
             var runnableTools = workingSet.Tools;
-            var toolDiscovery = workingSet.DiscoveryContext();
+            var capabilityCatalog = workingSet.CapabilityContext(enabledSkills);
 
             var relaxed = false;
             List<ChatMessage> messages;
             try
             {
                 messages = BuildMessages(mode, draftText, previewSession, context, settings,
-                    runnableTools, enabledSkills, attachments, 0, toolDiscovery);
+                    runnableTools, enabledSkills, attachments, 0, capabilityCatalog);
             }
             catch (PromptBudgetExceededException)
             {
                 relaxed = true;
                 messages = BuildMessages(mode, draftText, previewSession, context, settings,
-                    runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens, toolDiscovery);
+                    runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens, capabilityCatalog);
             }
 
             var options = ConversationRunService.BuildRequestOptions(
@@ -136,7 +139,7 @@ namespace RNAssistant.Office.Services
                 settings,
                 runnableTools,
                 enabledSkills,
-                toolDiscovery,
+                capabilityCatalog,
                 attachments,
                 draftText,
                 usedTokens);
@@ -153,7 +156,7 @@ namespace RNAssistant.Office.Services
                 ? "≈ уточнено по " + calibrationSamples + " API usage для этой модели."
                 : "≈ рассчитано по UTF-8 объёму.";
             estimateNotice += mode == ChatModes.Agent
-                ? " Даже пустой Agent включает system prompt, bootstrap-схемы tools, compact namespaces и каталог skills."
+                ? " Даже пустой Agent включает system prompt, bootstrap-схемы tools и компактный capability-каталог."
                 : " Даже пустой Chat включает system prompt и схемы read-only resource tools.";
 
             var response = new PromptContextInspectorResponse
@@ -212,7 +215,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             int historyBudgetTokens,
-            JObject toolDiscovery)
+            JObject capabilityCatalog)
         {
             return new ConversationPromptComposer().BuildMessages(
                 mode,
@@ -226,7 +229,7 @@ namespace RNAssistant.Office.Services
                 attachments,
                 false,
                 historyBudgetTokens,
-                toolDiscovery);
+                capabilityCatalog);
         }
 
         private List<PromptContextSectionDto> BuildSections(
@@ -239,7 +242,7 @@ namespace RNAssistant.Office.Services
             AppSettings settings,
             IReadOnlyList<ToolDefinition> tools,
             IReadOnlyList<SkillDefinition> skills,
-            JObject toolDiscovery,
+            JObject capabilityCatalog,
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
             int usedTokens)
@@ -277,7 +280,7 @@ namespace RNAssistant.Office.Services
                 context,
                 previewSession,
                 settings,
-                toolDiscovery);
+                capabilityCatalog);
             instructionEnvelope = instruction + "\n\nRUNTIME_CONTEXT:\n" + runtimeJson;
 
             var embeddedInstructionTokens = hasStandaloneInstruction || current == null
@@ -377,8 +380,8 @@ namespace RNAssistant.Office.Services
         {
             var root = string.IsNullOrWhiteSpace(runtimeJson) ? new JObject() : JObject.Parse(runtimeJson);
             var tools = root["tools"] as JArray ?? new JArray();
-            var toolDiscovery = root["tool_discovery"] as JObject;
-            var skills = root["skills"] as JArray ?? new JArray();
+            var capabilities = root["capabilities"] as JObject ?? new JObject();
+            var capabilityItems = capabilities["items"] as JArray ?? new JArray();
             var userContext = root["user_context"] as JArray ?? new JArray();
             var artifactIndex = (string)root["artifacts"] ?? string.Empty;
             var baseJson = new JObject
@@ -458,48 +461,28 @@ namespace RNAssistant.Office.Services
                 seeds[0].RawTokens += EstimateTextTokens("\"tools\":[]");
             }
 
-            if (toolDiscovery != null)
+            if (capabilities.HasValues)
             {
-                var namespaces = toolDiscovery["namespaces"] as JArray ?? new JArray();
                 seeds.Add(new SectionSeed
                 {
-                    Id = "tool_discovery",
-                    Title = "Discovery tools",
-                    Detail = namespaces.Count + " compact namespaces; schemas are loaded progressively",
-                    RawTokens = Math.Max(1, EstimateTextTokens(toolDiscovery.ToString(Formatting.None))),
-                    Count = namespaces.Count,
-                    Items = namespaces.OfType<JObject>().Select(item => Item(
+                    Id = "capabilities",
+                    Title = "Capability catalog",
+                    Detail = capabilityItems.Count + "/" + ((int?)capabilities["total"] ?? capabilityItems.Count) +
+                        " compact exact-id tools and skills",
+                    RawTokens = Math.Max(1, EstimateTextTokens(capabilities.ToString(Formatting.None))),
+                    Count = capabilityItems.Count,
+                    Items = capabilityItems.OfType<JObject>().Select(item => Item(
                         (string)item["id"],
-                        "tool-namespace",
-                        (string)item["id"] ?? "namespace",
-                        ((int?)item["count"] ?? 0) + " tools",
+                        (string)item["kind"] ?? "capability",
+                        (string)item["name"] ?? (string)item["id"] ?? "Capability",
+                        ((string)item["kind"] ?? "capability") + ": " + ((string)item["id"] ?? string.Empty),
                         EstimateTextTokens(item.ToString(Formatting.None)),
-                        item.ToString(Formatting.None))).ToList()
-                });
-            }
-
-            if (skills.Count > 0)
-            {
-                var items = skills.OfType<JObject>().Select(item => Item(
-                    (string)item["id"],
-                    "skill",
-                    (string)item["name"] ?? (string)item["id"] ?? "Skill",
-                    (string)item["id"] ?? string.Empty,
-                    EstimateTextTokens(item.ToString(Formatting.None)),
-                    (string)item["description"] ?? string.Empty)).ToList();
-                seeds.Add(new SectionSeed
-                {
-                    Id = "skills",
-                    Title = "Skills",
-                    Detail = skills.Count + " enabled skills",
-                    RawTokens = Math.Max(1, EstimateTextTokens(skills.ToString(Formatting.None))),
-                    Count = skills.Count,
-                    Items = items
+                        (string)item["summary"] ?? string.Empty)).ToList()
                 });
             }
             else
             {
-                seeds[0].RawTokens += EstimateTextTokens("\"skills\":[]");
+                seeds[0].RawTokens += EstimateTextTokens("\"capabilities\":{\"items\":[]}");
             }
 
             if (userContext.Count > 0)

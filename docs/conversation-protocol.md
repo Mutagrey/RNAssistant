@@ -5,20 +5,20 @@ RNAssistant has two explicit modes and one `ConversationRunService` transport/tr
 - `chat`: the editable `ChatSystemPrompt`, a dynamic `RUNTIME_CONTEXT`, and exactly the safe read-only `common.resources_list/resolve/search/read` catalog. Skills, Office tools, local mutations, and confirmation are unavailable by runtime policy.
 - `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
-Both modes return the same raw `message + tool_calls[]` JSON envelope and use the same bounded request-local format repair. The tool catalog, not model wording, is the authority: a Chat response naming any other tool is rejected before execution.
+Both modes return the same conversation-response v2 JSON envelope: `status + message + tool_calls[]`. They use the same bounded request-local format repair. Explicit structure and the tool catalog, never model wording, are the authority: a Chat response naming any other tool is rejected before execution.
 
 ## Conversation context
 
 Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:
 
 - current host and document identity;
-- exact bootstrap and currently loaded callable tool descriptors plus `tool_discovery` catalog revision, bounds, and compact namespace counts;
-- the enabled skill catalog with `id`, `name`, `description`, package `revision`, `bodyChars`, and `referenceCount` in Agent, or an empty catalog in Chat;
+- exact bootstrap and currently loaded callable tool descriptors;
+- one compact `capabilities` catalog with exact `id`, explicit `kind` (`tool` or `skill`), summary, revision, and kind-specific safety/body metadata in Agent, or an empty catalog in Chat;
 - chat-owned user context and artifact references.
 
 The Agent sections and Chat prompt use one explicit settings schema version. Settings without the current marker are hard-reset to the current defaults; RNAssistant does not merge an older no-tools Chat contract into the structured loop. Once the current marker is saved, current custom values are preserved normally.
 
-Agent bootstrap schemas are `common.resources_list/resolve/search/read`, `common.tools_list/search/read`, and `common.skills_read`. `common.tools_list` pages metadata inside an exact namespace, while `common.tools_search` performs bounded literal metadata search; neither returns parameters or makes a result tool callable. `common.tools_read` accepts one exact runnable id and returns `kind:"tool-schema"`, the descriptor revision, complete native-like descriptor, and explicit `loaded:true`, `complete:true`, `truncated:false`. The local parser and strict response schema admit a non-bootstrap tool only after that exact evidence matches the current descriptor.
+Agent bootstrap schemas are `common.resources_list/resolve/search/read` and `common.capabilities_search/read`. `RUNTIME_CONTEXT.capabilities.items` immediately exposes a bounded compact list of exact runnable tool and enabled skill ids; `common.capabilities_search` searches the complete schema-free catalog only when that list is truncated or has no exact match. `common.capabilities_read` accepts one exact catalog id. For `kind:"tool"` it returns `kind:"tool-schema"`, the descriptor revision, complete native-like descriptor, and explicit `loaded:true`, `complete:true`, `truncated:false`; for `kind:"skill"` it returns the complete Markdown skill evidence described below. The local parser and strict response schema admit a non-bootstrap tool only after matching tool-schema evidence. Tool and skill ids share one namespace, and a collision aborts request construction instead of choosing one implicitly.
 
 Dynamic callable schemas use an evidence-derived LRU with at most eight entries and a context-derived 8,192–20,000 token budget. Successful exact calls update recency. Replay processes schema-read and tool-call evidence in order, producing the same eviction without a mutable index or hidden activation state. `TOOL_WORKING_SET` reports the current ids and any request-local eviction. Generic result truncation removes loaded evidence; compaction, descriptor revision drift, or eviction requires another exact read. A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. The model may read several independent schemas in one response, but it cannot combine a first schema read with a dependent newly loaded call in that same response.
 
@@ -30,7 +30,7 @@ Paste, drop, and paperclip use one chat-scoped staging action. `sendChat` accept
 
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
-The skill catalog is metadata only: a listed name/description does not load or replace the skill Markdown. When the user names a skill or a catalog description clearly matches the task, the model calls `common.skills_read` with the exact id before skill-governed work. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. A revision is loaded only while that exact top-level evidence remains in active model context. Generic bounding replaces oversized data with top-level `truncated:true` and therefore cannot preserve a false loaded marker. Compaction or a revision mismatch requires another core read; an unchanged truncated core read is not retried.
+The skill entries in the unified capability catalog are metadata only: a listed name/summary does not load or replace the skill Markdown. When the user names a skill or a catalog summary clearly matches the task, the model calls `common.capabilities_read` with that exact id before skill-governed work. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. A revision is loaded only while that exact top-level evidence remains in active model context. Generic bounding replaces oversized data with top-level `truncated:true` and therefore cannot preserve a false loaded marker. Compaction or a revision mismatch requires another core read; an unchanged truncated core read is not retried.
 
 A custom skill package may contain up to 64 direct UTF-8 `references/*.md` files. Their paths, byte sizes, and content revisions are listed by the core read without bodies and are included in the package revision. The model reads only a needed reference through the same tool using exact `referencePath`; optional zero-based `offset` and `maxChars` produce bounded chunks with `nextOffset`. A reference chunk is ordinary context evidence but never loads the core skill. `common.skills_upsert` writes one reference when both `referencePath` and `referenceMarkdown` are supplied; `common.skills_delete` removes one when `referencePath` is supplied. Core and reference mutations are separate confirmed calls, and each reference mutation changes the package revision. Several clearly relevant skills may be read independently. There is no router or activation state.
 
@@ -80,6 +80,7 @@ Tool call:
 
 ```json
 {
+  "status": "in_progress",
   "message": "Читаю диапазон.",
   "tool_calls": [
     {
@@ -91,22 +92,60 @@ Tool call:
 }
 ```
 
-Final answer or clarification:
+Final answer:
 
 ```json
 {
+  "status": "completed",
   "message": "Готово.",
   "tool_calls": []
 }
 ```
 
-An empty `tool_calls` array ends the run. It must not accompany an unfinished action promise. While runnable tools exist, the parser conservatively rejects short Russian or English progress-only messages such as “создаю…” or “checking…” with no call and sends them through the ordinary bounded format-repair path. The check also evaluates a trailing promise after a completed-prefix sentence, such as “Анализ завершен. Подготавливаю отчет.” A concrete answer, clarification, refusal, completion, or inability remains a valid terminal response.
+Conversation-response v2 requires a root `status`. The strict response schema enforces its presence and closed enum; the local parser additionally enforces its relationship with `tool_calls`. This avoids unsupported cross-field constructs in provider structured-output schemas while keeping the same invariant in both `json_schema` and `json_object` modes:
+
+| `status` | Meaning | `tool_calls` | UI/run projection |
+| --- | --- | --- | --- |
+| `in_progress` | The model is requesting executable work now. | At least one call. | Run continues. |
+| `completed` | The requested outcome is complete. | Empty. | Successful final answer. |
+| `awaiting_user` | A user decision or missing information is required. | Empty. | Current run ends and the conversation visibly waits for the user. |
+| `blocked` | Work cannot proceed because of a concrete dependency or inability. | Empty. | Final blocked outcome, not success. |
+| `refused` | The request is explicitly refused. | Empty. | Final refusal. |
+| `planned` | A plan-only outcome is ready. Reserved for a future runtime-selected planning mode. | Empty. | Successful plan result, distinct from executed completion. |
+
+For example:
+
+```json
+{"status":"in_progress","message":"Читаю диапазон.","tool_calls":[{"id":"call_1","name":"excel.read_range","arguments":{"sheet":"Data","address":"A1:D20"}}]}
+```
+
+```json
+{"status":"awaiting_user","message":"Какой лист следует изменить?","tool_calls":[]}
+```
+
+```json
+{"status":"completed","message":"Диапазон обновлён.","tool_calls":[]}
+```
+
+The runtime enforces these rules:
+
+- `status` is explicit and required; it is never derived from `message`, punctuation, historical tool failures, or plan text.
+- `in_progress` with no calls and any terminal status with calls are structural format errors handled by the existing bounded format-repair path. No word lists or prose regexes participate in validation.
+- `awaiting_user` is the structured form of a model question. The visible question remains in `message`; the runtime does not require particular wording or a question mark.
+- An explicit provider-native refusal field maps directly to `refused`; ordinary response text is never classified as a refusal.
+- `planned` is rejected unless a future planning mode was selected by runtime policy. The model cannot switch conversation modes by choosing a status. Such a mode may use `in_progress` for permitted discovery calls, `awaiting_user` for clarification, and `planned` for its final plan.
+- `failed`, `cancelled`, `interrupted`, and `interrupted_unknown` remain runtime-owned execution states and are not model-selectable response statuses.
+- Intermediate `ok:false` tool results remain visible in the expanded action trace but do not relabel a later `completed` response as failed. If no valid final response exists because the runtime itself failed or was interrupted, the runtime-owned terminal state controls the collapsed summary.
+- The accepted response status is persisted in the append-only session event stream and replayed into UI projections. UI code must not rescan message text or aggregate any historical failed step to reconstruct the final state.
+- The cutover uses response protocol version `2` and the current settings prompt marker. Every new run records version `2`; a persisted pre-v2 confirmation must be cancelled and submitted again. Legacy stored responses remain unversioned with unknown outcome, are not assigned a synthetic status from prose, and have no dual-write or lexical compatibility fallback.
+
+The structured status records the model's declared outcome; it does not independently prove semantic completion. Proving that the user's goal was achieved would require explicit task/plan evidence or a separately designed verifier, neither of which may be hidden behind text heuristics.
 
 The parser accepts at most 32 calls, requires a non-empty user-facing `message` for every tool turn, unique call ids, and each call to contain exactly `id`, `name`, and an object `arguments`. Duplicate JSON properties and argument names that differ only by case are rejected. Structured arguments remain native JSON objects/arrays through parsing; escaped JSON strings are not coerced. The executor checks each exact tool name and validates arguments against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. The pending id, cumulative iteration/tool-step counters, and execution fingerprint of that tool and its pipeline dependencies are persisted with the chat, so confirmation survives a WebView or Office restart but cannot execute a replaced definition. Cosmetic changes to unrelated tools do not invalidate it. A new request in that chat is blocked until the action is confirmed or cancelled. After confirmation, the model receives that result and chooses the remaining work normally using the remaining original budget. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
 
-If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A refusal remains valid user-facing content when returned in `message` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
+If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A refusal is valid user-facing content only as `status:"refused"` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
 The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections plus `ChatSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
 

@@ -626,7 +626,7 @@ namespace RNAssistant.Harness
                 var updated = executor.Execute(update, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(updated.Success, "partial skill update succeeds");
 
-                var read = executor.Execute(Command("common.skills_read", "id", "excel.review_style"), tools, new AppSettings(), false, true);
+                var read = executor.Execute(Command("common.capabilities_read", "id", "excel.review_style"), tools, new AppSettings(), false, true);
                 AssertTrue(read.Success, "skill read succeeds");
                 AssertContains(read.DataJson, "Review workbook formatting consistently", "skill description updated");
                 AssertContains(read.DataJson, "Preserve workbook conventions", "omitted skill body preserved");
@@ -670,7 +670,7 @@ namespace RNAssistant.Harness
                     "reference branch excludes core fields");
 
                 var referenceRead = executor.Execute(
-                    Command("common.skills_read", "id", "excel.review_style", "referencePath", "references/checklist.md"),
+                    Command("common.capabilities_read", "id", "excel.review_style", "referencePath", "references/checklist.md"),
                     tools, new AppSettings(), false, true);
                 AssertTrue(referenceRead.Success, "agent-created reference can be read");
                 AssertContains(referenceRead.DataJson, "Preserve formats", "agent-created reference content");
@@ -793,7 +793,7 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var runtimeSkills = new[] { stored };
                 var main = executor.Execute(
-                    Command("common.skills_read", "id", stored.Id), tools, new AppSettings(), false, false,
+                    Command("common.capabilities_read", "id", stored.Id), tools, new AppSettings(), false, false,
                     new ChatSession(), 40, runtimeSkills, CancellationToken.None);
                 var mainData = JObject.Parse(main.DataJson);
                 AssertEqual(true, (bool)mainData["loaded"], "complete core read declares loaded state");
@@ -801,7 +801,7 @@ namespace RNAssistant.Harness
                     "core read lists references without their bodies");
 
                 var first = executor.Execute(
-                    Command("common.skills_read", "id", stored.Id, "referencePath", "references/details.md", "maxChars", 8),
+                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/details.md", "maxChars", 8),
                     tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
                 var firstData = JObject.Parse(first.DataJson);
                 AssertEqual("reference", (string)firstData["kind"], "reference result kind");
@@ -811,19 +811,19 @@ namespace RNAssistant.Harness
                 AssertTrue(firstData["loaded"] == null, "reference chunk does not load the core skill");
 
                 var rest = executor.Execute(
-                    Command("common.skills_read", "id", stored.Id, "referencePath", "references/details.md", "offset", 8, "maxChars", 50000),
+                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/details.md", "offset", 8, "maxChars", 50000),
                     tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
                 AssertEqual(true, (bool)JObject.Parse(rest.DataJson)["complete"], "final reference chunk is complete");
 
                 var traversal = executor.Execute(
-                    Command("common.skills_read", "id", stored.Id, "referencePath", "references/../secret.md"),
+                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/../secret.md"),
                     tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(!traversal.Success, "reference traversal is rejected");
 
                 var referencePath = Path.Combine(stored.StoragePath, "references", "details.md");
                 File.WriteAllText(referencePath, "# Details\n\nChanged");
                 var stale = executor.Execute(
-                    Command("common.skills_read", "id", stored.Id, "referencePath", "references/details.md"),
+                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/details.md"),
                     tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
                 AssertEqual("skill_reference_changed", stale.ErrorCode, "stale reference snapshot is rejected");
 
@@ -914,18 +914,18 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var enabledRead = executor.Execute(
-                    Command("common.skills_read", "id", "common.a.b"), tools, new AppSettings(), false, false,
+                    Command("common.capabilities_read", "id", "common.a.b"), tools, new AppSettings(), false, false,
                     new ChatSession(), 40, loaded, CancellationToken.None);
                 AssertTrue(enabledRead.Success, "enabled runtime skill can be read");
 
                 var disabledRead = executor.Execute(
-                    Command("common.skills_read", "id", "common.a_b"), tools, new AppSettings(), false, false,
+                    Command("common.capabilities_read", "id", "common.a_b"), tools, new AppSettings(), false, false,
                     new ChatSession(), 40, loaded, CancellationToken.None);
                 AssertTrue(!disabledRead.Success, "disabled runtime skill cannot be read by agent");
                 AssertTrue(disabledRead.DataJson == null || disabledRead.DataJson.IndexOf("DISABLED_SKILL", StringComparison.Ordinal) < 0,
                     "disabled skill body is not exposed");
                 var confirmedRuntimeRead = executor.Execute(
-                    Command("common.skills_read", "id", "common.a_b"), tools, new AppSettings(), false, true,
+                    Command("common.capabilities_read", "id", "common.a_b"), tools, new AppSettings(), false, true,
                     new ChatSession(), 40, loaded.Where(item => item.Enabled).ToList(), CancellationToken.None);
                 AssertTrue(!confirmedRuntimeRead.Success, "confirmation bypass does not broaden the runtime skill catalog");
             });

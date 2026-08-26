@@ -148,7 +148,7 @@
     <Compile Include="Tools\PipelineToolExecutor.cs" />
     <Compile Include="Tools\PipelineDefinition.cs" />
     <Compile Include="Tools\SkillToolExecutor.cs" />
-    <Compile Include="Tools\ToolDiscoveryExecutor.cs" />
+    <Compile Include="Tools\CapabilityDiscoveryExecutor.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.Schemas.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.Validation.cs" />

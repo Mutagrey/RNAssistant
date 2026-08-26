@@ -21,6 +21,9 @@ namespace RNAssistant.Office.Services
         public IReadOnlyList<object> ToolResults { get; set; }
         public object ContextUsage { get; set; }
         public bool WaitingForConfirmation { get; set; }
+        public int ResponseProtocolVersion { get; set; }
+        public string ResponseStatus { get; set; }
+        public string RunStatus { get; set; }
     }
 
     public sealed class ConversationRunService
@@ -152,9 +155,11 @@ namespace RNAssistant.Office.Services
             var policy = ConversationRunPolicy.For(mode);
             ReleaseHydratedArtifactMedia(session == null ? null : session.Messages);
             var runnableCatalog = PrepareToolsForRun(tools);
+            var enabledSkills = policy.SelectSkills(skills);
+            CapabilityDiscoveryExecutor.ThrowOnCollision(runnableCatalog, enabledSkills);
             runnableCatalog = _toolExecutor.AvailableConversationToolsForSession(runnableCatalog, session);
             runnableCatalog = policy.SelectTools(runnableCatalog);
-            var enabledSkills = policy.SelectSkills(skills);
+            CapabilityDiscoveryExecutor.BindReadSchema(runnableCatalog, enabledSkills);
             if (!policy.AllowsConfirmation) pendingToolRegistrar = null;
             var materialization = await BuildMessagesAsync(
                 policy.Mode,
@@ -237,8 +242,10 @@ namespace RNAssistant.Office.Services
                 string refusal;
                 if (TryGetRefusal(completion, out refusal))
                 {
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(refusal, completion));
-                    return Result(refusal, results, contextUsage, false);
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                        refusal, completion, null, AgentResponseStatuses.Refused));
+                    return Result(refusal, results, contextUsage, false,
+                        AgentResponseStatuses.Refused, AgentResponseStatuses.Refused);
                 }
                 var parsed = _responseParser.Parse(
                     completion == null ? null : completion.Content,
@@ -267,8 +274,10 @@ namespace RNAssistant.Office.Services
                         completion == null ? null : completion.PromptTokens, options);
                     if (TryGetRefusal(completion, out refusal))
                     {
-                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(refusal, completion));
-                        return Result(refusal, results, contextUsage, false);
+                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                            refusal, completion, null, AgentResponseStatuses.Refused));
+                        return Result(refusal, results, contextUsage, false,
+                            AgentResponseStatuses.Refused, AgentResponseStatuses.Refused);
                     }
                     parsed = _responseParser.Parse(
                         completion == null ? null : completion.Content,
@@ -285,8 +294,9 @@ namespace RNAssistant.Office.Services
                 if (response.ToolCalls.Count == 0)
                 {
                     var finalText = response.Message.Trim();
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(finalText, completion));
-                    return Result(finalText, results, contextUsage, false);
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(
+                        finalText, completion, null, response.Status));
+                    return Result(finalText, results, contextUsage, false, response.Status, response.Status);
                 }
 
                 var stepId = Guid.NewGuid().ToString("N");
@@ -427,7 +437,7 @@ namespace RNAssistant.Office.Services
                         UpdateRunCursor(session, iterationsUsed, toolSteps,
                             "waiting_confirmation", "waiting_confirmation");
                         Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
-                        return Result(waitingText, results, contextUsage, true);
+                        return Result(waitingText, results, contextUsage, true, null, "waiting_confirmation");
                     }
                     Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
                     if (string.Equals(toolResult.ErrorCode, "tool_step_limit_reached", StringComparison.OrdinalIgnoreCase))
@@ -442,8 +452,8 @@ namespace RNAssistant.Office.Services
             }
 
             var limitText = "Выполнение остановлено: достигнут лимит шагов.";
-            session.Messages.Add(AgentTranscript.CreateAssistantMessage(limitText, null));
-            return Result(limitText, results, contextUsage, false);
+            return FinishWithDiagnostic(session, results, contextUsage, limitText,
+                "Лимит выполнения", "step_limit_reached");
             }
             finally
             {
@@ -508,7 +518,7 @@ namespace RNAssistant.Office.Services
                         attachments,
                         replayCurrentUserInHistory,
                         0,
-                        workingSet.DiscoveryContext()),
+                        workingSet.CapabilityContext(skills)),
                     WorkingSet = workingSet
                 };
             }
@@ -537,7 +547,7 @@ namespace RNAssistant.Office.Services
                         attachments,
                         replayCurrentUserInHistory,
                         0,
-                        workingSet.DiscoveryContext()),
+                        workingSet.CapabilityContext(skills)),
                     WorkingSet = workingSet
                 };
             }
@@ -586,7 +596,7 @@ namespace RNAssistant.Office.Services
                     !string.Equals(tool.CapabilityStatus, "partial", StringComparison.OrdinalIgnoreCase)) continue;
                 var descriptor = ConversationPromptComposer.BuildTool(tool);
                 if (descriptor == null || descriptor.ToString(Formatting.None).Length >
-                    ToolDiscoveryExecutor.MaximumDescriptorCharacters) continue;
+                    CapabilityDiscoveryExecutor.MaximumDescriptorCharacters) continue;
                 tool.MutatesDocument = profile.MutatesDocument;
                 tool.MutatesLocalState = profile.MutatesLocalState;
                 tool.RequiresConfirmation = profile.RequiresConfirmation;
@@ -721,21 +731,30 @@ namespace RNAssistant.Office.Services
                 ResultMessage = text
             };
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(text, null, activity));
-            return Result(text, results, contextUsage, false);
+            return Result(text, results, contextUsage, false, null, "failed");
         }
 
         private static ChatTurnResult Result(
             string text,
             IReadOnlyList<object> results,
             object contextUsage,
-            bool waitingForConfirmation)
+            bool waitingForConfirmation,
+            string responseStatus = null,
+            string runStatus = null)
         {
             return new ChatTurnResult
             {
                 AssistantText = text ?? string.Empty,
                 ToolResults = results ?? new object[0],
                 ContextUsage = contextUsage,
-                WaitingForConfirmation = waitingForConfirmation
+                WaitingForConfirmation = waitingForConfirmation,
+                ResponseProtocolVersion = AgentResponseStatuses.IsKnown(responseStatus)
+                    ? AgentResponseProtocol.CurrentVersion
+                    : 0,
+                ResponseStatus = AgentResponseStatuses.IsKnown(responseStatus) ? responseStatus : null,
+                RunStatus = string.IsNullOrWhiteSpace(runStatus)
+                    ? (waitingForConfirmation ? "waiting_confirmation" : "failed")
+                    : runStatus
             };
         }
 
@@ -771,8 +790,7 @@ namespace RNAssistant.Office.Services
             var used = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             var availableForData = Math.Max(0, inputBudget - used - ToolResultEnvelopeReserveTokens);
             var toolId = command == null ? null : command.ToolId;
-            var maxDataTokens = string.Equals(toolId, "common.skills_read", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(toolId, ToolDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase)
+            var maxDataTokens = string.Equals(toolId, CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase)
                     ? availableForData
                     : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
             var artifact = ToolResultResourceService.ExternalizeIfNeeded(

@@ -95,7 +95,7 @@ namespace RNAssistant.Office.Services
                     new ChatMessage
                     {
                         Role = "user",
-                        Content = "Return exactly one JSON object: {\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}"
+                        Content = "Return exactly one JSON object: {\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}"
                     }
                 },
                 AgentOptions(responseMode, new[] { tool }),
@@ -103,7 +103,9 @@ namespace RNAssistant.Office.Services
                 {
                     var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new[] { tool });
                     if (!parsed.Success) return parsed.Error ?? "Endpoint returned no tool call.";
-                    if (!string.Equals(parsed.Response.Message, "TOOL_OK", StringComparison.Ordinal) || parsed.Response.ToolCalls.Count != 1)
+                    if (!string.Equals(parsed.Response.Status, AgentResponseStatuses.InProgress, StringComparison.Ordinal) ||
+                        !string.Equals(parsed.Response.Message, "TOOL_OK", StringComparison.Ordinal) ||
+                        parsed.Response.ToolCalls.Count != 1)
                     {
                         return "Endpoint did not return the exact Agent JSON sentinel.";
                     }
@@ -137,7 +139,9 @@ namespace RNAssistant.Office.Services
                 completion =>
                 {
                     var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new ToolDefinition[0]);
-                    return parsed.Success && parsed.Response.ToolCalls.Count == 0 &&
+                    return parsed.Success &&
+                           string.Equals(parsed.Response.Status, AgentResponseStatuses.Completed, StringComparison.Ordinal) &&
+                           parsed.Response.ToolCalls.Count == 0 &&
                            string.Equals(parsed.Response.Message, "RESULT_OK", StringComparison.Ordinal)
                         ? null
                         : parsed.Error ?? "Endpoint did not return the exact RESULT_OK sentinel after TOOL_RESULT.";
@@ -158,6 +162,8 @@ namespace RNAssistant.Office.Services
                     Role = "assistant",
                     Content = "TOOL_OK",
                     ProtocolMessage = true,
+                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                    ResponseStatus = AgentResponseStatuses.InProgress,
                     ToolCalls = new List<LlmToolCall>
                     {
                         new LlmToolCall
@@ -183,8 +189,10 @@ namespace RNAssistant.Office.Services
                 messages.Add(new ChatMessage
                 {
                     Role = "assistant",
-                    Content = "{\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}",
-                    ProtocolMessage = true
+                    Content = "{\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}",
+                    ProtocolMessage = true,
+                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                    ResponseStatus = AgentResponseStatuses.InProgress
                 });
                 messages.Add(new ChatMessage
                 {
@@ -196,7 +204,7 @@ namespace RNAssistant.Office.Services
             messages.Add(new ChatMessage
             {
                 Role = "user",
-                Content = "Reply with {\"message\":\"RESULT_OK\",\"tool_calls\":[]}."
+                Content = "Reply with {\"status\":\"completed\",\"message\":\"RESULT_OK\",\"tool_calls\":[]}."
             });
             return messages;
         }

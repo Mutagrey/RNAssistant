@@ -40,15 +40,15 @@ Registered providers:
 
 Every provider implements bounded `list`, `resolve`, `search`, and `read(ResourceReadRequest)`. The read request carries one `ResourceRef`, representation, opaque cursor, and character limit, so revision evidence cannot be lost between routing and the provider. Immutable text uses an offset internally because its URI is already pinned. Live Office/VBA chunks bind the internal position to the content hash; collection pages bind it to a deterministic collection fingerprint. Model-facing read results expose only `nextCursor`, not the raw offset, and continuation copies it unchanged into `cursor`. Reusing a cursor after drift fails with retryable `resource_revision_changed` instead of mixing versions or shifting rows.
 
-Search v1 is bounded case-insensitive literal search plus provider structure. Regex, embeddings, and a durable vector index are intentionally absent until they have a concrete use and bounded semantics. Skills are trusted instructions, not untrusted resources: their complete revision-matched bodies are read only through `common.skills_read`. HTML files/data and plans remain subresources of the chat provider so ownership, revision lineage, and CAS checks are not duplicated. The existing host-neutral `IOfficeApplicationAdapter` supplies document/VBA reads; a second `IOfficeResourceAdapter` would only repeat that boundary.
+Search v1 is bounded case-insensitive literal search plus provider structure. Regex, embeddings, and a durable vector index are intentionally absent until they have a concrete use and bounded semantics. Skills are trusted instructions, not untrusted document resources: their complete revision-matched bodies are read through the unified `common.capabilities_read` id path shared with tool schemas. HTML files/data and plans remain subresources of the chat provider so ownership, revision lineage, and CAS checks are not duplicated. The existing host-neutral `IOfficeApplicationAdapter` supplies document/VBA reads; a second `IOfficeResourceAdapter` would only repeat that boundary.
 
 ## Conversation loop
 
 Chat and Agent use one buffered structured loop. The policy differs, the transport and transcript do not:
 
 - Chat receives exactly the four resource discovery/read tools and no mutation tools, confirmation, or skills.
-- Agent keeps the complete mode/session-filtered catalog only as local execution authority. The initial model prompt contains bootstrap resource/skill/discovery schemas plus compact namespaces.
-- `common.tools_list/search` return bounded schema-free metadata. `common.tools_read` returns one exact revisioned descriptor; only complete, untruncated evidence matching the current descriptor enters the callable working set.
+- Agent keeps the complete mode/session-filtered catalog only as local execution authority. The initial model prompt contains resource and unified capability bootstrap schemas plus a compact exact-id tool/skill catalog.
+- `common.capabilities_search` returns bounded schema-free metadata when the prompt catalog is truncated. `common.capabilities_read` loads one exact revisioned tool descriptor or complete skill body according to the catalog kind; only complete, untruncated tool-schema evidence matching the current descriptor enters the callable working set.
 - The dynamic working set is an evidence-derived LRU of at most eight schemas with an 8k–20k token budget. Exact tool calls update recency, so replay reconstructs the same eviction. Compaction, truncation, revision drift, or explicit eviction requires another read.
 - A schema or skill body remains loaded only while its exact revision is present in active model context.
 
@@ -110,7 +110,7 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 3. **Done:** Unified `ConversationRunService`; read-only resource loop in Chat; removed `PlainChatService` and `ChatContextWindowBuilder`.
 4. **Done:** Automatic chat-scoped UI ingestion and durable pre-dispatch message references; explicit `artifactIds`/“В запрос” selection removed.
 5. **Done:** plan/HTML reads use canonical `chat` resources; live Office document/selection and VBA project/component/backup providers are registered. Duplicated plan/HTML/VBA reads plus host `get_context/get_selection` tools are removed without aliases; domain-specific range/slide/mail reads remain typed tools.
-6. **Done:** Agent uses compact tool namespaces plus `common.tools_list/search/read`; exact revisioned schemas enter a bounded replayable LRU working set, and full-catalog prompt injection is removed. Custom-definition inspection moved to `common.tools_definition_read` without an alias.
+6. **Done:** Agent receives one compact exact-id tool/skill catalog plus `common.capabilities_search/read`; exact revisioned tool schemas enter a bounded replayable LRU working set, and full-schema catalog injection is removed. Split model-facing tool/skill readers were removed without aliases. Custom-definition inspection remains `common.tools_definition_read`.
 7. **Done:** durable messages, media handoff, compaction, fork reachability, replay, and trajectory diagnostics carry revision-pinned `ResourceRef` values. Internal `ArtifactIds` message transport and `ChatArtifactService` are removed; event schema 3/session format 6 reject pre-cutover streams without migration.
 
 Each slice must leave one authoritative path for the capability it migrates and add harness coverage for URI safety, provider bounds, replay, context compaction, media hydration lifetime, and Chat mutation denial.

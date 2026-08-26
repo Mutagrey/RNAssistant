@@ -425,6 +425,7 @@ namespace RNAssistant.Office
             return Task.FromResult(new SendChatResponse
             {
                 Message = "ok",
+                ResponseStatus = AgentResponseStatuses.Completed,
                 Tools = new[] { new ToolDefinition { Id = "common.generated_tool" } },
                 Skills = new[] { new SkillDefinition { Id = "common.generated_skill" } }
             });

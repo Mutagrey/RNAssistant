@@ -360,6 +360,7 @@ namespace RNAssistant.Office
                     RunId = runId,
                     TurnId = runId,
                     RuntimeId = _runtimeId,
+                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     Status = "running",
                     Phase = "starting",
                     CurrentAction = "Preparing request.",
@@ -559,7 +560,7 @@ namespace RNAssistant.Office
                 ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
                 if (completion == null || !completion.WaitingForConfirmation)
                 {
-                    session.LastRun = null;
+                    ApplyTerminalRunResult(session, completion);
                 }
                 SaveSessionChanges(session);
                 _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
@@ -591,6 +592,7 @@ namespace RNAssistant.Office
             return new SendChatResponse
             {
                 Message = completion == null ? string.Empty : completion.AssistantText,
+                ResponseStatus = completion == null ? null : completion.ResponseStatus,
                 ToolResults = completion == null
                     ? (IReadOnlyList<object>)new object[0]
                     : completion.ToolResults ?? new object[0],
@@ -626,6 +628,23 @@ namespace RNAssistant.Office
                 ToolResults = new object[0],
                 ContextUsage = ContextUsageEstimator.FromSession(session, settings)
             });
+        }
+
+        private static void ApplyTerminalRunResult(ChatSession session, ChatTurnResult completion)
+        {
+            if (session == null || session.LastRun == null) return;
+            var status = completion == null || string.IsNullOrWhiteSpace(completion.RunStatus)
+                ? "failed"
+                : completion.RunStatus;
+            if (completion != null && completion.ResponseProtocolVersion > 0)
+            {
+                session.LastRun.ResponseProtocolVersion = completion.ResponseProtocolVersion;
+            }
+            session.LastRun.Status = status;
+            session.LastRun.Phase = status;
+            session.LastRun.CurrentAction = completion == null
+                ? "Conversation run ended without a result."
+                : completion.AssistantText;
         }
 
     }

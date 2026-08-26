@@ -19,51 +19,63 @@ namespace RNAssistant.Harness
             {
                 var catalog = ConversationRunService.PrepareToolsForRun(
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()));
-                var namespaces = executor.Execute(
-                    new ToolCommand { ToolId = ToolDiscoveryExecutor.ListToolId },
-                    catalog,
-                    new AppSettings(),
-                    false,
-                    false);
-                AssertTrue(namespaces.Success, "namespace discovery succeeds");
-                AssertContains(namespaces.DataJson, "\"kind\":\"tool-namespaces\"", "namespace result kind");
-                AssertContains(namespaces.DataJson, "\"id\":\"excel\"", "host namespace listed");
-                AssertTrue(namespaces.DataJson.IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
-                    "namespace discovery returns no schemas");
+                var skills = new[]
+                {
+                    new SkillDefinition
+                    {
+                        Id = "excel.review_workbook",
+                        Name = "Review workbook",
+                        Description = "Review workbook structure and formulas.",
+                        BodyMarkdown = "# Review\n\nInspect the workbook carefully.",
+                        Enabled = true
+                    }
+                };
+                CapabilityDiscoveryExecutor.BindReadSchema(catalog, skills);
 
-                var list = executor.Execute(
-                    Command(ToolDiscoveryExecutor.ListToolId, "namespace", "excel", "limit", 1),
-                    catalog,
-                    new AppSettings(),
-                    false,
-                    false);
-                AssertTrue(list.Success, "namespace metadata page succeeds");
-                var listData = JObject.Parse(list.DataJson);
-                AssertEqual(1, ((JArray)listData["items"]).Count, "metadata page respects limit");
-                AssertEqual(false, (bool)listData["schemasLoaded"], "metadata does not load schemas");
-                AssertTrue(listData.SelectToken("items[0].schemaLoaded") != null,
-                    "metadata explicitly marks schema as unloaded");
-                AssertTrue(list.DataJson.IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
-                    "metadata page contains no parameter schema");
+                var compact = CapabilityDiscoveryExecutor.BuildPromptCatalog(catalog, skills, catalog);
+                AssertTrue(((JArray)compact["items"]).OfType<JObject>().Any(item =>
+                    (string)item["id"] == "excel.add_sheet" && (string)item["kind"] == "tool"),
+                    "compact catalog contains exact tool ids with kind");
+                AssertTrue(((JArray)compact["items"]).OfType<JObject>().Any(item =>
+                    (string)item["id"] == "excel.review_workbook" && (string)item["kind"] == "skill"),
+                    "compact catalog contains exact skill ids with kind");
+                AssertEqual(true, (bool)compact["idEnumEnforced"],
+                    "bounded catalogs also constrain the reader schema to exact ids");
+                var reader = catalog.Single(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId);
+                AssertContains(reader.ArgumentSchemaJson, "excel.add_sheet", "reader enum contains exact tool id");
+                AssertContains(reader.ArgumentSchemaJson, "excel.review_workbook", "reader enum contains exact skill id");
+                AssertTrue(!executor.GetControllerTools().Any(tool =>
+                    string.Equals(tool.Id, "common.tools_read", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(tool.Id, "common.tools_list", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(tool.Id, "common.tools_search", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(tool.Id, "common.skills_read", StringComparison.OrdinalIgnoreCase)),
+                    "removed split discovery ids have no aliases");
 
                 var search = executor.Execute(
-                    Command(ToolDiscoveryExecutor.SearchToolId, "query", "sheet", "limit", 2),
+                    Command(CapabilityDiscoveryExecutor.SearchToolId, "query", "excel.review_workbook", "limit", 2),
                     catalog,
                     new AppSettings(),
                     false,
-                    false);
-                AssertTrue(search.Success, "tool metadata search succeeds");
+                    false,
+                    null,
+                    AppSettings.DefaultMaxAgentToolSteps,
+                    skills);
+                AssertTrue(search.Success, "capability metadata search succeeds");
                 AssertTrue(((JArray)JObject.Parse(search.DataJson)["items"]).Count <= 2,
                     "search result respects its bound");
+                AssertContains(search.DataJson, "\"kind\":\"skill\"", "search returns explicit capability kind");
                 AssertTrue(search.DataJson.IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
                     "search contains no exact schemas");
 
                 var read = executor.Execute(
-                    Command(ToolDiscoveryExecutor.ReadToolId, "id", "excel.add_sheet"),
+                    Command(CapabilityDiscoveryExecutor.ReadToolId, "id", "excel.add_sheet"),
                     catalog,
                     new AppSettings(),
                     false,
-                    false);
+                    false,
+                    null,
+                    AppSettings.DefaultMaxAgentToolSteps,
+                    skills);
                 AssertTrue(read.Success, "exact schema read succeeds");
                 var data = JObject.Parse(read.DataJson);
                 AssertEqual("tool-schema", (string)data["kind"], "exact result kind");
@@ -75,9 +87,71 @@ namespace RNAssistant.Harness
                 AssertTrue(data.SelectToken("descriptor.function.parameters") is JObject,
                     "exact descriptor includes strict parameters");
                 AssertEqual(
-                    ToolDiscoveryExecutor.Revision(catalog.Single(tool => tool.Id == "excel.add_sheet")),
+                    CapabilityDiscoveryExecutor.Revision(catalog.Single(tool => tool.Id == "excel.add_sheet")),
                     (string)data["revision"],
                     "schema revision is deterministic");
+
+                var skillRead = executor.Execute(
+                    Command(CapabilityDiscoveryExecutor.ReadToolId, "id", "excel.review_workbook"),
+                    catalog,
+                    new AppSettings(),
+                    false,
+                    false,
+                    null,
+                    AppSettings.DefaultMaxAgentToolSteps,
+                    skills);
+                AssertTrue(skillRead.Success, "same reader loads a skill");
+                AssertEqual("skill", (string)JObject.Parse(skillRead.DataJson)["kind"],
+                    "skill read returns discriminated kind");
+
+                var collisionDetected = false;
+                try
+                {
+                    CapabilityDiscoveryExecutor.ThrowOnCollision(catalog, new[]
+                    {
+                        new SkillDefinition { Id = "excel.add_sheet", Enabled = true }
+                    });
+                }
+                catch (InvalidOperationException)
+                {
+                    collisionDetected = true;
+                }
+                AssertTrue(collisionDetected, "tool/skill id collisions fail closed");
+
+                var largeCatalog = catalog.Concat(Enumerable.Range(0, 180).Select(index => new ToolDefinition
+                {
+                    Id = "excel.synthetic_" + index.ToString("D3"),
+                    Host = "Excel",
+                    Name = "Synthetic " + index,
+                    Description = new string('d', 300) + " " + index,
+                    ArgumentSchemaJson = EmptyFormalToolSchema,
+                    BuiltIn = true,
+                    Enabled = true,
+                    AgentCanRun = true
+                })).ToList();
+                CapabilityDiscoveryExecutor.BindReadSchema(largeCatalog, skills);
+                var boundedCatalog = CapabilityDiscoveryExecutor.BuildPromptCatalog(
+                    largeCatalog,
+                    skills,
+                    largeCatalog);
+                AssertEqual(true, (bool)boundedCatalog["truncated"],
+                    "large exact-id catalog is bounded in the prompt");
+                AssertTrue(((JArray)boundedCatalog["items"]).Count <= 128,
+                    "prompt catalog respects the item bound");
+                AssertTrue(((JArray)boundedCatalog["items"]).ToString(Newtonsoft.Json.Formatting.None).Length <= 25000,
+                    "prompt catalog respects the compact character bound");
+                var tailSearch = executor.Execute(
+                    Command(CapabilityDiscoveryExecutor.SearchToolId, "query", "excel.synthetic_179"),
+                    largeCatalog,
+                    new AppSettings(),
+                    false,
+                    false,
+                    null,
+                    AppSettings.DefaultMaxAgentToolSteps,
+                    skills);
+                AssertTrue(tailSearch.Success, "search reaches capabilities omitted from the prompt bound");
+                AssertContains(tailSearch.DataJson, "excel.synthetic_179",
+                    "search returns the exact omitted capability id");
             });
         }
 
@@ -87,10 +161,10 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Добавляю сразу.\",\"tool_calls\":[{\"id\":\"unloaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
+                    "{\"status\":\"in_progress\",\"message\":\"Добавляю сразу.\",\"tool_calls\":[{\"id\":\"unloaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
                     LoadToolSchemaResponse("excel.add_sheet", "schema_progressive"),
-                    "{\"message\":\"Добавляю после загрузки схемы.\",\"tool_calls\":[{\"id\":\"loaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
-                    "{\"message\":\"Лист создан.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Добавляю после загрузки схемы.\",\"tool_calls\":[{\"id\":\"loaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Лист создан.\",\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var options = new List<LlmRequestOptions>();
@@ -121,10 +195,18 @@ namespace RNAssistant.Harness
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"),
                     "unloaded attempt never executes");
                 AssertEqual(4, requests.Count, "unloaded repair, schema read, execution, and final requests");
-                AssertTrue(options[0].ResponseSchemaJson.IndexOf("excel.add_sheet", StringComparison.OrdinalIgnoreCase) < 0,
-                    "initial strict response schema omits unloaded tool");
-                AssertContains(options[2].ResponseSchemaJson, "excel.add_sheet",
-                    "strict response schema includes exact loaded tool");
+                var initialCallableNames = JObject.Parse(options[0].ResponseSchemaJson)
+                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
+                    .Select(token => (string)token)
+                    .ToList();
+                AssertTrue(!initialCallableNames.Contains("excel.add_sheet", StringComparer.OrdinalIgnoreCase),
+                    "initial strict response schema omits unloaded tool as a callable name");
+                var loadedCallableNames = JObject.Parse(options[2].ResponseSchemaJson)
+                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
+                    .Select(token => (string)token)
+                    .ToList();
+                AssertTrue(loadedCallableNames.Contains("excel.add_sheet", StringComparer.OrdinalIgnoreCase),
+                    "strict response schema includes exact loaded tool as a callable name");
                 AssertContains(FlattenSimple(requests[1]), "Unknown tool: excel.add_sheet",
                     "local parser explains unloaded tool during repair");
                 AssertContains(FlattenSimple(requests[2]), "\"kind\":\"tool-schema\"",
@@ -220,7 +302,7 @@ namespace RNAssistant.Harness
             string toolId,
             string callId)
         {
-            var command = Command(ToolDiscoveryExecutor.ReadToolId, "id", toolId);
+            var command = Command(CapabilityDiscoveryExecutor.ReadToolId, "id", toolId);
             command.ToolCallId = callId;
             var result = executor.Execute(command, catalog, new AppSettings(), false, false);
             AssertTrue(result.Success, "schema read succeeds for " + toolId);

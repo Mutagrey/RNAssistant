@@ -234,7 +234,7 @@ function appendAgentStepMessage(parent, text) {
 
 function appendCollapsedAgentStep(parent, step, isCurrent, finished) {
   var timeline = step.items || [];
-  var stats = agentRunStats(timeline, !!finished);
+  var stats = agentRunStats(timeline, !!finished, finished ? "completed" : "");
   var ambient = isCurrent && step.ambient ? step.ambient.activity : null;
   var active = ambient || (isCurrent && stats.current && isActiveTimelineStatus(activityStatus(stats.current))
     ? stats.current
@@ -290,8 +290,16 @@ function agentRunSummaryTitle(status, elapsed) {
     title = "Отменено";
   } else if (status === "waiting") {
     title = "Ожидает подтверждения";
-  } else if (status === "completed_with_errors") {
-    title = "Готово с ошибками";
+  } else if (status === "awaiting_user") {
+    title = "Ожидает ответа";
+  } else if (status === "blocked") {
+    title = "Заблокировано";
+  } else if (status === "refused") {
+    title = "Отказ";
+  } else if (status === "planned") {
+    title = "План готов";
+  } else if (status === "unknown") {
+    title = "Завершено (старый формат)";
   } else {
     title = "Готово";
   }
@@ -303,8 +311,11 @@ function appendAgentRunSummaryState(summary, status) {
     running: "",
     waiting: "!",
     failed: "×",
-    completed_with_errors: "×",
-    cancelled: "–"
+    cancelled: "–",
+    awaiting_user: "?",
+    blocked: "!",
+    refused: "×",
+    planned: "✓"
   };
   if (!Object.prototype.hasOwnProperty.call(labels, status)) return;
   var mark = document.createElement("span");
@@ -345,7 +356,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       section.appendChild(buildAgentRunTranscript(
         step.items,
         step.items,
-        agentRunStats(step.items, true)));
+        agentRunStats(step.items, true, "completed")));
     }
     content.appendChild(section);
   });
@@ -406,7 +417,8 @@ function renderAgentRunArticle(run) {
   var timeline = collectVisibleAgentTimelineItems(items);
   var timingItems = timeline.slice();
   if (finalMessage) timingItems.push(finalMessage);
-  var stats = agentRunStats(timingItems, !!finalMessage && !run.live);
+  var terminalStatus = finalMessage ? messageResponseStatus(finalMessage.message) : "";
+  var stats = agentRunStats(timingItems, !!finalMessage && !run.live, terminalStatus);
   var steps = groupAgentRunSteps(timeline);
   var node = document.createElement("article");
   node.className = "message assistant agent-run status-" + stats.status + (run.live ? " live" : "");

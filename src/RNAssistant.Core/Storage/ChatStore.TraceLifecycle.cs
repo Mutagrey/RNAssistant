@@ -93,6 +93,7 @@ namespace RNAssistant.Core.Storage
                 ["RunId"] = run == null || string.IsNullOrWhiteSpace(run.RunId) ? JValue.CreateNull() : new JValue(run.RunId),
                 ["TurnId"] = string.IsNullOrWhiteSpace(RunTurnId(run)) ? JValue.CreateNull() : new JValue(RunTurnId(run)),
                 ["Status"] = status ?? string.Empty,
+                ["ResponseProtocolVersion"] = run == null ? 0 : run.ResponseProtocolVersion,
                 ["Phase"] = run == null || string.IsNullOrWhiteSpace(run.Phase) ? JValue.CreateNull() : new JValue(run.Phase),
                 ["StartedUtc"] = run == null || run.StartedUtc == default(DateTime)
                     ? JValue.CreateNull()
@@ -131,6 +132,10 @@ namespace RNAssistant.Core.Storage
         private static bool IsTerminalRunStatus(string status)
         {
             return string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "awaiting_user", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "blocked", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "refused", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "planned", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(status, "interrupted", StringComparison.OrdinalIgnoreCase) ||

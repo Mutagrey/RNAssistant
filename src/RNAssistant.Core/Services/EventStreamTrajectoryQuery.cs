@@ -247,7 +247,7 @@ namespace RNAssistant.Core.Services
                 ToolCallIds = ExtractValues(sessionEvent.Data, "ToolCallId", "tool_call_id"),
                 ArtifactIds = ExtractArtifactIds(sessionEvent),
                 ResourceRefs = ExtractResourceRefs(sessionEvent == null ? null : sessionEvent.Data),
-                Statuses = ExtractValues(sessionEvent.Data, "Status", "ExecutionStatus")
+                Statuses = ExtractValues(sessionEvent.Data, "Status", "ExecutionStatus", "ResponseStatus")
             };
         }
 

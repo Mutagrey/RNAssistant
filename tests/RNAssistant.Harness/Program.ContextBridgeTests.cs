@@ -89,6 +89,8 @@ namespace RNAssistant.Harness
                 Content = "Done",
                 ExcludeFromModelContext = true,
                 ProtocolMessage = true,
+                ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                ResponseStatus = AgentResponseStatuses.Completed,
                 ToolCallId = "call-1",
                 ToolName = "rna_excel_read_range",
                 ToolResultRole = ToolResultRoles.Tool,
@@ -130,6 +132,10 @@ namespace RNAssistant.Harness
             AssertEqual("assistant", clonedMessages[0].Role, "message role");
             AssertTrue(clonedMessages[0].ExcludeFromModelContext, "message context exclusion");
             AssertTrue(clonedMessages[0].ProtocolMessage, "protocol marker cloned");
+            AssertEqual(AgentResponseProtocol.CurrentVersion, clonedMessages[0].ResponseProtocolVersion,
+                "response protocol version cloned");
+            AssertEqual(AgentResponseStatuses.Completed, clonedMessages[0].ResponseStatus,
+                "response status cloned");
             AssertEqual("call-1", clonedMessages[0].ToolCallId, "tool call id cloned");
             AssertEqual(ToolResultRoles.Tool, clonedMessages[0].ToolResultRole, "tool result role cloned");
             AssertTrue(!object.ReferenceEquals(sourceMessage.ToolCalls[0], clonedMessages[0].ToolCalls[0]), "tool call cloned");
@@ -181,6 +187,8 @@ namespace RNAssistant.Harness
             }, 1000);
             AssertContains(artifactPrompt, "CHAT_RESOURCE_INDEX", "prompt exposes resource metadata index");
             AssertContains(artifactPrompt, "html-2", "prompt exposes active html artifact reference");
+            AssertContains(artifactPrompt, "reps=metadata,structure",
+                "HTML workspace advertises only supported root representations");
             AssertTrue(artifactPrompt.IndexOf("large-v2", StringComparison.Ordinal) < 0, "prompt does not inline html snapshot bodies");
         }
 
@@ -411,6 +419,9 @@ namespace RNAssistant.Harness
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("ok", response["payload"]["message"].Value<string>(), "chat response message");
+            AssertEqual(AgentResponseStatuses.Completed,
+                response["payload"]["responseStatus"].Value<string>(),
+                "chat response carries explicit terminal status");
             AssertEqual("common.generated_tool", response["payload"]["tools"][0]["Id"].Value<string>(), "chat response refreshes tool catalog");
             AssertEqual("common.generated_skill", response["payload"]["skills"][0]["Id"].Value<string>(), "chat response refreshes skill catalog");
             AssertEqual("hello", controller.LastChatText, "chat text");

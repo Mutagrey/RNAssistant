@@ -455,7 +455,9 @@ namespace RNAssistant.Core.Services
 
         private static bool IsFailure(string status)
         {
-            return Same(status, "failed") || Same(status, "cancelled") || Same(status, "rejected") || Same(status, "interrupted");
+            return Same(status, "failed") || Same(status, "cancelled") || Same(status, "rejected") ||
+                Same(status, "interrupted") || Same(status, AgentResponseStatuses.Blocked) ||
+                Same(status, AgentResponseStatuses.Refused);
         }
 
         private static IEnumerable<JObject> Operations(SessionEvent item)

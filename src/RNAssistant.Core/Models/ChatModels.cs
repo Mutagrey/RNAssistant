@@ -73,6 +73,10 @@ namespace RNAssistant.Core.Models
         public bool ExcludeFromModelContext { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ProtocolMessage { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int ResponseProtocolVersion { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public string ResponseStatus { get; set; }
         public string ToolCallId { get; set; }
         public string ToolName { get; set; }
         public string ToolResultRole { get; set; }
@@ -274,6 +278,7 @@ namespace RNAssistant.Core.Models
         public string RunId { get; set; }
         public string TurnId { get; set; }
         public string RuntimeId { get; set; }
+        public int ResponseProtocolVersion { get; set; }
         public string Status { get; set; }
         public string Phase { get; set; }
         public string CurrentAction { get; set; }

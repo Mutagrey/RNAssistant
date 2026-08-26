@@ -33,6 +33,15 @@
     return !!objectValue(message, "ProtocolMessage", "protocolMessage", false);
   };
 
+  window.messageResponseProtocolVersion = function (message) {
+    return Number(objectValue(message, "ResponseProtocolVersion", "responseProtocolVersion", 0) || 0);
+  };
+
+  window.messageResponseStatus = function (message) {
+    if (window.messageResponseProtocolVersion(message) !== 2) return "";
+    return String(objectValue(message, "ResponseStatus", "responseStatus", "") || "").toLowerCase();
+  };
+
   window.messageTotalTokens = function (message) {
     return objectValue(message, "TotalTokens", "totalTokens", null);
   };

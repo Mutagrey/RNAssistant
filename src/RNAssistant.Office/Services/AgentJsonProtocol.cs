@@ -21,11 +21,11 @@ namespace RNAssistant.Office.Services
                 ["attempt"] = attempt,
                 ["max_attempts"] = maxAttempts,
                 ["instruction"] =
-                    "Return a new response to the current user request as exactly one JSON object with message and tool_calls. " +
-                    "Do not use Markdown, fences, or surrounding prose. To answer, clarify, refuse, or report inability, " +
-                    "put the user-facing text in message and return an empty tool_calls array. " +
-                    "An empty tool_calls array is terminal and must not contain unfinished progress or a promised action. " +
-                    "To use tools, return calls with unique id, exact name, and object arguments."
+                    "Return a new response to the current user request as exactly one conversation-response-v2 JSON object " +
+                    "with required status, message, and tool_calls. Do not use Markdown, fences, or surrounding prose. " +
+                    "Use status=in_progress only with one or more calls. Use completed, awaiting_user, blocked, or refused " +
+                    "only with an empty tool_calls array. planned is unavailable. Message wording never determines status. " +
+                    "Every call requires a unique id, exact name, and object arguments."
             };
             return new ChatMessage
             {
@@ -177,6 +177,8 @@ namespace RNAssistant.Office.Services
             if (string.Equals(normalizedRole, ToolResultRoles.Tool, StringComparison.Ordinal))
             {
                 var nativeMessage = AgentTranscript.CreateAssistantMessage(message ?? string.Empty, completion);
+                nativeMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
+                nativeMessage.ResponseStatus = AgentResponseStatuses.InProgress;
                 nativeMessage.ToolResultRole = normalizedRole;
                 nativeMessage.ToolCallId = call == null ? string.Empty : call.Id ?? string.Empty;
                 // ToolCalls keeps the provider-safe name; ToolName is local replay metadata and preserves the canonical id.
@@ -199,6 +201,7 @@ namespace RNAssistant.Office.Services
             }
             var content = new JObject
             {
+                ["status"] = AgentResponseStatuses.InProgress,
                 ["message"] = message ?? string.Empty,
                 ["tool_calls"] = new JArray
                 {
@@ -213,6 +216,8 @@ namespace RNAssistant.Office.Services
                 }
             }.ToString(Formatting.None);
             var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
+            protocolMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
+            protocolMessage.ResponseStatus = AgentResponseStatuses.InProgress;
             protocolMessage.ProtocolMessage = true;
             protocolMessage.ToolResultRole = normalizedRole;
             protocolMessage.ToolCallId = call == null ? string.Empty : call.Id ?? string.Empty;

@@ -240,6 +240,8 @@ namespace RNAssistant.Office.Services
             message.Content = text ?? string.Empty;
             message.AttachmentAnalysis = null;
             message.ExcludeFromModelContext = false;
+            message.ResponseProtocolVersion = 0;
+            message.ResponseStatus = null;
             message.Activity = null;
             message.PromptTokens = null;
             message.CompletionTokens = null;

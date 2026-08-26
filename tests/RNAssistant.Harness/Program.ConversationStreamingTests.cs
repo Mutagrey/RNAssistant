@@ -19,7 +19,7 @@ namespace RNAssistant.Harness
             var extractor = new ConversationMessageStreamExtractor();
             var chunks = new[]
             {
-                "\uFEFF {\"tool_calls\":[],\"meta\":{\"message\":\"ignore\"},\"mes",
+                "\uFEFF {\"status\":\"completed\",\"tool_calls\":[],\"meta\":{\"message\":\"ignore\"},\"mes",
                 "sage\":\"Line 1\\nquote: \\\"",
                 "ok\\\" \\\\ slash \\uD83D",
                 "\\uDE00\"}"
@@ -39,7 +39,7 @@ namespace RNAssistant.Harness
                 var responseChunks = new[]
                 {
                     "<think>" + thinking,
-                    "</think>{\"meta\":{\"message\":\"скрыто\"},\"mes",
+                    "</think>{\"status\":\"completed\",\"meta\":{\"message\":\"скрыто\"},\"mes",
                     "sage\":\"Привет\\nмир \\uD83D",
                     "\\uDE00\",\"tool_calls\":[]}"
                 };
@@ -82,6 +82,7 @@ namespace RNAssistant.Harness
                 AssertTrue(reasoning.Any(item => item.Status == "running"), "long thinking is shown before completion");
                 AssertEqual("completed", reasoning.Last().Status, "thinking receives a terminal update");
                 AssertEqual("Привет\nмир 😀", result.AssistantText, "final message matches streamed projection");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "streamed response status");
                 AssertEqual(thinking, session.Messages.Last().ReasoningContent, "thinking remains separate in history");
             });
         }
@@ -92,8 +93,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Черновик\",\"tool_calls\":\"invalid\"}",
-                    "{\"message\":\"Исправлено.\",\"tool_calls\":[]}"
+                    "{\"status\":\"completed\",\"message\":\"Черновик\",\"tool_calls\":\"invalid\"}",
+                    "{\"status\":\"completed\",\"message\":\"Исправлено.\",\"tool_calls\":[]}"
                 });
                 var calls = 0;
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>

@@ -155,13 +155,14 @@ namespace RNAssistant.Harness
         {
             return JsonConvert.SerializeObject(new
             {
+                status = AgentResponseStatuses.InProgress,
                 message = "Загружаю схему инструмента.",
                 tool_calls = new[]
                 {
                     new
                     {
                         id = callId ?? "schema_" + (toolId ?? string.Empty).Replace('.', '_'),
-                        name = ToolDiscoveryExecutor.ReadToolId,
+                        name = CapabilityDiscoveryExecutor.ReadToolId,
                         arguments = new { id = toolId }
                     }
                 }

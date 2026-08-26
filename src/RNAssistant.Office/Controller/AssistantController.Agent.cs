@@ -52,6 +52,7 @@ namespace RNAssistant.Office
                 {
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
+                EnsureCurrentResponseProtocol(session);
                 var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
                 if (!MarkPendingActivityExecuting(session, pending.PendingId, runId))
                 {
@@ -68,6 +69,7 @@ namespace RNAssistant.Office
                     RunId = runId,
                     TurnId = turnId,
                     RuntimeId = _runtimeId,
+                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     Status = "running",
                     Phase = "executing",
                     CurrentAction = "Выполняю подтверждённое действие.",
@@ -185,7 +187,7 @@ namespace RNAssistant.Office
                     ChatResourceReferenceService.LinkMessageResources(session, 0);
                     if (completion == null || !completion.WaitingForConfirmation)
                     {
-                        session.LastRun = null;
+                        ApplyTerminalRunResult(session, completion);
                     }
                     SaveSessionChanges(session);
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
@@ -267,7 +269,12 @@ namespace RNAssistant.Office
                     settings.ToolResultRole));
                 AnnotateRunMessages(session, protocolStart, "cancel_" + Guid.NewGuid().ToString("N"));
                 // Explicit user cancellation is terminal for this run: persist it, but do not invoke the model.
-                session.LastRun = null;
+                if (session.LastRun != null)
+                {
+                    session.LastRun.Status = "cancelled";
+                    session.LastRun.Phase = "cancelled";
+                    session.LastRun.CurrentAction = result.Message;
+                }
                 SaveSessionChanges(session);
             }
             return ChatState(session);
@@ -443,6 +450,16 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException("Pending tool belongs to another chat session.");
             }
+        }
+
+        private static void EnsureCurrentResponseProtocol(ChatSession session)
+        {
+            var version = session == null || session.LastRun == null
+                ? 0
+                : session.LastRun.ResponseProtocolVersion;
+            if (version == AgentResponseProtocol.CurrentVersion) return;
+            throw new InvalidOperationException(
+                "Pending action uses an older conversation response protocol. Cancel it and send the request again.");
         }
 
         private static PendingAgentTool FindPendingAgentTool(ChatSession session, string pendingId)

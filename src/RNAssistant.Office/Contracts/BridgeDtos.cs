@@ -687,6 +687,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("message")]
         public string Message { get; set; }
 
+        [JsonProperty("responseStatus", NullValueHandling = NullValueHandling.Ignore)]
+        public string ResponseStatus { get; set; }
+
         [JsonProperty("toolResults")]
         public IReadOnlyList<object> ToolResults { get; set; }
 

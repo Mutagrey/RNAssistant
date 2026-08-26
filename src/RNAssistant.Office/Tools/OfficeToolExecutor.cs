@@ -21,7 +21,7 @@ namespace RNAssistant.Office.Tools
         private readonly PipelineToolExecutor _pipelineExecutor;
         private readonly VbaToolExecutor _vbaExecutor;
         private readonly SkillToolExecutor _skillExecutor;
-        private readonly ToolDiscoveryExecutor _toolDiscoveryExecutor;
+        private readonly CapabilityDiscoveryExecutor _capabilityDiscoveryExecutor;
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
         private readonly PromptToolExecutor _promptToolExecutor;
         private readonly ResourceGatewayService _resourceGateway;
@@ -50,7 +50,7 @@ namespace RNAssistant.Office.Tools
             _pipelineExecutor = new PipelineToolExecutor();
             _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore);
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
-            _toolDiscoveryExecutor = new ToolDiscoveryExecutor();
+            _capabilityDiscoveryExecutor = new CapabilityDiscoveryExecutor(_skillExecutor);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
             _mutationLockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
@@ -68,7 +68,7 @@ namespace RNAssistant.Office.Tools
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
             RegisterControllerTools(controllerTools, _vbaExecutor.GetControllerTools(), ControllerExecutorKind.Vba);
             RegisterControllerTools(controllerTools, _skillExecutor.GetControllerTools(), ControllerExecutorKind.Skill);
-            RegisterControllerTools(controllerTools, _toolDiscoveryExecutor.GetControllerTools(), ControllerExecutorKind.ToolDiscovery);
+            RegisterControllerTools(controllerTools, _capabilityDiscoveryExecutor.GetControllerTools(), ControllerExecutorKind.CapabilityDiscovery);
             RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
             RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
             RegisterControllerTools(controllerTools, _resourceExecutor.GetControllerTools(), ControllerExecutorKind.Resource);
@@ -821,8 +821,12 @@ namespace RNAssistant.Office.Tools
                     return _vbaExecutor.ExecuteControllerTool(command, dryRun, context.Session, cancellationToken);
                 case ControllerExecutorKind.Skill:
                     return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.SkillCatalog);
-                case ControllerExecutorKind.ToolDiscovery:
-                    return _toolDiscoveryExecutor.ExecuteControllerTool(command, context.DiscoveryCatalog);
+                case ControllerExecutorKind.CapabilityDiscovery:
+                    return _capabilityDiscoveryExecutor.ExecuteControllerTool(
+                        command,
+                        context.DiscoveryCatalog,
+                        context.SkillCatalog,
+                        manualRun);
                 case ControllerExecutorKind.ToolAuthoring:
                     return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
                 case ControllerExecutorKind.Prompt:
@@ -1092,7 +1096,7 @@ namespace RNAssistant.Office.Tools
         {
             Vba,
             Skill,
-            ToolDiscovery,
+            CapabilityDiscovery,
             ToolAuthoring,
             Prompt,
             Resource,
