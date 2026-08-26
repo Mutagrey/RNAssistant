@@ -151,11 +151,13 @@ namespace RNAssistant.Core.Models
         public bool BeforeExists { get; set; }
         public string BeforeComponentType { get; set; }
         public string BeforeCodeSha256 { get; set; }
+        public string BeforeComparableCodeSha256 { get; set; }
         public ChatBlobReference BeforeCodeReference { get; set; }
         public string BackupId { get; set; }
         public bool IntendedAfterExists { get; set; }
         public string IntendedAfterComponentType { get; set; }
         public string IntendedAfterCodeSha256 { get; set; }
+        public string IntendedAfterComparableCodeSha256 { get; set; }
         public ChatBlobReference IntendedAfterCodeReference { get; set; }
 
         [JsonIgnore]
@@ -197,6 +199,7 @@ namespace RNAssistant.Core.Models
         public bool? ActualExists { get; set; }
         public string ActualComponentType { get; set; }
         public string ActualCodeSha256 { get; set; }
+        public string ActualComparableCodeSha256 { get; set; }
         public bool MatchesBefore { get; set; }
         public bool MatchesIntendedAfter { get; set; }
         public string ErrorCode { get; set; }

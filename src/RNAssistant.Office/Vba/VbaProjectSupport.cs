@@ -716,7 +716,7 @@ namespace RNAssistant.Office
                 {
                     return ToolResult.Fail("VBA component is not owned by this RNAssistant package and was not removed: " + property.Name, null, "vba_component_not_owned", false);
                 }
-                var actual = VbaToolManifestParser.CodeSha256(code);
+                var actual = VbaToolManifestParser.PackageComparableCodeSha256(code);
                 if (!string.Equals(actual, (string)property.Value, StringComparison.OrdinalIgnoreCase))
                 {
                     return ToolResult.Fail("VBA component changed after installation and was not removed: " + property.Name, JsonConvert.SerializeObject(new { component = property.Name, expected = (string)property.Value, actual = actual }), "vba_component_modified", false);
@@ -847,11 +847,15 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException((operation ?? "VBA package write") + " verification found no component.");
             }
             var expectedHash = VbaToolManifestParser.CodeSha256(expectedCode);
-            var actualHash = VbaToolManifestParser.CodeSha256(ReadComponentCode(componentObject));
-            if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
+            var actualCode = ReadComponentCode(componentObject);
+            var actualHash = VbaToolManifestParser.CodeSha256(actualCode);
+            var expectedComparableHash = VbaToolManifestParser.PackageComparableCodeSha256(expectedCode);
+            var actualComparableHash = VbaToolManifestParser.PackageComparableCodeSha256(actualCode);
+            if (!string.Equals(expectedComparableHash, actualComparableHash, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    (operation ?? "VBA package write") + " verification failed: expected " + expectedHash + ", actual " + actualHash + ".");
+                    (operation ?? "VBA package write") + " verification failed: expected/actual package hashes " + expectedHash + "/" + actualHash +
+                    ", VBE-comparable package hashes " + expectedComparableHash + "/" + actualComparableHash + ".");
             }
         }
 

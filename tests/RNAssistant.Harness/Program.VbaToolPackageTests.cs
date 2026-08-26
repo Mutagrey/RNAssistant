@@ -349,12 +349,82 @@ namespace RNAssistant.Harness
 
             var expected = new JObject
             {
-                ["RNA_FormToolForm"] = VbaToolManifestParser.CodeSha256(updatedCode)
+                ["RNA_FormToolForm"] = VbaToolManifestParser.PackageComparableCodeSha256(updatedCode)
             }.ToString();
             var removed = VbaProjectSupport.RemovePackage(document, expected, "RNAssistantPackage: id=excel.form_tool;");
             AssertTrue(removed.Success, "owned blank MSForm can be removed internally by package lifecycle");
             AssertTrue(!document.VBProject.VBComponents.Cast<FakeVbaComponent>().Any(component => component.Name == "RNA_FormToolForm"),
                 "package form is absent after verified removal");
+        }
+
+        private static void VbaPackageAcceptsVbeNormalization()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.SetDocumentTitle("Harness.xlsm");
+                adapter.VbaWriteTransform = code => code
+                    .Replace("Option Explicit", "option    explicit")
+                    .Replace("Public Function Prefix", "public   function Prefix");
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var tool = BuildVbaPackageToolForTest();
+
+                var installed = executor.InstallVbaTool(tool, false);
+
+                AssertTrue(installed.Success, "VBE-formatted package install succeeds");
+                AssertEqual("installed", executor.GetVbaInstallationStatus(tool), "VBE-formatted package probe matches source");
+                AssertTrue(
+                    !string.Equals(
+                        VbaToolManifestParser.CodeSha256(tool.Components[1].Code),
+                        VbaToolManifestParser.CodeSha256(adapter.GetVbaModuleCode("RNA_EchoService")),
+                        StringComparison.OrdinalIgnoreCase),
+                    "regression setup changes the strict package hash");
+                AssertEqual(
+                    VbaMutationStatuses.Committed,
+                    journal.ListPackageMutations("Excel", "doc").Single().Terminal.Status,
+                    "journal accepts VBE-equivalent installed source");
+                var installRecord = journal.ListPackageMutations("Excel", "doc").Single();
+                AssertTrue(
+                    installRecord.Prepared.Components.All(component => !string.IsNullOrWhiteSpace(component.IntendedAfterComparableCodeSha256)),
+                    "package preparation persists comparable intended hashes");
+                AssertTrue(
+                    installRecord.Terminal.Components.All(component => !string.IsNullOrWhiteSpace(component.ActualComparableCodeSha256)),
+                    "package terminal persists comparable actual hashes");
+
+                var removed = executor.RemoveVbaTool(tool);
+
+                AssertTrue(removed.Success, "VBE-formatted owned package uninstalls");
+                AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "VBE-formatted entry module removed");
+            });
+        }
+
+        private static void VbaComPackageAcceptsVbeNormalization()
+        {
+            var document = new FakeVbaDocumentObject();
+            document.VBProject.VBComponents.AddedModuleWriteTransform = code =>
+                code.Replace("Option Explicit", "option    explicit");
+            var source = "Option Explicit\nPublic Sub RunTool()\nEnd Sub";
+            var componentsJson = new JArray(new JObject
+            {
+                ["name"] = "RNA_FormatForm",
+                ["type"] = "MSForm",
+                ["code"] = source
+            }).ToString();
+            var marker = "RNAssistantPackage: id=excel.format_form; version=1.0.0; hash=test";
+
+            var installed = VbaProjectSupport.InstallPackage(document, componentsJson, marker);
+
+            AssertTrue(installed.Success, "COM install accepts VBE-equivalent package source");
+            var form = document.VBProject.VBComponents.Cast<FakeVbaComponent>().Single();
+            AssertContains(form.CodeModule.Code, "option    explicit", "COM regression setup reformats source");
+            var expected = new JObject
+            {
+                ["RNA_FormatForm"] = VbaToolManifestParser.PackageComparableCodeSha256(source)
+            }.ToString();
+            AssertTrue(
+                VbaProjectSupport.RemovePackage(document, expected, "RNAssistantPackage: id=excel.format_form;").Success,
+                "COM remove accepts VBE-equivalent owned package source");
         }
 
         private static void VbaDocumentToolsAreDiscoveredAndRunnable()

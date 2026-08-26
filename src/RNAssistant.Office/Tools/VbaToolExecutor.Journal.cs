@@ -591,9 +591,12 @@ namespace RNAssistant.Office.Tools
             Exception exception)
         {
             var components = new System.Collections.Generic.List<VbaPackageMutationComponentAssessment>();
+            var packageOperation = prepared != null &&
+                (string.Equals(prepared.Operation, "package_install", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(prepared.Operation, "package_remove", StringComparison.OrdinalIgnoreCase));
             foreach (var expected in prepared.Components ?? new System.Collections.Generic.List<VbaPackageMutationComponent>())
             {
-                components.Add(InspectPackageComponent(expected));
+                components.Add(InspectPackageComponent(expected, packageOperation));
             }
             var allIntended = components.Count > 0 && components.All(item => item.MatchesIntendedAfter);
             var allBefore = components.Count > 0 && components.All(item => item.MatchesBefore);
@@ -623,7 +626,9 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private VbaPackageMutationComponentAssessment InspectPackageComponent(VbaPackageMutationComponent expected)
+        private VbaPackageMutationComponentAssessment InspectPackageComponent(
+            VbaPackageMutationComponent expected,
+            bool packageOperation)
         {
             VbaModuleState actual;
             ToolResult readError;
@@ -632,12 +637,23 @@ namespace RNAssistant.Office.Tools
                 if (TryReadVbaModule(expected.ModuleName, 1000000, out actual, out readError))
                 {
                     var hash = VbaToolManifestParser.CodeSha256(actual.Code);
+                    var comparableHash = packageOperation
+                        ? VbaToolManifestParser.PackageComparableCodeSha256(actual.Code)
+                        : VbaToolManifestParser.VbeComparableCodeSha256(actual.Code);
                     var matchesBefore = expected.BeforeExists &&
-                        string.Equals(hash, expected.BeforeCodeSha256, StringComparison.OrdinalIgnoreCase) &&
+                        MatchesRecordedState(
+                            hash,
+                            comparableHash,
+                            expected.BeforeCodeSha256,
+                            expected.BeforeComparableCodeSha256) &&
                         string.Equals(actual.ComponentType, expected.BeforeComponentType, StringComparison.OrdinalIgnoreCase) &&
                         (!string.Equals(expected.BeforeComponentType, "MSForm", StringComparison.OrdinalIgnoreCase) || actual.CodeOnlyUserForm == true);
                     var matchesIntended = expected.IntendedAfterExists &&
-                        string.Equals(hash, expected.IntendedAfterCodeSha256, StringComparison.OrdinalIgnoreCase) &&
+                        MatchesRecordedState(
+                            hash,
+                            comparableHash,
+                            expected.IntendedAfterCodeSha256,
+                            expected.IntendedAfterComparableCodeSha256) &&
                         string.Equals(actual.ComponentType, expected.IntendedAfterComponentType, StringComparison.OrdinalIgnoreCase) &&
                         (!string.Equals(expected.IntendedAfterComponentType, "MSForm", StringComparison.OrdinalIgnoreCase) || actual.CodeOnlyUserForm == true);
                     return new VbaPackageMutationComponentAssessment
@@ -646,6 +662,7 @@ namespace RNAssistant.Office.Tools
                         ActualExists = true,
                         ActualComponentType = actual.ComponentType,
                         ActualCodeSha256 = hash,
+                        ActualComparableCodeSha256 = comparableHash,
                         MatchesBefore = matchesBefore,
                         MatchesIntendedAfter = matchesIntended,
                         ErrorCode = matchesBefore || matchesIntended ? null : "vba_package_component_diverged",

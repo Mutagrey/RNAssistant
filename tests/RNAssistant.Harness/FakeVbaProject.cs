@@ -31,11 +31,13 @@ namespace RNAssistant.Harness
 
         public int Count { get { return _items.Count; } }
         public bool FailNextAddedModuleWrite { get; set; }
+        public Func<string, string> AddedModuleWriteTransform { get; set; }
 
         public FakeVbaComponent Add(int type)
         {
             var component = new FakeVbaComponent("Module" + (_items.Count + 1), type, string.Empty);
             component.CodeModule.FailNextAdd = FailNextAddedModuleWrite;
+            component.CodeModule.WriteTransform = AddedModuleWriteTransform;
             FailNextAddedModuleWrite = false;
             _items.Add(component);
             return component;

@@ -525,7 +525,9 @@ namespace RNAssistant.Core.Storage
                     prepared.RetainBackups && component.BeforeExists != !string.IsNullOrWhiteSpace(component.BackupId) ||
                     !prepared.RetainBackups && !string.IsNullOrWhiteSpace(component.BackupId) ||
                     component.BeforeExists && (!ValidReference(component.BeforeCodeReference) || !ValidSha256(component.BeforeCodeSha256)) ||
-                    component.IntendedAfterExists && (!ValidReference(component.IntendedAfterCodeReference) || !ValidSha256(component.IntendedAfterCodeSha256)))
+                    component.IntendedAfterExists && (!ValidReference(component.IntendedAfterCodeReference) || !ValidSha256(component.IntendedAfterCodeSha256)) ||
+                    !string.IsNullOrWhiteSpace(component.BeforeComparableCodeSha256) && !ValidSha256(component.BeforeComparableCodeSha256) ||
+                    !string.IsNullOrWhiteSpace(component.IntendedAfterComparableCodeSha256) && !ValidSha256(component.IntendedAfterComparableCodeSha256))
                 {
                     return false;
                 }

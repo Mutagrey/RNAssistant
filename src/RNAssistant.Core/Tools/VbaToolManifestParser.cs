@@ -203,6 +203,11 @@ namespace RNAssistant.Core.Tools
             return TextPatternEngine.Sha256(NormalizeVbeComparableCode(code));
         }
 
+        public static string PackageComparableCodeSha256(string code)
+        {
+            return VbeComparableCodeSha256(NormalizeCode(code));
+        }
+
         public static string NormalizeLiveCode(string code)
         {
             var normalized = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');

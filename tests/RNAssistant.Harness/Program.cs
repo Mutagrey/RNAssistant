@@ -300,6 +300,8 @@ namespace RNAssistant.Harness
                 Test("vba: package journal reconciles interruption", VbaPackageJournalReconcilesInterruptedTransaction),
                 Test("vba: code-only UserForm package roundtrip", VbaCodeOnlyUserFormPackageRoundTrips),
                 Test("vba: COM code-only UserForm package lifecycle", VbaCodeOnlyUserFormPackageComLifecycle),
+                Test("vba: package accepts VBE normalization", VbaPackageAcceptsVbeNormalization),
+                Test("vba: COM package accepts VBE normalization", VbaComPackageAcceptsVbeNormalization),
                 Test("vba: document tools discovered", VbaDocumentToolsAreDiscoveredAndRunnable),
                 Test("vba: code hash normalizes export", VbaCodeHashIgnoresExportHeadersAndRuntimeMarkers),
 

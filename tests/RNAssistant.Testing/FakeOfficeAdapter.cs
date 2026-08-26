@@ -396,7 +396,11 @@ namespace RNAssistant.Harness
                 var marker = Argument(command, "marker", string.Empty);
                 foreach (var component in JArray.Parse(Argument(command, "componentsJson", "[]")).OfType<JObject>())
                 {
-                    SetVbaModule((string)component["name"], "' " + marker + "\n" + ((string)component["code"] ?? string.Empty), (string)component["type"] ?? "StdModule");
+                    var code = "' " + marker + "\n" + ((string)component["code"] ?? string.Empty);
+                    SetVbaModule(
+                        (string)component["name"],
+                        VbaWriteTransform == null ? code : VbaWriteTransform(code),
+                        (string)component["type"] ?? "StdModule");
                 }
                 return ToolResult.Ok("fake VBA package installed");
             }
@@ -412,7 +416,7 @@ namespace RNAssistant.Harness
                     {
                         return ToolResult.Fail("not owned", null, "vba_component_not_owned", false);
                     }
-                    if (_vbaModules.TryGetValue(property.Name, out module) && !string.Equals(VbaToolManifestParser.CodeSha256(module.Code), (string)property.Value, StringComparison.OrdinalIgnoreCase))
+                    if (_vbaModules.TryGetValue(property.Name, out module) && !string.Equals(VbaToolManifestParser.PackageComparableCodeSha256(module.Code), (string)property.Value, StringComparison.OrdinalIgnoreCase))
                     {
                         return ToolResult.Fail("modified", null, "vba_component_modified", false);
                     }

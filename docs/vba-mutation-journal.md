@@ -33,7 +33,7 @@ After the Office operation and read-back, one `mutation.terminal` records:
 
 Tool results expose `mutationId`, `rollbackBackupId`, and `journalStatus`. Restore is not a special side channel: it validates the current guard, journals the current source as the new before/rollback state, writes the selected CAS backup, verifies it, and appends its own terminal event.
 
-Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope and every component's before/intended existence, type, normalized source hash and CAS reference. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hash and whether it matches before and/or intended state. Mixed or unreadable component state is `unknown`, never partial success.
+Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope and every component's before/intended existence, type, normalized and VBE-comparable package source hashes, and CAS reference. The comparable hash also excludes import headers and RNAssistant ownership markers. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hashes and whether it matches before and/or intended state. Mixed or unreadable component state is `unknown`, never partial success.
 
 ## Recovery
 

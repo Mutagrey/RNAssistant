@@ -202,7 +202,10 @@ namespace RNAssistant.Office.Tools
         private ToolResult RemovePackageCore(ToolDefinition package, bool sessionOnly)
         {
             var expected = new JObject();
-            foreach (var component in package.Components) expected[component.Name] = VbaToolManifestParser.CodeSha256(component.Code);
+            foreach (var component in package.Components)
+            {
+                expected[component.Name] = VbaToolManifestParser.PackageComparableCodeSha256(component.Code);
+            }
             var remove = new ToolCommand { ToolId = BackendToolId("vba_remove_package_internal") };
             remove.Arguments["expectedComponentsJson"] = expected.ToString(Formatting.None);
             remove.Arguments["expectedMarker"] = (sessionOnly ? "RNAssistantSession: " : "RNAssistantPackage: ") + "id=" + package.Id + ";";
@@ -343,7 +346,9 @@ namespace RNAssistant.Office.Tools
                 present++;
                 var expected = VbaToolManifestParser.CodeSha256(component.Code);
                 var actual = VbaToolManifestParser.CodeSha256(current.Code);
-                var equals = string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase) &&
+                var expectedComparable = VbaToolManifestParser.PackageComparableCodeSha256(component.Code);
+                var actualComparable = VbaToolManifestParser.PackageComparableCodeSha256(current.Code);
+                var equals = string.Equals(expectedComparable, actualComparable, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(component.Type, current.ComponentType, StringComparison.OrdinalIgnoreCase) &&
                     (!string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase) || current.CodeOnlyUserForm == true);
                 if (equals) matching++;
@@ -353,6 +358,8 @@ namespace RNAssistant.Office.Tools
                     status = equals ? "matching" : "modified",
                     expected = expected,
                     actual = actual,
+                    expectedComparable = expectedComparable,
+                    actualComparable = actualComparable,
                     expectedType = component.Type,
                     actualType = current.ComponentType
                 });
