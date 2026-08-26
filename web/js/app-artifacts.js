@@ -194,6 +194,15 @@
     });
   }
 
+  function chatDockResourceHeads() {
+    var activePlanId = String(state.activePlanArtifactId || "").toLowerCase();
+    return artifactResourceHeads().filter(function (artifact) {
+      var isActivePlan = activePlanId && artifactKind(artifact) === "plan" &&
+        String(artifactId(artifact)).toLowerCase() === activePlanId;
+      return !isActivePlan;
+    });
+  }
+
   function openArtifactResource(artifact) {
     if (!artifact) return;
     var kind = artifactKind(artifact);
@@ -368,19 +377,24 @@
     panel.setAttribute("aria-hidden", open ? "false" : "true");
     button.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
+      if (typeof window.setAgentPlanDockOpen === "function") window.setAgentPlanDockOpen(false);
       renderChatResourceNavigation();
       var search = $("chatResourcesSearchInput");
-      if (search && artifactResourceHeads().length > 6) search.focus();
+      if (search && chatDockResourceHeads().length > 6) search.focus();
     }
   }
 
   function renderChatResourceNavigation() {
+    var dock = $("chatResourceDock");
     var button = $("toggleChatResourcesButton");
     var count = $("chatResourceCount");
     var list = $("chatResourcesList");
     var search = $("chatResourcesSearchInput");
     if (!button || !count || !list) return;
-    var items = artifactResourceHeads();
+    var items = chatDockResourceHeads();
+    var hasResources = !!state.activeChatId && !!items.length;
+    if (dock) dock.classList.toggle("hidden", !hasResources);
+    if (!hasResources) setChatResourcePopoverOpen(false);
     if (resourceNavigationChatId !== String(state.activeChatId || "")) {
       resourceNavigationChatId = String(state.activeChatId || "");
       if (search) search.value = "";
@@ -498,5 +512,6 @@
   window.appendAgentRunResourceCards = appendAgentRunResourceCards;
   window.bindChatResourceNavigation = bindChatResourceNavigation;
   window.renderChatResourceNavigation = renderChatResourceNavigation;
+  window.setChatResourcePopoverOpen = setChatResourcePopoverOpen;
   window.openArtifactResource = openArtifactResource;
 }());

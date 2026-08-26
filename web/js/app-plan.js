@@ -135,36 +135,74 @@
     var approvalPending = typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
     var details = document.createElement("details");
     details.className = "agent-plan-card status-" + info.status;
-    details.open = !approvalPending && (state.agentPlanExpanded[expansionKey] !== undefined
-      ? !!state.agentPlanExpanded[expansionKey]
-      : info.status !== "completed");
-    details.addEventListener("toggle", function () { state.agentPlanExpanded[expansionKey] = details.open; });
+    details.open = !approvalPending && !!state.agentPlanExpanded[expansionKey];
+    details.addEventListener("toggle", function () {
+      state.agentPlanExpanded[expansionKey] = details.open;
+      if (details.open && typeof window.setChatResourcePopoverOpen === "function") window.setChatResourcePopoverOpen(false);
+    });
 
     var summary = document.createElement("summary");
     summary.className = "agent-plan-summary";
+    summary.title = plan.goal;
+    summary.setAttribute("aria-label", "План: выполнено " + info.completed + " из " + info.total + ". " + plan.goal);
+    var icon = document.createElement("span");
+    icon.className = "agent-plan-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = "<svg viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"m8 9 1.5 1.5L12 8\"/><path d=\"M14 9h3\"/><path d=\"m8 15 1.5 1.5L12 14\"/><path d=\"M14 15h3\"/></svg>";
+    var label = document.createElement("span");
+    label.className = "agent-plan-label";
+    label.textContent = "План";
     var count = document.createElement("span");
     count.className = "agent-plan-count";
     count.textContent = info.completed + "/" + info.total;
-    var copy = document.createElement("span");
-    copy.className = "agent-plan-copy";
+    var caret = document.createElement("span");
+    caret.className = "agent-plan-caret";
+    caret.setAttribute("aria-hidden", "true");
+    summary.appendChild(icon);
+    summary.appendChild(label);
+    summary.appendChild(count);
+    summary.appendChild(caret);
+    details.appendChild(summary);
+
+    var popover = document.createElement("div");
+    popover.className = "agent-plan-popover";
+    var head = document.createElement("div");
+    head.className = "agent-plan-popover-head";
     var goal = document.createElement("strong");
     goal.textContent = plan.goal;
     var current = document.createElement("span");
     current.textContent = info.current ? stepValue(info.current, "Text", "text", "") : "План выполнен";
-    copy.appendChild(goal);
-    copy.appendChild(current);
-    var caret = document.createElement("span");
-    caret.className = "agent-plan-caret";
-    caret.textContent = "›";
-    caret.setAttribute("aria-hidden", "true");
-    summary.appendChild(count);
-    summary.appendChild(copy);
-    summary.appendChild(caret);
-    details.appendChild(summary);
-    details.appendChild(renderSteps(plan));
+    head.appendChild(goal);
+    head.appendChild(current);
+    popover.appendChild(head);
+    popover.appendChild(renderSteps(plan));
+    details.appendChild(popover);
     dock.replaceChildren(details);
     dock.classList.remove("hidden");
   }
 
+  function setAgentPlanDockOpen(open) {
+    var dock = $("agentPlanDock");
+    var details = dock && dock.querySelector(".agent-plan-card");
+    if (details) details.open = !!open;
+  }
+
+  document.addEventListener("pointerdown", function (event) {
+    var dock = $("agentPlanDock");
+    var details = dock && dock.querySelector(".agent-plan-card");
+    if (details && details.open && !dock.contains(event.target)) details.open = false;
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    var dock = $("agentPlanDock");
+    var details = dock && dock.querySelector(".agent-plan-card");
+    if (!details || !details.open) return;
+    details.open = false;
+    var summary = details.querySelector("summary");
+    if (summary) summary.focus();
+  });
+
   window.renderAgentPlanDock = renderAgentPlanDock;
+  window.setAgentPlanDockOpen = setAgentPlanDockOpen;
 }());

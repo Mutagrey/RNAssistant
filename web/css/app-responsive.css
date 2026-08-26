@@ -180,6 +180,14 @@
     max-width: 88px;
   }
 
+  .composer-model-picker {
+    max-width: min(142px, 34vw);
+  }
+
+  .composer-model-picker .composer-picker-trigger-label {
+    max-width: min(102px, 25vw);
+  }
+
   .composer-mode-picker .composer-picker-trigger-label {
     display: none;
   }

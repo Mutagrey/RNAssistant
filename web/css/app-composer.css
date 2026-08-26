@@ -311,16 +311,16 @@
   gap: 5px;
   align-items: center;
   width: auto;
-  height: 25px;
+  height: 24px;
   min-width: 0;
-  min-height: 25px;
+  min-height: 24px;
   overflow: hidden;
-  border: 1px solid #e0e3e8;
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0 7px;
-  background: #f7f7f8;
+  background: var(--secondary-bg);
   color: var(--text);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+  box-shadow: none;
   font-size: 10.5px;
   font-weight: var(--label-font-weight);
   cursor: help;
@@ -440,6 +440,18 @@
   font-weight: var(--label-font-weight);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.composer-model-picker {
+  max-width: min(292px, 32vw);
+}
+
+.composer-model-picker .composer-picker-trigger {
+  max-width: 100%;
+}
+
+.composer-model-picker .composer-picker-trigger-label {
+  max-width: min(248px, 28vw);
 }
 
 .composer-mode-picker .composer-picker-trigger-label {
@@ -743,6 +755,40 @@
   white-space: nowrap;
 }
 
+.context-compact-button {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  border: 1px solid var(--line);
+  background: var(--secondary-bg);
+}
+
+.context-compact-button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--composer-control-hover);
+  color: var(--accent-strong);
+}
+
+.context-compact-button:disabled {
+  color: var(--composer-disabled-text);
+  opacity: .55;
+}
+
+.context-compact-button[hidden] {
+  display: none;
+}
+
+.context-compact-button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .model-connection-indicator i {
   width: 6px;
   height: 6px;
@@ -952,9 +998,9 @@
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .context-meter {
-  border-color: #3d4652;
-  background: #292f38;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .2);
+  border-color: var(--line);
+  background: var(--secondary-bg);
+  box-shadow: none;
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .context-meter::before {
