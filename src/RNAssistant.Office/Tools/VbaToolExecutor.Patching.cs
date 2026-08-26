@@ -65,7 +65,7 @@ namespace RNAssistant.Office.Tools
             updated = current.Substring(0, index) + text + current.Substring(index + find.Length);
             if (string.Equals(updated, current, StringComparison.Ordinal))
             {
-                return ToolResult.Fail("The exact VBA patch makes no change.", null, "vba_patch_no_change", true);
+                return ToolResult.Ok("The exact VBA replacement already matches current source; skipped.");
             }
             return ToolResult.Ok("Replaced one exact unique VBA source block without changing text outside it.");
         }

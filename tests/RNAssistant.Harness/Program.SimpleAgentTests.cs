@@ -594,6 +594,10 @@ namespace RNAssistant.Harness
                 "{\"message\":\"Проверю листы.\",\"tool_calls\":[]}",
                 new[] { inspect });
             AssertTrue(!futurePromise.Success, "explicit future promise still requires a tool call");
+            var delayedReport = new AgentResponseParser().Parse(
+                "{\"message\":\"Анализ проекта завершен. Подготавливаю отчет о найденных проблемах и исправлениях.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(!delayedReport.Success, "completed prefix cannot hide a promised final report");
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {

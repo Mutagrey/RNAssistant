@@ -33,7 +33,7 @@ namespace RNAssistant.Office.Tools
 
             yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), "Common", "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted. Runtime snapshots current state before confirmation.", RestoreBackupSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document with two strict branches. Whole-source write requires moduleName+code and uses mode=upsert/createOnly/updateOnly; componentType applies only on creation. Atomic rename requires moduleName+newModuleName+mode=rename and accepts no code/componentType. Runtime guards both names, normalizes a new destination, rejects collisions, journals both identities, and verifies read-back. Rename preserves the component but does not rewrite textual references to its old name.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), "Common", "Mutates document: Apply ordered exact unique source-block replacements to an existing VBA component. There are no line-number, fuzzy, first-match, regex, or implicit insertion modes. Runtime patches one current full-module snapshot in memory, then performs one guarded whole-module write. Use common.vba_write_module with complete source when the module is missing.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), "Common", "Mutates document: Apply ordered exact unique source-block replacements to an existing VBA component. There are no line-number, fuzzy, first-match, regex, or implicit insertion modes. Runtime patches one current full-module snapshot in memory, then performs one guarded whole-module write. Exact replacements already satisfied are skipped; an all-no-op patch succeeds without writing. Use common.vba_write_module with complete source when the module is missing.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), "Common", "Mutates document: Delete an existing StdModule or ClassModule. Runtime reads it, validates the type, and creates a rollback backup; no separate read call is required. Document modules and UserForms are not deleted.", ModuleNameSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
         }
 
@@ -659,13 +659,19 @@ namespace RNAssistant.Office.Tools
             foreach (JObject operation in operations.OfType<JObject>())
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var beforeOperation = updated;
                 var result = ApplyPatchOperation(updated, operation, out updated);
                 if (!result.Success)
                 {
                     return result;
                 }
 
-                summary.Add(new { op = (string)operation["op"], message = result.Message });
+                summary.Add(new
+                {
+                    op = (string)operation["op"],
+                    changed = !string.Equals(beforeOperation, updated, StringComparison.Ordinal),
+                    message = result.Message
+                });
             }
             if (summary.Count != operations.Count)
             {
@@ -673,13 +679,22 @@ namespace RNAssistant.Office.Tools
             }
             if (string.Equals(updated, code, StringComparison.Ordinal))
             {
-                return ToolResult.Fail("The ordered exact VBA patch makes no net change.", null, "vba_patch_no_change", true);
+                return ToolResult.Ok(
+                    "VBA patch is already satisfied; no document write was needed.",
+                    JsonConvert.SerializeObject(new
+                    {
+                        moduleName = moduleName,
+                        operations = summary,
+                        changed = false,
+                        codeSha256 = currentHash
+                    }));
             }
 
             var preview = JsonConvert.SerializeObject(new
             {
                 moduleName = moduleName,
                 operations = summary,
+                changed = true,
                 oldLength = code.Length,
                 newLength = updated.Length,
                 previousCodeSha256 = currentHash,

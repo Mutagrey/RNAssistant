@@ -215,15 +215,10 @@ function collectRunActivities(items) {
 }
 
 function currentRunActivity(activities, finished) {
-  if (finished) {
-    return activities.length ? activities[activities.length - 1] : null;
-  }
-  var preferred = ["running", "waiting", "failed", "cancelled"];
-  for (var i = 0; i < preferred.length; i += 1) {
-    for (var j = activities.length - 1; j >= 0; j -= 1) {
-      if (activityStatus(activities[j]) === preferred[i]) {
-        return activities[j];
-      }
+  if (!finished) {
+    for (var i = activities.length - 1; i >= 0; i -= 1) {
+      var status = activityStatus(activities[i]);
+      if (status === "running" || status === "waiting") return activities[i];
     }
   }
   return activities.length ? activities[activities.length - 1] : null;
@@ -276,8 +271,8 @@ function agentRunStats(items, finished) {
     counts: counts,
     elapsed: elapsed,
     status: finished
-      ? (counts.failed ? "completed_with_errors" : "completed")
-      : (counts.failed ? "failed" : (counts.running ? "running" : (counts.waiting ? "waiting" : (counts.cancelled ? "cancelled" : "completed"))))
+      ? "completed"
+      : (current ? activityStatus(current) : "completed")
   };
 }
 

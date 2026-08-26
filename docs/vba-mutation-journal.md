@@ -21,6 +21,8 @@ After guard validation and confirmation, but before COM dispatch, every public `
 - rollback backup id when a before state exists;
 - chat/session, run, turn, step, and tool-call correlation.
 
+An exact patch whose ordered replacements produce the current source is already satisfied, not a mutation: its execution returns success and writes neither a backup nor journal events.
+
 After the Office operation and read-back, one `mutation.terminal` records:
 
 - `committed` — verified intended state;

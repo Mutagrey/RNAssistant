@@ -91,7 +91,7 @@ namespace RNAssistant.Core.Models
         public string Text { get; set; }
         [Newtonsoft.Json.JsonProperty("contentSha256")]
         public string ContentSha256 { get; set; }
-        [Newtonsoft.Json.JsonProperty("offset")]
+        [Newtonsoft.Json.JsonIgnore]
         public int Offset { get; set; }
         [Newtonsoft.Json.JsonProperty("returnedCharacters")]
         public int ReturnedCharacters { get; set; }

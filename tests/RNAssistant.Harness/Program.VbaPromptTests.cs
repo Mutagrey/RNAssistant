@@ -450,6 +450,45 @@ namespace RNAssistant.Harness
                 AssertTrue(backups[0].Code == null, "backup list is metadata-only");
                 AssertContains(backupStore.Find("Excel", "doc", backups[0].BackupId, null).Code, "\"old\"", "backup code");
 
+                var mixedNoOp = executor.Execute(
+                    Command(
+                        "common.vba_apply_patch",
+                        "moduleName", "Module2",
+                        "patch", new JArray(
+                            new JObject { ["op"] = "replace", ["find"] = "\"new\"", ["text"] = "\"new\"" },
+                            new JObject { ["op"] = "replace", ["find"] = "Sub Run()", ["text"] = "Sub RunFixed()" })),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertTrue(mixedNoOp.Success, "already-satisfied hunk does not abort later exact replacements");
+                AssertContains(adapter.GetVbaModuleCode("Module2"), "Sub RunFixed()", "later hunk still changes source");
+
+                var writesBeforeNoOp = adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase));
+                var backupsBeforeNoOp = backupStore.List("Excel", "doc").Count;
+                var allNoOp = executor.Execute(
+                    Command(
+                        "common.vba_apply_patch",
+                        "moduleName", "Module2",
+                        "patch", new JArray(new JObject
+                        {
+                            ["op"] = "replace",
+                            ["find"] = "Sub RunFixed()",
+                            ["text"] = "Sub RunFixed()"
+                        })),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertTrue(allNoOp.Success, "all-no-op patch completes successfully");
+                AssertContains(allNoOp.DataJson, "\"changed\":false", "all-no-op patch reports its outcome");
+                AssertEqual(writesBeforeNoOp, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase)),
+                    "all-no-op patch performs no backend write");
+                AssertEqual(backupsBeforeNoOp, backupStore.List("Excel", "doc").Count,
+                    "all-no-op patch creates no mutation backup");
+
                 var malformed = new ToolCommand { ToolId = executor.VbaToolId("vba_apply_patch") };
                 malformed.Arguments["moduleName"] = "Module2";
                 malformed.Arguments["patch"] = "[{\"op\":\"replace\"}}trailing";

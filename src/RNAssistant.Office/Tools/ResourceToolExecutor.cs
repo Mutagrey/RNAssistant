@@ -44,7 +44,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(
                 SearchToolId,
                 "Common",
-                "Read-only: Search resource metadata and locally available text. Returns bounded snippets and canonical URIs; it never returns raw binary media.",
+                "Read-only: Search resource metadata and locally available text. Returns bounded snippets and canonical URIs; match/snippet offsets are informational and are never resources_read arguments. It never returns raw binary media.",
                 SearchSchema(),
                 name: "resources_search",
                 scope: "session");
@@ -167,7 +167,7 @@ namespace RNAssistant.Office.Tools
                 "\"uri\":{\"type\":\"string\",\"description\":\"Exact canonical URI from resources_list/search/resolve.\",\"minLength\":1,\"maxLength\":1000}," +
                 "\"revision\":{\"type\":\"string\",\"description\":\"Optional exact revision returned with the resource reference. Mutable reads fail if it has changed.\",\"minLength\":1,\"maxLength\":128}," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read; auto selects the provider's preferred bounded form.\",\"enum\":[\"auto\",\"metadata\",\"text\",\"structure\",\"source\",\"media\"],\"default\":\"auto\"}," +
-                "\"cursor\":{\"type\":\"string\",\"description\":\"Copy the opaque nextCursor from the previous read unchanged. Mutable-resource cursors are revision-bound and fail on drift.\",\"maxLength\":256}," +
+                "\"cursor\":{\"type\":\"string\",\"description\":\"For continuation, copy the opaque nextCursor from the previous read unchanged. Never pass or calculate an offset; mutable-resource cursors are revision-bound and fail on drift.\",\"maxLength\":256}," +
                 "\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum text characters returned.\",\"minimum\":128,\"maximum\":32000,\"default\":8000}" +
                 "},\"required\":[\"uri\"],\"additionalProperties\":false}";
         }

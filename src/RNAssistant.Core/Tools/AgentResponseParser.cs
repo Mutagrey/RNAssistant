@@ -157,10 +157,13 @@ namespace RNAssistant.Core.Tools
         private static bool LooksLikeUnexecutedAction(string message)
         {
             var value = (message ?? string.Empty).Trim();
-            if (value.Length == 0 || value.Length > 240 || value.IndexOf('?') >= 0 ||
-                value.IndexOf(':') >= 0 || value.IndexOf(';') >= 0 || value.IndexOf('—') >= 0 ||
-                value.IndexOf('\n') >= 0 || value.IndexOf(". ", StringComparison.Ordinal) >= 0) return false;
-            var lower = value.ToLowerInvariant();
+            if (value.Length == 0) return false;
+            var candidate = Regex.Split(value, "(?:[.!?…]\\s+|\\r?\\n)+")
+                .LastOrDefault(part => !string.IsNullOrWhiteSpace(part));
+            candidate = (candidate ?? value).Trim();
+            if (candidate.Length == 0 || candidate.Length > 240 || candidate.IndexOf('?') >= 0 ||
+                candidate.IndexOf(':') >= 0 || candidate.IndexOf(';') >= 0 || candidate.IndexOf('—') >= 0) return false;
+            var lower = candidate.ToLowerInvariant();
             var terminalMarkers = new[]
             {
                 "готово", "завершено", "создано", "создан ", "создана ", "обновлено", "исправлено",
@@ -169,25 +172,25 @@ namespace RNAssistant.Core.Tools
             };
             if (terminalMarkers.Any(marker => lower.IndexOf(marker, StringComparison.Ordinal) >= 0)) return false;
 
-            var ellipsis = value.EndsWith("...", StringComparison.Ordinal) ||
-                value.EndsWith("…", StringComparison.Ordinal);
+            var ellipsis = candidate.EndsWith("...", StringComparison.Ordinal) ||
+                candidate.EndsWith("…", StringComparison.Ordinal);
             var explicitIntent = Regex.IsMatch(
-                    value,
-                    "^(?:сейчас\\s+(?:создаю|обновляю|исправляю|проверяю|читаю|добавляю|удаляю|переименовываю|применяю|запускаю|выполняю|привязываю|сохраняю|редактирую|анализирую|пробую)|создам|обновлю|исправлю|проверю|прочитаю|добавлю|удалю|переименую|применю|запущу|выполню|привяжу|сохраню|отредактирую|проанализирую|попробую|начинаю|приступаю)(?:\\b|\\s|[.…])",
+                    candidate,
+                    "^(?:(?:подготавливаю|готовлю|формирую|составляю)|сейчас\\s+(?:создаю|обновляю|исправляю|проверяю|читаю|добавляю|удаляю|переименовываю|применяю|запускаю|выполняю|привязываю|сохраняю|редактирую|анализирую|пробую|подготавливаю|готовлю|формирую|составляю)|создам|обновлю|исправлю|проверю|прочитаю|добавлю|удалю|переименую|применю|запущу|выполню|привяжу|сохраню|отредактирую|проанализирую|попробую|подготовлю|сформирую|составлю|начинаю|приступаю)(?:\\b|\\s|[.…])",
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
                 Regex.IsMatch(
-                    value,
-                    "^(?:now\\s+(?:creating|updating|fixing|checking|reading|adding|deleting|renaming|applying|running|executing|binding|saving|editing|analyzing|trying|starting|working\\s+on)|(?:let\\s+me|i(?:'|’)ll|i\\s+will)\\s+(?:create|update|fix|check|read|inspect|add|delete|rename|apply|run|execute|bind|save|edit|analyze|try|start|write|build))(?:\\b|\\s|[.…])",
+                    candidate,
+                    "^(?:(?:preparing|drafting|compiling)|now\\s+(?:creating|updating|fixing|checking|reading|adding|deleting|renaming|applying|running|executing|binding|saving|editing|analyzing|trying|starting|preparing|drafting|compiling|working\\s+on)|(?:let\\s+me|i(?:'|’)ll|i\\s+will)\\s+(?:create|update|fix|check|read|inspect|add|delete|rename|apply|run|execute|bind|save|edit|analyze|try|start|write|build|prepare|draft|compile))(?:\\b|\\s|[.…])",
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (!ellipsis && !explicitIntent) return false;
 
             return Regex.IsMatch(
-                       value,
-                       "^(?:сейчас\\s+)?(?:создаю|создам|обновляю|обновлю|исправляю|исправлю|проверяю|проверю|читаю|прочитаю|добавляю|добавлю|удаляю|удалю|переименовываю|переименую|применяю|применю|запускаю|запущу|выполняю|выполню|привязываю|привяжу|сохраняю|сохраню|редактирую|отредактирую|анализирую|проанализирую|пробую|попробую|начинаю|приступаю)(?:\\b|\\s|[.…])",
+                       candidate,
+                       "^(?:сейчас\\s+)?(?:создаю|создам|обновляю|обновлю|исправляю|исправлю|проверяю|проверю|читаю|прочитаю|добавляю|добавлю|удаляю|удалю|переименовываю|переименую|применяю|применю|запускаю|запущу|выполняю|выполню|привязываю|привяжу|сохраняю|сохраню|редактирую|отредактирую|анализирую|проанализирую|пробую|попробую|подготавливаю|подготовлю|готовлю|формирую|сформирую|составляю|составлю|начинаю|приступаю)(?:\\b|\\s|[.…])",
                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
                    Regex.IsMatch(
-                       value,
-                       "^(?:now\\s+)?(?:creating|updating|fixing|checking|reading|adding|deleting|renaming|applying|running|executing|binding|saving|editing|analyzing|trying|starting|working\\s+on)(?:\\b|\\s|[.…])|^(?:let\\s+me|i(?:'|’)ll|i\\s+will)\\s+(?:create|update|fix|check|read|inspect|add|delete|rename|apply|run|execute|bind|save|edit|analyze|try|start|write|build)(?:\\b|\\s|[.…])",
+                       candidate,
+                       "^(?:now\\s+)?(?:creating|updating|fixing|checking|reading|adding|deleting|renaming|applying|running|executing|binding|saving|editing|analyzing|trying|starting|preparing|drafting|compiling|working\\s+on)(?:\\b|\\s|[.…])|^(?:let\\s+me|i(?:'|’)ll|i\\s+will)\\s+(?:create|update|fix|check|read|inspect|add|delete|rename|apply|run|execute|bind|save|edit|analyze|try|start|write|build|prepare|draft|compile)(?:\\b|\\s|[.…])",
                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
     }

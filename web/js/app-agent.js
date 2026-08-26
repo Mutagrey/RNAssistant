@@ -360,18 +360,6 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   return details;
 }
 
-function lastAgentRunException(timeline) {
-  var result = null;
-  function inspect(activity) {
-    if (!activity) return;
-    var status = activityStatus(activity);
-    if (status === "failed" || status === "cancelled") result = activity;
-    activityChildren(activity).forEach(inspect);
-  }
-  (timeline || []).forEach(function (item) { inspect(item.activity); });
-  return result;
-}
-
 function agentRunOutcomeReason(activity) {
   var reason = String(activityResultMessage(activity) || "").trim();
   if (reason === "Execution was cancelled before a result was recorded.") {
@@ -435,7 +423,10 @@ function renderAgentRunArticle(run) {
     });
   } else {
     var overview = appendAgentRunOverview(body, steps, timeline, stats);
-    appendAgentRunOutcome(body, lastAgentRunException(timeline), overview);
+    var currentStatus = stats.current ? activityStatus(stats.current) : "";
+    if (!finalMessage && (currentStatus === "failed" || currentStatus === "cancelled")) {
+      appendAgentRunOutcome(body, stats.current, overview);
+    }
   }
   if (finalMessage) {
     var finalSection = document.createElement("section");

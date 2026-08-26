@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -102,6 +103,10 @@ namespace RNAssistant.Harness
             var first = ReadResource(gateway, session, resourceUri, "text", null, 128).Result;
             AssertEqual(128, first.ReturnedCharacters, "resource read is bounded");
             AssertTrue(!first.Complete && first.Truncated, "resource read exposes truncation");
+            var firstJson = JsonConvert.SerializeObject(first);
+            AssertTrue(firstJson.IndexOf("\"offset\"", StringComparison.Ordinal) < 0,
+                "resource result keeps continuation offsets opaque");
+            AssertContains(firstJson, "\"nextCursor\"", "resource result exposes only the continuation cursor");
             var second = ReadResource(gateway, session, resourceUri, "text",
                 first.NextCursor, 128).Result;
             AssertTrue(second.Offset > 0, "resource cursor advances");

@@ -150,7 +150,7 @@ namespace RNAssistant.Office.Tools
             };
             var exactReplace = PatchOperationSchema(
                 "replace",
-                "Replace one exact unique current source block. Missing or ambiguous source is rejected without writing.",
+                "Replace one exact unique current source block. Missing or ambiguous source is rejected without writing; an already-satisfied identical replacement is skipped.",
                 new JObject { ["find"] = find, ["text"] = text },
                 "find",
                 "text");
