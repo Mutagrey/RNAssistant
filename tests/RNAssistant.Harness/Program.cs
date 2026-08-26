@@ -300,6 +300,9 @@ namespace RNAssistant.Harness
                 Test("context: core normalizer", ContextNormalizerUsesCoreModelsOnly),
                 Test("context: normalize and upsert", ContextServiceNormalizesAndUpserts),
                 Test("context: trim helper", ContextServiceTrimsText),
+                Test("resources: canonical URI roundtrip", ResourceUriRoundTripsCanonicalAddress),
+                Test("resources: rejects ambiguous URI", ResourceUriRejectsAmbiguousAddresses),
+                Test("resources: separates head and revision", ResourceContractsSeparateHeadAndRevision),
                 Test("chart: default config", ChartArtifactBuildsDefaultConfig),
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
 

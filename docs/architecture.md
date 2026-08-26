@@ -1,5 +1,7 @@
 # RNAssistant architecture
 
+> The accepted replacement for artifact access and conversation execution is [Resource Fabric](resource-fabric.md). This document describes the currently shipped runtime until each vertical slice is cut over; legacy paths must not gain new responsibilities.
+
 ## Product
 
 RNAssistant is a local Office assistant for Word, Excel, PowerPoint, and Outlook. It stores per-document chats and context, talks to an OpenAI-compatible endpoint, executes Office tools locally, and requires no backend.

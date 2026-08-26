@@ -82,6 +82,7 @@
   <ItemGroup>
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
+    <Compile Include="Models\ResourceModels.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\CasMaintenanceModels.cs" />
@@ -111,6 +112,7 @@
     <Compile Include="Tools\AgentResponseParser.cs" />
     <Compile Include="Tools\AgentResponseSchemaBuilder.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
+    <Compile Include="Services\ResourceUri.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />
     <Compile Include="Services\ChartArtifactPayload.cs" />
     <Compile Include="Services\ChatSettingsResolver.cs" />

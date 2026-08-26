@@ -1,0 +1,96 @@
+# Resource Fabric
+
+Status: accepted target architecture; implementation is delivered in vertical slices. Legacy readers are removed when their provider enters the fabric, not retained as aliases.
+
+## Goals
+
+- A pasted, dropped, or attached file immediately becomes a chat-owned resource. No separate “В запрос” action is required.
+- Model context keeps compact references and a bounded working set, never every artifact body.
+- Chat can use read-only resources; Agent uses the same reads plus policy-approved mutations.
+- A multimodal primary model reads supported media directly. A helper model is used only when the primary model lacks that modality or when durable derived text is explicitly useful.
+- HTML, plans, uploads, generated images, live Office content, VBA projects, tool results, and future objects share discovery/read contracts without losing domain-specific mutation semantics.
+
+## Domain model
+
+`Resource` is an addressable object. A resource may be live and mutable, such as the active workbook, or backed by immutable revisions, such as an uploaded image or plan.
+
+`ArtifactRevision` is immutable content plus provenance stored through CAS. `ResourceHead` points to the current revision. A head and a revision have different URIs so replay can always pin exact historical content.
+
+`ResourceRef` is the compact value carried by messages, tool results, events, and the model working set:
+
+```json
+{"uri":"rna://chat/s1/artifact/a1/revision/2","revision":"2"}
+```
+
+Canonical URIs use `rna://<provider>/<escaped-segments>`. They never expose local paths, credentials, or provider implementation details. Query strings, fragments, dot segments, encoded separators, and non-canonical spellings are rejected.
+
+`Tool` is an executable capability, not a resource. `Skill` is versioned instruction content and may reference resources and tools. Domain mutations remain typed tools because safety, confirmation, and compare-and-swap rules differ by domain.
+
+## Providers
+
+Office owns a registry of resource providers. The common layer knows only provider contracts.
+
+Initial providers:
+
+- `chat`: uploaded files, images, audio, generated artifacts, plans, HTML revisions, chart payloads, and tool-result artifacts;
+- `document`: bounded structure and content from the active Office document;
+- `vba`: project/component metadata and bounded source reads;
+- `skill`: enabled skill packages and reference files where model access is allowed.
+
+Every provider implements bounded `list`, `resolve`, `search`, and `read`. Search v1 is structural plus lexical. The interface permits semantic search later, but embeddings and a durable vector index are not required. Reads select a representation such as `metadata`, `text`, `structure`, `source`, or `media`, use cursors, and report truncation explicitly.
+
+## Conversation loop
+
+Chat and Agent use one buffered structured loop. The policy differs, the transport and transcript do not:
+
+- Chat receives resource discovery/read tools and no mutation tools or skills.
+- Agent receives discovery/read tools, progressively discovered domain tools, enabled skills, and mutation tools allowed by safety policy.
+- Tool discovery is progressive: the initial prompt contains compact namespaces and `tools_search`/`tools_read`; exact schemas enter the working set only when read.
+- A schema or skill body remains loaded only while its exact revision is present in active model context.
+
+The prompt contains compact resource references relevant to the conversation. On a later question such as “что на той картинке?” the model resolves or reads the referenced URI again. Raw media is hydrated only for the next model step and then released; the durable reference remains.
+
+## Ingestion and derived data
+
+Paste, drag-and-drop, and the paperclip all call the same ingestion pipeline:
+
+1. Stream bytes into CAS and validate type/size.
+2. Append attachment/artifact revision events and bind a `ResourceRef` to the user turn.
+3. Extract cheap deterministic representations once (metadata, safe text, page structure).
+4. Route supported media directly to a multimodal primary model for the current turn.
+5. If the primary model cannot consume the modality, call a bounded helper with only the current request and selected media.
+
+Helper output is query-specific evidence for that model step. It is not silently treated as a complete durable description. Reusable OCR/transcription may be stored as a derived artifact revision with explicit provenance: source URI, extractor/model, parameters, timestamp, and content hash.
+
+## Context and storage
+
+The append-only session event stream remains the durable source of truth. Events store resource references and CAS references, not copied bodies. Model requests persist the exact materialized working set before dispatch.
+
+Compaction preserves user intent, decisions, tool protocol pairs, and resource references. It may remove hydrated bodies and old read results. A later read reconstructs evidence from the provider. CAS garbage collection derives reachability from verified event streams and journals as before.
+
+Live Office/VBA resources are read from the document and carry identity/version evidence. Mutations keep domain-specific guards, confirmations, journals, and read-back verification; Resource Fabric does not bypass them.
+
+## Removed architecture
+
+The completed cutover removes:
+
+- required manual “В запрос” attachment selection;
+- `PlainChatService` and its no-tools request path;
+- model-facing `common.artifacts_*` and duplicated plan/HTML/VBA/Office read tools;
+- full tool-catalog injection on every Agent step;
+- attachment bodies or generic helper analyses kept in ordinary conversation context;
+- compatibility aliases and migration of pre-cutover chat/context formats.
+
+Users may clear Chats/Data during the cutover. Unsupported prior streams are skipped; no dual write, shadow index, or mutable compatibility snapshot is introduced.
+
+## Delivery order
+
+1. Core resource contracts and canonical URI validation.
+2. Provider registry plus chat-artifact provider; replace `common.artifacts_*` with `common.resources_*`.
+3. Unified `ConversationRunService`; enable read-only resource loop in Chat.
+4. Automatic UI ingestion and durable message references; remove explicit selection mechanics.
+5. Office, VBA, HTML, and plan providers; remove duplicated read tools.
+6. Progressive tool discovery and bounded working-set eviction.
+7. Hard cutover of events/projections, deletion of obsolete services and tests, reset-only handling for old data.
+
+Each slice must leave one authoritative path for the capability it migrates and add harness coverage for URI safety, provider bounds, replay, context compaction, media hydration lifetime, and Chat mutation denial.

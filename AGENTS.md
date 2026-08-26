@@ -31,6 +31,8 @@ RNAssistant - локальный VSTO/WebView2 ассистент для Office,
 
 ## Tool/Agent Protocol
 
+- Целевая архитектура ресурсов и поэтапный hard cutover зафиксированы в `docs/resource-fabric.md`. Не расширяй legacy artifact readers, `PlainChatService` или ручной attachment-selection новыми responsibilities; переносимый срез должен удалять заменённый путь без alias/dual-write.
+
 - Поддерживаются только режимы `agent` и `chat`; новый chat создается в `agent`. Agent может отвечать без tools, отдельного auto-router режима нет.
 - Chat mode отправляет обычную историю с `ChatSystemPrompt`; tools и skills в его контекст не попадают и ничего локально не исполняется.
 - Формат ответа Agent выбирается между `json_object` (default) и строгим `json_schema`; в обоих случаях ответ — один raw JSON object `message` + `tool_calls`. Для `json_schema` runtime строит response schema из текущего runnable tool catalog; при явном отказе endpoint может один раз request-locally перейти на `json_object`, если включён `FallbackToJsonObject`. `tool_calls` пуст для финала/уточнения/отказа либо содержит один или несколько вызовов с уникальным `id`, точным `name` и object `arguments`. Вызовы выполняются локально последовательно в порядке массива; зависимые и confirmation-requiring действия модель должна выбирать по одному. Отдельного batch state нет. Fences, surrounding prose и legacy envelopes не принимаются; число request-local format repairs задаёт `MaxAgentFormatRetries` (1–20, default 10). Каждый retry строится из исходного чистого prompt; невалидные ответы и repair-инструкции не сохраняются в model replay/chat history, но пишутся как log-only trajectory events.
