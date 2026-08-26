@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
@@ -515,7 +516,9 @@ namespace RNAssistant.Office
                             tools,
                             primaryAttachments,
                             runProgress,
-                            executionMode == ChatModes.Agent ? RegisterPendingAgentTool : null,
+                            executionMode == ChatModes.Agent
+                                ? (ConversationRunService.PendingToolRegistrar)RegisterPendingAgentTool
+                                : null,
                             skills,
                             runCancellation.Token,
                             false).ConfigureAwait(false);
