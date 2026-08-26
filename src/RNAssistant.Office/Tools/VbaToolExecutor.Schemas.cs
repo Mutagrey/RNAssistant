@@ -54,12 +54,88 @@ namespace RNAssistant.Office.Tools
 
         private static string WriteModuleSchema()
         {
-            return "{\"type\":\"object\",\"properties\":{" +
-                "\"moduleName\":{\"type\":\"string\",\"description\":\"Exact target component name, not a rename destination. Invalid punctuation, a non-letter prefix, and names over the VBE limit of 31 characters are normalized deterministically only when creating; the result returns the actual name.\",\"minLength\":1,\"maxLength\":255}," +
-                "\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source or MSForm code-behind, never source reconstructed from a truncated read or partial context. Empty text intentionally clears an existing component or creates an empty one.\"}," +
-                "\"componentType\":{\"type\":\"string\",\"description\":\"Type used only if the component must be created.\",\"default\":\"StdModule\",\"enum\":[\"StdModule\",\"ClassModule\",\"MSForm\"]}," +
-                "\"mode\":{\"type\":\"string\",\"description\":\"upsert updates or creates automatically; createOnly/updateOnly are optional strict modes.\",\"default\":\"upsert\",\"enum\":[\"upsert\",\"createOnly\",\"updateOnly\"]}" +
-                "},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}";
+            var moduleName = new JObject
+            {
+                ["type"] = "string",
+                ["description"] = "Existing or intended VBA component name. Invalid new names are normalized deterministically only when creating.",
+                ["minLength"] = 1,
+                ["maxLength"] = 255
+            };
+            var code = new JObject
+            {
+                ["type"] = "string",
+                ["description"] = "Complete VBA source or MSForm code-behind, never source reconstructed from a truncated read or partial context. Empty text intentionally clears or creates an empty component."
+            };
+            var componentType = new JObject
+            {
+                ["type"] = "string",
+                ["description"] = "Type used only when the write branch creates a component.",
+                ["default"] = "StdModule",
+                ["enum"] = new JArray("StdModule", "ClassModule", "MSForm")
+            };
+            var writeMode = new JObject
+            {
+                ["type"] = "string",
+                ["description"] = "Write behavior: upsert updates or creates; createOnly/updateOnly guard existence.",
+                ["default"] = "upsert",
+                ["enum"] = new JArray("upsert", "createOnly", "updateOnly")
+            };
+            var newModuleName = new JObject
+            {
+                ["type"] = "string",
+                ["description"] = "Requested destination name for mode=rename. Runtime normalizes it and rejects collisions.",
+                ["minLength"] = 1,
+                ["maxLength"] = 255
+            };
+            var renameMode = new JObject
+            {
+                ["type"] = "string",
+                ["description"] = "Select the atomic rename branch; code and componentType are not accepted in this branch.",
+                ["enum"] = new JArray("rename")
+            };
+            Func<JObject, string[], JObject> variant = (properties, required) => new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = new JArray(required),
+                ["additionalProperties"] = false
+            };
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject
+                {
+                    ["moduleName"] = moduleName,
+                    ["code"] = code,
+                    ["componentType"] = componentType,
+                    ["mode"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Choose whole-source write semantics or the explicit rename branch.",
+                        ["default"] = "upsert",
+                        ["enum"] = new JArray("upsert", "createOnly", "updateOnly", "rename")
+                    },
+                    ["newModuleName"] = newModuleName
+                },
+                ["required"] = new JArray(),
+                ["additionalProperties"] = false,
+                ["anyOf"] = new JArray
+                {
+                    variant(new JObject
+                    {
+                        ["moduleName"] = moduleName.DeepClone(),
+                        ["code"] = code.DeepClone(),
+                        ["componentType"] = componentType.DeepClone(),
+                        ["mode"] = writeMode
+                    }, new[] { "moduleName", "code" }),
+                    variant(new JObject
+                    {
+                        ["moduleName"] = moduleName.DeepClone(),
+                        ["newModuleName"] = newModuleName.DeepClone(),
+                        ["mode"] = renameMode
+                    }, new[] { "moduleName", "newModuleName", "mode" })
+                }
+            }.ToString(Formatting.None);
         }
 
         private static string RestoreBackupSchema()

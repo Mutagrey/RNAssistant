@@ -141,10 +141,14 @@ namespace RNAssistant.Core.Storage
                 var preparedEvent = source.First(item => string.Equals(item.Type, VbaJournalEventTypes.PackageMutationPrepared, StringComparison.Ordinal));
                 var terminalEvent = source.FirstOrDefault(item => string.Equals(item.Type, VbaJournalEventTypes.PackageMutationTerminal, StringComparison.Ordinal));
                 var components = record.Prepared.Components ?? new List<VbaPackageMutationComponent>();
+                var rename = string.Equals(record.Prepared.Operation, "rename", StringComparison.OrdinalIgnoreCase);
+                var sourceComponent = rename
+                    ? components.FirstOrDefault(item => item.BeforeExists && !item.IntendedAfterExists)
+                    : null;
                 rows.Add(new VbaMutationQueryRow
                 {
                     MutationId = record.Prepared.MutationId,
-                    Kind = VbaMutationKinds.Package,
+                    Kind = rename ? VbaMutationKinds.Module : VbaMutationKinds.Package,
                     Operation = record.Prepared.Operation,
                     Status = record.Terminal == null ? VbaMutationStatuses.Open : record.Terminal.Status,
                     CreatedUtc = preparedEvent.CreatedUtc,
@@ -156,9 +160,11 @@ namespace RNAssistant.Core.Storage
                     TurnId = record.Prepared.TurnId,
                     StepId = record.Prepared.StepId,
                     ToolCallId = record.Prepared.ToolCallId,
-                    PackageId = record.Prepared.PackageId,
-                    PackageVersion = record.Prepared.PackageVersion,
-                    ComponentCount = components.Count,
+                    ModuleName = sourceComponent == null ? null : sourceComponent.ModuleName,
+                    ComponentType = sourceComponent == null ? null : sourceComponent.BeforeComponentType,
+                    PackageId = rename ? null : record.Prepared.PackageId,
+                    PackageVersion = rename ? null : record.Prepared.PackageVersion,
+                    ComponentCount = rename ? 1 : components.Count,
                     ComponentNames = components.Select(item => item.ModuleName).Where(item => !string.IsNullOrWhiteSpace(item)).ToList(),
                     ErrorCode = record.Terminal == null ? null : record.Terminal.ErrorCode,
                     Message = record.Terminal == null ? null : record.Terminal.Message,
@@ -240,9 +246,10 @@ namespace RNAssistant.Core.Storage
         {
             var prepared = record.Prepared;
             var terminal = record.Terminal;
+            var rename = string.Equals(prepared.Operation, "rename", StringComparison.OrdinalIgnoreCase);
             var detail = MutationDetailBase(
                 prepared.MutationId,
-                VbaMutationKinds.Package,
+                rename ? VbaMutationKinds.Module : VbaMutationKinds.Package,
                 prepared.Operation,
                 terminal == null ? VbaMutationStatuses.Open : terminal.Status,
                 prepared.CreatedUtc,
@@ -255,8 +262,11 @@ namespace RNAssistant.Core.Storage
                 terminal == null ? null : terminal.ErrorCode,
                 terminal == null ? null : terminal.Message,
                 events);
-            detail.PackageId = prepared.PackageId;
-            detail.PackageVersion = prepared.PackageVersion;
+            if (!rename)
+            {
+                detail.PackageId = prepared.PackageId;
+                detail.PackageVersion = prepared.PackageVersion;
+            }
             foreach (var component in prepared.Components ?? new List<VbaPackageMutationComponent>())
             {
                 var assessment = terminal == null || terminal.Components == null

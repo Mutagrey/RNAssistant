@@ -120,6 +120,75 @@ namespace RNAssistant.Office.Tools
             }
         }
 
+        private bool TryPrepareJournaledRename(
+            ToolCommand command,
+            ChatSession session,
+            string moduleName,
+            string newModuleName,
+            VbaModuleState source,
+            out VbaPackageMutationPreparation prepared,
+            out ToolResult error)
+        {
+            prepared = null;
+            error = null;
+            try
+            {
+                var guard = ReadGuard(command);
+                prepared = _vbaJournalStore.PreparePackageMutation(new VbaPackageMutationPreparation
+                {
+                    Operation = "rename",
+                    PackageId = ToolId("vba_write_module") + ":rename",
+                    PackageVersion = "1",
+                    SessionOnly = false,
+                    RetainBackups = false,
+                    Host = _adapter.HostName ?? string.Empty,
+                    DocumentKey = _adapter.DocumentKey ?? string.Empty,
+                    RuntimeDocumentKey = _adapter.RuntimeDocumentKey ?? string.Empty,
+                    DocumentTitle = _adapter.DocumentTitle ?? string.Empty,
+                    Components = new System.Collections.Generic.List<VbaPackageMutationComponent>
+                    {
+                        new VbaPackageMutationComponent
+                        {
+                            ModuleName = moduleName,
+                            BeforeExists = true,
+                            BeforeComponentType = source.ComponentType,
+                            BeforeCode = source.Code,
+                            IntendedAfterExists = false
+                        },
+                        new VbaPackageMutationComponent
+                        {
+                            ModuleName = newModuleName,
+                            BeforeExists = false,
+                            IntendedAfterExists = true,
+                            IntendedAfterComponentType = source.ComponentType,
+                            IntendedAfterCode = source.Code
+                        }
+                    },
+                    SessionId = guard == null
+                        ? (session == null ? string.Empty : session.Id ?? string.Empty)
+                        : guard.SessionId,
+                    RunId = guard == null
+                        ? (session == null || session.LastRun == null ? null : session.LastRun.RunId)
+                        : guard.RunId,
+                    TurnId = guard == null
+                        ? (session == null || session.LastRun == null ? null : session.LastRun.TurnId)
+                        : guard.TurnId,
+                    StepId = guard == null ? command == null ? null : command.RuntimeStepId : guard.StepId,
+                    ToolCallId = guard == null ? command == null ? null : command.ToolCallId : guard.ToolCallId
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ToolResult.Fail(
+                    "VBA rename was blocked because its prepared two-name journal record could not be saved. " + ex.Message,
+                    null,
+                    "vba_journal_prepare_failed",
+                    false);
+                return false;
+            }
+        }
+
         private ToolResult ExecuteJournaledMutation(VbaMutationPreparation prepared, Func<ToolResult> action)
         {
             ToolResult result;
@@ -440,6 +509,8 @@ namespace RNAssistant.Office.Tools
 
         private ToolResult ExecuteJournaledPackageMutation(VbaPackageMutationPreparation prepared, Func<ToolResult> action)
         {
+            var rename = prepared != null && string.Equals(prepared.Operation, "rename", StringComparison.OrdinalIgnoreCase);
+            var mutationLabel = rename ? "VBA rename" : "VBA package mutation";
             ToolResult result;
             Exception actionException = null;
             try
@@ -450,14 +521,18 @@ namespace RNAssistant.Office.Tools
             {
                 actionException = ex;
                 result = ToolResult.Fail(
-                    "VBA package mutation threw after its prepared record was persisted. " + ex.Message,
+                    mutationLabel + " threw after its prepared record was persisted. " + ex.Message,
                     null,
-                    "vba_package_mutation_exception",
+                    rename ? "vba_rename_exception" : "vba_package_mutation_exception",
                     false);
             }
             if (result == null)
             {
-                result = ToolResult.Fail("VBA package mutation returned no result.", null, "vba_package_mutation_missing_result", false);
+                result = ToolResult.Fail(
+                    mutationLabel + " returned no result.",
+                    null,
+                    rename ? "vba_rename_missing_result" : "vba_package_mutation_missing_result",
+                    false);
             }
 
             var assessment = InspectPackageMutation(prepared, result, actionException);
@@ -475,10 +550,10 @@ namespace RNAssistant.Office.Tools
             catch (Exception ex)
             {
                 return ToolResult.PartialFailure(
-                    "The VBA package effect was inspected as " + assessment.Status +
-                    ", but its terminal journal record could not be saved. Inspect all package components before retrying. " + ex.Message,
+                    "The " + mutationLabel + " effect was inspected as " + assessment.Status +
+                    ", but its terminal journal record could not be saved. Inspect the affected component identities before retrying. " + ex.Message,
                     PackageJournalData(result.DataJson, prepared, "unknown", assessment),
-                    "vba_package_journal_terminal_failed");
+                    rename ? "vba_rename_journal_terminal_failed" : "vba_package_journal_terminal_failed");
             }
 
             result.DataJson = PackageJournalData(result.DataJson, prepared, assessment.Status, assessment);
@@ -486,26 +561,26 @@ namespace RNAssistant.Office.Tools
             {
                 result.Success = false;
                 result.Status = "partial_failure";
-                result.ErrorCode = "vba_package_mutation_unknown";
+                result.ErrorCode = rename ? "vba_rename_unknown" : "vba_package_mutation_unknown";
                 result.Retryable = false;
-                result.Message = (result.Message ?? "VBA package mutation failed.") +
-                    " Final component state is mixed or unknown; inspect it before retrying.";
+                result.Message = (result.Message ?? mutationLabel + " failed.") +
+                    " Final component identity state is mixed or unknown; inspect it before retrying.";
             }
             else if (result.Success && !string.Equals(assessment.Status, VbaMutationStatuses.Committed, StringComparison.Ordinal))
             {
                 return ToolResult.PartialFailure(
-                    (result.Message ?? "VBA package mutation reported success.") +
-                    " Read-back did not match the complete intended package state.",
+                    (result.Message ?? mutationLabel + " reported success.") +
+                    " Read-back did not match the complete intended state.",
                     result.DataJson,
-                    "vba_package_verify_failed");
+                    rename ? "vba_rename_verify_failed" : "vba_package_verify_failed");
             }
             else if (!result.Success && string.Equals(assessment.Status, VbaMutationStatuses.Committed, StringComparison.Ordinal))
             {
                 return ToolResult.PartialFailure(
-                    (result.Message ?? "VBA package mutation reported failure.") +
+                    (result.Message ?? mutationLabel + " reported failure.") +
                     " Live components match the intended result, so the journal classified it as committed.",
                     result.DataJson,
-                    "vba_package_mutation_committed_after_error");
+                    rename ? "vba_rename_committed_after_error" : "vba_package_mutation_committed_after_error");
             }
             return result;
         }
@@ -528,16 +603,23 @@ namespace RNAssistant.Office.Tools
                     ? ReportsRollback(result, exception) ? VbaMutationStatuses.RolledBack : VbaMutationStatuses.NotApplied
                     : VbaMutationStatuses.Unknown;
             var failed = components.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.ErrorCode));
+            var rename = prepared != null && string.Equals(prepared.Operation, "rename", StringComparison.OrdinalIgnoreCase);
             return new PackageMutationAssessment
             {
                 Status = status,
                 Components = components,
                 ErrorCode = failed == null ? null : failed.ErrorCode,
                 Message = allIntended
-                    ? "Every live package component matches the recorded intended state."
+                    ? rename
+                        ? "The old and new VBA identities match the recorded intended rename state."
+                        : "Every live package component matches the recorded intended state."
                     : allBefore
-                        ? "Every live package component matches the recorded before state."
-                        : "Package components do not collectively match either the complete before or intended state."
+                        ? rename
+                            ? "The old and new VBA identities match the recorded state before rename."
+                            : "Every live package component matches the recorded before state."
+                        : rename
+                            ? "The old and new VBA identities match neither the complete before nor intended rename state."
+                            : "Package components do not collectively match either the complete before or intended state."
             };
         }
 
@@ -622,9 +704,19 @@ namespace RNAssistant.Office.Tools
             {
                 data = new JObject { ["operationData"] = dataJson ?? string.Empty };
             }
-            data["packageJournaled"] = true;
-            data["packageMutationId"] = prepared == null ? null : prepared.MutationId;
-            data["packageJournalStatus"] = status;
+            var rename = prepared != null && string.Equals(prepared.Operation, "rename", StringComparison.OrdinalIgnoreCase);
+            if (rename)
+            {
+                data["journaled"] = true;
+                data["mutationId"] = prepared.MutationId;
+                data["journalStatus"] = status;
+            }
+            else
+            {
+                data["packageJournaled"] = true;
+                data["packageMutationId"] = prepared == null ? null : prepared.MutationId;
+                data["packageJournalStatus"] = status;
+            }
             data["componentAssessments"] = assessment == null
                 ? new JArray()
                 : JArray.FromObject(assessment.Components ?? new System.Collections.Generic.List<VbaPackageMutationComponentAssessment>());

@@ -80,6 +80,93 @@ namespace RNAssistant.Office.Tools
             return null;
         }
 
+        private ToolResult PrepareRenameGuard(
+            ToolCommand command,
+            ChatSession session,
+            string moduleName,
+            string newModuleName)
+        {
+            if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(newModuleName))
+            {
+                return ToolResult.Fail(
+                    "moduleName and newModuleName are required for mode=rename.",
+                    null,
+                    "vba_module_name_required",
+                    true);
+            }
+
+            var requestedSourceName = moduleName.Trim();
+            string resolvedSourceName;
+            VbaModuleState source;
+            ToolResult sourceError;
+            if (!TryReadExistingModule(requestedSourceName, out resolvedSourceName, out source, out sourceError))
+            {
+                return sourceError;
+            }
+            if (!CanRenameComponent(source))
+            {
+                return ToolResult.Fail(
+                    "Only StdModule, ClassModule, and blank code-only MSForm components can be renamed through RNAssistant.",
+                    JsonConvert.SerializeObject(new { moduleName = resolvedSourceName, componentType = source.ComponentType }),
+                    "vba_component_type_read_only",
+                    false);
+            }
+
+            var requestedTargetName = newModuleName.Trim();
+            var normalizedTargetName = NormalizeModuleName(requestedTargetName);
+            if (string.Equals(resolvedSourceName, normalizedTargetName, StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail(
+                    "The rename destination resolves to the current VBA component name.",
+                    JsonConvert.SerializeObject(new
+                    {
+                        moduleName = resolvedSourceName,
+                        requestedNewModuleName = requestedTargetName,
+                        normalizedNewModuleName = normalizedTargetName
+                    }),
+                    "vba_rename_noop",
+                    true);
+            }
+
+            VbaModuleState target;
+            ToolResult targetError;
+            if (TryReadVbaModule(normalizedTargetName, 1000000, out target, out targetError))
+            {
+                return ToolResult.Fail(
+                    "VBA rename destination already exists: " + normalizedTargetName + ".",
+                    JsonConvert.SerializeObject(new
+                    {
+                        moduleName = resolvedSourceName,
+                        newModuleName = normalizedTargetName,
+                        targetComponentType = target.ComponentType
+                    }),
+                    "vba_module_exists",
+                    true);
+            }
+            if (!IsModuleNotFound(targetError)) return targetError;
+
+            var sourceHash = CodeSha256(source.Code);
+            string observedHash;
+            if (TryGetObservation(session, resolvedSourceName, out observedHash) &&
+                !string.Equals(observedHash, sourceHash, StringComparison.OrdinalIgnoreCase))
+            {
+                RemoveObservation(session, resolvedSourceName);
+                return StaleSnapshot(resolvedSourceName, true, observedHash, true, sourceHash, "rename");
+            }
+
+            command.Arguments["moduleName"] = resolvedSourceName;
+            command.Arguments["newModuleName"] = normalizedTargetName;
+            BindRenameGuard(
+                command,
+                session,
+                resolvedSourceName,
+                requestedSourceName,
+                sourceHash,
+                normalizedTargetName,
+                requestedTargetName);
+            return null;
+        }
+
         private ToolResult BindWriteGuard(
             ToolCommand command,
             ChatSession session,
@@ -176,6 +263,67 @@ namespace RNAssistant.Office.Tools
             return null;
         }
 
+        private ToolResult ValidateRenameGuard(
+            ToolCommand command,
+            ChatSession session,
+            string moduleName,
+            bool sourceExists,
+            VbaModuleState source,
+            string newModuleName,
+            bool targetExists,
+            VbaModuleState target)
+        {
+            var guard = ReadGuard(command);
+            if (guard == null || guard.Version != 3 || string.IsNullOrWhiteSpace(guard.ModuleName) ||
+                string.IsNullOrWhiteSpace(guard.TargetModuleName))
+            {
+                return SnapshotRequired(moduleName);
+            }
+            if (!GuardContextMatches(guard, session, moduleName) ||
+                !string.Equals(guard.TargetModuleName, newModuleName, StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail(
+                    "The prepared VBA rename belongs to another document, chat, source, or destination. Retry it in the current document.",
+                    JsonConvert.SerializeObject(new
+                    {
+                        moduleName = moduleName,
+                        newModuleName = newModuleName,
+                        retrySameTool = true
+                    }),
+                    "vba_snapshot_context_changed",
+                    true);
+            }
+
+            var sourceHash = sourceExists && source != null ? CodeSha256(source.Code) : null;
+            var targetHash = targetExists && target != null ? CodeSha256(target.Code) : null;
+            if (guard.ModuleExists != sourceExists ||
+                sourceExists && !string.Equals(guard.CodeSha256, sourceHash, StringComparison.OrdinalIgnoreCase) ||
+                guard.TargetModuleExists != targetExists ||
+                targetExists && !string.Equals(guard.TargetCodeSha256, targetHash, StringComparison.OrdinalIgnoreCase))
+            {
+                RemoveObservation(session, moduleName);
+                return ToolResult.Fail(
+                    "The VBA source or rename destination changed after confirmation was prepared. The rename was not applied; retry it against current state.",
+                    JsonConvert.SerializeObject(new
+                    {
+                        moduleName = moduleName,
+                        newModuleName = newModuleName,
+                        expectedSourceExists = guard.ModuleExists,
+                        actualSourceExists = sourceExists,
+                        expectedSourceCodeSha256 = guard.CodeSha256,
+                        actualSourceCodeSha256 = sourceHash,
+                        expectedTargetExists = guard.TargetModuleExists,
+                        actualTargetExists = targetExists,
+                        actualTargetCodeSha256 = targetHash,
+                        retrySameTool = true,
+                        inspectTool = ToolId("vba_read_module")
+                    }),
+                    "stale_vba_module",
+                    true);
+            }
+            return null;
+        }
+
         private bool GuardContextMatches(VbaMutationGuard guard, ChatSession session, string moduleName)
         {
             if (!string.Equals(guard.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
@@ -233,6 +381,47 @@ namespace RNAssistant.Office.Tools
                 ModuleExists = moduleExists,
                 CodeSha256 = moduleExists ? hash ?? string.Empty : string.Empty
             });
+        }
+
+        private void BindRenameGuard(
+            ToolCommand command,
+            ChatSession session,
+            string moduleName,
+            string requestedModuleName,
+            string sourceHash,
+            string targetModuleName,
+            string requestedTargetModuleName)
+        {
+            if (command == null) return;
+            command.RuntimeGuardJson = JsonConvert.SerializeObject(new VbaMutationGuard
+            {
+                Version = 3,
+                Host = _adapter.HostName ?? string.Empty,
+                DocumentKey = _adapter.DocumentKey ?? string.Empty,
+                RuntimeDocumentKey = _adapter.RuntimeDocumentKey ?? string.Empty,
+                SessionId = session == null ? string.Empty : session.Id ?? string.Empty,
+                RunId = session == null || session.LastRun == null ? null : session.LastRun.RunId,
+                TurnId = session == null || session.LastRun == null ? null : session.LastRun.TurnId,
+                StepId = command.RuntimeStepId,
+                ToolCallId = command.ToolCallId,
+                ModuleName = moduleName ?? string.Empty,
+                RequestedModuleName = requestedModuleName ?? moduleName ?? string.Empty,
+                ModuleExists = true,
+                CodeSha256 = sourceHash ?? string.Empty,
+                TargetModuleName = targetModuleName ?? string.Empty,
+                RequestedTargetModuleName = requestedTargetModuleName ?? targetModuleName ?? string.Empty,
+                TargetModuleExists = false,
+                TargetCodeSha256 = string.Empty
+            });
+        }
+
+        private static bool CanRenameComponent(VbaModuleState module)
+        {
+            if (module == null) return false;
+            if (string.Equals(module.ComponentType, "StdModule", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(module.ComponentType, "ClassModule", StringComparison.OrdinalIgnoreCase)) return true;
+            return string.Equals(module.ComponentType, "MSForm", StringComparison.OrdinalIgnoreCase) &&
+                module.CodeOnlyUserForm == true;
         }
 
         private ToolResult SnapshotRequired(string moduleName)

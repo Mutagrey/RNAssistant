@@ -430,6 +430,47 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("fake VBA module created");
             }
 
+            if ((command.ToolId ?? string.Empty).EndsWith(".vba_rename_module_internal", StringComparison.OrdinalIgnoreCase))
+            {
+                var moduleName = Argument(command, "moduleName", string.Empty);
+                var newModuleName = Argument(command, "newModuleName", string.Empty);
+                FakeVbaModule existing;
+                if (!_vbaModules.TryGetValue(moduleName, out existing))
+                {
+                    return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
+                }
+                if (string.Equals(moduleName, newModuleName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail("The VBA rename destination is the current component name.", null, "vba_rename_noop", true);
+                }
+                if (_vbaModules.ContainsKey(newModuleName))
+                {
+                    return ToolResult.Fail("VBA rename destination already exists: " + newModuleName, null, "vba_module_exists", true);
+                }
+                var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
+                var actualCodeSha256 = VbaToolManifestParser.LiveCodeSha256(existing.Code);
+                if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
+                    !string.Equals(expectedCodeSha256, actualCodeSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail(
+                        "stale VBA backend rename",
+                        JsonConvert.SerializeObject(new { moduleName = moduleName, actualExists = true, actualCodeSha256 = actualCodeSha256 }),
+                        "stale_vba_module",
+                        true);
+                }
+                _vbaModules.Remove(moduleName);
+                existing.Name = newModuleName;
+                _vbaModules[newModuleName] = existing;
+                return ToolResult.Ok("fake VBA module renamed", JsonConvert.SerializeObject(new
+                {
+                    previousModuleName = moduleName,
+                    moduleName = newModuleName,
+                    componentType = existing.Type,
+                    lineCount = LineCount(existing.Code),
+                    codeSha256 = actualCodeSha256
+                }));
+            }
+
             if ((command.ToolId ?? string.Empty).EndsWith(".vba_delete_module_internal", StringComparison.OrdinalIgnoreCase))
             {
                 var moduleName = Argument(command, "moduleName", "Module1");

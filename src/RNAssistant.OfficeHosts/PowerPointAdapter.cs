@@ -365,6 +365,12 @@ namespace RNAssistant.OfficeHosts
                         return VbaProjectSupport.RemovePackage(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"), ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
                     case "powerpoint.vba_create_module_internal":
                         return VbaProjectSupport.CreateModule(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty), ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"), ToolArgumentReader.String(command.Arguments, "code", string.Empty));
+                    case "powerpoint.vba_rename_module_internal":
+                        return VbaProjectSupport.RenameModule(
+                            RequirePresentation(),
+                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                            ToolArgumentReader.String(command.Arguments, "newModuleName", string.Empty),
+                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
                     case "powerpoint.vba_delete_module_internal":
                         return VbaProjectSupport.DeleteModule(
                             RequirePresentation(),

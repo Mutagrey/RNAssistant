@@ -35,7 +35,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(ToolId("vba_read_module"), "Common", "Read-only: List VBA component metadata when moduleName is omitted, or read one component when it is supplied. Omit startLine/lineCount for the whole source. Runtime resolves case and safely normalizable names.", ReadModuleSchema());
             yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), "Common", "Read-only: Search literal or regex patterns across VBA component code. Use moduleName only to limit the search to one component.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1,\"maxLength\":2048},\"moduleName\":{\"type\":\"string\",\"description\":\"Optional VBA component name; safely normalizable names are resolved by runtime.\",\"maxLength\":255},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100,\"minimum\":1,\"maximum\":500},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80,\"minimum\":0,\"maximum\":1000}},\"required\":[\"query\"],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), "Common", "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted. Runtime snapshots current state before confirmation.", RestoreBackupSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document: The only public tool that creates a missing VBA component. Pass its complete source: mode=upsert creates when missing and replaces whole source when present. Never reconstruct an existing module from a truncated read or partial context; use common.vba_apply_patch for targeted edits. Runtime normalizes invalid new names, snapshots existing code, creates a rollback backup, and verifies read-back. componentType is used only on creation; MSForm means code-behind only. This tool does not rename components: a different missing moduleName creates a separate component, so never emulate rename with write+delete.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document with two strict branches. Whole-source write requires moduleName+code and uses mode=upsert/createOnly/updateOnly; componentType applies only on creation. Atomic rename requires moduleName+newModuleName+mode=rename and accepts no code/componentType. Runtime guards both names, normalizes a new destination, rejects collisions, journals both identities, and verifies read-back. Rename preserves the component but does not rewrite textual references to its old name.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), "Common", "Mutates document: Apply ordered exact unique source-block replacements to an existing VBA component. There are no line-number, fuzzy, first-match, regex, or implicit insertion modes. Runtime patches one current full-module snapshot in memory, then performs one guarded whole-module write. Use common.vba_write_module with complete source when the module is missing.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), "Common", "Mutates document: Delete an existing StdModule or ClassModule. Runtime reads it, validates the type, and creates a rollback backup; no separate read call is required. Document modules and UserForms are not deleted.", ModuleNameSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
         }
@@ -134,6 +134,14 @@ namespace RNAssistant.Office.Tools
             }
             if (string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase))
             {
+                if (string.Equals(ToolArgumentReader.String(command.Arguments, "mode", "upsert"), "rename", StringComparison.OrdinalIgnoreCase))
+                {
+                    return PrepareRenameGuard(
+                        command,
+                        session,
+                        moduleName,
+                        ToolArgumentReader.String(command.Arguments, "newModuleName", string.Empty));
+                }
                 return PrepareWriteGuard(command, session, moduleName);
             }
             if (string.Equals(command.ToolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
@@ -334,6 +342,15 @@ namespace RNAssistant.Office.Tools
             var componentType = ToolArgumentReader.String(command.Arguments, "componentType", "StdModule");
             var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
             var mode = ToolArgumentReader.String(command.Arguments, "mode", "upsert");
+            if (string.Equals(mode, "rename", StringComparison.OrdinalIgnoreCase))
+            {
+                return RenameVbaModule(
+                    command,
+                    dryRun,
+                    session,
+                    moduleName,
+                    ToolArgumentReader.String(command.Arguments, "newModuleName", string.Empty));
+            }
             VbaModuleState existing;
             ToolResult readError;
             var exists = TryReadVbaModule(moduleName, 1000000, out existing, out readError);
@@ -420,6 +437,116 @@ namespace RNAssistant.Office.Tools
                     "vba_write",
                     expectedComponentType,
                     session);
+            });
+        }
+
+        private ToolResult RenameVbaModule(
+            ToolCommand command,
+            bool dryRun,
+            ChatSession session,
+            string moduleName,
+            string newModuleName)
+        {
+            VbaModuleState source;
+            ToolResult sourceError;
+            var sourceExists = TryReadVbaModule(moduleName, 1000000, out source, out sourceError);
+            if (!sourceExists && !IsModuleNotFound(sourceError)) return sourceError;
+
+            VbaModuleState target;
+            ToolResult targetError;
+            var targetExists = TryReadVbaModule(newModuleName, 1000000, out target, out targetError);
+            if (!targetExists && !IsModuleNotFound(targetError)) return targetError;
+
+            var guardError = ValidateRenameGuard(
+                command,
+                session,
+                moduleName,
+                sourceExists,
+                source,
+                newModuleName,
+                targetExists,
+                target);
+            if (guardError != null) return guardError;
+            if (!sourceExists) return sourceError;
+            if (targetExists)
+            {
+                return ToolResult.Fail(
+                    "VBA rename destination already exists: " + newModuleName + ".",
+                    null,
+                    "vba_module_exists",
+                    true);
+            }
+            if (!CanRenameComponent(source))
+            {
+                return ToolResult.Fail(
+                    "Only StdModule, ClassModule, and blank code-only MSForm components can be renamed through RNAssistant.",
+                    JsonConvert.SerializeObject(new { moduleName = moduleName, componentType = source.ComponentType }),
+                    "vba_component_type_read_only",
+                    false);
+            }
+
+            var guard = ReadGuard(command);
+            var requestedNewModuleName = guard == null || string.IsNullOrWhiteSpace(guard.RequestedTargetModuleName)
+                ? newModuleName
+                : guard.RequestedTargetModuleName;
+            var operationData = JsonConvert.SerializeObject(new
+            {
+                previousModuleName = moduleName,
+                moduleName = newModuleName,
+                requestedNewModuleName = requestedNewModuleName,
+                nameNormalized = !string.Equals(requestedNewModuleName, newModuleName, StringComparison.Ordinal),
+                componentType = source.ComponentType,
+                mode = "rename",
+                codeSha256 = CodeSha256(source.Code)
+            });
+            if (dryRun)
+            {
+                return ToolResult.Ok(
+                    "Dry run: would rename VBA " + source.ComponentType + " " + moduleName + " to " + newModuleName + ".",
+                    operationData);
+            }
+
+            VbaPackageMutationPreparation prepared;
+            ToolResult journalError;
+            if (!TryPrepareJournaledRename(
+                command,
+                session,
+                moduleName,
+                newModuleName,
+                source,
+                out prepared,
+                out journalError))
+            {
+                return journalError;
+            }
+
+            return ExecuteJournaledPackageMutation(prepared, () =>
+            {
+                var rename = new ToolCommand { ToolId = BackendToolId("vba_rename_module_internal") };
+                rename.Arguments["moduleName"] = moduleName;
+                rename.Arguments["newModuleName"] = newModuleName;
+                rename.Arguments["expectedCodeSha256"] = CodeSha256(source.Code);
+                var renamed = _adapter.ExecuteTool(rename);
+                if (renamed == null || !renamed.Success)
+                {
+                    return renamed ?? ToolResult.Fail("VBA rename returned no result.", null, "vba_rename_failed", false);
+                }
+
+                JObject data;
+                try { data = string.IsNullOrWhiteSpace(renamed.DataJson) ? new JObject() : JObject.Parse(renamed.DataJson); }
+                catch (JsonException) { data = new JObject(); }
+                data["previousModuleName"] = moduleName;
+                data["moduleName"] = newModuleName;
+                data["requestedNewModuleName"] = requestedNewModuleName;
+                data["nameNormalized"] = !string.Equals(requestedNewModuleName, newModuleName, StringComparison.Ordinal);
+                data["componentType"] = source.ComponentType;
+                data["mode"] = "rename";
+                data["codeSha256"] = CodeSha256(source.Code);
+                renamed.DataJson = data.ToString(Formatting.None);
+                renamed.Message = "VBA module renamed: " + moduleName + " -> " + newModuleName + ".";
+                RemoveObservation(session, moduleName);
+                RecordObservation(session, newModuleName, CodeSha256(source.Code));
+                return renamed;
             });
         }
 
@@ -984,6 +1111,10 @@ namespace RNAssistant.Office.Tools
             public string RequestedModuleName { get; set; }
             public bool ModuleExists { get; set; }
             public string CodeSha256 { get; set; }
+            public string TargetModuleName { get; set; }
+            public string RequestedTargetModuleName { get; set; }
+            public bool TargetModuleExists { get; set; }
+            public string TargetCodeSha256 { get; set; }
         }
 
     }

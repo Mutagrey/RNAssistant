@@ -318,6 +318,131 @@ namespace RNAssistant.Office
             }
         }
 
+        public static ToolResult RenameModule(
+            object documentObject,
+            string moduleName,
+            string newModuleName,
+            string expectedCodeSha256 = null)
+        {
+            if (!VbaToolManifestParser.ValidComponentName(moduleName) ||
+                !VbaToolManifestParser.ValidComponentName(newModuleName))
+            {
+                return ToolResult.Fail(
+                    "Invalid VBA module name; use 1-31 ASCII letters, numbers, or underscore and start with a letter.",
+                    null,
+                    "vba_module_name_invalid",
+                    false);
+            }
+            if (string.Equals(moduleName, newModuleName, StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail(
+                    "The VBA rename destination is the current component name.",
+                    null,
+                    "vba_rename_noop",
+                    true);
+            }
+
+            dynamic vbProject = GetVbaProject(documentObject);
+            dynamic component = FindComponent(vbProject, moduleName);
+            if (component == null)
+            {
+                return string.IsNullOrWhiteSpace(expectedCodeSha256)
+                    ? ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true)
+                    : StaleLiveModule(moduleName, expectedCodeSha256, false, null, "rename");
+            }
+            if (FindComponent(vbProject, newModuleName) != null)
+            {
+                return ToolResult.Fail(
+                    "VBA rename destination already exists: " + newModuleName,
+                    null,
+                    "vba_module_exists",
+                    true);
+            }
+
+            var type = (int)component.Type;
+            if (type != StdModuleType && type != ClassModuleType &&
+                (type != MsFormType || !IsCodeOnlyUserForm(component)))
+            {
+                return ToolResult.Fail(
+                    "Only StdModule, ClassModule, and blank code-only MSForm components can be renamed through RNAssistant.",
+                    null,
+                    "vba_component_type_read_only",
+                    false);
+            }
+
+            var originalName = (string)component.Name;
+            var originalCode = ReadComponentCode(component);
+            var originalHash = VbaToolManifestParser.LiveCodeSha256(originalCode);
+            if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
+                !string.Equals(expectedCodeSha256, originalHash, StringComparison.OrdinalIgnoreCase))
+            {
+                return StaleLiveModule(moduleName, expectedCodeSha256, true, originalHash, "rename");
+            }
+
+            var mutationStarted = false;
+            try
+            {
+                mutationStarted = true;
+                component.Name = newModuleName;
+                dynamic renamed = FindComponent(vbProject, newModuleName);
+                if (renamed == null || FindComponent(vbProject, originalName) != null ||
+                    (int)renamed.Type != type ||
+                    !string.Equals(
+                        VbaToolManifestParser.VbeComparableCodeSha256(ReadComponentCode(renamed)),
+                        VbaToolManifestParser.VbeComparableCodeSha256(originalCode),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("VBA rename read-back did not preserve the component identity, type, and source.");
+                }
+
+                return ToolResult.Ok(
+                    "VBA module renamed: " + originalName + " -> " + (string)renamed.Name,
+                    JsonConvert.SerializeObject(new
+                    {
+                        previousModuleName = originalName,
+                        moduleName = (string)renamed.Name,
+                        componentType = ComponentTypeName(type),
+                        lineCount = (int)renamed.CodeModule.CountOfLines,
+                        codeSha256 = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(renamed))
+                    }));
+            }
+            catch (Exception ex)
+            {
+                Exception rollbackError = null;
+                if (mutationStarted)
+                {
+                    try
+                    {
+                        component.Name = originalName;
+                        dynamic restored = FindComponent(vbProject, originalName);
+                        if (restored == null || FindComponent(vbProject, newModuleName) != null ||
+                            (int)restored.Type != type ||
+                            !string.Equals(
+                                VbaToolManifestParser.VbeComparableCodeSha256(ReadComponentCode(restored)),
+                                VbaToolManifestParser.VbeComparableCodeSha256(originalCode),
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidOperationException("The original VBA component could not be verified after rename rollback.");
+                        }
+                    }
+                    catch (Exception rollbackException)
+                    {
+                        rollbackError = rollbackException;
+                    }
+                }
+
+                if (rollbackError != null)
+                {
+                    throw new InvalidOperationException(
+                        "VBA module rename failed and the original name could not be restored: " + rollbackError.Message,
+                        ex);
+                }
+                throw new InvalidOperationException(
+                    "VBA module rename failed; the original name was restored.",
+                    ex);
+            }
+        }
+
         public static ToolResult DeleteModule(object documentObject, string moduleName, string expectedCodeSha256 = null)
         {
             dynamic vbProject = GetVbaProject(documentObject);

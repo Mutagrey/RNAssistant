@@ -360,6 +360,12 @@ namespace RNAssistant.OfficeHosts
                         return VbaProjectSupport.RemovePackage(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"), ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
                     case "excel.vba_create_module_internal":
                         return VbaProjectSupport.CreateModule(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty), ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"), ToolArgumentReader.String(command.Arguments, "code", string.Empty));
+                    case "excel.vba_rename_module_internal":
+                        return VbaProjectSupport.RenameModule(
+                            RequireWorkbook(),
+                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                            ToolArgumentReader.String(command.Arguments, "newModuleName", string.Empty),
+                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
                     case "excel.vba_delete_module_internal":
                         return VbaProjectSupport.DeleteModule(
                             RequireWorkbook(),

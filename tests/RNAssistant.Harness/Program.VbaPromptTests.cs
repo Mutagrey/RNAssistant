@@ -210,6 +210,126 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaWriteRenameIsStrictAndAtomic()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                const string source = "Option Explicit\nPublic Sub Run()\nEnd Sub";
+                var adapter = new FakeOfficeAdapter();
+                adapter.SetVbaModule("OldModule", source, "ClassModule");
+                var store = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var definition = tools.Single(item => item.Id == "common.vba_write_module");
+                var schema = JObject.Parse(definition.ArgumentSchemaJson);
+                var variants = schema["anyOf"] as JArray;
+                AssertEqual(2, variants == null ? 0 : variants.Count, "write tool exposes exactly write and rename branches");
+                var renameVariant = variants == null ? null : variants.OfType<JObject>().FirstOrDefault(item =>
+                    string.Equals((string)item.SelectToken("properties.mode.enum[0]"), "rename", StringComparison.Ordinal));
+                AssertTrue(renameVariant != null, "rename branch is explicit");
+                AssertTrue(renameVariant["properties"]["code"] == null && renameVariant["properties"]["componentType"] == null,
+                    "rename branch does not expose write-only arguments");
+
+                var promptParameters = ToolSchemaSupport.ForPrompt(schema);
+                AssertTrue(promptParameters["properties"] == null && promptParameters["anyOf"] is JArray,
+                    "model prompt exposes two complete alternatives without a misleading optional envelope");
+                var promptRenameVariant = ((JArray)promptParameters["anyOf"]).OfType<JObject>().Single(item =>
+                    string.Equals((string)item.SelectToken("properties.mode.enum[0]"), "rename", StringComparison.Ordinal));
+                AssertEqual(3, ((JObject)promptRenameVariant["properties"]).Properties().Count(),
+                    "model rename branch exposes only moduleName, newModuleName, and mode");
+                AssertEqual(3, ((JArray)promptRenameVariant["required"]).Count,
+                    "all model rename arguments are required");
+                AssertTrue(promptRenameVariant.SelectToken("properties.code") == null &&
+                    promptRenameVariant.SelectToken("properties.componentType") == null,
+                    "model rename branch cannot mix copy/write arguments");
+
+                var renamed = executor.Execute(
+                    Command(
+                        "common.vba_write_module",
+                        "moduleName", "OldModule",
+                        "newModuleName", "RenamedModule",
+                        "mode", "rename"),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    NewSession(adapter));
+
+                AssertTrue(renamed.Success, "public write rename succeeds");
+                AssertEqual(string.Empty, adapter.GetVbaModuleCode("OldModule"), "old identity is absent");
+                AssertEqual(source, adapter.GetVbaModuleCode("RenamedModule"), "rename preserves exact source");
+                var data = JObject.Parse(renamed.DataJson ?? "{}");
+                AssertEqual("OldModule", (string)data["previousModuleName"], "result returns previous name");
+                AssertEqual("RenamedModule", (string)data["moduleName"], "result returns actual new name");
+                AssertEqual("rename", (string)data["mode"], "result identifies rename branch");
+                AssertEqual(VbaMutationStatuses.Committed, (string)data["journalStatus"], "two-name journal commits");
+                AssertEqual(0, store.List("Excel", "doc").Count, "identity-only rename does not expose a misleading source backup");
+                var journal = store.ListPackageMutations("Excel", "doc").Single();
+                AssertEqual("rename", journal.Prepared.Operation, "rename uses a two-identity prepared record");
+                AssertEqual(2, journal.Prepared.Components.Count, "journal records old and new identities");
+                AssertEqual(VbaMutationStatuses.Committed, journal.Terminal.Status, "rename journal terminal is committed");
+                var row = store.QueryMutations("Excel", "doc", new VbaMutationQueryRequest()).Rows.Single();
+                AssertEqual(VbaMutationKinds.Module, row.Kind, "rename projects as a module mutation");
+                AssertEqual(1, row.ComponentCount, "rename remains one logical component");
+                AssertTrue(row.ComponentNames.Contains("OldModule") && row.ComponentNames.Contains("RenamedModule"),
+                    "diagnostics retain both names");
+
+                var invalid = executor.Execute(
+                    Command(
+                        "common.vba_write_module",
+                        "moduleName", "RenamedModule",
+                        "newModuleName", "AnotherModule",
+                        "mode", "rename",
+                        "code", source),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    NewSession(adapter));
+                AssertTrue(!invalid.Success, "rename with write-only code is rejected by schema");
+                AssertContains(invalid.Message, "unsupported property code", "invalid rename reports the conflicting branch argument");
+                AssertEqual(source, adapter.GetVbaModuleCode("RenamedModule"), "invalid branch leaves source identity unchanged");
+            });
+        }
+
+        private static void VbaRenameRejectsConfirmationRace()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                const string source = "Sub Original()\nEnd Sub";
+                adapter.SetVbaModule("RenameSource", source, "StdModule");
+                var session = NewSession(adapter);
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var command = Command(
+                    "common.vba_write_module",
+                    "moduleName", "RenameSource",
+                    "newModuleName", "RenameTarget",
+                    "mode", "rename");
+                var waiting = executor.Execute(
+                    command,
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = false },
+                    false,
+                    false,
+                    session);
+                AssertEqual("waiting_confirmation", waiting.Status, "rename waits for confirmation");
+                AssertContains(waiting.Message, "RenameSource", "confirmation identifies source");
+                AssertContains(waiting.Message, "RenameTarget", "confirmation identifies destination");
+
+                adapter.SetVbaModule("RenameTarget", "Sub External()\nEnd Sub", "StdModule");
+                var stale = executor.Execute(
+                    command,
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+                AssertEqual("stale_vba_module", stale.ErrorCode, "destination created during confirmation blocks rename");
+                AssertEqual(source, adapter.GetVbaModuleCode("RenameSource"), "source remains under its old name");
+                AssertContains(adapter.GetVbaModuleCode("RenameTarget"), "External", "racing destination is preserved");
+            });
+        }
+
         private static void VbaDeleteNeedsNoPublicRead()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -651,6 +771,45 @@ namespace RNAssistant.Harness
                 "read-back code is VBE-equivalent");
         }
 
+        private static void VbaProjectRenamePreservesComponentIdentity()
+        {
+            const string source = "Option Explicit\nPublic Sub Main()\nEnd Sub";
+            var document = new FakeVbaDocumentObject();
+            var component = document.VBProject.VBComponents.Seed("OldModule", source, 2);
+            var designer = component.Designer;
+            var hash = VbaToolManifestParser.LiveCodeSha256(source);
+
+            var result = VbaProjectSupport.RenameModule(document, "OldModule", "NewModule", hash);
+
+            AssertTrue(result.Success, "COM rename succeeds");
+            var renamed = document.VBProject.VBComponents.Cast<FakeVbaComponent>().Single();
+            AssertTrue(object.ReferenceEquals(component, renamed), "rename preserves the VBComponent object");
+            AssertTrue(object.ReferenceEquals(designer, renamed.Designer), "rename preserves component metadata/designer identity");
+            AssertEqual("NewModule", renamed.Name, "COM rename changes only the component name");
+            AssertEqual(2, renamed.Type, "COM rename preserves component type");
+            AssertEqual(source, renamed.CodeModule.Code, "COM rename preserves source");
+            AssertEqual("vba_module_not_found", VbaProjectSupport.ReadModule(document, "OldModule", 1000).ErrorCode,
+                "old name is absent after rename");
+
+            document.VBProject.VBComponents.Seed("Collision", "Sub Existing()\nEnd Sub");
+            var collision = VbaProjectSupport.RenameModule(document, "NewModule", "Collision", hash);
+            AssertEqual("vba_module_exists", collision.ErrorCode, "COM rename rejects destination collision");
+            AssertEqual("NewModule", renamed.Name, "collision leaves source identity unchanged");
+
+            var stale = VbaProjectSupport.RenameModule(
+                document,
+                "NewModule",
+                "AnotherName",
+                VbaToolManifestParser.LiveCodeSha256("Sub Stale()\nEnd Sub"));
+            AssertEqual("stale_vba_module", stale.ErrorCode, "COM rename compare-and-swap rejects source drift");
+            AssertEqual("NewModule", renamed.Name, "stale rename leaves source identity unchanged");
+
+            var documentModule = document.VBProject.VBComponents.Seed("ThisDocument", "Option Explicit", 100);
+            var blocked = VbaProjectSupport.RenameModule(document, "ThisDocument", "RenamedDocument");
+            AssertEqual("vba_component_type_read_only", blocked.ErrorCode, "document module rename remains blocked");
+            AssertEqual("ThisDocument", documentModule.Name, "blocked document module name is unchanged");
+        }
+
         private static void VbaBackendCompareAndSwapRejectsDrift()
         {
             var document = new FakeVbaDocumentObject();
@@ -745,7 +904,9 @@ namespace RNAssistant.Harness
             AssertContains(editing.Description, "Use whenever a request changes VBA source", "catalog reliably triggers VBA editing guidance");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
             AssertContains(editing.BodyMarkdown, "repeat the exact anchor block", "insertions use explicit exact replacement text");
-            AssertContains(editing.BodyMarkdown, "never imitate rename with write plus delete", "skill forbids unsafe rename emulation");
+            AssertContains(editing.BodyMarkdown, "mode=rename", "skill explains the strict rename branch");
+            AssertContains(editing.BodyMarkdown, "Never imitate rename with write plus delete", "skill forbids unsafe rename emulation");
+            AssertContains(editing.BodyMarkdown, "does not rewrite explicit references", "skill warns about qualified VBA references");
             AssertContains(editing.BodyMarkdown, "Option Explicit", "skill includes baseline VBA code quality");
             AssertContains(editing.BodyMarkdown, "complete Option block", "skill preserves all leading Option directives");
             AssertContains(editing.BodyMarkdown, "PtrSafe", "skill covers Office x64 declarations");
