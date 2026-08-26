@@ -16,25 +16,22 @@ namespace RNAssistant.Office
         public async Task<SendChatResponse> SendChatAsync(
             string text,
             string chatId = null,
-            IReadOnlyList<string> attachmentIds = null,
-            IReadOnlyList<string> artifactIds = null,
+            IReadOnlyList<string> resourceDraftIds = null,
             Action<string, string, ChatActivity> progress = null,
             Action<ChatStateResponse> chatStateChanged = null,
             CancellationToken cancellationToken = default(CancellationToken),
             string runId = null)
         {
             if (string.IsNullOrWhiteSpace(text) &&
-                (attachmentIds == null || attachmentIds.Count == 0) &&
-                (artifactIds == null || artifactIds.Count == 0))
+                (resourceDraftIds == null || resourceDraftIds.Count == 0))
             {
                 return EmptySendResponse(LoadAddressedSession(chatId), _settingsService.Load());
             }
 
             var settings = _settingsService.Load();
             var session = LoadAddressedSession(chatId);
-            var selectedArtifactIds = _resourceGateway.ResolveSelectedArtifactIds(session, artifactIds);
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
-            var attachments = _attachmentStore.LoadDrafts(attachmentIds);
+            var attachments = _chatResourceIngestion.LoadDrafts(session, resourceDraftIds);
             var invalidAttachment = attachments.FirstOrDefault(a => a != null && a.Status == "error");
             if (invalidAttachment != null)
             {
@@ -48,7 +45,6 @@ namespace RNAssistant.Office
                 {
                     Text = text ?? string.Empty,
                     Attachments = attachments,
-                    ArtifactIds = selectedArtifactIds,
                     AppendUserMessage = true,
                     CommitUserAttachments = true
                 },
@@ -133,16 +129,23 @@ namespace RNAssistant.Office
             }
         }
 
-        public AttachmentResponse ImportAttachment(string fileName, string contentType, string base64)
+        public ChatResourceDraftResponse StageChatResource(
+            string chatId,
+            string fileName,
+            string contentType,
+            string base64)
         {
-            var attachment = _attachmentStore.Import(fileName, contentType, base64);
-            _attachmentStore.SaveDraftMetadata(attachment);
-            return new AttachmentResponse { Attachment = attachment };
+            var session = LoadAddressedSession(chatId);
+            return new ChatResourceDraftResponse
+            {
+                Resource = _chatResourceIngestion.Stage(session, fileName, contentType, base64)
+            };
         }
 
-        public DeleteResponse DeleteDraftAttachment(string id)
+        public DeleteResponse DiscardChatResourceDraft(string chatId, string id)
         {
-            _attachmentStore.DeleteDraft(id);
+            var session = LoadAddressedSession(chatId);
+            _chatResourceIngestion.Discard(session, id);
             return new DeleteResponse { Deleted = true };
         }
 
@@ -267,7 +270,6 @@ namespace RNAssistant.Office
         {
             public string Text { get; set; }
             public IReadOnlyList<ChatAttachment> Attachments { get; set; }
-            public IReadOnlyList<string> ArtifactIds { get; set; }
             public bool AppendUserMessage { get; set; }
             public bool CommitUserAttachments { get; set; }
             public IReadOnlyList<ChatMessage> MessagesToDeleteAfterSave { get; set; }
@@ -311,15 +313,7 @@ namespace RNAssistant.Office
                 input = input ?? new ChatTurnInput();
                 var text = input.Text ?? string.Empty;
                 var attachments = input.Attachments ?? new ChatAttachment[0];
-                var selectedArtifactIds = _resourceGateway.ResolveSelectedArtifactIds(session, input.ArtifactIds);
-                var referencedMedia = _resourceGateway.ResolveModelAttachments(session, selectedArtifactIds);
-                var routedAttachments = attachments
-                    .Concat(referencedMedia)
-                    .Where(attachment => attachment != null)
-                    .GroupBy(AttachmentModelRoutingService.AttachmentIdentity, StringComparer.OrdinalIgnoreCase)
-                    .Select(group => group.First())
-                    .ToList();
-                var attachmentRouting = AttachmentModelRoutingService.Select(settings, session, routedAttachments);
+                var attachmentRouting = AttachmentModelRoutingService.Select(settings, session, attachments);
                 settings = attachmentRouting.Settings;
                 var executionMode = ChatModes.Normalize(session.Mode);
                 var documentRuntimeKey = string.Empty;
@@ -344,8 +338,7 @@ namespace RNAssistant.Office
                         RunId = runId,
                         Sequence = 1,
                         HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId,
-                        Attachments = new List<ChatAttachment>(attachments),
-                        ArtifactIds = new List<string>(selectedArtifactIds)
+                        Attachments = new List<ChatAttachment>(attachments)
                     };
                     session.Messages.Add(userMessage);
                     appendedUserMessage = userMessage;
@@ -380,14 +373,18 @@ namespace RNAssistant.Office
                     if (commitUserAttachments && appendedUserMessage != null)
                     {
                         // Keep drafts until the chat durably references their verified CAS blobs.
-                        _attachmentStore.Commit(appendedUserMessage, false);
+                        _chatResourceIngestion.CommitAndLink(session, appendedUserMessage, firstRunMessageIndex);
+                    }
+                    else
+                    {
+                        ChatArtifactService.LinkMessageArtifacts(session, firstRunMessageIndex);
                     }
                     _chatStore.Save(session);
                     preparedTurnPersisted = true;
                     _chatSessions.NotifySaved(session);
                     if (commitUserAttachments && appendedUserMessage != null)
                     {
-                        _attachmentStore.DeleteDrafts(appendedUserMessage);
+                        _chatResourceIngestion.DeleteDrafts(appendedUserMessage);
                     }
                     foreach (var removedMessage in input.MessagesToDeleteAfterSave ?? new ChatMessage[0])
                     {
@@ -470,20 +467,8 @@ namespace RNAssistant.Office
                         attachmentRouting,
                         runProgress,
                         runCancellation.Token).ConfigureAwait(false);
-                    var artifactEvidence = _resourceGateway.BuildSelectedEvidence(
-                        session,
-                        selectedArtifactIds.Except(
-                            _resourceGateway.ResolveDirectMediaArtifactIds(
-                                session,
-                                selectedArtifactIds,
-                                attachmentRouting.PrimaryAttachments),
-                            StringComparer.OrdinalIgnoreCase),
-                        Math.Max(256, Math.Min(
-                            AttachmentAnalysisService.ResolveEvidenceMaxTokens(settings),
-                            ModelContextBudget.InputBudgetTokens(settings) / 8)),
-                        settings);
                     var primaryText = AttachmentAnalysisService.BuildPrimaryRequest(
-                        ResourceGatewayService.AppendSelectedEvidence(text, artifactEvidence),
+                        text,
                         attachmentAnalysis);
                     var primaryAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
                     try

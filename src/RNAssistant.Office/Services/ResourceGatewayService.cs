@@ -9,20 +9,20 @@ namespace RNAssistant.Office.Services
     internal sealed class ResourceGatewayService
     {
         private readonly ResourceProviderRegistry _registry;
-        private readonly ChatArtifactResourceProvider _chatProvider;
 
         public ResourceGatewayService(
             Func<ChatSession, string, bool> loadArtifactBody = null,
             Func<ChatAttachment, int, string> readAttachmentText = null)
         {
-            _chatProvider = new ChatArtifactResourceProvider(loadArtifactBody, readAttachmentText);
-            _registry = new ResourceProviderRegistry(new IResourceProvider[] { _chatProvider });
+            _registry = new ResourceProviderRegistry(new IResourceProvider[]
+            {
+                new ChatArtifactResourceProvider(loadArtifactBody, readAttachmentText)
+            });
         }
 
         internal ResourceGatewayService(IEnumerable<IResourceProvider> providers)
         {
             _registry = new ResourceProviderRegistry(providers);
-            _chatProvider = _registry.All().OfType<ChatArtifactResourceProvider>().SingleOrDefault();
         }
 
         public ResourceListPage List(ChatSession session, string providerId, string kind, string cursor, int limit)
@@ -80,38 +80,6 @@ namespace RNAssistant.Office.Services
             return ProviderFor(resourceUri).Read(session, resourceUri, representation, offset, maxChars);
         }
 
-        public IReadOnlyList<string> ResolveSelectedArtifactIds(ChatSession session, IEnumerable<string> values)
-        {
-            return ChatProvider().ResolveSelectedIds(session, values);
-        }
-
-        public IReadOnlyList<ChatAttachment> ResolveModelAttachments(ChatSession session, IEnumerable<string> artifactIds)
-        {
-            return ChatProvider().ResolveModelAttachments(session, artifactIds);
-        }
-
-        public IReadOnlyList<string> ResolveDirectMediaArtifactIds(
-            ChatSession session,
-            IEnumerable<string> artifactIds,
-            IEnumerable<ChatAttachment> directAttachments)
-        {
-            return ChatProvider().ResolveDirectMediaArtifactIds(session, artifactIds, directAttachments);
-        }
-
-        public string BuildSelectedEvidence(
-            ChatSession session,
-            IEnumerable<string> artifactIds,
-            int maxTokens,
-            AppSettings settings)
-        {
-            return ChatProvider().BuildSelectedEvidence(session, artifactIds, maxTokens, settings);
-        }
-
-        public static string AppendSelectedEvidence(string userText, string evidence)
-        {
-            return ChatArtifactResourceProvider.AppendSelectedEvidence(userText, evidence);
-        }
-
         private IResourceProvider SelectProvider(string providerId)
         {
             if (!string.IsNullOrWhiteSpace(providerId)) return _registry.Get(providerId);
@@ -128,12 +96,6 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("A canonical resource URI is required.");
             }
             return _registry.Get(address.Provider);
-        }
-
-        private ChatArtifactResourceProvider ChatProvider()
-        {
-            if (_chatProvider == null) throw new InvalidOperationException("The chat resource provider is unavailable.");
-            return _chatProvider;
         }
     }
 }

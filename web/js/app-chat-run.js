@@ -8,9 +8,8 @@ function removeLocalMessage(text) {
   return false;
 }
 
-async function sendChat(text, attachments, artifactIds) {
+async function sendChat(text, attachments) {
   attachments = attachments || [];
-  artifactIds = artifactIds || [];
   var sentChatId = state.activeChatId;
   var knownMessageIds = {};
   (state.messages || []).forEach(function (message) {
@@ -20,10 +19,9 @@ async function sendChat(text, attachments, artifactIds) {
   var request = send("sendChat", {
     chatId: state.activeChatId,
     text: text,
-    attachmentIds: attachments.map(attachmentId),
-    artifactIds: artifactIds
+    resourceDraftIds: attachments.map(attachmentId)
   });
-  state.activeSends[sentChatId] = { requestId: request.requestId, text: text, attachments: attachments, artifactIds: artifactIds, canceling: false };
+  state.activeSends[sentChatId] = { requestId: request.requestId, text: text, attachments: attachments, canceling: false };
   beginChatRunTracking(sentChatId);
   renderSendControls();
   renderChatSessions();
@@ -42,14 +40,13 @@ async function sendChat(text, attachments, artifactIds) {
     var refreshed = await refreshChatAfterSendFailure(sentChatId);
     var activeChatStillSelected = state.activeChatId === sentChatId;
     var persisted = activeChatStillSelected && refreshed && (state.messages || []).some(function (message) {
-      return matchesPersistedSend(message, knownMessageIds, failedRunId, text, attachments, artifactIds);
+      return matchesPersistedSend(message, knownMessageIds, failedRunId, text, attachments);
     });
     if (error.cancelled) {
       if (activeChatStillSelected && !persisted) {
         removeLocalMessage(text);
         if (!$("chatInput").value.trim()) setChatInputText(text, false);
         state.draftAttachments = attachments.slice();
-        state.draftArtifactIds = artifactIds.slice();
         renderAttachmentDrafts();
         updateEstimatedContextUsage();
         renderContextMeter();
@@ -65,7 +62,6 @@ async function sendChat(text, attachments, artifactIds) {
             Role: "user",
             Content: text,
             Attachments: attachments,
-            ArtifactIds: artifactIds,
             Local: true,
             Pending: false,
             Failed: true
@@ -74,7 +70,6 @@ async function sendChat(text, attachments, artifactIds) {
         renderMessages();
         showSendError(error.detail || error.message, text);
         state.failedSend.attachments = attachments;
-        state.failedSend.artifactIds = artifactIds;
       } else if (persisted) {
         clearSendError();
       }
@@ -94,7 +89,7 @@ async function sendChat(text, attachments, artifactIds) {
   }
 }
 
-function matchesPersistedSend(message, knownMessageIds, runId, text, attachments, artifactIds) {
+function matchesPersistedSend(message, knownMessageIds, runId, text, attachments) {
   var id = message ? (message.Id || message.id || "") : "";
   var role = message ? (message.Role || message.role || "") : "";
   if (!id || knownMessageIds[id] || String(role).toLowerCase() !== "user") return false;
@@ -108,11 +103,7 @@ function matchesPersistedSend(message, knownMessageIds, runId, text, attachments
   var attachmentsMatch = expectedIds.length === actualIds.length && expectedIds.every(function (value, index) {
     return value === actualIds[index];
   });
-  var expectedArtifacts = (artifactIds || []).slice().sort();
-  var actualArtifacts = (message.ArtifactIds || message.artifactIds || []).slice().sort();
-  return attachmentsMatch && expectedArtifacts.length === actualArtifacts.length && expectedArtifacts.every(function (value, index) {
-    return value === actualArtifacts[index];
-  });
+  return attachmentsMatch;
 }
 
 async function refreshChatAfterSendFailure(chatId) {
@@ -146,26 +137,25 @@ async function submitChatInput() {
 
   var text = $("chatInput").value.trim();
   var attachments = (state.draftAttachments || []).slice();
-  var artifactIds = (state.draftArtifactIds || []).slice();
-  if (!text && !attachments.length && !artifactIds.length) {
+  if (!text && !attachments.length) {
     return;
   }
 
   setChatInputText("", false);
   clearSendError();
-  state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Attachments: attachments, ArtifactIds: artifactIds, Local: true, Pending: true });
+  state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Attachments: attachments, Local: true, Pending: true });
   clearDraftAttachments();
   updateEstimatedContextUsage();
   renderMessages({ forceScroll: true });
   renderChatSessions();
   renderContextMeter();
-  sendChat(text, attachments, artifactIds);
+  sendChat(text, attachments);
 }
 
 function retryFailedSend() {
   if (currentActiveSend() || hasActiveMessageEdit() ||
     (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) ||
-    !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length && !(state.failedSend.artifactIds || []).length)) {
+    !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length)) {
     return;
   }
 
@@ -176,9 +166,8 @@ function retryFailedSend() {
   renderContextMeter();
   var text = state.failedSend.text;
   var attachments = state.failedSend.attachments || [];
-  var artifactIds = state.failedSend.artifactIds || [];
   clearSendError();
-  sendChat(text, attachments, artifactIds);
+  sendChat(text, attachments);
 }
 
 function stopActiveSend() {

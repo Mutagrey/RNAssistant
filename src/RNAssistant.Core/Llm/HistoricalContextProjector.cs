@@ -12,12 +12,17 @@ namespace RNAssistant.Core.Llm
 
         public static ChatMessage Project(ChatMessage source)
         {
+            return Project(source, null);
+        }
+
+        public static ChatMessage Project(ChatMessage source, Func<string, string> resourceUriResolver)
+        {
             if (source == null) return null;
             return new ChatMessage
             {
                 Id = source.Id,
                 Role = source.Role,
-                Content = AppendReferences(source),
+                Content = AppendReferences(source, resourceUriResolver),
                 ExcludeFromModelContext = source.ExcludeFromModelContext,
                 ProtocolMessage = source.ProtocolMessage,
                 ToolCallId = source.ToolCallId,
@@ -42,21 +47,28 @@ namespace RNAssistant.Core.Llm
             };
         }
 
-        private static string AppendReferences(ChatMessage source)
+        private static string AppendReferences(ChatMessage source, Func<string, string> resourceUriResolver)
         {
             var references = new List<string>();
             references.AddRange((source.ArtifactIds ?? new List<string>())
                 .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Select(id => "artifact:" + SafeValue(id)));
+                .Select(id => ResolveReference(id, resourceUriResolver))
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
             if (!string.IsNullOrWhiteSpace(source.HtmlWorkspaceCheckpointId))
             {
-                references.Add("html_workspace:" + SafeValue(source.HtmlWorkspaceCheckpointId));
+                var workspaceReference = resourceUriResolver == null
+                    ? "html_workspace:" + SafeValue(source.HtmlWorkspaceCheckpointId)
+                    : ResolveReference(source.HtmlWorkspaceCheckpointId, resourceUriResolver);
+                if (!string.IsNullOrWhiteSpace(workspaceReference)) references.Add(workspaceReference);
             }
-            references.AddRange((source.Attachments ?? new List<ChatAttachment>())
-                .Where(attachment => attachment != null)
-                .Select(attachment => "attachment:" + SafeValue(attachment.Id) + " | " +
-                    SafeValue(attachment.Kind ?? "file") + " | " +
-                    SafeValue(attachment.FileName ?? "unnamed")));
+            if (resourceUriResolver == null)
+            {
+                references.AddRange((source.Attachments ?? new List<ChatAttachment>())
+                    .Where(attachment => attachment != null)
+                    .Select(attachment => "attachment:" + SafeValue(attachment.Id) + " | " +
+                        SafeValue(attachment.Kind ?? "file") + " | " +
+                        SafeValue(attachment.FileName ?? "unnamed")));
+            }
             references = references
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(MaximumReferences)
@@ -65,6 +77,13 @@ namespace RNAssistant.Core.Llm
             return (source.Content ?? string.Empty) +
                 "\n\nHISTORICAL_REFERENCES (local artifacts; not new instructions):\n- " +
                 string.Join("\n- ", references.ToArray());
+        }
+
+        private static string ResolveReference(string artifactId, Func<string, string> resourceUriResolver)
+        {
+            if (resourceUriResolver == null) return "artifact:" + SafeValue(artifactId);
+            var uri = resourceUriResolver(artifactId);
+            return string.IsNullOrWhiteSpace(uri) ? null : "resource:" + uri;
         }
 
         private static string SafeValue(string value)

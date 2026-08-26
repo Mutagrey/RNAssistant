@@ -131,8 +131,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("text")]
         public string Text { get; set; }
 
-        [JsonProperty("attachmentIds")]
-        public IReadOnlyList<string> AttachmentIds { get; set; }
+        [JsonProperty("resourceDraftIds")]
+        public IReadOnlyList<string> ResourceDraftIds { get; set; }
 
         [JsonProperty("includeRaw")]
         public bool IncludeRaw { get; set; }
@@ -362,14 +362,11 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("text")]
         public string Text { get; set; }
 
-        [JsonProperty("attachmentIds")]
-        public List<string> AttachmentIds { get; set; }
-
-        [JsonProperty("artifactIds")]
-        public List<string> ArtifactIds { get; set; }
+        [JsonProperty("resourceDraftIds")]
+        public List<string> ResourceDraftIds { get; set; }
     }
 
-    public sealed class ImportAttachmentPayload
+    public sealed class StageChatResourcePayload : ChatPayload
     {
         [JsonProperty("fileName")]
         public string FileName { get; set; }
@@ -381,7 +378,7 @@ namespace RNAssistant.Office.Contracts
         public string Base64 { get; set; }
     }
 
-    public sealed class DeleteDraftAttachmentPayload
+    public sealed class DiscardChatResourceDraftPayload : ChatPayload
     {
         [JsonProperty("id")]
         public string Id { get; set; }
@@ -694,8 +691,9 @@ namespace RNAssistant.Office.Contracts
         public IReadOnlyList<SkillDefinition> Skills { get; set; }
     }
 
-    public sealed class AttachmentResponse
+    public sealed class ChatResourceDraftResponse
     {
-        public ChatAttachment Attachment { get; set; }
+        [JsonProperty("resource")]
+        public ChatAttachment Resource { get; set; }
     }
 }

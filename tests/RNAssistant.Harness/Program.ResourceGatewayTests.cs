@@ -81,10 +81,6 @@ namespace RNAssistant.Harness
             }
             AssertTrue(invalidRepresentationRejected, "resource reads reject unknown representations");
 
-            var evidence = gateway.BuildSelectedEvidence(session, new[] { artifact.Id }, 256, new AppSettings());
-            AssertContains(evidence, "SELECTED_RESOURCE_EVIDENCE", "selected resource evidence marker");
-            AssertContains(evidence, resourceUri, "selected resource evidence citation");
-
             var imageAttachment = new ChatAttachment
             {
                 Id = "direct-image",
@@ -99,19 +95,22 @@ namespace RNAssistant.Harness
                 Attachments = new List<ChatAttachment> { imageAttachment }
             };
             session.Messages.Add(imageMessage);
-            session.Artifacts.Add(new ChatArtifact
+            var imageArtifact = new ChatArtifact
             {
                 Id = "attachment_direct-image",
                 Kind = ChatArtifactKinds.Image,
                 SourceMessageId = imageMessage.Id,
                 MetadataJson = "{\"attachmentId\":\"direct-image\"}"
-            });
-            var directIds = gateway.ResolveDirectMediaArtifactIds(
+            };
+            session.Artifacts.Add(imageArtifact);
+            var media = gateway.Read(
                 session,
-                new[] { "attachment_direct-image" },
-                new[] { imageAttachment });
-            AssertEqual("attachment_direct-image", directIds.Single(),
-                "direct multimodal media is excluded from duplicate textual evidence");
+                ChatArtifactResourceProvider.CreateRevisionUri(session, imageArtifact),
+                "media",
+                0,
+                128);
+            AssertTrue(media.Result.HydratedForNextModelStep, "media is hydrated only by an explicit resource read");
+            AssertEqual("direct-image", media.ModelAttachments.Single().Id, "media read returns exact attachment");
 
             session.Artifacts.Add(new ChatArtifact
             {
@@ -175,7 +174,7 @@ namespace RNAssistant.Harness
         {
             var adapter = FakeOfficeAdapter.ForHost("Excel");
             var session = NewSession(adapter);
-            session.Messages.Add(new ChatMessage
+            var historicMessage = new ChatMessage
             {
                 Role = "user",
                 Content = "Old request",
@@ -196,9 +195,18 @@ namespace RNAssistant.Harness
                     Content = "HISTORICAL_ANALYSIS_MUST_NOT_REPLAY",
                     AttachmentIds = new List<string> { "old-text" }
                 }
-            });
+            };
+            session.Messages.Add(historicMessage);
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Old answer" });
             session.Messages.Add(new ChatMessage { Role = "user", Content = "New request" });
+            session.Artifacts.Add(new ChatArtifact
+            {
+                Id = "attachment_old-text",
+                Kind = ChatArtifactKinds.Attachment,
+                SourceMessageId = historicMessage.Id,
+                MetadataJson = "{\"attachmentId\":\"old-text\"}"
+            });
+            var historicUri = ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last());
 
             var prompt = new ConversationPromptComposer().BuildMessages(
                 ChatModes.Agent,
@@ -206,7 +214,11 @@ namespace RNAssistant.Harness
                 new DocumentContext(), new AppSettings(), session, null);
             var old = prompt.First(message => (message.Content ?? string.Empty).StartsWith("Old request", StringComparison.Ordinal));
             AssertEqual(0, old.Attachments.Count, "historical attachment bodies are removed from replay");
-            AssertContains(old.Content, "artifact:attachment_old-text", "historical artifact reference remains");
+            AssertContains(old.Content, "resource:" + historicUri, "historical canonical resource reference remains");
+            AssertTrue(old.Content.IndexOf("artifact:attachment_old-text", StringComparison.Ordinal) < 0,
+                "model history does not expose a second artifact-id reference channel");
+            AssertTrue(old.Content.IndexOf("attachment:old-text", StringComparison.Ordinal) < 0,
+                "model history does not duplicate the canonical resource as attachment metadata");
             AssertTrue(FlattenSimple(prompt).IndexOf("HISTORICAL_BODY_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,
                 "historical extracted text is not copied into every prompt");
             AssertTrue(FlattenSimple(prompt).IndexOf("HISTORICAL_ANALYSIS_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,
@@ -216,14 +228,6 @@ namespace RNAssistant.Harness
                 "session usage estimates the virtualized reference rather than the historical body");
 
             var gateway = new ResourceGatewayService();
-            session.Artifacts.Add(new ChatArtifact
-            {
-                Id = "attachment_old-text",
-                Kind = ChatArtifactKinds.Attachment,
-                SourceMessageId = session.Messages[0].Id,
-                MetadataJson = "{\"attachmentId\":\"old-text\"}"
-            });
-            var historicUri = ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last());
             var descriptor = gateway.Resolve(session, historicUri).Resource;
             AssertTrue(!descriptor.Representations.Contains("analysis"),
                 "query-specific helper analysis is not exposed as a reusable resource representation");
@@ -241,8 +245,8 @@ namespace RNAssistant.Harness
                 true,
                 null,
                 CancellationToken.None).GetAwaiter().GetResult();
-            AssertContains(compactionInput, "artifact:attachment_old-text",
-                "compaction receives the stable artifact reference");
+            AssertContains(compactionInput, "resource:" + historicUri,
+                "compaction receives the canonical resource reference");
             AssertTrue(compactionInput.IndexOf("HISTORICAL_BODY_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,
                 "compaction does not reopen historical attachment bodies");
             AssertTrue(compactionInput.IndexOf("HISTORICAL_ANALYSIS_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,

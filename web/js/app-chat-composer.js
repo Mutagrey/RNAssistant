@@ -1,6 +1,6 @@
 function chatModeDefinition(mode) {
   return mode === "chat"
-    ? { value: "chat", title: "Chat", icon: "○", description: "Прямой ответ модели без инструментов" }
+    ? { value: "chat", title: "Chat", icon: "○", description: "Ответ модели с безопасным чтением ресурсов" }
     : { value: "agent", title: "Agent", icon: "✦", description: "Получает skills и tools, выполняет их по одному" };
 }
 
@@ -142,19 +142,18 @@ function updateComposerInputState() {
   var clearButton = $("clearInputButton");
   var hasText = !!(input && input.value.trim());
   var hasAttachments = !!(state.draftAttachments && state.draftAttachments.length);
-  var hasArtifacts = !!(state.draftArtifactIds && state.draftArtifactIds.length);
 
   if (hasActiveMessageEdit() && input) {
     state.editingText = input.value;
   }
 
   if (form) {
-    form.classList.toggle("has-input", hasText || hasAttachments || hasArtifacts);
+    form.classList.toggle("has-input", hasText || hasAttachments);
   }
   if (clearButton) {
     clearButton.hidden = !hasText;
   }
-  updateSendButtonAvailability(hasText || hasAttachments || hasArtifacts);
+  updateSendButtonAvailability(hasText || hasAttachments);
   resizeChatInput();
 }
 

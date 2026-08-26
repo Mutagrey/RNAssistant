@@ -150,22 +150,23 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await _controller.SendChatAsync(
                             sendChat.Text,
                             sendChat.ChatId,
-                            sendChat.AttachmentIds,
-                            sendChat.ArtifactIds,
+                            sendChat.ResourceDraftIds,
                             (phase, message, activity) => ReportProgress(id, sendChat.ChatId, runId, phase, message, activity),
                             ReportChatState,
                             cancellationToken,
                             runId);
                         break;
-                    case "importAttachment":
-                        var importAttachment = Payload<ImportAttachmentPayload>(payload);
-                        responsePayload = _controller.ImportAttachment(
-                            importAttachment.FileName,
-                            importAttachment.ContentType,
-                            importAttachment.Base64);
+                    case "stageChatResource":
+                        var stageResource = Payload<StageChatResourcePayload>(payload);
+                        responsePayload = _controller.StageChatResource(
+                            stageResource.ChatId,
+                            stageResource.FileName,
+                            stageResource.ContentType,
+                            stageResource.Base64);
                         break;
-                    case "deleteDraftAttachment":
-                        responsePayload = _controller.DeleteDraftAttachment(Payload<DeleteDraftAttachmentPayload>(payload).Id);
+                    case "discardChatResourceDraft":
+                        var discardResource = Payload<DiscardChatResourceDraftPayload>(payload);
+                        responsePayload = _controller.DiscardChatResourceDraft(discardResource.ChatId, discardResource.Id);
                         break;
                     case "deleteMessage":
                         var deleteMessage = Payload<MessageActionPayload>(payload);
@@ -389,7 +390,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.InspectPromptContext(
                             inspectContext.ChatId,
                             inspectContext.Text,
-                            inspectContext.AttachmentIds,
+                            inspectContext.ResourceDraftIds,
                             inspectContext.IncludeRaw);
                         break;
                     case "addSelectionContext":

@@ -54,7 +54,11 @@ namespace RNAssistant.Office.Services
                     true);
             }
 
-            var candidates = history.Select(HistoricalContextProjector.Project).ToList();
+            var candidates = history
+                .Select(message => HistoricalContextProjector.Project(
+                    message,
+                    artifactId => ChatArtifactResourceProvider.ResolveRevisionUri(session, artifactId)))
+                .ToList();
             var required = EstimateMessages(candidates, settings);
             if (required > available)
             {

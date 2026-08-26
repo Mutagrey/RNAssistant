@@ -273,10 +273,6 @@
         editButton.disabled = blocked && !isPlan;
       }
       if (isArtifact) state.htmlWorkspaceMode = "preview";
-      if ($("addArtifactToChatButton")) {
-        $("addArtifactToChatButton").classList.toggle("hidden", !isPlan && !isArtifact);
-        $("addArtifactToChatButton").disabled = state.bridgeUnavailable || !selected;
-      }
       if ($("saveHtmlWorkspaceButton")) $("saveHtmlWorkspaceButton").classList.toggle("hidden", isArtifact);
       if ($("deleteHtmlWorkspaceButton")) $("deleteHtmlWorkspaceButton").classList.toggle("hidden", isArtifact);
       if (typeof setCodeEditorValue === "function") {

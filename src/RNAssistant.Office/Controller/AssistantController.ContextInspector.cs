@@ -12,12 +12,12 @@ namespace RNAssistant.Office
         public PromptContextInspectorResponse InspectPromptContext(
             string chatId,
             string text,
-            IReadOnlyList<string> attachmentIds,
+            IReadOnlyList<string> resourceDraftIds,
             bool includeRaw)
         {
             var session = LoadAddressedSession(chatId);
             var settings = ResolveChatSettings(session);
-            var attachments = _attachmentStore.LoadDrafts(attachmentIds);
+            var attachments = _chatResourceIngestion.LoadDrafts(session, resourceDraftIds);
             var invalidAttachment = attachments.FirstOrDefault(item => item != null && item.Status == "error");
             if (invalidAttachment != null)
             {

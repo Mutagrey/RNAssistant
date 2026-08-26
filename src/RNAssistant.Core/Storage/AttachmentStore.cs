@@ -41,8 +41,9 @@ namespace RNAssistant.Core.Storage
             CleanupExpiredDrafts(DateTime.UtcNow.AddDays(-1));
         }
 
-        public ChatAttachment Import(string fileName, string contentType, string base64)
+        public ChatAttachment Import(string fileName, string contentType, string base64, string draftChatId)
         {
+            draftChatId = RequireDraftChatId(draftChatId);
             if (string.IsNullOrWhiteSpace(base64) || base64.Length > ((MaxFileBytes + 2) / 3) * 4 + 16)
             {
                 throw new InvalidOperationException("Attachment must be between 1 byte and 20 MB.");
@@ -72,6 +73,7 @@ namespace RNAssistant.Core.Storage
             contentType = NormalizeContentType(kind, contentType, bytes);
             var attachment = new ChatAttachment
             {
+                DraftChatId = draftChatId,
                 FileName = fileName,
                 ContentType = contentType,
                 Size = bytes.LongLength,
@@ -96,8 +98,9 @@ namespace RNAssistant.Core.Storage
             return attachment;
         }
 
-        public List<ChatAttachment> LoadDrafts(IEnumerable<string> ids)
+        public List<ChatAttachment> LoadDrafts(IEnumerable<string> ids, string draftChatId)
         {
+            draftChatId = RequireDraftChatId(draftChatId);
             var requested = (ids ?? new string[0]).Where(IsSafeId).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (requested.Count > MaxFilesPerMessage)
             {
@@ -112,6 +115,10 @@ namespace RNAssistant.Core.Storage
                     !string.Equals(metadata.Id, id, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException("Attachment metadata is no longer available: " + id);
+                }
+                if (!string.Equals(metadata.DraftChatId, draftChatId, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Resource draft does not belong to the active chat: " + id);
                 }
                 if (!File.Exists(AbsolutePath(metadata.RelativePath)))
                 {
@@ -140,24 +147,26 @@ namespace RNAssistant.Core.Storage
                 new UTF8Encoding(false));
         }
 
-        public void DeleteDraft(string id)
+        public void DeleteDraft(string id, string draftChatId)
         {
+            draftChatId = RequireDraftChatId(draftChatId);
             if (!IsSafeId(id) || !Directory.Exists(StagingDirectory()))
             {
                 return;
             }
-            foreach (var path in Directory.GetFiles(StagingDirectory(), id + ".*"))
+            var metadata = LoadMetadata(id);
+            if (metadata == null)
             {
-                SafeDeleteFile(path);
+                return;
             }
+            if (!string.Equals(metadata.DraftChatId, draftChatId, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Resource draft does not belong to the active chat: " + id);
+            }
+            DeleteDraftFiles(id);
         }
 
-        public void Commit(ChatMessage message)
-        {
-            Commit(message, true);
-        }
-
-        public void Commit(ChatMessage message, bool deleteDrafts)
+        public void CommitToCas(ChatMessage message)
         {
             if (message == null || message.Attachments == null || message.Attachments.Count == 0)
             {
@@ -185,7 +194,7 @@ namespace RNAssistant.Core.Storage
                 }
                 attachment.RelativePath = null;
                 attachment.ExtractedTextPath = null;
-                if (deleteDrafts) DeleteDraft(attachment.Id);
+                attachment.DraftChatId = null;
             }
         }
 
@@ -197,7 +206,7 @@ namespace RNAssistant.Core.Storage
             {
                 try
                 {
-                    DeleteDraft(attachment.Id);
+                    DeleteDraftFiles(attachment.Id);
                 }
                 catch (IOException)
                 {
@@ -206,6 +215,24 @@ namespace RNAssistant.Core.Storage
                 {
                 }
             }
+        }
+
+        private void DeleteDraftFiles(string id)
+        {
+            if (!IsSafeId(id) || !Directory.Exists(StagingDirectory())) return;
+            foreach (var path in Directory.GetFiles(StagingDirectory(), id + ".*"))
+            {
+                SafeDeleteFile(path);
+            }
+        }
+
+        private static string RequireDraftChatId(string draftChatId)
+        {
+            if (string.IsNullOrWhiteSpace(draftChatId))
+            {
+                throw new InvalidOperationException("A chat id is required for resource staging.");
+            }
+            return draftChatId.Trim();
         }
 
         public void DeleteMessage(ChatMessage message)

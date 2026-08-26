@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Status: accepted target architecture. Core resource contracts, the chat provider, `common.resources_*`, and the unified Chat/Agent conversation loop are implemented. Remaining slices are delivered vertically; replaced paths are removed, not retained as aliases.
+Status: accepted target architecture. Core resource contracts, the chat provider, `common.resources_*`, the unified Chat/Agent loop, and automatic chat resource ingestion are implemented. Remaining slices are delivered vertically; replaced paths are removed, not retained as aliases.
 
 ## Goals
 
@@ -52,10 +52,10 @@ The prompt contains compact resource references relevant to the conversation. On
 
 ## Ingestion and derived data
 
-Paste, drag-and-drop, and the paperclip all call the same ingestion pipeline:
+Paste, drag-and-drop, and the paperclip all call the same chat-scoped ingestion pipeline. Bytes are staged while the composer remains editable; sending the turn promotes them into the durable resource graph in a fixed recoverable order:
 
-1. Stream bytes into CAS and validate type/size.
-2. Append attachment/artifact revision events and bind a `ResourceRef` to the user turn.
+1. Validate type/size and stage bytes under the target chat id.
+2. On send, copy bytes into CAS, append attachment/artifact revision events, and bind the canonical revision to the user turn before model dispatch.
 3. Extract cheap deterministic representations once (metadata, safe text, page structure).
 4. Route supported media directly to a multimodal primary model for the current turn.
 5. If the primary model cannot consume the modality, call a bounded helper with only the current request and selected media.
@@ -88,7 +88,7 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 1. **Done:** Core resource contracts and canonical URI validation.
 2. **Done:** Provider registry plus chat-artifact provider; `common.artifacts_*` removed and replaced by `common.resources_*` without aliases.
 3. **Done:** Unified `ConversationRunService`; read-only resource loop in Chat; removed `PlainChatService` and `ChatContextWindowBuilder`.
-4. Automatic UI ingestion and durable message references; remove explicit selection mechanics.
+4. **Done:** Automatic chat-scoped UI ingestion and durable pre-dispatch message references; explicit `artifactIds`/“В запрос” selection removed.
 5. Office, VBA, HTML, and plan providers; remove duplicated read tools.
 6. Progressive tool discovery and bounded working-set eviction.
 7. Hard cutover of events/projections, deletion of obsolete services and tests, reset-only handling for old data.

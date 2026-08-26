@@ -95,6 +95,7 @@
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatArtifactService.cs" />
     <Compile Include="Services\ChatArtifactResourceProvider.cs" />
+    <Compile Include="Services\ChatResourceIngestionService.cs" />
     <Compile Include="Services\ResourceGatewayService.cs" />
     <Compile Include="Services\ResourceProviderRegistry.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />

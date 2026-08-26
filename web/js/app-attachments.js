@@ -30,7 +30,7 @@ function fileToBase64(file) {
   });
 }
 
-async function addAttachmentFiles(files) {
+async function ingestChatResourceFiles(files) {
   files = Array.prototype.slice.call(files || []);
   if (!files.length) return;
   if (currentActiveSend() || state.bridgeUnavailable) return;
@@ -49,12 +49,13 @@ async function addAttachmentFiles(files) {
   try {
     for (var index = 0; index < files.length; index += 1) {
       var file = files[index];
-      var response = await send("importAttachment", {
+      var response = await send("stageChatResource", {
+        chatId: targetChatId,
         fileName: file.name || ("clipboard-" + Date.now() + ".png"),
         contentType: file.type || "application/octet-stream",
         base64: await fileToBase64(file)
       });
-      var attachment = response.attachment || response.Attachment;
+      var attachment = response.resource || response.Resource;
       if (file.type.indexOf("image/") === 0) attachment.previewUrl = URL.createObjectURL(file);
       if (state.activeChatId === targetChatId) {
         state.draftAttachments.push(attachment);
@@ -76,7 +77,7 @@ async function addAttachmentFiles(files) {
 async function removeDraftAttachment(item) {
   var targetChatId = state.activeChatId;
   try {
-    await send("deleteDraftAttachment", { id: attachmentId(item) });
+    await send("discardChatResourceDraft", { chatId: targetChatId, id: attachmentId(item) });
   } catch (error) {
     log(error.detail || error.message, "error");
     return;
@@ -136,71 +137,17 @@ function renderAttachmentDrafts() {
   var box = $("attachmentDrafts");
   if (!box) return;
   box.innerHTML = "";
-  var artifactIds = state.draftArtifactIds || [];
-  box.classList.toggle("hidden", !state.draftAttachments.length && !artifactIds.length);
+  box.classList.toggle("hidden", !state.draftAttachments.length);
   state.draftAttachments.forEach(function (item) { box.appendChild(attachmentCard(item, true)); });
-  artifactIds.forEach(function (id) { box.appendChild(artifactReferenceCard(id)); });
   updateComposerInputState();
-}
-
-function artifactReferenceCard(id) {
-  var artifact = (state.artifacts || []).filter(function (item) {
-    return String(item.Id || item.id || "").toLowerCase() === String(id || "").toLowerCase();
-  })[0] || {};
-  var card = document.createElement("div");
-  card.className = "attachment-draft artifact-reference-draft";
-  var thumb = document.createElement("div");
-  thumb.className = "attachment-thumb";
-  thumb.textContent = "REF";
-  card.appendChild(thumb);
-  var copy = document.createElement("div");
-  copy.className = "attachment-copy";
-  var name = document.createElement("div");
-  name.className = "attachment-name";
-  name.textContent = artifact.Title || artifact.title || id;
-  copy.appendChild(name);
-  var meta = document.createElement("div");
-  meta.className = "attachment-meta";
-  meta.textContent = (artifact.Kind || artifact.kind || "artifact") + " · по ссылке";
-  copy.appendChild(meta);
-  card.appendChild(copy);
-  var remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "attachment-remove";
-  remove.title = "Убрать артефакт из запроса";
-  remove.textContent = "×";
-  remove.addEventListener("click", function () {
-    state.draftArtifactIds = (state.draftArtifactIds || []).filter(function (candidate) {
-      return String(candidate).toLowerCase() !== String(id).toLowerCase();
-    });
-    renderAttachmentDrafts();
-  });
-  card.appendChild(remove);
-  return card;
-}
-
-function queueArtifactReference(id) {
-  id = String(id || "").trim();
-  if (!id || !state.activeChatId || currentActiveSend()) return false;
-  state.draftArtifactIds = state.draftArtifactIds || [];
-  if (!state.draftArtifactIds.some(function (candidate) {
-    return String(candidate).toLowerCase() === id.toLowerCase();
-  })) {
-    state.draftArtifactIds.push(id);
-  }
-  renderAttachmentDrafts();
-  return true;
 }
 
 function clearDraftAttachments() {
   state.draftAttachments.forEach(function (item) { if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); });
   state.draftAttachments = [];
-  state.draftArtifactIds = [];
   if (state.activeChatId) delete chatDraftStore()[state.activeChatId];
   renderAttachmentDrafts();
 }
-
-window.queueArtifactReference = queueArtifactReference;
 
 function bindAttachmentActions() {
   var button = $("attachFileButton");
@@ -208,7 +155,7 @@ function bindAttachmentActions() {
   var composer = $("chatForm");
   button.addEventListener("click", function () { input.click(); });
   input.addEventListener("change", function () {
-    addAttachmentFiles(input.files);
+    ingestChatResourceFiles(input.files);
     input.value = "";
   });
   ["dragenter", "dragover"].forEach(function (name) {
@@ -221,7 +168,7 @@ function bindAttachmentActions() {
     composer.addEventListener(name, function (event) {
       event.preventDefault();
       composer.classList.remove("is-dragging");
-      if (name === "drop") addAttachmentFiles(event.dataTransfer.files);
+      if (name === "drop") ingestChatResourceFiles(event.dataTransfer.files);
     });
   });
   $("chatInput").addEventListener("paste", function (event) {
@@ -235,7 +182,7 @@ function bindAttachmentActions() {
     }
     if (files && files.length) {
       event.preventDefault();
-      addAttachmentFiles(files);
+      ingestChatResourceFiles(files);
     }
   });
   renderAttachmentDrafts();

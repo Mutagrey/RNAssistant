@@ -186,10 +186,11 @@ namespace RNAssistant.Harness
                 var attachment = store.Import(
                     "notes.txt",
                     "text/plain",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("fork data")));
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("fork data")),
+                    source.Id);
                 message.Attachments.Add(attachment);
                 source.Messages.Add(message);
-                store.Commit(message);
+                store.CommitToCas(message);
                 ChatArtifactService.LinkMessageArtifacts(source, 0);
 
                 var fork = new ChatSession
@@ -395,7 +396,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b2\",\"type\":\"sendChat\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\",\"artifactIds\":[\"artifact-1\"]}}")
+                "{\"id\":\"b2\",\"type\":\"sendChat\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\",\"text\":\"hello\",\"resourceDraftIds\":[\"draft-1\"]}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -406,7 +407,7 @@ namespace RNAssistant.Harness
             AssertEqual("common.generated_skill", response["payload"]["skills"][0]["Id"].Value<string>(), "chat response refreshes skill catalog");
             AssertEqual("hello", controller.LastChatText, "chat text");
             AssertEqual("chat-1", controller.LastChatId, "chat id");
-            AssertEqual("artifact-1", controller.LastArtifactIds.Single(), "artifact id");
+            AssertEqual("draft-1", controller.LastResourceDraftIds.Single(), "resource draft id");
             var progress = JObject.Parse(progressMessages[0]);
             AssertEqual("b2", progress["id"].Value<string>(), "progress id");
             AssertEqual("thinking", progress["payload"]["phase"].Value<string>(), "progress phase");
@@ -418,6 +419,32 @@ namespace RNAssistant.Harness
             var chatState = JObject.Parse(progressMessages[2]);
             AssertEqual("chatState", chatState["type"].Value<string>(), "chat state event type");
             AssertEqual("chat-1", chatState["payload"]["activeChatId"].Value<string>(), "chat state active id");
+        }
+
+        private static void BridgeUsesTypedResourceIngestionPayloads()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var stagedJson = bridge.HandleMessageAsync(
+                "{\"id\":\"stage-resource\",\"type\":\"stageChatResource\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-resource\",\"fileName\":\"image.png\",\"contentType\":\"image/png\",\"base64\":\"AQ==\"}}")
+                .GetAwaiter()
+                .GetResult();
+
+            var staged = JObject.Parse(stagedJson);
+            AssertTrue(staged["ok"].Value<bool>(), "resource staging response ok");
+            AssertEqual("resource-draft", staged["payload"]["resource"]["Id"].Value<string>(), "resource draft returned");
+            AssertEqual("chat-resource", controller.LastChatId, "resource draft is chat-scoped");
+            AssertEqual("image.png", controller.LastResourceFileName, "resource file name reaches typed payload");
+
+            var discardedJson = bridge.HandleMessageAsync(
+                "{\"id\":\"discard-resource\",\"type\":\"discardChatResourceDraft\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-resource\",\"id\":\"resource-draft\"}}")
+                .GetAwaiter()
+                .GetResult();
+            AssertTrue(JObject.Parse(discardedJson)["ok"].Value<bool>(), "resource discard response ok");
+            AssertEqual("resource-draft", controller.LastResourceDraftId, "discard uses exact draft id");
         }
 
         private static void BridgeUsesTypedEditMessagePayloadAndProgress()
@@ -655,7 +682,7 @@ namespace RNAssistant.Harness
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"context-inspect\",\"type\":\"inspectPromptContext\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-context\",\"text\":\"draft\",\"attachmentIds\":[\"file-1\"],\"includeRaw\":true}}")
+                "\",\"payload\":{\"chatId\":\"chat-context\",\"text\":\"draft\",\"resourceDraftIds\":[\"file-1\"],\"includeRaw\":true}}")
                 .GetAwaiter()
                 .GetResult();
 

@@ -19,7 +19,9 @@ namespace RNAssistant.Office
         public bool LastDryRun { get; private set; }
         public string LastChatText { get; private set; }
         public string LastChatId { get; private set; }
-        public IReadOnlyList<string> LastArtifactIds { get; private set; }
+        public IReadOnlyList<string> LastResourceDraftIds { get; private set; }
+        public string LastResourceDraftId { get; private set; }
+        public string LastResourceFileName { get; private set; }
         public string LastChatMode { get; private set; }
         public bool LastChatReasoning { get; private set; }
         public string LastRunId { get; private set; }
@@ -299,7 +301,7 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(pendingId, chatId));
         }
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
-        public PromptContextInspectorResponse InspectPromptContext(string chatId, string text, IReadOnlyList<string> attachmentIds, bool includeRaw)
+        public PromptContextInspectorResponse InspectPromptContext(string chatId, string text, IReadOnlyList<string> resourceDraftIds, bool includeRaw)
         {
             return new PromptContextInspectorResponse
             {
@@ -400,8 +402,7 @@ namespace RNAssistant.Office
         public Task<SendChatResponse> SendChatAsync(
             string text,
             string chatId = null,
-            IReadOnlyList<string> attachmentIds = null,
-            IReadOnlyList<string> artifactIds = null,
+            IReadOnlyList<string> resourceDraftIds = null,
             Action<string, string, ChatActivity> progress = null,
             Action<ChatStateResponse> chatStateChanged = null,
             CancellationToken cancellationToken = default(CancellationToken),
@@ -410,7 +411,7 @@ namespace RNAssistant.Office
             cancellationToken.ThrowIfCancellationRequested();
             LastChatText = text;
             LastChatId = chatId;
-            LastArtifactIds = artifactIds ?? new string[0];
+            LastResourceDraftIds = resourceDraftIds ?? new string[0];
             if (progress != null)
             {
                 progress("thinking", "Testing progress", new ChatActivity { Kind = "notice", Title = "Testing progress", Status = "running" });
@@ -428,15 +429,26 @@ namespace RNAssistant.Office
             });
         }
 
-        public AttachmentResponse ImportAttachment(string fileName, string contentType, string base64)
+        public ChatResourceDraftResponse StageChatResource(
+            string chatId,
+            string fileName,
+            string contentType,
+            string base64)
         {
-            return new AttachmentResponse
+            LastChatId = chatId;
+            LastResourceFileName = fileName;
+            return new ChatResourceDraftResponse
             {
-                Attachment = new ChatAttachment { FileName = fileName, ContentType = contentType, Kind = "image" }
+                Resource = new ChatAttachment { Id = "resource-draft", FileName = fileName, ContentType = contentType, Kind = "image" }
             };
         }
 
-        public object DeleteDraftAttachment(string id) { return new { deleted = true }; }
+        public object DiscardChatResourceDraft(string chatId, string id)
+        {
+            LastChatId = chatId;
+            LastResourceDraftId = id;
+            return new { deleted = true };
+        }
 
         public ToolResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
         {

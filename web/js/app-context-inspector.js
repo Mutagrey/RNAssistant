@@ -29,7 +29,7 @@ function closePromptContextInspector() {
   setPromptContextInspectorOpen(false);
 }
 
-function promptContextAttachmentIds() {
+function promptContextResourceDraftIds() {
   return (state.draftAttachments || []).map(function (item) {
     return typeof attachmentId === "function"
       ? attachmentId(item)
@@ -56,7 +56,7 @@ async function loadPromptContextInspector(includeRaw) {
   var request = send("inspectPromptContext", {
     chatId: chatId,
     text: $("chatInput") ? $("chatInput").value : "",
-    attachmentIds: promptContextAttachmentIds(),
+    resourceDraftIds: promptContextResourceDraftIds(),
     includeRaw: !!includeRaw
   });
   promptContextInspectorRequest = request;

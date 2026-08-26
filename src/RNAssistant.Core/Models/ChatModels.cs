@@ -126,6 +126,8 @@ namespace RNAssistant.Core.Models
     public sealed class ChatAttachment
     {
         public string Id { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public string DraftChatId { get; set; }
         public string FileName { get; set; }
         public string ContentType { get; set; }
         public long Size { get; set; }

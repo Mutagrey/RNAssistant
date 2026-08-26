@@ -176,6 +176,7 @@ namespace RNAssistant.Harness
                 Test("chat sessions: saved run boundary preserves protocol", InterruptedRunAtSavedBoundaryPreservesProtocol),
 
                 Test("attachments: import commit delete", AttachmentImportCommitDelete),
+                Test("attachments: resource link precedes model dispatch", AttachmentPromotionLinksResourceBeforeModelDispatch),
                 Test("attachments: fork artifact reuses shared blob", ForkedAttachmentArtifactTracksCopiedFile),
                 Test("attachments: multimodal api payload", AttachmentMultimodalApiPayload),
                 Test("attachments: image import bypasses pdf extraction", AttachmentImageImportBypassesPdfExtraction),
@@ -318,6 +319,7 @@ namespace RNAssistant.Harness
                 Test("bridge: rejects missing token", BridgeRejectsMissingToken),
                 Test("bridge: typed runTool", BridgeUsesTypedRunToolPayload),
                 Test("bridge: typed sendChat", BridgeUsesTypedSendChatPayloadAndProgress),
+                Test("bridge: typed resource ingestion", BridgeUsesTypedResourceIngestionPayloads),
                 Test("bridge: typed editMessage", BridgeUsesTypedEditMessagePayloadAndProgress),
                 Test("bridge: compact addressed context", BridgeCompactsAddressedChatContext),
                 Test("bridge: confirm ids", BridgeConfirmProgressCarriesChatAndRunIds),

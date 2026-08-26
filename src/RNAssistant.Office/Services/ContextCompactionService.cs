@@ -46,7 +46,7 @@ namespace RNAssistant.Office.Services
             }
 
             var window = BuildReplayTail(session);
-            var projectedWindow = window.Select(HistoricalContextProjector.Project).ToList();
+            var projectedWindow = window.Select(message => ProjectMessage(session, message)).ToList();
             var inputBudget = Math.Max(1024, ModelContextBudget.InputBudgetTokens(settings));
             var activeCheckpoint = ActiveCheckpoint(session);
             var instructionTokens = Math.Max(
@@ -64,7 +64,7 @@ namespace RNAssistant.Office.Services
                 return null;
             }
 
-            var compactCount = SelectPrefixCount(window, inputBudget, force, settings);
+            var compactCount = SelectPrefixCount(session, window, inputBudget, force, settings);
             if (compactCount <= 0)
             {
                 return null;
@@ -72,6 +72,7 @@ namespace RNAssistant.Office.Services
             var sourceTokenBudget = Math.Max(768, Math.Min(inputBudget / 2, inputBudget - 768));
             compactCount = ToolProtocolMessages.PreserveCompletePrefix(window, compactCount);
             var prefix = TakeFullyIncludedPrefix(
+                session,
                 window.Take(compactCount),
                 Math.Max(384, sourceTokenBudget / 2),
                 settings);
@@ -129,7 +130,7 @@ namespace RNAssistant.Office.Services
                 PromptVersion = ContextCheckpoint.CurrentPromptVersion,
                 SourceMessageCount = prefix.Count,
                 SourceTokens = ModelContextBudget.EstimateMessagesTokens(
-                    prefix.Select(HistoricalContextProjector.Project),
+                    prefix.Select(message => ProjectMessage(session, message)),
                     settings),
                 SummaryTokens = ModelContextBudget.EstimateTextTokens(summaryMarkdown, settings)
             };
@@ -250,6 +251,7 @@ namespace RNAssistant.Office.Services
         }
 
         private static int SelectPrefixCount(
+            ChatSession session,
             IReadOnlyList<ChatMessage> window,
             int inputBudget,
             bool force,
@@ -265,7 +267,7 @@ namespace RNAssistant.Office.Services
             for (var index = window.Count - 1; index >= 0; index--)
             {
                 var cost = ModelContextBudget.EstimateMessageTokens(
-                    HistoricalContextProjector.Project(window[index]),
+                    ProjectMessage(session, window[index]),
                     settings);
                 if (recentTokens + cost > target && firstRecent < window.Count)
                 {
@@ -315,7 +317,7 @@ namespace RNAssistant.Office.Services
             foreach (var message in prefixMessages)
             {
                 if (message == null) continue;
-                var projected = HistoricalContextProjector.Project(message);
+                var projected = ProjectMessage(session, message);
                 builder.Append('[').Append(projected.Role ?? "unknown").Append("] ");
                 builder.Append(projected.Content);
                 var toolCalls = (projected.ToolCalls ?? new List<LlmToolCall>())
@@ -344,7 +346,8 @@ namespace RNAssistant.Office.Services
                 foreach (var artifact in artifacts.Take(100))
                 {
                     artifactIndex.AppendLine(
-                        ModelContextBudget.TruncateText(artifact.Id, 64, settings) + " | " +
+                        ModelContextBudget.TruncateText(
+                            ChatArtifactResourceProvider.CreateRevisionUri(session, artifact), 256, settings) + " | " +
                         ModelContextBudget.TruncateText(artifact.Kind, 32, settings) + " | " +
                         ModelContextBudget.TruncateText(artifact.Title, 128, settings) +
                         " | revision=" + artifact.Revision + " | parent=" +
@@ -362,6 +365,7 @@ namespace RNAssistant.Office.Services
         }
 
         private static List<ChatMessage> TakeFullyIncludedPrefix(
+            ChatSession session,
             IEnumerable<ChatMessage> messages,
             int tokenBudget,
             AppSettings settings)
@@ -372,7 +376,7 @@ namespace RNAssistant.Office.Services
             while (count < source.Count)
             {
                 var cost = Math.Max(1, ModelContextBudget.EstimateMessageTokens(
-                    HistoricalContextProjector.Project(source[count]),
+                    ProjectMessage(session, source[count]),
                     settings,
                     null,
                     false));
@@ -381,6 +385,13 @@ namespace RNAssistant.Office.Services
                 count += 1;
             }
             return source.Take(ToolProtocolMessages.PreserveCompletePrefix(source, count)).ToList();
+        }
+
+        private static ChatMessage ProjectMessage(ChatSession session, ChatMessage message)
+        {
+            return HistoricalContextProjector.Project(
+                message,
+                artifactId => ChatArtifactResourceProvider.ResolveRevisionUri(session, artifactId));
         }
 
         private static JObject ParseSummary(string content)
