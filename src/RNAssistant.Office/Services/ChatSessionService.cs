@@ -238,10 +238,18 @@ namespace RNAssistant.Office.Services
         {
             return string.IsNullOrWhiteSpace(requestedSessionId)
                 ? LoadSession(null)
-                : LoadSession(requestedSessionId, false);
+                : LoadSession(requestedSessionId, false, false);
         }
 
         public ChatSession LoadSession(string requestedSessionId, bool allowMissingRequestedFallback)
+        {
+            return LoadSession(requestedSessionId, allowMissingRequestedFallback, true);
+        }
+
+        private ChatSession LoadSession(
+            string requestedSessionId,
+            bool allowMissingRequestedFallback,
+            bool makeActive)
         {
             var host = _adapter.HostName;
             var documentKey = _adapter.DocumentKey;
@@ -368,12 +376,12 @@ namespace RNAssistant.Office.Services
             }
 
             session.Mode = ChatModes.Normalize(session.Mode);
-            if (migrationDeferred)
+            if (makeActive && migrationDeferred)
             {
                 _activeSession = session;
                 _activeSessionPersisted = _chatStore.IsPersisted(session);
             }
-            else
+            else if (makeActive)
             {
                 SetActiveSession(session);
             }

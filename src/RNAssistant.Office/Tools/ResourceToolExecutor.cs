@@ -30,7 +30,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(
                 ListToolId,
                 "Common",
-                "Read-only: Discover providers or list bounded resource metadata from one provider. If multiple providers exist, omit provider once to receive their ids, then select one. Bodies are never returned.",
+                "Read-only: Discover providers or list bounded resource metadata from one provider. If multiple providers exist, omit provider once to receive their ids, then select one. Bodies are never returned. Continue only with nextCursor from the same result and the identical provider/kind query.",
                 ListSchema(),
                 name: "resources_list",
                 scope: "session");
@@ -51,7 +51,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(
                 ReadToolId,
                 "Common",
-                "Read-only: Read one exact resource representation by canonical URI. Text is bounded and pageable; media is hydrated only for the next model step and base64 is never embedded in JSON.",
+                "Read-only: Read one exact resource representation by canonical URI. Text is bounded and pageable; media is hydrated only for the next model step and base64 is never embedded in JSON. Continue only with nextCursor from the immediately preceding read of the same URI, revision, and representation.",
                 ReadSchema(),
                 name: "resources_read",
                 scope: "session");
@@ -138,7 +138,7 @@ namespace RNAssistant.Office.Tools
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"provider\":{\"type\":\"string\",\"description\":\"Optional exact provider id; omit when only one provider is available.\",\"maxLength\":64}," +
                 "\"kind\":{\"type\":\"string\",\"description\":\"Optional exact resource kind filter.\",\"maxLength\":64}," +
-                "\"cursor\":{\"type\":\"string\",\"description\":\"Opaque nextCursor from a previous result.\",\"maxLength\":256}," +
+                "\"cursor\":{\"type\":\"string\",\"description\":\"Optional continuation: copy nextCursor only from the immediately preceding resources_list result with the identical provider and kind. Omit it for the first page, after changing any filter, or when nextCursor is absent. Never use a resources_read cursor.\",\"maxLength\":256}," +
                 "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum metadata rows.\",\"minimum\":1,\"maximum\":50,\"default\":20}" +
                 "},\"required\":[],\"additionalProperties\":false}";
         }
@@ -167,7 +167,7 @@ namespace RNAssistant.Office.Tools
                 "\"uri\":{\"type\":\"string\",\"description\":\"Exact canonical URI from resources_list/search/resolve.\",\"minLength\":1,\"maxLength\":1000}," +
                 "\"revision\":{\"type\":\"string\",\"description\":\"Optional exact revision returned with the resource reference. Mutable reads fail if it has changed.\",\"minLength\":1,\"maxLength\":128}," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read; auto selects the provider's preferred bounded form.\",\"enum\":[\"auto\",\"metadata\",\"text\",\"structure\",\"source\",\"media\"],\"default\":\"auto\"}," +
-                "\"cursor\":{\"type\":\"string\",\"description\":\"For continuation, copy the opaque nextCursor from the previous read unchanged. Never pass or calculate an offset; mutable-resource cursors are revision-bound and fail on drift.\",\"maxLength\":256}," +
+                "\"cursor\":{\"type\":\"string\",\"description\":\"Optional continuation: copy nextCursor only from the immediately preceding resources_read result for this exact uri, revision, and representation. Omit it for the first chunk or when nextCursor is absent. Never reuse a resources_list or another resource's cursor and never calculate an offset.\",\"maxLength\":256}," +
                 "\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum text characters returned.\",\"minimum\":128,\"maximum\":32000,\"default\":8000}" +
                 "},\"required\":[\"uri\"],\"additionalProperties\":false}";
         }

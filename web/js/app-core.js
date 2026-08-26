@@ -50,6 +50,7 @@ var state = {
   editingDraftScrollTop: 0,
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelSaving: false,
+  modeSaving: false,
   reasoningSaving: false,
   modelDiagnostics: null,
   modelDiagnosticsTimer: null,

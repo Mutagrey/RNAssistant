@@ -65,7 +65,7 @@
         handoff.disabled = !!state.activeTaskListArtifactId || !prop(selected.item, "ResourceUri", "resourceUri", "");
         if (state.activeTaskListArtifactId) handoff.title = "Сначала закройте активный Task List.";
         handoff.addEventListener("click", async function () {
-          await saveChatMode("agent");
+          if (!await saveChatMode("agent")) return;
           var input = $("chatInput");
           var form = $("chatForm");
           if (!input || !form) return;

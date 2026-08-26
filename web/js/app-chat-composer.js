@@ -16,7 +16,7 @@ function renderChatModePicker() {
   label.textContent = active.title;
   icon.textContent = active.icon;
   icon.dataset.mode = active.value;
-  var disabled = !!currentActiveSend() || hasActiveMessageEdit() || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+  var disabled = !!currentActiveSend() || hasActiveMessageEdit() || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   if (typeof setComposerPickerDisabled === "function") setComposerPickerDisabled(picker, disabled);
 
   menu.replaceChildren();
@@ -100,7 +100,7 @@ function renderSendControls() {
     stopButton.setAttribute("aria-label", stopButton.title);
   }
   if (input) {
-    input.readOnly = isSending || approvalPending || state.reasoningSaving || state.bridgeUnavailable;
+    input.readOnly = isSending || approvalPending || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable;
     input.placeholder = isEditing
       ? "Измените сообщение или отправьте его заново..."
       : (state.bridgeUnavailable
@@ -116,7 +116,7 @@ function renderSendControls() {
     modelSelect.disabled = isSending || isEditing || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   if (modeSelect) {
-    modeSelect.disabled = isSending || isEditing || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+    modeSelect.disabled = isSending || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   renderChatModePicker();
   if (typeof renderChatModelPicker === "function") {
@@ -170,6 +170,7 @@ function updateSendButtonAvailability(hasContent) {
     !!currentActiveSend() ||
     (!hasActiveMessageEdit() && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity()) ||
     state.modelSaving ||
+    state.modeSaving ||
     state.reasoningSaving ||
     state.bridgeUnavailable ||
     !state.activeChatId ||

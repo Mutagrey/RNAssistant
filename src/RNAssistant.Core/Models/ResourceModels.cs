@@ -126,7 +126,7 @@ namespace RNAssistant.Core.Models
         public List<ResourceDescriptor> Items { get; set; }
         [Newtonsoft.Json.JsonProperty("total")]
         public int Total { get; set; }
-        [Newtonsoft.Json.JsonProperty("cursor")]
+        [Newtonsoft.Json.JsonIgnore]
         public string Cursor { get; set; }
         [Newtonsoft.Json.JsonProperty("nextCursor")]
         public string NextCursor { get; set; }

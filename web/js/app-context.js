@@ -172,11 +172,13 @@ async function syncActiveChatState() {
   await synchronizeChatState(true);
 }
 
-function applyContextResponse(response) {
+function applyContextResponse(response, expectedChatId) {
+  if (expectedChatId && state.activeChatId !== expectedChatId) return false;
   var context = response && (response.context || response.Context) || response;
-  if (!context || typeof context !== "object") return;
+  if (!context || typeof context !== "object") return false;
   state.context = context;
   renderContext();
+  return true;
 }
 
 async function refreshContext() {
@@ -188,14 +190,18 @@ async function refreshContext() {
 }
 
 async function addSelectionContext(mode) {
+  var targetChatId = state.activeChatId;
+  if (!targetChatId) return;
   setControlBusy("addSelectionContextButton", true);
   try {
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
     reportFocusState();
-    applyContextResponse(await send("addSelectionContext", { chatId: state.activeChatId, mode: mode || "full" }));
-    await syncActiveChatState();
+    applyContextResponse(
+      await send("addSelectionContext", { chatId: targetChatId, mode: mode || "full" }),
+      targetChatId);
+    if (state.activeChatId === targetChatId) await syncActiveChatState();
     log("Выделение добавлено в контекст.");
   } catch (error) {
     log(error.detail || error.message, "error");
@@ -205,15 +211,18 @@ async function addSelectionContext(mode) {
 }
 
 async function addTextContext(kind, title, reference, text, details) {
-  applyContextResponse(await send("addTextContext", {
-    chatId: state.activeChatId,
+  var targetChatId = state.activeChatId;
+  if (!targetChatId) return false;
+  var applied = applyContextResponse(await send("addTextContext", {
+    chatId: targetChatId,
     kind: kind,
     title: title,
     reference: reference,
     text: text,
     detailsJson: typeof details === "string" ? details : JSON.stringify(details || {})
-  }));
-  await syncActiveChatState();
+  }), targetChatId);
+  if (state.activeChatId === targetChatId) await syncActiveChatState();
+  return applied;
 }
 
 async function addSelectedToolContextToContext() {
@@ -243,9 +252,12 @@ async function removeContextItem(id) {
   }
 
   try {
-    applyContextResponse(await send("removeContextItem", { chatId: state.activeChatId, id: id }));
-    if (!contextNotes().length) setContextManagerOpen(false);
-    await syncActiveChatState();
+    var targetChatId = state.activeChatId;
+    var applied = applyContextResponse(
+      await send("removeContextItem", { chatId: targetChatId, id: id }),
+      targetChatId);
+    if (applied && !contextNotes().length) setContextManagerOpen(false);
+    if (state.activeChatId === targetChatId) await syncActiveChatState();
     log("Элемент контекста удален.");
   } catch (error) {
     log(error.detail || error.message, "error");
@@ -276,11 +288,15 @@ function bindContextActions() {
   $("closeContextManagerButton").addEventListener("click", function () { setContextManagerOpen(false); });
   $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
   $("clearContextButton").addEventListener("click", async function () {
+    var targetChatId = state.activeChatId;
+    if (!targetChatId) return;
     setControlBusy("clearContextButton", true);
     try {
-      applyContextResponse(await send("clearContext", { chatId: state.activeChatId }));
-      setContextManagerOpen(false);
-      await syncActiveChatState();
+      var applied = applyContextResponse(
+        await send("clearContext", { chatId: targetChatId }),
+        targetChatId);
+      if (applied) setContextManagerOpen(false);
+      if (state.activeChatId === targetChatId) await syncActiveChatState();
       log("Контекст очищен.");
     } catch (error) {
       log(error.message, "error");

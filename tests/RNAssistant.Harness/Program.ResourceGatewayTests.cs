@@ -66,7 +66,25 @@ namespace RNAssistant.Harness
             AssertTrue(!string.IsNullOrWhiteSpace(firstListPage.NextCursor),
                 "resource list exposes an opaque continuation");
             AssertTrue(firstListPage.Cursor.StartsWith("r1:", StringComparison.Ordinal),
-                "resource list exposes only revision-bound cursors");
+                "resource list keeps an internal revision-bound cursor");
+            var firstListJson = JsonConvert.SerializeObject(firstListPage);
+            AssertTrue(firstListJson.IndexOf("\"cursor\"", StringComparison.Ordinal) < 0,
+                "resource list does not expose the current-page cursor");
+            AssertContains(firstListJson, "\"nextCursor\"",
+                "resource list exposes only the usable continuation cursor");
+            var crossOperationCursor = new ResourceToolExecutor(pagingGateway).ExecuteControllerTool(
+                Command(
+                    ResourceToolExecutor.ReadToolId,
+                    "uri", firstListPage.Items[0].Reference.Uri,
+                    "representation", ResourceRepresentations.Text,
+                    "cursor", firstListPage.Cursor),
+                pagingSession);
+            AssertEqual("resource_cursor_invalid", crossOperationCursor.ErrorCode,
+                "list cursor is rejected by resource read");
+            AssertTrue(crossOperationCursor.Retryable != true,
+                "invalid cross-operation cursor is not retried unchanged");
+            AssertContains(crossOperationCursor.Message, "Omit cursor",
+                "invalid cursor tells the model how to restart");
             pagingSession.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "Third", InlineText = "3" });
             ResourceRequestException listDrift = null;
             try

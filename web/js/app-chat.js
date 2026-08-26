@@ -16,19 +16,32 @@ async function runQuickAction(action) {
 }
 
 async function saveChatMode(mode) {
-  if (!state.activeChatId || state.bridgeUnavailable || currentActiveSend() || hasActiveMessageEdit()) {
-    return;
+  mode = mode || "agent";
+  if (!state.activeChatId || state.bridgeUnavailable || state.modeSaving || currentActiveSend() || hasActiveMessageEdit()) {
+    return false;
+  }
+  if (mode === state.activeChatMode) {
+    return true;
   }
   var targetChatId = state.activeChatId;
+  var previousMode = state.activeChatMode || "agent";
+  state.modeSaving = true;
+  state.activeChatMode = mode;
+  renderChatSessions();
   try {
     var applied = applyChatStateForChat(await send("setChatMode", {
       chatId: targetChatId,
-      mode: mode || "agent"
+      mode: mode
     }), targetChatId);
     if (applied) log("Режим чата: " + state.activeChatMode + ".");
+    return applied && state.activeChatMode === mode;
   } catch (error) {
-    $("chatModeSelect").value = state.activeChatMode || "agent";
+    if (state.activeChatId === targetChatId) state.activeChatMode = previousMode;
     log(error.detail || error.message, "error");
+    return false;
+  } finally {
+    state.modeSaving = false;
+    renderChatSessions();
   }
 }
 

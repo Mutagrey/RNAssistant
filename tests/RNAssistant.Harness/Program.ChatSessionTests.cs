@@ -265,6 +265,7 @@ namespace RNAssistant.Harness
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
                 var service = new ChatSessionService(adapter, store);
+                var active = service.LoadSession(null);
                 var archived = store.Create("Word", "archived-doc", "Archive.docx", "Archive chat");
 
                 var loaded = service.LoadAddressedSession(archived.Id);
@@ -272,6 +273,8 @@ namespace RNAssistant.Harness
                 AssertEqual(archived.Id, loaded.Id, "addressed session id");
                 AssertEqual("Word", loaded.Host, "addressed host");
                 AssertEqual("archived-doc", loaded.DocumentKey, "addressed document key");
+                AssertEqual(active.Id, service.GetActiveSession().Id,
+                    "addressed load preserves the selected chat");
             });
         }
 

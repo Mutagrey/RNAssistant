@@ -176,9 +176,9 @@ namespace RNAssistant.Office.Services
         private static ResourceRequestException InvalidCursor()
         {
             return new ResourceRequestException(
-                "Resource continuation cursor is invalid or belongs to another revision.",
+                "Resource continuation cursor is invalid for this exact operation or resource. Omit cursor and restart from the first page or first chunk; never reuse a cursor from another result.",
                 "resource_cursor_invalid",
-                true);
+                false);
         }
     }
 }

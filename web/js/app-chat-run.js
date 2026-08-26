@@ -120,7 +120,7 @@ async function refreshChatAfterSendFailure(chatId) {
 
 async function submitChatInput() {
   if (hasActiveMessageEdit()) {
-    if (!currentActiveSend() && !state.modelSaving && !state.reasoningSaving) {
+    if (!currentActiveSend() && !state.modelSaving && !state.modeSaving && !state.reasoningSaving) {
       state.editingText = $("chatInput").value;
       saveMessageEdit();
     } else {
@@ -128,7 +128,7 @@ async function submitChatInput() {
     }
     return;
   }
-  if (currentActiveSend() || state.modelSaving || state.reasoningSaving) {
+  if (currentActiveSend() || state.modelSaving || state.modeSaving || state.reasoningSaving) {
     return;
   }
   if (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) {

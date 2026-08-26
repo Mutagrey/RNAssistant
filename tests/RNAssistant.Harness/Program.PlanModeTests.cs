@@ -14,6 +14,8 @@ namespace RNAssistant.Harness
             AssertEqual(ChatModes.Plan, ChatModes.Normalize("PLAN"), "plan mode normalizes");
             AssertContains(ConversationPromptComposer.BuildInstruction(ChatModes.Plan, new AppSettings()),
                 "common.capabilities_read", "Plan includes progressive capability policy");
+            AssertContains(ConversationPromptComposer.BuildInstruction(ChatModes.Plan, new AppSettings()),
+                "Never substitute chat prose or an HTML workspace", "Plan requires the Markdown artifact");
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();

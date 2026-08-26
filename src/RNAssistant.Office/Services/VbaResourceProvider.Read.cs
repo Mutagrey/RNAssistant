@@ -383,9 +383,9 @@ namespace RNAssistant.Office.Services
             if (offset > content.Length)
             {
                 throw new ResourceRequestException(
-                    "Resource read offset exceeds the available VBA representation.",
+                    "Resource read cursor exceeds the available VBA representation. Omit cursor and restart this exact resource from the first chunk.",
                     "resource_cursor_invalid",
-                    true);
+                    false);
             }
             var length = Math.Min(maxChars, content.Length - offset);
             var next = offset + length;
