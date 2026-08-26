@@ -11,7 +11,7 @@ Filters compose with AND:
 - inclusive `minSequence` / `maxSequence`;
 - exact event types;
 - run, turn and step correlation;
-- tool-call id, artifact id, exact canonical `resourceUri`, and runtime status extracted from typed event data, including protocol-v3 structural `ResponseStatus` on assistant-message operations;
+- tool-call id, artifact id, exact canonical `resourceUri`, and status extracted from typed event data, including conversation-response v2 `ResponseStatus` on assistant-message operations;
 - `current`, `shadowed` or `log-only` visibility;
 - case-insensitive tokenized full-text search over event metadata and materialized event data.
 
@@ -27,7 +27,7 @@ The same `ITrajectoryQuery` rebuilds six correlated, read-only projections:
 - `tool-execution`: a tool call from protocol record through running/waiting/terminal states;
 - `artifact-lineage`: immutable artifact revision metadata and `parentArtifactId` links;
 - `confirmation-pauses`: waiting interval and its pending/resolved/failed/cancelled outcome;
-- `failure-retries`: model, tool and runtime terminal-turn failures with retry counts; provider refusals and runtime blockers are included, while a typed user-question pause is terminal but not a failure;
+- `failure-retries`: model, tool and terminal-turn failures with retry counts; model-declared `blocked` and `refused` turns are included, while `awaiting_user` is terminal but not a failure;
 - `turn-usage`: lifecycle timing, model/tool/confirmation/failure counts, actual and estimated tokens, and provider-reported USD cost.
 
 Every row retains the complete contributing `sourceEventSeqs` and `sourceEventIds`. Derived pagination uses `view:<view>:<snapshotSequence>:<offset>`: all pages use the same upper event-stream boundary even if new events are appended. A changed view or filter starts a fresh cursor.

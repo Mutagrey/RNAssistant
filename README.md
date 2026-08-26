@@ -222,6 +222,7 @@ In Agent mode the prompt contains bootstrap and currently loaded native-like too
 
 ```json
 {
+  "status": "in_progress",
   "message": "Read the table before editing.",
   "tool_calls": [
     {
@@ -235,7 +236,7 @@ In Agent mode the prompt contains bootstrap and currently loaded native-like too
 
 Independent calls may be placed in the same array and execute locally in order. Dependent calls and calls that may require confirmation are emitted one at a time. If confirmation pauses a multi-call response, calls after it are not executed; the model selects them again after the confirmed result. There is no persistent batch state.
 
-Every response contains only `message + tool_calls[]`. A non-empty call array continues execution; an empty array ends the run with `message` as the final answer, clarification, refusal, or blocker. Runtime never infers execution from wording or punctuation. Agent mode uses the configured `json_object` (default) or strict runtime-generated `json_schema`; an explicitly rejected schema may fall back once, request-locally, to `json_object` when enabled. There are no native tool-call transport, planner state machine, router, skill activation, automatic tool retries, or separate verification phase. Invalid output gets up to `MaxAgentFormatRetries` ephemeral correction requests (default 10, range 1–20); every retry starts from the original accepted prompt and neither rejected output nor correction instructions enter chat history.
+Every response declares conversation-response v2 `status`. `in_progress` requires one or more calls. Terminal `completed`, `awaiting_user`, `blocked`, or `refused` requires an empty array, for example `{"status":"completed","message":"...","tool_calls":[]}`. Runtime never infers state from wording or punctuation. Agent mode uses the configured `json_object` (default) or strict runtime-generated `json_schema`; an explicitly rejected schema may fall back once, request-locally, to `json_object` when enabled. There are no native tool-call transport, planner state machine, router, skill activation, automatic tool retries, or separate verification phase. Invalid output gets up to `MaxAgentFormatRetries` ephemeral correction requests (default 10, range 1–20); every retry starts from the original accepted prompt and neither rejected output nor correction instructions enter chat history.
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. Tool-result data is bounded and oversized data is replaced by a structured preview; the prompt budget is checked before every model request. Excel value/formula/profile reads reject ranges above 100000 cells before loading COM `Value2`. The runtime also enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 

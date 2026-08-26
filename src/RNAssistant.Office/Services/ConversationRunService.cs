@@ -259,7 +259,7 @@ namespace RNAssistant.Office.Services
                     Math.Min(AppSettings.MaximumAgentFormatRetries, configuredFormatRetries));
                 for (var retry = 1; !parsed.Success && retry <= maxFormatRetries; retry++)
                 {
-                    Report(progress, "thinking", "Модель исправляет структуру ответа... (" + retry + "/" + maxFormatRetries + ")", null);
+                    // Repair is transport-internal; the rejected payload and parser error remain in trace diagnostics.
                     var repairMessages = new List<ChatMessage>(messages)
                     {
                         AgentJsonProtocol.CreateFormatRepairMessage(parsed.Error, retry, maxFormatRetries)

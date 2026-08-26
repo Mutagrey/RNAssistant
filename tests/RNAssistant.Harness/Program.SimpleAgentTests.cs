@@ -18,10 +18,10 @@ namespace RNAssistant.Harness
         private static void SimpleAgentParsesFinalJson()
         {
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Готово.\",\"tool_calls\":[]}",
+                "{\"status\":\"completed\",\"message\":\"Готово.\",\"tool_calls\":[]}",
                 new ToolDefinition[0]);
             AssertTrue(parsed.Success, "final response parses");
-            AssertEqual(AgentResponseStatuses.Completed, parsed.Response.Status, "terminal state is derived from an empty tool_calls array");
+            AssertEqual(AgentResponseStatuses.Completed, parsed.Response.Status, "final status");
             AssertEqual("Готово.", parsed.Response.Message, "final message");
             AssertEqual(0, parsed.Response.ToolCalls.Count, "final has no tool");
         }
@@ -31,10 +31,10 @@ namespace RNAssistant.Harness
         {
             var tool = new ToolDefinition { Id = "excel.add_sheet" };
             var parsed = new AgentResponseParser().Parse(
-                "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"values\":[[\"A\"]]}}]}",
+                "{\"status\":\"in_progress\",\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"values\":[[\"A\"]]}}]}",
                 new[] { tool });
             AssertTrue(parsed.Success, "tool response parses");
-            AssertEqual(AgentResponseStatuses.InProgress, parsed.Response.Status, "continuation state is derived from tool_calls");
+            AssertEqual(AgentResponseStatuses.InProgress, parsed.Response.Status, "tool response status");
             AssertEqual(1, parsed.Response.ToolCalls.Count, "one tool parsed");
             AssertEqual("excel.add_sheet", parsed.Response.ToolCalls[0].Name, "tool name");
             AssertEqual("Report", Convert.ToString(parsed.Response.ToolCalls[0].Arguments["name"]), "tool argument");
@@ -46,14 +46,9 @@ namespace RNAssistant.Harness
         {
             var parser = new AgentResponseParser();
             var tool = new ToolDefinition { Id = "excel.inspect" };
-            var canonical = parser.Parse("{\"message\":\"Готово.\",\"tool_calls\":[]}", new[] { tool });
-            AssertTrue(canonical.Success, "message and tool_calls form the complete envelope");
-            var obsoleteStatus = parser.Parse(
-                "{\"status\":\"in_progress\",\"message\":\"Готово.\",\"tool_calls\":[]}",
-                new[] { tool });
-            AssertTrue(obsoleteStatus.Success, "obsolete status metadata cannot force a format repair");
-            AssertEqual(AgentResponseStatuses.Completed, obsoleteStatus.Response.Status,
-                "tool_calls remains the run-state authority");
+            var missingStatus = parser.Parse("{\"message\":\"Готово.\",\"tool_calls\":[]}", new[] { tool });
+            AssertTrue(!missingStatus.Success, "status is required");
+            AssertContains(missingStatus.Error, "status", "missing status diagnostic");
 
             var missingCalls = parser.Parse("{\"status\":\"completed\",\"message\":\"Готово.\"}", new[] { tool });
             AssertTrue(!missingCalls.Success, "tool_calls is required");
@@ -553,7 +548,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<LlmCompletionResult>(new[]
                 {
                     new LlmCompletionResult { Content = invalid, ReasoningContent = "INVALID_REASONING_SENTINEL" },
-                    new LlmCompletionResult { Content = "{\"message\":\"Не могу выполнить этот запрос.\",\"tool_calls\":[]}" }
+                    new LlmCompletionResult { Content = "{\"status\":\"refused\",\"message\":\"Не могу выполнить этот запрос.\",\"tool_calls\":[]}" }
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -569,10 +564,10 @@ namespace RNAssistant.Harness
 
                 AssertEqual(2, requests.Count, "one repair request");
                 AssertEqual("Не могу выполнить этот запрос.", result.AssistantText, "formatted refusal accepted");
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "ordinary terminal text uses the structural terminal state");
+                AssertEqual(AgentResponseStatuses.Refused, result.ResponseStatus, "formatted refusal status");
                 var repair = requests[1].Last();
                 AssertContains(repair.Content, "FORMAT_REPAIR", "repair instruction added");
-                AssertContains(repair.Content, "empty tool_calls", "terminal response repair is structural");
+                AssertContains(repair.Content, "refuse", "refusal can remain a final answer");
                 AssertTrue(FlattenSimple(requests[1]).IndexOf(invalid, StringComparison.Ordinal) < 0,
                     "invalid raw response is not copied into repair prompt");
                 AssertTrue(!session.Messages.Any(message =>
@@ -583,52 +578,150 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SimpleAgentUsesToolCallStructureForRunState()
+        private static void SimpleAgentUsesExplicitResponseStatus()
         {
             var inspect = new ToolDefinition { Id = "excel.inspect" };
-            var staleProgressStatus = new AgentResponseParser().Parse(
+            var progressWithoutCall = new AgentResponseParser().Parse(
                 "{\"status\":\"in_progress\",\"message\":\"Проверяю листы...\",\"tool_calls\":[]}",
                 new[] { inspect });
-            AssertTrue(staleProgressStatus.Success, "obsolete in_progress metadata does not reject a terminal response");
-            AssertEqual(AgentResponseStatuses.Completed, staleProgressStatus.Response.Status,
-                "empty tool_calls is terminal");
+            AssertTrue(!progressWithoutCall.Success, "in_progress requires a call");
+            AssertContains(progressWithoutCall.Error, "at least one", "missing call diagnostic");
 
-            var staleTerminalStatus = new AgentResponseParser().Parse(
+            var terminalWithCall = new AgentResponseParser().Parse(
                 "{\"status\":\"completed\",\"message\":\"Проверяю листы.\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"excel.inspect\",\"arguments\":{}}]}",
                 new[] { inspect });
-            AssertTrue(staleTerminalStatus.Success, "obsolete completed metadata does not suppress executable calls");
-            AssertEqual(AgentResponseStatuses.InProgress, staleTerminalStatus.Response.Status,
-                "non-empty tool_calls continues the run");
+            AssertTrue(!terminalWithCall.Success, "terminal status rejects calls");
+            AssertContains(terminalWithCall.Error, "empty", "terminal status mismatch diagnostic");
 
             var unknown = new AgentResponseParser().Parse(
                 "{\"status\":\"done\",\"message\":\"Готово.\",\"tool_calls\":[]}",
                 new[] { inspect });
-            AssertTrue(unknown.Success, "non-canonical status metadata is ignored in json_object responses");
+            AssertTrue(!unknown.Success, "unknown status is rejected");
+
+            var proseIsNotAuthority = new AgentResponseParser().Parse(
+                "{\"status\":\"completed\",\"message\":\"Проверяю листы...\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(proseIsNotAuthority.Success, "message wording does not override explicit status");
+            var delayedReport = new AgentResponseParser().Parse(
+                "{\"status\":\"completed\",\"message\":\"Анализ проекта завершен. Подготавливаю отчет о найденных проблемах и исправлениях.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(delayedReport.Success, "mixed-language progress wording is not scanned");
+            var awaiting = new AgentResponseParser().Parse(
+                "{\"status\":\"awaiting_user\",\"message\":\"Укажите нужный лист\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(awaiting.Success, "awaiting_user needs no punctuation heuristic");
+            var blocked = new AgentResponseParser().Parse(
+                "{\"status\":\"blocked\",\"message\":\"Документ недоступен.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(blocked.Success, "blocked terminal status parses");
+            var refused = new AgentResponseParser().Parse(
+                "{\"status\":\"refused\",\"message\":\"Не могу помочь с этим запросом.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(refused.Success, "refused terminal status parses");
+            var planned = new AgentResponseParser().Parse(
+                "{\"status\":\"planned\",\"message\":\"План готов.\",\"tool_calls\":[]}",
+                new[] { inspect });
+            AssertTrue(!planned.Success, "planned is unavailable without runtime planning mode");
+            AssertTrue(new AgentResponseParser().Parse(
+                "{\"status\":\"planned\",\"message\":\"План готов.\",\"tool_calls\":[]}",
+                new[] { inspect }, true).Success, "runtime-selected planning mode may accept planned");
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var requests = 0;
+                const string invalidPair = "{\"status\":\"in_progress\",\"message\":\"Проверяю листы...\",\"tool_calls\":[]}";
+                var responses = new Queue<string>(new[]
+                {
+                    invalidPair,
+                    LoadToolSchemaResponse("excel.inspect", "schema_inspect_after_repair"),
+                    "{\"status\":\"in_progress\",\"message\":\"Проверяю листы.\",\"tool_calls\":[{\"id\":\"call_inspect\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Список листов проверен.\",\"tool_calls\":[]}"
+                });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
-                    requests += 1;
-                    return Task.FromResult(new LlmCompletionResult
-                    {
-                        Content = "{\"status\":\"in_progress\",\"message\":\"Рассказ готов.\",\"tool_calls\":[]}"
-                    });
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
                 var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Напиши рассказ.", session, NewContext(adapter), new AppSettings(),
+                    "Проверь листы.", session, NewContext(adapter), new AppSettings(),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
-                AssertEqual(1, requests, "obsolete status mismatch does not trigger format repair");
-                AssertEqual("Рассказ готов.", result.AssistantText, "first response completes directly");
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "terminal state is structural");
+                AssertEqual(4, requests.Count, "structural repair, schema discovery, and tool continuation");
+                AssertContains(requests[1].Last().Content, "at least one tool call", "repair identifies status mismatch");
+                AssertEqual("Список листов проверен.", result.AssistantText, "run completes after the actual tool call");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "terminal result status is explicit");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, session.Messages.Last().ResponseProtocolVersion,
-                    "current structural protocol version is persisted");
+                    "terminal response protocol version is persisted");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus,
-                    "derived terminal state is persisted");
+                    "terminal response status is persisted");
+                AssertTrue(!session.Messages.Any(message => string.Equals(message.Content, invalidPair, StringComparison.Ordinal)),
+                    "rejected status mismatch is not persisted");
+
+                var terminalCases = new[]
+                {
+                    new { Status = AgentResponseStatuses.AwaitingUser, Message = "Укажите лист" },
+                    new { Status = AgentResponseStatuses.Blocked, Message = "Документ недоступен." },
+                    new { Status = AgentResponseStatuses.Refused, Message = "Не могу выполнить запрос." }
+                };
+                foreach (var terminalCase in terminalCases)
+                {
+                    var terminalSession = NewSession(adapter);
+                    var terminalService = new ConversationRunService(
+                        adapter,
+                        executor,
+                        (settings, messages, options, stream, cancellationToken) => Task.FromResult(
+                            new LlmCompletionResult
+                            {
+                                Content = JsonConvert.SerializeObject(new
+                                {
+                                    status = terminalCase.Status,
+                                    message = terminalCase.Message,
+                                    tool_calls = new object[0]
+                                })
+                            }));
+                    var terminalResult = terminalService.ExecuteAsync(
+                        ChatModes.Agent,
+                        "Продолжай.",
+                        terminalSession,
+                        NewContext(adapter),
+                        new AppSettings(),
+                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                        null).GetAwaiter().GetResult();
+                    AssertEqual(terminalCase.Status, terminalResult.ResponseStatus,
+                        terminalCase.Status + " reaches the turn result");
+                    AssertEqual(terminalCase.Status, terminalResult.RunStatus,
+                        terminalCase.Status + " reaches the run projection");
+                    AssertEqual(AgentResponseProtocol.CurrentVersion, terminalResult.ResponseProtocolVersion,
+                        terminalCase.Status + " carries response protocol version");
+                    AssertEqual(terminalCase.Status, terminalSession.Messages.Last().ResponseStatus,
+                        terminalCase.Status + " is stored with the assistant message");
+                }
+
+                var limitedSession = NewSession(adapter);
+                var limitedService = new ConversationRunService(
+                    adapter,
+                    executor,
+                    (settings, messages, options, stream, cancellationToken) => Task.FromResult(
+                        new LlmCompletionResult
+                        {
+                            Content = "{\"status\":\"in_progress\",\"message\":\"Проверяю ресурсы.\",\"tool_calls\":[{\"id\":\"limit_call\",\"name\":\"common.resources_list\",\"arguments\":{}}]}"
+                        }));
+                var limitedResult = limitedService.ExecuteAsync(
+                    ChatModes.Agent,
+                    "Проверяй до лимита.",
+                    limitedSession,
+                    NewContext(adapter),
+                    new AppSettings { MaxAgentIterations = 1 },
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    null).GetAwaiter().GetResult();
+                AssertEqual("failed", limitedResult.RunStatus,
+                    "runtime step limit is not projected as model-declared completion");
+                AssertTrue(string.IsNullOrWhiteSpace(limitedResult.ResponseStatus),
+                    "runtime step limit has no synthetic model response status");
+                AssertEqual("step_limit_reached", limitedSession.Messages.Last().Activity.ExecutionStatus,
+                    "runtime step limit is stored as a diagnostic outcome");
             });
         }
 

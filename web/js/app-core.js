@@ -311,6 +311,7 @@ if (window.chrome && window.chrome.webview) {
       var reasoningComplete = !!(progress.reasoningComplete || progress.ReasoningComplete);
       var hasReasoningProgress = !!(reasoningDelta || reasoningComplete);
       if ((contentReset || reasoningReset) && isChatProgress) {
+        // Keep the previous attempt visible until the next attempt has real output to replace it.
         var resetRun = progressChatId ? state.chatRuns[progressChatId] : null;
         if (resetRun) {
           if (contentReset) resetRun.streamResetPending = true;

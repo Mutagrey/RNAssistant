@@ -6,7 +6,7 @@ RNAssistant has three explicit modes and one `ConversationRunService` transport/
 - `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, typed `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_*`, and optional `common.task_list_*`. Office/shared mutations and confirmation are unavailable by runtime policy.
 - `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
-All modes return the same JSON envelope: `message + tool_calls[]`. They use the same bounded request-local format repair. Explicit structure and the tool catalog, never model wording, are the authority: a Chat response naming any other tool is rejected before execution.
+All modes return the same conversation-response v2 JSON envelope: `status + message + tool_calls[]`. They use the same bounded request-local format repair. Explicit structure and the tool catalog, never model wording, are the authority: a Chat response naming any other tool is rejected before execution.
 
 ## Conversation context
 
@@ -81,6 +81,7 @@ Tool call:
 
 ```json
 {
+  "status": "in_progress",
   "message": "Читаю диапазон.",
   "tool_calls": [
     {
@@ -96,27 +97,40 @@ Final answer:
 
 ```json
 {
+  "status": "completed",
   "message": "Готово.",
   "tool_calls": []
 }
 ```
 
+Conversation-response v2 requires a root `status`. The strict response schema enforces its presence and exposes only statuses callable for the current request; the local parser additionally enforces its relationship with `tool_calls`. The schema puts `status` after `tool_calls` so constrained decoders choose the action list first. This avoids unsupported cross-field constructs in provider structured-output schemas while keeping the same invariant in both `json_schema` and `json_object` modes:
+
+| `status` | Meaning | `tool_calls` | UI/run projection |
+| --- | --- | --- | --- |
+| `in_progress` | The model is requesting executable work now. | At least one call. | Run continues. |
+| `completed` | The requested outcome is complete. | Empty. | Successful final answer. |
+| `awaiting_user` | A user decision or missing information is required. | Empty. | Current run ends and visibly waits for the user. |
+| `blocked` | Work cannot proceed because of a concrete dependency or inability. | Empty. | Final blocked outcome. |
+| `refused` | The request is explicitly refused. | Empty. | Final refusal. |
+| `planned` | Reserved and unavailable in current modes. | Empty. | Rejected by the parser. |
+
 The runtime enforces these rules:
 
-- A non-empty `tool_calls` array continues the run; an empty array ends it with the visible `message` as the final answer, clarification, refusal, or blocker.
-- `message` wording and punctuation never change execution state. Plan mode uses `common.questions_ask` for typed questions and publishes its ready artifact before returning an empty array.
-- Provider-native refusal metadata remains a terminal refusal and is stored separately from ordinary response text.
-- `failed`, `cancelled`, `interrupted`, and `interrupted_unknown` are runtime-owned execution states and are never model-selectable fields.
-- Intermediate `ok:false` tool results remain visible in the expanded action trace but do not relabel a later valid final answer as failed. If no valid final response exists because runtime itself failed or was interrupted, the runtime-owned terminal state controls the collapsed summary.
-- Response protocol version `3` records that run state was projected from `tool_calls`, not declared by model text. A persisted pending confirmation from another response version must be cancelled and submitted again.
+- `status` is explicit and required; it is never derived from `message`, punctuation, historical tool failures, or plan text.
+- `in_progress` with no calls and any terminal status with calls are structural format errors handled by the bounded format-repair path.
+- `awaiting_user` is the structured form of a model question. Plan mode normally uses `common.questions_ask` for typed questions and publishes its ready artifact before returning `completed`.
+- Provider-native refusal metadata maps directly to `refused`; ordinary response text is never classified as a refusal.
+- `failed`, `cancelled`, `interrupted`, and `interrupted_unknown` remain runtime-owned states and are not model-selectable.
+- Intermediate `ok:false` tool results remain visible in the expanded action trace but do not relabel a later accepted terminal response as failed.
+- Accepted status and response protocol version `2` are persisted in the append-only session stream; replay never reconstructs them from message wording.
 
 The parser accepts at most 32 calls, requires a non-empty user-facing `message` for every tool turn, unique call ids, and each call to contain exactly `id`, `name`, and an object `arguments`. Duplicate JSON properties and argument names that differ only by case are rejected. Structured arguments remain native JSON objects/arrays through parsing; escaped JSON strings are not coerced. The executor checks each exact tool name and validates arguments against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. The pending id, cumulative iteration/tool-step counters, and execution fingerprint of that tool and its pipeline dependencies are persisted with the chat, so confirmation survives a WebView or Office restart but cannot execute a replaced definition. Cosmetic changes to unrelated tools do not invalidate it. A new request in that chat is blocked until the action is confirmed or cancelled. After confirmation, the model receives that result and chooses the remaining work normally using the remaining original budget. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
 
-If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A normal user-facing refusal uses `message` with an empty `tool_calls` array; provider-native refusal metadata remains separate. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
+If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. A refusal is valid user-facing content only as `status:"refused"` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
-The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections plus `ChatSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
+The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections plus `ChatSystemPrompt`, `PlanSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
 
 ## Tool result
 

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -22,7 +23,7 @@ namespace RNAssistant.Harness
                 "\uFEFF {\"tool_calls\":[],\"meta\":{\"message\":\"ignore\"},\"mes",
                 "sage\":\"Line 1\\nquote: \\\"",
                 "ok\\\" \\\\ slash \\uD83D",
-                "\\uDE00\"}"
+                "\\uDE00\",\"status\":\"completed\"}"
             };
             var visible = string.Concat(chunks.Select(extractor.Add).ToArray()) + extractor.Complete();
 
@@ -41,7 +42,7 @@ namespace RNAssistant.Harness
                     "<think>" + thinking,
                     "</think>{\"meta\":{\"message\":\"скрыто\"},\"mes",
                     "sage\":\"Привет\\nмир \\uD83D",
-                    "\\uDE00\",\"tool_calls\":[]}"
+                    "\\uDE00\",\"tool_calls\":[],\"status\":\"completed\"}"
                 };
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>
                 {
@@ -87,27 +88,79 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ConversationStreamsProviderReasoning()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var sse = string.Join("", new[]
+                {
+                    BuildDeltaSse("reasoning_content", "Размышление "),
+                    BuildDeltaSse("reasoning", "продолжается."),
+                    BuildDeltaSse("content", "{\"message\":\"Ответ"),
+                    BuildDeltaSse("content", ".\",\"tool_calls\":[],\"status\":\"completed\"}"),
+                    "data: [DONE]\n\n"
+                });
+                LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>
+                    Task.FromResult(LlmResponseParser.ParseStreamingResponse(sse, streamProgress));
+                var progress = new List<Tuple<string, string, ChatActivity>>();
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Chat;
+                session.ReasoningEnabled = true;
+
+                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Chat,
+                    "Ответь с reasoning.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings { StreamResponses = true },
+                    new ToolDefinition[0],
+                    (phase, message, activity) => progress.Add(Tuple.Create(phase, message, activity)))
+                    .GetAwaiter().GetResult();
+
+                var reasoning = progress
+                    .Where(item => item.Item3 != null && item.Item3.Kind == "reasoning")
+                    .Select(item => item.Item3.ResultMessage)
+                    .ToArray();
+                AssertEqual("Размышление продолжается.", string.Concat(reasoning),
+                    "provider reasoning fields are streamed separately");
+                AssertEqual("Ответ.", result.AssistantText, "provider reasoning does not enter visible message");
+                AssertEqual("Размышление продолжается.", session.Messages.Last().ReasoningContent,
+                    "provider reasoning is persisted separately");
+            });
+        }
+
         private static void ConversationStreamResetsBetweenAttempts()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Черновик\",\"tool_calls\":\"invalid\"}",
-                    "{\"message\":\"Исправлено.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Жил-был потоковый черновик.\",\"tool_calls\":[]}",
+                    "{\"status\":\"completed\",\"message\":\"Исправлено.\",\"tool_calls\":[]}"
                 });
+                var thoughts = new Queue<string>(new[] { "Первая мысль.", "Исправленная мысль." });
                 var calls = 0;
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                var traces = new List<LlmTraceRecord>();
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>
                 {
                     calls += 1;
+                    requests.Add(messages.ToList());
+                    if (options.TraceSink == null) options.TraceSink = record => traces.Add(record);
                     var response = responses.Dequeue();
+                    streamProgress(new LlmStreamUpdate { ReasoningDelta = thoughts.Dequeue() });
                     streamProgress(new LlmStreamUpdate { ContentDelta = response });
                     streamProgress(new LlmStreamUpdate { Completed = true });
-                    return Task.FromResult(new LlmCompletionResult { Content = response });
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = response,
+                        ReasoningContent = calls == 1 ? "Первая мысль." : "Исправленная мысль."
+                    });
                 };
-                var streamEvents = new List<string>();
+                var progressEvents = new List<Tuple<string, string, ChatActivity>>();
                 var session = NewSession(adapter);
                 session.Mode = ChatModes.Chat;
+                session.ReasoningEnabled = true;
 
                 var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Chat,
@@ -116,18 +169,40 @@ namespace RNAssistant.Harness
                     NewContext(adapter),
                     new AppSettings { StreamResponses = true, MaxAgentFormatRetries = 1 },
                     new ToolDefinition[0],
-                    (phase, message, activity) =>
-                    {
-                        if (phase == "streaming") streamEvents.Add(message);
-                    }).GetAwaiter().GetResult();
+                    (phase, message, activity) => progressEvents.Add(Tuple.Create(phase, message, activity)))
+                    .GetAwaiter().GetResult();
 
-                AssertEqual(2, calls, "invalid envelope gets one repair request");
+                var streamEvents = progressEvents
+                    .Where(item => item.Item1 == "streaming")
+                    .Select(item => item.Item2)
+                    .ToList();
+                var reasoning = progressEvents
+                    .Where(item => item.Item3 != null && item.Item3.Kind == "reasoning")
+                    .Select(item => item.Item3.ResultMessage)
+                    .ToList();
+
+                AssertEqual(2, calls, "status/tool_calls mismatch gets one repair request");
+                AssertContains(requests[1].Last().Content, "status in_progress requires at least one tool call",
+                    "repair receives the first parser rejection");
+                AssertEqual(1, traces.Count, "only the rejected attempt is traced");
+                AssertEqual("rejected", traces[0].Type, "trace identifies the rejected response");
+                AssertContains(traces[0].PayloadJson, "Жил-был потоковый черновик.",
+                    "trace preserves the first rejected payload");
+                AssertContains(traces[0].Error, "status in_progress requires at least one tool call",
+                    "trace preserves the exact parser error");
                 AssertEqual(4, streamEvents.Count, "each attempt emits reset and visible message");
                 AssertEqual(string.Empty, streamEvents[0], "first attempt reset");
-                AssertEqual("Черновик", streamEvents[1], "first attempt message");
+                AssertEqual("Жил-был потоковый черновик.", streamEvents[1], "first attempt message");
                 AssertEqual(string.Empty, streamEvents[2], "repair attempt reset");
                 AssertEqual("Исправлено.", streamEvents[3], "repaired attempt message");
+                AssertTrue(reasoning.SequenceEqual(new[] { "Первая мысль.", "Исправленная мысль." }),
+                    "thinking is isolated per model attempt");
+                AssertTrue(!progressEvents.Any(item =>
+                    (item.Item2 ?? string.Empty).IndexOf("исправляет структуру", StringComparison.OrdinalIgnoreCase) >= 0),
+                    "internal format repair is not exposed as UI status");
                 AssertEqual("Исправлено.", result.AssistantText, "repaired response completes");
+                AssertEqual("Исправленная мысль.", session.Messages.Last().ReasoningContent,
+                    "only accepted thinking is persisted");
             });
         }
 
@@ -142,6 +217,17 @@ namespace RNAssistant.Harness
                 })).Append("\n\n");
             }
             return builder.Append("data: [DONE]\n\n").ToString();
+        }
+
+        private static string BuildDeltaSse(string name, string value)
+        {
+            return "data: " + new JObject
+            {
+                ["choices"] = new JArray(new JObject
+                {
+                    ["delta"] = new JObject { [name] = value }
+                })
+            }.ToString(Formatting.None) + "\n\n";
         }
     }
 }

@@ -11,7 +11,8 @@ namespace RNAssistant.Core.Tools
     {
         public AgentResponseParseResult Parse(
             string content,
-            IEnumerable<ToolDefinition> tools)
+            IEnumerable<ToolDefinition> tools,
+            bool allowPlanned = false)
         {
             var raw = (content ?? string.Empty).Trim();
             if (raw.Length == 0)
@@ -36,12 +37,28 @@ namespace RNAssistant.Core.Tools
                 return AgentResponseParseResult.Fail("Agent response is invalid JSON: " + ex.Message);
             }
 
+            var statusToken = root["status"];
+            if (statusToken == null || statusToken.Type != JTokenType.String)
+            {
+                return AgentResponseParseResult.Fail("Agent response requires a string status field.");
+            }
+            var status = (string)statusToken;
+            if (!AgentResponseStatuses.IsKnown(status))
+            {
+                return AgentResponseParseResult.Fail("Agent response status is not supported: " + status + ".");
+            }
+            if (string.Equals(status, AgentResponseStatuses.Planned, StringComparison.Ordinal) && !allowPlanned)
+            {
+                return AgentResponseParseResult.Fail(
+                    "Agent response status planned is unavailable because runtime did not select planning mode.");
+            }
+
             var messageToken = root["message"];
             if (messageToken == null || messageToken.Type != JTokenType.String)
             {
                 return AgentResponseParseResult.Fail("Agent response requires a string message field.");
             }
-            var response = new AgentResponse { Message = (string)messageToken };
+            var response = new AgentResponse { Status = status, Message = (string)messageToken };
             var callsToken = root["tool_calls"];
             if (callsToken == null)
             {
@@ -60,10 +77,18 @@ namespace RNAssistant.Core.Tools
             }
             if (calls.Count == 0)
             {
-                response.Status = AgentResponseStatuses.Completed;
+                if (string.Equals(response.Status, AgentResponseStatuses.InProgress, StringComparison.Ordinal))
+                {
+                    return AgentResponseParseResult.Fail(
+                        "Agent response status in_progress requires at least one tool call.");
+                }
                 return ValidateFinalResponse(response);
             }
-            response.Status = AgentResponseStatuses.InProgress;
+            if (!string.Equals(response.Status, AgentResponseStatuses.InProgress, StringComparison.Ordinal))
+            {
+                return AgentResponseParseResult.Fail(
+                    "Agent response status " + response.Status + " requires an empty tool_calls array.");
+            }
             if (string.IsNullOrWhiteSpace(response.Message))
             {
                 return AgentResponseParseResult.Fail("Tool response requires a non-empty message describing the current step.");

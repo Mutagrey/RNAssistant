@@ -12,7 +12,7 @@ RNAssistant uses an OpenAI-compatible Chat Completions endpoint.
 - the selected Agent response format: `json_object` by default or strict `json_schema`;
 - the selected tool-result role: `user` by default, optionally `developer` or a matched `assistant.tool_calls` → `tool` pair.
 
-Chat, Plan, and Agent require the `message + tool_calls[]` JSON described in [conversation-protocol.md](conversation-protocol.md). Chat receives only read-only resource tools; Plan receives its scoped planning tools; Agent receives its runnable catalog. The response format and tool-result role are explicit settings; RNAssistant does not auto-select them. Optional `json_schema` fallback is limited to an endpoint rejection and lasts only for the current run.
+Chat, Plan, and Agent require the conversation-response v2 `status + message + tool_calls[]` JSON described in [conversation-protocol.md](conversation-protocol.md). Chat receives only read-only resource tools; Plan receives its scoped planning tools; Agent receives its runnable catalog. The response format and tool-result role are explicit settings; RNAssistant does not auto-select them. Optional `json_schema` fallback is limited to an endpoint rejection and lasts only for the current run.
 
 Settings → Agent → «Запустить тест» checks three exact sentinels using the currently selected instruction role, response format, and result role: `ROLE_OK`, the requested `TOOL_OK` Agent JSON call with exact id/name/arguments, and `RESULT_OK` after the chosen result transport. The probes do not execute Office actions.
 

@@ -676,14 +676,14 @@
                   <p>Приоритет системных Markdown-инструкций во всех запросах.</p>
                 </div>
                 <div class="form-grid two-columns agent-instruction-settings">
-                  <label><span>Роль Markdown-инструкций</span><select id="systemPromptRoleInput"><option value="developer">developer — по умолчанию</option><option value="system">system</option><option value="user">user</option></select><small>Применяется к Agent, Chat и служебным запросам.</small></label>
+                  <label><span>Роль Markdown-инструкций</span><select id="systemPromptRoleInput"><option value="developer">developer — по умолчанию</option><option value="system">system</option><option value="user">user</option></select><small>Применяется к Agent, Plan, Chat и служебным запросам.</small></label>
                 </div>
               </section>
               <section class="agent-protocol-panel agent-parameter-section" aria-labelledby="agentProtocolTitle">
                 <div class="agent-protocol-head">
                   <div>
                     <h3 id="agentProtocolTitle">Протокол</h3>
-                    <p>Единый контракт Chat и Agent; доступные tools задаются политикой режима.</p>
+                    <p>Единый контракт Chat, Plan и Agent; доступные tools задаются политикой режима.</p>
                   </div>
                   <span class="agent-protocol-badge">единый JSON-поток</span>
                 </div>
@@ -695,7 +695,7 @@
                         <option value="json_object">json_object — совместимый</option>
                         <option value="json_schema">json_schema — строгий</option>
                       </select>
-                      <small>В обоих режимах ответ — объект status + message + tool_calls.</small>
+                      <small>В обоих форматах ответ — объект status + message + tool_calls.</small>
                     </label>
                     <label class="agent-protocol-control">
                       <span>Роль результата tool</span>
@@ -729,7 +729,7 @@
                   <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20"></label>
                   <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
                 </div>
-                <div class="setting-note">Chat получает только read-only resource tools без skills; Agent — полный разрешённый каталог и skills. В обоих режимах вызовы идут через один JSON-loop.</div>
+                <div class="setting-note">Chat получает только read-only resource tools без skills; Plan — scoped planning tools; Agent — полный разрешённый каталог и skills. Все режимы используют один JSON-loop.</div>
               </section>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
                 <div class="model-compatibility-head">
@@ -946,8 +946,8 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=conversation-stream-v3-20260826-1"></script>
-  <script src="js/app-utils.js?v=conversation-stream-v3-20260826-1"></script>
+  <script src="js/app-core.js?v=conversation-stream-status-v2-20260826-1"></script>
+  <script src="js/app-utils.js?v=conversation-stream-status-v2-20260826-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
@@ -994,7 +994,7 @@
   <script src="js/app-attachments.js?v=resource-ingestion-20260826-1"></script>
   <script src="js/app-chat-session.js?v=html-workspace-auto-20260825-1"></script>
   <script src="js/app-chat-composer.js?v=resource-ingestion-20260826-1"></script>
-  <script src="js/app-chat-run.js?v=conversation-stream-v3-20260826-1"></script>
+  <script src="js/app-chat-run.js?v=conversation-stream-status-v2-20260826-1"></script>
   <script src="js/app-chat.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-chat-edit.js?v=message-edit-submit-20260825-1"></script>
   <script src="js/app.js?v=resource-navigation-20260826-1"></script>
