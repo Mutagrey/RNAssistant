@@ -166,8 +166,7 @@ namespace RNAssistant.Office
             {
                 var root = JObject.Parse(json ?? string.Empty);
                 var type = (string)root["type"] ?? (string)root["Type"] ?? string.Empty;
-                return string.Equals(type, "rnassistant.chart", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(type, "rnassistant.html", StringComparison.OrdinalIgnoreCase);
+                return string.Equals(type, "rnassistant.chart", StringComparison.OrdinalIgnoreCase);
             }
             catch (JsonException)
             {

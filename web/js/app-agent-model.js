@@ -230,21 +230,24 @@ function currentRunActivity(activities, finished) {
 }
 
 function formatElapsedTime(ms) {
-  if (!ms || ms < 1000) {
+  if (ms === null || ms === undefined || ms < 0) {
     return "";
+  }
+  if (ms < 1000) {
+    return "<1 с";
   }
   var seconds = Math.round(ms / 1000);
   if (seconds < 60) {
-    return seconds + "s";
+    return seconds + " с";
   }
   var minutes = Math.floor(seconds / 60);
   seconds = seconds % 60;
   if (minutes < 60) {
-    return minutes + "m" + (seconds ? " " + seconds + "s" : "");
+    return minutes + " мин" + (seconds ? " " + seconds + " с" : "");
   }
   var hours = Math.floor(minutes / 60);
   minutes = minutes % 60;
-  return hours + "h" + (minutes ? " " + minutes + "m" : "");
+  return hours + " ч" + (minutes ? " " + minutes + " мин" : "");
 }
 
 function agentRunElapsedText(items) {

@@ -9,6 +9,102 @@
   align-self: flex-end;
 }
 
+.agent-run-resource-list,
+.chat-resource-bundle {
+  width: min(430px, 92%);
+  margin: 8px 0 2px;
+}
+
+.chat-resource-bundle {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.chat-resource-bundle > summary {
+  list-style: none;
+}
+
+.chat-resource-bundle > summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-resource-bundle-summary {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 16px;
+  gap: 8px;
+  align-items: center;
+  min-height: 43px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.chat-resource-bundle-summary:hover {
+  background: var(--secondary-bg);
+}
+
+.chat-resource-bundle-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.chat-resource-bundle-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.chat-resource-bundle-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.chat-resource-bundle-copy strong,
+.chat-resource-bundle-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-resource-bundle-copy strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: var(--label-font-weight);
+}
+
+.chat-resource-bundle-copy span {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.chat-resource-bundle-caret {
+  color: var(--muted);
+  font-size: 19px;
+  line-height: 1;
+  transition: transform .14s ease;
+}
+
+.chat-resource-bundle[open] .chat-resource-bundle-caret {
+  transform: rotate(90deg);
+}
+
+.chat-resource-bundle-list {
+  width: auto;
+  margin: 0;
+  padding: 0 6px 6px;
+}
+
 .chat-artifact-card,
 .chat-resource-row {
   display: grid;
@@ -320,6 +416,11 @@
   }
 
   .chat-artifact-list {
+    width: 96%;
+  }
+
+  .agent-run-resource-list,
+  .chat-resource-bundle {
     width: 96%;
   }
 }

@@ -147,6 +147,7 @@ namespace RNAssistant.Core.Models
         public string ToolId { get; set; }
         public string ArtifactId { get; set; }
         public string ParentArtifactId { get; set; }
+        public List<ResourceRef> ResourceRefs { get; set; }
         public int AttemptCount { get; set; }
         public int FailureCount { get; set; }
         public int? PromptTokens { get; set; }
@@ -163,6 +164,7 @@ namespace RNAssistant.Core.Models
             Data = new Newtonsoft.Json.Linq.JObject();
             SourceEventSeqs = new List<long>();
             SourceEventIds = new List<string>();
+            ResourceRefs = new List<ResourceRef>();
         }
     }
 

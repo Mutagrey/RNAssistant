@@ -133,13 +133,13 @@ async function deleteAgentRun(items, finalMessage) {
   }
 }
 
-function completedAgentActionCountLabel(count) {
+function agentActionCountText(count) {
   var lastTwo = count % 100;
   var last = count % 10;
   var noun = lastTwo >= 11 && lastTwo <= 14
     ? "действий"
     : (last === 1 ? "действие" : (last >= 2 && last <= 4 ? "действия" : "действий"));
-  return "Выполнено " + count + " " + noun;
+  return count + " " + noun;
 }
 
 function agentToolCallCount(timeline) {
@@ -240,7 +240,6 @@ function appendCollapsedAgentStep(parent, step, isCurrent, finished) {
     ? stats.current
     : null);
   var effectiveStatus = active ? activityStatus(active) : stats.status;
-  var actionCount = agentToolCallCount(timeline);
   var lastAction = null;
   for (var actionIndex = timeline.length - 1; actionIndex >= 0; actionIndex -= 1) {
     var actionKind = activityKind(timeline[actionIndex].activity);
@@ -249,32 +248,19 @@ function appendCollapsedAgentStep(parent, step, isCurrent, finished) {
       break;
     }
   }
-  var completedBatch = !active && effectiveStatus === "completed" && actionCount > 1;
   var transcript = buildAgentRunTranscript(step.items, timeline, stats);
   var details = document.createElement("details");
   details.className = "agent-run-history agent-step-actions status-" + effectiveStatus;
 
   var summary = document.createElement("summary");
   summary.className = "agent-run-history-summary";
-  var icon = document.createElement("span");
-  icon.className = "agent-run-history-icon";
-  icon.setAttribute("aria-hidden", "true");
-  summary.appendChild(icon);
   var title = document.createElement("span");
   title.className = "agent-run-history-title";
   title.textContent = active
     ? activityPrimaryText(active)
-    : (completedBatch
-      ? completedAgentActionCountLabel(actionCount)
-      : (lastAction ? activityPrimaryText(lastAction) : (step.message || "Выполняю…")));
+    : (lastAction ? activityPrimaryText(lastAction) : (step.message || "Выполняю…"));
   summary.appendChild(title);
-  var meta = document.createElement("span");
-  meta.className = "agent-run-history-meta";
-  var exceptionalStatus = effectiveStatus === "waiting" || effectiveStatus === "failed" || effectiveStatus === "cancelled"
-    ? agentStatusLabel(effectiveStatus)
-    : "";
-  meta.textContent = [stats.elapsed, exceptionalStatus].filter(Boolean).join(" · ");
-  summary.appendChild(meta);
+  appendAgentRunSummaryState(summary, effectiveStatus);
   var caret = document.createElement("span");
   caret.className = "agent-run-history-caret";
   caret.setAttribute("aria-hidden", "true");
@@ -296,35 +282,169 @@ function appendCollapsedAgentStep(parent, step, isCurrent, finished) {
   parent.appendChild(details);
 }
 
+function agentRunSummaryTitle(status, elapsed) {
+  var title;
+  if (status === "failed") {
+    title = "Прервано";
+  } else if (status === "cancelled") {
+    title = "Отменено";
+  } else if (status === "waiting") {
+    title = "Ожидает подтверждения";
+  } else if (status === "completed_with_errors") {
+    title = "Готово с ошибками";
+  } else {
+    title = "Готово";
+  }
+  return title + (elapsed ? " за " + elapsed : "");
+}
+
+function appendAgentRunSummaryState(summary, status) {
+  var labels = {
+    running: "",
+    waiting: "!",
+    failed: "×",
+    completed_with_errors: "×",
+    cancelled: "–"
+  };
+  if (!Object.prototype.hasOwnProperty.call(labels, status)) return;
+  var mark = document.createElement("span");
+  mark.className = "agent-run-history-state status-" + status;
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = labels[status];
+  summary.appendChild(mark);
+}
+
+function appendAgentRunOverview(parent, steps, timeline, stats) {
+  var details = document.createElement("details");
+  details.className = "agent-run-history agent-run-overview status-" + stats.status;
+
+  var summary = document.createElement("summary");
+  summary.className = "agent-run-history-summary";
+  var actionCount = agentToolCallCount(timeline);
+  var title = document.createElement("span");
+  title.className = "agent-run-history-title";
+  title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed);
+  summary.appendChild(title);
+  appendAgentRunSummaryState(summary, stats.status);
+  var caret = document.createElement("span");
+  caret.className = "agent-run-history-caret";
+  caret.setAttribute("aria-hidden", "true");
+  caret.textContent = "›";
+  summary.appendChild(caret);
+  summary.setAttribute("aria-label", title.textContent + ". " + agentActionCountText(actionCount));
+  summary.title = agentActionCountText(actionCount);
+  details.appendChild(summary);
+
+  var content = document.createElement("div");
+  content.className = "agent-run-history-content agent-run-overview-content";
+  (steps || []).forEach(function (step) {
+    var section = document.createElement("section");
+    section.className = "agent-model-step agent-model-step-history";
+    appendAgentStepMessage(section, step.message);
+    if ((step.items || []).length) {
+      section.appendChild(buildAgentRunTranscript(
+        step.items,
+        step.items,
+        agentRunStats(step.items, true)));
+    }
+    content.appendChild(section);
+  });
+  if (!content.childNodes.length) {
+    var empty = document.createElement("div");
+    empty.className = "agent-run-empty";
+    empty.textContent = "Подробности выполнения не записаны.";
+    content.appendChild(empty);
+  }
+  details.appendChild(content);
+  parent.appendChild(details);
+  return details;
+}
+
+function lastAgentRunException(timeline) {
+  var result = null;
+  function inspect(activity) {
+    if (!activity) return;
+    var status = activityStatus(activity);
+    if (status === "failed" || status === "cancelled") result = activity;
+    activityChildren(activity).forEach(inspect);
+  }
+  (timeline || []).forEach(function (item) { inspect(item.activity); });
+  return result;
+}
+
+function agentRunOutcomeReason(activity) {
+  var reason = String(activityResultMessage(activity) || "").trim();
+  if (reason === "Execution was cancelled before a result was recorded.") {
+    return "Выполнение отменено до получения результата.";
+  }
+  if (reason === "Execution stopped before a result was recorded.") {
+    return "Выполнение остановлено до получения результата.";
+  }
+  return reason;
+}
+
+function appendAgentRunOutcome(parent, activity, overview) {
+  if (!activity) return;
+  var status = activityStatus(activity);
+  var outcome = document.createElement("button");
+  outcome.type = "button";
+  outcome.className = "agent-run-outcome status-" + status;
+  outcome.title = "Показать ход выполнения";
+
+  var copy = document.createElement("span");
+  copy.className = "agent-run-outcome-copy";
+  var reasonText = agentRunOutcomeReason(activity);
+  copy.textContent = reasonText || (status === "cancelled"
+    ? "Выполнение отменено"
+    : "Не удалось: " + activityPrimaryText(activity));
+  outcome.appendChild(copy);
+  var caret = document.createElement("span");
+  caret.className = "agent-run-outcome-caret";
+  caret.setAttribute("aria-hidden", "true");
+  caret.textContent = "›";
+  outcome.appendChild(caret);
+  outcome.title = copy.textContent + " · Показать ход выполнения";
+  outcome.setAttribute("aria-label", outcome.title);
+  outcome.addEventListener("click", function () {
+    overview.open = true;
+    overview.scrollIntoView({ block: "nearest" });
+  });
+  parent.appendChild(outcome);
+}
+
 function renderAgentRunArticle(run) {
   var items = run.items || [];
   var finalMessage = run.finalMessage || null;
   var timeline = collectVisibleAgentTimelineItems(items);
-  var stats = agentRunStats(items, !!finalMessage && !run.live);
+  var timingItems = timeline.slice();
+  if (finalMessage) timingItems.push(finalMessage);
+  var stats = agentRunStats(timingItems, !!finalMessage && !run.live);
   var steps = groupAgentRunSteps(timeline);
   var node = document.createElement("article");
   node.className = "message assistant agent-run status-" + stats.status + (run.live ? " live" : "");
 
   var body = document.createElement("div");
   body.className = "agent-run-wrap";
-  steps.forEach(function (step, stepIndex) {
-    var section = document.createElement("section");
-    section.className = "agent-model-step";
-    appendAgentStepMessage(section, step.message);
-    appendCollapsedAgentStep(section, step, stepIndex === steps.length - 1 && !!run.live,
-      !run.live || stepIndex < steps.length - 1);
-    body.appendChild(section);
-  });
+  if (run.live) {
+    steps.forEach(function (step, stepIndex) {
+      var section = document.createElement("section");
+      section.className = "agent-model-step";
+      appendAgentStepMessage(section, step.message);
+      appendCollapsedAgentStep(section, step, stepIndex === steps.length - 1, stepIndex < steps.length - 1);
+      body.appendChild(section);
+    });
+  } else {
+    var overview = appendAgentRunOverview(body, steps, timeline, stats);
+    appendAgentRunOutcome(body, lastAgentRunException(timeline), overview);
+  }
   if (finalMessage) {
     var finalSection = document.createElement("section");
     finalSection.className = "agent-final-step";
     appendAgentFinalAnswer(finalSection, finalMessage);
     body.appendChild(finalSection);
   }
-  if (!run.live) {
-    var renderedArtifactIds = {};
-    items.forEach(function (item) { appendMessageArtifactCards(body, item.message, renderedArtifactIds); });
-    if (finalMessage) appendMessageArtifactCards(body, finalMessage.message, renderedArtifactIds);
+  if (!run.live && typeof appendAgentRunResourceCards === "function") {
+    appendAgentRunResourceCards(body, items, finalMessage);
   }
   node.appendChild(body);
 

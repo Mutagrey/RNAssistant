@@ -139,14 +139,14 @@
     if (turnId) correlationButton(root, "turn " + turnId, "turnId", turnId, isVbaView() ? "raw" : activeView, sourceChatId);
     if (stepId) correlationButton(root, "step " + stepId, "stepId", stepId, isVbaView() ? "raw" : activeView, sourceChatId);
 
-    var artifactIds = unique([value(item, "ArtifactId", "artifactId", "")]
-      .concat(value(item, "ArtifactIds", "artifactIds", []) || []));
-    artifactIds.forEach(function (id) {
-      correlationButton(root, "artifact " + id, "artifactId", id, "artifact-lineage", sourceChatId);
-    });
     var resourceRefs = value(item, "ResourceRefs", "resourceRefs", []) || [];
     unique(resourceRefs.map(function (reference) { return value(reference, "Uri", "uri", ""); })).forEach(function (uri) {
       correlationButton(root, "resource " + uri, "resourceUri", uri, "raw", sourceChatId);
+    });
+    var artifactIds = unique([value(item, "ArtifactId", "artifactId", "")]
+      .concat(value(item, "ArtifactIds", "artifactIds", []) || []));
+    artifactIds.forEach(function (id) {
+      correlationButton(root, "lineage " + id, "artifactId", id, "artifact-lineage", sourceChatId);
     });
     var parentArtifactId = value(item, "ParentArtifactId", "parentArtifactId", "");
     if (parentArtifactId) {
@@ -178,6 +178,7 @@
     var costUsd = value(item, "CostUsd", "costUsd", null);
     var sourceSeqs = value(item, "SourceEventSeqs", "sourceEventSeqs", []) || [];
     var sourceIds = value(item, "SourceEventIds", "sourceEventIds", []) || [];
+    var resourceRefs = value(item, "ResourceRefs", "resourceRefs", []) || [];
     $("trajectoryEventTitle").textContent = value(item, "Title", "title", value(item, "Kind", "kind", "row"));
     $("trajectoryEventMeta").textContent = [
       "seq=" + firstSequence + (lastSequence !== firstSequence ? "…" + lastSequence : ""),
@@ -186,6 +187,9 @@
       value(item, "TurnId", "turnId", "") ? "turn=" + value(item, "TurnId", "turnId", "") : "",
       value(item, "StepId", "stepId", "") ? "step=" + value(item, "StepId", "stepId", "") : "",
       value(item, "ToolId", "toolId", "") ? "tool=" + value(item, "ToolId", "toolId", "") : "",
+      resourceRefs.length ? "resource=" + resourceRefs.map(function (reference) {
+        return value(reference, "Uri", "uri", "");
+      }).filter(Boolean).join(",") : "",
       value(item, "ArtifactId", "artifactId", "") ? "artifact=" + value(item, "ArtifactId", "artifactId", "") : "",
       duration === null ? "" : "duration=" + duration + "ms",
       totalTokens === null ? "" : "tokens=" + totalTokens + " (" + (promptTokens || 0) + "+" + (completionTokens || 0) + ")",
@@ -255,10 +259,10 @@
       stepId ? "step=" + stepId : "",
       visibility || "",
       toolCallIds.length ? "tool=" + toolCallIds.join(",") : "",
-      artifactIds.length ? "artifact=" + artifactIds.join(",") : "",
       resourceRefs.length ? "resource=" + resourceRefs.map(function (reference) {
         return value(reference, "Uri", "uri", "");
       }).filter(Boolean).join(",") : "",
+      artifactIds.length ? "artifact=" + artifactIds.join(",") : "",
       statuses.length ? "status=" + statuses.join(",") : "",
       previousHash ? "prev=" + previousHash : "root",
       hash ? "hash=" + hash : "",

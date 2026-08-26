@@ -2,7 +2,9 @@ function renderActivityNode(activity, nested, current, context) {
   var node = document.createElement("div");
   var status = activityStatus(activity);
   var kind = activityKind(activity) || "activity";
-  node.className = "agent-activity kind-" + kind + (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status;
+  var operation = activityOperation(activity);
+  node.className = "agent-activity kind-" + kind + " operation-" + operation +
+    (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status;
 
   var expandable = activityHasDetails(activity);
   if (expandable) {
@@ -27,12 +29,14 @@ function renderActivityRow(activity, current, expandable, context) {
   var status = activityStatus(activity);
   var title = activityPrimaryText(activity);
   var comment = activityCommentText(activity);
+  var time = activityTimeText(context);
   row.className = "agent-activity-row" + (comment ? " has-comment" : " has-no-comment");
-  row.title = [title, comment, agentStatusLabel(status)].filter(Boolean).join(" · ");
+  row.title = [title, comment, agentStatusLabel(status), time].filter(Boolean).join(" · ");
 
   var mark = document.createElement("span");
-  mark.className = "agent-activity-mark";
+  mark.className = "agent-activity-mark operation-" + activityOperation(activity);
   mark.setAttribute("aria-hidden", "true");
+  mark.innerHTML = activityOperationIcon(activity);
   row.appendChild(mark);
 
   var copy = document.createElement("span");
@@ -43,20 +47,13 @@ function renderActivityRow(activity, current, expandable, context) {
   name.textContent = title;
   copy.appendChild(name);
 
-  var commentNode = document.createElement("span");
-  commentNode.className = "agent-activity-comment" + (comment ? "" : " is-empty");
-  commentNode.textContent = comment;
-  copy.appendChild(commentNode);
-
-  var metaParts = [agentStatusLabel(status)];
-  var time = activityTimeText(context);
-  if (time) {
-    metaParts.push(time);
+  if (status === "failed" || status === "completed_with_errors" || status === "cancelled") {
+    var state = document.createElement("span");
+    state.className = "agent-activity-state status-" + status;
+    state.setAttribute("aria-hidden", "true");
+    state.textContent = status === "cancelled" ? "–" : "×";
+    copy.appendChild(state);
   }
-  var meta = document.createElement("span");
-  meta.className = "agent-activity-meta";
-  meta.textContent = metaParts.join(" · ");
-  copy.appendChild(meta);
   row.appendChild(copy);
 
   if (expandable) {
@@ -67,6 +64,34 @@ function renderActivityRow(activity, current, expandable, context) {
     copy.appendChild(caret);
   }
   return row;
+}
+
+function activityOperation(activity) {
+  var kind = activityKind(activity);
+  if (kind === "reasoning") return "reasoning";
+  if (kind === "diagnostic") return "diagnostic";
+  if (kind === "step" || kind === "notice" || kind === "compaction") return "status";
+
+  var toolId = String(activityToolId(activity) || "").toLowerCase();
+  var operationId = toolId.replace(/[.\-]/g, "_");
+  if (/(^|_)search($|_)/.test(operationId)) return "search";
+  if (/(^|_)(read|inspect|list|resolve|get|find)($|_)/.test(operationId)) return "read";
+  if (/(^|_)(write|upsert|update|patch|format|create|add|set|delete|remove|rename|restore|install|bind|refresh|freeze)($|_)/.test(operationId)) return "write";
+  if (/(^|_)(run|execute|command|macro)($|_)/.test(operationId)) return "command";
+  return kind === "tool" || kind === "control" ? "command" : "status";
+}
+
+function activityOperationIcon(activity) {
+  var icons = {
+    search: "<svg viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m16 16 4 4\"/></svg>",
+    read: "<svg viewBox=\"0 0 24 24\"><path d=\"M3.5 5.5A7.5 7.5 0 0 1 12 7v13a7.5 7.5 0 0 0-8.5-1.5Z\"/><path d=\"M20.5 5.5A7.5 7.5 0 0 0 12 7v13a7.5 7.5 0 0 1 8.5-1.5Z\"/></svg>",
+    write: "<svg viewBox=\"0 0 24 24\"><path d=\"M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16Z\"/><path d=\"m13.5 6.5 4 4\"/></svg>",
+    command: "<svg viewBox=\"0 0 24 24\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"m7 9 3 3-3 3\"/><path d=\"M13 15h4\"/></svg>",
+    reasoning: "<svg viewBox=\"0 0 24 24\"><path d=\"M9 18h6M10 22h4\"/><path d=\"M8.5 15.5A7 7 0 1 1 15.5 15.5c-.8.6-1 1.1-1 2h-5c0-.9-.2-1.4-1-2Z\"/></svg>",
+    diagnostic: "<svg viewBox=\"0 0 24 24\"><path d=\"M12 3 2.8 20h18.4Z\"/><path d=\"M12 9v5M12 17.5v.1\"/></svg>",
+    status: "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8\"/><path d=\"m8.5 12 2.3 2.3 4.8-5\"/></svg>"
+  };
+  return icons[activityOperation(activity)] || icons.status;
 }
 
 function activityPrimaryText(activity) {
@@ -219,13 +244,6 @@ function appendActivityArtifacts(node, activity, context) {
     var chart = tryRenderChartArtifact(activity, context || {});
     if (chart) {
       node.appendChild(chart);
-      appended = true;
-    }
-  }
-  if (typeof tryRenderHtmlArtifact === "function") {
-    var html = tryRenderHtmlArtifact(activity, context || {});
-    if (html) {
-      node.appendChild(html);
       appended = true;
     }
   }

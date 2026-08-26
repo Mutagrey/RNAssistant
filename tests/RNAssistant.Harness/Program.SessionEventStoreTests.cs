@@ -737,6 +737,8 @@ namespace RNAssistant.Harness
             var artifact = query.QueryView(events, new TrajectoryViewQueryRequest { View = TrajectoryViews.ArtifactLineage, ArtifactId = "artifact-root" }).Rows.Single();
             AssertEqual("artifact-1", artifact.ArtifactId, "artifact lineage filters by parent id");
             AssertEqual(6L, artifact.SourceEventSeqs.Single(), "artifact row retains revision source");
+            AssertEqual("rna://chat/trajectory-chat/artifact/artifact-1/revision/2", artifact.ResourceRefs.Single().Uri,
+                "artifact diagnostics expose the canonical revision-pinned resource URI");
 
             var failure = query.QueryView(events, new TrajectoryViewQueryRequest { View = TrajectoryViews.FailureRetries }).Rows.Single();
             AssertEqual("model-failure", failure.Kind, "failure view records rejected model attempt");
@@ -832,6 +834,7 @@ namespace RNAssistant.Harness
         {
             return new SessionEvent
             {
+                SessionId = "trajectory-chat",
                 Sequence = sequence,
                 EventId = "derived-event-" + sequence.ToString(CultureInfo.InvariantCulture),
                 Type = type,

@@ -272,17 +272,21 @@ html[data-theme="dark"] .mode-button.active {
 }
 
 html[data-theme="dark"] .danger-zone,
-html[data-theme="dark"] .message.failed .markdown,
-html[data-theme="dark"] .agent-error-panel {
+html[data-theme="dark"] .message.failed .markdown {
   border-color: #63383a;
   background: #2d1d20;
 }
 
+html[data-theme="dark"] .agent-error-panel {
+  border-color: #63383a;
+  background: transparent;
+  color: #a9b2bf;
+}
+
 html[data-theme="dark"] .danger-zone-title,
 html[data-theme="dark"] .danger-zone-text,
-html[data-theme="dark"] .agent-error-panel,
 html[data-theme="dark"] .agent-error-meta {
-  color: #f1aaa5;
+  color: #a9b2bf;
 }
 
 html[data-theme="dark"] .model-compatibility-summary.warning {
@@ -508,9 +512,6 @@ html[data-theme="dark"] .agent-activity-name {
   color: #a9b2bf;
 }
 
-html[data-theme="dark"] .agent-run-history-meta,
-html[data-theme="dark"] .agent-activity-comment,
-html[data-theme="dark"] .agent-activity-meta,
 html[data-theme="dark"] .agent-run-empty {
   color: #7f8a9a;
 }

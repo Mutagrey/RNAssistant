@@ -193,6 +193,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("toolId")] public string ToolId { get; set; }
         [JsonProperty("artifactId")] public string ArtifactId { get; set; }
         [JsonProperty("parentArtifactId")] public string ParentArtifactId { get; set; }
+        [JsonProperty("resourceRefs")] public IReadOnlyList<ResourceRef> ResourceRefs { get; set; }
         [JsonProperty("attemptCount")] public int AttemptCount { get; set; }
         [JsonProperty("failureCount")] public int FailureCount { get; set; }
         [JsonProperty("promptTokens")] public int? PromptTokens { get; set; }
@@ -218,6 +219,7 @@ namespace RNAssistant.Office.Contracts
                 RunId = row.RunId, TurnId = row.TurnId, StepId = row.StepId,
                 ToolCallId = row.ToolCallId, ToolId = row.ToolId,
                 ArtifactId = row.ArtifactId, ParentArtifactId = row.ParentArtifactId,
+                ResourceRefs = row.ResourceRefs ?? new List<ResourceRef>(),
                 AttemptCount = row.AttemptCount, FailureCount = row.FailureCount,
                 PromptTokens = row.PromptTokens, CompletionTokens = row.CompletionTokens, TotalTokens = row.TotalTokens,
                 EstimatedPromptTokens = row.EstimatedPromptTokens, CostUsd = row.CostUsd,

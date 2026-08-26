@@ -163,11 +163,15 @@
     return current ? artifactId(current) : artifactId(artifact);
   }
 
-  function artifactResourceHeads() {
-    var artifacts = (state.artifacts || []).filter(function (artifact) { return !!artifact && !!artifactId(artifact); });
+  function artifactResourceHeads(sourceArtifacts) {
+    var artifacts = (Array.isArray(sourceArtifacts) ? sourceArtifacts : (state.artifacts || []))
+      .filter(function (artifact) { return !!artifact && !!artifactId(artifact); });
+    var lineageArtifacts = (state.artifacts || []).filter(function (artifact) { return !!artifact && !!artifactId(artifact); });
     var byId = {};
     var heads = {};
-    artifacts.forEach(function (artifact) { byId[String(artifactId(artifact)).toLowerCase()] = artifact; });
+    lineageArtifacts.concat(artifacts).forEach(function (artifact) {
+      byId[String(artifactId(artifact)).toLowerCase()] = artifact;
+    });
     artifacts.forEach(function (artifact) {
       var kind = artifactKind(artifact);
       var stableId = kind === "plan" ? planId(artifact) : "";
@@ -276,6 +280,82 @@
       wrap.appendChild(artifactCard(artifact));
     });
     parent.appendChild(wrap);
+  }
+
+  function collectRunArtifacts(items, finalMessage) {
+    var seen = {};
+    var artifacts = [];
+    var messages = (items || []).map(function (item) { return item && item.message; });
+    if (finalMessage && finalMessage.message) messages.push(finalMessage.message);
+    messages.filter(Boolean).forEach(function (message) {
+      messageArtifacts(message).forEach(function (artifact) {
+        var key = String(artifactId(artifact) || "").toLowerCase();
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        artifacts.push(artifact);
+      });
+    });
+    return artifactResourceHeads(artifacts);
+  }
+
+  function resourceBundleMeta(artifacts) {
+    var labels = [];
+    var seen = {};
+    (artifacts || []).forEach(function (artifact) {
+      var label = kindLabel(artifactKind(artifact));
+      if (!seen[label]) {
+        seen[label] = true;
+        labels.push(label);
+      }
+    });
+    return labels.slice(0, 3).join(" · ") + (labels.length > 3 ? " · …" : "");
+  }
+
+  function appendAgentRunResourceCards(parent, items, finalMessage) {
+    if (!parent) return;
+    var artifacts = collectRunArtifacts(items, finalMessage);
+    if (!artifacts.length) return;
+
+    if (artifacts.length === 1) {
+      var single = document.createElement("div");
+      single.className = "chat-artifact-list agent-run-resource-list";
+      single.appendChild(artifactCard(artifacts[0]));
+      parent.appendChild(single);
+      return;
+    }
+
+    var details = document.createElement("details");
+    details.className = "chat-resource-bundle";
+    var summary = document.createElement("summary");
+    summary.className = "chat-resource-bundle-summary";
+
+    var icon = document.createElement("span");
+    icon.className = "chat-resource-bundle-icon";
+    icon.innerHTML = "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"7\" y=\"3\" width=\"13\" height=\"15\" rx=\"2\"/><path d=\"M17 21H6a2 2 0 0 1-2-2V8\"/><path d=\"M10 8h7M10 12h5\"/></svg>";
+    summary.appendChild(icon);
+
+    var copy = document.createElement("span");
+    copy.className = "chat-resource-bundle-copy";
+    var title = document.createElement("strong");
+    title.textContent = "Ресурсы · " + artifacts.length;
+    var meta = document.createElement("span");
+    meta.textContent = resourceBundleMeta(artifacts);
+    copy.appendChild(title);
+    copy.appendChild(meta);
+    summary.appendChild(copy);
+
+    var caret = document.createElement("span");
+    caret.className = "chat-resource-bundle-caret";
+    caret.setAttribute("aria-hidden", "true");
+    caret.textContent = "›";
+    summary.appendChild(caret);
+    details.appendChild(summary);
+
+    var list = document.createElement("div");
+    list.className = "chat-artifact-list chat-resource-bundle-list";
+    artifacts.forEach(function (artifact) { list.appendChild(artifactCard(artifact)); });
+    details.appendChild(list);
+    parent.appendChild(details);
   }
 
   function setChatResourcePopoverOpen(open) {
@@ -415,6 +495,7 @@
   window.artifactResourceHeads = artifactResourceHeads;
   window.messageResourceRefs = messageResourceRefs;
   window.appendMessageArtifactCards = appendMessageArtifactCards;
+  window.appendAgentRunResourceCards = appendAgentRunResourceCards;
   window.bindChatResourceNavigation = bindChatResourceNavigation;
   window.renderChatResourceNavigation = renderChatResourceNavigation;
   window.openArtifactResource = openArtifactResource;

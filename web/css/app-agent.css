@@ -211,6 +211,21 @@
   max-width: 94%;
 }
 
+.agent-run-overview {
+  max-width: 100%;
+}
+
+.agent-run-overview-content {
+  display: grid;
+  gap: 13px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.agent-model-step-history + .agent-model-step-history {
+  margin-top: 0;
+}
+
 .agent-run-history > summary,
 .agent-activity-toggle > summary {
   list-style: none;
@@ -222,9 +237,11 @@
 }
 
 .agent-run-history-summary {
-  display: flex;
-  gap: 6px;
+  display: inline-flex;
+  gap: 3px;
   align-items: center;
+  width: fit-content;
+  max-width: 100%;
   min-height: 25px;
   padding: 1px 0;
   cursor: pointer;
@@ -236,49 +253,82 @@
   color: #344054;
 }
 
-.agent-run-history-icon {
-  display: grid;
-  width: 16px;
-  height: 16px;
-  place-items: center;
+.agent-run-outcome {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  width: fit-content;
+  max-width: 96%;
+  margin: 1px 0 0;
+  padding: 1px 0;
+  border: 0;
+  background: transparent;
   color: #98a2b3;
-  font-size: 12px;
+  text-align: left;
 }
 
-.agent-run-history-icon::after {
-  content: "✓";
+.agent-run-outcome.status-cancelled {
+  color: #98a2b3;
 }
 
-.agent-run-history.status-running .agent-run-history-icon::after {
+.agent-run-outcome:hover,
+.agent-run-outcome:focus-visible {
+  background: transparent;
+  color: #667085;
+}
+
+.agent-run-outcome:focus-visible {
+  outline: 2px solid var(--focus-ring-tight);
+  outline-offset: 1px;
+}
+
+.agent-run-outcome-copy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 400;
+}
+
+.agent-run-outcome-caret,
+.agent-run-history-state {
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.agent-run-outcome-caret {
+  color: #98a2b3;
+  font-size: 15px;
+}
+
+.agent-run-history-state {
+  width: 10px;
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.agent-run-history-state.status-running {
   width: 6px;
   height: 6px;
+  margin: 0 2px;
   border-radius: 50%;
   background: #2563eb;
-  content: "";
   animation: agent-activity-pulse 1.35s ease-in-out infinite;
 }
 
-.agent-run-history.status-waiting .agent-run-history-icon::after {
+.agent-run-history-state.status-waiting {
   color: #b54708;
-  content: "!";
 }
 
-.agent-run-history.status-failed .agent-run-history-icon::after {
-  color: #b42318;
-  content: "×";
+.agent-run-history-state.status-failed,
+.agent-run-history-state.status-completed_with_errors {
+  color: #d92d20;
 }
 
-.agent-run-history.status-completed_with_errors .agent-run-history-icon::after {
-  color: #b54708;
-  content: "!";
-}
-
-.agent-run-history.status-cancelled .agent-run-history-icon::after {
-  content: "–";
-}
-
-.agent-run-history-title,
-.agent-run-history-meta {
+.agent-run-history-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -299,14 +349,9 @@
   animation: agent-text-shimmer 1.7s linear infinite;
 }
 
-.agent-run-history-meta {
-  flex: 0 1 auto;
-  color: #98a2b3;
-  font-size: 11px;
-}
-
 .agent-run-history-caret {
   flex: 0 0 auto;
+  margin-left: -1px;
 }
 
 .agent-run-history-caret,
@@ -359,22 +404,32 @@
 }
 
 .agent-activity-mark {
+  position: relative;
   display: grid;
   width: 16px;
   height: 16px;
   place-items: center;
   color: #98a2b3;
-  font-size: 11px;
 }
 
-.agent-activity.status-completed .agent-activity-mark::after {
-  content: "✓";
+.agent-activity-mark svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
 }
 
 .agent-activity.status-running .agent-activity-mark::after,
 .agent-activity.status-waiting .agent-activity-mark::after {
-  width: 6px;
-  height: 6px;
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 5px;
+  height: 5px;
+  border: 1.5px solid var(--bg);
   border-radius: 50%;
   background: #2563eb;
   content: "";
@@ -388,26 +443,17 @@
   background: #d97706;
 }
 
-.agent-activity.status-failed .agent-activity-mark::after {
-  color: #b42318;
-  content: "×";
-}
-
-.agent-activity.status-cancelled .agent-activity-mark::after {
-  content: "–";
-}
-
 .agent-activity-copy {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  gap: 6px;
+  display: inline-flex;
+  gap: 3px;
   align-items: baseline;
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
 }
 
-.agent-activity-name,
-.agent-activity-comment,
-.agent-activity-meta {
+.agent-activity-name {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -422,46 +468,30 @@
   white-space: nowrap;
 }
 
-.agent-activity-comment,
-.agent-activity-meta {
-  color: #98a2b3;
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.agent-activity-comment {
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
-}
-
-.agent-activity-comment.is-empty {
-  display: none;
-}
-
-.agent-activity-meta {
-  text-align: left;
-}
-
-.agent-activity-comment::before,
-.agent-activity-meta::before {
-  margin-right: 6px;
-  color: #c4cad3;
-  content: "·";
-}
-
 .agent-activity.status-running .agent-activity-name,
 .agent-activity.status-waiting .agent-activity-name,
 .agent-activity.status-failed .agent-activity-name {
   color: #344054;
 }
 
-.agent-activity.status-failed .agent-activity-meta {
-  color: #b42318;
+.agent-activity-state {
+  flex: 0 0 auto;
+  width: 10px;
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.agent-activity-state.status-failed,
+.agent-activity-state.status-completed_with_errors {
+  color: #d92d20;
 }
 
 .agent-activity-caret {
   flex: 0 0 auto;
-  margin-left: 0;
+  margin-left: -1px;
 }
 
 .agent-activity.status-running.current .agent-activity-name,
@@ -488,12 +518,8 @@
 }
 
 .agent-activity.kind-notice.status-running.current .agent-activity-mark,
-.agent-activity.kind-notice.status-running.current .agent-activity-comment,
-.agent-activity.kind-notice.status-running.current .agent-activity-meta,
 .agent-activity.kind-notice.status-running.current .agent-activity-caret,
 .agent-activity.kind-reasoning.status-running.current .agent-activity-mark,
-.agent-activity.kind-reasoning.status-running.current .agent-activity-comment,
-.agent-activity.kind-reasoning.status-running.current .agent-activity-meta,
 .agent-activity.kind-reasoning.status-running.current .agent-activity-caret {
   display: none;
 }
@@ -540,26 +566,23 @@
 
 .agent-error-panel {
   display: grid;
-  gap: 6px;
-  padding: 7px 9px;
-  border-radius: 6px;
-}
-
-.agent-error-panel {
-  border-left: 2px solid #d92d20;
-  background: #fff6f5;
-  color: #7a271a;
+  gap: 4px;
+  padding: 3px 0 3px 8px;
+  border-left: 1px solid color-mix(in srgb, var(--danger) 38%, var(--line));
+  background: transparent;
+  color: var(--muted);
 }
 
 .agent-error-reason {
-  font-size: 12px;
-  font-weight: var(--label-font-weight);
+  font-size: 11.5px;
+  font-weight: 400;
   line-height: 1.4;
 }
 
 .agent-error-meta {
-  color: #8a3a32;
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 10.5px;
+  opacity: .82;
 }
 
 .agent-inline-actions {
@@ -601,8 +624,7 @@
   margin: 2px 0 4px;
 }
 
-.agent-activity .chart-artifact,
-.agent-activity .html-artifact {
+.agent-activity .chart-artifact {
   margin: 5px 0 8px;
 }
 
@@ -826,10 +848,6 @@
 }
 
 @media (max-width: 560px) {
-  .agent-run-history-meta {
-    max-width: 44%;
-  }
-
   .agent-run-history-content {
     padding-left: 0;
   }
@@ -847,7 +865,7 @@
 @media (prefers-reduced-motion: reduce) {
   .agent-activity.status-running.current .agent-activity-name,
   .agent-step-actions.status-running .agent-run-history-title,
-  .agent-run-history.status-running .agent-run-history-icon::after {
+  .agent-run-history-state.status-running {
     animation: none;
   }
 

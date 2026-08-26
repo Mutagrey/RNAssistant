@@ -222,6 +222,14 @@ namespace RNAssistant.Core.Services
             return artifacts.Values.Select(artifact =>
             {
                 var value = artifact.Value ?? new JObject();
+                var revision = Math.Max(1, IntValue(Property(value, "Revision")).GetValueOrDefault(1));
+                var sessionId = LastText(artifact.Events.Select(item => item.SessionId));
+                var resourceRef = string.IsNullOrWhiteSpace(sessionId)
+                    ? null
+                    : new ResourceRef(
+                        ResourceUri.Create(ChatResourceUri.ProviderName, sessionId, "artifact", artifact.Id,
+                            "revision", revision.ToString(CultureInfo.InvariantCulture)),
+                        revision.ToString(CultureInfo.InvariantCulture));
                 var row = new TrajectoryViewRow
                 {
                     Id = "artifact:" + artifact.Id,
@@ -233,6 +241,9 @@ namespace RNAssistant.Core.Services
                     TurnId = LastText(artifact.Events.Select(item => item.TurnId)),
                     ArtifactId = artifact.Id,
                     ParentArtifactId = Text(Property(value, "ParentArtifactId")),
+                    ResourceRefs = resourceRef == null
+                        ? new List<ResourceRef>()
+                        : new List<ResourceRef> { resourceRef },
                     CompletedUtc = artifact.Events.Last().CreatedUtc,
                     Data = new JObject
                     {
@@ -480,6 +491,8 @@ namespace RNAssistant.Core.Services
                 RunId = source.RunId, TurnId = source.TurnId, StepId = source.StepId,
                 ToolCallId = source.ToolCallId, ToolId = source.ToolId,
                 ArtifactId = source.ArtifactId, ParentArtifactId = source.ParentArtifactId,
+                ResourceRefs = (source.ResourceRefs ?? new List<ResourceRef>()).Select(reference =>
+                    reference == null ? null : new ResourceRef(reference.Uri, reference.Revision)).Where(reference => reference != null).ToList(),
                 AttemptCount = source.AttemptCount, FailureCount = source.FailureCount,
                 PromptTokens = source.PromptTokens, CompletionTokens = source.CompletionTokens, TotalTokens = source.TotalTokens,
                 EstimatedPromptTokens = source.EstimatedPromptTokens, CostUsd = source.CostUsd,

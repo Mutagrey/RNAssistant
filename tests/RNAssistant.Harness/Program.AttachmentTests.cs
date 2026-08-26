@@ -31,6 +31,8 @@ namespace RNAssistant.Harness
                 var drafts = store.LoadDrafts(new[] { attachment.Id }, "chat-a");
                 AssertEqual(1, drafts.Count, "draft count");
                 AssertEqual("hello attachment", drafts[0].ExtractedText, "extracted text");
+                AssertEqual(0, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length,
+                    "staging and draft reads do not write CAS before send");
                 var wrongChatRejected = false;
                 try
                 {
