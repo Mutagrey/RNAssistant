@@ -480,22 +480,86 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
-            var reasoning = new StringBuilder();
+            var messageExtractor = new ConversationMessageStreamExtractor();
+            var pendingContent = new StringBuilder();
+            var pendingReasoning = new StringBuilder();
+            var contentReported = false;
+            var reasoningSeen = false;
+            var reasoningCompleted = false;
+            var lastContentReportUtc = DateTime.UtcNow;
+            var lastReasoningReportUtc = DateTime.UtcNow;
+
+            Action flushContent = () =>
+            {
+                if (pendingContent.Length == 0) return;
+                Report(progress, "streaming", pendingContent.ToString(), null);
+                pendingContent.Clear();
+                contentReported = true;
+                lastContentReportUtc = DateTime.UtcNow;
+            };
+            Action<bool> flushReasoning = completed =>
+            {
+                if (!reasoningSeen ||
+                    pendingReasoning.Length == 0 && (!completed || reasoningCompleted)) return;
+                Report(progress, "thinking", completed ? "Анализ завершен." : "Модель анализирует запрос...", new ChatActivity
+                {
+                    Kind = "reasoning",
+                    Title = completed ? "Анализ завершен" : "Анализ",
+                    Subtitle = "Ход рассуждения",
+                    Status = completed ? "completed" : "running",
+                    ResultMessage = pendingReasoning.ToString()
+                });
+                pendingReasoning.Clear();
+                reasoningCompleted = completed;
+                lastReasoningReportUtc = DateTime.UtcNow;
+            };
+            Action<string> queueVisibleContent = delta =>
+            {
+                if (string.IsNullOrEmpty(delta)) return;
+                if (reasoningSeen && !reasoningCompleted) flushReasoning(true);
+                pendingContent.Append(delta);
+                if (!contentReported || pendingContent.Length >= 256 ||
+                    DateTime.UtcNow - lastContentReportUtc >= TimeSpan.FromMilliseconds(50))
+                {
+                    flushContent();
+                }
+            };
+
+            if (settings != null && settings.StreamResponses)
+            {
+                // An empty streaming update is an explicit per-model-step UI reset.
+                Report(progress, "streaming", string.Empty, null);
+            }
             var completion = await _completeAsync(settings, messages, options, update =>
             {
                 if (update == null) return;
-                if (!string.IsNullOrEmpty(update.ReasoningDelta)) reasoning.Append(update.ReasoningDelta);
-                if (reasoning.Length == 0) return;
-                if (reasoning.Length < 256 && !update.Completed) return;
-                Report(progress, "thinking", "Модель анализирует запрос...", new ChatActivity
+
+                if (!string.IsNullOrEmpty(update.ReasoningDelta))
                 {
-                    Kind = "reasoning",
-                    Title = "Анализ",
-                    Status = update.Completed ? "completed" : "running",
-                    ResultMessage = reasoning.ToString()
-                });
-                reasoning.Clear();
+                    reasoningSeen = true;
+                    if (reasoningCompleted) reasoningCompleted = false;
+                    pendingReasoning.Append(update.ReasoningDelta);
+                }
+
+                queueVisibleContent(messageExtractor.Add(update.ContentDelta));
+                if (messageExtractor.MessageCompleted) flushContent();
+                if (update.Completed)
+                {
+                    queueVisibleContent(messageExtractor.Complete());
+                    flushReasoning(true);
+                    flushContent();
+                    return;
+                }
+                if (!reasoningCompleted && pendingReasoning.Length > 0 &&
+                    (pendingReasoning.Length >= 256 ||
+                     DateTime.UtcNow - lastReasoningReportUtc >= TimeSpan.FromMilliseconds(100)))
+                {
+                    flushReasoning(false);
+                }
             }, cancellationToken).ConfigureAwait(false);
+            queueVisibleContent(messageExtractor.Complete());
+            flushReasoning(true);
+            flushContent();
             if (completion == null) throw new InvalidOperationException("Model returned no completion.");
             return completion;
         }

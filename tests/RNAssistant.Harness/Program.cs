@@ -38,6 +38,9 @@ namespace RNAssistant.Harness
             {
                 Test("harness: native async execution", HarnessRunsNativeAsync),
                 Test("agent: parses final JSON", SimpleAgentParsesFinalJson),
+                Test("conversation: extracts streamed message JSON", ConversationStreamExtractorHandlesChunkedJson),
+                Test("conversation: streams message and thinking", ConversationStreamsMessageAndThinking),
+                Test("conversation: resets stream between attempts", ConversationStreamResetsBetweenAttempts),
                 Test("agent: parses one tool call", SimpleAgentParsesToolCall),
                 Test("agent: requires complete unique envelope", SimpleAgentRequiresCompleteUniqueEnvelope),
                 Test("agent: parses multiple tool calls", SimpleAgentParsesMultipleToolCalls),

@@ -415,6 +415,7 @@ namespace RNAssistant.Office
             if (progress != null)
             {
                 progress("thinking", "Testing progress", new ChatActivity { Kind = "notice", Title = "Testing progress", Status = "running" });
+                progress("streaming", string.Empty, null);
                 progress("streaming", "Hel", null);
             }
             if (chatStateChanged != null)

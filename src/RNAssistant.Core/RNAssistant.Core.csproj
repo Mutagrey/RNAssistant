@@ -109,6 +109,7 @@
     <Compile Include="Tools\TextPatternEngine.cs" />
     <Compile Include="Tools\StructuredTextPatchEngine.cs" />
     <Compile Include="Tools\VbaToolManifestParser.cs" />
+    <Compile Include="Tools\ConversationMessageStreamExtractor.cs" />
     <Compile Include="Tools\AgentResponseParser.cs" />
     <Compile Include="Tools\AgentResponseSchemaBuilder.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
