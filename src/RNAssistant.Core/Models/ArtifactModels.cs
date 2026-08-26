@@ -3,6 +3,11 @@ using System.Collections.Generic;
 
 namespace RNAssistant.Core.Models
 {
+    public static class ChatArtifactLimits
+    {
+        public const int MaximumTextCharacters = 2000000;
+    }
+
     public static class ChatArtifactKinds
     {
         public const string Plan = "plan";

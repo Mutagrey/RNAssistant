@@ -17,25 +17,27 @@ namespace RNAssistant.Office.Services
         private const int MaximumSearchCharactersPerResource = 128000;
         private const string TruncatedMarker = "\n...[truncated]";
 
-        public ResourceReadSelection Read(
-            ChatSession session,
-            string resourceUri,
-            string representation,
-            int offset,
-            int maxChars)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
         {
             return _scope.Read(session, delegate
             {
+                var resourceUri = request == null || request.Reference == null
+                    ? string.Empty
+                    : request.Reference.Uri;
                 VbaResourceTarget target;
                 if (!TryResolveTarget(session, resourceUri, out target))
                 {
                     throw new KeyNotFoundException("VBA resource was not found: " + resourceUri);
                 }
-                representation = NormalizeRepresentation(representation, target.Project);
+                var representation = NormalizeRepresentation(
+                    request == null ? null : request.Representation,
+                    target.Project);
                 if (representation == ResourceRepresentations.Metadata)
                 {
+                    ResourceReadCursor.RejectCursor(request);
                     return MetadataSelection(session, resourceUri, target);
                 }
+                var position = ResourceReadCursor.ParseRevisionBound(request);
                 if (target.Project)
                 {
                     var manifest = JsonConvert.SerializeObject(new
@@ -51,8 +53,8 @@ namespace RNAssistant.Office.Services
                         ResourceRepresentations.Structure,
                         manifest,
                         false,
-                        offset,
-                        maxChars);
+                        request,
+                        position);
                 }
                 if (target.Module != null)
                 {
@@ -63,8 +65,8 @@ namespace RNAssistant.Office.Services
                         ResourceRepresentations.Source,
                         source.Code,
                         source.Truncated,
-                        offset,
-                        maxChars);
+                        request,
+                        position);
                 }
                 var backup = ReadBackup(target.Backup);
                 return SelectText(
@@ -73,8 +75,8 @@ namespace RNAssistant.Office.Services
                     ResourceRepresentations.Source,
                     backup.Code ?? string.Empty,
                     false,
-                    offset,
-                    maxChars);
+                    request,
+                    position);
             });
         }
 
@@ -354,7 +356,12 @@ namespace RNAssistant.Office.Services
                     Representation = ResourceRepresentations.Metadata,
                     Complete = true
                 },
-                ResourceRefs = new[] { new ResourceRef(resourceUri) }
+                ResourceRefs = new[]
+                {
+                    descriptor.Reference == null
+                        ? new ResourceRef(resourceUri)
+                        : new ResourceRef(resourceUri, descriptor.Reference.Revision)
+                }
             };
         }
 
@@ -364,12 +371,15 @@ namespace RNAssistant.Office.Services
             string representation,
             string content,
             bool sourceTruncated,
-            int offset,
-            int maxChars)
+            ResourceReadRequest request,
+            ResourceReadPosition position)
         {
             content = content ?? string.Empty;
-            offset = Math.Max(0, offset);
+            var offset = position == null ? 0 : position.Offset;
+            var maxChars = request == null ? 0 : request.MaxChars;
             maxChars = Math.Max(128, Math.Min(MaximumReadCharacters, maxChars <= 0 ? 8000 : maxChars));
+            var contentSha256 = descriptor.ContentSha256 ?? TextPatternEngine.Sha256(content);
+            ResourceReadCursor.ValidateLive(request, position, contentSha256);
             if (offset > content.Length)
             {
                 throw new ResourceRequestException(
@@ -380,7 +390,6 @@ namespace RNAssistant.Office.Services
             var length = Math.Min(maxChars, content.Length - offset);
             var next = offset + length;
             var complete = next >= content.Length && !sourceTruncated;
-            var contentSha256 = descriptor.ContentSha256 ?? TextPatternEngine.Sha256(content);
             descriptor.ContentSha256 = contentSha256;
             if (descriptor.Reference != null) descriptor.Reference.Revision = contentSha256;
             return new ResourceReadSelection
@@ -394,7 +403,9 @@ namespace RNAssistant.Office.Services
                     Offset = offset,
                     ReturnedCharacters = length,
                     TotalCharacters = content.Length,
-                    NextCursor = next < content.Length ? next.ToString() : null,
+                    NextCursor = next < content.Length
+                        ? ResourceReadCursor.CreateRevisionBound(next, contentSha256)
+                        : null,
                     Complete = complete,
                     Truncated = !complete,
                     RawContentIncluded = true

@@ -28,16 +28,20 @@ namespace RNAssistant.Harness
             AssertEqual(false, ResourceUri.TryParse("RNA://chat/a", out ignored), "non-canonical scheme rejected");
         }
 
-        private static void ResourceContractsSeparateHeadAndRevision()
+        private static void ResourceReferencePinsRevision()
         {
             var revision = new ResourceRef(ResourceUri.Create("chat", "s1", "artifact", "a1", "revision", "2"), "2");
-            var head = new ResourceHead
-            {
-                Uri = ResourceUri.Create("chat", "s1", "artifact", "a1"),
-                Current = revision
-            };
-            AssertEqual("2", head.Current.Revision, "immutable revision token");
-            AssertEqual(false, string.Equals(head.Uri, head.Current.Uri, StringComparison.Ordinal), "head differs from revision URI");
+            AssertEqual("2", revision.Revision, "immutable revision token");
+            AssertContains(revision.Uri, "/revision/2", "canonical reference pins the revision in its URI");
+
+            string sessionId;
+            string artifactId;
+            int parsedRevision;
+            AssertEqual(false, ChatResourceUri.TryParseArtifactRevision(
+                new ResourceRef(ResourceUri.Create("chat", "s1", "artifact", "a1", "revision", "02"), "02"),
+                out sessionId,
+                out artifactId,
+                out parsedRevision), "semantically non-canonical revision rejected");
         }
 
         private static void ResourceRegistryRejectsDuplicateProviders()
@@ -137,7 +141,7 @@ namespace RNAssistant.Harness
                 throw new NotSupportedException();
             }
 
-            public ResourceReadSelection Read(ChatSession session, string resourceUri, string representation, int offset, int maxChars)
+            public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
             {
                 throw new NotSupportedException();
             }

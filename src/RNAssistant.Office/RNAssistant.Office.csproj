@@ -107,6 +107,8 @@
     <Compile Include="Services\ChatResourceIngestionService.cs" />
     <Compile Include="Services\ResourceGatewayService.cs" />
     <Compile Include="Services\ResourceProviderRegistry.cs" />
+    <Compile Include="Services\ResourceReadCursor.cs" />
+    <Compile Include="Services\ToolResultResourceService.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\ConversationRunService.cs" />
     <Compile Include="Services\ConversationStreamProgressProjector.cs" />

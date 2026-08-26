@@ -9,6 +9,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Services;
@@ -26,6 +27,7 @@ namespace RNAssistant.Harness
             AssertContains(settings.SystemPrompt, "empty `tool_calls` array ends the run", "agent prompt rejects progress-only finals");
             AssertTrue(settings.AgentToolsPrompt.StartsWith("# Agent tool policy", StringComparison.Ordinal), "tool prompt is separate Markdown");
             AssertContains(settings.AgentToolsPrompt, "matching call", "tool prompt couples progress to execution");
+            AssertContains(settings.AgentToolsPrompt, "optional exact `resources`", "tool prompt explains externalized results");
             AssertTrue(settings.AgentSkillsPrompt.StartsWith("# Agent skill policy", StringComparison.Ordinal), "skill prompt is separate Markdown");
             AssertContains(settings.AgentSkillsPrompt, "metadata only", "skill catalog is explicitly not loaded guidance");
             AssertContains(settings.AgentSkillsPrompt, "package `revision`", "skill prompt describes revisions");
@@ -233,19 +235,144 @@ namespace RNAssistant.Harness
         private static void AgentToolResultDataIsBounded()
         {
             var command = new ToolCommand { ToolId = "excel.read_range", ToolCallId = "call_large" };
-            var data = JsonConvert.SerializeObject(new { value = new string('x', 50000) });
-            var result = JObject.Parse(AgentJsonProtocol.BuildToolResult(command, ToolResult.Ok("read", data), 256));
+            var data = JsonConvert.SerializeObject(new { value = new string('x', 50000) + "TOOL_RESULT_END" });
+            var toolResult = ToolResult.Ok("read", data);
+            var result = JObject.Parse(AgentJsonProtocol.BuildToolResult(command, toolResult, 256));
 
             AssertTrue(result.SelectToken("data.truncated").Value<bool>(), "oversized data is marked truncated");
             AssertTrue(result.SelectToken("data.original_chars").Value<int>() > 49000, "original size retained");
             AssertTrue(((string)result.SelectToken("data.preview") ?? string.Empty).Length < 1000, "preview is bounded");
             AssertEqual("call_large", (string)result["tool_call_id"], "tool call id retained");
 
+            var resourceSession = new ChatSession();
+            var resourceArtifact = ToolResultResourceService.ExternalizeIfNeeded(
+                resourceSession,
+                command,
+                toolResult,
+                256,
+                new AppSettings());
+            AssertTrue(resourceArtifact != null && resourceArtifact.Kind == ChatArtifactKinds.ToolResult,
+                "oversized generic result becomes a tool-result resource");
+            var resourceEnvelope = JObject.Parse(AgentJsonProtocol.BuildToolResult(command, toolResult, 256));
+            var resourceUri = (string)resourceEnvelope.SelectToken("resources[0].uri");
+            AssertEqual(ArtifactUri(resourceSession, resourceArtifact), resourceUri,
+                "bounded envelope exposes the exact durable result reference");
+            AssertEqual("result", (string)resourceEnvelope.SelectToken("resources[0].relation"),
+                "externalized full result is distinguished from other produced resources");
+            AssertContains((string)resourceEnvelope.SelectToken("data.hint"), "common.resources_read",
+                "bounded envelope tells the model how to read the externalized result");
+            var firstPage = ReadResource(
+                new ResourceGatewayService(), resourceSession, resourceUri, ResourceRepresentations.Text, null, 32000).Result;
+            var secondPage = ReadResource(
+                new ResourceGatewayService(), resourceSession, resourceUri, ResourceRepresentations.Text, firstPage.NextCursor, 32000).Result;
+            AssertContains(firstPage.Text + secondPage.Text, "TOOL_RESULT_END",
+                "externalized result remains pageable through the resource gateway");
+            WithTempPaths(paths =>
+            {
+                resourceSession.Host = "Excel";
+                resourceSession.DocumentKey = "tool-result-resource";
+                resourceSession.DocumentTitle = "ToolResult.xlsx";
+                resourceSession.Messages.Add(new ChatMessage
+                {
+                    Role = "developer",
+                    Content = "TOOL_RESULT resource",
+                    ProtocolMessage = true,
+                    RunId = "run_tool_result",
+                    ResourceRefs = new List<ResourceRef> { ArtifactReference(resourceSession, resourceArtifact) }
+                });
+                new ChatStore(paths).Save(resourceSession);
+                var durable = new ChatStore(paths).Load(
+                    resourceSession.Host,
+                    resourceSession.DocumentKey,
+                    resourceSession.Id);
+                var durableArtifact = durable.Artifacts.Single(item => item.Id == resourceArtifact.Id);
+                AssertTrue(!string.IsNullOrWhiteSpace(durableArtifact.ContentSha256),
+                    "tool-result resource body is externalized to CAS");
+                AssertContains(durableArtifact.InlineText, "TOOL_RESULT_END",
+                    "tool-result resource body survives event replay and CAS hydration");
+            });
+
+            var producedArtifact = new ChatArtifact
+            {
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "Produced resource",
+                InlineText = "produced"
+            };
+            resourceSession.Artifacts.Add(producedArtifact);
+            var resultWithProducedResource = ToolResult.Ok("read", data);
+            resultWithProducedResource.ModelResourceRefs = new[] { ArtifactReference(resourceSession, producedArtifact) };
+            var externalizedAlongsideProduced = ToolResultResourceService.ExternalizeIfNeeded(
+                resourceSession, command, resultWithProducedResource, 256, new AppSettings());
+            AssertTrue(externalizedAlongsideProduced != null && resultWithProducedResource.ModelResourceRefs.Count == 2,
+                "a produced-resource reference does not suppress externalization of an independent oversized result");
+
+            var chartSession = new ChatSession
+            {
+                Host = "Excel",
+                DocumentKey = "chart-resource",
+                DocumentTitle = "Chart.xlsx"
+            };
+            var chartData = JsonConvert.SerializeObject(new
+            {
+                type = "rnassistant.chart",
+                title = "Sales",
+                rows = new[] { new { month = "Jan", value = 10 } }
+            });
+            var chartResult = ToolResult.Ok("chart", chartData);
+            var chartArtifact = ToolResultResourceService.ExternalizeIfNeeded(
+                chartSession, command, chartResult, 10000, new AppSettings());
+            AssertEqual(ChatArtifactKinds.Chart, chartArtifact == null ? null : chartArtifact.Kind,
+                "chart result becomes its specialized resource even when it fits inline");
+            var chartEnvelope = JObject.Parse(AgentJsonProtocol.BuildToolResult(command, chartResult, 10000));
+            AssertEqual(ArtifactUri(chartSession, chartArtifact), (string)chartEnvelope.SelectToken("resources[0].uri"),
+                "chart URI is available to the next model step");
+            AssertEqual("result", (string)chartEnvelope.SelectToken("resources[0].relation"),
+                "chart result resource has an explicit relation");
+            AssertEqual(ChatArtifactKinds.Chart, (string)chartEnvelope.SelectToken("resources[0].kind"),
+                "chart result resource exposes its specialized kind");
+            AssertEqual(true, (bool?)chartEnvelope.SelectToken("data.externalized"),
+                "chart result body is reference-only in model history");
+            AssertTrue(chartEnvelope.ToString(Formatting.None).IndexOf("\"month\":\"Jan\"", StringComparison.Ordinal) < 0,
+                "chart body is absent from the model tool-result envelope");
+            AssertEqual(chartArtifact.Id, ToolResultResourceService.ExternalizeIfNeeded(
+                chartSession, command, chartResult, 10000, new AppSettings()).Id,
+                "chart result externalization is idempotent for an existing exact reference");
+            var chartActivity = AgentTranscript.CreateToolActivity(command, chartResult, "tool");
+            AssertEqual(true, (bool?)JObject.Parse(chartActivity.DataJson)["externalized"],
+                "durable chart activity keeps a resource pointer instead of duplicate chart data");
+            AssertEqual(ArtifactUri(chartSession, chartArtifact),
+                (string)JObject.Parse(chartActivity.DataJson).SelectToken("resource.uri"),
+                "durable chart activity points at the exact chart revision");
+            chartSession.Messages.Add(new ChatMessage
+            {
+                Role = "assistant",
+                Activity = chartActivity,
+                ResourceRefs = chartResult.ModelResourceRefs.ToList()
+            });
+            WithTempPaths(paths =>
+            {
+                new ChatStore(paths).Save(chartSession);
+                var events = File.ReadAllText(SessionEventFile(paths, chartSession));
+                AssertTrue(events.IndexOf("\"month\":\"Jan\"", StringComparison.Ordinal) < 0,
+                    "chart body is absent from the durable conversation event");
+                var durable = new ChatStore(paths).Load(
+                    chartSession.Host,
+                    chartSession.DocumentKey,
+                    chartSession.Id);
+                AssertEqual(1, durable.Artifacts.Count(item => item.Kind == ChatArtifactKinds.Chart),
+                    "chart storage projection reuses the pre-dispatch resource without a duplicate");
+                AssertContains(durable.Messages.Single().Activity.DataJson, "\"month\":\"Jan\"",
+                    "chart UI projection rehydrates the body from CAS");
+            });
+
             var skillCommand = new ToolCommand { ToolId = "common.skills_read", ToolCallId = "call_skill_large" };
             var skillData = JsonConvert.SerializeObject(new { kind = "skill", loaded = true, bodyMarkdown = new string('x', 50000) });
             var boundedSkill = JObject.Parse(AgentJsonProtocol.BuildToolResult(skillCommand, ToolResult.Ok("read", skillData), 256));
             AssertEqual(true, (bool)boundedSkill.SelectToken("data.truncated"), "oversized skill data is marked truncated");
             AssertTrue(boundedSkill.SelectToken("data.loaded") == null, "truncated skill does not retain top-level loaded evidence");
+            AssertTrue(ToolResultResourceService.ExternalizeIfNeeded(
+                    new ChatSession(), skillCommand, ToolResult.Ok("read", skillData), 256, new AppSettings()) == null,
+                "trusted skill evidence is not duplicated into an untrusted artifact");
 
             var nestedData = JsonConvert.SerializeObject(new { value = new string('x', 200000) });
             var pipeline = AgentTranscript.CreateToolActivity(command, ToolResult.Ok("pipeline", JsonConvert.SerializeObject(new

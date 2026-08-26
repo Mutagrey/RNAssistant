@@ -6,7 +6,7 @@ namespace RNAssistant.Core.Services
     public static class HtmlWorkspaceHistoryPolicy
     {
         public const int MaxItems = 20;
-        public const long MaxContentCharacters = 2000000;
+        public const long MaxContentCharacters = ChatArtifactLimits.MaximumTextCharacters;
 
         public static List<HtmlWorkspaceSnapshot> Trim(IEnumerable<HtmlWorkspaceSnapshot> snapshots)
         {

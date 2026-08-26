@@ -1145,7 +1145,35 @@ namespace RNAssistant.Harness
                 });
             };
             var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
-            session.Messages.Add(new ChatMessage { Role = "user", Content = "Create a report." });
+            var compactedArtifact = new ChatArtifact
+            {
+                Kind = ChatArtifactKinds.Image,
+                Title = "Compacted reference",
+                MimeType = "image/png"
+            };
+            session.Artifacts.Add(compactedArtifact);
+            var compactedReference = ArtifactReference(session, compactedArtifact);
+            var activityArtifact = new ChatArtifact
+            {
+                Kind = ChatArtifactKinds.Chart,
+                Title = "Compacted activity reference",
+                MimeType = "application/vnd.rnassistant.chart+json"
+            };
+            session.Artifacts.Add(activityArtifact);
+            var activityReference = ArtifactReference(session, activityArtifact);
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "user",
+                Content = "Create a report.",
+                ResourceRefs = new List<ResourceRef> { compactedReference }
+            });
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "assistant",
+                ExcludeFromModelContext = true,
+                Activity = new ChatActivity { Kind = "tool", Status = "completed" },
+                ResourceRefs = new List<ResourceRef> { activityReference }
+            });
             session.Messages.Add(new ChatMessage
             {
                 Role = "assistant",
@@ -1204,6 +1232,13 @@ namespace RNAssistant.Harness
                 ContextCompactionService.BuildActiveWindow(session)[0].Content,
                 "Skill bodies or reference chunks present only in compacted earlier context are unavailable",
                 "compacted context invalidates skill body loading");
+            var activeCheckpointMessage = ContextCompactionService.BuildActiveWindow(session)[0];
+            AssertTrue(activeCheckpointMessage.ResourceRefs.Any(reference => reference.Uri == compactedReference.Uri),
+                "compaction deterministically carries exact resource references into the active window");
+            AssertTrue(activeCheckpointMessage.ResourceRefs.Any(reference => reference.Uri == activityReference.Uri),
+                "compaction carries resources produced by excluded presentation activities");
+            AssertContains(HistoricalContextProjector.Project(activeCheckpointMessage).Content, compactedReference.Uri,
+                "compacted resource remains visible even when the model summary omits its URI");
         }
 
         private static void CompactionPreservesToolProtocolPairs()

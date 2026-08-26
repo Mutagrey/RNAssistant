@@ -291,7 +291,7 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("messageId is required.");
             }
 
-            if ((dataJson ?? string.Empty).Length > 2000000)
+            if ((dataJson ?? string.Empty).Length > ChatArtifactLimits.MaximumTextCharacters)
             {
                 throw new InvalidOperationException("Chart artifact is too large.");
             }

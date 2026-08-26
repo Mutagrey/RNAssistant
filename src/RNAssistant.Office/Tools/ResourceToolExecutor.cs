@@ -98,10 +98,15 @@ namespace RNAssistant.Office.Tools
                 {
                     var selection = _gateway.Read(
                         session,
-                        ToolArgumentReader.String(command.Arguments, "uri", string.Empty),
-                        ToolArgumentReader.String(command.Arguments, "representation", "auto"),
-                        ParseCursor(ToolArgumentReader.String(command.Arguments, "cursor", string.Empty)),
-                        ToolArgumentReader.Int32(command.Arguments, "maxChars", 8000));
+                        new ResourceReadRequest
+                        {
+                            Reference = new ResourceRef(
+                                ToolArgumentReader.String(command.Arguments, "uri", string.Empty),
+                                ToolArgumentReader.String(command.Arguments, "revision", null)),
+                            Representation = ToolArgumentReader.String(command.Arguments, "representation", "auto"),
+                            Cursor = ToolArgumentReader.String(command.Arguments, "cursor", string.Empty),
+                            MaxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 8000)
+                        });
                     var result = ToolResult.Ok("Resource representation read.", Serialize(selection.Result));
                     result.ModelAttachments = selection.ModelAttachments;
                     result.ModelResourceRefs = selection.ResourceRefs;
@@ -123,17 +128,6 @@ namespace RNAssistant.Office.Tools
             return ToolResult.Fail("Unknown resource tool: " + command.ToolId);
         }
 
-        private static int ParseCursor(string cursor)
-        {
-            int offset;
-            if (string.IsNullOrWhiteSpace(cursor)) return 0;
-            if (!int.TryParse(cursor, out offset) || offset < 0)
-            {
-                throw new InvalidOperationException("Resource read cursor is invalid.");
-            }
-            return offset;
-        }
-
         private static string Serialize(object value)
         {
             return JsonConvert.SerializeObject(value, ResultJsonSettings);
@@ -144,7 +138,7 @@ namespace RNAssistant.Office.Tools
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"provider\":{\"type\":\"string\",\"description\":\"Optional exact provider id; omit when only one provider is available.\",\"maxLength\":64}," +
                 "\"kind\":{\"type\":\"string\",\"description\":\"Optional exact resource kind filter.\",\"maxLength\":64}," +
-                "\"cursor\":{\"type\":\"string\",\"description\":\"Opaque nextCursor from a previous result.\",\"maxLength\":32}," +
+                "\"cursor\":{\"type\":\"string\",\"description\":\"Opaque nextCursor from a previous result.\",\"maxLength\":256}," +
                 "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum metadata rows.\",\"minimum\":1,\"maximum\":50,\"default\":20}" +
                 "},\"required\":[],\"additionalProperties\":false}";
         }
@@ -171,8 +165,9 @@ namespace RNAssistant.Office.Tools
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"uri\":{\"type\":\"string\",\"description\":\"Exact canonical URI from resources_list/search/resolve.\",\"minLength\":1,\"maxLength\":1000}," +
+                "\"revision\":{\"type\":\"string\",\"description\":\"Optional exact revision returned with the resource reference. Mutable reads fail if it has changed.\",\"minLength\":1,\"maxLength\":128}," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read; auto selects the provider's preferred bounded form.\",\"enum\":[\"auto\",\"metadata\",\"text\",\"structure\",\"source\",\"media\"],\"default\":\"auto\"}," +
-                "\"cursor\":{\"type\":\"string\",\"description\":\"nextCursor from a previous text read.\",\"maxLength\":32}," +
+                "\"cursor\":{\"type\":\"string\",\"description\":\"Copy the opaque nextCursor from the previous read unchanged. Mutable-resource cursors are revision-bound and fail on drift.\",\"maxLength\":256}," +
                 "\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum text characters returned.\",\"minimum\":128,\"maximum\":32000,\"default\":8000}" +
                 "},\"required\":[\"uri\"],\"additionalProperties\":false}";
         }

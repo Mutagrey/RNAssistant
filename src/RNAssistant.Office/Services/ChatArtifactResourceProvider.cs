@@ -40,21 +40,26 @@ namespace RNAssistant.Office.Services
                 return _htmlResources.List(session, kind, cursor, limit);
             }
             limit = Math.Max(1, Math.Min(MaximumListItems, limit <= 0 ? 20 : limit));
-            var offset = ParseCursor(cursor);
             var filtered = OrderedArtifacts(session)
                 .Where(item => string.IsNullOrWhiteSpace(kind) ||
                     string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            var items = filtered.Skip(offset).Take(limit)
-                .Select(item => Describe(session, item, true))
-                .ToArray();
+            var descriptors = filtered.Select(item => Describe(session, item, true)).ToList();
+            var position = ResourceReadCursor.ParseRevisionBound(cursor);
+            var collectionRevision = ResourceReadCursor.CollectionRevision(descriptors);
+            ResourceReadCursor.ValidateContinuation(position, collectionRevision);
+            ResourceReadCursor.ValidateCollectionOffset(position, descriptors.Count);
+            var offset = position.Offset;
+            var items = descriptors.Skip(offset).Take(limit).ToArray();
             var nextOffset = offset + items.Length;
             return new ResourceListPage
             {
                 Items = items.ToList(),
                 Total = filtered.Count,
-                Cursor = offset.ToString(),
-                NextCursor = nextOffset < filtered.Count ? nextOffset.ToString() : null,
+                Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision),
+                NextCursor = nextOffset < filtered.Count
+                    ? ResourceReadCursor.CreateRevisionBound(nextOffset, collectionRevision)
+                    : null,
                 Truncated = nextOffset < filtered.Count
             };
         }
@@ -145,21 +150,16 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public ResourceReadSelection Read(
-            ChatSession session,
-            string resourceUri,
-            string representation,
-            int offset,
-            int maxChars)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
         {
             ResourceReadSelection htmlSelection;
             if (_htmlResources.TryRead(
                 session,
-                resourceUri,
-                representation,
-                offset,
-                maxChars,
+                request,
                 out htmlSelection)) return htmlSelection;
+            var resourceUri = request == null || request.Reference == null
+                ? string.Empty
+                : request.Reference.Uri;
             var artifact = FindByUri(session, resourceUri);
             if (artifact == null)
             {
@@ -167,12 +167,15 @@ namespace RNAssistant.Office.Services
             }
             var exactReference = ChatResourceUri.CreateArtifactRevision(session, artifact);
             var exactUri = exactReference.Uri;
+            ResourceReadCursor.ValidatePinned(request, exactReference.Revision);
+            var representation = request == null ? null : request.Representation;
+            var maxChars = request == null ? 0 : request.MaxChars;
             representation = NormalizeRepresentation(representation, session, artifact);
-            offset = Math.Max(0, offset);
             maxChars = Math.Max(128, Math.Min(MaximumReadCharacters, maxChars <= 0 ? DefaultReadCharacters : maxChars));
 
             if (representation == "metadata")
             {
+                ResourceReadCursor.RejectCursor(request);
                 return new ResourceReadSelection
                 {
                     Result = new ResourceReadResult
@@ -188,6 +191,7 @@ namespace RNAssistant.Office.Services
             }
             if (representation == "media")
             {
+                ResourceReadCursor.RejectCursor(request);
                 var attachment = FindAttachment(session, artifact);
                 if (!IsModelMedia(attachment))
                 {
@@ -208,6 +212,7 @@ namespace RNAssistant.Office.Services
                     ResourceRefs = new[] { exactReference }
                 };
             }
+            var offset = ResourceReadCursor.ParseImmutable(request);
             if (representation == ResourceRepresentations.Structure)
             {
                 var structure = _htmlResources.ReadStructure(session, artifact, offset, maxChars);
@@ -242,7 +247,9 @@ namespace RNAssistant.Office.Services
                     Complete = nextOffset >= content.Length,
                     Truncated = nextOffset < content.Length,
                     RawContentIncluded = true,
-                    NextCursor = nextOffset < content.Length ? nextOffset.ToString() : null
+                    NextCursor = nextOffset < content.Length
+                        ? ResourceReadCursor.CreateImmutable(nextOffset)
+                        : null
                 },
                 ResourceRefs = new[] { exactReference }
             };
@@ -448,17 +455,6 @@ namespace RNAssistant.Office.Services
                 .ThenByDescending(item => string.Equals(item.Id, session == null ? null : session.ActivePlanArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => item.CreatedUtc)
                 .ThenBy(item => item.Id, StringComparer.OrdinalIgnoreCase);
-        }
-
-        private static int ParseCursor(string cursor)
-        {
-            int offset;
-            if (string.IsNullOrWhiteSpace(cursor)) return 0;
-            if (!int.TryParse(cursor, out offset) || offset < 0)
-            {
-                throw new InvalidOperationException("Artifact cursor is invalid.");
-            }
-            return offset;
         }
 
     }

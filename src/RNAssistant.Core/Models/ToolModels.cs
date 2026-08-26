@@ -112,6 +112,12 @@ namespace RNAssistant.Core.Models
         [JsonIgnore]
         public IReadOnlyList<ResourceRef> ModelResourceRefs { get; set; }
 
+        [JsonIgnore]
+        public ResourceRef ModelResultResourceRef { get; set; }
+
+        [JsonIgnore]
+        public string ModelResultResourceKind { get; set; }
+
         public static ToolResult Ok(string message, string dataJson = null)
         {
             return new ToolResult { Success = true, Status = "completed", Message = message, DataJson = dataJson };

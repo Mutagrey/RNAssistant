@@ -69,33 +69,6 @@ namespace RNAssistant.Core.Models
         }
     }
 
-    public sealed class ArtifactRevision
-    {
-        [Newtonsoft.Json.JsonProperty("reference")]
-        public ResourceRef Reference { get; set; }
-        [Newtonsoft.Json.JsonProperty("parent")]
-        public ResourceRef Parent { get; set; }
-        [Newtonsoft.Json.JsonProperty("contentSha256")]
-        public string ContentSha256 { get; set; }
-        [Newtonsoft.Json.JsonProperty("contentByteLength")]
-        public long ContentByteLength { get; set; }
-        [Newtonsoft.Json.JsonProperty("createdUtc")]
-        public DateTime CreatedUtc { get; set; }
-
-        public ArtifactRevision()
-        {
-            CreatedUtc = DateTime.UtcNow;
-        }
-    }
-
-    public sealed class ResourceHead
-    {
-        [Newtonsoft.Json.JsonProperty("uri")]
-        public string Uri { get; set; }
-        [Newtonsoft.Json.JsonProperty("current")]
-        public ResourceRef Current { get; set; }
-    }
-
     public sealed class ResourceReadRequest
     {
         [Newtonsoft.Json.JsonProperty("reference")]

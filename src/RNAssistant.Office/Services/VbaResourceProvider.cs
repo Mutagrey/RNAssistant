@@ -48,7 +48,6 @@ namespace RNAssistant.Office.Services
             return _scope.Read(session, delegate
             {
                 limit = Math.Max(1, Math.Min(MaximumItems, limit <= 0 ? 20 : limit));
-                var offset = ParseCursor(cursor);
                 List<ResourceDescriptor> items;
                 if (string.IsNullOrWhiteSpace(kind) ||
                     string.Equals(kind, ProjectKind, StringComparison.OrdinalIgnoreCase))
@@ -67,14 +66,21 @@ namespace RNAssistant.Office.Services
                 {
                     items = new List<ResourceDescriptor>();
                 }
+                var position = ResourceReadCursor.ParseRevisionBound(cursor);
+                var collectionRevision = ResourceReadCursor.CollectionRevision(items);
+                ResourceReadCursor.ValidateContinuation(position, collectionRevision);
+                ResourceReadCursor.ValidateCollectionOffset(position, items.Count);
+                var offset = position.Offset;
                 var selected = items.Skip(offset).Take(limit).ToList();
                 var next = offset + selected.Count;
                 return new ResourceListPage
                 {
                     Items = selected,
                     Total = items.Count,
-                    Cursor = offset.ToString(),
-                    NextCursor = next < items.Count ? next.ToString() : null,
+                    Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision),
+                    NextCursor = next < items.Count
+                        ? ResourceReadCursor.CreateRevisionBound(next, collectionRevision)
+                        : null,
                     Truncated = next < items.Count
                 };
             });
@@ -280,20 +286,6 @@ namespace RNAssistant.Office.Services
                     ? "vba_read_failed"
                     : result.ErrorCode,
                 result != null && result.Retryable == true);
-        }
-
-        private static int ParseCursor(string cursor)
-        {
-            int offset;
-            if (string.IsNullOrWhiteSpace(cursor)) return 0;
-            if (!int.TryParse(cursor, out offset) || offset < 0)
-            {
-                throw new ResourceRequestException(
-                    "VBA resource cursor is invalid.",
-                    "resource_cursor_invalid",
-                    true);
-            }
-            return offset;
         }
 
         private sealed class VbaResourceTarget

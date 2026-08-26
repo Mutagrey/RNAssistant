@@ -62,7 +62,7 @@ namespace RNAssistant.Office.Tools
                 readAttachmentText,
                 BeginLiveOfficeRead);
             _resourceExecutor = new ResourceToolExecutor(_resourceGateway);
-            _htmlArtifactExecutor = new HtmlArtifactToolExecutor(_adapter, _adapterTools);
+            _htmlArtifactExecutor = new HtmlArtifactToolExecutor(_adapter, _adapterTools, BeginLiveOfficeRead);
             _planToolExecutor = new PlanToolExecutor();
             var controllerTools = new List<ToolDefinition>();
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);

@@ -56,16 +56,34 @@ namespace RNAssistant.Harness
             OfficeToolExecutor executor,
             ChatSession session,
             string moduleName,
-            int offset = 0,
             int maxChars = 32000)
         {
             var component = VbaComponent(executor, session, moduleName);
-            return executor.ResourceGateway.Read(
+            return ReadResource(
+                executor.ResourceGateway,
                 session,
                 component.Reference.Uri,
                 ResourceRepresentations.Source,
-                offset,
+                null,
                 maxChars).Result;
+        }
+
+        private static ResourceReadSelection ReadResource(
+            ResourceGatewayService gateway,
+            ChatSession session,
+            string uri,
+            string representation,
+            string cursor,
+            int maxChars,
+            string revision = null)
+        {
+            return gateway.Read(session, new ResourceReadRequest
+            {
+                Reference = new ResourceRef(uri, revision),
+                Representation = representation,
+                Cursor = cursor,
+                MaxChars = maxChars
+            });
         }
 
         private static ResourceSearchResult SearchVbaSource(

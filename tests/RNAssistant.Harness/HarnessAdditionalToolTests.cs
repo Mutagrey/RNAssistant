@@ -366,7 +366,7 @@ namespace RNAssistant.Harness
                 var dataResource = gateway
                     .List(session, ChatArtifactResourceProvider.ProviderName, ChatHtmlResourceCatalog.DataKind, null, 10)
                     .Items.Single(item => item.Title == "rows");
-                var readResult = gateway.Read(session, dataResource.Reference.Uri, "text", 0, 8000).Result;
+                var readResult = ReadResource(gateway, session, dataResource.Reference.Uri, "text", null, 8000).Result;
                 AssertContains(readResult.Text, "items", "html data reads through the resource gateway");
 
                 var removedRead = executor.Execute(
@@ -455,6 +455,27 @@ namespace RNAssistant.Harness
                 AssertEqual(3, table["rowCount"].Value<int>(), "html table transform row count");
                 AssertEqual("Jan", (string)table["rows"][0]["month"], "html table header becomes stable key");
 
+                var gateEntries = 0;
+                var gateExits = 0;
+                var gatedHtml = new HtmlArtifactToolExecutor(
+                    adapter,
+                    adapter.GetBuiltInTools(),
+                    ignoredSession =>
+                    {
+                        gateEntries += 1;
+                        return new CallbackDisposable(() => gateExits += 1);
+                    });
+                var gatedSession = new ChatSession
+                {
+                    Host = adapter.HostName,
+                    DocumentKey = adapter.DocumentKey,
+                    DocumentTitle = adapter.DocumentTitle
+                };
+                var gatedBindResult = gatedHtml.ExecuteControllerTool(bind, gatedSession, false);
+                AssertTrue(gatedBindResult.Success, "gated HTML binding source read succeeds");
+                AssertEqual(1, gateEntries, "HTML binding enters the shared live-document read gate");
+                AssertEqual(1, gateExits, "HTML binding releases the shared live-document read gate");
+
                 adapter.ExecuteTool(Command("excel.write_range", "kind", "value", "sheet", "Data", "address", "B2", "value", "999"));
                 var historyBeforeRefresh = boundSession.HtmlWorkspace.History.Count;
                 var refresh = new ToolCommand { ToolId = HtmlArtifactToolExecutor.RefreshDataToolId };
@@ -531,7 +552,7 @@ namespace RNAssistant.Harness
                     null,
                     10);
                 var indexResource = files.Items.Single(item => item.Title == "index.html");
-                var readResult = gateway.Read(session, indexResource.Reference.Uri, "source", 0, 128).Result;
+                var readResult = ReadResource(gateway, session, indexResource.Reference.Uri, "source", null, 128).Result;
                 AssertEqual("one\ntwo\nthree\nfour", readResult.Text, "HTML source reads through canonical resource URI");
                 AssertEqual(ResourceRepresentations.Source, readResult.Representation, "HTML file advertises source representation");
 
@@ -710,11 +731,12 @@ namespace RNAssistant.Harness
 
             var gateway = new ResourceGatewayService();
             var activeArtifact = transportSession.Artifacts.Single(item => item.Id == transportSession.ActiveHtmlArtifactId);
-            var manifestResult = gateway.Read(
+            var manifestResult = ReadResource(
+                gateway,
                 transportSession,
                 ArtifactUri(transportSession, activeArtifact),
                 ResourceRepresentations.Structure,
-                0,
+                null,
                 8000).Result;
             AssertContains(manifestResult.Text, "resources", "html structure contains the resource manifest");
             AssertContains(manifestResult.Text, "index.html", "html structure identifies current members");
@@ -726,11 +748,12 @@ namespace RNAssistant.Harness
                 ChatHtmlResourceCatalog.FileKind,
                 null,
                 10).Items.Single(item => item.Title == "index.html");
-            var sourceResult = gateway.Read(
+            var sourceResult = ReadResource(
+                gateway,
                 transportSession,
                 fileResource.Reference.Uri,
                 ResourceRepresentations.Source,
-                0,
+                null,
                 8000).Result;
             AssertContains(sourceResult.Text, "CURRENT_THIRD", "resource read includes current file content");
             AssertTrue(sourceResult.Text.IndexOf("CURRENT_FIRST", StringComparison.Ordinal) < 0, "resource read omits old snapshot bodies");

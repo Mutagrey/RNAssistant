@@ -910,11 +910,12 @@ namespace RNAssistant.Harness
                 AssertTrue(component.Reference.Uri.IndexOf("Module1", StringComparison.OrdinalIgnoreCase) < 0,
                     "VBA component URI does not expose its module name");
 
-                var first = executor.ResourceGateway.Read(
+                var first = ReadResource(
+                    executor.ResourceGateway,
                     session,
                     component.Reference.Uri,
                     ResourceRepresentations.Source,
-                    0,
+                    null,
                     128).Result;
                 AssertEqual(adapter.VbaModuleCode.Substring(0, 128), first.Text,
                     "VBA resource returns the exact first bounded chunk");
@@ -924,11 +925,12 @@ namespace RNAssistant.Harness
                 AssertEqual(VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode), first.ContentSha256,
                     "VBA resource read carries the full live source hash");
 
-                var second = executor.ResourceGateway.Read(
+                var second = ReadResource(
+                    executor.ResourceGateway,
                     session,
                     component.Reference.Uri,
                     ResourceRepresentations.Source,
-                    int.Parse(first.NextCursor),
+                    first.NextCursor,
                     128).Result;
                 AssertEqual(128, second.Offset, "VBA continuation starts at the exact prior cursor");
                 AssertEqual(adapter.VbaModuleCode.Substring(128, 128), second.Text,
@@ -953,7 +955,7 @@ namespace RNAssistant.Harness
                     "removed public VBA read facade is rejected without an alias");
 
                 adapter.VbaModuleCode = string.Join("\n", Enumerable.Range(1, 250).Select(index => "line" + index).ToArray());
-                var whole = ReadVbaSource(executor, session, "Module1", 0, 32000);
+                var whole = ReadVbaSource(executor, session, "Module1", 32000);
                 AssertTrue(whole.Complete, "bounded resource read reports complete source when it fits");
                 AssertContains(whole.Text, "line250",
                     "resource source read returns the complete module when it fits the bound");
@@ -1238,11 +1240,12 @@ namespace RNAssistant.Harness
                 AssertTrue(!listedBackup.Metadata.Values.Any(value =>
                     value != null && value.IndexOf("Restored", StringComparison.Ordinal) >= 0),
                     "backup listing does not duplicate source code into model context");
-                AssertContains(executor.ResourceGateway.Read(
+                AssertContains(ReadResource(
+                    executor.ResourceGateway,
                     session,
                     listedBackup.Reference.Uri,
                     ResourceRepresentations.Source,
-                    0,
+                    null,
                     32000).Result.Text, "Restored", "backup source is read only on demand");
 
                 var missingSelector = executor.Execute(

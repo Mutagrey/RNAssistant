@@ -316,7 +316,7 @@ namespace RNAssistant.Harness
                 Test("context: trim helper", ContextServiceTrimsText),
                 Test("resources: canonical URI roundtrip", ResourceUriRoundTripsCanonicalAddress),
                 Test("resources: rejects ambiguous URI", ResourceUriRejectsAmbiguousAddresses),
-                Test("resources: separates head and revision", ResourceContractsSeparateHeadAndRevision),
+                Test("resources: reference pins revision", ResourceReferencePinsRevision),
                 Test("resources: registry rejects duplicate providers", ResourceRegistryRejectsDuplicateProviders),
                 Test("resources: gateway discovers providers", ResourceGatewayDiscoversProvidersBeforeListing),
                 Test("resources: hard cutover artifact tools", ResourceToolsHardCutoverArtifactTools),

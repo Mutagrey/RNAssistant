@@ -103,17 +103,19 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        public ResourceReadSelection Read(
-            ChatSession session,
-            string resourceUri,
-            string representation,
-            int offset,
-            int maxChars)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
         {
-            var provider = ProviderFor(resourceUri);
+            if (request == null || request.Reference == null || string.IsNullOrWhiteSpace(request.Reference.Uri))
+            {
+                throw new ResourceRequestException(
+                    "A canonical resource reference is required.",
+                    "resource_reference_required",
+                    true);
+            }
+            var provider = ProviderFor(request.Reference.Uri);
             return WithProvider(provider, session, delegate
             {
-                return provider.Read(session, resourceUri, representation, offset, maxChars);
+                return provider.Read(session, request);
             });
         }
 

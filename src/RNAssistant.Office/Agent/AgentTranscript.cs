@@ -16,7 +16,7 @@ namespace RNAssistant.Office
         private const int MaxTranscriptReasoningChars = 24000;
         private const int MaxTranscriptArgumentsChars = 64000;
         private const int MaxTranscriptDataChars = 128000;
-        private const int MaxRenderableTranscriptDataChars = 2000000;
+        private const int MaxRenderableTranscriptDataChars = ChatArtifactLimits.MaximumTextCharacters;
         private const int MaxTranscriptMessageChars = 16000;
 
         public static ChatMessage CreateLocalResultMessage(
@@ -130,7 +130,7 @@ namespace RNAssistant.Office
                         false),
                 RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson,
                 ResultMessage = message,
-                DataJson = BoundJson(rawDataJson, MaxTranscriptDataChars, false, true)
+                DataJson = BoundActivityData(result, rawDataJson)
             };
 
             foreach (var child in ParsePipelineChildren(rawDataJson))
@@ -139,6 +139,26 @@ namespace RNAssistant.Office
             }
 
             return activity;
+        }
+
+        private static string BoundActivityData(ToolResult result, string dataJson)
+        {
+            var reference = result == null ? null : result.ModelResultResourceRef;
+            if (reference == null || string.IsNullOrWhiteSpace(reference.Uri))
+            {
+                return BoundJson(dataJson, MaxTranscriptDataChars, false, true);
+            }
+            return JsonConvert.SerializeObject(new
+            {
+                externalized = true,
+                originalCharacters = (dataJson ?? string.Empty).Length,
+                resource = new
+                {
+                    uri = reference.Uri,
+                    revision = reference.Revision,
+                    kind = result.ModelResultResourceKind
+                }
+            });
         }
 
         private static string BoundJson(

@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Status: implemented. Core contracts, providers, the unified Chat/Agent loop, automatic ingestion, progressive tool discovery, and the event/projection cutover all use one canonical resource path; replaced paths are removed, not retained as aliases.
+Status: implemented and re-audited. Core contracts, providers, the unified Chat/Agent loop, automatic ingestion, progressive tool discovery, and the event/projection cutover use one canonical resource path; replaced paths are removed, not retained as aliases.
 
 ## Goals
 
@@ -14,7 +14,7 @@ Status: implemented. Core contracts, providers, the unified Chat/Agent loop, aut
 
 `Resource` is an addressable object. A resource may be live and mutable, such as the active workbook, or backed by immutable revisions, such as an uploaded image or plan.
 
-`ArtifactRevision` is immutable content plus provenance stored through CAS. `ResourceHead` points to the current revision. A head and a revision have different URIs so replay can always pin exact historical content.
+`ChatArtifact` is an internal replay projection of immutable content/provenance stored through CAS. It is not a second model transport. Model-facing chat resources always use an exact revision URI; active HTML/plan/checkpoint ids remain internal domain pointers and are projected to that URI before entering a message or prompt. There is deliberately no mutable model-facing head URI whose meaning could change during replay.
 
 `ResourceRef` is the compact value carried by messages, tool results, events, and the model working set:
 
@@ -22,7 +22,9 @@ Status: implemented. Core contracts, providers, the unified Chat/Agent loop, aut
 {"uri":"rna://chat/s1/artifact/a1/revision/2","revision":"2"}
 ```
 
-Canonical URIs use `rna://<provider>/<escaped-segments>`. They never expose local paths, credentials, or provider implementation details. Query strings, fragments, dot segments, encoded separators, and non-canonical spellings are rejected.
+Canonical URIs use `rna://<provider>/<escaped-segments>`. They never expose local paths, credentials, or provider implementation details. Query strings, fragments, dot segments, encoded separators, and non-canonical spellings are rejected. Immutable chat URIs encode the revision and are checked against `ResourceRef.Revision`; a live resource keeps a stable URI and reports a content-hash revision after materialization.
+
+`ResourceRef` intentionally contains identity only. Contextual relations belong to the owning message/tool envelope or to descriptor lineage (`Parent`/`Related`); for example, a tool envelope marks the full externalized value with `relation:"result"`. This avoids creating different identities for the same revision. A separate `ETag` field is unnecessary: for live reads, `Revision` is the observed content hash used by cursors and guards.
 
 `Tool` is an executable capability, not a resource. `Skill` is versioned instruction content and may reference resources and tools. Domain mutations remain typed tools because safety, confirmation, and compare-and-swap rules differ by domain.
 
@@ -30,14 +32,15 @@ Canonical URIs use `rna://<provider>/<escaped-segments>`. They never expose loca
 
 Office owns a registry of resource providers. The common layer knows only provider contracts.
 
-Initial providers:
+Registered providers:
 
 - `chat`: uploaded files, images, audio, generated artifacts, plans, HTML revisions, chart payloads, and tool-result artifacts;
 - `document`: bounded structure and content from the active Office document;
-- `vba`: project/component metadata and bounded source reads;
-- `skill`: enabled skill packages and reference files where model access is allowed.
+- `vba`: project/component metadata, bounded source reads, and journal-backed backup reads.
 
-Every provider implements bounded `list`, `resolve`, `search`, and `read`. Search v1 is structural plus lexical. The interface permits semantic search later, but embeddings and a durable vector index are not required. Reads select a representation such as `metadata`, `text`, `structure`, `source`, or `media`, use cursors, and report truncation explicitly.
+Every provider implements bounded `list`, `resolve`, `search`, and `read(ResourceReadRequest)`. The read request carries one `ResourceRef`, representation, opaque cursor, and character limit, so revision evidence cannot be lost between routing and the provider. Immutable text uses an offset cursor because its URI is already pinned. Live Office/VBA chunks use a cursor bound to both offset and content hash; collection pages bind the cursor to a deterministic collection fingerprint. Reusing either cursor after drift fails with retryable `resource_revision_changed` instead of mixing versions or shifting rows.
+
+Search v1 is bounded case-insensitive literal search plus provider structure. Regex, embeddings, and a durable vector index are intentionally absent until they have a concrete use and bounded semantics. Skills are trusted instructions, not untrusted resources: their complete revision-matched bodies are read only through `common.skills_read`. HTML files/data and plans remain subresources of the chat provider so ownership, revision lineage, and CAS checks are not duplicated. The existing host-neutral `IOfficeApplicationAdapter` supplies document/VBA reads; a second `IOfficeResourceAdapter` would only repeat that boundary.
 
 ## Conversation loop
 
@@ -50,6 +53,8 @@ Chat and Agent use one buffered structured loop. The policy differs, the transpo
 - A schema or skill body remains loaded only while its exact revision is present in active model context.
 
 The prompt contains compact resource references relevant to the conversation. On a later question such as “что на той картинке?” the model resolves or reads the referenced URI again. Raw media is hydrated only for the next model step and then released; the durable reference remains.
+
+Ordinary large tool results follow the same rule. The result envelope keeps a bounded preview and optional `resources:[{uri,revision,relation?,kind?}]`; `relation:"result"` distinguishes the resource containing the full result from other produced/cited resources. When eligible generic result data exceeds its inline budget, up to the shared 2,000,000-character artifact safety bound becomes a CAS-backed `tool_result` resource before the next model dispatch. Resource/schema/skill reads are not rewrapped as untrusted artifacts. Chart payloads become their specialized immutable artifact at the same result boundary, so the next model step receives kind plus exact URI rather than a duplicate chart body. Durable activity also keeps only that pointer; the storage/UI projection rehydrates the chart from CAS instead of storing or creating a duplicate.
 
 ## Ingestion and derived data
 
@@ -67,9 +72,23 @@ Helper output is query-specific evidence for that model step. It is not silently
 
 The append-only session event stream remains the durable source of truth. Events store resource references and CAS references, not copied bodies. Model requests persist the exact materialized working set before dispatch.
 
-Compaction preserves user intent, decisions, tool protocol pairs, and resource references. It may remove hydrated bodies and old read results. A later read reconstructs evidence from the provider. CAS garbage collection derives reachability from verified event streams and journals as before.
+Compaction preserves user intent, decisions, complete tool protocol pairs, and a deterministic bounded union of exact references from the compacted prefix, including resources attached to presentation-only activity messages. It may remove hydrated bodies and old read results. A later read reconstructs evidence from the provider. CAS garbage collection derives reachability from verified event streams and journals as before.
 
 Live Office/VBA resources are bound to the chat's document identity and carry content-hash revision evidence on materialized reads. Their provider calls share the document mutation gate, so journal reconciliation and source reads cannot observe an in-flight VBA mutation. Mutations keep domain-specific guards, confirmations, journals, and read-back verification; Resource Fabric does not bypass them.
+
+## Domain projections and UI
+
+Resource access is unified at the model/runtime boundary, not forced into one generic editor. The Artifacts view renders chat-owned attachments, plans, immutable chart snapshots, and HTML workspace revisions; VBA stays a live document view with its own editor and journaled mutations. Message resource cards resolve exact revisions. Paste, drop, and paperclip are the normal attachment path. A future explicit `@artifact` composer affordance may insert an exact URI for disambiguation, but it is not a separate transport and is not required for later access.
+
+HTML data bindings intentionally persist an approved typed read-only `toolId + arguments` contract, document identity, transform, and last-good JSON. A generic resource URI cannot represent parameterized reads such as an Excel range without recreating a tool contract inside the URI. Bind and refresh therefore revalidate the current tool schema and execute inside the shared document gate; failure retains the last-good value. Charts are immutable data snapshots with a human-readable source locator as provenance, not live bindings; current data requires regeneration or an explicit HTML binding.
+
+## Audit decisions
+
+- Keep three providers instead of separate plan, HTML, skill, and media provider layers.
+- Keep exact revision URIs and internal active pointers instead of mutable model-facing heads.
+- Keep structured range/slide/mail reads and every mutation as typed tools; generic resources cover discovery and bounded content, not all domain commands.
+- Keep literal bounded search and disposable in-memory projections; do not add regex, semantic search, or a durable vector index speculatively.
+- Keep specialized UI projections over the shared backend instead of a single weakly typed artifact editor.
 
 ## Removed architecture
 

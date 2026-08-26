@@ -81,6 +81,47 @@ namespace RNAssistant.Office.Services
                         ["retryable"] = result == null ? false : result.Retryable ?? false
                     }
             };
+            var resources = (result == null ? null : result.ModelResourceRefs ?? new ResourceRef[0])
+                .Where(reference => reference != null && !string.IsNullOrWhiteSpace(reference.Uri))
+                .GroupBy(reference => reference.Uri + "\n" + (reference.Revision ?? string.Empty), StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToList();
+            if (resources.Count > 0)
+            {
+                root["resources"] = new JArray(resources.Select(reference =>
+                {
+                    var value = new JObject { ["uri"] = reference.Uri };
+                    if (!string.IsNullOrWhiteSpace(reference.Revision)) value["revision"] = reference.Revision;
+                    if (SameReference(reference, result == null ? null : result.ModelResultResourceRef))
+                    {
+                        value["relation"] = "result";
+                        if (!string.IsNullOrWhiteSpace(result.ModelResultResourceKind))
+                        {
+                            value["kind"] = result.ModelResultResourceKind;
+                        }
+                    }
+                    return value;
+                }));
+                if (result != null && string.Equals(
+                    result.ModelResultResourceKind,
+                    ChatArtifactKinds.Chart,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    root["data"] = new JObject
+                    {
+                        ["externalized"] = true,
+                        ["kind"] = ChatArtifactKinds.Chart,
+                        ["original_chars"] = (result.DataJson ?? string.Empty).Length,
+                        ["hint"] = "The chart body is available through the exact resource with relation=result."
+                    };
+                }
+                var boundedData = root["data"] as JObject;
+                if ((bool?)boundedData?["truncated"] == true)
+                {
+                    boundedData["hint"] =
+                        "The full result is available through the resource with relation=result. Read its exact URI with common.resources_read, or request a smaller scope.";
+                }
+            }
             return root.ToString(Formatting.None);
         }
 
@@ -230,6 +271,13 @@ namespace RNAssistant.Office.Services
             var text = value ?? string.Empty;
             if (ModelContextBudget.EstimateTextTokens(text, settings) <= maxTokens) return text;
             return ModelContextBudget.TruncateText(text, Math.Max(1, maxTokens - 8), settings) + "...[truncated]";
+        }
+
+        private static bool SameReference(ResourceRef left, ResourceRef right)
+        {
+            return left != null && right != null &&
+                string.Equals(left.Uri, right.Uri, StringComparison.Ordinal) &&
+                string.Equals(left.Revision ?? string.Empty, right.Revision ?? string.Empty, StringComparison.Ordinal);
         }
     }
 }

@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Services
         ResourceListPage List(ChatSession session, string kind, string cursor, int limit);
         ResourceDescriptor Resolve(ChatSession session, string resourceUri);
         ResourceSearchResult Search(ChatSession session, string query, string kind, int limit, int maxCharsPerMatch);
-        ResourceReadSelection Read(ChatSession session, string resourceUri, string representation, int offset, int maxChars);
+        ResourceReadSelection Read(ChatSession session, ResourceReadRequest request);
     }
 
     internal interface ILiveOfficeResourceProvider : IResourceProvider

@@ -29,15 +29,25 @@ namespace RNAssistant.Office.Tools
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly Dictionary<string, ToolDefinition> _dataSourceTools;
+        private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
 
         public HtmlArtifactToolExecutor()
-            : this(null, null)
+            : this(null, null, null)
         {
         }
 
         public HtmlArtifactToolExecutor(IOfficeApplicationAdapter adapter, IEnumerable<ToolDefinition> adapterTools)
+            : this(adapter, adapterTools, null)
+        {
+        }
+
+        internal HtmlArtifactToolExecutor(
+            IOfficeApplicationAdapter adapter,
+            IEnumerable<ToolDefinition> adapterTools,
+            Func<ChatSession, IDisposable> beginLiveOfficeRead)
         {
             _adapter = adapter;
+            _beginLiveOfficeRead = beginLiveOfficeRead;
             _dataSourceTools = (adapterTools ?? new ToolDefinition[0])
                 .Where(IsEligibleDataSourceTool)
                 .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)

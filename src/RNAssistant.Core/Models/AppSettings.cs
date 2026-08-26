@@ -204,7 +204,7 @@ namespace RNAssistant.Core.Models
             "- A complete `common.tools_read` result identifies the loaded schema revision. The working set is bounded; if `TOOL_WORKING_SET.evicted` names a tool, read it again before use.\n" +
             "- A visible progress message does not execute anything. Any promised local action must have a matching call in the same `tool_calls` array.\n" +
             "- Return several calls only when independent and all arguments are already known. Calls run sequentially in array order. Use one call when the next action depends on its result or may require confirmation.\n" +
-            "- Each `TOOL_RESULT` contains `ok`, `tool_call_id`, `name`, `status`, `message`, `data`, and `error`. Read current Office state when an edit depends on it. After a failure, inspect `error` and change the call or explain the blocker; do not retry unchanged. Request a smaller scope when `data.truncated=true`.";
+            "- Each `TOOL_RESULT` contains `ok`, `tool_call_id`, `name`, `status`, `message`, `data`, `error`, and optional exact `resources`; `relation=result` identifies the full result resource. Read current Office state when an edit depends on it. After a failure, inspect `error` and change the call or explain the blocker; do not retry unchanged. When `data.truncated=true`, read that exact result URI or request a smaller scope.";
 
         public const string SkillInstructions =
             "# Agent skill policy\n\n" + AgentSkillPromptPolicy.CurrentInstructions;

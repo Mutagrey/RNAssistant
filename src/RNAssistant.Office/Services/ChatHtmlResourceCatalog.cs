@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
@@ -34,21 +35,28 @@ namespace RNAssistant.Office.Services
         public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
         {
             limit = Math.Max(1, Math.Min(MaximumItems, limit <= 0 ? 20 : limit));
-            var offset = ParseCursor(cursor);
             var members = ActiveMembers(session)
                 .Where(item => string.IsNullOrWhiteSpace(kind) ||
                     string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(item => item.Active)
                 .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var selected = members.Skip(offset).Take(limit).Select(Describe).ToList();
+            var descriptors = members.Select(Describe).ToList();
+            var position = ResourceReadCursor.ParseRevisionBound(cursor);
+            var collectionRevision = ResourceReadCursor.CollectionRevision(descriptors);
+            ResourceReadCursor.ValidateContinuation(position, collectionRevision);
+            ResourceReadCursor.ValidateCollectionOffset(position, descriptors.Count);
+            var offset = position.Offset;
+            var selected = descriptors.Skip(offset).Take(limit).ToList();
             var next = offset + selected.Count;
             return new ResourceListPage
             {
                 Items = selected,
                 Total = members.Count,
-                Cursor = offset.ToString(),
-                NextCursor = next < members.Count ? next.ToString() : null,
+                Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision),
+                NextCursor = next < members.Count
+                    ? ResourceReadCursor.CreateRevisionBound(next, collectionRevision)
+                    : null,
                 Truncated = next < members.Count
             };
         }
@@ -114,17 +122,19 @@ namespace RNAssistant.Office.Services
         private bool TryFind(ChatSession session, string resourceUri, out HtmlMember member)
         {
             member = null;
+            if (session == null) return false;
             ResourceAddress address;
-            if (!ResourceUri.TryParse(resourceUri, out address) ||
-                !string.Equals(address.Provider, ChatArtifactResourceProvider.ProviderName, StringComparison.Ordinal) ||
-                address.Segments.Count != 8 || session == null ||
-                !string.Equals(address.Segments[0], session.Id, StringComparison.Ordinal) ||
-                !string.Equals(address.Segments[1], "artifact", StringComparison.Ordinal) ||
-                !string.Equals(address.Segments[3], "revision", StringComparison.Ordinal) ||
-                !string.Equals(address.Segments[5], "member", StringComparison.Ordinal)) return false;
+            string artifactId;
             int revision;
-            if (!int.TryParse(address.Segments[4], out revision) || revision < 1) return false;
-            var artifact = FindArtifact(session, address.Segments[2]);
+            if (!ResourceUri.TryParse(resourceUri, out address) ||
+                address.Segments.Count != 8 ||
+                !string.Equals(address.Segments[5], "member", StringComparison.Ordinal) ||
+                !ChatResourceUri.TryParseArtifactRevision(
+                    session.Id,
+                    new ResourceRef(resourceUri),
+                    out artifactId,
+                    out revision)) return false;
+            var artifact = FindArtifact(session, artifactId);
             if (artifact == null || Math.Max(1, artifact.Revision) != revision) return false;
             member = Members(session, artifact).FirstOrDefault(item =>
                 string.Equals(item.MemberType, address.Segments[6], StringComparison.Ordinal) &&
@@ -167,7 +177,7 @@ namespace RNAssistant.Office.Services
                 ContentSha256 = TextPatternEngine.Sha256(member.Content ?? string.Empty),
                 Parent = new ResourceRef(
                     ChatResourceUri.CreateArtifactRevisionUri(member.Session, member.Artifact),
-                    Math.Max(1, member.Artifact.Revision).ToString())
+                    RevisionText(member))
             };
             descriptor.Representations.Add(ResourceRepresentations.Metadata);
             descriptor.Representations.Add(member.MemberType == "file"
@@ -186,7 +196,7 @@ namespace RNAssistant.Office.Services
 
         private static ResourceRef Reference(HtmlMember member)
         {
-            return new ResourceRef(CreateUri(member), Math.Max(1, member.Artifact.Revision).ToString());
+            return new ResourceRef(CreateUri(member), RevisionText(member));
         }
 
         private static string CreateUri(HtmlMember member)
@@ -197,7 +207,7 @@ namespace RNAssistant.Office.Services
                 "artifact",
                 member.Artifact.Id,
                 "revision",
-                Math.Max(1, member.Artifact.Revision).ToString(),
+                RevisionText(member),
                 "member",
                 member.MemberType,
                 member.MemberKey);
@@ -215,23 +225,17 @@ namespace RNAssistant.Office.Services
             return TextPatternEngine.Sha256((type ?? string.Empty) + "\n" + (id ?? string.Empty));
         }
 
+        private static string RevisionText(HtmlMember member)
+        {
+            return Math.Max(1, member.Artifact.Revision).ToString(CultureInfo.InvariantCulture);
+        }
+
         private static string MimeType(string kind)
         {
             if (string.Equals(kind, "html", StringComparison.OrdinalIgnoreCase)) return "text/html";
             if (string.Equals(kind, "css", StringComparison.OrdinalIgnoreCase)) return "text/css";
             if (string.Equals(kind, "script", StringComparison.OrdinalIgnoreCase)) return "application/javascript";
             return "text/plain";
-        }
-
-        private static int ParseCursor(string cursor)
-        {
-            int offset;
-            if (string.IsNullOrWhiteSpace(cursor)) return 0;
-            if (!int.TryParse(cursor, out offset) || offset < 0)
-            {
-                throw new InvalidOperationException("HTML resource cursor is invalid.");
-            }
-            return offset;
         }
 
         private sealed class HtmlMember

@@ -67,21 +67,25 @@ namespace RNAssistant.Office.Services
 
         public bool TryRead(
             ChatSession session,
-            string resourceUri,
-            string representation,
-            int offset,
-            int maxChars,
+            ResourceReadRequest request,
             out ResourceReadSelection selection)
         {
+            var resourceUri = request == null || request.Reference == null
+                ? string.Empty
+                : request.Reference.Uri;
             HtmlMember member;
             if (!TryFind(session, resourceUri, out member))
             {
                 selection = null;
                 return false;
             }
+            ResourceReadCursor.ValidatePinned(request, RevisionText(member));
+            var representation = request == null ? null : request.Representation;
+            var maxChars = request == null ? 0 : request.MaxChars;
             representation = NormalizeRepresentation(representation, member);
             if (representation == ResourceRepresentations.Metadata)
             {
+                ResourceReadCursor.RejectCursor(request);
                 selection = new ResourceReadSelection
                 {
                     Result = new ResourceReadResult
@@ -90,10 +94,11 @@ namespace RNAssistant.Office.Services
                         Representation = ResourceRepresentations.Metadata,
                         Complete = true
                     },
-                    ResourceRefs = new[] { new ResourceRef(resourceUri, Math.Max(1, member.Artifact.Revision).ToString()) }
+                    ResourceRefs = new[] { new ResourceRef(resourceUri, RevisionText(member)) }
                 };
                 return true;
             }
+            var offset = ResourceReadCursor.ParseImmutable(request);
             selection = ReadText(member, representation, offset, maxChars);
             return true;
         }
@@ -147,12 +152,14 @@ namespace RNAssistant.Office.Services
                     Offset = offset,
                     ReturnedCharacters = length,
                     TotalCharacters = member.Content.Length,
-                    NextCursor = next < member.Content.Length ? next.ToString() : null,
+                    NextCursor = next < member.Content.Length
+                        ? ResourceReadCursor.CreateImmutable(next)
+                        : null,
                     Complete = next >= member.Content.Length,
                     Truncated = next < member.Content.Length,
                     RawContentIncluded = true
                 },
-                ResourceRefs = new[] { new ResourceRef(uri, Math.Max(1, member.Artifact.Revision).ToString()) }
+                ResourceRefs = new[] { new ResourceRef(uri, RevisionText(member)) }
             };
         }
 

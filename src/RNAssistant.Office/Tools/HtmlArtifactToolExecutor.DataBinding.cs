@@ -143,7 +143,7 @@ namespace RNAssistant.Office.Tools
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            var sourceResult = _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
+            var sourceResult = ExecuteDataSource(session, sourceCommand, cancellationToken);
             if (!sourceResult.Success)
             {
                 return ToolResult.Fail(
@@ -271,7 +271,7 @@ namespace RNAssistant.Office.Tools
                 ToolDefinition sourceTool;
                 var sourceCommand = BuildSourceCommand(binding.ToolId, arguments, out sourceTool);
                 cancellationToken.ThrowIfCancellationRequested();
-                var result = _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
+                var result = ExecuteDataSource(session, sourceCommand, cancellationToken);
                 if (!result.Success)
                 {
                     MarkBindingError(session, data, result.Message);
@@ -336,6 +336,26 @@ namespace RNAssistant.Office.Tools
         {
             JObject ignored;
             return BuildSourceCommand(sourceToolId, arguments, out sourceTool, out ignored);
+        }
+
+        private ToolResult ExecuteDataSource(
+            ChatSession session,
+            ToolCommand sourceCommand,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                using (_beginLiveOfficeRead == null ? null : _beginLiveOfficeRead(session))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
+                }
+            }
+            catch (ResourceRequestException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+            }
         }
 
         private ToolCommand BuildSourceCommand(string sourceToolId, JObject arguments, out ToolDefinition sourceTool, out JObject normalizedArguments)

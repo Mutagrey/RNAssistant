@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using RNAssistant.Core.Models;
 
@@ -16,7 +17,7 @@ namespace RNAssistant.Core.Services
             {
                 throw new InvalidOperationException("A persisted chat and artifact are required to create a resource reference.");
             }
-            var revision = Math.Max(1, artifact.Revision).ToString();
+            var revision = Math.Max(1, artifact.Revision).ToString(CultureInfo.InvariantCulture);
             return new ResourceRef(
                 ResourceUri.Create(ProviderName, session.Id, "artifact", artifact.Id, "revision", revision),
                 revision);
@@ -67,7 +68,12 @@ namespace RNAssistant.Core.Services
                  !(address.Segments.Count == 8 && string.Equals(address.Segments[5], "member", StringComparison.Ordinal))) ||
                 !string.Equals(address.Segments[1], "artifact", StringComparison.Ordinal) ||
                 !string.Equals(address.Segments[3], "revision", StringComparison.Ordinal) ||
-                !int.TryParse(address.Segments[4], out revision) || revision < 1 ||
+                !int.TryParse(address.Segments[4], NumberStyles.None, CultureInfo.InvariantCulture, out revision) ||
+                revision < 1 ||
+                !string.Equals(
+                    revision.ToString(CultureInfo.InvariantCulture),
+                    address.Segments[4],
+                    StringComparison.Ordinal) ||
                 (!string.IsNullOrWhiteSpace(reference.Revision) &&
                  !string.Equals(reference.Revision, address.Segments[4], StringComparison.Ordinal)))
             {
@@ -91,7 +97,9 @@ namespace RNAssistant.Core.Services
             var address = ResourceUri.Parse(reference.Uri);
             var segments = address.Segments.ToArray();
             segments[0] = targetSessionId;
-            return new ResourceRef(ResourceUri.Create(ProviderName, segments), revision.ToString());
+            return new ResourceRef(
+                ResourceUri.Create(ProviderName, segments),
+                revision.ToString(CultureInfo.InvariantCulture));
         }
 
         public static bool TryGetCurrentArtifactId(ChatSession session, ResourceRef reference, out string artifactId)

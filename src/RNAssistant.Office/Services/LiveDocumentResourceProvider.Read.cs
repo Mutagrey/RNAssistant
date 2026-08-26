@@ -14,23 +14,22 @@ namespace RNAssistant.Office.Services
         private const int MaximumSearchResults = 20;
         private const int MaximumSnippetCharacters = 2000;
 
-        public ResourceReadSelection Read(
-            ChatSession session,
-            string resourceUri,
-            string representation,
-            int offset,
-            int maxChars)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
         {
             return _scope.Read(session, delegate
             {
+                var resourceUri = request == null || request.Reference == null
+                    ? string.Empty
+                    : request.Reference.Uri;
                 string target;
                 if (!TryParseUri(session, resourceUri, out target))
                 {
                     throw new KeyNotFoundException("Live Office resource was not found: " + resourceUri);
                 }
-                representation = NormalizeRepresentation(representation);
+                var representation = NormalizeRepresentation(request == null ? null : request.Representation);
                 if (representation == ResourceRepresentations.Metadata)
                 {
+                    ResourceReadCursor.RejectCursor(request);
                     return new ResourceReadSelection
                     {
                         Result = new ResourceReadResult
@@ -47,14 +46,15 @@ namespace RNAssistant.Office.Services
                     ? ReadStructure(target)
                     : ReadText(target);
                 var sourceTruncated = content.Length >= MaximumMaterializedCharacters;
+                var position = ResourceReadCursor.ParseRevisionBound(request);
                 return SelectText(
                     session,
                     target,
                     representation,
                     content,
                     sourceTruncated,
-                    offset,
-                    maxChars);
+                    request,
+                    position);
             });
         }
 
@@ -98,6 +98,7 @@ namespace RNAssistant.Office.Services
                     return result;
                 }
                 var content = ReadText(target);
+                var contentSha256 = TextPatternEngine.Sha256(content);
                 result.ScannedCharacters = content.Length;
                 result.ScanTruncated = content.Length >= MaximumMaterializedCharacters;
                 var index = 0;
@@ -107,7 +108,7 @@ namespace RNAssistant.Office.Services
                     var start = Math.Max(0, index - maxCharsPerMatch / 3);
                     result.Matches.Add(new ResourceSearchMatch
                     {
-                        Reference = new ResourceRef(CreateUri(session, target)),
+                        Reference = new ResourceRef(CreateUri(session, target), contentSha256),
                         Kind = resultKind,
                         Title = target == "selection"
                             ? "Current Office selection"
@@ -198,14 +199,17 @@ namespace RNAssistant.Office.Services
             string representation,
             string content,
             bool sourceTruncated,
-            int offset,
-            int maxChars)
+            ResourceReadRequest request,
+            ResourceReadPosition position)
         {
             content = content ?? string.Empty;
-            offset = Math.Max(0, offset);
+            var offset = position == null ? 0 : position.Offset;
+            var maxChars = request == null ? 0 : request.MaxChars;
             maxChars = Math.Max(128, Math.Min(
                 MaximumReadCharacters,
                 maxChars <= 0 ? 8000 : maxChars));
+            var contentSha256 = TextPatternEngine.Sha256(content);
+            ResourceReadCursor.ValidateLive(request, position, contentSha256);
             if (offset > content.Length)
             {
                 throw new ResourceRequestException(
@@ -217,7 +221,6 @@ namespace RNAssistant.Office.Services
             var next = offset + length;
             var uri = CreateUri(session, target);
             var complete = next >= content.Length && !sourceTruncated;
-            var contentSha256 = TextPatternEngine.Sha256(content);
             var descriptor = Describe(session, target);
             descriptor.ContentSha256 = contentSha256;
             descriptor.Reference.Revision = contentSha256;
@@ -232,7 +235,9 @@ namespace RNAssistant.Office.Services
                     Offset = offset,
                     ReturnedCharacters = length,
                     TotalCharacters = content.Length,
-                    NextCursor = next < content.Length ? next.ToString() : null,
+                    NextCursor = next < content.Length
+                        ? ResourceReadCursor.CreateRevisionBound(next, contentSha256)
+                        : null,
                     Complete = complete,
                     Truncated = !complete,
                     RawContentIncluded = true

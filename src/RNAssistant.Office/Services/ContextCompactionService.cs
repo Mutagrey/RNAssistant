@@ -17,6 +17,7 @@ namespace RNAssistant.Office.Services
         internal const int TriggerPercent = 80;
         internal const int TargetPercent = 55;
 
+        private const int MaximumCheckpointResourceReferences = 32;
         private const string SummarySchema =
             "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"summary\"],\"properties\":{" +
             "\"summary\":{\"type\":\"string\"}}}";
@@ -161,6 +162,9 @@ namespace RNAssistant.Office.Services
             session.ContextCheckpoints = session.ContextCheckpoints ?? new List<ContextCheckpoint>();
             session.ContextCheckpoints.Add(checkpoint);
             session.ActiveContextCheckpointId = artifact.Id;
+            var checkpointReferences = CollectCheckpointResourceRefs(session, checkpoint);
+            var eventReferences = new List<ResourceRef> { ChatResourceUri.CreateArtifactRevision(session, artifact) };
+            eventReferences.AddRange(checkpointReferences.Take(MaximumCheckpointResourceReferences - 1));
             var eventMessage = new ChatMessage
             {
                 Role = "assistant",
@@ -175,7 +179,7 @@ namespace RNAssistant.Office.Services
                     ResultMessage = summaryMarkdown,
                     DataJson = artifact.MetadataJson
                 },
-                ResourceRefs = new List<ResourceRef> { ChatResourceUri.CreateArtifactRevision(session, artifact) }
+                ResourceRefs = eventReferences
             };
             artifact.SourceMessageId = eventMessage.Id;
             session.Messages.Add(eventMessage);
@@ -202,7 +206,8 @@ namespace RNAssistant.Office.Services
                         "For relevant work, call common.skills_read again unless the replay tail below contains a successful, " +
                         "non-truncated data.loaded=true skill result for the catalog's current revision; re-read any needed reference chunk. " +
                         "TOOL_SCHEMA_NOTICE: Tool schemas present only in compacted earlier context are unavailable. Use common.tools_read again; " +
-                        "only exact current-revision schema evidence in the replay tail may restore a non-bootstrap tool."
+                        "only exact current-revision schema evidence in the replay tail may restore a non-bootstrap tool.",
+                    ResourceRefs = CollectCheckpointResourceRefs(session, checkpoint)
                 }
             };
             result.AddRange(messages);
@@ -251,6 +256,48 @@ namespace RNAssistant.Office.Services
             return !string.IsNullOrWhiteSpace(message.Content) &&
                 (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static List<ResourceRef> CollectCheckpointResourceRefs(
+            ChatSession session,
+            ContextCheckpoint checkpoint)
+        {
+            var result = new List<ResourceRef>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            Action<ResourceRef> add = reference =>
+            {
+                ResourceAddress ignored;
+                if (reference == null || string.IsNullOrWhiteSpace(reference.Uri) ||
+                    !ResourceUri.TryParse(reference.Uri, out ignored)) return;
+                var key = reference.Uri + "\n" + (reference.Revision ?? string.Empty);
+                if (!seen.Add(key) || result.Count >= MaximumCheckpointResourceReferences) return;
+                result.Add(new ResourceRef(reference.Uri, reference.Revision));
+            };
+
+            if (session == null) return result;
+            add(ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId));
+            add(ChatResourceUri.ResolveArtifactRevision(session, session.ActivePlanArtifactId));
+
+            var messages = session.Messages ?? new List<ChatMessage>();
+            var throughIndex = checkpoint == null
+                ? -1
+                : messages.FindIndex(message => message != null && string.Equals(
+                    message.Id,
+                    checkpoint.ThroughMessageId,
+                    StringComparison.OrdinalIgnoreCase));
+            if (throughIndex < 0) return result;
+            for (var index = throughIndex; index >= 0 && result.Count < MaximumCheckpointResourceReferences; index--)
+            {
+                var message = messages[index];
+                if (message == null) continue;
+                add(message.HtmlWorkspaceCheckpoint);
+                foreach (var reference in (message.ResourceRefs ?? new List<ResourceRef>()).AsEnumerable().Reverse())
+                {
+                    add(reference);
+                    if (result.Count >= MaximumCheckpointResourceReferences) break;
+                }
+            }
+            return result;
         }
 
         private static int SelectPrefixCount(

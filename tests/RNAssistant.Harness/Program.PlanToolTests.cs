@@ -62,7 +62,7 @@ namespace RNAssistant.Harness
 
                 var updatedArtifact = session.Artifacts.Single(item => item.Id == secondArtifactId);
                 var planUri = ArtifactUri(session, updatedArtifact);
-                var read = new ResourceGatewayService().Read(session, planUri, "text", 0, 32000).Result;
+                var read = ReadResource(new ResourceGatewayService(), session, planUri, "text", null, 32000).Result;
                 AssertContains(read.Text, "Prepare verified workbook report", "active plan revision reads through resources");
                 var removedRead = executor.Execute(Command("common.plan_read"), tools, new AppSettings(), false, false, session);
                 AssertEqual("unknown_tool", removedRead.ErrorCode, "removed plan read id stays unknown");

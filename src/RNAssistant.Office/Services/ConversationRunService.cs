@@ -181,7 +181,7 @@ namespace RNAssistant.Office.Services
             {
             if (initialCommand != null && initialResult != null)
             {
-                var confirmed = CreateBoundedToolResultMessage(initialCommand, initialResult, messages, settings);
+                var confirmed = CreateBoundedToolResultMessage(initialCommand, initialResult, messages, session, settings);
                 session.Messages.Add(confirmed);
                 messages.Add(confirmed);
                 results.Add(AgentTranscript.DescribeResult(initialCommand, initialResult));
@@ -398,7 +398,7 @@ namespace RNAssistant.Office.Services
                                     true);
                             }
                         }
-                        var resultMessage = CreateBoundedToolResultMessage(command, toolResult, messages, settings);
+                        var resultMessage = CreateBoundedToolResultMessage(command, toolResult, messages, session, settings);
                         session.Messages.Add(resultMessage);
                         messages.Add(resultMessage);
                         IReadOnlyList<string> evicted;
@@ -416,6 +416,8 @@ namespace RNAssistant.Office.Services
                     var completedActivityMessage = AgentTranscript.CreateLocalResultMessage(command, toolResult, stepId, stepMessage);
                     activityMessage.Content = completedActivityMessage.Content;
                     activityMessage.Activity = completedActivityMessage.Activity;
+                    activityMessage.ResourceRefs = CloneResourceRefs(toolResult.ModelResourceRefs);
+                    LinkChartArtifactsToActivity(session, activityMessage);
                     activityMessage.HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId);
                     results.Add(AgentTranscript.DescribeResult(command, toolResult));
 
@@ -762,6 +764,7 @@ namespace RNAssistant.Office.Services
             ToolCommand command,
             ToolResult result,
             IReadOnlyList<ChatMessage> messages,
+            ChatSession session,
             AppSettings settings)
         {
             var inputBudget = ModelContextBudget.InputBudgetTokens(settings);
@@ -772,13 +775,44 @@ namespace RNAssistant.Office.Services
                     string.Equals(toolId, ToolDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase)
                     ? availableForData
                     : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
+            var artifact = ToolResultResourceService.ExternalizeIfNeeded(
+                session,
+                command,
+                result,
+                maxDataTokens,
+                settings);
             var message = AgentJsonProtocol.CreateToolResultMessage(
                 command, result, maxDataTokens, settings.ToolResultRole, settings);
-            message.ResourceRefs = (result == null ? null : result.ModelResourceRefs ?? new ResourceRef[0])
-                .Where(reference => reference != null && !string.IsNullOrWhiteSpace(reference.Uri))
-                .Select(reference => new ResourceRef(reference.Uri, reference.Revision))
-                .ToList();
+            message.ResourceRefs = CloneResourceRefs(result == null ? null : result.ModelResourceRefs);
+            if (artifact != null && !string.Equals(
+                artifact.Kind,
+                ChatArtifactKinds.Chart,
+                StringComparison.OrdinalIgnoreCase)) artifact.SourceMessageId = message.Id;
             return message;
+        }
+
+        private static void LinkChartArtifactsToActivity(ChatSession session, ChatMessage activityMessage)
+        {
+            if (session == null || activityMessage == null) return;
+            var referencedIds = new HashSet<string>(
+                ChatResourceUri.CurrentArtifactIds(session, activityMessage.ResourceRefs),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var artifact in (session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null &&
+                referencedIds.Contains(item.Id) &&
+                string.Equals(item.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (string.IsNullOrWhiteSpace(artifact.SourceMessageId)) artifact.SourceMessageId = activityMessage.Id;
+                if (string.IsNullOrWhiteSpace(artifact.RunId)) artifact.RunId = activityMessage.RunId;
+            }
+        }
+
+        private static List<ResourceRef> CloneResourceRefs(IEnumerable<ResourceRef> references)
+        {
+            return (references ?? new ResourceRef[0])
+                .Where(reference => reference != null && !string.IsNullOrWhiteSpace(reference.Uri))
+                .GroupBy(reference => reference.Uri + "\n" + (reference.Revision ?? string.Empty), StringComparer.Ordinal)
+                .Select(group => new ResourceRef(group.First().Uri, group.First().Revision))
+                .ToList();
         }
 
         private async Task<ChatMessage> BuildArtifactMediaMessageAsync(

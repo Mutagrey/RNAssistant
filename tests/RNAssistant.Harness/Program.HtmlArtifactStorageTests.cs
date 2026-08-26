@@ -40,11 +40,12 @@ namespace RNAssistant.Harness
                 ToolId = ResourceToolExecutor.ReadToolId,
                 Arguments = { ["uri"] = fileResource.Reference.Uri, ["representation"] = "source" }
             };
-            var readResult = new ResourceGatewayService().Read(
+            var readResult = ReadResource(
+                new ResourceGatewayService(),
                 session,
                 fileResource.Reference.Uri,
                 "source",
-                0,
+                null,
                 8000).Result;
             var readMessage = new ChatMessage
             {

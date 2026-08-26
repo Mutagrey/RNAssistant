@@ -56,14 +56,54 @@ namespace RNAssistant.Harness
             AssertTrue(listed.Items[0].Representations.Contains("text"),
                 "artifact list advertises extracted text");
 
+            var pagingSession = new ChatSession();
+            pagingSession.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "First", InlineText = "1" });
+            pagingSession.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "Second", InlineText = "2" });
+            var pagingGateway = new ResourceGatewayService();
+            var firstListPage = pagingGateway.List(
+                pagingSession, ChatArtifactResourceProvider.ProviderName, ChatArtifactKinds.Markdown, null, 1);
+            AssertTrue(!string.IsNullOrWhiteSpace(firstListPage.NextCursor),
+                "resource list exposes an opaque continuation");
+            AssertTrue(firstListPage.Cursor.StartsWith("r1:", StringComparison.Ordinal),
+                "resource list exposes only revision-bound cursors");
+            pagingSession.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "Third", InlineText = "3" });
+            ResourceRequestException listDrift = null;
+            try
+            {
+                pagingGateway.List(
+                    pagingSession,
+                    ChatArtifactResourceProvider.ProviderName,
+                    ChatArtifactKinds.Markdown,
+                    firstListPage.NextCursor,
+                    1);
+            }
+            catch (ResourceRequestException ex)
+            {
+                listDrift = ex;
+            }
+            AssertEqual("resource_revision_changed", listDrift == null ? null : listDrift.ErrorCode,
+                "resource list continuation fails instead of shifting across collection revisions");
+
             var resolved = gateway.Resolve(session, resourceUri);
             AssertEqual(resourceUri, resolved.Resource.Reference.Uri, "resource resolve is exact");
 
-            var first = gateway.Read(session, resourceUri, "text", 0, 128).Result;
+            ResourceRequestException pinnedMismatch = null;
+            try
+            {
+                ReadResource(gateway, session, resourceUri, "text", null, 128, "999");
+            }
+            catch (ResourceRequestException ex)
+            {
+                pinnedMismatch = ex;
+            }
+            AssertEqual("resource_revision_mismatch", pinnedMismatch == null ? null : pinnedMismatch.ErrorCode,
+                "immutable read rejects a revision token that disagrees with the exact URI");
+
+            var first = ReadResource(gateway, session, resourceUri, "text", null, 128).Result;
             AssertEqual(128, first.ReturnedCharacters, "resource read is bounded");
             AssertTrue(!first.Complete && first.Truncated, "resource read exposes truncation");
-            var second = gateway.Read(session, resourceUri, "text",
-                int.Parse(first.NextCursor), 128).Result;
+            var second = ReadResource(gateway, session, resourceUri, "text",
+                first.NextCursor, 128).Result;
             AssertTrue(second.Offset > 0, "resource cursor advances");
 
             var search = gateway.Search(session, null, "NEEDLE", null, 10, 256);
@@ -74,7 +114,7 @@ namespace RNAssistant.Harness
             var invalidRepresentationRejected = false;
             try
             {
-                gateway.Read(session, resourceUri, "legacy", 0, 128);
+                ReadResource(gateway, session, resourceUri, "legacy", null, 128);
             }
             catch (InvalidOperationException)
             {
@@ -104,11 +144,12 @@ namespace RNAssistant.Harness
                 MetadataJson = "{\"attachmentId\":\"direct-image\"}"
             };
             session.Artifacts.Add(imageArtifact);
-            var media = gateway.Read(
+            var media = ReadResource(
+                gateway,
                 session,
                 ArtifactUri(session, imageArtifact),
                 "media",
-                0,
+                null,
                 128);
             AssertTrue(media.Result.HydratedForNextModelStep, "media is hydrated only by an explicit resource read");
             AssertEqual("direct-image", media.ModelAttachments.Single().Id, "media read returns exact attachment");
@@ -123,11 +164,12 @@ namespace RNAssistant.Harness
             var implicitAttachmentMappingRejected = false;
             try
             {
-                gateway.Read(
+                ReadResource(
+                    gateway,
                     session,
                     ArtifactUri(session, session.Artifacts.Last()),
                     "media",
-                    0,
+                    null,
                     128);
             }
             catch (InvalidOperationException)
@@ -165,11 +207,12 @@ namespace RNAssistant.Harness
             AssertEqual(ResourceRepresentations.Source, oldScriptResource.Representations.Last(),
                 "HTML files advertise source representation");
 
-            var boundedSource = htmlGateway.Read(
+            var boundedSource = ReadResource(
+                htmlGateway,
                 htmlSession,
                 oldScriptResource.Reference.Uri,
                 ResourceRepresentations.Source,
-                0,
+                null,
                 128).Result;
             AssertEqual(128, boundedSource.ReturnedCharacters, "HTML member read obeys the common bound");
             AssertTrue(boundedSource.Truncated && !string.IsNullOrWhiteSpace(boundedSource.NextCursor),
@@ -181,11 +224,12 @@ namespace RNAssistant.Harness
                 var address = ResourceUri.Parse(oldScriptResource.Reference.Uri);
                 var segments = address.Segments.ToArray();
                 segments[7] = new string('0', 64);
-                htmlGateway.Read(
+                ReadResource(
+                    htmlGateway,
                     htmlSession,
                     ResourceUri.Create(ChatArtifactResourceProvider.ProviderName, segments),
                     ResourceRepresentations.Source,
-                    0,
+                    null,
                     128);
             }
             catch (KeyNotFoundException)
@@ -202,7 +246,7 @@ namespace RNAssistant.Harness
                 null,
                 10).Items.Single();
             AssertContains(
-                htmlGateway.Read(htmlSession, dataResource.Reference.Uri, ResourceRepresentations.Text, 0, 128).Result.Text,
+                ReadResource(htmlGateway, htmlSession, dataResource.Reference.Uri, ResourceRepresentations.Text, null, 128).Result.Text,
                 "items",
                 "HTML data is an independently readable text resource");
 
@@ -224,11 +268,11 @@ namespace RNAssistant.Harness
                     StringComparison.Ordinal),
                 "HTML mutation creates a new revision-pinned member URI");
             AssertContains(
-                htmlGateway.Read(htmlSession, oldScriptResource.Reference.Uri, ResourceRepresentations.Source, 0, 8000).Result.Text,
+                ReadResource(htmlGateway, htmlSession, oldScriptResource.Reference.Uri, ResourceRepresentations.Source, null, 8000).Result.Text,
                 "OLD_NEEDLE",
                 "historical HTML member URI remains pinned to its original revision");
             AssertContains(
-                htmlGateway.Read(htmlSession, currentScriptResource.Reference.Uri, ResourceRepresentations.Source, 0, 8000).Result.Text,
+                ReadResource(htmlGateway, htmlSession, currentScriptResource.Reference.Uri, ResourceRepresentations.Source, null, 8000).Result.Text,
                 "CURRENT_NEEDLE",
                 "current HTML member URI reads the new revision");
 
@@ -243,11 +287,12 @@ namespace RNAssistant.Harness
                 "HTML search returns the exact current member URI");
 
             var activeHtmlArtifact = htmlSession.Artifacts.Single(item => item.Id == htmlSession.ActiveHtmlArtifactId);
-            var structure = htmlGateway.Read(
+            var structure = ReadResource(
+                htmlGateway,
                 htmlSession,
                 ArtifactUri(htmlSession, activeHtmlArtifact),
                 ResourceRepresentations.Structure,
-                0,
+                null,
                 8000).Result;
             AssertContains(structure.Text, "scripts/nested/app.js", "HTML structure lists member metadata");
             AssertTrue(structure.Text.IndexOf("CURRENT_NEEDLE", StringComparison.Ordinal) < 0,
@@ -281,11 +326,16 @@ namespace RNAssistant.Harness
                     document.Reference.Uri.IndexOf("C:", StringComparison.OrdinalIgnoreCase) < 0,
                     "live document URI does not expose its title or path");
 
-                var documentText = gateway.Read(
+                for (var index = 0; index < 6; index++)
+                {
+                    adapter.ExecuteTool(Command("excel.add_sheet", "name", "ResourcePage" + index));
+                }
+                var documentText = ReadResource(
+                    gateway,
                     session,
                     document.Reference.Uri,
                     ResourceRepresentations.Text,
-                    0,
+                    null,
                     128).Result;
                 AssertTrue(!string.IsNullOrWhiteSpace(documentText.Text), "live document text is readable on demand");
                 AssertTrue(!string.IsNullOrWhiteSpace(documentText.ContentSha256) &&
@@ -294,6 +344,44 @@ namespace RNAssistant.Harness
                         documentText.Resource.Reference.Revision,
                         StringComparison.Ordinal),
                     "live document read carries exact revision evidence");
+                AssertTrue(!string.IsNullOrWhiteSpace(documentText.NextCursor),
+                    "long live document read exposes a revision-bound continuation");
+                adapter.ExecuteTool(Command("excel.add_sheet", "name", "ResourceDrift"));
+                ResourceRequestException documentDrift = null;
+                try
+                {
+                    ReadResource(
+                        gateway,
+                        session,
+                        document.Reference.Uri,
+                        ResourceRepresentations.Text,
+                        documentText.NextCursor,
+                        128);
+                }
+                catch (ResourceRequestException ex)
+                {
+                    documentDrift = ex;
+                }
+                AssertEqual("resource_revision_changed", documentDrift == null ? null : documentDrift.ErrorCode,
+                    "live document continuation fails instead of mixing revisions");
+                ResourceRequestException pinnedDocumentDrift = null;
+                try
+                {
+                    ReadResource(
+                        gateway,
+                        session,
+                        document.Reference.Uri,
+                        ResourceRepresentations.Text,
+                        null,
+                        128,
+                        documentText.ContentSha256);
+                }
+                catch (ResourceRequestException ex)
+                {
+                    pinnedDocumentDrift = ex;
+                }
+                AssertEqual("resource_revision_changed", pinnedDocumentDrift == null ? null : pinnedDocumentDrift.ErrorCode,
+                    "live read rejects an explicitly pinned stale revision before returning its first chunk");
 
                 var selection = gateway.List(
                     session,
@@ -310,21 +398,50 @@ namespace RNAssistant.Harness
                     128);
                 AssertEqual(selection.Reference.Uri, selectionSearch.Matches.Single().Reference.Uri,
                     "selection search returns its exact live resource URI");
+                AssertTrue(!string.IsNullOrWhiteSpace(selectionSearch.Matches.Single().Reference.Revision),
+                    "live search result pins the searched content revision");
 
                 var component = VbaComponent(executor, session, "ResourceModule");
                 AssertTrue(component.Reference.Uri.IndexOf("ResourceModule", StringComparison.OrdinalIgnoreCase) < 0,
                     "VBA component URI does not expose the module name");
-                var firstSource = gateway.Read(
+                var firstSource = ReadResource(
+                    gateway,
                     session,
                     component.Reference.Uri,
                     ResourceRepresentations.Source,
-                    0,
+                    null,
                     128).Result;
                 AssertEqual(128, firstSource.ReturnedCharacters, "VBA source read is bounded");
                 AssertTrue(firstSource.Truncated && !string.IsNullOrWhiteSpace(firstSource.NextCursor),
                     "VBA source read exposes continuation");
                 AssertTrue(!string.IsNullOrWhiteSpace(firstSource.Resource.Reference.Revision),
                     "VBA source read carries exact revision evidence");
+
+                var firstComponentPage = gateway.List(
+                    session,
+                    VbaResourceProvider.ProviderName,
+                    VbaResourceProvider.ComponentKind,
+                    null,
+                    1);
+                AssertTrue(!string.IsNullOrWhiteSpace(firstComponentPage.NextCursor),
+                    "VBA component list exposes an opaque continuation");
+                adapter.SetVbaModule("ResourceListDrift", "Sub Added()\nEnd Sub", "StdModule");
+                ResourceRequestException vbaListDrift = null;
+                try
+                {
+                    gateway.List(
+                        session,
+                        VbaResourceProvider.ProviderName,
+                        VbaResourceProvider.ComponentKind,
+                        firstComponentPage.NextCursor,
+                        1);
+                }
+                catch (ResourceRequestException ex)
+                {
+                    vbaListDrift = ex;
+                }
+                AssertEqual("resource_revision_changed", vbaListDrift == null ? null : vbaListDrift.ErrorCode,
+                    "VBA list continuation fails instead of shifting across project revisions");
 
                 var sourceSearch = SearchVbaSource(executor, session, "ResourceNeedle");
                 AssertTrue(sourceSearch.Matches.Any(match =>
@@ -333,6 +450,28 @@ namespace RNAssistant.Harness
                 var metadataSearch = SearchVbaSource(executor, session, "ResourceModule");
                 AssertEqual(ResourceRepresentations.Metadata, metadataSearch.Matches.Single().Representation,
                     "VBA resource search discovers component metadata without reading its body");
+
+                adapter.SetVbaModule(
+                    "ResourceModule",
+                    "Option Explicit\nSub ResourceNeedleChanged()\n" + new string('y', 220) + "\nEnd Sub",
+                    "StdModule");
+                ResourceRequestException vbaDrift = null;
+                try
+                {
+                    ReadResource(
+                        gateway,
+                        session,
+                        component.Reference.Uri,
+                        ResourceRepresentations.Source,
+                        firstSource.NextCursor,
+                        128);
+                }
+                catch (ResourceRequestException ex)
+                {
+                    vbaDrift = ex;
+                }
+                AssertEqual("resource_revision_changed", vbaDrift == null ? null : vbaDrift.ErrorCode,
+                    "VBA continuation fails instead of mixing source revisions");
 
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 adapter.DocumentKeyValue = "other-document";
