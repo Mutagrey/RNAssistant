@@ -76,7 +76,7 @@ namespace RNAssistant.Harness
                 Test("agent: failed format repair stays out of context", SimpleAgentFailedRepairDoesNotPolluteContext),
                 Test("agent: format repair limit is clamped to twenty", SimpleAgentClampsFormatRepairLimit),
                 Test("agent: exposes safe VBA editing tools", SimpleAgentExposesSafeVbaEditingTools),
-                Test("agent: rejects hidden VBA backend calls", SimpleAgentRejectsHiddenVbaBackendCalls),
+                Test("agent: loads and runs arbitrary macro", SimpleAgentLoadsAndRunsArbitraryMacro),
                 Test("agent: confirmation replays one final result", SimpleAgentConfirmationReplaysOnlyFinalResult),
                 Test("agent: confirmed tool failure continues", SimpleAgentConfirmationFailureContinues),
                 Test("agent: provider refusal is terminal", ModelRefusalIsTerminalInAgentAndChat),

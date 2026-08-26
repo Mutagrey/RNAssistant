@@ -85,7 +85,7 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("offset and maxChars require referencePath.", null, "skill_reference_path_required", false);
             }
 
-            return ToolResult.Ok("Skill loaded: " + skill.Id, JsonConvert.SerializeObject(new
+            return ToolResult.Ok("Skill loaded: " + skill.Id + ". Tool schemas named by this skill are not loaded automatically.", JsonConvert.SerializeObject(new
             {
                 kind = "skill",
                 loaded = true,
@@ -106,6 +106,11 @@ namespace RNAssistant.Office.Tools
                     byteLength = item.ByteLength,
                     revision = item.Revision
                 }).ToArray(),
+                capabilityUse = new
+                {
+                    toolSchemasLoadedByThisRead = false,
+                    instruction = "Before calling a tool id named in bodyMarkdown, ensure its schema is already callable. Otherwise call common.capabilities_read with that exact tool id, wait for a successful complete tool-schema result, and call the tool only in a later response."
+                },
                 bodyMarkdown = skill.BodyMarkdown ?? string.Empty
             }));
         }

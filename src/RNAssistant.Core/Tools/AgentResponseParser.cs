@@ -14,6 +14,15 @@ namespace RNAssistant.Core.Tools
             IEnumerable<ToolDefinition> tools,
             bool allowPlanned = false)
         {
+            return Parse(content, tools, tools, allowPlanned);
+        }
+
+        public AgentResponseParseResult Parse(
+            string content,
+            IEnumerable<ToolDefinition> callableTools,
+            IEnumerable<ToolDefinition> runnableCatalog,
+            bool allowPlanned = false)
+        {
             var raw = (content ?? string.Empty).Trim();
             if (raw.Length == 0)
             {
@@ -93,7 +102,11 @@ namespace RNAssistant.Core.Tools
             {
                 return AgentResponseParseResult.Fail("Tool response requires a non-empty message describing the current step.");
             }
-            var knownTools = (tools ?? new ToolDefinition[0])
+            var knownTools = (callableTools ?? new ToolDefinition[0])
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var catalogTools = (runnableCatalog ?? new ToolDefinition[0])
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
@@ -127,6 +140,16 @@ namespace RNAssistant.Core.Tools
                 ToolDefinition tool;
                 if (!knownTools.TryGetValue(name, out tool))
                 {
+                    ToolDefinition catalogTool;
+                    if (catalogTools.TryGetValue(name, out catalogTool))
+                    {
+                        return AgentResponseParseResult.Fail(
+                            "Tool schema is not loaded: " + name + ". This exact capability exists but is not callable yet. " +
+                            "Call common.capabilities_read with arguments " +
+                            new JObject { ["id"] = catalogTool.Id }.ToString(Formatting.None) +
+                            ", wait for a successful complete tool-schema TOOL_RESULT, then call " +
+                            catalogTool.Id + " in a later response.");
+                    }
                     return AgentResponseParseResult.Fail("Unknown tool: " + name + ". Use an exact name from tools.");
                 }
                 containsConfirmationCall |= tool.RequiresConfirmation;

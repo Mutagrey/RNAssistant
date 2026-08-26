@@ -139,6 +139,18 @@ namespace RNAssistant.Harness
                 new[] { new ToolDefinition { Id = "excel.inspect" } });
             AssertTrue(!parsed.Success, "case aliases are rejected");
             AssertContains(parsed.Error, "Unknown tool", "exact name diagnostic");
+
+            var unloaded = new AgentResponseParser().Parse(
+                "{\"status\":\"in_progress\",\"message\":\"Working.\",\"tool_calls\":[{\"id\":\"call_2\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                new[] { new ToolDefinition { Id = "common.capabilities_read" } },
+                new[]
+                {
+                    new ToolDefinition { Id = "common.capabilities_read" },
+                    new ToolDefinition { Id = "excel.inspect" }
+                });
+            AssertTrue(!unloaded.Success, "known unloaded tool is rejected before schema evidence");
+            AssertContains(unloaded.Error, "Tool schema is not loaded: excel.inspect", "unloaded tool diagnostic is state-aware");
+            AssertContains(unloaded.Error, "common.capabilities_read", "unloaded tool diagnostic gives exact recovery");
         }
 
         private static void SimpleAgentRejectsMissingToolCallId()
@@ -304,6 +316,10 @@ namespace RNAssistant.Harness
                 AssertContains(replay, "\"revision\":\"" + revision + "\"", "loaded skill revision matches catalog");
                 AssertContains(replay, "\"loaded\":true", "loaded skill result is explicit");
                 AssertContains(replay, "\"complete\":true", "loaded skill body is complete");
+                AssertContains(replay, "\"toolSchemasLoadedByThisRead\":false",
+                    "skill result explicitly keeps referenced tool schemas unloaded");
+                AssertContains(replay, "common.capabilities_read",
+                    "skill result gives adjacent tool-schema loading guidance");
                 AssertTrue(replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) < 0,
                     "loaded skill is not duplicated into a truncated result");
             });
@@ -834,19 +850,21 @@ namespace RNAssistant.Harness
                     "raw host VBA read backend remains hidden");
                 AssertTrue(prompt.IndexOf("\"name\":\"excel.vba_replace_module\"", StringComparison.Ordinal) < 0,
                     "raw whole-module backend remains hidden");
-                AssertTrue(prompt.IndexOf("\"name\":\"excel.run_macro\"", StringComparison.Ordinal) < 0,
-                    "macro execution backend remains hidden");
+                AssertContains(prompt, "\"id\":\"excel.run_macro\"", "arbitrary macro execution is discoverable by exact id");
+                AssertTrue(!callableNames.Contains("excel.run_macro", StringComparer.OrdinalIgnoreCase),
+                    "macro schema remains progressive rather than eagerly injected");
             });
         }
 
-        private static void SimpleAgentRejectsHiddenVbaBackendCalls()
+        private static void SimpleAgentLoadsAndRunsArbitraryMacro()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"status\":\"in_progress\",\"message\":\"Запускаю макрос напрямую.\",\"tool_calls\":[{\"id\":\"call_macro\",\"name\":\"excel.run_macro\",\"arguments\":{\"macroName\":\"MigrateApiKey\"}}]}",
-                    "{\"status\":\"completed\",\"message\":\"Скрытый backend недоступен; нужен безопасный публичный инструмент.\",\"tool_calls\":[]}"
+                    LoadToolSchemaResponse("excel.run_macro", "schema_run_macro"),
+                    "{\"status\":\"in_progress\",\"message\":\"Запускаю выбранный макрос.\",\"tool_calls\":[{\"id\":\"call_macro\",\"name\":\"excel.run_macro\",\"arguments\":{\"macroName\":\"Module1.MigrateApiKey\",\"arguments\":[\"value\",2,true]}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Макрос выполнен.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -857,13 +875,15 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Bypass a failed patch.", NewSession(adapter), NewContext(adapter), new AppSettings(), tools, null)
+                    "Run Module1.MigrateApiKey with arguments.", NewSession(adapter), NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 }, tools, null)
                     .GetAwaiter().GetResult();
 
-                AssertEqual(2, calls.Count, "hidden backend response repaired once");
-                AssertEqual(0, adapter.Executed.Count(command => command.ToolId == "excel.run_macro"), "hidden macro was not executed");
-                AssertContains(FlattenSimple(calls[1]), "Unknown tool: excel.run_macro", "repair explains hidden tool rejection");
-                AssertContains(result.AssistantText, "недоступен", "model recovers without hidden execution");
+                AssertEqual(3, calls.Count, "schema load, macro execution, and final response");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.run_macro"), "macro executes once");
+                AssertEqual("Module1.MigrateApiKey", adapter.RanMacros.Single(), "arbitrary exact macro name reaches the adapter");
+                AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "macro schema evidence reaches execution step");
+                AssertEqual("Макрос выполнен.", result.AssistantText, "macro result returns to the model");
             });
         }
 

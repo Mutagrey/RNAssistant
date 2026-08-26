@@ -502,7 +502,7 @@ namespace RNAssistant.Office
         {
             if (applicationObject == null) throw new InvalidOperationException("Office application is not available.");
             var array = JArray.Parse(string.IsNullOrWhiteSpace(argumentsJson) ? "[]" : argumentsJson);
-            if (array.Count > 30) throw new InvalidOperationException("VBA tool entry functions support at most 30 positional arguments.");
+            if (array.Count > 30) throw new InvalidOperationException("VBA macro execution supports at most 30 positional arguments.");
             var invokeArguments = new object[array.Count + 1];
             invokeArguments[0] = macroName;
             for (var index = 0; index < array.Count; index++)

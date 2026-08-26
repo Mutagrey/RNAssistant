@@ -249,7 +249,8 @@ namespace RNAssistant.Office.Services
                 }
                 var parsed = _responseParser.Parse(
                     completion == null ? null : completion.Content,
-                    activeTools);
+                    activeTools,
+                    runnableCatalog);
                 if (!parsed.Success) TraceRejectedResponse(options, completion, parsed.Error, 0);
                 var configuredFormatRetries = settings.MaxAgentFormatRetries > 0
                     ? settings.MaxAgentFormatRetries
@@ -281,7 +282,8 @@ namespace RNAssistant.Office.Services
                     }
                     parsed = _responseParser.Parse(
                         completion == null ? null : completion.Content,
-                        activeTools);
+                        activeTools,
+                        runnableCatalog);
                     if (!parsed.Success) TraceRejectedResponse(options, completion, parsed.Error, retry);
                 }
                 if (!parsed.Success)

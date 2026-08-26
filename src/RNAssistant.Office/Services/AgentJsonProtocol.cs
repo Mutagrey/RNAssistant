@@ -26,7 +26,9 @@ namespace RNAssistant.Office.Services
                     "Choose tool_calls before status. If tool_calls is empty, never use in_progress; use completed, " +
                     "awaiting_user, blocked, or refused. If tool_calls is non-empty, use in_progress. planned is unavailable. " +
                     "Message wording never determines status. " +
-                    "Every call requires a unique id, exact name, and object arguments."
+                    "Every call requires a unique id, exact name, and object arguments. Follow the error action exactly. " +
+                    "If a known tool schema is not loaded, replace the rejected call with common.capabilities_read for that exact id, " +
+                    "wait for its successful complete tool-schema result, and call the loaded tool only in a later response."
             };
             return new ChatMessage
             {

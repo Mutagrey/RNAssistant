@@ -50,8 +50,7 @@ namespace RNAssistant.Office.Tools
         internal bool IsInternalToolId(string id)
         {
             return !string.IsNullOrWhiteSpace(id) &&
-                (id.StartsWith(BackendToolId("vba_"), StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(id, BackendToolId("run_macro"), StringComparison.OrdinalIgnoreCase));
+                id.StartsWith(BackendToolId("vba_"), StringComparison.OrdinalIgnoreCase);
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, bool dryRun, ChatSession session, CancellationToken cancellationToken)

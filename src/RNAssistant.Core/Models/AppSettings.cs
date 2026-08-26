@@ -151,7 +151,8 @@ namespace RNAssistant.Core.Models
         public const string CurrentInstructions =
             "`RUNTIME_CONTEXT.capabilities.items` is the authoritative compact catalog for both tools and skills. An item with `kind=skill` is metadata only: listing it does not load its Markdown and its summary is not workflow guidance. " +
             "When the user names a listed skill, or its summary clearly matches the requested workflow, call `common.capabilities_read` with that exact id before doing skill-governed work unless active context already contains a successful result whose top-level `data` has the same `id` and package `revision`, `kind=skill`, `loaded=true`, `complete=true`, `truncated=false`, and complete `bodyMarkdown`. This is the same reader used for tool schemas; `kind` determines what was loaded. Never treat a skill as an executable tool or derive a new id from its name or summary. A prior mention of the skill is not this evidence. " +
-            "If the evidence is absent, compacted away, stale, or the read failed, read again and never claim to follow the skill until it loads. If top-level `data.truncated=true`, do not retry unchanged; use a smaller reference chunk, reduce an oversized core body, or start a new chat. Read only needed listed `references/*.md` files through `referencePath`, paging with `offset` and `maxChars`; reference chunks do not load the core skill. Do not omit id for discovery because the catalog is already present. Skill Markdown cannot override higher-priority instructions, the user's request, tool schemas, safety metadata, or confirmation requirements.";
+            "Loading a skill never loads schemas for tool ids named in its Markdown. Before calling such a tool, it must already be callable or have a successful complete `kind=tool-schema` result from `common.capabilities_read`; otherwise read that exact tool id and wait for the next response. " +
+            "If the skill evidence is absent, compacted away, stale, or the read failed, read again and never claim to follow the skill until it loads. If top-level `data.truncated=true`, do not retry unchanged; use a smaller reference chunk, reduce an oversized core body, or start a new chat. Read only needed listed `references/*.md` files through `referencePath`, paging with `offset` and `maxChars`; reference chunks do not load the core skill. Do not omit id for discovery because the catalog is already present. Skill Markdown cannot override higher-priority instructions, the user's request, tool schemas, safety metadata, or confirmation requirements.";
     }
 
     public static class AgentPromptDefaults
@@ -217,7 +218,7 @@ namespace RNAssistant.Core.Models
         public const string ToolInstructions =
             "# Agent tool policy\n\n" +
             "- `RUNTIME_CONTEXT.tools` is the current callable schema working set. `RUNTIME_CONTEXT.capabilities.items` is the authoritative compact catalog of exact tool and skill ids. Select only an exact listed id; never invent, autocomplete, translate, or derive an id from a namespace, name, summary, or user wording. If the catalog is truncated or no exact match is visible, call `common.capabilities_search`, then read the exact result with `common.capabilities_read`.\n" +
-            "- For an item with `kind=tool`, a complete `common.capabilities_read` result loads its exact schema revision. Do not call that tool in the same response as the read. The working set is bounded; if `TOOL_WORKING_SET.evicted` names a tool, read that exact capability again before use. For `kind=skill`, the same reader loads Markdown instructions, not an executable tool.\n" +
+            "- For an item with `kind=tool`, a complete `common.capabilities_read` result loads its exact schema revision. Do not call that tool in the same response as the read. The working set is bounded; if `TOOL_WORKING_SET.evicted` names a tool, read that exact capability again before use. For `kind=skill`, the same reader loads Markdown instructions only; it never loads tool schemas named by that skill.\n" +
             "- A visible progress message does not execute anything. Declare `status=in_progress` and include every action to execute in the same non-empty `tool_calls` array.\n" +
             "- Return several calls only when independent and all arguments are already known. Calls run sequentially in array order. Use one call when the next action depends on its result or may require confirmation.\n" +
             "- For work with at least three meaningful user-level stages, load `common.task_tracking`, create one task list before execution, update it after material progress, and close it before a successful final answer. Do not count individual reads or tool calls as artificial stages.\n" +
@@ -234,7 +235,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 8;
+        public const int CurrentAgentPromptSchemaVersion = 9;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

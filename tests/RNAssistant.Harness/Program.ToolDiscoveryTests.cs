@@ -207,8 +207,10 @@ namespace RNAssistant.Harness
                     .ToList();
                 AssertTrue(loadedCallableNames.Contains("excel.add_sheet", StringComparer.OrdinalIgnoreCase),
                     "strict response schema includes exact loaded tool as a callable name");
-                AssertContains(FlattenSimple(requests[1]), "Unknown tool: excel.add_sheet",
-                    "local parser explains unloaded tool during repair");
+                AssertContains(FlattenSimple(requests[1]), "Tool schema is not loaded: excel.add_sheet",
+                    "local parser distinguishes an unloaded known tool during repair");
+                AssertContains(FlattenSimple(requests[1]), "common.capabilities_read",
+                    "repair names the exact schema-loading action");
                 AssertContains(FlattenSimple(requests[2]), "\"kind\":\"tool-schema\"",
                     "complete schema evidence reaches the next model step");
             });
