@@ -199,7 +199,9 @@ namespace RNAssistant.Office.Services
                         (checkpoint.SummaryMarkdown ?? string.Empty) +
                         "\n\nSKILL_CONTEXT_NOTICE: Skill bodies or reference chunks present only in compacted earlier context are unavailable. " +
                         "For relevant work, call common.skills_read again unless the replay tail below contains a successful, " +
-                        "non-truncated data.loaded=true skill result for the catalog's current revision; re-read any needed reference chunk."
+                        "non-truncated data.loaded=true skill result for the catalog's current revision; re-read any needed reference chunk. " +
+                        "TOOL_SCHEMA_NOTICE: Tool schemas present only in compacted earlier context are unavailable. Use common.tools_read again; " +
+                        "only exact current-revision schema evidence in the replay tail may restore a non-bootstrap tool."
                 }
             };
             result.AddRange(messages);

@@ -269,6 +269,7 @@ namespace RNAssistant.Harness
                     JsonConvert.SerializeObject(new { value = new string('x', 150000) })));
                 var responses = new Queue<string>(new[]
                 {
+                    LoadToolSchemaResponse("excel.inspect", "schema_large_inspect"),
                     "{\"message\":\"Читаю.\",\"tool_calls\":[{\"id\":\"call_large\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                     "{\"message\":\"Диапазон результата нужно сузить.\",\"tool_calls\":[]}"
                 });
@@ -283,7 +284,9 @@ namespace RNAssistant.Harness
                     ContextWindowOverrideTokens = 12000,
                     MaxTokens = 512
                 };
-                var tools = adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.inspect").ToList();
+                var tools = adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.inspect")
+                    .Concat(executor.GetControllerTools())
+                    .ToList();
 
                 var turn = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
@@ -291,8 +294,8 @@ namespace RNAssistant.Harness
                     null, null, null, null, CancellationToken.None, true).GetAwaiter().GetResult();
 
                 AssertEqual("Диапазон результата нужно сузить.", turn.AssistantText, "agent continues after bounded result");
-                AssertEqual(2, calls.Count, "two model calls");
-                var replay = FlattenSimple(calls[1]);
+                AssertEqual(3, calls.Count, "schema read, data read, and final model calls");
+                var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "\"truncated\":true", "bounded marker reaches model");
                 var estimated = ModelContextBudget.EstimateMessagesTokens(calls[1]) +
                     ModelContextBudget.EstimateRequestOptionsTokens(new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonObject });

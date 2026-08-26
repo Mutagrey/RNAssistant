@@ -138,7 +138,8 @@ namespace RNAssistant.Office.Services
                 var nativeMessage = AgentTranscript.CreateAssistantMessage(message ?? string.Empty, completion);
                 nativeMessage.ToolResultRole = normalizedRole;
                 nativeMessage.ToolCallId = call == null ? string.Empty : call.Id ?? string.Empty;
-                nativeMessage.ToolName = ApiToolName(call == null ? null : call.Name);
+                // ToolCalls keeps the provider-safe name; ToolName is local replay metadata and preserves the canonical id.
+                nativeMessage.ToolName = call == null ? string.Empty : call.Name ?? string.Empty;
                 nativeMessage.ToolCalls = new List<LlmToolCall>
                 {
                     new LlmToolCall

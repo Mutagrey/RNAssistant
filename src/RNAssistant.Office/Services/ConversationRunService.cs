@@ -150,13 +150,25 @@ namespace RNAssistant.Office.Services
             settings = settings ?? new AppSettings();
             var policy = ConversationRunPolicy.For(mode);
             ReleaseHydratedArtifactMedia(session == null ? null : session.Messages);
-            var availableTools = PrepareToolsForRun(tools);
-            availableTools = _toolExecutor.AvailableConversationToolsForSession(availableTools, session);
-            availableTools = policy.SelectTools(availableTools);
+            var runnableCatalog = PrepareToolsForRun(tools);
+            runnableCatalog = _toolExecutor.AvailableConversationToolsForSession(runnableCatalog, session);
+            runnableCatalog = policy.SelectTools(runnableCatalog);
             var enabledSkills = policy.SelectSkills(skills);
             if (!policy.AllowsConfirmation) pendingToolRegistrar = null;
-            var messages = await BuildMessagesAsync(policy.Mode, text, session, documentContext, settings, availableTools,
-                enabledSkills, attachments, initialCommand != null && initialResult != null, progress, cancellationToken).ConfigureAwait(false);
+            var materialization = await BuildMessagesAsync(
+                policy.Mode,
+                text,
+                session,
+                documentContext,
+                settings,
+                runnableCatalog,
+                enabledSkills,
+                attachments,
+                initialCommand != null && initialResult != null,
+                progress,
+                cancellationToken).ConfigureAwait(false);
+            var messages = materialization.Messages;
+            var workingSet = materialization.WorkingSet;
             var results = new List<object>();
             var toolSteps = Math.Max(0, initialToolStepsUsed);
             var iterationsUsed = Math.Max(0, initialIterationsUsed);
@@ -183,7 +195,8 @@ namespace RNAssistant.Office.Services
                 iterationsUsed += 1;
                 UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "thinking");
                 Report(progress, "thinking", "Модель выбирает следующий шаг...", null);
-                var options = BuildRequestOptions(policy.Mode, responseMode, availableTools, session, runCache);
+                var activeTools = workingSet.Tools;
+                var options = BuildRequestOptions(policy.Mode, responseMode, activeTools, session, runCache);
                 string budgetError;
                 if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                 {
@@ -203,7 +216,8 @@ namespace RNAssistant.Office.Services
                         settings.FallbackToJsonObject)
                     {
                         responseMode = AgentResponseModes.JsonObject;
-                        options = BuildRequestOptions(policy.Mode, responseMode, availableTools, session, runCache);
+                        activeTools = workingSet.Tools;
+                        options = BuildRequestOptions(policy.Mode, responseMode, activeTools, session, runCache);
                         Report(progress, "thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
                         if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                         {
@@ -227,7 +241,7 @@ namespace RNAssistant.Office.Services
                 }
                 var parsed = _responseParser.Parse(
                     completion == null ? null : completion.Content,
-                    availableTools);
+                    activeTools);
                 if (!parsed.Success) TraceRejectedResponse(options, completion, parsed.Error, 0);
                 var configuredFormatRetries = settings.MaxAgentFormatRetries > 0
                     ? settings.MaxAgentFormatRetries
@@ -257,7 +271,7 @@ namespace RNAssistant.Office.Services
                     }
                     parsed = _responseParser.Parse(
                         completion == null ? null : completion.Content,
-                        availableTools);
+                        activeTools);
                     if (!parsed.Success) TraceRejectedResponse(options, completion, parsed.Error, retry);
                 }
                 if (!parsed.Success)
@@ -287,12 +301,15 @@ namespace RNAssistant.Office.Services
                         Status = "running"
                     });
                 }
+                var workingSetChanged = false;
+                var evictedSchemas = new List<string>();
                 for (var callIndex = 0; callIndex < response.ToolCalls.Count; callIndex++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var call = response.ToolCalls[callIndex];
                     var command = AgentJsonProtocol.ToCommand(call);
                     command.RuntimeStepId = stepId;
+                    workingSet.Touch(command.ToolId);
                     var callMessage = AgentJsonProtocol.CreateToolCallMessage(
                         call,
                         callIndex == 0 ? response.Message : string.Empty,
@@ -323,7 +340,7 @@ namespace RNAssistant.Office.Services
                     {
                         toolResult = _toolExecutor.Execute(
                             command,
-                            availableTools,
+                            runnableCatalog,
                             settings,
                             false,
                             false,
@@ -347,7 +364,7 @@ namespace RNAssistant.Office.Services
                     if (AgentTranscript.IsWaitingResult(toolResult) && pendingToolRegistrar != null)
                     {
                         toolResult.ConfirmationCatalogSha256 = ToolExecutionFingerprint(
-                            availableTools,
+                            runnableCatalog,
                             command.ToolId);
                         toolResult.PendingId = pendingToolRegistrar(session, command, toolResult);
                     }
@@ -383,6 +400,12 @@ namespace RNAssistant.Office.Services
                         var resultMessage = CreateBoundedToolResultMessage(command, toolResult, messages, settings);
                         session.Messages.Add(resultMessage);
                         messages.Add(resultMessage);
+                        IReadOnlyList<string> evicted;
+                        if (workingSet.ObserveReadResult(resultMessage, out evicted))
+                        {
+                            workingSetChanged = true;
+                            evictedSchemas.AddRange(evicted ?? new string[0]);
+                        }
                         if (artifactMediaMessage != null && toolResult.Success)
                         {
                             session.Messages.Add(artifactMediaMessage);
@@ -408,6 +431,10 @@ namespace RNAssistant.Office.Services
                     {
                         break;
                     }
+                }
+                if (workingSetChanged)
+                {
+                    messages.Add(workingSet.BuildStateMessage(evictedSchemas));
                 }
             }
 
@@ -444,23 +471,43 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private async Task<List<ChatMessage>> BuildMessagesAsync(
+        private async Task<ConversationMaterialization> BuildMessagesAsync(
             string mode,
             string text,
             ChatSession session,
             DocumentContext context,
             AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolDefinition> runnableCatalog,
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             bool replayCurrentUserInHistory,
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
+            var workingSet = ProgressiveToolWorkingSet.Create(
+                mode,
+                runnableCatalog,
+                settings,
+                ContextCompactionService.BuildActiveWindow(session));
             try
             {
-                return _promptComposer.BuildMessages(
-                    mode, text, _adapter, tools, skills, context, settings, session, attachments, replayCurrentUserInHistory);
+                return new ConversationMaterialization
+                {
+                    Messages = _promptComposer.BuildMessages(
+                        mode,
+                        text,
+                        _adapter,
+                        workingSet.Tools,
+                        skills,
+                        context,
+                        settings,
+                        session,
+                        attachments,
+                        replayCurrentUserInHistory,
+                        0,
+                        workingSet.DiscoveryContext()),
+                    WorkingSet = workingSet
+                };
             }
             catch (PromptBudgetExceededException ex) when (
                 ex.CanCompact && settings.AutoCompressContext && _contextCompactionService != null)
@@ -468,8 +515,28 @@ namespace RNAssistant.Office.Services
                 var checkpoint = await _contextCompactionService.EnsureWithinBudgetAsync(
                     session, settings, string.Empty, true, progress, cancellationToken).ConfigureAwait(false);
                 if (checkpoint == null) throw;
-                return _promptComposer.BuildMessages(
-                    mode, text, _adapter, tools, skills, context, settings, session, attachments, replayCurrentUserInHistory);
+                workingSet = ProgressiveToolWorkingSet.Create(
+                    mode,
+                    runnableCatalog,
+                    settings,
+                    ContextCompactionService.BuildActiveWindow(session));
+                return new ConversationMaterialization
+                {
+                    Messages = _promptComposer.BuildMessages(
+                        mode,
+                        text,
+                        _adapter,
+                        workingSet.Tools,
+                        skills,
+                        context,
+                        settings,
+                        session,
+                        attachments,
+                        replayCurrentUserInHistory,
+                        0,
+                        workingSet.DiscoveryContext()),
+                    WorkingSet = workingSet
+                };
             }
         }
 
@@ -585,6 +652,9 @@ namespace RNAssistant.Office.Services
                 if (!string.IsNullOrWhiteSpace(tool.CapabilityStatus) &&
                     !string.Equals(tool.CapabilityStatus, "available", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(tool.CapabilityStatus, "partial", StringComparison.OrdinalIgnoreCase)) continue;
+                var descriptor = ConversationPromptComposer.BuildTool(tool);
+                if (descriptor == null || descriptor.ToString(Formatting.None).Length >
+                    ToolDiscoveryExecutor.MaximumDescriptorCharacters) continue;
                 tool.MutatesDocument = profile.MutatesDocument;
                 tool.MutatesLocalState = profile.MutatesLocalState;
                 tool.RequiresConfirmation = profile.RequiresConfirmation;
@@ -768,7 +838,8 @@ namespace RNAssistant.Office.Services
             var used = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             var availableForData = Math.Max(0, inputBudget - used - ToolResultEnvelopeReserveTokens);
             var toolId = command == null ? null : command.ToolId;
-            var maxDataTokens = string.Equals(toolId, "common.skills_read", StringComparison.OrdinalIgnoreCase)
+            var maxDataTokens = string.Equals(toolId, "common.skills_read", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(toolId, ToolDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase)
                     ? availableForData
                     : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
             return AgentJsonProtocol.CreateToolResultMessage(command, result, maxDataTokens, settings.ToolResultRole, settings);
@@ -894,6 +965,12 @@ namespace RNAssistant.Office.Services
                 PayloadJson = completion == null ? null : completion.Content,
                 PayloadContentType = "application/json"
             });
+        }
+
+        private sealed class ConversationMaterialization
+        {
+            public List<ChatMessage> Messages { get; set; }
+            public ProgressiveToolWorkingSet WorkingSet { get; set; }
         }
     }
 }

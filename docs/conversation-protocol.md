@@ -3,7 +3,7 @@
 RNAssistant has two explicit modes and one `ConversationRunService` transport/transcript loop.
 
 - `chat`: the editable `ChatSystemPrompt`, a dynamic `RUNTIME_CONTEXT`, and exactly the safe read-only `common.resources_list/resolve/search/read` catalog. Skills, Office tools, local mutations, and confirmation are unavailable by runtime policy.
-- `agent`: the same structured loop with the full runnable catalog and enabled skill metadata. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
+- `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
 Both modes return the same raw `message + tool_calls[]` JSON envelope and use the same bounded request-local format repair. The tool catalog, not model wording, is the authority: a Chat response naming any other tool is rejected before execution.
 
@@ -12,11 +12,15 @@ Both modes return the same raw `message + tool_calls[]` JSON envelope and use th
 Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:
 
 - current host and document identity;
-- every enabled, schema-valid tool allowed by the current mode policy;
+- exact bootstrap and currently loaded callable tool descriptors plus `tool_discovery` catalog revision, bounds, and compact namespace counts;
 - the enabled skill catalog with `id`, `name`, `description`, package `revision`, `bodyChars`, and `referenceCount` in Agent, or an empty catalog in Chat;
 - chat-owned user context and artifact references.
 
 The Agent sections and Chat prompt use one explicit settings schema version. Settings without the current marker are hard-reset to the current defaults; RNAssistant does not merge an older no-tools Chat contract into the structured loop. Once the current marker is saved, current custom values are preserved normally.
+
+Agent bootstrap schemas are `common.resources_list/resolve/search/read`, `common.tools_list/search/read`, and `common.skills_read`. `common.tools_list` pages metadata inside an exact namespace, while `common.tools_search` performs bounded literal metadata search; neither returns parameters or makes a result tool callable. `common.tools_read` accepts one exact runnable id and returns `kind:"tool-schema"`, the descriptor revision, complete native-like descriptor, and explicit `loaded:true`, `complete:true`, `truncated:false`. The local parser and strict response schema admit a non-bootstrap tool only after that exact evidence matches the current descriptor.
+
+Dynamic callable schemas use an evidence-derived LRU with at most eight entries and a context-derived 8,192–20,000 token budget. Successful exact calls update recency. Replay processes schema-read and tool-call evidence in order, producing the same eviction without a mutable index or hidden activation state. `TOOL_WORKING_SET` reports the current ids and any request-local eviction. Generic result truncation removes loaded evidence; compaction, descriptor revision drift, or eviction requires another exact read. A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. The model may read several independent schemas in one response, but it cannot combine a first schema read with a dependent newly loaded call in that same response.
 
 Visible planning is optional data, not a protocol phase. `common.plan_create/update/delete` stores a versioned plan artifact for the active chat, and `common.resources_read` reads its exact active `rna://` revision. The model explicitly supplies every step status; runtime does not infer progress from tool calls. The active plan URI appears in `RUNTIME_CONTEXT`.
 
@@ -26,7 +30,7 @@ Paste, drop, and paperclip use one chat-scoped staging action. `sendChat` accept
 
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
-The catalog is metadata only: a listed name/description does not load or replace the skill Markdown. When the user names a skill or a catalog description clearly matches the task, the model calls `common.skills_read` with the exact id before skill-governed work. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. A revision is loaded only while that exact top-level evidence remains in active model context. Generic bounding replaces oversized data with top-level `truncated:true` and therefore cannot preserve a false loaded marker. Compaction or a revision mismatch requires another core read; an unchanged truncated core read is not retried.
+The skill catalog is metadata only: a listed name/description does not load or replace the skill Markdown. When the user names a skill or a catalog description clearly matches the task, the model calls `common.skills_read` with the exact id before skill-governed work. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. A revision is loaded only while that exact top-level evidence remains in active model context. Generic bounding replaces oversized data with top-level `truncated:true` and therefore cannot preserve a false loaded marker. Compaction or a revision mismatch requires another core read; an unchanged truncated core read is not retried.
 
 A custom skill package may contain up to 64 direct UTF-8 `references/*.md` files. Their paths, byte sizes, and content revisions are listed by the core read without bodies and are included in the package revision. The model reads only a needed reference through the same tool using exact `referencePath`; optional zero-based `offset` and `maxChars` produce bounded chunks with `nextOffset`. A reference chunk is ordinary context evidence but never loads the core skill. `common.skills_upsert` writes one reference when both `referencePath` and `referenceMarkdown` are supplied; `common.skills_delete` removes one when `referencePath` is supplied. Core and reference mutations are separate confirmed calls, and each reference mutation changes the package revision. Several clearly relevant skills may be read independently. There is no router or activation state.
 
@@ -64,7 +68,7 @@ Custom tools must have a strict object JSON Schema with explicit `properties`, `
 Both modes always return the same raw JSON envelope with no Markdown or surrounding prose. `AgentResponseMode` selects its transport constraint for the shared loop:
 
 - `json_object` (default) asks the endpoint for a generic JSON object and relies on the local parser and tool argument validators;
-- `json_schema` sends a strict response schema generated from the exact currently runnable tool catalog. The schema fixes the root fields, exact tool names, and each tool's argument contract.
+- `json_schema` sends a strict response schema generated from the exact current callable working set. The schema fixes the root fields, loaded tool names, and each loaded argument contract; the full internal catalog is never copied into it.
 
 With SSE enabled, transport chunks still contain that raw JSON envelope. The live UI projection incrementally decodes only the root `message` string, resets it for every model request or format-repair attempt, and never exposes `tool_calls`/other raw JSON. Provider reasoning and one leading `<think>` block use the separate reasoning projection; its terminal update is emitted before visible message content starts or when the stream ends.
 
@@ -131,8 +135,8 @@ Chat-local plan/HTML mutations are serialized by the per-chat lease. Manual libr
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.
 - Chat exposes only the four exact `common.resources_*` read tools after schema and safety validation; it never receives skills, confirmation, document mutations, or local-state mutations.
 - Confirmation and mutation safety remain local executor rules.
-- HTML workspace is an ordinary Agent capability, not a separate chat mode or preference flag; the model chooses it from the request and tool catalog.
-- Agent mode remains available for an archived or closed document. Its request catalog keeps document-independent local tools, including HTML workspace tools, while Office/VBA tools and Office-backed HTML bindings are omitted until that document is open again.
+- HTML workspace is an ordinary Agent capability, not a separate chat mode or preference flag; the model discovers and chooses its tools from the request and current metadata/schema evidence.
+- Agent mode remains available for an archived or closed document. Its local discovery catalog keeps document-independent capabilities, including HTML workspace tools, while Office/VBA tools and Office-backed HTML bindings are omitted until that document is open again.
 - Every Agent run pins both the stable document key and runtime COM identity. The UI/STA adapter accepts either matching identity so COM proxy changes and document-key migration do not create false switches; when neither matches, it returns non-retryable `active_document_changed` before starting the Office tool.
 - Maximum iterations and maximum tool steps bound execution.
 - Tool schemas use the locally enforced closed dialect documented in the README; unsupported assertion keywords and duplicate/case-colliding property names are rejected before catalog publication.

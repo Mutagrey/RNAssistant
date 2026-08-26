@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -148,6 +149,23 @@ namespace RNAssistant.Harness
             }
 
             return command;
+        }
+
+        private static string LoadToolSchemaResponse(string toolId, string callId = null)
+        {
+            return JsonConvert.SerializeObject(new
+            {
+                message = "Загружаю схему инструмента.",
+                tool_calls = new[]
+                {
+                    new
+                    {
+                        id = callId ?? "schema_" + (toolId ?? string.Empty).Replace('.', '_'),
+                        name = ToolDiscoveryExecutor.ReadToolId,
+                        arguments = new { id = toolId }
+                    }
+                }
+            });
         }
 
         private static ChatSession NewSession(FakeOfficeAdapter adapter)

@@ -92,7 +92,10 @@ namespace RNAssistant.Harness
             AssertTrue(result.UsedTokens > 0, "inspector estimates prompt tokens");
             AssertTrue(result.Sections.Any(section => section.Id == "tool_instructions"), "separate tool prompt cost is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "skill_instructions"), "separate skill prompt cost is visible");
-            AssertTrue(result.Sections.Any(section => section.Id == "tools"), "tool schemas are visible");
+            AssertTrue(result.Sections.Any(section => section.Id == "tool_discovery"),
+                "compact tool namespaces are visible without eager schemas");
+            AssertTrue(!result.Sections.Any(section => section.Id == "tools"),
+                "unread domain schemas are absent from the active working set");
             AssertTrue(result.Sections.Any(section => section.Id == "skills"), "skill catalog is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "tool_history"), "tool protocol history is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "document_context"), "document context is visible");

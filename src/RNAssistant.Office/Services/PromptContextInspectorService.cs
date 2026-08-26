@@ -88,21 +88,28 @@ namespace RNAssistant.Office.Services
 
             var mode = ChatModes.Normalize(previewSession.Mode);
             var policy = ConversationRunPolicy.For(mode);
-            var runnableTools = ConversationRunService.PrepareToolsForMode(mode, tools);
+            var runnableCatalog = ConversationRunService.PrepareToolsForMode(mode, tools);
             var enabledSkills = policy.SelectSkills(skills);
+            var workingSet = ProgressiveToolWorkingSet.Create(
+                mode,
+                runnableCatalog,
+                settings,
+                ContextCompactionService.BuildActiveWindow(previewSession));
+            var runnableTools = workingSet.Tools;
+            var toolDiscovery = workingSet.DiscoveryContext();
 
             var relaxed = false;
             List<ChatMessage> messages;
             try
             {
                 messages = BuildMessages(mode, draftText, previewSession, context, settings,
-                    runnableTools, enabledSkills, attachments, 0);
+                    runnableTools, enabledSkills, attachments, 0, toolDiscovery);
             }
             catch (PromptBudgetExceededException)
             {
                 relaxed = true;
                 messages = BuildMessages(mode, draftText, previewSession, context, settings,
-                    runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens);
+                    runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens, toolDiscovery);
             }
 
             var options = ConversationRunService.BuildRequestOptions(
@@ -128,6 +135,7 @@ namespace RNAssistant.Office.Services
                 settings,
                 runnableTools,
                 enabledSkills,
+                toolDiscovery,
                 attachments,
                 draftText,
                 usedTokens);
@@ -144,7 +152,7 @@ namespace RNAssistant.Office.Services
                 ? "≈ уточнено по " + calibrationSamples + " API usage для этой модели."
                 : "≈ рассчитано по UTF-8 объёму.";
             estimateNotice += mode == ChatModes.Agent
-                ? " Даже пустой Agent включает system prompt, схемы tools и каталог skills."
+                ? " Даже пустой Agent включает system prompt, bootstrap-схемы tools, compact namespaces и каталог skills."
                 : " Даже пустой Chat включает system prompt и схемы read-only resource tools.";
 
             var response = new PromptContextInspectorResponse
@@ -202,7 +210,8 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ToolDefinition> tools,
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
-            int historyBudgetTokens)
+            int historyBudgetTokens,
+            JObject toolDiscovery)
         {
             return new ConversationPromptComposer().BuildMessages(
                 mode,
@@ -215,7 +224,8 @@ namespace RNAssistant.Office.Services
                 session,
                 attachments,
                 false,
-                historyBudgetTokens);
+                historyBudgetTokens,
+                toolDiscovery);
         }
 
         private List<PromptContextSectionDto> BuildSections(
@@ -228,6 +238,7 @@ namespace RNAssistant.Office.Services
             AppSettings settings,
             IReadOnlyList<ToolDefinition> tools,
             IReadOnlyList<SkillDefinition> skills,
+            JObject toolDiscovery,
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
             int usedTokens)
@@ -264,7 +275,8 @@ namespace RNAssistant.Office.Services
                 skills,
                 context,
                 previewSession,
-                settings);
+                settings,
+                toolDiscovery);
             instructionEnvelope = instruction + "\n\nRUNTIME_CONTEXT:\n" + runtimeJson;
 
             var embeddedInstructionTokens = hasStandaloneInstruction || current == null
@@ -364,6 +376,7 @@ namespace RNAssistant.Office.Services
         {
             var root = string.IsNullOrWhiteSpace(runtimeJson) ? new JObject() : JObject.Parse(runtimeJson);
             var tools = root["tools"] as JArray ?? new JArray();
+            var toolDiscovery = root["tool_discovery"] as JObject;
             var skills = root["skills"] as JArray ?? new JArray();
             var userContext = root["user_context"] as JArray ?? new JArray();
             var artifactIndex = (string)root["artifacts"] ?? string.Empty;
@@ -442,6 +455,26 @@ namespace RNAssistant.Office.Services
             else
             {
                 seeds[0].RawTokens += EstimateTextTokens("\"tools\":[]");
+            }
+
+            if (toolDiscovery != null)
+            {
+                var namespaces = toolDiscovery["namespaces"] as JArray ?? new JArray();
+                seeds.Add(new SectionSeed
+                {
+                    Id = "tool_discovery",
+                    Title = "Discovery tools",
+                    Detail = namespaces.Count + " compact namespaces; schemas are loaded progressively",
+                    RawTokens = Math.Max(1, EstimateTextTokens(toolDiscovery.ToString(Formatting.None))),
+                    Count = namespaces.Count,
+                    Items = namespaces.OfType<JObject>().Select(item => Item(
+                        (string)item["id"],
+                        "tool-namespace",
+                        (string)item["id"] ?? "namespace",
+                        ((int?)item["count"] ?? 0) + " tools",
+                        EstimateTextTokens(item.ToString(Formatting.None)),
+                        item.ToString(Formatting.None))).ToList()
+                });
             }
 
             if (skills.Count > 0)

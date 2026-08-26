@@ -588,7 +588,7 @@ namespace RNAssistant.Harness
                 var updated = executor.Execute(update, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(updated.Success, "partial tool update should succeed");
 
-                var read = executor.Execute(new ToolCommand { ToolId = "common.tools_read", Arguments = { ["id"] = "excel.generated_report" } }, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
+                var read = executor.Execute(new ToolCommand { ToolId = ToolAuthoringExecutor.DefinitionReadToolId, Arguments = { ["id"] = "excel.generated_report" } }, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
                 AssertTrue(read.Success, "tool read should succeed");
                 AssertContains(read.DataJson, "excel.add_sheet", "saved pipeline");
                 AssertContains(read.DataJson, "\"parameters\":{", "schema returned as native object");

@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Status: accepted target architecture. Core contracts, chat/HTML/plan/live-document/VBA providers, `common.resources_*`, the unified Chat/Agent loop, and automatic chat resource ingestion are implemented. Remaining slices are delivered vertically; replaced paths are removed, not retained as aliases.
+Status: accepted target architecture. Core contracts, chat/HTML/plan/live-document/VBA providers, `common.resources_*`, the unified Chat/Agent loop, automatic chat resource ingestion, and progressive tool discovery are implemented. The final event/projection cutover remains; replaced paths are removed, not retained as aliases.
 
 ## Goals
 
@@ -44,8 +44,9 @@ Every provider implements bounded `list`, `resolve`, `search`, and `read`. Searc
 Chat and Agent use one buffered structured loop. The policy differs, the transport and transcript do not:
 
 - Chat receives exactly the four resource discovery/read tools and no mutation tools, confirmation, or skills.
-- Agent currently receives all runnable tools plus enabled skills and mutations allowed by safety policy.
-- A later slice makes Agent tool discovery progressive: the initial prompt will contain compact namespaces and discovery tools, and exact schemas will enter the working set only when read.
+- Agent keeps the complete mode/session-filtered catalog only as local execution authority. The initial model prompt contains bootstrap resource/skill/discovery schemas plus compact namespaces.
+- `common.tools_list/search` return bounded schema-free metadata. `common.tools_read` returns one exact revisioned descriptor; only complete, untruncated evidence matching the current descriptor enters the callable working set.
+- The dynamic working set is an evidence-derived LRU of at most eight schemas with an 8k–20k token budget. Exact tool calls update recency, so replay reconstructs the same eviction. Compaction, truncation, revision drift, or explicit eviction requires another read.
 - A schema or skill body remains loaded only while its exact revision is present in active model context.
 
 The prompt contains compact resource references relevant to the conversation. On a later question such as “что на той картинке?” the model resolves or reads the referenced URI again. Raw media is hydrated only for the next model step and then released; the durable reference remains.
@@ -90,7 +91,7 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 3. **Done:** Unified `ConversationRunService`; read-only resource loop in Chat; removed `PlainChatService` and `ChatContextWindowBuilder`.
 4. **Done:** Automatic chat-scoped UI ingestion and durable pre-dispatch message references; explicit `artifactIds`/“В запрос” selection removed.
 5. **Done:** plan/HTML reads use canonical `chat` resources; live Office document/selection and VBA project/component/backup providers are registered. Duplicated plan/HTML/VBA reads plus host `get_context/get_selection` tools are removed without aliases; domain-specific range/slide/mail reads remain typed tools.
-6. Progressive tool discovery and bounded working-set eviction.
+6. **Done:** Agent uses compact tool namespaces plus `common.tools_list/search/read`; exact revisioned schemas enter a bounded replayable LRU working set, and full-catalog prompt injection is removed. Custom-definition inspection moved to `common.tools_definition_read` without an alias.
 7. Hard cutover of events/projections, deletion of obsolete services and tests, reset-only handling for old data.
 
 Each slice must leave one authoritative path for the capability it migrates and add harness coverage for URI safety, provider bounds, replay, context compaction, media hydration lifetime, and Chat mutation denial.

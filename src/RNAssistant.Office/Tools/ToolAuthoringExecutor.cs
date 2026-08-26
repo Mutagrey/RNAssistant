@@ -11,6 +11,8 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class ToolAuthoringExecutor
     {
+        public const string DefinitionReadToolId = "common.tools_definition_read";
+
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly ToolStore _toolStore;
 
@@ -27,7 +29,7 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerToolDefinition.Create("common.tools_read", "Common", "Read-only: Read one custom tool in authoring shape; omit id to list compact metadata for visible custom tools.", OptionalIdSchema());
+            yield return ControllerToolDefinition.Create(DefinitionReadToolId, "Common", "Read-only authoring inspection: Read one custom tool definition including its implementation fields; omit id to list compact custom-tool metadata. This does not load a callable schema.", OptionalIdSchema());
             yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a complete custom pipeline or manifest-based VBA tool definition without saving it. Agent authoring may use compact parameterDefinitions and pipelineSteps; advanced callers may pass complete native parameters/pipeline objects.", ToolPayloadSchema(false));
             yield return ControllerToolDefinition.Create("common.tools_upsert", "Common", "Mutates settings: Create or update one custom tool after validating the effective definition. In Agent mode prefer compact parameterDefinitions and pipelineSteps; parameters/pipeline remain the advanced native forms. Omitted update fields are preserved.", ToolUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.tools_delete", "Common", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
@@ -40,7 +42,7 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("Tool authoring store is not available.");
             }
 
-            if (string.Equals(command.ToolId, "common.tools_read", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, DefinitionReadToolId, StringComparison.OrdinalIgnoreCase))
             {
                 return string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "id", string.Empty))
                     ? ListTools()

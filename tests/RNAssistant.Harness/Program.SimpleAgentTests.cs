@@ -327,6 +327,7 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var responses = new Queue<string>(new[]
                 {
+                    LoadToolSchemaResponse("common.html_workspace_upsert", "schema_html"),
                     "{\"message\":\"Создаю локальный HTML.\",\"tool_calls\":[{\"id\":\"call_html\",\"name\":\"common.html_workspace_upsert\",\"arguments\":{\"resourceType\":\"file\",\"name\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
                     "{\"message\":\"Локальный HTML готов.\",\"tool_calls\":[]}"
                 });
@@ -356,7 +357,11 @@ namespace RNAssistant.Harness
                 var prompt = FlattenSimple(calls[0]);
                 AssertContains(prompt, "\"key\":\"closed-doc\"", "archived document identity in prompt");
                 AssertContains(prompt, "\"office_tools_available\":false", "Office availability in prompt");
-                AssertContains(prompt, "common.html_workspace_upsert", "local HTML tool remains available");
+                AssertContains(prompt, "\"id\":\"common.html\"", "local HTML namespace remains discoverable");
+                AssertTrue(prompt.IndexOf("\"name\":\"common.html_workspace_upsert\"", StringComparison.OrdinalIgnoreCase) < 0,
+                    "local HTML schema is not injected before discovery");
+                AssertContains(FlattenSimple(calls[1]), "\"name\":\"common.html_workspace_upsert\"",
+                    "exact local HTML schema is available after read");
                 AssertTrue(prompt.IndexOf("excel.read_range", StringComparison.OrdinalIgnoreCase) < 0,
                     "Office tools omitted for a closed document");
                 AssertTrue(prompt.IndexOf("common.html_data_bind", StringComparison.OrdinalIgnoreCase) < 0,
@@ -562,6 +567,7 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
+                    LoadToolSchemaResponse("excel.add_sheet", "schema_add_sheet"),
                     "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"call_add\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
                     "{\"message\":\"Лист Report создан.\",\"tool_calls\":[]}"
                 });
@@ -577,16 +583,19 @@ namespace RNAssistant.Harness
                     ChatModes.Agent,
                     "Создай лист Report.", NewSession(adapter), NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 },
-                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual("Лист Report создан.", result.AssistantText, "final response");
                 AssertTrue(adapter.HasSheet("Report"), "tool executed");
-                AssertEqual(2, calls.Count, "two model turns");
-                var second = FlattenSimple(calls[1]);
-                AssertContains(second, "TOOL_RESULT", "tool result label");
-                AssertContains(second, "\"ok\":true", "tool result ok");
-                AssertContains(second, "\"name\":\"excel.add_sheet\"", "tool result name");
-                AssertContains(second, "\"message\":", "tool result message");
+                AssertEqual(3, calls.Count, "schema read, execution, and final model turns");
+                AssertTrue(FlattenSimple(calls[0]).IndexOf("\"name\":\"excel.add_sheet\"", StringComparison.Ordinal) < 0,
+                    "domain schema is absent before discovery");
+                AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "schema evidence reaches model");
+                var finalRequest = FlattenSimple(calls[2]);
+                AssertContains(finalRequest, "TOOL_RESULT", "tool result label");
+                AssertContains(finalRequest, "\"ok\":true", "tool result ok");
+                AssertContains(finalRequest, "\"name\":\"excel.add_sheet\"", "tool result name");
+                AssertContains(finalRequest, "\"message\":", "tool result message");
             });
         }
 
@@ -722,6 +731,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     progressOnly,
+                    LoadToolSchemaResponse("excel.inspect", "schema_inspect_after_repair"),
                     "{\"message\":\"Проверяю листы.\",\"tool_calls\":[{\"id\":\"call_inspect\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                     "{\"message\":\"Список листов проверен.\",\"tool_calls\":[]}"
                 });
@@ -735,9 +745,9 @@ namespace RNAssistant.Harness
                 var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Проверь листы.", session, NewContext(adapter), new AppSettings(),
-                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
-                AssertEqual(3, requests.Count, "semantic repair then tool continuation");
+                AssertEqual(4, requests.Count, "semantic repair, schema discovery, and tool continuation");
                 AssertContains(requests[1].Last().Content, "unfinished progress", "repair identifies semantic failure");
                 AssertEqual("Список листов проверен.", result.AssistantText, "run completes after the actual tool call");
                 AssertTrue(!session.Messages.Any(message => string.Equals(message.Content, progressOnly, StringComparison.Ordinal)),
@@ -820,9 +830,14 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "\"name\":\"common.resources_list\"", "resource discovery exposed");
                 AssertContains(prompt, "\"name\":\"common.resources_read\"", "resource reads exposed");
                 AssertContains(prompt, "\"name\":\"common.resources_search\"", "resource search exposed");
-                AssertContains(prompt, "\"name\":\"common.vba_apply_patch\"", "common safe VBA patch exposed");
-                AssertContains(prompt, "\"name\":\"common.vba_write_module\"", "common VBA upsert exposed");
-                AssertContains(prompt, "\"name\":\"common.vba_delete_module\"", "common VBA delete exposed");
+                AssertContains(prompt, "\"name\":\"common.tools_list\"", "tool namespace discovery exposed");
+                AssertContains(prompt, "\"name\":\"common.tools_search\"", "tool metadata search exposed");
+                AssertContains(prompt, "\"name\":\"common.tools_read\"", "exact schema loading exposed");
+                AssertContains(prompt, "\"id\":\"common.vba\"", "VBA mutation namespace is discoverable");
+                AssertTrue(prompt.IndexOf("\"name\":\"common.vba_apply_patch\"", StringComparison.Ordinal) < 0 &&
+                    prompt.IndexOf("\"name\":\"common.vba_write_module\"", StringComparison.Ordinal) < 0 &&
+                    prompt.IndexOf("\"name\":\"common.vba_delete_module\"", StringComparison.Ordinal) < 0,
+                    "VBA mutation schemas are not eagerly injected");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_create_module\"", StringComparison.Ordinal) < 0,
                     "redundant create alias is hidden from the model");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_replace_text\"", StringComparison.Ordinal) < 0,
@@ -878,6 +893,7 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
+                    LoadToolSchemaResponse("excel.add_sheet", "schema_add_sheet_batch"),
                     "{\"message\":\"Создаю два независимых листа.\",\"tool_calls\":[" +
                     "{\"id\":\"call_first\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}," +
                     "{\"id\":\"call_second\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
@@ -889,7 +905,7 @@ namespace RNAssistant.Harness
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     callCount += 1;
-                    if (callCount == 2) secondTurn = messages.ToList();
+                    if (callCount == 3) secondTurn = messages.ToList();
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
@@ -897,7 +913,7 @@ namespace RNAssistant.Harness
                     ChatModes.Agent,
                     "Создай листы First и Second.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 },
-                    adapter.GetBuiltInTools().ToList(), (phase, message, activity) =>
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), (phase, message, activity) =>
                     {
                         if (activity != null) progressActivities.Add(activity);
                     }).GetAwaiter().GetResult();
@@ -908,19 +924,23 @@ namespace RNAssistant.Harness
                 AssertEqual("First", Convert.ToString(adapter.Executed[adapter.Executed.Count - 2].Arguments["name"]), "first call order");
                 AssertEqual("Second", Convert.ToString(adapter.Executed[adapter.Executed.Count - 1].Arguments["name"]), "second call order");
                 var replay = FlattenSimple(secondTurn);
-                AssertEqual(2, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1, "two results replayed");
+                AssertEqual(3, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1,
+                    "schema result and two execution results replayed");
                 AssertContains(replay, "call_first", "first call id replayed");
                 AssertContains(replay, "call_second", "second call id replayed");
                 var activities = session.Messages
-                    .Where(message => message != null && message.Activity != null && message.Activity.Kind == "tool")
+                    .Where(message => message != null && message.Activity != null && message.Activity.Kind == "tool" &&
+                        string.Equals(message.Activity.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase))
                     .Select(message => message.Activity)
                     .ToList();
                 AssertEqual(2, activities.Count, "two visible tool activities");
                 AssertTrue(!string.IsNullOrWhiteSpace(activities[0].StepId), "model step id stored");
                 AssertEqual(activities[0].StepId, activities[1].StepId, "batch tools share one model step");
                 AssertEqual("Создаю два независимых листа.", activities[0].StepMessage, "model step message stored");
-                var marker = progressActivities.First(activity => activity.Kind == "step");
-                var running = progressActivities.First(activity => activity.Kind == "tool" && activity.Status == "running");
+                var marker = progressActivities.First(activity => activity.Kind == "step" &&
+                    string.Equals(activity.Title, "Создаю два независимых листа.", StringComparison.Ordinal));
+                var running = progressActivities.First(activity => activity.Kind == "tool" && activity.Status == "running" &&
+                    string.Equals(activity.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase));
                 AssertEqual(marker.StepId, running.StepId, "live tool belongs to visible model step");
             });
         }
@@ -931,6 +951,7 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
+                    LoadToolSchemaResponse("common.skills_upsert", "schema_skills_upsert"),
                     "{\"message\":\"Создаю skill.\",\"tool_calls\":[" +
                     "{\"id\":\"call_skill\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
                     "{\"message\":\"Skill сохранён.\",\"tool_calls\":[]}"
@@ -975,8 +996,8 @@ namespace RNAssistant.Harness
                             "common.skills_upsert"),
                         StringComparison.OrdinalIgnoreCase),
                     "tool fingerprint changes with a replaced executable definition");
-                AssertEqual(1, session.LastRun.IterationsUsed, "confirmation stores iteration cursor");
-                AssertEqual(1, session.LastRun.ToolStepsUsed, "confirmation reserves one logical tool step");
+                AssertEqual(2, session.LastRun.IterationsUsed, "confirmation stores iteration cursor after discovery");
+                AssertEqual(2, session.LastRun.ToolStepsUsed, "schema read and pending action consume logical tool steps");
                 var initialIterationsUsed = session.LastRun.IterationsUsed;
                 var initialToolStepsUsed = session.LastRun.ToolStepsUsed;
                 foreach (var message in session.Messages)
@@ -1000,16 +1021,17 @@ namespace RNAssistant.Harness
                     initialToolStepsUsed: initialToolStepsUsed).GetAwaiter().GetResult();
 
                 AssertEqual("Skill сохранён.", final.AssistantText, "continued final response");
-                AssertEqual(2, session.LastRun.IterationsUsed, "confirmation continuation keeps cumulative iteration budget");
-                AssertEqual(1, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
-                var replay = FlattenSimple(calls[1]);
+                AssertEqual(3, session.LastRun.IterationsUsed, "confirmation continuation keeps cumulative iteration budget");
+                AssertEqual(2, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
+                var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "RUNTIME_CONTEXT", "user-role continuation keeps runtime context");
-                AssertEqual(1, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1, "one result replayed");
+                AssertEqual(2, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1,
+                    "schema evidence and confirmed result replayed");
                 AssertContains(replay, "\"ok\":true", "confirmed result replayed");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "no stale waiting result");
                 AssertTrue(replay.IndexOf("Create a test skill.", StringComparison.Ordinal) < replay.IndexOf("call_skill", StringComparison.Ordinal),
                     "user request precedes tool call in replay");
-                AssertTrue(replay.IndexOf("call_skill", StringComparison.Ordinal) < replay.IndexOf("TOOL_RESULT:", StringComparison.Ordinal),
+                AssertTrue(replay.IndexOf("call_skill", StringComparison.Ordinal) < replay.LastIndexOf("TOOL_RESULT:", StringComparison.Ordinal),
                     "tool call precedes result in replay");
             });
         }
@@ -1020,6 +1042,7 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
+                    LoadToolSchemaResponse("common.skills_upsert", "schema_skills_upsert_failure"),
                     "{\"message\":\"Создаю skill.\",\"tool_calls\":[{\"id\":\"call_skill_failure\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.failure_test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
                     "{\"message\":\"Skill уже существует; выберу другой id.\",\"tool_calls\":[]}"
                 });
@@ -1057,8 +1080,8 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("Skill уже существует; выберу другой id.", final.AssistantText, "agent continues after confirmed failure");
-                AssertEqual(2, calls.Count, "failure triggers next model turn");
-                var replay = FlattenSimple(calls[1]);
+                AssertEqual(3, calls.Count, "schema discovery and confirmed failure trigger the next model turn");
+                var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "\"ok\":false", "confirmed failure replayed");
                 AssertContains(replay, "skill_already_exists", "confirmed failure code replayed");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");

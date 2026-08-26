@@ -21,6 +21,7 @@ namespace RNAssistant.Office.Tools
         private readonly PipelineToolExecutor _pipelineExecutor;
         private readonly VbaToolExecutor _vbaExecutor;
         private readonly SkillToolExecutor _skillExecutor;
+        private readonly ToolDiscoveryExecutor _toolDiscoveryExecutor;
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
         private readonly PromptToolExecutor _promptToolExecutor;
         private readonly ResourceGatewayService _resourceGateway;
@@ -49,6 +50,7 @@ namespace RNAssistant.Office.Tools
             _pipelineExecutor = new PipelineToolExecutor();
             _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore);
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
+            _toolDiscoveryExecutor = new ToolDiscoveryExecutor();
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
             _mutationLockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
@@ -66,6 +68,7 @@ namespace RNAssistant.Office.Tools
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
             RegisterControllerTools(controllerTools, _vbaExecutor.GetControllerTools(), ControllerExecutorKind.Vba);
             RegisterControllerTools(controllerTools, _skillExecutor.GetControllerTools(), ControllerExecutorKind.Skill);
+            RegisterControllerTools(controllerTools, _toolDiscoveryExecutor.GetControllerTools(), ControllerExecutorKind.ToolDiscovery);
             RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
             RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
             RegisterControllerTools(controllerTools, _resourceExecutor.GetControllerTools(), ControllerExecutorKind.Resource);
@@ -142,7 +145,13 @@ namespace RNAssistant.Office.Tools
             IReadOnlyList<SkillDefinition> skillCatalog,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            var context = new ToolExecutionContext(KnownTools(tools), settings ?? new AppSettings(), session, maxExecutionSteps, skillCatalog);
+            var context = new ToolExecutionContext(
+                KnownTools(tools),
+                tools,
+                settings ?? new AppSettings(),
+                session,
+                maxExecutionSteps,
+                skillCatalog);
             var initialSteps = context.RemainingSteps;
             var result = ExecuteForExpectedDocument(
                 session,
@@ -812,6 +821,8 @@ namespace RNAssistant.Office.Tools
                     return _vbaExecutor.ExecuteControllerTool(command, dryRun, context.Session, cancellationToken);
                 case ControllerExecutorKind.Skill:
                     return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.SkillCatalog);
+                case ControllerExecutorKind.ToolDiscovery:
+                    return _toolDiscoveryExecutor.ExecuteControllerTool(command, context.DiscoveryCatalog);
                 case ControllerExecutorKind.ToolAuthoring:
                     return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
                 case ControllerExecutorKind.Prompt:
@@ -1017,12 +1028,14 @@ namespace RNAssistant.Office.Tools
 
             public ToolExecutionContext(
                 IReadOnlyList<ToolDefinition> tools,
+                IReadOnlyList<ToolDefinition> discoveryCatalog,
                 AppSettings settings,
                 ChatSession session,
                 int maxExecutionSteps,
                 IReadOnlyList<SkillDefinition> skillCatalog)
             {
                 Tools = tools ?? new ToolDefinition[0];
+                DiscoveryCatalog = discoveryCatalog ?? new ToolDefinition[0];
                 Settings = settings;
                 Session = session;
                 SkillCatalog = skillCatalog;
@@ -1034,6 +1047,8 @@ namespace RNAssistant.Office.Tools
             }
 
             public IReadOnlyList<ToolDefinition> Tools { get; private set; }
+
+            public IReadOnlyList<ToolDefinition> DiscoveryCatalog { get; private set; }
 
             public AppSettings Settings { get; private set; }
 
@@ -1077,6 +1092,7 @@ namespace RNAssistant.Office.Tools
         {
             Vba,
             Skill,
+            ToolDiscovery,
             ToolAuthoring,
             Prompt,
             Resource,

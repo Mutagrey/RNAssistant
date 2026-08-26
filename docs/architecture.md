@@ -27,9 +27,9 @@ static WebView UI
 There are exactly two persisted modes and one structured execution service.
 
 - `Chat` uses `ConversationRunService` with `ChatSystemPrompt`, the shared raw `message + tool_calls[]` JSON contract, and only the four read-only `common.resources_list/resolve/search/read` tools. Runtime policy removes skills, Office tools, local mutations, and confirmation regardless of prompt wording.
-- `Agent` uses the same service and transcript loop with the complete runnable tool catalog, enabled skill metadata, confirmation, and policy-approved mutations.
+- `Agent` uses the same service and transcript loop with progressive tool discovery, enabled skill metadata, confirmation, and policy-approved mutations. The full mode/session-filtered catalog stays local as execution authority; it is not injected into every prompt.
 
-`ConversationPromptComposer` selects the editable mode instruction, then appends one dynamic `RUNTIME_CONTEXT` JSON object containing mode, document identity, exactly the tools allowed for this request in native-like function format, user context, bounded resource references, and either the compact Agent skill catalog or `skills:[]` in Chat. Invalid, unavailable, dependency-incomplete, or mode-forbidden tools are omitted before the request. If the complete request does not fit, the run stops with a prompt-budget diagnostic. Agent skill entries remain metadata rather than loaded instructions; relevant complete Markdown is loaded through `common.skills_read` and must remain in active context with matching revision and complete loaded evidence. The composer does not classify request wording or capture Office content eagerly.
+`ConversationPromptComposer` selects the editable mode instruction, then appends one dynamic `RUNTIME_CONTEXT` JSON object containing mode, document identity, the current exact callable schemas, compact tool namespaces, user context, bounded resource references, and either the compact Agent skill catalog or `skills:[]` in Chat. Invalid, oversized, unavailable, dependency-incomplete, or mode-forbidden tools are omitted before the request. Agent bootstrap contains `common.resources_*`, `common.tools_list/search/read`, and `common.skills_read`. List/search expose bounded metadata only; an exact complete `common.tools_read` result adds its revision-matched descriptor to an evidence-derived LRU working set of at most eight dynamic schemas. Strict response JSON Schema is built from that same current set. Tool calls update recency, replay reconstructs eviction, and compaction/revision drift requires another read. Agent skill entries remain metadata rather than loaded instructions; relevant complete Markdown is loaded through `common.skills_read` and must remain in active context with matching revision and complete loaded evidence. The composer does not classify request wording or capture Office content eagerly.
 
 Editable general/tool/skill Agent, Chat, title, compaction, and attachment-analysis prompts are stored as Markdown. Their instruction role (`developer`/`system`/`user`) is independent from the shared response format (`json_object`/strict `json_schema`) and tool-result role (`user`/`developer`/matched `tool`). Protocol repair and compatibility-probe instructions remain fixed.
 
@@ -76,11 +76,13 @@ See [conversation-protocol.md](conversation-protocol.md).
 - `src/RNAssistant.Office/Services/ConversationRunService.cs`: shared structured Chat/Agent loop.
 - `src/RNAssistant.Office/Services/ConversationRunPolicy.cs`: hard mode boundary for tools, skills, and confirmation.
 - `src/RNAssistant.Office/Services/ConversationPromptComposer.cs`: mode instruction and runtime context.
+- `src/RNAssistant.Office/Services/ProgressiveToolWorkingSet.cs`: evidence-derived callable schemas, revision checks, token/count bounds, and deterministic LRU replay.
 - `src/RNAssistant.Office/Services/ResourceProviderRegistry.cs`: exact provider registration and dispatch boundary.
 - `src/RNAssistant.Office/Services/ResourceGatewayService.cs`: common resource orchestration and URI-based dispatch.
 - `src/RNAssistant.Office/Services/ChatArtifactResourceProvider.cs`: bounded chat-owned metadata, text, and one-step media hydration.
 - `src/RNAssistant.Office/Services/ContextCompactionService.cs`: optional checkpointing.
 - `src/RNAssistant.Office/Tools`: dispatch, schemas, pipelines, tool/skill/prompt CRUD, VBA lifecycle.
+- `src/RNAssistant.Office/Tools/ToolDiscoveryExecutor.cs`: compact namespace/list/search metadata and exact callable-schema reads.
 - `src/RNAssistant.Office/Tools/VbaToolExecutor*.cs`: VBA host orchestration and verification in the base partial, package install/run/remove lifecycle in `.Packages`, and deterministic text patching in `.Patching`.
 - `src/RNAssistant.Office/Controller`: typed bridge-facing orchestration.
 - `src/RNAssistant.OfficeHosts`: Excel/Word/PowerPoint/Outlook COM adapters.

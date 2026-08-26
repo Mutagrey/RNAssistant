@@ -22,12 +22,14 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             IReadOnlyList<ChatAttachment> attachments,
             bool replayCurrentUserInHistory = false,
-            int historyBudgetTokens = 0)
+            int historyBudgetTokens = 0,
+            JObject toolDiscovery = null)
         {
             settings = settings ?? new AppSettings();
             mode = ChatModes.Normalize(mode);
             var instruction = BuildInstruction(mode, settings);
-            var runtimeContext = BuildRuntimeContext(mode, adapter, tools, skills, context, session, settings);
+            var runtimeContext = BuildRuntimeContext(
+                mode, adapter, tools, skills, context, session, settings, toolDiscovery);
             var role = NormalizeInstructionRole(settings.SystemPromptRole);
             var messages = new List<ChatMessage>();
             if (!string.Equals(role, "user", StringComparison.Ordinal))
@@ -128,7 +130,8 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             DocumentContext context,
             ChatSession session,
-            AppSettings settings = null)
+            AppSettings settings = null,
+            JObject toolDiscovery = null)
         {
             mode = ChatModes.Normalize(mode);
             var adapterHost = SafeAdapterValue(adapter, item => item.HostName);
@@ -165,6 +168,10 @@ namespace RNAssistant.Office.Services
                 ["skills"] = BuildSkills(skills),
                 ["user_context"] = BuildUserContext(context)
             };
+            if (toolDiscovery != null)
+            {
+                root["tool_discovery"] = toolDiscovery.DeepClone();
+            }
             var artifactBudget = Math.Max(
                 192,
                 Math.Min(600, ModelContextBudget.InputBudgetTokens(settings) / 20));
@@ -193,35 +200,38 @@ namespace RNAssistant.Office.Services
             var result = new JArray();
             foreach (var tool in tools ?? new ToolDefinition[0])
             {
-                if (tool == null || string.IsNullOrWhiteSpace(tool.Id)) continue;
-                JObject schema;
-                string schemaError;
-                if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError))
-                {
-                    continue;
-                }
-                result.Add(new JObject
-                {
-                    ["type"] = "function",
-                    ["function"] = new JObject
-                    {
-                        ["name"] = tool.Id,
-                        ["description"] = BuildDescription(tool),
-                        ["parameters"] = ToolSchemaSupport.ForPrompt(schema)
-                    },
-                    ["safety"] = new JObject
-                    {
-                        ["mutates_document"] = tool.MutatesDocument,
-                        ["mutates_local_state"] = tool.MutatesLocalState,
-                        ["requires_confirmation"] = tool.RequiresConfirmation,
-                        ["risk_level"] = tool.RiskLevel
-                    }
-                });
+                var descriptor = BuildTool(tool);
+                if (descriptor != null) result.Add(descriptor);
             }
             return result;
         }
 
-        private static string BuildDescription(ToolDefinition tool)
+        internal static JObject BuildTool(ToolDefinition tool)
+        {
+            if (tool == null || string.IsNullOrWhiteSpace(tool.Id)) return null;
+            JObject schema;
+            string schemaError;
+            if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError)) return null;
+            return new JObject
+            {
+                ["type"] = "function",
+                ["function"] = new JObject
+                {
+                    ["name"] = tool.Id,
+                    ["description"] = BuildDescription(tool),
+                    ["parameters"] = ToolSchemaSupport.ForPrompt(schema)
+                },
+                ["safety"] = new JObject
+                {
+                    ["mutates_document"] = tool.MutatesDocument,
+                    ["mutates_local_state"] = tool.MutatesLocalState,
+                    ["requires_confirmation"] = tool.RequiresConfirmation,
+                    ["risk_level"] = tool.RiskLevel
+                }
+            };
+        }
+
+        internal static string BuildDescription(ToolDefinition tool)
         {
             var parts = new List<string>();
             if (!string.IsNullOrWhiteSpace(tool.Description)) parts.Add(tool.Description.Trim());
