@@ -454,14 +454,18 @@ namespace RNAssistant.Harness
                 AssertEqual(discoveryCalls, adapter.Executed.Count(item =>
                     string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
                     "document VBA discovery uses short cache");
+                catalogService.GetFreshConversationTools();
+                AssertEqual(discoveryCalls + 1, adapter.Executed.Count(item =>
+                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
+                    "each conversation boundary refreshes document VBA discovery");
                 adapter.RuntimeDocumentKeyValue = "runtime-reopened-document";
                 catalogService.GetVisibleTools();
-                AssertEqual(discoveryCalls + 1, adapter.Executed.Count(item =>
+                AssertEqual(discoveryCalls + 2, adapter.Executed.Count(item =>
                     string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
                     "document VBA discovery cache is scoped to the runtime document");
                 catalogService.InvalidateDocumentVbaTools();
                 catalogService.GetVisibleTools();
-                AssertEqual(discoveryCalls + 2, adapter.Executed.Count(item =>
+                AssertEqual(discoveryCalls + 3, adapter.Executed.Count(item =>
                     string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
                     "document VBA discovery cache invalidates");
 

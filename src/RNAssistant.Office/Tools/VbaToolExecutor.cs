@@ -35,6 +35,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document with two strict branches. Whole-source write requires moduleName+code and uses mode=upsert/createOnly/updateOnly; componentType applies only on creation. Atomic rename requires moduleName+newModuleName+mode=rename and accepts no code/componentType. Runtime guards both names, normalizes a new destination, rejects collisions, journals both identities, and verifies read-back. Rename preserves the component but does not rewrite textual references to its old name.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), "Common", "Mutates document: Apply ordered exact unique source-block replacements to an existing VBA component. There are no line-number, fuzzy, first-match, regex, or implicit insertion modes. Runtime patches one current full-module snapshot in memory, then performs one guarded whole-module write. Exact replacements already satisfied are skipped; an all-no-op patch succeeds without writing. Use common.vba_write_module with complete source when the module is missing.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), "Common", "Mutates document: Delete an existing StdModule or ClassModule. Runtime reads it, validates the type, and creates a rollback backup; no separate read call is required. Document modules and UserForms are not deleted.", ModuleNameSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("office_run_macro"), "Common", "Mutates document and may execute arbitrary VBA code: Run any existing macro by its exact Office Application.Run name without a manifest or allowlist. Available in Excel, Word, and PowerPoint. The macro may affect files or external state; use only when execution is requested and inspect the returned result.", RunMacroSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
         }
 
         public string ToolId(string suffix)
@@ -50,7 +51,8 @@ namespace RNAssistant.Office.Tools
         internal bool IsInternalToolId(string id)
         {
             return !string.IsNullOrWhiteSpace(id) &&
-                id.StartsWith(BackendToolId("vba_"), StringComparison.OrdinalIgnoreCase);
+                (id.StartsWith(BackendToolId("vba_"), StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(id, BackendToolId("run_macro"), StringComparison.OrdinalIgnoreCase));
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, bool dryRun, ChatSession session, CancellationToken cancellationToken)
@@ -73,6 +75,7 @@ namespace RNAssistant.Office.Tools
 
             if (string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase)) return WriteVbaModule(command, dryRun, session);
             if (string.Equals(command.ToolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase)) return DeleteModule(command, dryRun, session);
+            if (string.Equals(command.ToolId, ToolId("office_run_macro"), StringComparison.OrdinalIgnoreCase)) return RunMacro(command, dryRun);
 
             return ToolResult.Fail("Unknown VBA controller tool: " + command.ToolId);
         }
@@ -137,13 +140,51 @@ namespace RNAssistant.Office.Tools
 
         public ToolResult RunMacro(string macroName)
         {
+            var command = new ToolCommand { ToolId = ToolId("office_run_macro") };
+            command.Arguments["macroName"] = macroName;
+            return RunMacro(command, false);
+        }
+
+        private ToolResult RunMacro(ToolCommand command, bool dryRun)
+        {
+            var macroName = ToolArgumentReader.String(command == null ? null : command.Arguments, "macroName", string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(macroName))
             {
                 return ToolResult.Fail("macroName is required.", null, "vba_macro_name_required", true);
             }
-            var command = new ToolCommand { ToolId = BackendToolId("run_macro") };
-            command.Arguments["macroName"] = macroName.Trim();
-            return _adapter.ExecuteTool(command) ??
+
+            JArray arguments;
+            try
+            {
+                object raw;
+                if (command.Arguments != null && command.Arguments.TryGetValue("arguments", out raw) && raw != null)
+                {
+                    var token = raw as JToken ?? JToken.FromObject(raw);
+                    arguments = token as JArray;
+                    if (arguments == null) return ToolResult.Fail("Macro arguments must be a native JSON array.", null, "vba_macro_arguments_invalid", true);
+                }
+                else
+                {
+                    arguments = new JArray();
+                }
+            }
+            catch (JsonException ex)
+            {
+                return ToolResult.Fail("Macro arguments are invalid: " + ex.Message, null, "vba_macro_arguments_invalid", true);
+            }
+            if (dryRun)
+            {
+                return ToolResult.Ok("Dry run: would run Office macro " + macroName + ".", JsonConvert.SerializeObject(new
+                {
+                    macroName = macroName,
+                    arguments = arguments
+                }));
+            }
+
+            var backend = new ToolCommand { ToolId = BackendToolId("run_macro") };
+            backend.Arguments["macroName"] = macroName;
+            backend.Arguments["argumentsJson"] = arguments.ToString(Formatting.None);
+            return _adapter.ExecuteTool(backend) ??
                 ToolResult.Fail("VBA macro returned no result.", null, "vba_macro_missing_result", true);
         }
 

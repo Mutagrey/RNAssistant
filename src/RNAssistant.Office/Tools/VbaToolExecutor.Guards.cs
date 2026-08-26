@@ -26,6 +26,7 @@ namespace RNAssistant.Office.Tools
         private bool IsPreflightMutation(string toolId)
         {
             return IsPublicMutation(toolId) ||
+                string.Equals(toolId, ToolId("office_run_macro"), StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase);
         }
 

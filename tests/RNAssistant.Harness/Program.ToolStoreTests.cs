@@ -139,17 +139,21 @@ namespace RNAssistant.Harness
                         (tool.Id ?? string.Empty).StartsWith(hostPrefix + "vba_", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(tool.Id, hostPrefix + "insert_vba_module", StringComparison.OrdinalIgnoreCase)),
                         host + " omits internal VBA backend from the visible tool catalog");
-                    var runMacro = adapter.GetBuiltInTools().Single(tool =>
-                        string.Equals(tool.Id, hostPrefix + "run_macro", StringComparison.OrdinalIgnoreCase));
+                    AssertTrue(!adapter.GetBuiltInTools().Any(tool =>
+                        string.Equals(tool.Id, hostPrefix + "run_macro", StringComparison.OrdinalIgnoreCase)),
+                        host + " keeps the host macro backend out of the public adapter catalog");
+                    var runMacro = tools.Single(tool =>
+                        string.Equals(tool.Id, "common.office_run_macro", StringComparison.OrdinalIgnoreCase));
                     AssertTrue(runMacro.AgentCanRun && runMacro.MutatesDocument && runMacro.RequiresConfirmation &&
                         runMacro.RiskLevel == 3,
-                        host + " publishes confirmed arbitrary macro execution with high-risk metadata");
+                        host + " publishes one host-neutral confirmed macro tool with high-risk metadata");
                     AssertContains(runMacro.ArgumentSchemaJson, "\"arguments\"", host + " macro tool accepts positional arguments");
                 }
 
                 var outlook = FakeOfficeAdapter.ForHost("Outlook");
                 var outlookExecutor = new OfficeToolExecutor(outlook, new VbaJournalStore(paths), new SkillStore(paths));
                 AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "common.vba_apply_patch"), "Outlook does not expose VBA facade");
+                AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "common.office_run_macro"), "Outlook does not expose unsupported Application.Run");
 
                 var excel = FakeOfficeAdapter.ForHost("Excel");
                 var store = new ToolStore(paths);
@@ -265,7 +269,7 @@ namespace RNAssistant.Harness
             AssertTrue(HasTool(excel, "excel.add_table"), "excel add table visible");
             AssertTrue(HasTool(excel, "excel.upsert_chart"), "excel chart upsert facade visible");
             AssertTrue(FindTool(excel, "excel.clear_range").RequiresConfirmation, "excel clear requires confirmation");
-            AssertTrue(HasTool(excel, "excel.run_macro"), "excel arbitrary macro runner visible");
+            AssertTrue(!HasTool(excel, "excel.run_macro"), "excel macro backend is hidden from built-ins");
             AssertTrue(!HasTool(excel, "excel.get_context") && !HasTool(excel, "excel.get_selection"),
                 "generic Excel context and selection reads use document resources");
 
@@ -278,7 +282,7 @@ namespace RNAssistant.Harness
                 "word replacement has no model-owned precondition");
             AssertTrue(HasTool(word, "word.format_text"), "word formatting facade visible");
             AssertTrue(HasTool(word, "word.add_table"), "word add table visible");
-            AssertTrue(HasTool(word, "word.run_macro"), "word arbitrary macro runner visible");
+            AssertTrue(!HasTool(word, "word.run_macro"), "word macro backend is hidden from built-ins");
 
             var powerpoint = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("PowerPoint").GetBuiltInTools());
             AssertTrue(!HasTool(powerpoint, "powerpoint.get_context") &&
@@ -287,7 +291,7 @@ namespace RNAssistant.Harness
             AssertTrue(HasTool(powerpoint, "powerpoint.list_objects"), "powerpoint list facade visible");
             AssertTrue(HasTool(powerpoint, "powerpoint.set_text") && HasTool(powerpoint, "powerpoint.add_object"), "powerpoint mutation facades visible");
             AssertTrue(FindTool(powerpoint, "powerpoint.move_slide").RequiresConfirmation, "powerpoint move requires confirmation");
-            AssertTrue(HasTool(powerpoint, "powerpoint.run_macro"), "powerpoint arbitrary macro runner visible");
+            AssertTrue(!HasTool(powerpoint, "powerpoint.run_macro"), "powerpoint macro backend is hidden from built-ins");
 
             var outlook = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Outlook").GetBuiltInTools());
             AssertTrue(!HasTool(outlook, "outlook.get_context"), "generic Outlook context uses document resources");
@@ -302,9 +306,9 @@ namespace RNAssistant.Harness
                 { "PowerPoint", powerpoint },
                 { "Outlook", outlook }
             };
-            AssertEqual(16, excel.Count, "complete Excel tool count");
-            AssertEqual(10, word.Count, "complete Word tool count");
-            AssertEqual(10, powerpoint.Count, "complete PowerPoint tool count");
+            AssertEqual(15, excel.Count, "complete Excel tool count");
+            AssertEqual(9, word.Count, "complete Word tool count");
+            AssertEqual(9, powerpoint.Count, "complete PowerPoint tool count");
             AssertEqual(5, outlook.Count, "complete Outlook tool count");
             foreach (var catalog in catalogs)
             {

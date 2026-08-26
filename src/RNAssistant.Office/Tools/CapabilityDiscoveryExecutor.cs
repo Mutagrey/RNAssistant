@@ -16,12 +16,10 @@ namespace RNAssistant.Office.Tools
         public const string ReadToolId = "common.capabilities_read";
         public const int MaximumDescriptorCharacters = 24000;
 
-        private const int MaximumPromptItems = 128;
-        private const int MaximumPromptCatalogCharacters = 24000;
-        private const int MaximumEnumItems = 256;
         private const int MaximumSearchPageSize = 20;
         private const int MaximumQueryCharacters = 200;
-        private const int MaximumSummaryCharacters = 220;
+        private const int MaximumNameCharacters = 100;
+        private const int MaximumSummaryCharacters = 160;
 
         private readonly SkillToolExecutor _skillExecutor;
 
@@ -35,7 +33,7 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(
                 SearchToolId,
                 "Common",
-                "Read-only: Search the complete runnable capability catalog when the compact RUNTIME_CONTEXT.capabilities index is truncated or no exact id is visible. Results identify tools and skills but load neither.",
+                "Read-only: Filter the complete compact RUNTIME_CONTEXT.capabilities catalog by id or metadata. Results identify tools and skills but load neither; use the exact id with common.capabilities_read.",
                 SearchSchema(),
                 name: "capabilities_search",
                 scope: "session");
@@ -118,27 +116,20 @@ namespace RNAssistant.Office.Tools
                 .OrderBy(record => record.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(record => record.Kind, StringComparer.Ordinal)
                 .ToList();
-            var selected = new List<JObject>();
-            var selectedCharacters = 2;
-            foreach (var record in entries.Take(MaximumPromptItems))
-            {
-                var item = Metadata(record, activeIds.Contains(record.Id));
-                var itemCharacters = item.ToString(Formatting.None).Length + (selected.Count == 0 ? 0 : 1);
-                if (selected.Count > 0 && selectedCharacters + itemCharacters > MaximumPromptCatalogCharacters) break;
-                selected.Add(item);
-                selectedCharacters += itemCharacters;
-            }
+            var selected = entries
+                .Select(record => Metadata(record, activeIds.Contains(record.Id)))
+                .ToArray();
             return new JObject
             {
                 ["revision"] = CatalogRevision(toolCatalog, skillCatalog),
                 ["items"] = new JArray(selected),
-                ["shown"] = selected.Count,
+                ["shown"] = selected.Length,
                 ["total"] = entries.Count,
-                ["truncated"] = selected.Count < entries.Count,
+                ["complete"] = true,
+                ["truncated"] = false,
                 ["idEnumEnforced"] = HasBoundIdEnum(toolCatalog, entries.Count),
-                ["instruction"] = selected.Count < entries.Count
-                    ? "Use only exact ids shown here or returned by common.capabilities_search; read one with common.capabilities_read. Never synthesize an id."
-                    : "Use only exact ids shown here; read one with common.capabilities_read. Never synthesize an id."
+                ["instruction"] =
+                    "This is the complete runnable tool and enabled skill index for this run. Use only an exact id shown here; common.capabilities_search is an optional filter. Load the selected tool schema or skill body with common.capabilities_read. Never synthesize an id."
             };
         }
 
@@ -161,11 +152,6 @@ namespace RNAssistant.Office.Tools
                 .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             var genericSchema = ReadSchema(null, null);
-            if (allIds.Length > MaximumEnumItems)
-            {
-                reader.ArgumentSchemaJson = genericSchema;
-                return;
-            }
             reader.ArgumentSchemaJson = ReadSchema(allIds, skillIds);
             var descriptor = Descriptor(reader);
             if (descriptor == null || descriptor.ToString(Formatting.None).Length > MaximumDescriptorCharacters)
@@ -313,7 +299,7 @@ namespace RNAssistant.Office.Tools
                 .ThenBy(record => record.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             cursor = Math.Min(cursor, matches.Count);
-            var page = matches.Skip(cursor).Take(limit).Select(record => Metadata(record, false)).ToArray();
+            var page = matches.Skip(cursor).Take(limit).Select(record => Metadata(record, null)).ToArray();
             var next = cursor + page.Length;
             return ToolResult.Ok("Capability metadata search completed.", new JObject
             {
@@ -376,19 +362,19 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static JObject Metadata(CapabilityRecord record, bool schemaLoaded)
+        private static JObject Metadata(CapabilityRecord record, bool? schemaLoaded)
         {
             var result = new JObject
             {
                 ["id"] = record.Id,
                 ["kind"] = record.Kind,
-                ["name"] = Bound(record.Name, MaximumSummaryCharacters),
+                ["name"] = Bound(record.Name, MaximumNameCharacters),
                 ["summary"] = Bound(record.Summary, MaximumSummaryCharacters),
                 ["revision"] = record.Revision
             };
             if (record.Tool != null)
             {
-                result["schemaLoaded"] = schemaLoaded;
+                if (schemaLoaded.HasValue) result["schemaLoaded"] = schemaLoaded.Value;
                 result["mutatesDocument"] = record.Tool.MutatesDocument;
                 result["mutatesLocalState"] = record.Tool.MutatesLocalState;
                 result["requiresConfirmation"] = record.Tool.RequiresConfirmation;

@@ -64,6 +64,12 @@ namespace RNAssistant.Office.Services
             return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id).ToList();
         }
 
+        public List<ToolDefinition> GetFreshConversationTools()
+        {
+            InvalidateDocumentVbaTools();
+            return GetVisibleTools();
+        }
+
         private void DiscoverDocumentVbaTools(IDictionary<string, ToolDefinition> result)
         {
             var matchedGlobalPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

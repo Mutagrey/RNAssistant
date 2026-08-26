@@ -65,7 +65,7 @@ namespace RNAssistant.Harness
                 Test("agent: json schema fallback is request-local", AgentJsonSchemaFallbackIsRequestLocal),
                 Test("tools: strict schema validates metadata and constraints", StrictToolSchemaValidatesMetadataAndConstraints),
                 Test("tools: controller catalog uses strict schemas", ControllerToolCatalogUsesStrictSchemas),
-                Test("tools: discovery is bounded and exact", ToolDiscoveryIsBoundedAndLoadsExactSchema),
+                Test("tools: discovery is complete and exact", ToolDiscoveryIsCompleteAndLoadsExactSchema),
                 Test("agent: progressive tools require exact read", ProgressiveAgentRequiresExactToolRead),
                 Test("agent: tool working set evicts and replays", ProgressiveToolWorkingSetEvictsAndReplaysDeterministically),
                 Test("agent: executes tool and receives JSON result", SimpleAgentExecutesToolAndReceivesJsonResult),

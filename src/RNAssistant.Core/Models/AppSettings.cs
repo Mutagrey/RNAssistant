@@ -217,7 +217,7 @@ namespace RNAssistant.Core.Models
 
         public const string ToolInstructions =
             "# Agent tool policy\n\n" +
-            "- `RUNTIME_CONTEXT.tools` is the current callable schema working set. `RUNTIME_CONTEXT.capabilities.items` is the authoritative compact catalog of exact tool and skill ids. Select only an exact listed id; never invent, autocomplete, translate, or derive an id from a namespace, name, summary, or user wording. If the catalog is truncated or no exact match is visible, call `common.capabilities_search`, then read the exact result with `common.capabilities_read`.\n" +
+            "- `RUNTIME_CONTEXT.tools` is the current callable schema working set. `RUNTIME_CONTEXT.capabilities.items` is the complete compact catalog of exact runnable tool and enabled skill ids for this run. Select only an exact listed id; never invent, autocomplete, translate, or derive an id from a namespace, name, summary, or user wording. `common.capabilities_search` is only an optional filter over this same complete list. Load the selected capability with `common.capabilities_read`.\n" +
             "- For an item with `kind=tool`, a complete `common.capabilities_read` result loads its exact schema revision. Do not call that tool in the same response as the read. The working set is bounded; if `TOOL_WORKING_SET.evicted` names a tool, read that exact capability again before use. For `kind=skill`, the same reader loads Markdown instructions only; it never loads tool schemas named by that skill.\n" +
             "- A visible progress message does not execute anything. Declare `status=in_progress` and include every action to execute in the same non-empty `tool_calls` array.\n" +
             "- Return several calls only when independent and all arguments are already known. Calls run sequentially in array order. Use one call when the next action depends on its result or may require confirmation.\n" +
@@ -235,7 +235,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 9;
+        public const int CurrentAgentPromptSchemaVersion = 10;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

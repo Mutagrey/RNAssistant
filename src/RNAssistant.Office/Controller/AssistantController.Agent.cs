@@ -106,7 +106,7 @@ namespace RNAssistant.Office
                 var settings = ResolveChatSettings(session);
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
                 var continuationAttachments = pending.Attachments ?? LatestUserAttachments(session);
-                var tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
+                var tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
                 var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
                 var pendingResolved = false;
                 try
@@ -142,8 +142,7 @@ namespace RNAssistant.Office
                     pendingResolved = true;
                     ReportProgress(runProgress, "tool_result", result == null ? string.Empty : result.Message,
                         AgentTranscript.CreateToolActivity(CloneCommand(pending.Command), result, "tool"));
-                    _toolCatalog.InvalidateDocumentVbaTools();
-                    tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
+                    tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
                     var context = LoadContext(session);
                     skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
                     SetToolCallReplay(session, pending.Command.ToolCallId, true);

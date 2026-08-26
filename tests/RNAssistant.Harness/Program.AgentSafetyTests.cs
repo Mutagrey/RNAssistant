@@ -403,13 +403,31 @@ namespace RNAssistant.Harness
             });
 
             var skillCommand = new ToolCommand { ToolId = CapabilityDiscoveryExecutor.ReadToolId, ToolCallId = "call_skill_large" };
-            var skillData = JsonConvert.SerializeObject(new { kind = "skill", loaded = true, bodyMarkdown = new string('x', 50000) });
-            var boundedSkill = JObject.Parse(AgentJsonProtocol.BuildToolResult(skillCommand, ToolResult.Ok("read", skillData), 256));
-            AssertEqual(true, (bool)boundedSkill.SelectToken("data.truncated"), "oversized skill data is marked truncated");
-            AssertTrue(boundedSkill.SelectToken("data.loaded") == null, "truncated skill does not retain top-level loaded evidence");
+            var skillData = JsonConvert.SerializeObject(new { kind = "skill", id = "common.large", revision = "r1", loaded = true, complete = true, truncated = false, bodyMarkdown = new string('x', 50000) });
+            var oversizedSkillResult = ToolResult.Ok("Skill loaded", skillData);
+            AgentJsonProtocol.FailClosedOversizedCapabilityEvidence(skillCommand, oversizedSkillResult, 256, new AppSettings());
+            var boundedSkill = JObject.Parse(AgentJsonProtocol.BuildToolResult(skillCommand, oversizedSkillResult, 256));
+            AssertEqual(false, (bool)boundedSkill["ok"], "oversized capability evidence fails closed");
+            AssertEqual("capability_evidence_context_too_large", (string)boundedSkill.SelectToken("error.code"),
+                "oversized capability evidence has an actionable error");
+            AssertEqual(false, (bool)boundedSkill.SelectToken("data.loaded"), "oversized skill never claims loaded evidence");
+            AssertEqual(true, (bool)boundedSkill.SelectToken("data.truncated"), "oversized skill reports incomplete transport");
             AssertTrue(ToolResultResourceService.ExternalizeIfNeeded(
                     new ChatSession(), skillCommand, ToolResult.Ok("read", skillData), 256, new AppSettings()) == null,
                 "trusted skill evidence is not duplicated into an untrusted artifact");
+
+            var fittingSchemaResult = ToolResult.Ok("Tool schema loaded", JsonConvert.SerializeObject(new
+            {
+                kind = "tool-schema",
+                id = "common.small",
+                revision = "r2",
+                loaded = true,
+                complete = true,
+                truncated = false,
+                descriptor = new { type = "function" }
+            }));
+            AgentJsonProtocol.FailClosedOversizedCapabilityEvidence(skillCommand, fittingSchemaResult, 256, new AppSettings());
+            AssertTrue(fittingSchemaResult.Success, "complete capability evidence that fits remains successful");
 
             var nestedData = JsonConvert.SerializeObject(new { value = new string('x', 200000) });
             var pipeline = AgentTranscript.CreateToolActivity(command, ToolResult.Ok("pipeline", JsonConvert.SerializeObject(new

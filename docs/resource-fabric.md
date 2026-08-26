@@ -48,7 +48,7 @@ Chat and Agent use one buffered structured loop. The policy differs, the transpo
 
 - Chat receives exactly the four resource discovery/read tools and no mutation tools, confirmation, or skills.
 - Agent keeps the complete mode/session-filtered catalog only as local execution authority. The initial model prompt contains resource and unified capability bootstrap schemas plus a compact exact-id tool/skill catalog.
-- `common.capabilities_search` returns bounded schema-free metadata when the prompt catalog is truncated. `common.capabilities_read` loads one exact revisioned tool descriptor or complete skill body according to the catalog kind; only complete, untruncated tool-schema evidence matching the current descriptor enters the callable working set.
+- `RUNTIME_CONTEXT.capabilities.items` always contains the complete compact schema-free capability index. `common.capabilities_search` is an optional bounded metadata filter over it. `common.capabilities_read` loads one exact revisioned tool descriptor or complete skill body according to the catalog kind; only complete, untruncated tool-schema evidence matching the current descriptor enters the callable working set.
 - The dynamic working set is an evidence-derived LRU of at most eight schemas with an 8k–20k token budget. Exact tool calls update recency, so replay reconstructs the same eviction. Compaction, truncation, revision drift, or explicit eviction requires another read.
 - A schema or skill body remains loaded only while its exact revision is present in active model context.
 

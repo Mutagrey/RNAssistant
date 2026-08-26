@@ -803,6 +803,8 @@ namespace RNAssistant.Office.Services
             var maxDataTokens = string.Equals(toolId, CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase)
                     ? availableForData
                     : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
+            AgentJsonProtocol.FailClosedOversizedCapabilityEvidence(
+                command, result, maxDataTokens, settings);
             var artifact = ToolResultResourceService.ExternalizeIfNeeded(
                 session,
                 command,

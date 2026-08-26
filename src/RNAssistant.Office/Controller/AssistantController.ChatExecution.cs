@@ -502,7 +502,11 @@ namespace RNAssistant.Office
                             "Не удалось обновить сжатый контекст; продолжаю с сохранённой историей.", null, activity));
                         runProgress("compaction_failed", activity.ResultMessage, activity);
                     }
-                    var tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
+                    var tools = (executionMode == ChatModes.Agent
+                            ? _toolCatalog.GetFreshConversationTools()
+                            : _toolCatalog.GetVisibleTools())
+                        .Where(tool => tool.Enabled)
+                        .ToList();
                     var skills = executionMode != ChatModes.Chat
                         ? _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList()
                         : new List<SkillDefinition>();

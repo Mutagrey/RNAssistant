@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -168,6 +169,51 @@ namespace RNAssistant.Office.Services
                 Content = "TOOL_RESULT:\n" + resultJson,
                 ProtocolMessage = true
             };
+        }
+
+        internal static void FailClosedOversizedCapabilityEvidence(
+            ToolCommand command,
+            ToolResult result,
+            int maxDataTokens,
+            AppSettings settings = null)
+        {
+            if (command == null || result == null || !result.Success ||
+                !string.Equals(command.ToolId, CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(result.DataJson)) return;
+
+            JObject data;
+            try { data = JObject.Parse(result.DataJson); }
+            catch (JsonException) { return; }
+            var kind = (string)data["kind"] ?? string.Empty;
+            var isCoreEvidence = (string.Equals(kind, "tool-schema", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase)) &&
+                (bool?)data["loaded"] == true &&
+                (bool?)data["complete"] == true &&
+                (bool?)data["truncated"] == false;
+            if (!isCoreEvidence) return;
+
+            var compact = data.ToString(Formatting.None);
+            var estimatedTokens = ModelContextBudget.EstimateTextTokens(compact, settings);
+            if (estimatedTokens <= Math.Max(0, maxDataTokens)) return;
+
+            result.Success = false;
+            result.Status = "failed";
+            result.ErrorCode = "capability_evidence_context_too_large";
+            result.Retryable = false;
+            result.Message =
+                "Capability was found but its complete evidence did not fit the remaining model context, so it was not loaded. Reduce context or start a new chat; do not retry unchanged.";
+            result.DataJson = new JObject
+            {
+                ["kind"] = kind,
+                ["id"] = data["id"] == null ? JValue.CreateNull() : data["id"].DeepClone(),
+                ["revision"] = data["revision"] == null ? JValue.CreateNull() : data["revision"].DeepClone(),
+                ["loaded"] = false,
+                ["complete"] = false,
+                ["truncated"] = true,
+                ["original_chars"] = compact.Length,
+                ["original_estimated_tokens"] = estimatedTokens,
+                ["available_tokens"] = Math.Max(0, maxDataTokens)
+            }.ToString(Formatting.None);
         }
 
         public static ChatMessage CreateToolCallMessage(

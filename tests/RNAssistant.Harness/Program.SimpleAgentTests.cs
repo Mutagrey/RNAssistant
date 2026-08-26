@@ -850,8 +850,10 @@ namespace RNAssistant.Harness
                     "raw host VBA read backend remains hidden");
                 AssertTrue(prompt.IndexOf("\"name\":\"excel.vba_replace_module\"", StringComparison.Ordinal) < 0,
                     "raw whole-module backend remains hidden");
-                AssertContains(prompt, "\"id\":\"excel.run_macro\"", "arbitrary macro execution is discoverable by exact id");
-                AssertTrue(!callableNames.Contains("excel.run_macro", StringComparer.OrdinalIgnoreCase),
+                AssertContains(prompt, "\"id\":\"common.office_run_macro\"", "host-neutral arbitrary macro execution is discoverable by exact id");
+                AssertTrue(prompt.IndexOf("\"id\":\"excel.run_macro\"", StringComparison.Ordinal) < 0,
+                    "host macro backend is hidden from the compact catalog");
+                AssertTrue(!callableNames.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase),
                     "macro schema remains progressive rather than eagerly injected");
             });
         }
@@ -862,8 +864,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.run_macro", "schema_run_macro"),
-                    "{\"status\":\"in_progress\",\"message\":\"Запускаю выбранный макрос.\",\"tool_calls\":[{\"id\":\"call_macro\",\"name\":\"excel.run_macro\",\"arguments\":{\"macroName\":\"Module1.MigrateApiKey\",\"arguments\":[\"value\",2,true]}}]}",
+                    LoadToolSchemaResponse("common.office_run_macro", "schema_run_macro"),
+                    "{\"status\":\"in_progress\",\"message\":\"Запускаю выбранный макрос.\",\"tool_calls\":[{\"id\":\"call_macro\",\"name\":\"common.office_run_macro\",\"arguments\":{\"macroName\":\"Module1.MigrateApiKey\",\"arguments\":[\"value\",2,true]}}]}",
                     "{\"status\":\"completed\",\"message\":\"Макрос выполнен.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -882,6 +884,8 @@ namespace RNAssistant.Harness
                 AssertEqual(3, calls.Count, "schema load, macro execution, and final response");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.run_macro"), "macro executes once");
                 AssertEqual("Module1.MigrateApiKey", adapter.RanMacros.Single(), "arbitrary exact macro name reaches the adapter");
+                AssertEqual("[\"value\",2,true]", Convert.ToString(adapter.Executed.Single(command => command.ToolId == "excel.run_macro").Arguments["argumentsJson"]),
+                    "public native arguments are serialized only at the hidden backend boundary");
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "macro schema evidence reaches execution step");
                 AssertEqual("Макрос выполнен.", result.AssistantText, "macro result returns to the model");
             });

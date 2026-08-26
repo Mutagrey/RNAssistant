@@ -770,9 +770,7 @@ namespace RNAssistant.OfficeHosts
                 return ToolResult.Fail("No macroName provided.");
             }
 
-            var argumentsJson = command.Arguments != null && command.Arguments.ContainsKey("arguments")
-                ? ToolArgumentReader.String(command.Arguments, "arguments", "[]")
-                : ToolArgumentReader.String(command.Arguments, "argumentsJson", "[]");
+            var argumentsJson = ToolArgumentReader.String(command.Arguments, "argumentsJson", "[]");
             var output = VbaProjectSupport.RunStringFunction(_application, macroName, argumentsJson);
             return ToolResult.Ok("Macro ran: " + macroName, JsonConvert.SerializeObject(new { output = output }));
         }

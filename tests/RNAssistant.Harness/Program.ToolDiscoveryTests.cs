@@ -13,7 +13,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void ToolDiscoveryIsBoundedAndLoadsExactSchema()
+        private static void ToolDiscoveryIsCompleteAndLoadsExactSchema()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -118,7 +118,7 @@ namespace RNAssistant.Harness
                 }
                 AssertTrue(collisionDetected, "tool/skill id collisions fail closed");
 
-                var largeCatalog = catalog.Concat(Enumerable.Range(0, 180).Select(index => new ToolDefinition
+                var largeCatalog = catalog.Concat(Enumerable.Range(0, 300).Select(index => new ToolDefinition
                 {
                     Id = "excel.synthetic_" + index.ToString("D3"),
                     Host = "Excel",
@@ -130,18 +130,24 @@ namespace RNAssistant.Harness
                     AgentCanRun = true
                 })).ToList();
                 CapabilityDiscoveryExecutor.BindReadSchema(largeCatalog, skills);
-                var boundedCatalog = CapabilityDiscoveryExecutor.BuildPromptCatalog(
+                var completeCatalog = CapabilityDiscoveryExecutor.BuildPromptCatalog(
                     largeCatalog,
                     skills,
                     largeCatalog);
-                AssertEqual(true, (bool)boundedCatalog["truncated"],
-                    "large exact-id catalog is bounded in the prompt");
-                AssertTrue(((JArray)boundedCatalog["items"]).Count <= 128,
-                    "prompt catalog respects the item bound");
-                AssertTrue(((JArray)boundedCatalog["items"]).ToString(Newtonsoft.Json.Formatting.None).Length <= 25000,
-                    "prompt catalog respects the compact character bound");
+                AssertEqual(true, (bool)completeCatalog["complete"],
+                    "large exact-id catalog is explicitly complete");
+                AssertEqual(false, (bool)completeCatalog["truncated"],
+                    "large exact-id catalog is never silently truncated");
+                AssertEqual((int)completeCatalog["total"], ((JArray)completeCatalog["items"]).Count,
+                    "every runnable tool and enabled skill is listed");
+                AssertTrue(((JArray)completeCatalog["items"]).OfType<JObject>().Any(item =>
+                    (string)item["id"] == "excel.synthetic_299"),
+                    "complete prompt index contains the tail id");
+                AssertTrue(completeCatalog["items"].ToString(Newtonsoft.Json.Formatting.None)
+                        .IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
+                    "complete prompt index remains schema-free");
                 var tailSearch = executor.Execute(
-                    Command(CapabilityDiscoveryExecutor.SearchToolId, "query", "excel.synthetic_179"),
+                    Command(CapabilityDiscoveryExecutor.SearchToolId, "query", "excel.synthetic_299"),
                     largeCatalog,
                     new AppSettings(),
                     false,
@@ -149,9 +155,21 @@ namespace RNAssistant.Harness
                     null,
                     AppSettings.DefaultMaxAgentToolSteps,
                     skills);
-                AssertTrue(tailSearch.Success, "search reaches capabilities omitted from the prompt bound");
-                AssertContains(tailSearch.DataJson, "excel.synthetic_179",
-                    "search returns the exact omitted capability id");
+                AssertTrue(tailSearch.Success, "optional search filters the complete catalog");
+                AssertContains(tailSearch.DataJson, "excel.synthetic_299",
+                    "search returns the exact tail capability id");
+                AssertTrue(tailSearch.DataJson.IndexOf("schemaLoaded", StringComparison.Ordinal) < 0,
+                    "search does not claim working-set state it cannot observe");
+                var tailRead = executor.Execute(
+                    Command(CapabilityDiscoveryExecutor.ReadToolId, "id", "excel.synthetic_299"),
+                    largeCatalog,
+                    new AppSettings(),
+                    false,
+                    false,
+                    null,
+                    AppSettings.DefaultMaxAgentToolSteps,
+                    skills);
+                AssertTrue(tailRead.Success, "exact reader loads a tail schema from a large catalog");
             });
         }
 
