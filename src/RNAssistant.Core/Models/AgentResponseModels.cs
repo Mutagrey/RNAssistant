@@ -5,7 +5,7 @@ namespace RNAssistant.Core.Models
 {
     public static class AgentResponseProtocol
     {
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
     }
 
     public static class AgentResponseStatuses
@@ -35,6 +35,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AgentResponse
     {
+        // Runtime projection derived only from tool_calls. It is not a model-facing field.
         public string Status { get; set; }
         public string Message { get; set; }
         public List<AgentToolCall> ToolCalls { get; set; }

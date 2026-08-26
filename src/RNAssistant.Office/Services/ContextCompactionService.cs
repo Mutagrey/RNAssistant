@@ -56,6 +56,9 @@ namespace RNAssistant.Office.Services
                     ConversationPromptComposer.BuildInstruction(ChatModes.Agent, settings), settings),
                 ModelContextBudget.EstimateTextTokens(
                     ConversationPromptComposer.BuildInstruction(ChatModes.Chat, settings), settings));
+            instructionTokens = Math.Max(instructionTokens,
+                ModelContextBudget.EstimateTextTokens(
+                    ConversationPromptComposer.BuildInstruction(ChatModes.Plan, settings), settings));
             var projected = ModelContextBudget.EstimateMessagesTokens(projectedWindow, settings) +
                 ModelContextBudget.EstimateTextTokens(activeCheckpoint == null ? null : activeCheckpoint.SummaryMarkdown, settings) +
                 ModelContextBudget.EstimateTextTokens(incomingText, settings) +
@@ -276,7 +279,8 @@ namespace RNAssistant.Office.Services
 
             if (session == null) return result;
             add(ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId));
-            add(ChatResourceUri.ResolveArtifactRevision(session, session.ActivePlanArtifactId));
+            add(ChatResourceUri.ResolveArtifactRevision(session, session.ActiveTaskListArtifactId));
+            add(ChatResourceUri.ResolveArtifactRevision(session, session.ActivePlanDocumentArtifactId));
 
             var messages = session.Messages ?? new List<ChatMessage>();
             var throughIndex = checkpoint == null
@@ -360,7 +364,8 @@ namespace RNAssistant.Office.Services
                     message.ResourceRefs ?? new List<ResourceRef>())),
                 StringComparer.OrdinalIgnoreCase);
             if (session != null && !string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) referencedArtifactIds.Add(session.ActiveHtmlArtifactId);
-            if (session != null && !string.IsNullOrWhiteSpace(session.ActivePlanArtifactId)) referencedArtifactIds.Add(session.ActivePlanArtifactId);
+            if (session != null && !string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId)) referencedArtifactIds.Add(session.ActiveTaskListArtifactId);
+            if (session != null && !string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId)) referencedArtifactIds.Add(session.ActivePlanDocumentArtifactId);
             var artifacts = (session == null || session.Artifacts == null ? new List<ChatArtifact>() : session.Artifacts)
                 .Where(artifact => artifact != null && referencedArtifactIds.Contains(artifact.Id))
                 .ToList();

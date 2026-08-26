@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
 
@@ -89,9 +90,10 @@ namespace RNAssistant.Office.Services
 
         internal static string BuildInstruction(string mode, AppSettings settings)
         {
-            return string.Equals(ChatModes.Normalize(mode), ChatModes.Chat, StringComparison.Ordinal)
-                ? ResolveChatPrompt(settings)
-                : BuildAgentInstruction(settings);
+            mode = ChatModes.Normalize(mode);
+            if (string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal)) return ResolveChatPrompt(settings);
+            if (string.Equals(mode, ChatModes.Plan, StringComparison.Ordinal)) return BuildPlanInstruction(settings);
+            return BuildAgentInstruction(settings);
         }
 
         internal static string BuildAgentInstruction(AppSettings settings)
@@ -104,9 +106,24 @@ namespace RNAssistant.Office.Services
             }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
         }
 
+        internal static string BuildPlanInstruction(AppSettings settings)
+        {
+            return string.Join("\n\n", new[]
+            {
+                ResolvePlanPrompt(settings),
+                ResolveToolPrompt(settings),
+                ResolveSkillPrompt(settings)
+            }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
+        }
+
         internal static string ResolveChatPrompt(AppSettings settings)
         {
             return ResolvePrompt(settings == null ? null : settings.ChatSystemPrompt, AgentPromptDefaults.ChatInstructions);
+        }
+
+        internal static string ResolvePlanPrompt(AppSettings settings)
+        {
+            return ResolvePrompt(settings == null ? null : settings.PlanSystemPrompt, AgentPromptDefaults.PlanInstructions);
         }
 
         internal static string ResolveGeneralPrompt(AppSettings settings)
@@ -166,7 +183,7 @@ namespace RNAssistant.Office.Services
                             : "The chat document is closed or inactive. Do not call Office object-model tools until it is opened; continue with non-Office tools such as the HTML workspace when useful."
                 },
                 ["tools"] = BuildTools(tools),
-                ["capabilities"] = string.Equals(mode, ChatModes.Agent, StringComparison.Ordinal)
+                ["capabilities"] = !string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal)
                     ? (JToken)(capabilityCatalog ?? CapabilityDiscoveryExecutor.BuildPromptCatalog(tools, skills, tools))
                     : new JObject
                     {
@@ -182,7 +199,36 @@ namespace RNAssistant.Office.Services
                 Math.Min(600, ModelContextBudget.InputBudgetTokens(settings) / 20));
             var artifacts = ChatResourcePromptIndex.Build(session, artifactBudget, settings);
             if (!string.IsNullOrWhiteSpace(artifacts)) root["artifacts"] = artifacts;
+            var activePlan = BuildActivePlan(session);
+            if (activePlan != null) root["active_plan"] = activePlan;
             return root.ToString(Formatting.None);
+        }
+
+        private static JObject BuildActivePlan(ChatSession session)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId)) return null;
+            var artifact = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item => item != null &&
+                string.Equals(item.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase));
+            if (artifact == null) return null;
+            var status = "draft";
+            var planId = string.Empty;
+            try
+            {
+                var metadata = JObject.Parse(artifact.MetadataJson ?? "{}");
+                status = (string)metadata["status"] ?? status;
+                planId = (string)metadata["planId"] ?? string.Empty;
+            }
+            catch (JsonException)
+            {
+            }
+            return new JObject
+            {
+                ["id"] = planId,
+                ["status"] = status,
+                ["title"] = artifact.Title ?? string.Empty,
+                ["revision_uri"] = ChatResourceUri.CreateArtifactRevisionUri(session, artifact)
+            };
         }
 
         private static string SafeAdapterValue(

@@ -368,7 +368,7 @@ namespace RNAssistant.Core.Services
         private static List<string> ExtractArtifactIds(SessionEvent sessionEvent)
         {
             var values = ExtractValues(sessionEvent == null ? null : sessionEvent.Data,
-                "ArtifactId", "ParentArtifactId", "ActiveHtmlArtifactId", "ActivePlanArtifactId", "ActiveContextCheckpointId");
+                "ArtifactId", "ParentArtifactId", "ActiveHtmlArtifactId", "ActiveTaskListArtifactId", "ActivePlanDocumentArtifactId", "ActiveContextCheckpointId");
             foreach (var operation in Operations(sessionEvent).Where(operation => IsArtifactOperation(StringProperty(operation, "Type"))))
             {
                 var data = Property(operation, "Data") as JObject;

@@ -213,8 +213,17 @@ namespace RNAssistant.Office
             return string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase);
         }
 
+        public static bool IsAwaitingUserResult(ToolResult result)
+        {
+            return string.Equals(NormalizeExecutionStatus(result), "awaiting_user", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string ToActivityStatus(ToolResult result)
         {
+            if (IsAwaitingUserResult(result))
+            {
+                return "waiting";
+            }
             if (result != null && result.Success)
             {
                 return "completed";

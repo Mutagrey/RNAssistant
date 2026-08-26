@@ -26,7 +26,7 @@ namespace RNAssistant.Office
 
             IReadOnlyList<ToolDefinition> tools = new ToolDefinition[0];
             IReadOnlyList<SkillDefinition> skills = new SkillDefinition[0];
-            if (ChatModes.Normalize(session.Mode) == ChatModes.Agent)
+            if (ChatModes.Normalize(session.Mode) != ChatModes.Chat)
             {
                 tools = _toolCatalog.GetVisibleTools().Where(item => item.Enabled).ToList();
                 skills = _skillCatalog.GetVisibleSkills().Where(item => item.Enabled).ToList();

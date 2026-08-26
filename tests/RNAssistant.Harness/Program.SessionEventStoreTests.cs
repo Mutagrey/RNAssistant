@@ -508,12 +508,12 @@ namespace RNAssistant.Harness
                 var session = writer.Create("Word", "storage-usage", "Storage.docx", "Storage usage");
                 var artifact = new ChatArtifact
                 {
-                    Kind = ChatArtifactKinds.Plan,
+                    Kind = ChatArtifactKinds.PlanDocument,
                     MimeType = "application/json",
                     InlineText = body
                 };
                 session.Artifacts.Add(artifact);
-                session.ActivePlanArtifactId = artifact.Id;
+                session.ActivePlanDocumentArtifactId = artifact.Id;
                 writer.Save(session);
                 writer.AppendTrace(session, SessionEventTypes.AssistantChunk,
                     new { chunkCount = 1 }, body, "application/json",
@@ -1262,12 +1262,12 @@ namespace RNAssistant.Harness
                 var session = store.Create("Word", "cas-fast-skip", "CAS.docx", "CAS skip");
                 var artifact = new ChatArtifact
                 {
-                    Kind = ChatArtifactKinds.Plan,
+                    Kind = ChatArtifactKinds.PlanDocument,
                     MimeType = "application/json",
                     InlineText = original
                 };
                 session.Artifacts.Add(artifact);
-                session.ActivePlanArtifactId = artifact.Id;
+                session.ActivePlanDocumentArtifactId = artifact.Id;
                 store.Save(session);
                 AssertEqual(1L, store.ArtifactCasExternalizationCount, "new body enters CAS once");
 
@@ -1832,12 +1832,12 @@ namespace RNAssistant.Harness
                 var session = store.Create("Word", "blob-doc", "Blob.docx", "Blob");
                 var artifact = new ChatArtifact
                 {
-                    Kind = ChatArtifactKinds.Plan,
+                    Kind = ChatArtifactKinds.PlanDocument,
                     MimeType = "application/json",
                     InlineText = "{\"goal\":\"safe\"}"
                 };
                 session.Artifacts.Add(artifact);
-                session.ActivePlanArtifactId = artifact.Id;
+                session.ActivePlanDocumentArtifactId = artifact.Id;
                 store.Save(session);
                 var blob = Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
                 File.WriteAllText(blob, "corrupt");
@@ -1849,12 +1849,12 @@ namespace RNAssistant.Harness
 
                 var repair = new ChatArtifact
                 {
-                    Kind = ChatArtifactKinds.Plan,
+                    Kind = ChatArtifactKinds.PlanDocument,
                     MimeType = "application/json",
                     InlineText = "{\"goal\":\"safe\"}"
                 };
                 loaded.Artifacts.Add(repair);
-                loaded.ActivePlanArtifactId = repair.Id;
+                loaded.ActivePlanDocumentArtifactId = repair.Id;
                 store.Save(loaded);
                 AssertEqual("{\"goal\":\"safe\"}", store.Load(loaded.Id).Artifacts
                     .Single(item => item.Id == repair.Id).InlineText, "known content repairs its corrupted CAS blob");

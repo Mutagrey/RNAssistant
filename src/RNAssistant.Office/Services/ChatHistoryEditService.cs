@@ -90,7 +90,8 @@ namespace RNAssistant.Office.Services
             _cancelPendingActivities(session, PendingActionCancelledReason);
             session.LastRun = null;
             InvalidateContextCheckpoints(session);
-            ChatResourceReferenceService.RestoreActivePlanFromMessages(session);
+            ChatResourceReferenceService.RestoreActiveTaskListFromMessages(session);
+            ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(session);
             ChatResourceReferenceService.PruneUnreachable(session);
 
             return new ChatHistoryEditResult

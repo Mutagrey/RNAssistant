@@ -66,23 +66,20 @@
       return (state.artifacts || []).filter(function (artifact) { return artifactId(artifact) === id; })[0] || null;
     }
 
-    function planJson(artifact) {
-      if (!artifact || artifactKind(artifact) !== "plan") return null;
-      try { return JSON.parse(artifactInlineText(artifact)); } catch (error) { return null; }
-    }
-
     function planStableId(artifact) {
-      var plan = planJson(artifact);
-      return plan && (plan.id || plan.Id) || artifactId(artifact);
+      try {
+        var metadata = JSON.parse(prop(artifact, "MetadataJson", "metadataJson", "{}") || "{}");
+        return metadata.planId || metadata.PlanId || artifactId(artifact);
+      } catch (error) { return artifactId(artifact); }
     }
 
     function latestPlanArtifacts() {
       if (typeof artifactResourceHeads === "function") {
-        return artifactResourceHeads().filter(function (artifact) { return artifactKind(artifact) === "plan"; });
+        return artifactResourceHeads().filter(function (artifact) { return artifactKind(artifact) === "plan_document"; });
       }
       var latest = {};
       (state.artifacts || []).forEach(function (artifact) {
-        if (artifactKind(artifact) !== "plan") return;
+        if (artifactKind(artifact) !== "plan_document") return;
         var id = planStableId(artifact);
         if (!latest[id] || artifactRevision(artifact) > artifactRevision(latest[id])) latest[id] = artifact;
       });
@@ -222,7 +219,7 @@
       }
 
       if (state.activePlanArtifactId && artifactById(state.activePlanArtifactId)) {
-        state.htmlWorkspaceSelection = { type: "plan", id: state.activePlanArtifactId };
+        state.htmlWorkspaceSelection = { type: "plan", id: state.activePlanDocumentArtifactId };
         return;
       }
       var active = activeHtmlFile();

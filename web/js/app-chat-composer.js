@@ -1,4 +1,5 @@
 function chatModeDefinition(mode) {
+  if (mode === "plan") return { value: "plan", title: "Plan", icon: "◇", description: "Исследует, задаёт вопросы и создаёт Markdown-план без изменений" };
   return mode === "chat"
     ? { value: "chat", title: "Chat", icon: "○", description: "Ответ модели с безопасным чтением ресурсов" }
     : { value: "agent", title: "Agent", icon: "✦", description: "Получает skills и tools, выполняет их по одному" };
@@ -19,7 +20,7 @@ function renderChatModePicker() {
   if (typeof setComposerPickerDisabled === "function") setComposerPickerDisabled(picker, disabled);
 
   menu.replaceChildren();
-  [chatModeDefinition("agent"), chatModeDefinition("chat")].forEach(function (mode) {
+  [chatModeDefinition("agent"), chatModeDefinition("plan"), chatModeDefinition("chat")].forEach(function (mode) {
     var button = document.createElement("button");
     button.type = "button";
     button.className = "composer-picker-item composer-mode-item" + (mode.value === active.value ? " is-selected" : "");

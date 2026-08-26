@@ -152,6 +152,7 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ChatSystemPrompt = defaults.ChatSystemPrompt;
             }
+            if (string.IsNullOrWhiteSpace(settings.PlanSystemPrompt)) settings.PlanSystemPrompt = defaults.PlanSystemPrompt;
             settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole, defaults.SystemPromptRole);
             settings.AgentResponseMode = AgentResponseModes.Normalize(settings.AgentResponseMode);
             settings.ToolResultRole = ToolResultRoles.Normalize(settings.ToolResultRole);

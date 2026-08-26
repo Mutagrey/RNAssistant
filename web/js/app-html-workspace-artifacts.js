@@ -23,9 +23,7 @@
   }
 
   function planStableId(artifact) {
-    var plan = null;
-    try { plan = JSON.parse(artifactInlineText(artifact)); } catch (ignore) {}
-    return plan && (plan.id || plan.Id) || artifactId(artifact);
+    return storedPlanId(artifact);
   }
 
   function storedPlanId(artifact) {
@@ -33,22 +31,19 @@
       var metadata = JSON.parse(prop(artifact, "MetadataJson", "metadataJson", "{}") || "{}");
       if (metadata.planId || metadata.PlanId) return metadata.planId || metadata.PlanId;
     } catch (ignore) {}
-    return planStableId(artifact);
+    return artifactId(artifact);
   }
 
   function typeLabel(kind) {
-    var labels = { attachment: "Вложение", image: "Изображение", audio: "Аудио", file: "Файл", markdown: "Markdown", html_workspace: "HTML workspace", chart: "Диаграмма", compaction: "Checkpoint", tool_result: "Результат" };
+    var labels = { attachment: "Вложение", image: "Изображение", audio: "Аудио", file: "Файл", markdown: "Markdown", plan_document: "План", task_list: "Task list", html_workspace: "HTML workspace", chart: "Диаграмма", compaction: "Checkpoint", tool_result: "Результат" };
     return labels[kind] || kind;
   }
 
   function planSummary(artifact) {
-    var plan = null;
-    try { plan = JSON.parse(artifactInlineText(artifact)); } catch (ignore) {}
-    var steps = plan && (plan.steps || plan.Steps) || [];
-    var completed = steps.filter(function (step) {
-      return String(step.status || step.Status || "pending") === "completed";
-    }).length;
-    return completed + "/" + steps.length;
+    try {
+      var metadata = JSON.parse(prop(artifact, "MetadataJson", "metadataJson", "{}") || "{}");
+      return metadata.status || metadata.Status || "draft";
+    } catch (ignore) { return "draft"; }
   }
 
   function planStatusLabel(status) {
@@ -59,44 +54,34 @@
   function renderDetail(root, selected, editorValue) {
     root.replaceChildren();
     if (selected.type === "plan") {
-      var plan = null;
-      try { plan = JSON.parse(editorValue || ""); }
-      catch (error) {
-        var invalid = document.createElement("div");
-        invalid.className = "artifact-detail-error";
-        invalid.textContent = "Некорректный JSON: " + error.message;
-        root.appendChild(invalid);
-        return;
+      var planMetadata = {};
+      try { planMetadata = JSON.parse(prop(selected.item, "MetadataJson", "metadataJson", "{}") || "{}"); } catch (ignore) {}
+      if (String(planMetadata.status || planMetadata.Status || "draft").toLowerCase() === "ready" &&
+          artifactId(selected.item) === state.activePlanDocumentArtifactId) {
+        var handoff = document.createElement("button");
+        handoff.type = "button";
+        handoff.className = "primary";
+        handoff.textContent = "Начать выполнение";
+        handoff.disabled = !!state.activeTaskListArtifactId || !prop(selected.item, "ResourceUri", "resourceUri", "");
+        if (state.activeTaskListArtifactId) handoff.title = "Сначала закройте активный Task List.";
+        handoff.addEventListener("click", async function () {
+          await saveChatMode("agent");
+          var input = $("chatInput");
+          var form = $("chatForm");
+          if (!input || !form) return;
+          var revisionUri = prop(selected.item, "ResourceUri", "resourceUri", "") || "";
+          if (!revisionUri) return;
+          input.value = "Выполни утверждённый план " + revisionUri + ". Перед началом прочитай эту точную ревизию через common.resources_read.";
+          updateComposerInputState();
+          if (form.requestSubmit) form.requestSubmit();
+        });
+        root.appendChild(handoff);
       }
-      var goal = document.createElement("h2");
-      goal.textContent = plan.goal || plan.Goal || "План без цели";
-      root.appendChild(goal);
-      var steps = plan.steps || plan.Steps || [];
-      var summary = document.createElement("div");
-      summary.className = "artifact-plan-summary";
-      summary.textContent = steps.filter(function (step) {
-        return String(step.status || step.Status || "pending") === "completed";
-      }).length + " из " + steps.length + " шагов выполнено";
-      root.appendChild(summary);
-      var list = document.createElement("ol");
-      list.className = "artifact-plan-steps";
-      steps.forEach(function (step) {
-        var status = String(step.status || step.Status || "pending");
-        var row = document.createElement("li");
-        row.className = "status-" + status;
-        var mark = document.createElement("span");
-        mark.className = "artifact-plan-mark";
-        mark.textContent = status === "completed" ? "✓" : (status === "in_progress" ? "•" : (status === "blocked" ? "!" : ""));
-        var text = document.createElement("span");
-        text.textContent = step.text || step.Text || step.id || step.Id || "Шаг";
-        var badge = document.createElement("em");
-        badge.textContent = planStatusLabel(status);
-        row.appendChild(mark);
-        row.appendChild(text);
-        row.appendChild(badge);
-        list.appendChild(row);
-      });
-      root.appendChild(list);
+      var body = document.createElement("div");
+      body.className = "markdown";
+      body.innerHTML = markdown(editorValue || "_План пуст._");
+      root.appendChild(body);
+      if (typeof enhanceMarkdown === "function") enhanceMarkdown(body);
       return;
     }
 
@@ -128,32 +113,9 @@
   }
 
   function validatePlanDraft(artifact) {
-    var plan;
-    try { plan = JSON.parse(artifactInlineText(artifact)); }
-    catch (error) { throw new Error("Некорректный JSON плана: " + error.message); }
-    if (!plan || Array.isArray(plan) || typeof plan !== "object") throw new Error("План должен быть JSON-объектом.");
-    var currentId = storedPlanId(artifact);
-    var id = String(plan.id || plan.Id || "").trim();
-    if (!id || id !== currentId) throw new Error("ID плана нельзя изменять.");
-    var goal = String(plan.goal || plan.Goal || "").trim();
-    if (!goal || goal.length > 500) throw new Error("Цель плана должна содержать от 1 до 500 символов.");
-    var steps = plan.steps || plan.Steps;
-    if (!Array.isArray(steps) || !steps.length || steps.length > 32) throw new Error("План должен содержать от 1 до 32 шагов.");
-    var ids = {};
-    var statuses = ["pending", "in_progress", "completed", "blocked", "cancelled"];
-    steps = steps.map(function (step) {
-      if (!step || Array.isArray(step) || typeof step !== "object") throw new Error("Каждый шаг должен быть объектом.");
-      var stepId = String(step.id || step.Id || "").trim();
-      var text = String(step.text || step.Text || "").trim();
-      var status = String(step.status || step.Status || "pending").toLowerCase();
-      if (!stepId || /\s/.test(stepId) || stepId.length > 80) throw new Error("У каждого шага нужен ID без пробелов длиной до 80 символов.");
-      if (ids[stepId.toLowerCase()]) throw new Error("Повторяется ID шага: " + stepId);
-      if (!text || text.length > 500) throw new Error("Описание каждого шага должно содержать от 1 до 500 символов.");
-      if (statuses.indexOf(status) < 0) throw new Error("Неизвестный статус шага: " + status);
-      ids[stepId.toLowerCase()] = true;
-      return { id: stepId, text: text, status: status };
-    });
-    return { id: id, goal: goal, steps: steps };
+    var markdownText = String(artifactInlineText(artifact) || "").trim();
+    if (!markdownText || markdownText.length > 32000) throw new Error("Markdown-план должен содержать от 1 до 32000 символов.");
+    return { id: storedPlanId(artifact), markdown: markdownText, title: prop(artifact, "Title", "title", "План"), expectedRevisionArtifactId: artifactId(artifact) };
   }
 
   window.RNAssistantHtmlWorkspaceArtifacts = {

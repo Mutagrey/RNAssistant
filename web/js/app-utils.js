@@ -38,7 +38,7 @@
   };
 
   window.messageResponseStatus = function (message) {
-    if (window.messageResponseProtocolVersion(message) !== 2) return "";
+    if (window.messageResponseProtocolVersion(message) < 2) return "";
     return String(objectValue(message, "ResponseStatus", "responseStatus", "") || "").toLowerCase();
   };
 

@@ -27,7 +27,9 @@ namespace RNAssistant.Office.Tools
         private readonly ResourceGatewayService _resourceGateway;
         private readonly ResourceToolExecutor _resourceExecutor;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
-        private readonly PlanToolExecutor _planToolExecutor;
+        private readonly TaskListToolExecutor _taskListToolExecutor;
+        private readonly PlanDocumentToolExecutor _planDocumentToolExecutor;
+        private readonly UserQuestionToolExecutor _userQuestionToolExecutor;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
         private readonly string _mutationLockDirectory;
@@ -63,7 +65,9 @@ namespace RNAssistant.Office.Tools
                 BeginLiveOfficeRead);
             _resourceExecutor = new ResourceToolExecutor(_resourceGateway);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(_adapter, _adapterTools, BeginLiveOfficeRead);
-            _planToolExecutor = new PlanToolExecutor();
+            _taskListToolExecutor = new TaskListToolExecutor();
+            _planDocumentToolExecutor = new PlanDocumentToolExecutor();
+            _userQuestionToolExecutor = new UserQuestionToolExecutor();
             var controllerTools = new List<ToolDefinition>();
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
             RegisterControllerTools(controllerTools, _vbaExecutor.GetControllerTools(), ControllerExecutorKind.Vba);
@@ -73,7 +77,9 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
             RegisterControllerTools(controllerTools, _resourceExecutor.GetControllerTools(), ControllerExecutorKind.Resource);
             RegisterControllerTools(controllerTools, _htmlArtifactExecutor.GetControllerTools(), ControllerExecutorKind.HtmlArtifact);
-            RegisterControllerTools(controllerTools, _planToolExecutor.GetControllerTools(), ControllerExecutorKind.Plan);
+            RegisterControllerTools(controllerTools, _taskListToolExecutor.GetControllerTools(), ControllerExecutorKind.TaskList);
+            RegisterControllerTools(controllerTools, _planDocumentToolExecutor.GetControllerTools(), ControllerExecutorKind.PlanDocument);
+            RegisterControllerTools(controllerTools, _userQuestionToolExecutor.GetControllerTools(), ControllerExecutorKind.UserQuestion);
             _controllerTools = controllerTools.ToArray();
             var duplicate = _adapterTools.FirstOrDefault(tool => tool != null && _controllerExecutors.ContainsKey(tool.Id ?? string.Empty));
             if (duplicate != null)
@@ -835,8 +841,12 @@ namespace RNAssistant.Office.Tools
                     return _resourceExecutor.ExecuteControllerTool(command, context.Session);
                 case ControllerExecutorKind.HtmlArtifact:
                     return _htmlArtifactExecutor.ExecuteControllerTool(command, context.Session, dryRun, cancellationToken);
-                case ControllerExecutorKind.Plan:
-                    return _planToolExecutor.ExecuteControllerTool(command, context.Session, dryRun);
+                case ControllerExecutorKind.TaskList:
+                    return _taskListToolExecutor.ExecuteControllerTool(command, context.Session, dryRun);
+                case ControllerExecutorKind.PlanDocument:
+                    return _planDocumentToolExecutor.ExecuteControllerTool(command, context.Session, dryRun);
+                case ControllerExecutorKind.UserQuestion:
+                    return _userQuestionToolExecutor.ExecuteControllerTool(command);
                 default:
                     return ToolResult.Fail("Unknown controller executor for tool: " + command.ToolId);
             }
@@ -1101,7 +1111,9 @@ namespace RNAssistant.Office.Tools
             Prompt,
             Resource,
             HtmlArtifact,
-            Plan
+            TaskList,
+            PlanDocument,
+            UserQuestion
         }
     }
 }

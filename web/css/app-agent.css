@@ -877,6 +877,16 @@
   color: var(--muted);
 }
 
+.plan-question-cards { display: grid; gap: 12px; margin: 10px 0 4px 34px; }
+.plan-question-cards fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.plan-question-cards legend { font-weight: 600; padding: 0 4px; }
+.plan-question-cards p { margin: 2px 0 8px; color: var(--text-muted); }
+.plan-question-cards label { display: flex; gap: 8px; padding: 7px; border-radius: 8px; cursor: pointer; }
+.plan-question-cards label:hover { background: var(--surface-hover); }
+.plan-question-cards label span { display: grid; gap: 2px; }
+.plan-question-cards label small { color: var(--text-muted); }
+.plan-question-cards textarea { width: 100%; margin-top: 8px; resize: vertical; }
+
 .agent-approval-dock {
   flex: 0 0 auto;
   min-width: 0;

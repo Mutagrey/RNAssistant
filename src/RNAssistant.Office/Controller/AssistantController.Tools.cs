@@ -208,9 +208,12 @@ namespace RNAssistant.Office
                 string.Equals(toolId, HtmlArtifactToolExecutor.BindDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlArtifactToolExecutor.RefreshDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlArtifactToolExecutor.FreezeDataToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, PlanToolExecutor.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, PlanToolExecutor.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, PlanToolExecutor.DeleteToolId, StringComparison.OrdinalIgnoreCase);
+                string.Equals(toolId, TaskListToolExecutor.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, TaskListToolExecutor.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, TaskListToolExecutor.CloseToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanDocumentToolExecutor.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanDocumentToolExecutor.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanDocumentToolExecutor.DeleteToolId, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

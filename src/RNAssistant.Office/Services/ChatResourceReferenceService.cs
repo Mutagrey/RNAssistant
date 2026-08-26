@@ -23,7 +23,8 @@ namespace RNAssistant.Office.Services
                 if (message.ProtocolMessage) continue;
                 LinkAttachments(session, message);
                 LinkHtmlWorkspace(session, message);
-                LinkPlan(session, message);
+                LinkTaskList(session, message);
+                LinkPlanDocument(session, message);
             }
         }
 
@@ -66,28 +67,35 @@ namespace RNAssistant.Office.Services
             if (session == null) return;
             var activeArtifactIds = new List<string>();
             if (!string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) activeArtifactIds.Add(session.ActiveHtmlArtifactId);
-            if (!string.IsNullOrWhiteSpace(session.ActivePlanArtifactId)) activeArtifactIds.Add(session.ActivePlanArtifactId);
+            if (!string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId)) activeArtifactIds.Add(session.ActiveTaskListArtifactId);
+            if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId)) activeArtifactIds.Add(session.ActivePlanDocumentArtifactId);
             session.Artifacts = ReachableForMessages(session.Artifacts, session.Messages, activeArtifactIds);
-            if (!string.IsNullOrWhiteSpace(session.ActivePlanArtifactId) &&
-                !session.Artifacts.Any(artifact => string.Equals(artifact.Id, session.ActivePlanArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(artifact.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase)))
+            if (!string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId) &&
+                !session.Artifacts.Any(artifact => string.Equals(artifact.Id, session.ActiveTaskListArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(artifact.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase)))
             {
-                session.ActivePlanArtifactId = null;
+                session.ActiveTaskListArtifactId = null;
+            }
+            if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId) &&
+                !session.Artifacts.Any(artifact => string.Equals(artifact.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(artifact.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase)))
+            {
+                session.ActivePlanDocumentArtifactId = null;
             }
         }
 
-        public static void RestoreActivePlanFromMessages(ChatSession session)
+        public static void RestoreActiveTaskListFromMessages(ChatSession session)
         {
             if (session == null)
             {
                 return;
             }
             var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
-                .Where(item => item != null && string.Equals(item.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase))
+                .Where(item => item != null && string.Equals(item.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase))
                 .Where(item => !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-            session.ActivePlanArtifactId = null;
+            session.ActiveTaskListArtifactId = null;
             for (var messageIndex = (session.Messages ?? new List<ChatMessage>()).Count - 1; messageIndex >= 0; messageIndex--)
             {
                 var ids = session.Messages[messageIndex] == null
@@ -96,7 +104,34 @@ namespace RNAssistant.Office.Services
                 for (var idIndex = (ids ?? new List<string>()).Count - 1; idIndex >= 0; idIndex--)
                 {
                     if (!artifacts.ContainsKey(ids[idIndex])) continue;
-                    session.ActivePlanArtifactId = ids[idIndex];
+                    ChatTaskList taskList;
+                    try { taskList = JsonConvert.DeserializeObject<ChatTaskList>(artifacts[ids[idIndex]].InlineText); }
+                    catch (JsonException) { continue; }
+                    if (taskList == null) continue;
+                    if (!string.Equals(taskList.Status, "active", StringComparison.OrdinalIgnoreCase)) return;
+                    session.ActiveTaskListArtifactId = ids[idIndex];
+                    return;
+                }
+            }
+        }
+
+        public static void RestoreActivePlanDocumentFromMessages(ChatSession session)
+        {
+            if (session == null) return;
+            var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase))
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+            session.ActivePlanDocumentArtifactId = null;
+            for (var messageIndex = (session.Messages ?? new List<ChatMessage>()).Count - 1; messageIndex >= 0; messageIndex--)
+            {
+                var ids = session.Messages[messageIndex] == null
+                    ? new List<string>()
+                    : ReferencedArtifactIds(session.Messages[messageIndex], artifacts.Values);
+                for (var idIndex = ids.Count - 1; idIndex >= 0; idIndex--)
+                {
+                    if (!artifacts.ContainsKey(ids[idIndex])) continue;
+                    session.ActivePlanDocumentArtifactId = ids[idIndex];
                     return;
                 }
             }
@@ -203,11 +238,11 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private static void LinkPlan(ChatSession session, ChatMessage message)
+        private static void LinkTaskList(ChatSession session, ChatMessage message)
         {
             var activity = message.Activity;
             if (activity == null || string.IsNullOrWhiteSpace(activity.ToolId) ||
-                !activity.ToolId.StartsWith("common.plan_", StringComparison.OrdinalIgnoreCase) ||
+                !activity.ToolId.StartsWith("common.task_list_", StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(activity.DataJson))
             {
                 return;
@@ -218,7 +253,30 @@ namespace RNAssistant.Office.Services
                 if (string.IsNullOrWhiteSpace(artifactId)) return;
                 var artifact = session.Artifacts.FirstOrDefault(item => item != null &&
                     string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(item.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(item.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase));
+                if (artifact == null) return;
+                artifact.SourceMessageId = string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? message.Id : artifact.SourceMessageId;
+                artifact.RunId = string.IsNullOrWhiteSpace(artifact.RunId) ? message.RunId : artifact.RunId;
+                AddReference(session, message, artifact);
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        private static void LinkPlanDocument(ChatSession session, ChatMessage message)
+        {
+            var activity = message.Activity;
+            if (activity == null || string.IsNullOrWhiteSpace(activity.ToolId) ||
+                !activity.ToolId.StartsWith("common.plan_doc_", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(activity.DataJson)) return;
+            try
+            {
+                var artifactId = (string)JObject.Parse(activity.DataJson)["artifactId"];
+                if (string.IsNullOrWhiteSpace(artifactId)) return;
+                var artifact = session.Artifacts.FirstOrDefault(item => item != null &&
+                    string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase));
                 if (artifact == null) return;
                 artifact.SourceMessageId = string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? message.Id : artifact.SourceMessageId;
                 artifact.RunId = string.IsNullOrWhiteSpace(artifact.RunId) ? message.RunId : artifact.RunId;

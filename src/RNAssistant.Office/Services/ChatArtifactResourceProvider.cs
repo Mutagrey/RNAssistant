@@ -379,7 +379,8 @@ namespace RNAssistant.Office.Services
             if (artifact == null) return false;
             if (!string.IsNullOrWhiteSpace(artifact.InlineText)) return true;
             return !string.IsNullOrWhiteSpace(artifact.ContentSha256) &&
-                (string.Equals(artifact.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase) ||
+                (string.Equals(artifact.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(artifact.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase) ||
@@ -456,7 +457,8 @@ namespace RNAssistant.Office.Services
         {
             return Artifacts(session)
                 .OrderByDescending(item => string.Equals(item.Id, session == null ? null : session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase))
-                .ThenByDescending(item => string.Equals(item.Id, session == null ? null : session.ActivePlanArtifactId, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(item => string.Equals(item.Id, session == null ? null : session.ActiveTaskListArtifactId, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(item => string.Equals(item.Id, session == null ? null : session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => item.CreatedUtc)
                 .ThenBy(item => item.Id, StringComparer.OrdinalIgnoreCase);
         }

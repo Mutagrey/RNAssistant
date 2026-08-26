@@ -95,7 +95,7 @@ namespace RNAssistant.Office.Services
                     new ChatMessage
                     {
                         Role = "user",
-                        Content = "Return exactly one JSON object: {\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}"
+                        Content = "Return exactly one JSON object: {\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}"
                     }
                 },
                 AgentOptions(responseMode, new[] { tool }),
@@ -189,7 +189,7 @@ namespace RNAssistant.Office.Services
                 messages.Add(new ChatMessage
                 {
                     Role = "assistant",
-                    Content = "{\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}",
+                    Content = "{\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}",
                     ProtocolMessage = true,
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     ResponseStatus = AgentResponseStatuses.InProgress
@@ -204,7 +204,7 @@ namespace RNAssistant.Office.Services
             messages.Add(new ChatMessage
             {
                 Role = "user",
-                Content = "Reply with {\"status\":\"completed\",\"message\":\"RESULT_OK\",\"tool_calls\":[]}."
+                Content = "Reply with {\"message\":\"RESULT_OK\",\"tool_calls\":[]}."
             });
             return messages;
         }

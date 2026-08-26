@@ -113,7 +113,7 @@ namespace RNAssistant.Core.Storage
                 SessionOperationTypes.ArtifactRevisionCreated, SessionOperationTypes.ArtifactRemove, SessionOperationTypes.ArtifactsReorder);
 
             var active = new JObject();
-            foreach (var property in new[] { "ActiveContextCheckpointId", "ActiveHtmlArtifactId", "ActivePlanArtifactId" })
+            foreach (var property in new[] { "ActiveContextCheckpointId", "ActiveHtmlArtifactId", "ActiveTaskListArtifactId", "ActivePlanDocumentArtifactId" })
             {
                 if (!JToken.DeepEquals(before[property], after[property]))
                 {

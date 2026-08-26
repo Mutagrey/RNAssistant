@@ -229,8 +229,7 @@
         return "";
       }
       if (selected.type === "plan") {
-        try { return JSON.stringify(JSON.parse(artifactInlineText(selected.item)), null, 2); }
-        catch (error) { return artifactInlineText(selected.item); }
+        return artifactInlineText(selected.item);
       }
       if (selected.type === "artifact") return artifactInlineText(selected.item);
       return selected.type === "data" ? dataJson(selected.item) : fileContent(selected.item);

@@ -211,8 +211,11 @@ function applyChatState(response) {
   if (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined) {
     state.activeHtmlArtifactId = response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || "";
   }
-  if (response.activePlanArtifactId !== undefined || response.ActivePlanArtifactId !== undefined) {
-    state.activePlanArtifactId = response.activePlanArtifactId || response.ActivePlanArtifactId || "";
+  if (response.activeTaskListArtifactId !== undefined || response.ActiveTaskListArtifactId !== undefined) {
+    state.activeTaskListArtifactId = response.activeTaskListArtifactId || response.ActiveTaskListArtifactId || "";
+  }
+  if (response.activePlanDocumentArtifactId !== undefined || response.ActivePlanDocumentArtifactId !== undefined) {
+    state.activePlanDocumentArtifactId = response.activePlanDocumentArtifactId || response.ActivePlanDocumentArtifactId || "";
   }
   if (response.contextUsage || response.ContextUsage) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};

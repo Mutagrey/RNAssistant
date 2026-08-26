@@ -47,7 +47,8 @@ namespace RNAssistant.Office.Services
                     .Select(CloneArtifact)
                     .ToList(),
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
-                ActivePlanArtifactId = session.ActivePlanArtifactId
+                ActiveTaskListArtifactId = session.ActiveTaskListArtifactId,
+                ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId
             };
         }
 

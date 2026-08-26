@@ -14,62 +14,60 @@
     }
   }
 
-  function planFromArtifact(artifact) {
-    if (!artifact || String(value(artifact, "Kind", "kind", "")).toLowerCase() !== "plan") return null;
+  function taskListFromArtifact(artifact) {
+    if (!artifact || String(value(artifact, "Kind", "kind", "")).toLowerCase() !== "task_list") return null;
     var plan = parseJson(value(artifact, "InlineText", "inlineText", ""));
     if (!plan || !Array.isArray(plan.steps || plan.Steps)) return null;
     return {
       artifactId: value(artifact, "Id", "id", ""),
       revision: Number(value(artifact, "Revision", "revision", 1) || 1),
       id: plan.id || plan.Id || "",
-      goal: plan.goal || plan.Goal || "План задачи",
+      goal: plan.goal || plan.Goal || "Текущая задача",
       steps: plan.steps || plan.Steps || []
     };
   }
 
-  function persistedActivePlan() {
-    var activeId = state.activePlanArtifactId || "";
+  function persistedActiveTaskList() {
+    var activeId = state.activeTaskListArtifactId || "";
     if (!activeId) return null;
     var artifacts = state.artifacts || [];
     for (var i = artifacts.length - 1; i >= 0; i -= 1) {
-      if (value(artifacts[i], "Id", "id", "") === activeId) return planFromArtifact(artifacts[i]);
+      if (value(artifacts[i], "Id", "id", "") === activeId) return taskListFromArtifact(artifacts[i]);
     }
     return null;
   }
 
-  function planFromToolActivity(activity) {
+  function taskListFromToolActivity(activity) {
     var data = parseJson(typeof activityDataJson === "function" ? activityDataJson(activity) : "");
-    var plan = data && (data.plan || data.Plan);
+    var plan = data && (data.taskList || data.TaskList);
     if (!plan || !Array.isArray(plan.steps || plan.Steps)) return null;
     return {
       artifactId: data.artifactId || data.ArtifactId || "",
       revision: Number(data.revision || data.Revision || 1),
       id: plan.id || plan.Id || "",
-      goal: plan.goal || plan.Goal || "План задачи",
+      goal: plan.goal || plan.Goal || "Текущая задача",
       steps: plan.steps || plan.Steps || []
     };
   }
 
-  function applyLivePlanActivity(current, activity) {
+  function applyLiveTaskListActivity(current, activity) {
     if (!activity) return current;
     var toolId = typeof activityToolId === "function" ? activityToolId(activity) : "";
     var status = typeof activityStatus === "function" ? activityStatus(activity) : "";
-    if (status === "completed" && (toolId === "common.plan_create" || toolId === "common.plan_update")) {
-      current = planFromToolActivity(activity) || current;
-    } else if (status === "completed" && toolId === "common.plan_delete") {
-      var deleted = parseJson(typeof activityDataJson === "function" ? activityDataJson(activity) : "");
-      var deletedId = deleted && (deleted.id || deleted.Id);
-      if (!current || !deletedId || current.id === deletedId) current = null;
+    if (status === "completed" && (toolId === "common.task_list_create" || toolId === "common.task_list_update")) {
+      current = taskListFromToolActivity(activity) || current;
+    } else if (status === "completed" && toolId === "common.task_list_close") {
+      current = null;
     }
     var children = typeof activityChildren === "function" ? activityChildren(activity) : [];
-    children.forEach(function (child) { current = applyLivePlanActivity(current, child); });
+    children.forEach(function (child) { current = applyLiveTaskListActivity(current, child); });
     return current;
   }
 
-  function activePlan() {
-    var current = persistedActivePlan();
+  function activeTaskList() {
+    var current = persistedActiveTaskList();
     (state.liveAgentRun || []).forEach(function (activity) {
-      current = applyLivePlanActivity(current, activity);
+      current = applyLiveTaskListActivity(current, activity);
     });
     return current;
   }
@@ -123,7 +121,7 @@
   function renderAgentPlanDock() {
     var dock = $("agentPlanDock");
     if (!dock) return;
-    var plan = activePlan();
+    var plan = activeTaskList();
     if (!plan || !plan.steps.length) {
       dock.replaceChildren();
       dock.classList.add("hidden");
@@ -144,14 +142,14 @@
     var summary = document.createElement("summary");
     summary.className = "agent-plan-summary";
     summary.title = plan.goal;
-    summary.setAttribute("aria-label", "План: выполнено " + info.completed + " из " + info.total + ". " + plan.goal);
+    summary.setAttribute("aria-label", "Задачи: выполнено " + info.completed + " из " + info.total + ". " + plan.goal);
     var icon = document.createElement("span");
     icon.className = "agent-plan-icon";
     icon.setAttribute("aria-hidden", "true");
     icon.innerHTML = "<svg viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"m8 9 1.5 1.5L12 8\"/><path d=\"M14 9h3\"/><path d=\"m8 15 1.5 1.5L12 14\"/><path d=\"M14 15h3\"/></svg>";
     var label = document.createElement("span");
     label.className = "agent-plan-label";
-    label.textContent = "План";
+    label.textContent = "Задачи";
     var count = document.createElement("span");
     count.className = "agent-plan-count";
     count.textContent = info.completed + "/" + info.total;
@@ -171,7 +169,7 @@
     var goal = document.createElement("strong");
     goal.textContent = plan.goal;
     var current = document.createElement("span");
-    current.textContent = info.current ? stepValue(info.current, "Text", "text", "") : "План выполнен";
+    current.textContent = info.current ? stepValue(info.current, "Text", "text", "") : "Задачи выполнены";
     head.appendChild(goal);
     head.appendChild(current);
     popover.appendChild(head);

@@ -613,7 +613,7 @@ namespace RNAssistant.Harness
                     CreatedUtc = DateTime.UtcNow.AddMinutes(index)
                 });
             }
-            session.ActivePlanArtifactId = "artifact_0";
+            session.ActivePlanDocumentArtifactId = "artifact_0";
             var latestMessage = new ChatMessage
             {
                 Role = "user",

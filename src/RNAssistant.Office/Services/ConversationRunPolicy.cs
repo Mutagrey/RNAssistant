@@ -17,6 +17,16 @@ namespace RNAssistant.Office.Services
                 ResourceToolExecutor.ReadToolId
             },
             StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> PlanLocalToolIds = new HashSet<string>(new[]
+        {
+            TaskListToolExecutor.CreateToolId,
+            TaskListToolExecutor.UpdateToolId,
+            TaskListToolExecutor.CloseToolId,
+            PlanDocumentToolExecutor.CreateToolId,
+            PlanDocumentToolExecutor.UpdateToolId,
+            PlanDocumentToolExecutor.DeleteToolId,
+            UserQuestionToolExecutor.AskToolId
+        }, StringComparer.OrdinalIgnoreCase);
 
         private ConversationRunPolicy(string mode)
         {
@@ -27,7 +37,7 @@ namespace RNAssistant.Office.Services
 
         public bool AllowsSkills
         {
-            get { return string.Equals(Mode, ChatModes.Agent, StringComparison.Ordinal); }
+            get { return !string.Equals(Mode, ChatModes.Chat, StringComparison.Ordinal); }
         }
 
         public bool AllowsConfirmation
@@ -46,6 +56,16 @@ namespace RNAssistant.Office.Services
             if (string.Equals(Mode, ChatModes.Agent, StringComparison.Ordinal))
             {
                 return source.ToList();
+            }
+
+            if (string.Equals(Mode, ChatModes.Plan, StringComparison.Ordinal))
+            {
+                return source.Where(tool => tool.AgentCanRun &&
+                        !tool.MutatesDocument &&
+                        !tool.RequiresConfirmation &&
+                        (!tool.MutatesLocalState || PlanLocalToolIds.Contains(tool.Id ?? string.Empty)))
+                    .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             }
 
             return source.Where(tool =>

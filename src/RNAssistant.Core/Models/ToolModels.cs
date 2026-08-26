@@ -154,6 +154,11 @@ namespace RNAssistant.Core.Models
             return new ToolResult { Success = false, Status = "waiting_confirmation", Retryable = false, Message = message };
         }
 
+        public static ToolResult AwaitingUser(string message, string dataJson)
+        {
+            return new ToolResult { Success = true, Status = "awaiting_user", Retryable = false, Message = message, DataJson = dataJson };
+        }
+
         public static ToolResult Cancelled(string message)
         {
             return new ToolResult { Success = false, Status = "cancelled", Retryable = false, Message = message };

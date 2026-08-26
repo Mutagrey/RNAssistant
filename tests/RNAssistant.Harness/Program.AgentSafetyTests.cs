@@ -24,10 +24,10 @@ namespace RNAssistant.Harness
             var settings = new AppSettings();
             AssertTrue(settings.SystemPrompt.StartsWith("# RNAssistant Agent", StringComparison.Ordinal), "agent prompt Markdown heading");
             AssertContains(settings.SystemPrompt, "## Response contract", "agent prompt structured section");
-            AssertContains(settings.SystemPrompt, "`status` is required", "agent prompt requires explicit status");
-            AssertContains(settings.SystemPrompt, "`awaiting_user`", "agent prompt distinguishes clarification status");
+            AssertContains(settings.SystemPrompt, "\"message\"", "agent prompt requires the visible message field");
+            AssertContains(settings.SystemPrompt, "empty array ends it", "agent prompt defines the structural terminal condition");
             AssertTrue(settings.AgentToolsPrompt.StartsWith("# Agent tool policy", StringComparison.Ordinal), "tool prompt is separate Markdown");
-            AssertContains(settings.AgentToolsPrompt, "status=in_progress", "tool prompt couples explicit status to execution");
+            AssertContains(settings.AgentToolsPrompt, "non-empty `tool_calls`", "tool prompt couples calls to execution");
             AssertContains(settings.AgentToolsPrompt, "optional exact `resources`", "tool prompt explains externalized results");
             AssertTrue(settings.AgentSkillsPrompt.StartsWith("# Agent skill policy", StringComparison.Ordinal), "skill prompt is separate Markdown");
             AssertContains(settings.AgentSkillsPrompt, "metadata only", "skill catalog is explicitly not loaded guidance");
@@ -61,7 +61,7 @@ namespace RNAssistant.Harness
 
         private static void AgentSupportsSelectableResponseFormats()
         {
-            AssertEqual(2, AgentResponseProtocol.CurrentVersion,
+            AssertEqual(3, AgentResponseProtocol.CurrentVersion,
                 "conversation response protocol cutover version");
             var settings = new AppSettings { StreamResponses = false };
             var messages = new List<object> { new { role = "user", content = "test" } };
@@ -98,19 +98,11 @@ namespace RNAssistant.Harness
             };
             var schema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { tool }));
             var rootRequired = schema["required"] as JArray;
-            AssertTrue(rootRequired != null && rootRequired.Values<string>().Contains("status"),
-                "strict response schema requires status");
-            var statuses = schema.SelectToken("properties.status.enum") as JArray;
-            AssertTrue(statuses != null &&
-                statuses.Values<string>().SequenceEqual(new[]
-                {
-                    AgentResponseStatuses.InProgress,
-                    AgentResponseStatuses.Completed,
-                    AgentResponseStatuses.AwaitingUser,
-                    AgentResponseStatuses.Blocked,
-                    AgentResponseStatuses.Refused,
-                    AgentResponseStatuses.Planned
-                }), "strict response schema exposes the closed status enum");
+            AssertTrue(rootRequired != null &&
+                rootRequired.Values<string>().SequenceEqual(new[] { "message", "tool_calls" }),
+                "strict response schema exposes only the canonical root fields");
+            AssertTrue(schema.SelectToken("properties.status") == null,
+                "model-facing response schema does not expose runtime status");
             var call = schema.SelectToken("properties.tool_calls.items.anyOf[0]");
             AssertEqual("excel.read_range", (string)call.SelectToken("properties.name.const"), "exact tool name in schema");
             AssertEqual("string", (string)call.SelectToken("properties.arguments.properties.range.type"), "tool argument schema copied");
@@ -198,7 +190,8 @@ namespace RNAssistant.Harness
                 var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, role);
                 var resultMessage = AgentJsonProtocol.CreateToolResultMessage(command, result, role);
                 AssertTrue(callMessage.ToolCalls.Count == 0, role + " uses JSON envelope history");
-                AssertContains(callMessage.Content, "\"status\":\"in_progress\"", role + " replays response status");
+                AssertTrue(callMessage.Content.IndexOf("\"status\"", StringComparison.Ordinal) < 0,
+                    role + " replays only message and tool_calls");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, callMessage.ResponseProtocolVersion,
                     role + " stores response protocol version");
                 AssertEqual(AgentResponseStatuses.InProgress, callMessage.ResponseStatus,

@@ -318,7 +318,7 @@ namespace RNAssistant.Office
                 settings = attachmentRouting.Settings;
                 var executionMode = ChatModes.Normalize(session.Mode);
                 var documentRuntimeKey = string.Empty;
-                if (executionMode == ChatModes.Agent)
+                if (executionMode != ChatModes.Chat)
                 {
                     documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
                 }
@@ -364,7 +364,7 @@ namespace RNAssistant.Office
                     Status = "running",
                     Phase = "starting",
                     CurrentAction = "Preparing request.",
-                    DocumentRuntimeKey = executionMode == ChatModes.Agent ? documentRuntimeKey : null,
+                    DocumentRuntimeKey = executionMode != ChatModes.Chat ? documentRuntimeKey : null,
                     IterationsUsed = 0,
                     ToolStepsUsed = 0,
                     StartedUtc = DateTime.UtcNow
@@ -503,7 +503,7 @@ namespace RNAssistant.Office
                         runProgress("compaction_failed", activity.ResultMessage, activity);
                     }
                     var tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
-                    var skills = executionMode == ChatModes.Agent
+                    var skills = executionMode != ChatModes.Chat
                         ? _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList()
                         : new List<SkillDefinition>();
                     try
@@ -527,7 +527,7 @@ namespace RNAssistant.Office
                     finally
                     {
                         // Auto-confirmed VBA mutations bypass the explicit VBA bridge methods.
-                        if (executionMode == ChatModes.Agent) _toolCatalog.InvalidateDocumentVbaTools();
+                        if (executionMode != ChatModes.Chat) _toolCatalog.InvalidateDocumentVbaTools();
                     }
                 }
                 catch (Exception ex)
@@ -606,10 +606,11 @@ namespace RNAssistant.Office
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
                 Messages = session == null ? new List<ChatMessage>() : ChatCloneService.CloneMessages(session.Messages),
-                Artifacts = ChatArtifactDto.From(session == null ? null : session.Artifacts),
+                Artifacts = ChatArtifactDto.From(session),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
-                ActivePlanArtifactId = session == null ? string.Empty : session.ActivePlanArtifactId,
+                ActiveTaskListArtifactId = session == null ? string.Empty : session.ActiveTaskListArtifactId,
+                ActivePlanDocumentArtifactId = session == null ? string.Empty : session.ActivePlanDocumentArtifactId,
                 ContextUsage = completion == null
                     ? ContextUsageEstimator.FromSession(session, settings)
                     : completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings),

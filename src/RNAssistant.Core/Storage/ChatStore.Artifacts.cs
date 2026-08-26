@@ -404,7 +404,8 @@ namespace RNAssistant.Core.Storage
             return mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) ||
                 mimeType.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 mimeType.IndexOf("xml", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(artifact.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(artifact.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase);
         }

@@ -239,7 +239,8 @@ namespace RNAssistant.Office
                     _attachmentStore.CloneMessageAttachments(message);
                 }
                 ChatResourceReferenceService.LinkMessageResources(fork, 0);
-                ChatResourceReferenceService.RestoreActivePlanFromMessages(fork);
+                ChatResourceReferenceService.RestoreActiveTaskListFromMessages(fork);
+                ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(fork);
                 NormalizeContext(fork.Context, fork);
                 SaveSessionChanges(fork);
                 _chatSessions.SetActiveSession(fork);
@@ -442,7 +443,8 @@ namespace RNAssistant.Office
                 session.ContextCheckpoints = new List<ContextCheckpoint>();
                 session.ActiveContextCheckpointId = null;
                 session.ActiveHtmlArtifactId = null;
-                session.ActivePlanArtifactId = null;
+                session.ActiveTaskListArtifactId = null;
+                session.ActivePlanDocumentArtifactId = null;
                 session.LastRun = null;
                 NormalizeContext(session.Context, session);
                 SaveSessionChanges(session);
@@ -553,10 +555,11 @@ namespace RNAssistant.Office
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
                 Messages = session == null ? new List<ChatMessage>() : ChatCloneService.CloneMessages(session.Messages),
-                Artifacts = ChatArtifactDto.From(session == null ? null : session.Artifacts),
+                Artifacts = ChatArtifactDto.From(session),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
-                ActivePlanArtifactId = session == null ? string.Empty : session.ActivePlanArtifactId,
+                ActiveTaskListArtifactId = session == null ? string.Empty : session.ActiveTaskListArtifactId,
+                ActivePlanDocumentArtifactId = session == null ? string.Empty : session.ActivePlanDocumentArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, ResolveChatSettings(session)),
                 HtmlWorkspace = HtmlWorkspaceDto.From(
                     session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),

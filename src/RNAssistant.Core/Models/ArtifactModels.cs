@@ -10,7 +10,8 @@ namespace RNAssistant.Core.Models
 
     public static class ChatArtifactKinds
     {
-        public const string Plan = "plan";
+        public const string TaskList = "task_list";
+        public const string PlanDocument = "plan_document";
         public const string Markdown = "markdown";
         public const string HtmlWorkspace = "html_workspace";
         public const string Image = "image";
@@ -21,7 +22,7 @@ namespace RNAssistant.Core.Models
         public const string ToolResult = "tool_result";
     }
 
-    public sealed class ChatPlan
+    public sealed class ChatTaskList
     {
         public const int CurrentProtocolVersion = 1;
 
@@ -34,17 +35,21 @@ namespace RNAssistant.Core.Models
         [Newtonsoft.Json.JsonProperty("goal")]
         public string Goal { get; set; }
 
-        [Newtonsoft.Json.JsonProperty("steps")]
-        public List<ChatPlanStep> Steps { get; set; }
+        [Newtonsoft.Json.JsonProperty("status")]
+        public string Status { get; set; }
 
-        public ChatPlan()
+        [Newtonsoft.Json.JsonProperty("steps")]
+        public List<ChatTaskStep> Steps { get; set; }
+
+        public ChatTaskList()
         {
             ProtocolVersion = CurrentProtocolVersion;
-            Steps = new List<ChatPlanStep>();
+            Status = "active";
+            Steps = new List<ChatTaskStep>();
         }
     }
 
-    public sealed class ChatPlanStep
+    public sealed class ChatTaskStep
     {
         [Newtonsoft.Json.JsonProperty("id")]
         public string Id { get; set; }

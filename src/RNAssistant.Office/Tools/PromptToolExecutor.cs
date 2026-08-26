@@ -33,6 +33,7 @@ namespace RNAssistant.Office.Tools
                     "\"agentToolsPrompt\":{\"type\":\"string\",\"description\":\"Agent-wide tool selection and execution policy; tool-specific input details remain in each tool schema.\",\"maxLength\":100000}," +
                     "\"agentSkillsPrompt\":{\"type\":\"string\",\"description\":\"Agent skill discovery, mandatory loading evidence, reference reading, and precedence policy.\",\"maxLength\":100000}," +
                     "\"chatSystemPrompt\":{\"type\":\"string\",\"description\":\"Complete tool-free Chat-mode Markdown prompt.\",\"maxLength\":100000}," +
+                    "\"planSystemPrompt\":{\"type\":\"string\",\"description\":\"Complete read-only Plan-mode Markdown prompt.\",\"maxLength\":100000}," +
                     "\"systemPromptRole\":{\"type\":\"string\",\"description\":\"Message role used for prompt instructions.\",\"enum\":[\"developer\",\"system\",\"user\"]}," +
                     "\"contextCompactionPrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to compact completed history.\",\"maxLength\":100000}," +
                     "\"chatTitlePrompt\":{\"type\":\"string\",\"description\":\"Markdown prompt used to generate chat titles.\",\"maxLength\":100000}," +
@@ -90,12 +91,13 @@ namespace RNAssistant.Office.Tools
             ApplyIfPresent(command, "agentToolsPrompt", value => settings.AgentToolsPrompt = value);
             ApplyIfPresent(command, "agentSkillsPrompt", value => settings.AgentSkillsPrompt = value);
             ApplyIfPresent(command, "chatSystemPrompt", value => settings.ChatSystemPrompt = value);
+            ApplyIfPresent(command, "planSystemPrompt", value => settings.PlanSystemPrompt = value);
             ApplyIfPresent(command, "systemPromptRole", value => settings.SystemPromptRole = NormalizePromptRole(value));
             ApplyIfPresent(command, "contextCompactionPrompt", value => settings.ContextCompactionPrompt = value);
             ApplyIfPresent(command, "chatTitlePrompt", value => settings.ChatTitlePrompt = value);
             ApplyIfPresent(command, "attachmentAnalysisPrompt", value => settings.AttachmentAnalysisPrompt = value);
             if (PromptTooLarge(settings.SystemPrompt) || PromptTooLarge(settings.AgentToolsPrompt) ||
-                PromptTooLarge(settings.AgentSkillsPrompt) || PromptTooLarge(settings.ChatSystemPrompt) ||
+                PromptTooLarge(settings.AgentSkillsPrompt) || PromptTooLarge(settings.ChatSystemPrompt) || PromptTooLarge(settings.PlanSystemPrompt) ||
                 PromptTooLarge(settings.ContextCompactionPrompt) || PromptTooLarge(settings.ChatTitlePrompt) ||
                 PromptTooLarge(settings.AttachmentAnalysisPrompt))
             {
@@ -132,6 +134,7 @@ namespace RNAssistant.Office.Tools
                 agentToolsPrompt = settings.AgentToolsPrompt,
                 agentSkillsPrompt = settings.AgentSkillsPrompt,
                 chatSystemPrompt = settings.ChatSystemPrompt,
+                planSystemPrompt = settings.PlanSystemPrompt,
                 systemPromptRole = settings.SystemPromptRole,
                 contextCompactionPrompt = settings.ContextCompactionPrompt,
                 chatTitlePrompt = settings.ChatTitlePrompt,

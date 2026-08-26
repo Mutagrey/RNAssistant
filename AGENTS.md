@@ -30,11 +30,12 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 
 ### Conversation и resources
 
-- Поддерживаются только `agent` и `chat`; новый chat создаётся в `agent`. Оба режима используют один `ConversationRunService`.
+- Поддерживаются `agent`, `plan` и `chat`; новый chat создаётся в `agent`. Все режимы используют один `ConversationRunService`.
 - Model-facing чтение документов/артефактов идёт только через `common.resources_list/resolve/search/read` и revision-pinned `rna://` URI. Durable ссылки — только `ResourceRef`; internal artifact ids не являются вторым transport.
 - Paste/drop/скрепка используют chat-scoped `stageChatResource`; `sendChat` принимает только `resourceDraftIds`. CAS/resource revision и связь с user turn сохраняются до network dispatch. Не возвращай ручные `artifactIds`, «В запрос», legacy readers, aliases или dual-write.
 - Pre-cutover chat/context streams не мигрируются: только reset/skip.
 - Chat получает только read-only `common.resources_*`, пустой capability catalog и не может confirmation/mutation tools.
+- Plan получает read-only discovery и chat-local `common.questions_ask`, `common.plan_doc_*`, `common.task_list_*`; Office/shared mutations и confirmation запрещены. Один revisioned Markdown plan задаёт направление, а временный Task List отслеживает текущую работу.
 - Agent хранит полный runnable catalog только как local execution authority. Модель сразу получает компактный каталог точных tool/skill ids с явным kind и bootstrap `common.capabilities_search/read`; точные схемы загружаются через revision-matched `common.capabilities_read` в bounded LRU working set. Не возвращай full-schema catalog injection или скрытый router/planner state.
 - Skill body загружается через тот же полный revision-matched `common.capabilities_read` по точному id; после compaction/truncation/revision change требуется повторное чтение. References читаются bounded chunks тем же reader.
 - Ответ модели — один JSON object `message + tool_calls`. Никаких fences/prose/legacy envelopes. Невалидные attempts не входят в replay/history; runtime не делает automatic tool retry или отдельную verification phase.

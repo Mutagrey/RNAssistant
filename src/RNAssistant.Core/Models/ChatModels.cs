@@ -8,11 +8,12 @@ namespace RNAssistant.Core.Models
     {
         public const string Chat = "chat";
         public const string Agent = "agent";
+        public const string Plan = "plan";
 
         public static string Normalize(string value)
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
-            return value == Chat ? Chat : Agent;
+            return value == Chat || value == Plan ? value : Agent;
         }
     }
 
@@ -231,7 +232,8 @@ namespace RNAssistant.Core.Models
         public string ActiveContextCheckpointId { get; set; }
         public List<ChatArtifact> Artifacts { get; set; }
         public string ActiveHtmlArtifactId { get; set; }
-        public string ActivePlanArtifactId { get; set; }
+        public string ActiveTaskListArtifactId { get; set; }
+        public string ActivePlanDocumentArtifactId { get; set; }
 
         public ChatSession()
         {

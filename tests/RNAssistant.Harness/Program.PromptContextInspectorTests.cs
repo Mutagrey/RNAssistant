@@ -47,7 +47,7 @@ namespace RNAssistant.Harness
             session.Artifacts.Add(new ChatArtifact
             {
                 Id = "plan_r1",
-                Kind = ChatArtifactKinds.Plan,
+                Kind = ChatArtifactKinds.TaskList,
                 Title = "План проверки",
                 InlineText = "{\"steps\":[]}"
             });

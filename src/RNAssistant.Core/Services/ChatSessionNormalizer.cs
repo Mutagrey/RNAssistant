@@ -167,10 +167,16 @@ namespace RNAssistant.Core.Services
             }
 
             if (!session.Artifacts.Any(item =>
-                string.Equals(item.Id, session.ActivePlanArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase)))
+                string.Equals(item.Id, session.ActiveTaskListArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase)))
             {
-                session.ActivePlanArtifactId = null;
+                session.ActiveTaskListArtifactId = null;
+            }
+            if (!session.Artifacts.Any(item =>
+                string.Equals(item.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase)))
+            {
+                session.ActivePlanDocumentArtifactId = null;
             }
         }
     }

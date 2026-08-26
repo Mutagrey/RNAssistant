@@ -158,7 +158,9 @@
     <Compile Include="Tools\HtmlArtifactToolExecutor.DataBinding.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.Diagnostics.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.Source.cs" />
-    <Compile Include="Tools\PlanToolExecutor.cs" />
+    <Compile Include="Tools\TaskListToolExecutor.cs" />
+    <Compile Include="Tools\PlanDocumentToolExecutor.cs" />
+    <Compile Include="Tools\UserQuestionToolExecutor.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
     <Compile Include="Tools\VbaToolExecutor.Guards.cs" />

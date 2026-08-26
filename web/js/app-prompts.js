@@ -5,6 +5,7 @@
     { key: "agentToolsPrompt", label: "Агент · tools", group: "Основные", source: "root", field: "AgentToolsPrompt", description: "Общие правила выбора и выполнения tools; конкретные аргументы остаются в схемах tools." },
     { key: "agentSkillsPrompt", label: "Агент · skills", group: "Основные", source: "root", field: "AgentSkillsPrompt", description: "Правила выбора, обязательного чтения и повторной загрузки skills." },
     { key: "chatSystemPrompt", label: "Чат", group: "Основные", source: "root", field: "ChatSystemPrompt", description: "Прямой ответ и доступ только к read-only resource tools." },
+    { key: "planSystemPrompt", label: "Plan mode", group: "Основные", source: "root", field: "PlanSystemPrompt", description: "Read-only discovery, typed questions и Markdown-план без выполнения." },
     { key: "contextCompactionPrompt", label: "Сжатие контекста", group: "Служебные", source: "root", field: "ContextCompactionPrompt", description: "Правила создания checkpoint активной истории." },
     { key: "chatTitlePrompt", label: "Название чата", group: "Служебные", source: "root", field: "ChatTitlePrompt", description: "Короткий запрос для генерации названия." },
     { key: "attachmentAnalysisPrompt", label: "Анализ вложений", group: "Служебные", source: "root", field: "AttachmentAnalysisPrompt", description: "Инструкции вспомогательной модели для изображений и аудио." }
@@ -384,6 +385,7 @@
       AgentToolsPrompt: state.promptDrafts.agentToolsPrompt || "",
       AgentSkillsPrompt: state.promptDrafts.agentSkillsPrompt || "",
       ChatSystemPrompt: state.promptDrafts.chatSystemPrompt || "",
+      PlanSystemPrompt: state.promptDrafts.planSystemPrompt || "",
       ContextCompactionPrompt: state.promptDrafts.contextCompactionPrompt || "",
       ChatTitlePrompt: state.promptDrafts.chatTitlePrompt || "",
       AttachmentAnalysisPrompt: state.promptDrafts.attachmentAnalysisPrompt || ""

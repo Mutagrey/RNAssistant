@@ -516,6 +516,25 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("metadataJson")] public string MetadataJson { get; set; }
         [JsonProperty("relatedArtifactIds")] public IReadOnlyList<string> RelatedArtifactIds { get; set; }
         [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
+        [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
+
+        public static IReadOnlyList<ChatArtifactDto> From(ChatSession session)
+        {
+            var result = From(session == null ? null : session.Artifacts).ToList();
+            if (session == null) return result;
+            var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null)
+                .ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+            foreach (var item in result)
+            {
+                ChatArtifact artifact;
+                if (item != null && artifacts.TryGetValue(item.Id ?? string.Empty, out artifact))
+                {
+                    item.ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
+                }
+            }
+            return result;
+        }
 
         public static IReadOnlyList<ChatArtifactDto> From(IEnumerable<ChatArtifact> artifacts)
         {
@@ -585,8 +604,11 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("activeHtmlArtifactId")]
         public string ActiveHtmlArtifactId { get; set; }
 
-        [JsonProperty("activePlanArtifactId")]
-        public string ActivePlanArtifactId { get; set; }
+        [JsonProperty("activeTaskListArtifactId")]
+        public string ActiveTaskListArtifactId { get; set; }
+
+        [JsonProperty("activePlanDocumentArtifactId")]
+        public string ActivePlanDocumentArtifactId { get; set; }
 
         [JsonProperty("contextUsage")]
         public object ContextUsage { get; set; }
@@ -666,8 +688,11 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("activeHtmlArtifactId")]
         public string ActiveHtmlArtifactId { get; set; }
 
-        [JsonProperty("activePlanArtifactId")]
-        public string ActivePlanArtifactId { get; set; }
+        [JsonProperty("activeTaskListArtifactId")]
+        public string ActiveTaskListArtifactId { get; set; }
+
+        [JsonProperty("activePlanDocumentArtifactId")]
+        public string ActivePlanDocumentArtifactId { get; set; }
 
         [JsonProperty("contextUsage")]
         public object ContextUsage { get; set; }

@@ -21,7 +21,76 @@ function renderActivityNode(activity, nested, current, context) {
   if (!context || context.renderInlineArtifacts !== false) {
     appendActivityArtifacts(node, activity, context);
   }
+  appendQuestionCards(node, activity, context);
   return node;
+}
+
+function appendQuestionCards(node, activity, context) {
+  if (String(activityToolId(activity) || "") !== "common.questions_ask" || activityStatus(activity) !== "waiting") return;
+  if (context && Number.isInteger(context.index) && (state.messages || []).slice(context.index + 1).some(function (message) {
+    return String(messageRole(message) || "").toLowerCase() === "user";
+  })) return;
+  var data;
+  try { data = JSON.parse(activityDataJson(activity) || "{}"); } catch (error) { return; }
+  if (!data || data.type !== "rnassistant.questions" || !Array.isArray(data.questions)) return;
+  var form = document.createElement("form");
+  form.className = "plan-question-cards";
+  data.questions.forEach(function (question) {
+    var fieldset = document.createElement("fieldset");
+    var legend = document.createElement("legend");
+    legend.textContent = question.header || question.prompt || "Вопрос";
+    fieldset.appendChild(legend);
+    var prompt = document.createElement("p");
+    prompt.textContent = question.prompt || "";
+    fieldset.appendChild(prompt);
+    (question.options || []).forEach(function (option) {
+      var label = document.createElement("label");
+      var input = document.createElement("input");
+      input.type = question.selection === "multiple" ? "checkbox" : "radio";
+      input.name = "q_" + question.id;
+      input.value = option.id;
+      var copy = document.createElement("span");
+      copy.innerHTML = "<strong></strong><small></small>";
+      copy.querySelector("strong").textContent = option.label + (option.recommended ? " · рекомендуется" : "");
+      copy.querySelector("small").textContent = option.description || "";
+      label.appendChild(input);
+      label.appendChild(copy);
+      fieldset.appendChild(label);
+    });
+    if (question.allowFreeText !== false) {
+      var free = document.createElement("textarea");
+      free.name = "free_" + question.id;
+      free.rows = 2;
+      free.placeholder = "Дополнение или свой вариант";
+      fieldset.appendChild(free);
+    }
+    form.appendChild(fieldset);
+  });
+  var submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "agent-action-button primary";
+  submit.textContent = "Ответить";
+  form.appendChild(submit);
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var answers = data.questions.map(function (question) {
+      var selected = Array.prototype.slice.call(form.querySelectorAll("[name='q_" + question.id + "']:checked")).map(function (input) { return input.value; });
+      var free = form.querySelector("[name='free_" + question.id + "']");
+      return { questionId: question.id, optionIds: selected, freeText: free ? free.value.trim() : "" };
+    });
+    if (answers.some(function (answer) { return !answer.optionIds.length && !answer.freeText; })) {
+      window.alert("Ответьте на каждый вопрос.");
+      return;
+    }
+    var input = $("chatInput");
+    var chatForm = $("chatForm");
+    if (!input || !chatForm) return;
+    input.value = "PLAN_ANSWERS:\n" + JSON.stringify({ questionSetId: data.questionSetId, answers: answers });
+    updateComposerInputState();
+    if (chatForm.requestSubmit) chatForm.requestSubmit();
+    else chatForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  node.appendChild(form);
 }
 
 function renderActivityRow(activity, current, expandable, context) {

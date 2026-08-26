@@ -31,8 +31,8 @@
     async function savePlan(selection, chatId) {
       var plan = options.validatePlanDraft(selection.item);
       var result = await options.send("runTool", {
-        toolId: "common.plan_update",
-        arguments: { id: plan.id, goal: plan.goal, steps: plan.steps },
+        toolId: "common.plan_doc_update",
+        arguments: { id: plan.id, expectedRevisionArtifactId: plan.expectedRevisionArtifactId, title: plan.title, markdown: plan.markdown, status: "draft" },
         dryRun: false
       });
       if (!toolSucceeded(result)) throw new Error(toolMessage(result, "План не сохранён."));
@@ -89,7 +89,7 @@
       try {
         if (selected.type === "plan") {
           var result = await options.send("runTool", {
-            toolId: "common.plan_delete",
+            toolId: "common.plan_doc_delete",
             arguments: { id: selected.planId },
             dryRun: false
           });
@@ -160,18 +160,18 @@
       var chatId = state.activeChatId;
       try {
         var result = await options.send("runTool", {
-          toolId: "common.plan_create",
+          toolId: "common.plan_doc_create",
           arguments: {
-            goal: "Новый план",
-            steps: [{ id: "step_1", text: "Опишите первый шаг", status: "pending" }]
+            title: "Новый план",
+            markdown: "# Новый план\n\nОпишите цель, решения, этапы и проверку.",
+            status: "draft"
           },
           dryRun: false
         });
         if (!toolSucceeded(result)) throw new Error(toolMessage(result, "План не создан."));
         var payload = {};
         try { payload = JSON.parse(result.DataJson || result.dataJson || "{}"); } catch (ignore) {}
-        var plan = payload.plan || payload.Plan || {};
-        if (!await refreshPlan(plan.id || plan.Id || "", chatId)) return;
+        if (!await refreshPlan(payload.planId || payload.PlanId || "", chatId)) return;
         if (state.activeChatId !== chatId) return;
         state.htmlWorkspaceMode = "preview";
         options.render();

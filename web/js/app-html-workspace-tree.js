@@ -248,7 +248,7 @@
       return ["attachment", "image", "audio", "file"].indexOf(artifact.kind) >= 0;
     }), query, "artifact", options);
     rendered += renderArtifactGroup(tree, "Служебные", "artifact-system", artifacts.filter(function (artifact) {
-      return ["plan", "markdown", "chart", "attachment", "image", "audio", "file", "html_workspace"].indexOf(artifact.kind) < 0;
+      return ["plan_document", "task_list", "markdown", "chart", "attachment", "image", "audio", "file", "html_workspace"].indexOf(artifact.kind) < 0;
     }), query, "artifact", options);
     if (!rendered) tree.appendChild(createResourceEmptyState(query ? "Ничего не найдено." : "Артефактов пока нет."));
     return rendered;

@@ -200,10 +200,11 @@ namespace RNAssistant.Office
                 SkillsPath = _paths.SkillsDirectory,
                 Context = ChatCloneService.CloneContext(context),
                 Messages = ChatCloneService.CloneMessages(session.Messages),
-                Artifacts = ChatArtifactDto.From(session.Artifacts),
+                Artifacts = ChatArtifactDto.From(session),
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
-                ActivePlanArtifactId = session.ActivePlanArtifactId,
+                ActiveTaskListArtifactId = session.ActiveTaskListArtifactId,
+                ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, chatSettings),
                 HtmlWorkspace = HtmlWorkspaceDto.From(
                     session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
@@ -274,10 +275,11 @@ namespace RNAssistant.Office
                 ActiveChatReasoning = active != null && active.ReasoningEnabled,
                 Chats = chats,
                 Documents = ListOpenDocuments(),
-                Artifacts = ChatArtifactDto.From(active == null ? null : active.Artifacts),
+                Artifacts = ChatArtifactDto.From(active),
                 ActiveContextCheckpointId = active == null ? string.Empty : active.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = active == null ? string.Empty : active.ActiveHtmlArtifactId,
-                ActivePlanArtifactId = active == null ? string.Empty : active.ActivePlanArtifactId
+                ActiveTaskListArtifactId = active == null ? string.Empty : active.ActiveTaskListArtifactId,
+                ActivePlanDocumentArtifactId = active == null ? string.Empty : active.ActivePlanDocumentArtifactId
             };
         }
 

@@ -1,28 +1,29 @@
 # Conversation JSON flow
 
-RNAssistant has two explicit modes and one `ConversationRunService` transport/transcript loop.
+RNAssistant has three explicit modes and one `ConversationRunService` transport/transcript loop.
 
 - `chat`: the editable `ChatSystemPrompt`, a dynamic `RUNTIME_CONTEXT`, and exactly the safe read-only `common.resources_list/resolve/search/read` catalog. Skills, Office tools, local mutations, and confirmation are unavailable by runtime policy.
+- `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, typed `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_*`, and optional `common.task_list_*`. Office/shared mutations and confirmation are unavailable by runtime policy.
 - `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
-Both modes return the same conversation-response v2 JSON envelope: `status + message + tool_calls[]`. They use the same bounded request-local format repair. Explicit structure and the tool catalog, never model wording, are the authority: a Chat response naming any other tool is rejected before execution.
+All modes return the same JSON envelope: `message + tool_calls[]`. They use the same bounded request-local format repair. Explicit structure and the tool catalog, never model wording, are the authority: a Chat response naming any other tool is rejected before execution.
 
 ## Conversation context
 
-Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:
+Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Plan uses `PlanSystemPrompt` with the same progressive capability policy; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:
 
 - current host and document identity;
 - exact bootstrap and currently loaded callable tool descriptors;
 - one compact `capabilities` catalog with exact `id`, explicit `kind` (`tool` or `skill`), summary, revision, and kind-specific safety/body metadata in Agent, or an empty catalog in Chat;
 - chat-owned user context and artifact references.
 
-The Agent sections and Chat prompt use one explicit settings schema version. Settings without the current marker are hard-reset to the current defaults; RNAssistant does not merge an older no-tools Chat contract into the structured loop. Once the current marker is saved, current custom values are preserved normally.
+The Agent sections and Plan/Chat prompts use one explicit settings schema version. Settings without the current marker are hard-reset to the current defaults; RNAssistant does not merge an older no-tools Chat contract into the structured loop. Once the current marker is saved, current custom values are preserved normally.
 
 Agent bootstrap schemas are `common.resources_list/resolve/search/read` and `common.capabilities_search/read`. `RUNTIME_CONTEXT.capabilities.items` immediately exposes a bounded compact list of exact runnable tool and enabled skill ids; `common.capabilities_search` searches the complete schema-free catalog only when that list is truncated or has no exact match. `common.capabilities_read` accepts one exact catalog id. For `kind:"tool"` it returns `kind:"tool-schema"`, the descriptor revision, complete native-like descriptor, and explicit `loaded:true`, `complete:true`, `truncated:false`; for `kind:"skill"` it returns the complete Markdown skill evidence described below. The local parser and strict response schema admit a non-bootstrap tool only after matching tool-schema evidence. Tool and skill ids share one namespace, and a collision aborts request construction instead of choosing one implicitly.
 
 Dynamic callable schemas use an evidence-derived LRU with at most eight entries and a context-derived 8,192–20,000 token budget. Successful exact calls update recency. Replay processes schema-read and tool-call evidence in order, producing the same eviction without a mutable index or hidden activation state. `TOOL_WORKING_SET` reports the current ids and any request-local eviction. Generic result truncation removes loaded evidence; compaction, descriptor revision drift, or eviction requires another exact read. A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. The model may read several independent schemas in one response, but it cannot combine a first schema read with a dependent newly loaded call in that same response.
 
-Visible planning is optional data, not a protocol phase. `common.plan_create/update/delete` stores a versioned plan artifact for the active chat, and `common.resources_read` reads its exact active `rna://` revision. The model explicitly supplies every step status; runtime does not infer progress from tool calls. The active plan URI appears in `RUNTIME_CONTEXT`.
+Planning and execution tracking are separate. `common.plan_doc_create/update/delete` stores the single broad free-form Markdown plan as immutable revisions; its exact active `rna://` URI and metadata appear in `RUNTIME_CONTEXT.active_plan`, while the body is read only through `common.resources_read`. `common.task_list_create/update/close` stores a temporary ordered execution checklist for work with at least three meaningful stages. Runtime never maps tool calls to steps or changes statuses automatically. A ready-plan handoff switches to Agent and cites the exact revision URI; internal artifact ids are not transport.
 
 The resource index is a bounded working-set manifest, not a body store. `common.resources_list` pages metadata, `common.resources_resolve` validates one exact reference, `common.resources_search` returns bounded literal matches, and `common.resources_read` reads one exact `metadata`, `text`, `structure`, `source`, or `media` representation by canonical revision-pinned `rna://` URI. `read` accepts the exact optional `revision` returned with a reference. Immutable text/source/structure uses an offset internally because the URI is already pinned; live continuations bind that position to the observed content hash, and list continuations bind it to a collection fingerprint. A changed live value or collection returns retryable `resource_revision_changed` instead of combining pages. Model-facing read results expose only opaque `nextCursor`, never a raw continuation offset; it must be copied unchanged into the next call's `cursor`. Search `matchOffset`/`snippetOffset` values are informational and are not read arguments. Media is attached only to the immediately following model step, with the resource URI kept as provenance and no base64 in tool JSON. A capable main model reads it directly; missing Vision/Audio capability uses the isolated attachment helper. Query-specific helper output is not advertised as a reusable resource representation.
 
@@ -65,12 +66,12 @@ Custom tools must have a strict object JSON Schema with explicit `properties`, `
 
 ## Model response
 
-Both modes always return the same raw JSON envelope with no Markdown or surrounding prose. `AgentResponseMode` selects its transport constraint for the shared loop:
+All modes always return the same raw JSON envelope with no Markdown or surrounding prose. `AgentResponseMode` selects its transport constraint for the shared loop:
 
 - `json_object` (default) asks the endpoint for a generic JSON object and relies on the local parser and tool argument validators;
 - `json_schema` sends a strict response schema generated from the exact current callable working set. The schema fixes the root fields, loaded tool names, and each loaded argument contract; the full internal catalog is never copied into it.
 
-With SSE enabled, transport chunks still contain that raw JSON envelope. The live UI projection incrementally decodes only the root `message` string, resets it for every model request or format-repair attempt, and never exposes `tool_calls`/other raw JSON. Provider reasoning and one leading `<think>` block use the separate reasoning projection; its terminal update is emitted before visible message content starts or when the stream ends.
+With SSE enabled, transport chunks still contain that raw JSON envelope. The live UI projection incrementally decodes only the root `message` string and never exposes `tool_calls` or other raw JSON. A new model attempt marks the previous provisional projection for replacement, but UI applies that reset only with the first new content/reasoning delta so a format repair cannot create an empty blink. Provider reasoning and one leading `<think>` block use the separate reasoning projection; its terminal update is emitted before visible message content starts or when the stream ends.
 
 Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; immediately before normal validation, runtime removes those optional nulls and applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.
 
@@ -80,7 +81,6 @@ Tool call:
 
 ```json
 {
-  "status": "in_progress",
   "message": "Читаю диапазон.",
   "tool_calls": [
     {
@@ -96,56 +96,25 @@ Final answer:
 
 ```json
 {
-  "status": "completed",
   "message": "Готово.",
   "tool_calls": []
 }
 ```
 
-Conversation-response v2 requires a root `status`. The strict response schema enforces its presence and closed enum; the local parser additionally enforces its relationship with `tool_calls`. This avoids unsupported cross-field constructs in provider structured-output schemas while keeping the same invariant in both `json_schema` and `json_object` modes:
-
-| `status` | Meaning | `tool_calls` | UI/run projection |
-| --- | --- | --- | --- |
-| `in_progress` | The model is requesting executable work now. | At least one call. | Run continues. |
-| `completed` | The requested outcome is complete. | Empty. | Successful final answer. |
-| `awaiting_user` | A user decision or missing information is required. | Empty. | Current run ends and the conversation visibly waits for the user. |
-| `blocked` | Work cannot proceed because of a concrete dependency or inability. | Empty. | Final blocked outcome, not success. |
-| `refused` | The request is explicitly refused. | Empty. | Final refusal. |
-| `planned` | A plan-only outcome is ready. Reserved for a future runtime-selected planning mode. | Empty. | Successful plan result, distinct from executed completion. |
-
-For example:
-
-```json
-{"status":"in_progress","message":"Читаю диапазон.","tool_calls":[{"id":"call_1","name":"excel.read_range","arguments":{"sheet":"Data","address":"A1:D20"}}]}
-```
-
-```json
-{"status":"awaiting_user","message":"Какой лист следует изменить?","tool_calls":[]}
-```
-
-```json
-{"status":"completed","message":"Диапазон обновлён.","tool_calls":[]}
-```
-
 The runtime enforces these rules:
 
-- `status` is explicit and required; it is never derived from `message`, punctuation, historical tool failures, or plan text.
-- `in_progress` with no calls and any terminal status with calls are structural format errors handled by the existing bounded format-repair path. No word lists or prose regexes participate in validation.
-- `awaiting_user` is the structured form of a model question. The visible question remains in `message`; the runtime does not require particular wording or a question mark.
-- An explicit provider-native refusal field maps directly to `refused`; ordinary response text is never classified as a refusal.
-- `planned` is rejected unless a future planning mode was selected by runtime policy. The model cannot switch conversation modes by choosing a status. Such a mode may use `in_progress` for permitted discovery calls, `awaiting_user` for clarification, and `planned` for its final plan.
-- `failed`, `cancelled`, `interrupted`, and `interrupted_unknown` remain runtime-owned execution states and are not model-selectable response statuses.
-- Intermediate `ok:false` tool results remain visible in the expanded action trace but do not relabel a later `completed` response as failed. If no valid final response exists because the runtime itself failed or was interrupted, the runtime-owned terminal state controls the collapsed summary.
-- The accepted response status is persisted in the append-only session event stream and replayed into UI projections. UI code must not rescan message text or aggregate any historical failed step to reconstruct the final state.
-- The cutover uses response protocol version `2` and the current settings prompt marker. Every new run records version `2`; a persisted pre-v2 confirmation must be cancelled and submitted again. Legacy stored responses remain unversioned with unknown outcome, are not assigned a synthetic status from prose, and have no dual-write or lexical compatibility fallback.
-
-The structured status records the model's declared outcome; it does not independently prove semantic completion. Proving that the user's goal was achieved would require explicit task/plan evidence or a separately designed verifier, neither of which may be hidden behind text heuristics.
+- A non-empty `tool_calls` array continues the run; an empty array ends it with the visible `message` as the final answer, clarification, refusal, or blocker.
+- `message` wording and punctuation never change execution state. Plan mode uses `common.questions_ask` for typed questions and publishes its ready artifact before returning an empty array.
+- Provider-native refusal metadata remains a terminal refusal and is stored separately from ordinary response text.
+- `failed`, `cancelled`, `interrupted`, and `interrupted_unknown` are runtime-owned execution states and are never model-selectable fields.
+- Intermediate `ok:false` tool results remain visible in the expanded action trace but do not relabel a later valid final answer as failed. If no valid final response exists because runtime itself failed or was interrupted, the runtime-owned terminal state controls the collapsed summary.
+- Response protocol version `3` records that run state was projected from `tool_calls`, not declared by model text. A persisted pending confirmation from another response version must be cancelled and submitted again.
 
 The parser accepts at most 32 calls, requires a non-empty user-facing `message` for every tool turn, unique call ids, and each call to contain exactly `id`, `name`, and an object `arguments`. Duplicate JSON properties and argument names that differ only by case are rejected. Structured arguments remain native JSON objects/arrays through parsing; escaped JSON strings are not coerced. The executor checks each exact tool name and validates arguments against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. The pending id, cumulative iteration/tool-step counters, and execution fingerprint of that tool and its pipeline dependencies are persisted with the chat, so confirmation survives a WebView or Office restart but cannot execute a replaced definition. Cosmetic changes to unrelated tools do not invalidate it. A new request in that chat is blocked until the action is confirmed or cancelled. After confirmation, the model receives that result and chooses the remaining work normally using the remaining original budget. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
 
-If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A refusal is valid user-facing content only as `status:"refused"` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
+If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. A normal user-facing refusal uses `message` with an empty `tool_calls` array; provider-native refusal metadata remains separate. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
 The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections plus `ChatSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
 

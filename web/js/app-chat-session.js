@@ -296,7 +296,8 @@ function applyInitState(init) {
   state.artifacts = init.artifacts || init.Artifacts || [];
   state.activeContextCheckpointId = init.activeContextCheckpointId || init.ActiveContextCheckpointId || "";
   state.activeHtmlArtifactId = init.activeHtmlArtifactId || init.ActiveHtmlArtifactId || "";
-  state.activePlanArtifactId = init.activePlanArtifactId || init.ActivePlanArtifactId || "";
+  state.activeTaskListArtifactId = init.activeTaskListArtifactId || init.ActiveTaskListArtifactId || "";
+  state.activePlanDocumentArtifactId = init.activePlanDocumentArtifactId || init.ActivePlanDocumentArtifactId || "";
   if (chatChanged) restoreChatDraft(state.activeChatId);
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";

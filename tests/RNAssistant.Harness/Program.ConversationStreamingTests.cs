@@ -19,7 +19,7 @@ namespace RNAssistant.Harness
             var extractor = new ConversationMessageStreamExtractor();
             var chunks = new[]
             {
-                "\uFEFF {\"status\":\"completed\",\"tool_calls\":[],\"meta\":{\"message\":\"ignore\"},\"mes",
+                "\uFEFF {\"tool_calls\":[],\"meta\":{\"message\":\"ignore\"},\"mes",
                 "sage\":\"Line 1\\nquote: \\\"",
                 "ok\\\" \\\\ slash \\uD83D",
                 "\\uDE00\"}"
@@ -39,7 +39,7 @@ namespace RNAssistant.Harness
                 var responseChunks = new[]
                 {
                     "<think>" + thinking,
-                    "</think>{\"status\":\"completed\",\"meta\":{\"message\":\"скрыто\"},\"mes",
+                    "</think>{\"meta\":{\"message\":\"скрыто\"},\"mes",
                     "sage\":\"Привет\\nмир \\uD83D",
                     "\\uDE00\",\"tool_calls\":[]}"
                 };
@@ -93,8 +93,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"status\":\"completed\",\"message\":\"Черновик\",\"tool_calls\":\"invalid\"}",
-                    "{\"status\":\"completed\",\"message\":\"Исправлено.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Черновик\",\"tool_calls\":\"invalid\"}",
+                    "{\"message\":\"Исправлено.\",\"tool_calls\":[]}"
                 });
                 var calls = 0;
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>

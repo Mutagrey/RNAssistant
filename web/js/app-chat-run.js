@@ -203,7 +203,14 @@ function beginChatRunTracking(chatId) {
     return;
   }
 
-  state.chatRuns[chatId] = { activities: [], stream: "", reasoning: "", reasoningComplete: false };
+  state.chatRuns[chatId] = {
+    activities: [],
+    stream: "",
+    streamResetPending: false,
+    reasoning: "",
+    reasoningComplete: false,
+    reasoningResetPending: false
+  };
   if (state.activeChatId !== chatId) {
     return;
   }

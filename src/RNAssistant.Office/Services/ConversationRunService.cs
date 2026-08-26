@@ -364,7 +364,7 @@ namespace RNAssistant.Office.Services
                     {
                         var consumedSteps = Math.Max(1, toolResult.ToolStepsConsumed);
                         toolResult = ToolResult.Fail(
-                            "Chat mode cannot execute a tool that requires confirmation.",
+                            "This conversation mode cannot execute a tool that requires confirmation.",
                             null,
                             "conversation_policy_denied",
                             false);
@@ -380,7 +380,7 @@ namespace RNAssistant.Office.Services
                         toolResult.PendingId = pendingToolRegistrar(session, command, toolResult);
                     }
 
-                    if (!AgentTranscript.IsWaitingResult(toolResult))
+                    if (!AgentTranscript.IsWaitingResult(toolResult) && !AgentTranscript.IsAwaitingUserResult(toolResult))
                     {
                         ChatMessage artifactMediaMessage = null;
                         if ((toolResult.ModelAttachments ?? new ChatAttachment[0]).Count > 0)
@@ -438,6 +438,14 @@ namespace RNAssistant.Office.Services
                             "waiting_confirmation", "waiting_confirmation");
                         Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
                         return Result(waitingText, results, contextUsage, true, null, "waiting_confirmation");
+                    }
+                    if (AgentTranscript.IsAwaitingUserResult(toolResult))
+                    {
+                        var waitingText = string.IsNullOrWhiteSpace(toolResult.Message) ? response.Message : toolResult.Message;
+                        UpdateRunCursor(session, iterationsUsed, toolSteps, "awaiting_user", "awaiting_user");
+                        Report(progress, "tool_result", waitingText, activityMessage.Activity);
+                        return Result(waitingText, results, contextUsage, false,
+                            AgentResponseStatuses.AwaitingUser, AgentResponseStatuses.AwaitingUser);
                     }
                     Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
                     if (string.Equals(toolResult.ErrorCode, "tool_step_limit_reached", StringComparison.OrdinalIgnoreCase))

@@ -21,11 +21,9 @@ namespace RNAssistant.Office.Services
                 ["attempt"] = attempt,
                 ["max_attempts"] = maxAttempts,
                 ["instruction"] =
-                    "Return a new response to the current user request as exactly one conversation-response-v2 JSON object " +
-                    "with required status, message, and tool_calls. Do not use Markdown, fences, or surrounding prose. " +
-                    "Use status=in_progress only with one or more calls. Use completed, awaiting_user, blocked, or refused " +
-                    "only with an empty tool_calls array. planned is unavailable. Message wording never determines status. " +
-                    "Every call requires a unique id, exact name, and object arguments."
+                    "Return a new response to the current user request as exactly one JSON object with message and tool_calls. " +
+                    "Do not use Markdown, fences, surrounding prose, status, phase, or another envelope. " +
+                    "An empty tool_calls array ends the run; otherwise every call requires a unique id, exact name, and object arguments."
             };
             return new ChatMessage
             {
@@ -201,7 +199,6 @@ namespace RNAssistant.Office.Services
             }
             var content = new JObject
             {
-                ["status"] = AgentResponseStatuses.InProgress,
                 ["message"] = message ?? string.Empty,
                 ["tool_calls"] = new JArray
                 {

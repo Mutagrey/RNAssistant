@@ -26,7 +26,8 @@ var state = {
   artifacts: [],
   activeContextCheckpointId: "",
   activeHtmlArtifactId: "",
-  activePlanArtifactId: "",
+  activeTaskListArtifactId: "",
+  activePlanDocumentArtifactId: "",
   agentPlanExpanded: {},
   draftAttachments: [],
   failedSend: null,
@@ -226,7 +227,7 @@ function cancelChatRun(chatId, runId) {
 
 function recordChatRunActivityState(chatId, activity) {
   if (!chatId || !activity) return;
-  var run = state.chatRuns[chatId] = state.chatRuns[chatId] || { activities: [], stream: "" };
+  var run = state.chatRuns[chatId] = state.chatRuns[chatId] || { activities: [], stream: "", streamResetPending: false, reasoningResetPending: false };
   if (typeof recordActivityTimeline === "function") {
     return recordActivityTimeline(run.activities, activity);
   }
@@ -299,7 +300,7 @@ if (window.chrome && window.chrome.webview) {
       var progressChatId = progress.chatId || progress.ChatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
       var progressRunId = progress.runId || progress.RunId || "";
       if (progressChatId && isChatProgress) {
-        state.chatRuns[progressChatId] = state.chatRuns[progressChatId] || { activities: [], stream: "" };
+        state.chatRuns[progressChatId] = state.chatRuns[progressChatId] || { activities: [], stream: "", streamResetPending: false, reasoningResetPending: false };
         state.chatRuns[progressChatId].runId = progressRunId;
         state.chatRuns[progressChatId].phase = progress.phase || progress.Phase || "working";
       }
@@ -312,29 +313,29 @@ if (window.chrome && window.chrome.webview) {
       if ((contentReset || reasoningReset) && isChatProgress) {
         var resetRun = progressChatId ? state.chatRuns[progressChatId] : null;
         if (resetRun) {
-          if (contentReset) resetRun.stream = "";
-          if (reasoningReset) {
-            resetRun.reasoning = "";
-            resetRun.reasoningComplete = false;
-          }
-        }
-        if (progressChatId === state.activeChatId) {
-          if (contentReset) state.liveStreamContent = null;
-          if (reasoningReset) resetLiveReasoning();
-          if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
-          else renderMessages();
-        } else {
-          renderChatSessions();
+          if (contentReset) resetRun.streamResetPending = true;
+          if (reasoningReset) resetRun.reasoningResetPending = true;
         }
         if (!contentDelta && !hasReasoningProgress) return;
       }
       if (contentDelta && isChatProgress) {
-        var firstContentDelta = !progressChatId || !state.chatRuns[progressChatId].stream;
-        if (progressChatId) state.chatRuns[progressChatId].stream = (state.chatRuns[progressChatId].stream || "") + contentDelta;
+        var contentRun = progressChatId ? state.chatRuns[progressChatId] : null;
+        var replaceContent = !!(contentRun && contentRun.streamResetPending);
+        var firstContentDelta = !progressChatId || replaceContent || !contentRun.stream;
+        if (contentRun) {
+          contentRun.stream = replaceContent ? contentDelta : (contentRun.stream || "") + contentDelta;
+          contentRun.streamResetPending = false;
+          if (contentRun.reasoningResetPending) {
+            contentRun.reasoning = "";
+            contentRun.reasoningComplete = false;
+            contentRun.reasoningResetPending = false;
+          }
+        }
         if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
         state.liveStreamContent = progressChatId
-          ? state.chatRuns[progressChatId].stream
+          ? contentRun.stream
           : (state.liveStreamContent || "") + contentDelta;
+        if (contentRun && !contentRun.reasoning) resetLiveReasoning();
         if (progressChatId) {
           state.liveAgentRun = state.chatRuns[progressChatId].activities;
           if (!state.liveActivity && state.liveAgentRun && state.liveAgentRun.length) {
@@ -353,6 +354,11 @@ if (window.chrome && window.chrome.webview) {
       if (hasReasoningProgress && isChatProgress) {
         var reasoningRun = progressChatId ? state.chatRuns[progressChatId] : null;
         if (reasoningRun) {
+          if (reasoningRun.reasoningResetPending) {
+            reasoningRun.reasoning = "";
+            reasoningRun.reasoningComplete = false;
+            reasoningRun.reasoningResetPending = false;
+          }
           if (reasoningDelta && reasoningRun.reasoningComplete) reasoningRun.reasoning = "";
           reasoningRun.reasoning = (reasoningRun.reasoning || "") + reasoningDelta;
           if (reasoningRun.reasoning.length > 24000) reasoningRun.reasoning = reasoningRun.reasoning.substring(0, 24000);
@@ -372,6 +378,8 @@ if (window.chrome && window.chrome.webview) {
         var activityPhase = String(progress.phase || progress.Phase || "").toLowerCase();
         if ((activityPhase === "acting" || activityPhase === "tool_running") && progressChatId) {
           state.chatRuns[progressChatId].stream = "";
+          state.chatRuns[progressChatId].streamResetPending = false;
+          state.chatRuns[progressChatId].reasoningResetPending = false;
           if (progressChatId === state.activeChatId) state.liveStreamContent = null;
         }
         var normalizedActivity = normalizeProgressActivity(progress);

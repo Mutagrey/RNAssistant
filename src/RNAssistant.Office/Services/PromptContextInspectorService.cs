@@ -155,8 +155,8 @@ namespace RNAssistant.Office.Services
             var estimateNotice = calibrationSamples > 0
                 ? "≈ уточнено по " + calibrationSamples + " API usage для этой модели."
                 : "≈ рассчитано по UTF-8 объёму.";
-            estimateNotice += mode == ChatModes.Agent
-                ? " Даже пустой Agent включает system prompt, bootstrap-схемы tools и компактный capability-каталог."
+            estimateNotice += mode != ChatModes.Chat
+                ? " Даже пустой " + (mode == ChatModes.Plan ? "Plan" : "Agent") + " включает system prompt, bootstrap-схемы tools и компактный capability-каталог."
                 : " Даже пустой Chat включает system prompt и схемы read-only resource tools.";
 
             var response = new PromptContextInspectorResponse
@@ -261,9 +261,11 @@ namespace RNAssistant.Office.Services
             string agentSkillInstruction = string.Empty;
             string instructionEnvelope;
             string runtimeJson = string.Empty;
-            if (mode == ChatModes.Agent)
+            if (mode != ChatModes.Chat)
             {
-                agentGeneralInstruction = ConversationPromptComposer.ResolveGeneralPrompt(settings);
+                agentGeneralInstruction = mode == ChatModes.Plan
+                    ? ConversationPromptComposer.ResolvePlanPrompt(settings)
+                    : ConversationPromptComposer.ResolveGeneralPrompt(settings);
                 agentToolInstruction = ConversationPromptComposer.ResolveToolPrompt(settings);
                 agentSkillInstruction = ConversationPromptComposer.ResolveSkillPrompt(settings);
             }
@@ -392,7 +394,7 @@ namespace RNAssistant.Office.Services
             }.ToString(Formatting.None);
             var baseItems = new List<PromptContextItemDto>
             {
-                Item(mode + "-system-prompt", "instruction", mode == ChatModes.Agent ? "Agent system prompt" : "Chat system prompt", string.Empty,
+                Item(mode + "-system-prompt", "instruction", mode == ChatModes.Plan ? "Plan system prompt" : mode == ChatModes.Agent ? "Agent system prompt" : "Chat system prompt", string.Empty,
                     EstimateTextTokens(generalInstruction), generalInstruction),
                 Item("runtime-document", "runtime", "Документ и host", string.Empty,
                     EstimateTextTokens(baseJson), baseJson)
@@ -403,7 +405,7 @@ namespace RNAssistant.Office.Services
                 {
                     Id = "instructions",
                     Title = "Общие инструкции и runtime",
-                    Detail = (mode == ChatModes.Agent ? "Agent" : "Chat") + " prompt, document identity и JSON-обвязка",
+                    Detail = (mode == ChatModes.Plan ? "Plan" : mode == ChatModes.Agent ? "Agent" : "Chat") + " prompt, document identity и JSON-обвязка",
                     RawTokens = Math.Max(1, baseItems.Sum(item => item.Tokens) + 8),
                     Count = baseItems.Count,
                     Items = baseItems
