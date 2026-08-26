@@ -112,7 +112,7 @@ namespace RNAssistant.Office.Services
             if (!ResourceUri.TryParse(resourceUri, out address) ||
                 !string.Equals(address.Provider, ProviderName, StringComparison.Ordinal) ||
                 address.Segments.Count != 2 ||
-                !string.Equals(address.Segments[0], _scope.DocumentToken(session), StringComparison.Ordinal))
+                !_scope.MatchesDocumentToken(session, address.Segments[0]))
             {
                 return false;
             }

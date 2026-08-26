@@ -93,7 +93,7 @@ namespace RNAssistant.Office.Services
                 VbaResourceTarget target;
                 if (!TryResolveTarget(session, resourceUri, out target))
                 {
-                    throw new KeyNotFoundException("VBA resource was not found: " + resourceUri);
+                    throw MissingResource(resourceUri);
                 }
                 if (target.Project) return DescribeProject(session);
                 if (target.Module != null) return DescribeComponent(session, target.Module, null);
@@ -216,7 +216,7 @@ namespace RNAssistant.Office.Services
             if (!ResourceUri.TryParse(resourceUri, out address) ||
                 !string.Equals(address.Provider, ProviderName, StringComparison.Ordinal) ||
                 address.Segments.Count < 2 ||
-                !string.Equals(address.Segments[0], _scope.DocumentToken(session), StringComparison.Ordinal))
+                !_scope.MatchesDocumentToken(session, address.Segments[0]))
             {
                 return false;
             }
@@ -286,6 +286,15 @@ namespace RNAssistant.Office.Services
                     ? "vba_read_failed"
                     : result.ErrorCode,
                 result != null && result.Retryable == true);
+        }
+
+        private static ResourceRequestException MissingResource(string resourceUri)
+        {
+            return new ResourceRequestException(
+                "VBA resource is no longer available at this URI: " + resourceUri +
+                ". Call common.resources_list with provider=vba and kind=vba-component or vba-backup, then use the exact current URI.",
+                "resource_not_found",
+                true);
         }
 
         private sealed class VbaResourceTarget

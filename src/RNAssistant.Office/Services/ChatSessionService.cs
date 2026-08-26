@@ -283,6 +283,10 @@ namespace RNAssistant.Office.Services
                     }
                     else if (_activeSession != null)
                     {
+                        ChatSessionNormalizer.RecordDocumentKeyMigration(
+                            _activeSession,
+                            oldDocumentKey,
+                            documentKey);
                         _activeSession.Host = host;
                         _activeSession.DocumentKey = documentKey;
                         _activeSession.DocumentTitle = title;

@@ -27,7 +27,7 @@ namespace RNAssistant.Office.Services
                 VbaResourceTarget target;
                 if (!TryResolveTarget(session, resourceUri, out target))
                 {
-                    throw new KeyNotFoundException("VBA resource was not found: " + resourceUri);
+                    throw MissingResource(resourceUri);
                 }
                 var representation = NormalizeRepresentation(
                     request == null ? null : request.Representation,

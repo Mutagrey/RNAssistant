@@ -198,6 +198,8 @@ namespace RNAssistant.Harness
 
                 AssertEqual(session.Id, migrated.Id, "migrated session id");
                 AssertEqual("saved-doc", migrated.DocumentKey, "migrated document key");
+                AssertTrue(migrated.PreviousDocumentKeys.Contains("doc", StringComparer.OrdinalIgnoreCase),
+                    "migrated session retains the previous live-resource document key");
                 AssertEqual("saved-doc", migrated.Context.DocumentKey, "migrated chat context identity");
                 AssertEqual(1, migrated.Messages.Count, "migrated message count");
                 AssertEqual(0, store.List("Excel", "doc", "Harness.xlsx").Count, "old document sessions");

@@ -60,10 +60,34 @@ namespace RNAssistant.Office.Services
         {
             return Read(session, delegate
             {
-                return RNAssistant.Core.Tools.TextPatternEngine.Sha256(
-                    (_adapter.HostName ?? string.Empty).ToLowerInvariant() + "\n" +
-                    (_adapter.DocumentKey ?? string.Empty).ToLowerInvariant());
+                var documentKey = string.IsNullOrWhiteSpace(session.DocumentKey)
+                    ? _adapter.DocumentKey
+                    : session.DocumentKey;
+                return TokenFor(documentKey);
             });
+        }
+
+        public bool MatchesDocumentToken(ChatSession session, string token)
+        {
+            return Read(session, delegate
+            {
+                var currentDocumentKey = string.IsNullOrWhiteSpace(session.DocumentKey)
+                    ? _adapter.DocumentKey
+                    : session.DocumentKey;
+                if (string.Equals(token, TokenFor(currentDocumentKey), StringComparison.Ordinal)) return true;
+                foreach (var documentKey in session.PreviousDocumentKeys ?? new System.Collections.Generic.List<string>())
+                {
+                    if (string.Equals(token, TokenFor(documentKey), StringComparison.Ordinal)) return true;
+                }
+                return false;
+            });
+        }
+
+        private string TokenFor(string documentKey)
+        {
+            return RNAssistant.Core.Tools.TextPatternEngine.Sha256(
+                (_adapter.HostName ?? string.Empty).ToLowerInvariant() + "\n" +
+                (documentKey ?? string.Empty).ToLowerInvariant());
         }
     }
 }

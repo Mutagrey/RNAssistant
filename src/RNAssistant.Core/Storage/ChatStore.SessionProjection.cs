@@ -20,7 +20,7 @@ namespace RNAssistant.Core.Storage
         private static readonly string[] MetadataProperties =
         {
             "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId",
-            "Host", "DocumentKey", "DocumentTitle", "DocumentPath",
+            "Host", "DocumentKey", "PreviousDocumentKeys", "DocumentTitle", "DocumentPath",
             "Title", "Model", "Mode", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc"
         };
 
@@ -275,6 +275,15 @@ namespace RNAssistant.Core.Storage
                 switch (operation.Type)
                 {
                     case SessionOperationTypes.SessionMetadataSet:
+                        if (data.Property("DocumentKey") != null)
+                        {
+                            RecordPreviousDocumentKey(
+                                root,
+                                (string)root["DocumentKey"],
+                                (string)data["DocumentKey"]);
+                        }
+                        foreach (var property in data.Properties()) root[property.Name] = property.Value.DeepClone();
+                        break;
                     case SessionOperationTypes.ActiveReferencesSet:
                         foreach (var property in data.Properties()) root[property.Name] = property.Value.DeepClone();
                         break;
@@ -314,6 +323,26 @@ namespace RNAssistant.Core.Storage
                         throw new JsonException("Unsupported session operation: " + operation.Type);
                 }
             }
+        }
+
+        private static void RecordPreviousDocumentKey(
+            JObject root,
+            string previousDocumentKey,
+            string currentDocumentKey)
+        {
+            var keys = (root["PreviousDocumentKeys"] as JArray ?? new JArray())
+                .Values<string>()
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .ToList();
+            if (!string.IsNullOrWhiteSpace(previousDocumentKey) &&
+                !string.Equals(previousDocumentKey, currentDocumentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                keys.Add(previousDocumentKey.Trim());
+            }
+            root["PreviousDocumentKeys"] = new JArray(keys
+                .Where(value => !string.Equals(value, currentDocumentKey, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase));
         }
 
         private static JToken CloneValue(JToken value)

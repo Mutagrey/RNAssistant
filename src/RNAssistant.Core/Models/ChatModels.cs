@@ -208,6 +208,7 @@ namespace RNAssistant.Core.Models
         public string ForkedThroughMessageId { get; set; }
         public string Host { get; set; }
         public string DocumentKey { get; set; }
+        public List<string> PreviousDocumentKeys { get; set; }
         public string DocumentTitle { get; set; }
         public string DocumentPath { get; set; }
         public string Title { get; set; }
@@ -240,6 +241,7 @@ namespace RNAssistant.Core.Models
             Messages = new List<ChatMessage>();
             ContextCheckpoints = new List<ContextCheckpoint>();
             Artifacts = new List<ChatArtifact>();
+            PreviousDocumentKeys = new List<string>();
             Mode = ChatModes.Agent;
         }
     }

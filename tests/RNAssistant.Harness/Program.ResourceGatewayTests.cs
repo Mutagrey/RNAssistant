@@ -478,7 +478,85 @@ namespace RNAssistant.Harness
                 AssertEqual("resource_revision_changed", vbaDrift == null ? null : vbaDrift.ErrorCode,
                     "VBA continuation fails instead of mixing source revisions");
 
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "resource-migration-run",
+                    DocumentRuntimeKey = adapter.RuntimeDocumentKey
+                };
+                var previousDocumentKey = session.DocumentKey;
+                adapter.DocumentKeyValue = "saved-document";
+                AssertTrue(!string.IsNullOrWhiteSpace(ReadResource(
+                    gateway,
+                    session,
+                    document.Reference.Uri,
+                    ResourceRepresentations.Text,
+                    null,
+                    128).Result.Text),
+                    "live document URI survives a save while chat migration is deferred");
+                AssertContains(ReadResource(
+                    gateway,
+                    session,
+                    component.Reference.Uri,
+                    ResourceRepresentations.Source,
+                    null,
+                    128).Result.Text,
+                    "ResourceNeedleChanged",
+                    "VBA URI survives a save while chat migration is deferred");
+
+                ChatSessionNormalizer.RecordDocumentKeyMigration(
+                    session,
+                    previousDocumentKey,
+                    adapter.DocumentKeyValue);
+                session.DocumentKey = adapter.DocumentKeyValue;
+                session.Context.DocumentKey = session.DocumentKey;
+                AssertTrue(!string.IsNullOrWhiteSpace(ReadResource(
+                    gateway,
+                    session,
+                    document.Reference.Uri,
+                    ResourceRepresentations.Text,
+                    null,
+                    128).Result.Text),
+                    "live document URI survives completed document identity migration");
+                AssertContains(ReadResource(
+                    gateway,
+                    session,
+                    component.Reference.Uri,
+                    ResourceRepresentations.Source,
+                    null,
+                    128).Result.Text,
+                    "ResourceNeedleChanged",
+                    "VBA URI survives completed document identity migration");
+
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var renamed = executor.Execute(
+                    Command(
+                        "common.vba_write_module",
+                        "moduleName", "ResourceModule",
+                        "newModuleName", "ResourceModuleRenamed",
+                        "mode", "rename"),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+                AssertTrue(renamed.Success, "VBA resource recovery setup renames the live component");
+                var staleComponent = executor.Execute(
+                    Command(
+                        ResourceToolExecutor.ReadToolId,
+                        "uri", component.Reference.Uri,
+                        "representation", ResourceRepresentations.Source),
+                    tools,
+                    new AppSettings(),
+                    false,
+                    false,
+                    session);
+                AssertEqual("resource_not_found", staleComponent.ErrorCode,
+                    "renamed VBA component returns a stable missing-resource error");
+                AssertEqual(true, staleComponent.Retryable,
+                    "stale VBA component URI invites fresh discovery");
+                AssertContains(staleComponent.Message, "common.resources_list",
+                    "stale VBA component URI explains exact recovery");
+
                 adapter.DocumentKeyValue = "other-document";
                 adapter.RuntimeDocumentKeyValue = "runtime-other-document";
                 var blocked = executor.Execute(

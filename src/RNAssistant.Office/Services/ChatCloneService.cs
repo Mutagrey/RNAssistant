@@ -26,6 +26,7 @@ namespace RNAssistant.Office.Services
                 ForkedThroughMessageId = session.ForkedThroughMessageId,
                 Host = session.Host,
                 DocumentKey = session.DocumentKey,
+                PreviousDocumentKeys = (session.PreviousDocumentKeys ?? new List<string>()).ToList(),
                 DocumentTitle = session.DocumentTitle,
                 DocumentPath = session.DocumentPath,
                 Title = session.Title,

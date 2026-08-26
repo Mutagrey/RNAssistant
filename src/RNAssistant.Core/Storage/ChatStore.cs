@@ -542,9 +542,11 @@ namespace RNAssistant.Core.Storage
             if (session == null) return null;
             var oldHost = session.Host;
             var oldDocumentKey = session.DocumentKey;
+            var oldPreviousDocumentKeys = (session.PreviousDocumentKeys ?? new List<string>()).ToList();
             var oldDocumentTitle = session.DocumentTitle;
             var oldPath = GetSessionPath(oldHost, oldDocumentKey, session.Id);
 
+            ChatSessionNormalizer.RecordDocumentKeyMigration(session, oldDocumentKey, documentKey);
             session.Host = host;
             session.DocumentKey = documentKey;
             session.DocumentTitle = documentTitle;
@@ -590,6 +592,7 @@ namespace RNAssistant.Core.Storage
             {
                 session.Host = oldHost;
                 session.DocumentKey = oldDocumentKey;
+                session.PreviousDocumentKeys = oldPreviousDocumentKeys;
                 session.DocumentTitle = oldDocumentTitle;
                 if (session.Context != null)
                 {

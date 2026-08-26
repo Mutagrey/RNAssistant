@@ -15,6 +15,7 @@ namespace RNAssistant.Core.Services
             if (string.IsNullOrWhiteSpace(session.Id)) session.Id = Guid.NewGuid().ToString("N");
             if (string.IsNullOrWhiteSpace(session.Host)) session.Host = host ?? string.Empty;
             if (string.IsNullOrWhiteSpace(session.DocumentKey)) session.DocumentKey = documentKey ?? string.Empty;
+            NormalizePreviousDocumentKeys(session);
             if (string.IsNullOrWhiteSpace(session.DocumentTitle)) session.DocumentTitle = documentTitle ?? session.Title ?? string.Empty;
             if (string.IsNullOrWhiteSpace(session.Title)) session.Title = "New chat";
             if (session.CreatedUtc == default(DateTime))
@@ -33,6 +34,31 @@ namespace RNAssistant.Core.Services
             NormalizeCheckpoints(session);
             NormalizeArtifacts(session);
             NormalizeActiveReferences(session);
+        }
+
+        public static void RecordDocumentKeyMigration(
+            ChatSession session,
+            string previousDocumentKey,
+            string currentDocumentKey)
+        {
+            if (session == null) return;
+            var keys = session.PreviousDocumentKeys ?? new List<string>();
+            if (!string.IsNullOrWhiteSpace(previousDocumentKey) &&
+                !string.Equals(previousDocumentKey, currentDocumentKey, StringComparison.OrdinalIgnoreCase))
+            {
+                keys.Add(previousDocumentKey.Trim());
+            }
+            session.PreviousDocumentKeys = keys
+                .Where(value => !string.IsNullOrWhiteSpace(value) &&
+                    !string.Equals(value, currentDocumentKey, StringComparison.OrdinalIgnoreCase))
+                .Select(value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static void NormalizePreviousDocumentKeys(ChatSession session)
+        {
+            RecordDocumentKeyMigration(session, null, session.DocumentKey);
         }
 
         private static void NormalizeMessages(ChatSession session)

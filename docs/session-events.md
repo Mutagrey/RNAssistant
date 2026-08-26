@@ -28,6 +28,7 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
 - `session.created` seeds the initial projection.
 - `session.forked` seeds an independent projection and records parent session id, source revision, and boundary message id.
 - `session.commit` applies typed operations such as user/assistant messages, tool calls/results, tool execution boundaries, run state, metadata, context, active references, and artifact revisions.
+- When `DocumentKey` changes during first save or Save As, replay retains the prior key in `PreviousDocumentKeys`. This is derived from the same metadata operations and keeps existing opaque live-document/VBA URIs resolvable without rewriting historical messages.
 - Schema 3 uses `message.updated` for an existing message and `artifact.revision.created` for immutable artifact metadata. Generic `message.upsert` / `artifact.upsert` operations are not accepted.
 - `turn.started` / `turn.ended` delimit one logical user turn. `TurnId` remains stable when a confirmation pause resumes under a new runtime `RunId`.
 - `step.started` / `step.ended` delimit one model request. Startup recovery appends a synthetic interrupted end for a request that never reached a terminal event.
