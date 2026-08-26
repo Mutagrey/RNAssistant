@@ -414,15 +414,14 @@ namespace RNAssistant.Core.Services
 
         private static bool IsMessageOperation(string type)
         {
-            return string.Equals(type, SessionOperationTypes.MessageUpsert, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(type, SessionOperationTypes.MessageUpdated, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, SessionOperationTypes.UserMessageAppended, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, SessionOperationTypes.AssistantMessageAppended, StringComparison.OrdinalIgnoreCase) || IsToolOperation(type);
         }
 
         private static bool IsArtifactOperation(string type)
         {
-            return string.Equals(type, SessionOperationTypes.ArtifactUpsert, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(type, SessionOperationTypes.ArtifactRevisionCreated, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(type, SessionOperationTypes.ArtifactRevisionCreated, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, SessionOperationTypes.ArtifactRemove, StringComparison.OrdinalIgnoreCase);
         }
 

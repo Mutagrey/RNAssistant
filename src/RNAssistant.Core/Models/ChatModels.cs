@@ -79,8 +79,8 @@ namespace RNAssistant.Core.Models
         public List<RNAssistant.Core.Llm.LlmToolCall> ToolCalls { get; set; }
         public List<ChatAttachment> Attachments { get; set; }
         public AttachmentAnalysisContext AttachmentAnalysis { get; set; }
-        public List<string> ArtifactIds { get; set; }
-        public string HtmlWorkspaceCheckpointId { get; set; }
+        public List<ResourceRef> ResourceRefs { get; set; }
+        public ResourceRef HtmlWorkspaceCheckpoint { get; set; }
         public ChatActivity Activity { get; set; }
         public int? PromptTokens { get; set; }
         public int? CompletionTokens { get; set; }
@@ -99,7 +99,7 @@ namespace RNAssistant.Core.Models
             CreatedUtc = DateTime.UtcNow;
             Attachments = new List<ChatAttachment>();
             ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall>();
-            ArtifactIds = new List<string>();
+            ResourceRefs = new List<ResourceRef>();
         }
     }
 
@@ -189,7 +189,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatSession
     {
-        public const int CurrentFormatVersion = 5;
+        public const int CurrentFormatVersion = 6;
 
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }

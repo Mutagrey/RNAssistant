@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -8,6 +9,28 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static ResourceRef ArtifactReference(ChatSession session, ChatArtifact artifact)
+        {
+            return ChatResourceUri.CreateArtifactRevision(session, artifact);
+        }
+
+        private static string ArtifactUri(ChatSession session, ChatArtifact artifact)
+        {
+            return ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
+        }
+
+        private static bool ReferencesArtifact(ChatSession session, ChatMessage message, string artifactId)
+        {
+            return ChatResourceUri.CurrentArtifactIds(
+                session,
+                message == null ? null : message.ResourceRefs).Contains(artifactId, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static ResourceRef HtmlCheckpoint(ChatSession session, string artifactId)
+        {
+            return ChatResourceUri.ResolveArtifactRevision(session, artifactId);
+        }
+
         private static ResourceListPage ListVbaComponents(OfficeToolExecutor executor, ChatSession session)
         {
             return executor.ResourceGateway.List(

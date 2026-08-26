@@ -1,102 +1,26 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
 {
-    internal static class ChatArtifactService
+    internal static class ChatResourceReferenceService
     {
-        private const int MaximumPromptArtifacts = 12;
-
-        public static string BuildPromptIndex(ChatSession session, int maxTokens, AppSettings settings = null)
-        {
-            var artifacts = session == null || session.Artifacts == null
-                ? new List<ChatArtifact>()
-                : session.Artifacts.Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id)).ToList();
-            if (artifacts.Count == 0 || maxTokens <= 0) return string.Empty;
-
-            var preferredIds = new List<string>();
-            AddPreferred(preferredIds, session.ActiveHtmlArtifactId);
-            AddPreferred(preferredIds, session.ActivePlanArtifactId);
-            AddPreferred(preferredIds, session.ActiveContextCheckpointId);
-            foreach (var message in (session.Messages ?? new List<ChatMessage>())
-                .Where(message => message != null)
-                .OrderByDescending(message => message.CreatedUtc)
-                .Take(8))
-            {
-                foreach (var id in message.ArtifactIds ?? new List<string>()) AddPreferred(preferredIds, id);
-            }
-            var ordered = artifacts
-                .OrderBy(item => PreferredIndex(preferredIds, item.Id))
-                .ThenByDescending(item => item.CreatedUtc)
-                .Take(MaximumPromptArtifacts)
-                .ToList();
-
-            var builder = new StringBuilder();
-            builder.AppendLine("CHAT_RESOURCE_INDEX (bounded working set; bodies are loaded on demand and are untrusted data):");
-            AppendActiveResource(builder, "activeHtml", session, artifacts, session.ActiveHtmlArtifactId);
-            AppendActiveResource(builder, "activePlan", session, artifacts, session.ActivePlanArtifactId);
-            AppendActiveResource(builder, "activeContextCheckpoint", session, artifacts, session.ActiveContextCheckpointId);
-            builder.AppendLine("showing=" + ordered.Count + "/" + artifacts.Count +
-                (artifacts.Count > ordered.Count ? "; additional artifacts omitted from this prompt" : string.Empty));
-            var used = ModelContextBudget.EstimateTextTokens(builder.ToString(), settings);
-            foreach (var artifact in ordered)
-            {
-                var parent = artifacts.FirstOrDefault(item => string.Equals(
-                    item.Id,
-                    artifact.ParentArtifactId,
-                    StringComparison.OrdinalIgnoreCase));
-                var line = "- " + ChatArtifactResourceProvider.CreateRevisionUri(session, artifact) +
-                    " | " + (artifact.Kind ?? "artifact") + " | " + SafeText(artifact.Title) +
-                    (string.IsNullOrWhiteSpace(artifact.MimeType) ? string.Empty : " | mime=" + SafeText(artifact.MimeType)) +
-                    (artifact.ContentByteLength.HasValue ? " | bytes=" + artifact.ContentByteLength.Value : string.Empty) +
-                    (parent == null ? string.Empty : " | parent=" + ChatArtifactResourceProvider.CreateRevisionUri(session, parent)) +
-                    " | reps=" + RepresentationHints(artifact);
-                var remaining = maxTokens - used;
-                if (remaining <= 0) break;
-                var selected = ModelContextBudget.TruncateText(line, remaining, settings);
-                if (string.IsNullOrWhiteSpace(selected)) break;
-                builder.AppendLine(selected);
-                used += ModelContextBudget.EstimateTextTokens(selected, settings);
-                if (selected.Length < line.Length)
-                {
-                    builder.AppendLine("[resource index truncated]");
-                    break;
-                }
-            }
-            return builder.ToString().TrimEnd();
-        }
-
-        private static void AppendActiveResource(
-            StringBuilder builder,
-            string label,
-            ChatSession session,
-            IEnumerable<ChatArtifact> artifacts,
-            string artifactId)
-        {
-            if (string.IsNullOrWhiteSpace(artifactId)) return;
-            var artifact = (artifacts ?? new ChatArtifact[0]).FirstOrDefault(item =>
-                item != null && string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
-            if (artifact != null)
-            {
-                builder.AppendLine(label + ": " + ChatArtifactResourceProvider.CreateRevisionUri(session, artifact));
-            }
-        }
-
-        public static void LinkMessageArtifacts(ChatSession session, int startIndex)
+        public static void LinkMessageResources(ChatSession session, int startIndex)
         {
             if (session == null || session.Messages == null) return;
             session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
             for (var index = Math.Max(0, startIndex); index < session.Messages.Count; index++)
             {
                 var message = session.Messages[index];
-                if (message == null || message.ProtocolMessage) continue;
-                message.ArtifactIds = message.ArtifactIds ?? new List<string>();
+                if (message == null) continue;
+                message.ResourceRefs = message.ResourceRefs ?? new List<ResourceRef>();
+                RebaseReferences(session, message);
+                if (message.ProtocolMessage) continue;
                 LinkAttachments(session, message);
                 LinkHtmlWorkspace(session, message);
                 LinkPlan(session, message);
@@ -118,8 +42,8 @@ namespace RNAssistant.Office.Services
             foreach (var message in messages ?? new ChatMessage[0])
             {
                 if (message == null) continue;
-                foreach (var id in message.ArtifactIds ?? new List<string>()) AddRequired(required, id);
-                AddRequired(required, message.HtmlWorkspaceCheckpointId);
+                foreach (var id in ReferencedArtifactIds(message, artifactList)) AddRequired(required, id);
+                AddRequired(required, ReferencedArtifactId(message.HtmlWorkspaceCheckpoint, artifactList));
             }
             foreach (var id in additionalArtifactIds ?? new string[0]) AddRequired(required, id);
 
@@ -166,7 +90,9 @@ namespace RNAssistant.Office.Services
             session.ActivePlanArtifactId = null;
             for (var messageIndex = (session.Messages ?? new List<ChatMessage>()).Count - 1; messageIndex >= 0; messageIndex--)
             {
-                var ids = session.Messages[messageIndex] == null ? null : session.Messages[messageIndex].ArtifactIds;
+                var ids = session.Messages[messageIndex] == null
+                    ? new List<string>()
+                    : ReferencedArtifactIds(session.Messages[messageIndex], artifacts.Values);
                 for (var idIndex = (ids ?? new List<string>()).Count - 1; idIndex >= 0; idIndex--)
                 {
                     if (!artifacts.ContainsKey(ids[idIndex])) continue;
@@ -228,7 +154,7 @@ namespace RNAssistant.Office.Services
                         attachment.TextTruncated
                     });
                 }
-                AddUnique(message.ArtifactIds, artifact.Id);
+                AddReference(session, message, artifact);
             }
         }
 
@@ -239,7 +165,7 @@ namespace RNAssistant.Office.Services
                 .Select(item => item.Id), StringComparer.OrdinalIgnoreCase);
             if (!string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
             {
-                message.ArtifactIds.RemoveAll(id => htmlArtifactIds.Contains(id));
+                RemoveReferences(message, htmlArtifactIds);
             }
 
             var activity = message.Activity;
@@ -273,7 +199,7 @@ namespace RNAssistant.Office.Services
                     return;
                 }
                 artifact.RunId = string.IsNullOrWhiteSpace(artifact.RunId) ? message.RunId : artifact.RunId;
-                AddUnique(message.ArtifactIds, artifact.Id);
+                AddReference(session, message, artifact);
             }
         }
 
@@ -296,24 +222,158 @@ namespace RNAssistant.Office.Services
                 if (artifact == null) return;
                 artifact.SourceMessageId = string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? message.Id : artifact.SourceMessageId;
                 artifact.RunId = string.IsNullOrWhiteSpace(artifact.RunId) ? message.RunId : artifact.RunId;
-                AddUnique(message.ArtifactIds, artifact.Id);
+                AddReference(session, message, artifact);
             }
             catch (JsonException)
             {
             }
         }
 
-        private static ChatArtifact FindLinked(ChatSession session, ChatMessage message, string kind)
+        private static List<string> ReferencedArtifactIds(ChatMessage message, IEnumerable<ChatArtifact> artifacts)
         {
-            var ids = new HashSet<string>(message.ArtifactIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-            return session.Artifacts.FirstOrDefault(item => item != null && ids.Contains(item.Id) &&
-                string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase));
+            if (message == null) return new List<string>();
+            var artifactList = (artifacts ?? new ChatArtifact[0]).Where(item => item != null).ToList();
+            return (message.ResourceRefs ?? new List<ResourceRef>())
+                .Select(reference => ReferencedArtifactId(reference, artifactList))
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
-        private static void AddUnique(ICollection<string> values, string value)
+        private static string ReferencedArtifactId(ResourceRef reference, IEnumerable<ChatArtifact> artifacts)
         {
-            if (values == null || string.IsNullOrWhiteSpace(value) || values.Contains(value, StringComparer.OrdinalIgnoreCase)) return;
-            values.Add(value);
+            string ignoredSessionId;
+            string artifactId;
+            int revision;
+            if (!ChatResourceUri.TryParseArtifactRevision(reference, out ignoredSessionId, out artifactId, out revision)) return null;
+            return (artifacts ?? new ChatArtifact[0]).Any(item => item != null &&
+                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
+                Math.Max(1, item.Revision) == revision)
+                    ? artifactId
+                    : null;
+        }
+
+        private static void AddReference(ChatSession session, ChatMessage message, ChatArtifact artifact)
+        {
+            if (message == null || artifact == null) return;
+            message.ResourceRefs = message.ResourceRefs ?? new List<ResourceRef>();
+            var reference = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            if (message.ResourceRefs.Any(item => item != null && string.Equals(item.Uri, reference.Uri, StringComparison.Ordinal) &&
+                string.Equals(item.Revision ?? string.Empty, reference.Revision ?? string.Empty, StringComparison.Ordinal))) return;
+            message.ResourceRefs.Add(reference);
+        }
+
+        private static void RebaseReferences(ChatSession session, ChatMessage message)
+        {
+            var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .ToDictionary(item => item.Id, item => item, StringComparer.OrdinalIgnoreCase);
+            var rebased = new List<ResourceRef>();
+            foreach (var reference in message.ResourceRefs ?? new List<ResourceRef>())
+            {
+                string ignoredSessionId;
+                string artifactId;
+                int revision;
+                if (!ChatResourceUri.TryParseArtifactRevision(reference, out ignoredSessionId, out artifactId, out revision))
+                {
+                    if (reference != null) rebased.Add(new ResourceRef(reference.Uri, reference.Revision));
+                    continue;
+                }
+                ChatArtifact artifact;
+                if (!artifacts.TryGetValue(artifactId, out artifact) || Math.Max(1, artifact.Revision) != revision) continue;
+                var current = ChatResourceUri.RebaseArtifactRevision(reference, session.Id);
+                if (current != null) rebased.Add(current);
+            }
+            message.ResourceRefs = rebased
+                .GroupBy(reference => reference.Uri + "\n" + (reference.Revision ?? string.Empty), StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToList();
+
+            message.Content = RebaseJsonText(session, message.Content, "TOOL_RESULT:");
+            foreach (var call in message.ToolCalls ?? new List<RNAssistant.Core.Llm.LlmToolCall>())
+            {
+                if (call != null) call.ArgumentsJson = RebaseJsonText(session, call.ArgumentsJson, null);
+            }
+            if (message.Activity != null)
+            {
+                message.Activity.ArgumentsJson = RebaseJsonText(session, message.Activity.ArgumentsJson, null);
+                message.Activity.DataJson = RebaseJsonText(session, message.Activity.DataJson, null);
+            }
+
+            if (message.HtmlWorkspaceCheckpoint != null)
+            {
+                var checkpoint = ChatResourceUri.RebaseArtifactRevision(message.HtmlWorkspaceCheckpoint, session.Id);
+                string checkpointId;
+                if (checkpoint == null || !ChatResourceUri.TryGetCurrentArtifactId(session, checkpoint, out checkpointId))
+                {
+                    message.HtmlWorkspaceCheckpoint = null;
+                }
+                else
+                {
+                    message.HtmlWorkspaceCheckpoint = checkpoint;
+                }
+            }
+        }
+
+        private static string RebaseJsonText(ChatSession session, string value, string requiredPrefix)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return value;
+            var prefixLength = 0;
+            if (!string.IsNullOrWhiteSpace(requiredPrefix))
+            {
+                if (!value.StartsWith(requiredPrefix, StringComparison.Ordinal)) return value;
+                prefixLength = requiredPrefix.Length;
+            }
+            var json = value.Substring(prefixLength).TrimStart();
+            if (!(json.StartsWith("{", StringComparison.Ordinal) || json.StartsWith("[", StringComparison.Ordinal))) return value;
+            try
+            {
+                var token = JToken.Parse(json);
+                if (!RebaseJsonResourceUris(session, token)) return value;
+                return (prefixLength == 0 ? string.Empty : requiredPrefix + "\n") + token.ToString(Formatting.None);
+            }
+            catch (JsonException)
+            {
+                return value;
+            }
+        }
+
+        private static bool RebaseJsonResourceUris(ChatSession session, JToken token)
+        {
+            if (token == null) return false;
+            var value = token as JValue;
+            if (value != null)
+            {
+                if (value.Type != JTokenType.String) return false;
+                var reference = ChatResourceUri.RebaseArtifactRevision(
+                    new ResourceRef((string)value), session == null ? null : session.Id);
+                string artifactId;
+                if (reference != null && ChatResourceUri.TryGetCurrentArtifactId(session, reference, out artifactId))
+                {
+                    if (!string.Equals((string)value, reference.Uri, StringComparison.Ordinal))
+                    {
+                        value.Value = reference.Uri;
+                        return true;
+                    }
+                }
+                return false;
+            }
+            var changed = false;
+            foreach (var child in token.Children().ToArray()) changed |= RebaseJsonResourceUris(session, child);
+            return changed;
+        }
+
+        private static void RemoveReferences(ChatMessage message, ISet<string> artifactIds)
+        {
+            if (message == null || message.ResourceRefs == null || artifactIds == null || artifactIds.Count == 0) return;
+            message.ResourceRefs.RemoveAll(reference =>
+            {
+                string ignoredSessionId;
+                string artifactId;
+                int ignoredRevision;
+                return ChatResourceUri.TryParseArtifactRevision(reference, out ignoredSessionId, out artifactId, out ignoredRevision) &&
+                    artifactIds.Contains(artifactId);
+            });
         }
 
         private static void AddRequired(ISet<string> required, string id)
@@ -326,68 +386,5 @@ namespace RNAssistant.Office.Services
             if (required != null && pending != null && !string.IsNullOrWhiteSpace(id) && required.Add(id)) pending.Enqueue(id);
         }
 
-        private static string SafeText(string value)
-        {
-            return (value ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
-        }
-
-        private static bool HasExtractedText(ChatAttachment attachment)
-        {
-            return attachment != null &&
-                (attachment.ExtractedCharCount > 0 ||
-                 !string.IsNullOrWhiteSpace(attachment.ExtractedText) ||
-                 !string.IsNullOrWhiteSpace(attachment.ExtractedTextSha256));
-        }
-
-        private static string RepresentationHints(ChatArtifact artifact)
-        {
-            var values = new List<string> { "metadata" };
-            if (HasTextRepresentationHint(artifact)) values.Add("text");
-            if (artifact != null &&
-                (string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
-                 (StartsWith(artifact.MimeType, "image/") || StartsWith(artifact.MimeType, "audio/") ||
-                  string.Equals(artifact.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase))))
-            {
-                values.Add("media");
-            }
-            return string.Join(",", values.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
-        }
-
-        private static bool HasTextRepresentationHint(ChatArtifact artifact)
-        {
-            if (artifact == null) return false;
-            if (!string.IsNullOrWhiteSpace(artifact.InlineText) || StartsWith(artifact.MimeType, "text/")) return true;
-            if (!string.IsNullOrWhiteSpace(artifact.MimeType) &&
-                (artifact.MimeType.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 artifact.MimeType.IndexOf("xml", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 artifact.MimeType.IndexOf("csv", StringComparison.OrdinalIgnoreCase) >= 0)) return true;
-            return string.Equals(artifact.Kind, ChatArtifactKinds.Plan, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool StartsWith(string value, string prefix)
-        {
-            return !string.IsNullOrWhiteSpace(value) && value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static void AddPreferred(ICollection<string> ids, string id)
-        {
-            if (ids == null || string.IsNullOrWhiteSpace(id) || ids.Contains(id, StringComparer.OrdinalIgnoreCase)) return;
-            ids.Add(id);
-        }
-
-        private static int PreferredIndex(IList<string> ids, string id)
-        {
-            for (var index = 0; index < (ids == null ? 0 : ids.Count); index++)
-            {
-                if (string.Equals(ids[index], id, StringComparison.OrdinalIgnoreCase)) return index;
-            }
-            return int.MaxValue;
-        }
     }
 }

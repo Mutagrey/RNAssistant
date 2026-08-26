@@ -104,8 +104,7 @@ namespace RNAssistant.Office.Tools
                         ToolArgumentReader.Int32(command.Arguments, "maxChars", 8000));
                     var result = ToolResult.Ok("Resource representation read.", Serialize(selection.Result));
                     result.ModelAttachments = selection.ModelAttachments;
-                    result.ModelArtifactIds = selection.ArtifactIds;
-                    result.ModelResourceUris = selection.ResourceUris;
+                    result.ModelResourceRefs = selection.ResourceRefs;
                     return result;
                 }
             }

@@ -8,7 +8,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void HtmlWorkspaceCheckpointsStayInternalUntilMutation()
+        private static void HtmlWorkspaceMessagesUseCanonicalResourceReferences()
         {
             var empty = new ChatSession();
             var emptyId = HtmlWorkspaceArtifactService.CaptureCurrent(empty, "Before chat turn");
@@ -29,7 +29,7 @@ namespace RNAssistant.Harness
             var writeMessage = new ChatMessage
             {
                 Role = "assistant",
-                HtmlWorkspaceCheckpointId = revisionId,
+                HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
                 Activity = new ChatActivity { ToolId = write.ToolId, DataJson = writeResult.DataJson }
             };
             var fileResource = new ResourceGatewayService()
@@ -49,25 +49,25 @@ namespace RNAssistant.Harness
             var readMessage = new ChatMessage
             {
                 Role = "assistant",
-                HtmlWorkspaceCheckpointId = revisionId,
-                ArtifactIds = new List<string> { revisionId },
+                HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
+                ResourceRefs = new List<ResourceRef> { HtmlCheckpoint(session, revisionId) },
                 Activity = new ChatActivity { ToolId = read.ToolId, DataJson = Newtonsoft.Json.JsonConvert.SerializeObject(readResult) }
             };
             var duplicateMutationMessage = new ChatMessage
             {
                 Role = "assistant",
-                HtmlWorkspaceCheckpointId = revisionId,
+                HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
                 Activity = new ChatActivity { ToolId = HtmlArtifactToolExecutor.SetActiveToolId, DataJson = writeResult.DataJson }
             };
             session.Messages.Add(writeMessage);
             session.Messages.Add(duplicateMutationMessage);
             session.Messages.Add(readMessage);
 
-            ChatArtifactService.LinkMessageArtifacts(session, 0);
+            ChatResourceReferenceService.LinkMessageResources(session, 0);
 
-            AssertTrue(writeMessage.ArtifactIds.Contains(revisionId), "html mutation links its revision artifact");
-            AssertTrue(!duplicateMutationMessage.ArtifactIds.Contains(revisionId), "same html revision is linked only once");
-            AssertTrue(!readMessage.ArtifactIds.Contains(revisionId), "html read does not expose checkpoint artifact");
+            AssertTrue(ReferencesArtifact(session, writeMessage, revisionId), "html mutation links its canonical revision resource");
+            AssertTrue(!ReferencesArtifact(session, duplicateMutationMessage, revisionId), "same html revision is linked only once");
+            AssertTrue(!ReferencesArtifact(session, readMessage, revisionId), "html read does not promote the checkpoint to a mutation reference");
         }
     }
 }

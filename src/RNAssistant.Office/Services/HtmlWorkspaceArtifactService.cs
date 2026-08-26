@@ -185,13 +185,14 @@ namespace RNAssistant.Office.Services
                 true);
         }
 
-        public static string CheckpointAtOrBefore(IReadOnlyList<ChatMessage> messages, int index)
+        public static string CheckpointAtOrBefore(ChatSession session, IReadOnlyList<ChatMessage> messages, int index)
         {
             if (messages == null) return string.Empty;
             for (var current = Math.Min(index, messages.Count - 1); current >= 0; current--)
             {
-                var id = messages[current] == null ? null : messages[current].HtmlWorkspaceCheckpointId;
-                if (!string.IsNullOrWhiteSpace(id)) return id;
+                string id;
+                var reference = messages[current] == null ? null : messages[current].HtmlWorkspaceCheckpoint;
+                if (ChatResourceUri.TryGetArtifactId(session, reference, out id)) return id;
             }
             return string.Empty;
         }
@@ -199,12 +200,14 @@ namespace RNAssistant.Office.Services
         public static void StampUncheckpointed(ChatSession session, int startIndex, string checkpointId)
         {
             if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(checkpointId)) return;
+            var reference = ChatResourceUri.ResolveArtifactRevision(session, checkpointId);
+            if (reference == null) return;
             for (var index = Math.Max(0, startIndex); index < session.Messages.Count; index++)
             {
                 var message = session.Messages[index];
-                if (message != null && string.IsNullOrWhiteSpace(message.HtmlWorkspaceCheckpointId))
+                if (message != null && message.HtmlWorkspaceCheckpoint == null)
                 {
-                    message.HtmlWorkspaceCheckpointId = checkpointId;
+                    message.HtmlWorkspaceCheckpoint = new ResourceRef(reference.Uri, reference.Revision);
                 }
             }
         }

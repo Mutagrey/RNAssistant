@@ -408,6 +408,7 @@ function scheduleLiveStreamRender() {
 
 function renderMessages(options) {
   options = options || {};
+  if (typeof renderChatResourceNavigation === "function") renderChatResourceNavigation();
   var box = $("messages");
   var chatChanged = renderedMessagesChatId !== state.activeChatId;
   var shouldScroll = !!options.forceScroll || chatChanged || isChatNearBottom(box);

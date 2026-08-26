@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Every staged resource must belong to the target chat.");
             }
             _attachments.CommitToCas(message);
-            ChatArtifactService.LinkMessageArtifacts(session, messageIndex);
+            ChatResourceReferenceService.LinkMessageResources(session, messageIndex);
         }
 
         public void DeleteDrafts(ChatMessage message)

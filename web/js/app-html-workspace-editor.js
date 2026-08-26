@@ -118,9 +118,10 @@
         } else if (blocked) {
           status.textContent = "HTML workspace требует восстановления.";
         } else if (!files().length && !dataSources().length && !(state.artifacts || []).length) {
-          status.textContent = "Артефактов пока нет.";
+          status.textContent = "Ресурсов пока нет.";
         } else {
-          status.textContent = (state.artifacts || []).length + " артефактов · " + files().length + " файлов · " + dataSources().length + " наборов данных" + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
+          var resourceCount = typeof artifactResourceHeads === "function" ? artifactResourceHeads().length : (state.artifacts || []).length;
+          status.textContent = resourceCount + " ресурсов · " + files().length + " файлов · " + dataSources().length + " наборов данных" + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
         }
       }
       if (save) {

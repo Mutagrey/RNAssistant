@@ -712,7 +712,7 @@ namespace RNAssistant.Harness
             var activeArtifact = transportSession.Artifacts.Single(item => item.Id == transportSession.ActiveHtmlArtifactId);
             var manifestResult = gateway.Read(
                 transportSession,
-                ChatArtifactResourceProvider.CreateRevisionUri(transportSession, activeArtifact),
+                ArtifactUri(transportSession, activeArtifact),
                 ResourceRepresentations.Structure,
                 0,
                 8000).Result;

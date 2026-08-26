@@ -569,6 +569,7 @@ namespace RNAssistant.Harness
 
         private static void TrajectoryQueryPaginatesAndFilters()
         {
+            var resourceUri = ResourceUri.Create("chat", "session-1", "artifact", "artifact-1", "revision", "1");
             var events = new List<SessionEvent>
             {
                 new SessionEvent { Sequence = 1, EventId = "event-1", Type = SessionEventTypes.SessionCreated, Data = new JObject { ["Title"] = "Root" } },
@@ -581,12 +582,13 @@ namespace RNAssistant.Harness
                     {
                         ["Operations"] = new JArray(new JObject
                         {
-                            ["Type"] = SessionOperationTypes.MessageUpsert,
+                            ["Type"] = SessionOperationTypes.MessageUpdated,
                             ["Data"] = new JObject
                             {
                                 ["Value"] = new JObject
                                 {
                                     ["Id"] = "message-1",
+                                    ["ResourceRefs"] = new JArray(new JObject { ["uri"] = resourceUri, ["revision"] = "1" }),
                                     ["Activity"] = new JObject { ["ToolCallId"] = "tool-call-old", ["Status"] = "running" }
                                 }
                             }
@@ -655,6 +657,9 @@ namespace RNAssistant.Harness
                 "seed and live projection mutations are current");
             AssertEqual(2L, query.Query(events, new TrajectoryQueryRequest { ToolCallId = "tool-call-old" }).Records.Single().Event.Sequence,
                 "tool-call correlation filter searches event data");
+            var resourceRecord = query.Query(events, new TrajectoryQueryRequest { ResourceUri = resourceUri }).Records.Single();
+            AssertEqual(2L, resourceRecord.Event.Sequence, "resource filter resolves canonical message references");
+            AssertEqual("1", resourceRecord.ResourceRefs.Single().Revision, "resource projection preserves revision evidence");
             AssertEqual(4L, query.Query(events, new TrajectoryQueryRequest { ArtifactId = "artifact-1" }).Records.Single().Event.Sequence,
                 "artifact filter resolves operation values");
             AssertEqual(5L, query.Query(events, new TrajectoryQueryRequest { Search = "unique marker", Status = "failed", RunId = "run-failed" })
@@ -894,6 +899,47 @@ namespace RNAssistant.Harness
                 File.AppendAllText(path, "\n");
                 AssertTrue(store.Load(session.Host, session.DocumentKey, session.Id) == null,
                     "blank canonical JSONL records reject the stream");
+            });
+        }
+
+        private static void PreCutoverSessionFormatsAreResetOnly()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "old-schema-doc", "Old.xlsx", "Old schema");
+                var path = SessionEventFile(paths, session);
+                var lines = File.ReadAllLines(path);
+                var seed = JObject.Parse(lines[0]);
+                seed["SchemaVersion"] = SessionEvent.CurrentSchemaVersion - 1;
+                seed["Hash"] = ComputeUnkeyedEventHash(seed);
+                lines[0] = seed.ToString(Newtonsoft.Json.Formatting.None);
+                File.WriteAllLines(path, lines);
+
+                var reader = new ChatStore(paths);
+                AssertTrue(reader.Load(session.Host, session.DocumentKey, session.Id) == null,
+                    "pre-cutover schema is refused instead of migrated");
+                AssertEqual(0, reader.List(session.Host, session.DocumentKey, session.DocumentTitle).Count,
+                    "pre-cutover stream is skipped until Chats/Data is cleared");
+            });
+
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "old-format-doc", "OldFormat.xlsx", "Old format");
+                var path = SessionEventFile(paths, session);
+                var lines = File.ReadAllLines(path);
+                var seed = JObject.Parse(lines[0]);
+                seed["Data"]["FormatVersion"] = ChatSession.CurrentFormatVersion - 1;
+                seed["Hash"] = ComputeUnkeyedEventHash(seed);
+                lines[0] = seed.ToString(Newtonsoft.Json.Formatting.None);
+                File.WriteAllLines(path, lines);
+
+                var reader = new ChatStore(paths);
+                AssertTrue(reader.Load(session.Host, session.DocumentKey, session.Id) == null,
+                    "pre-cutover projection format is refused instead of normalized");
+                AssertEqual(0, reader.List(session.Host, session.DocumentKey, session.DocumentTitle).Count,
+                    "pre-cutover projection format is excluded from headers");
             });
         }
 
@@ -2011,7 +2057,7 @@ namespace RNAssistant.Harness
                         ResultMessage = checkpoint.SummaryMarkdown,
                         DataJson = artifact.MetadataJson
                     },
-                    ArtifactIds = new System.Collections.Generic.List<string> { artifact.Id }
+                    ResourceRefs = new System.Collections.Generic.List<ResourceRef> { ArtifactReference(session, artifact) }
                 };
                 artifact.SourceMessageId = activityMessage.Id;
                 session.Artifacts.Add(artifact);

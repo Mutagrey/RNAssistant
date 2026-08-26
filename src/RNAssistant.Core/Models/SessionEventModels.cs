@@ -27,7 +27,7 @@ namespace RNAssistant.Core.Models
         public const string RunStarted = "run.started";
         public const string RunUpdated = "run.updated";
         public const string RunEnded = "run.ended";
-        public const string MessageUpsert = "message.upsert";
+        public const string MessageUpdated = "message.updated";
         public const string UserMessageAppended = "user.message.appended";
         public const string AssistantMessageAppended = "assistant.message.appended";
         public const string ToolCallRecorded = "tool.call.recorded";
@@ -36,7 +36,6 @@ namespace RNAssistant.Core.Models
         public const string ToolExecutionFinished = "tool.execution.finished";
         public const string MessageRemove = "message.remove";
         public const string MessagesReorder = "messages.reorder";
-        public const string ArtifactUpsert = "artifact.upsert";
         public const string ArtifactRevisionCreated = "artifact.revision.created";
         public const string ArtifactRemove = "artifact.remove";
         public const string ArtifactsReorder = "artifacts.reorder";
@@ -45,7 +44,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class SessionEvent
     {
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 3;
 
         public int SchemaVersion { get; set; }
         public string SessionId { get; set; }

@@ -97,6 +97,7 @@
 
   function workspaceTreeArtifact(artifact) {
     var kind = artifactKind(artifact);
+    var visuals = window.RNAssistantArtifactVisuals || null;
     return {
       id: artifactId(artifact),
       kind: kind,
@@ -104,18 +105,21 @@
       mimeType: prop(artifact, "MimeType", "mimeType", ""),
       relativePath: prop(artifact, "RelativePath", "relativePath", ""),
       text: artifactInlineText(artifact),
-      meta: kind === "plan" ? workspaceArtifacts.planSummary(artifact) : workspaceArtifacts.typeLabel(kind)
+      meta: visuals && typeof visuals.meta === "function"
+        ? visuals.meta(artifact)
+        : (kind === "plan" ? workspaceArtifacts.planSummary(artifact) : workspaceArtifacts.typeLabel(kind))
     };
   }
 
   function renderHtmlWorkspaceList() {
     var search = $("htmlWorkspaceSearchInput");
+    var resourceHeads = typeof artifactResourceHeads === "function" ? artifactResourceHeads() : (state.artifacts || []);
     workspaceTree.render({
       root: $("htmlWorkspaceTree"),
       query: search ? search.value : "",
       files: files().map(workspaceTreeFile),
       dataSources: dataSources().map(workspaceTreeData),
-      artifacts: (state.artifacts || []).map(workspaceTreeArtifact),
+      artifacts: resourceHeads.map(workspaceTreeArtifact),
       plans: latestPlanArtifacts().map(workspaceTreeArtifact),
       selected: state.htmlWorkspaceSelection || {},
       onSelect: selectHtmlWorkspaceItem,
@@ -288,11 +292,20 @@
     var label = state.htmlWorkspaceSidebarHidden ? "Показать список" : "Скрыть список";
     button.setAttribute("title", label);
     button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", state.htmlWorkspaceSidebarHidden ? "true" : "false");
+    button.innerHTML = state.htmlWorkspaceSidebarHidden
+      ? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m10 6 6 6-6 6\"/></svg>"
+      : "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m14 6-6 6 6 6\"/></svg>";
   }
 
   function toggleHtmlWorkspaceSidebar() {
     state.htmlWorkspaceSidebarHidden = !state.htmlWorkspaceSidebarHidden;
+    try {
+      window.localStorage.setItem("rnassistant.artifacts.sidebar.hidden", state.htmlWorkspaceSidebarHidden ? "1" : "0");
+    } catch (error) {
+    }
     renderHtmlWorkspace();
+    if (typeof refreshCodeEditors === "function") refreshCodeEditors(["htmlWorkspaceEditorInput"]);
   }
 
   function renderHtmlWorkspace() {

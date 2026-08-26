@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Status: accepted target architecture. Core contracts, chat/HTML/plan/live-document/VBA providers, `common.resources_*`, the unified Chat/Agent loop, automatic chat resource ingestion, and progressive tool discovery are implemented. The final event/projection cutover remains; replaced paths are removed, not retained as aliases.
+Status: implemented. Core contracts, providers, the unified Chat/Agent loop, automatic ingestion, progressive tool discovery, and the event/projection cutover all use one canonical resource path; replaced paths are removed, not retained as aliases.
 
 ## Goals
 
@@ -92,6 +92,6 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 4. **Done:** Automatic chat-scoped UI ingestion and durable pre-dispatch message references; explicit `artifactIds`/“В запрос” selection removed.
 5. **Done:** plan/HTML reads use canonical `chat` resources; live Office document/selection and VBA project/component/backup providers are registered. Duplicated plan/HTML/VBA reads plus host `get_context/get_selection` tools are removed without aliases; domain-specific range/slide/mail reads remain typed tools.
 6. **Done:** Agent uses compact tool namespaces plus `common.tools_list/search/read`; exact revisioned schemas enter a bounded replayable LRU working set, and full-catalog prompt injection is removed. Custom-definition inspection moved to `common.tools_definition_read` without an alias.
-7. Hard cutover of events/projections, deletion of obsolete services and tests, reset-only handling for old data.
+7. **Done:** durable messages, media handoff, compaction, fork reachability, replay, and trajectory diagnostics carry revision-pinned `ResourceRef` values. Internal `ArtifactIds` message transport and `ChatArtifactService` are removed; event schema 3/session format 6 reject pre-cutover streams without migration.
 
 Each slice must leave one authoritative path for the capability it migrates and add harness coverage for URI safety, provider bounds, replay, context compaction, media hydration lifetime, and Chat mutation denial.

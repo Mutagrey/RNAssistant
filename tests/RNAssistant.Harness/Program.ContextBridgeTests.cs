@@ -81,6 +81,7 @@ namespace RNAssistant.Harness
             snapshot.Files[0].Content = "changed snapshot";
             AssertEqual("original html", restoredWorkspace.Files[0].Content, "restored workspace is independent from snapshot");
 
+            var sourcePlanUri = ResourceUri.Create("chat", "source", "artifact", "plan-1", "revision", "1");
             var sourceMessage = new ChatMessage
             {
                 Id = "message-1",
@@ -93,10 +94,10 @@ namespace RNAssistant.Harness
                 ToolResultRole = ToolResultRoles.Tool,
                 ToolCalls = new List<LlmToolCall>
                 {
-                    new LlmToolCall { Id = "call-1", Type = "function", Name = "rna_excel_read_range", ArgumentsJson = "{}" }
+                    new LlmToolCall { Id = "call-1", Type = "function", Name = "rna_excel_read_range", ArgumentsJson = "{\"uri\":\"" + sourcePlanUri + "\"}" }
                 },
-                ArtifactIds = new List<string> { "plan-1" },
-                HtmlWorkspaceCheckpointId = "html-2",
+                ResourceRefs = new List<ResourceRef> { new ResourceRef(sourcePlanUri, "1") },
+                HtmlWorkspaceCheckpoint = new ResourceRef(ResourceUri.Create("chat", "source", "artifact", "html-2", "revision", "2"), "2"),
                 PromptTokens = 10,
                 CompletionTokens = 2,
                 TotalTokens = 12,
@@ -132,8 +133,9 @@ namespace RNAssistant.Harness
             AssertEqual("call-1", clonedMessages[0].ToolCallId, "tool call id cloned");
             AssertEqual(ToolResultRoles.Tool, clonedMessages[0].ToolResultRole, "tool result role cloned");
             AssertTrue(!object.ReferenceEquals(sourceMessage.ToolCalls[0], clonedMessages[0].ToolCalls[0]), "tool call cloned");
-            AssertEqual("plan-1", clonedMessages[0].ArtifactIds[0], "artifact reference cloned");
-            AssertEqual("html-2", clonedMessages[0].HtmlWorkspaceCheckpointId, "html checkpoint cloned");
+            AssertEqual(sourceMessage.ResourceRefs[0].Uri, clonedMessages[0].ResourceRefs[0].Uri, "resource reference cloned");
+            AssertTrue(!object.ReferenceEquals(sourceMessage.ResourceRefs[0], clonedMessages[0].ResourceRefs[0]), "resource reference deep cloned");
+            AssertEqual(sourceMessage.HtmlWorkspaceCheckpoint.Uri, clonedMessages[0].HtmlWorkspaceCheckpoint.Uri, "html checkpoint cloned");
             AssertEqual(12, clonedMessages[0].TotalTokens, "message tokens");
             AssertEqual("run-1", clonedMessages[0].RunId, "message run id");
             AssertEqual(4, clonedMessages[0].Sequence, "message sequence");
@@ -153,8 +155,8 @@ namespace RNAssistant.Harness
             var artifacts = new[]
             {
                 new ChatArtifact { Id = "plan-1", Kind = ChatArtifactKinds.Markdown, Title = "Note", InlineText = "{}", RelatedArtifactIds = new List<string> { "related" } },
-                new ChatArtifact { Id = "html-1", Kind = ChatArtifactKinds.HtmlWorkspace, Title = "HTML v1", InlineText = "large-v1" },
-                new ChatArtifact { Id = "html-2", Kind = ChatArtifactKinds.HtmlWorkspace, Title = "HTML v2", ParentArtifactId = "html-1", InlineText = "large-v2" },
+                new ChatArtifact { Id = "html-1", Kind = ChatArtifactKinds.HtmlWorkspace, Title = "HTML v1", Revision = 1, InlineText = "large-v1" },
+                new ChatArtifact { Id = "html-2", Kind = ChatArtifactKinds.HtmlWorkspace, Title = "HTML v2", Revision = 2, ParentArtifactId = "html-1", InlineText = "large-v2" },
                 new ChatArtifact { Id = "related", Kind = ChatArtifactKinds.Markdown, Title = "Related" },
                 new ChatArtifact { Id = "unused", Kind = ChatArtifactKinds.File, Title = "Unused" }
             };
@@ -163,10 +165,16 @@ namespace RNAssistant.Harness
             AssertTrue(clonedArtifacts.Any(artifact => artifact.Id == "html-1"), "html parent revision retained");
             AssertTrue(clonedArtifacts.Any(artifact => artifact.Id == "related"), "related artifact retained");
             AssertTrue(!clonedArtifacts.Any(artifact => artifact.Id == "unused"), "unreachable artifact omitted from fork");
+            var forkSession = new ChatSession { Messages = clonedMessages, Artifacts = clonedArtifacts };
+            ChatResourceReferenceService.LinkMessageResources(forkSession, 0);
+            var forkPlanUri = ArtifactUri(forkSession, clonedArtifacts.Single(artifact => artifact.Id == "plan-1"));
+            AssertEqual(forkPlanUri, clonedMessages[0].ResourceRefs[0].Uri, "fork rebases durable resource reference");
+            AssertContains(clonedMessages[0].ToolCalls[0].ArgumentsJson, forkPlanUri,
+                "fork rebases structured historical tool arguments");
             var dto = ChatArtifactDto.From(artifacts);
             AssertTrue(string.IsNullOrEmpty(dto.First(item => item.Id == "html-2").InlineText), "bridge omits heavyweight html snapshot body");
             AssertEqual("{}", dto.First(item => item.Id == "plan-1").InlineText, "bridge includes bounded plan payload");
-            var artifactPrompt = ChatArtifactService.BuildPromptIndex(new ChatSession
+            var artifactPrompt = ChatResourcePromptIndex.Build(new ChatSession
             {
                 Artifacts = artifacts.ToList(),
                 ActiveHtmlArtifactId = "html-2"
@@ -191,7 +199,7 @@ namespace RNAssistant.Harness
                 message.Attachments.Add(attachment);
                 source.Messages.Add(message);
                 store.CommitToCas(message);
-                ChatArtifactService.LinkMessageArtifacts(source, 0);
+                ChatResourceReferenceService.LinkMessageResources(source, 0);
 
                 var fork = new ChatSession
                 {
@@ -200,7 +208,7 @@ namespace RNAssistant.Harness
                 fork.Artifacts = ChatCloneService.CloneArtifactsForMessages(source.Artifacts, fork.Messages);
                 var sourceHash = fork.Messages[0].Attachments[0].ContentSha256;
                 store.CloneMessageAttachments(fork.Messages[0]);
-                ChatArtifactService.LinkMessageArtifacts(fork, 0);
+                ChatResourceReferenceService.LinkMessageResources(fork, 0);
 
                 var clonedAttachment = fork.Messages[0].Attachments[0];
                 var clonedArtifact = fork.Artifacts.Single(item => item.Id == "attachment_" + clonedAttachment.Id);

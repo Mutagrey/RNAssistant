@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
@@ -181,7 +182,7 @@ namespace RNAssistant.Office
 
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
-                    ChatArtifactService.LinkMessageArtifacts(session, 0);
+                    ChatResourceReferenceService.LinkMessageResources(session, 0);
                     if (completion == null || !completion.WaitingForConfirmation)
                     {
                         session.LastRun = null;
@@ -215,7 +216,7 @@ namespace RNAssistant.Office
                     }
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
-                    ChatArtifactService.LinkMessageArtifacts(session, 0);
+                    ChatResourceReferenceService.LinkMessageResources(session, 0);
                     SaveSessionChanges(session);
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                     throw;
@@ -638,7 +639,7 @@ namespace RNAssistant.Office
                     if (message != null)
                     {
                         message.Content = BuildResolvedToolContent(replacement);
-                        message.HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId;
+                        message.HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId);
                     }
                     return;
                 }

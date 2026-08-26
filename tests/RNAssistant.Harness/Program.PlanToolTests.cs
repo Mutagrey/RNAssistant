@@ -42,8 +42,8 @@ namespace RNAssistant.Harness
 
                 var createMessage = AgentTranscript.CreateLocalResultMessage(create, created);
                 session.Messages.Add(createMessage);
-                ChatArtifactService.LinkMessageArtifacts(session, 0);
-                AssertTrue(createMessage.ArtifactIds.Contains(firstArtifactId), "created plan linked to tool result message");
+                ChatResourceReferenceService.LinkMessageResources(session, 0);
+                AssertTrue(ReferencesArtifact(session, createMessage, firstArtifactId), "created plan linked to tool result message");
 
                 var update = Command(PlanToolExecutor.UpdateToolId, "id", planId, "goal", "Prepare verified workbook report");
                 var updated = executor.Execute(update, tools, new AppSettings(), false, false, session);
@@ -57,19 +57,19 @@ namespace RNAssistant.Harness
 
                 var updateMessage = AgentTranscript.CreateLocalResultMessage(update, updated);
                 session.Messages.Add(updateMessage);
-                ChatArtifactService.LinkMessageArtifacts(session, 1);
-                AssertTrue(updateMessage.ArtifactIds.Contains(secondArtifactId), "updated plan linked to tool result message");
+                ChatResourceReferenceService.LinkMessageResources(session, 1);
+                AssertTrue(ReferencesArtifact(session, updateMessage, secondArtifactId), "updated plan linked to tool result message");
 
                 var updatedArtifact = session.Artifacts.Single(item => item.Id == secondArtifactId);
-                var planUri = ChatArtifactResourceProvider.CreateRevisionUri(session, updatedArtifact);
+                var planUri = ArtifactUri(session, updatedArtifact);
                 var read = new ResourceGatewayService().Read(session, planUri, "text", 0, 32000).Result;
                 AssertContains(read.Text, "Prepare verified workbook report", "active plan revision reads through resources");
                 var removedRead = executor.Execute(Command("common.plan_read"), tools, new AppSettings(), false, false, session);
                 AssertEqual("unknown_tool", removedRead.ErrorCode, "removed plan read id stays unknown");
 
                 session.Messages.Remove(updateMessage);
-                ChatArtifactService.RestoreActivePlanFromMessages(session);
-                ChatArtifactService.PruneUnreachable(session);
+                ChatResourceReferenceService.RestoreActivePlanFromMessages(session);
+                ChatResourceReferenceService.PruneUnreachable(session);
                 AssertEqual(firstArtifactId, session.ActivePlanArtifactId, "history rewind restores prior plan revision");
                 AssertTrue(session.Artifacts.All(item => item.Id != secondArtifactId), "future plan revision pruned");
 
@@ -77,7 +77,7 @@ namespace RNAssistant.Harness
                 AssertTrue(deleted.Success, "plan delete succeeds");
                 AssertEqual(0, session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.Plan), "all plan revisions deleted");
                 AssertTrue(string.IsNullOrWhiteSpace(session.ActivePlanArtifactId), "deleted plan is no longer active");
-                AssertTrue(!createMessage.ArtifactIds.Contains(firstArtifactId), "deleted plan unlinked from messages");
+                AssertTrue(!ReferencesArtifact(session, createMessage, firstArtifactId), "deleted plan unlinked from messages");
             });
         }
 

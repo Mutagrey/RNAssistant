@@ -189,6 +189,7 @@ namespace RNAssistant.Core.Services
                 StepId = source.StepId,
                 ToolCallId = source.ToolCallId,
                 ArtifactId = source.ArtifactId,
+                ResourceUri = source.ResourceUri,
                 Status = source.Status,
                 Visibility = source.Visibility
             };
@@ -222,6 +223,11 @@ namespace RNAssistant.Core.Services
             if (!TrajectoryViews.IsSupported(request.View))
             {
                 throw new ArgumentException("Unsupported trajectory export view: " + request.View + ".", "request");
+            }
+            request.ResourceUri = string.IsNullOrWhiteSpace(request.ResourceUri) ? null : request.ResourceUri.Trim();
+            if (request.ResourceUri != null && !string.Equals(request.View, TrajectoryViews.Raw, StringComparison.Ordinal))
+            {
+                throw new ArgumentException("resourceUri is available only for raw trajectory export.", "request");
             }
             if (!string.IsNullOrWhiteSpace(request.RedactionMode) &&
                 !TrajectoryExportRedactionModes.IsValid(request.RedactionMode.Trim()))
@@ -468,6 +474,7 @@ namespace RNAssistant.Core.Services
                     ["stepId"] = StringToken(request.StepId),
                     ["toolCallId"] = StringToken(request.ToolCallId),
                     ["artifactId"] = StringToken(request.ArtifactId),
+                    ["resourceUri"] = StringToken(request.ResourceUri),
                     ["status"] = StringToken(request.Status),
                     ["visibility"] = StringToken(request.Visibility)
                 },

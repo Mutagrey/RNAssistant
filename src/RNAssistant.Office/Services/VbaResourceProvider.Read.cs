@@ -354,7 +354,7 @@ namespace RNAssistant.Office.Services
                     Representation = ResourceRepresentations.Metadata,
                     Complete = true
                 },
-                ResourceUris = new[] { resourceUri }
+                ResourceRefs = new[] { new ResourceRef(resourceUri) }
             };
         }
 
@@ -399,7 +399,7 @@ namespace RNAssistant.Office.Services
                     Truncated = !complete,
                     RawContentIncluded = true
                 },
-                ResourceUris = new[] { resourceUri }
+                ResourceRefs = new[] { new ResourceRef(resourceUri, contentSha256) }
             };
         }
 

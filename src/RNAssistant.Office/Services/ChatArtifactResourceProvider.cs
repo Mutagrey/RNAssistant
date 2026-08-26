@@ -165,7 +165,8 @@ namespace RNAssistant.Office.Services
             {
                 throw new KeyNotFoundException("Resource not found in the active chat: " + resourceUri);
             }
-            var exactUri = CreateRevisionUri(session, artifact);
+            var exactReference = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            var exactUri = exactReference.Uri;
             representation = NormalizeRepresentation(representation, session, artifact);
             offset = Math.Max(0, offset);
             maxChars = Math.Max(128, Math.Min(MaximumReadCharacters, maxChars <= 0 ? DefaultReadCharacters : maxChars));
@@ -182,8 +183,7 @@ namespace RNAssistant.Office.Services
                         Truncated = false,
                         RawContentIncluded = false
                     },
-                    ArtifactIds = new[] { artifact.Id },
-                    ResourceUris = new[] { exactUri }
+                    ResourceRefs = new[] { exactReference }
                 };
             }
             if (representation == "media")
@@ -205,8 +205,7 @@ namespace RNAssistant.Office.Services
                         RawContentIncluded = false
                     },
                     ModelAttachments = new[] { attachment },
-                    ArtifactIds = new[] { artifact.Id },
-                    ResourceUris = new[] { exactUri }
+                    ResourceRefs = new[] { exactReference }
                 };
             }
             if (representation == ResourceRepresentations.Structure)
@@ -245,8 +244,7 @@ namespace RNAssistant.Office.Services
                     RawContentIncluded = true,
                     NextCursor = nextOffset < content.Length ? nextOffset.ToString() : null
                 },
-                ArtifactIds = new[] { artifact.Id },
-                ResourceUris = new[] { exactUri }
+                ResourceRefs = new[] { exactReference }
             };
         }
 
@@ -262,7 +260,7 @@ namespace RNAssistant.Office.Services
             if (IsModelMedia(attachment)) representations.Add("media");
             var result = new ResourceDescriptor
             {
-                Reference = new ResourceRef(CreateRevisionUri(session, artifact), Math.Max(1, artifact.Revision).ToString()),
+                Reference = ChatResourceUri.CreateArtifactRevision(session, artifact),
                 Provider = ProviderName,
                 Kind = artifact.Kind ?? "artifact",
                 Title = artifact.Title ?? string.Empty,
@@ -277,13 +275,11 @@ namespace RNAssistant.Office.Services
                 var parent = Find(session, artifact.ParentArtifactId);
                 result.Parent = parent == null
                     ? null
-                    : new ResourceRef(CreateRevisionUri(session, parent), Math.Max(1, parent.Revision).ToString());
+                    : ChatResourceUri.CreateArtifactRevision(session, parent);
                 result.Related = (artifact.RelatedArtifactIds ?? new List<string>())
                     .Select(id => Find(session, id))
                     .Where(item => item != null)
-                    .Select(item => new ResourceRef(
-                        CreateRevisionUri(session, item),
-                        Math.Max(1, item.Revision).ToString()))
+                    .Select(item => ChatResourceUri.CreateArtifactRevision(session, item))
                     .ToList();
                 result.SourceMessageId = artifact.SourceMessageId;
                 result.ContentSha256 = artifact.ContentSha256;
@@ -350,7 +346,7 @@ namespace RNAssistant.Office.Services
             var length = Math.Min(maxChars, source.Length - start);
             return new ResourceSearchMatch
             {
-                Reference = new ResourceRef(CreateRevisionUri(session, artifact), Math.Max(1, artifact.Revision).ToString()),
+                Reference = ChatResourceUri.CreateArtifactRevision(session, artifact),
                 Kind = artifact.Kind ?? "artifact",
                 Title = artifact.Title ?? string.Empty,
                 Representation = representation,
@@ -421,43 +417,18 @@ namespace RNAssistant.Office.Services
                 string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
         }
 
-        internal static string CreateRevisionUri(ChatSession session, ChatArtifact artifact)
-        {
-            if (session == null || string.IsNullOrWhiteSpace(session.Id) || artifact == null ||
-                string.IsNullOrWhiteSpace(artifact.Id))
-            {
-                throw new InvalidOperationException("A persisted chat and artifact are required to create a resource URI.");
-            }
-            return ResourceUri.Create(
-                ProviderName,
-                session.Id,
-                "artifact",
-                artifact.Id,
-                "revision",
-                Math.Max(1, artifact.Revision).ToString());
-        }
-
-        internal static string ResolveRevisionUri(ChatSession session, string artifactId)
-        {
-            var artifact = Find(session, artifactId);
-            return artifact == null ? null : CreateRevisionUri(session, artifact);
-        }
-
         private static ChatArtifact FindByUri(ChatSession session, string resourceUri)
         {
             ResourceAddress address;
-            if (!ResourceUri.TryParse(resourceUri, out address) ||
-                !string.Equals(address.Provider, ProviderName, StringComparison.Ordinal) ||
-                address.Segments.Count != 5 || session == null ||
-                !string.Equals(address.Segments[0], session.Id, StringComparison.Ordinal) ||
-                !string.Equals(address.Segments[1], "artifact", StringComparison.Ordinal) ||
-                !string.Equals(address.Segments[3], "revision", StringComparison.Ordinal))
+            if (!ResourceUri.TryParse(resourceUri, out address) || address.Segments.Count != 5)
             {
                 return null;
             }
+            string artifactId;
             int revision;
-            if (!int.TryParse(address.Segments[4], out revision) || revision < 1) return null;
-            var artifact = Find(session, address.Segments[2]);
+            if (session == null || !ChatResourceUri.TryParseArtifactRevision(
+                session.Id, new ResourceRef(resourceUri), out artifactId, out revision)) return null;
+            var artifact = Find(session, artifactId);
             return artifact != null && Math.Max(1, artifact.Revision) == revision ? artifact : null;
         }
 

@@ -166,7 +166,7 @@ namespace RNAssistant.Office.Services
                 CreatedUtc = member.CreatedUtc,
                 ContentSha256 = TextPatternEngine.Sha256(member.Content ?? string.Empty),
                 Parent = new ResourceRef(
-                    ChatArtifactResourceProvider.CreateRevisionUri(member.Session, member.Artifact),
+                    ChatResourceUri.CreateArtifactRevisionUri(member.Session, member.Artifact),
                     Math.Max(1, member.Artifact.Revision).ToString())
             };
             descriptor.Representations.Add(ResourceRepresentations.Metadata);

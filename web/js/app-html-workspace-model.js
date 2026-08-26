@@ -77,6 +77,9 @@
     }
 
     function latestPlanArtifacts() {
+      if (typeof artifactResourceHeads === "function") {
+        return artifactResourceHeads().filter(function (artifact) { return artifactKind(artifact) === "plan"; });
+      }
       var latest = {};
       (state.artifacts || []).forEach(function (artifact) {
         if (artifactKind(artifact) !== "plan") return;

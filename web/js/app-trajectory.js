@@ -144,6 +144,10 @@
     artifactIds.forEach(function (id) {
       correlationButton(root, "artifact " + id, "artifactId", id, "artifact-lineage", sourceChatId);
     });
+    var resourceRefs = value(item, "ResourceRefs", "resourceRefs", []) || [];
+    unique(resourceRefs.map(function (reference) { return value(reference, "Uri", "uri", ""); })).forEach(function (uri) {
+      correlationButton(root, "resource " + uri, "resourceUri", uri, "raw", sourceChatId);
+    });
     var parentArtifactId = value(item, "ParentArtifactId", "parentArtifactId", "");
     if (parentArtifactId) {
       correlationButton(root, "parent " + parentArtifactId, "artifactId", parentArtifactId, "artifact-lineage", sourceChatId);
@@ -242,6 +246,7 @@
     var visibility = value(item, "Visibility", "visibility", "");
     var toolCallIds = value(item, "ToolCallIds", "toolCallIds", []) || [];
     var artifactIds = value(item, "ArtifactIds", "artifactIds", []) || [];
+    var resourceRefs = value(item, "ResourceRefs", "resourceRefs", []) || [];
     var statuses = value(item, "Statuses", "statuses", []) || [];
     $("trajectoryEventTitle").textContent = "#" + sequence + "  " + type;
     $("trajectoryEventMeta").textContent = [
@@ -251,6 +256,9 @@
       visibility || "",
       toolCallIds.length ? "tool=" + toolCallIds.join(",") : "",
       artifactIds.length ? "artifact=" + artifactIds.join(",") : "",
+      resourceRefs.length ? "resource=" + resourceRefs.map(function (reference) {
+        return value(reference, "Uri", "uri", "");
+      }).filter(Boolean).join(",") : "",
       statuses.length ? "status=" + statuses.join(",") : "",
       previousHash ? "prev=" + previousHash : "root",
       hash ? "hash=" + hash : "",

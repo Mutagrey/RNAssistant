@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Tools
 {
@@ -136,8 +137,8 @@ namespace RNAssistant.Office.Tools
             session.Artifacts.RemoveAll(item => item != null && artifactIds.Contains(item.Id));
             foreach (var message in session.Messages ?? new List<ChatMessage>())
             {
-                if (message == null || message.ArtifactIds == null) continue;
-                message.ArtifactIds.RemoveAll(artifactId => artifactIds.Contains(artifactId));
+                if (message == null || message.ResourceRefs == null) continue;
+                message.ResourceRefs.RemoveAll(reference => ReferencesAnyArtifact(reference, artifactIds));
             }
             foreach (var artifact in session.Artifacts.Where(item => item != null))
             {
@@ -147,6 +148,15 @@ namespace RNAssistant.Office.Tools
             if (artifactIds.Contains(session.ActivePlanArtifactId)) session.ActivePlanArtifactId = null;
             return ToolResult.Ok("Plan deleted: " + selected.Id,
                 JsonConvert.SerializeObject(new { id = selected.Id, deletedRevisions = revisions.Count }));
+        }
+
+        private static bool ReferencesAnyArtifact(ResourceRef reference, ISet<string> artifactIds)
+        {
+            string ignoredSessionId;
+            string artifactId;
+            int ignoredRevision;
+            return artifactIds != null && ChatResourceUri.TryParseArtifactRevision(
+                reference, out ignoredSessionId, out artifactId, out ignoredRevision) && artifactIds.Contains(artifactId);
         }
 
         private static ChatArtifact CreateArtifact(ChatPlan plan, ChatArtifact parent, int revision)

@@ -37,7 +37,7 @@
   }
 
   function typeLabel(kind) {
-    var labels = { attachment: "Вложение", image: "Изображение", file: "Файл", markdown: "Markdown", chart: "Диаграмма", compaction: "Checkpoint", tool_result: "Результат" };
+    var labels = { attachment: "Вложение", image: "Изображение", audio: "Аудио", file: "Файл", markdown: "Markdown", html_workspace: "HTML workspace", chart: "Диаграмма", compaction: "Checkpoint", tool_result: "Результат" };
     return labels[kind] || kind;
   }
 
@@ -106,7 +106,9 @@
       ["Тип", typeLabel(artifactKind(selected.item))],
       ["Формат", prop(selected.item, "MimeType", "mimeType", "—") || "—"],
       ["Путь", prop(selected.item, "RelativePath", "relativePath", "—") || "—"],
-      ["Версия", String(artifactRevision(selected.item))]
+      ["Ревизия", "v" + artifactRevision(selected.item)],
+      ["Источник", prop(selected.item, "SourceMessageId", "sourceMessageId", "—") || "—"],
+      ["Родитель", prop(selected.item, "ParentArtifactId", "parentArtifactId", "—") || "—"]
     ].forEach(function (pair) {
       var term = document.createElement("dt");
       var value = document.createElement("dd");

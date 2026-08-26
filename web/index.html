@@ -30,13 +30,13 @@
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-ui-20260825-1">
   <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-ui-20260825-1">
   <link rel="stylesheet" href="css/app-tools.css?v=skill-references-20260825-1">
-  <link rel="stylesheet" href="css/app-vba.css?v=userform-20260824-1">
+  <link rel="stylesheet" href="css/app-vba.css?v=resource-navigation-20260826-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=context-close-20260825-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=context-inspector-20260824-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-html-artifacts.css?v=chatui-20260702-2">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=ui-simplify-20260821-3">
-  <link rel="stylesheet" href="css/app-html-workspace.css?v=html-recovery-20260825-1">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=resource-navigation-20260826-1">
+  <link rel="stylesheet" href="css/app-html-workspace.css?v=resource-navigation-20260826-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=model-capability-inline-20260826-1">
   <link rel="stylesheet" href="css/app-agent.css?v=compaction-divider-20260825-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=agent-ui-20260821-2">
@@ -80,6 +80,26 @@
             <span id="activeChatSubtitle"></span>
           </div>
           <div class="chatbar-actions">
+            <div class="chat-resource-menu" id="chatResourceMenu">
+              <button type="button" class="icon-button chatbar-icon-button" id="toggleChatResourcesButton" title="В чате пока нет ресурсов" aria-label="В чате пока нет ресурсов" aria-haspopup="dialog" aria-expanded="false" aria-controls="chatResourcesPopover" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h11a2 2 0 0 0 2-2V8"/></svg>
+                <span class="chat-resource-count hidden" id="chatResourceCount">0</span>
+              </button>
+              <section class="chat-resource-popover hidden" id="chatResourcesPopover" role="dialog" aria-label="Ресурсы чата" aria-hidden="true">
+                <div class="chat-resource-popover-head">
+                  <strong>Ресурсы чата</strong>
+                  <span>Текущие версии артефактов и файлов этого чата.</span>
+                </div>
+                <label class="chat-resource-search-wrap hidden">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>
+                  <input id="chatResourcesSearchInput" type="search" placeholder="Найти ресурс..." autocomplete="off">
+                </label>
+                <div class="chat-resource-list" id="chatResourcesList"></div>
+                <div class="chat-resource-popover-foot">
+                  <button type="button" class="link-button" id="openArtifactsTabButton">Открыть все артефакты</button>
+                </div>
+              </section>
+            </div>
             <button type="button" class="icon-button chatbar-icon-button" id="compactContextButton" title="Сжать ранний контекст" aria-label="Сжать ранний контекст" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5"/><path d="m3 3 6 6"/><path d="M16 21h5v-5"/><path d="m21 21-6-6"/></svg>
             </button>
@@ -441,6 +461,9 @@
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка VBA"></div>
           <section class="vba-editor surface-panel padded tool-editor">
             <div class="resource-editor-head vba-editor-head">
+              <button class="icon-button chatbar-icon-button html-sidebar-toggle-button" id="toggleVbaSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+              </button>
               <div class="resource-editor-titlebox">
                 <div class="resource-editor-title" id="vbaModuleTitle">Модуль не выбран</div>
                 <div class="resource-editor-meta" id="vbaModuleMeta"></div>
@@ -491,7 +514,7 @@
       <section class="panel" id="tab-artifacts">
         <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-split-key="html-workspace" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.18" data-max-ratio="0.5">
           <aside class="tool-list-panel html-workspace-sidebar" id="htmlWorkspaceSidebar">
-            <div class="tool-list-status" id="htmlWorkspaceStatus">Артефактов пока нет.</div>
+            <div class="tool-list-status" id="htmlWorkspaceStatus">Ресурсов пока нет.</div>
             <div class="tool-list-controls">
               <input class="tool-search" id="htmlWorkspaceSearchInput" placeholder="Поиск артефактов..." autocomplete="off">
               <div class="tool-list-actions html-workspace-add-actions">
@@ -509,13 +532,13 @@
                 </div>
               </div>
             </div>
-            <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Артефакты чата"></div>
+            <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Ресурсы чата"></div>
           </aside>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка артефактов"></div>
           <section class="html-workspace-editor surface-panel padded tool-editor" id="htmlWorkspaceEditor">
             <div class="resource-editor-head html-workspace-head">
-              <button class="icon-button secondary html-sidebar-toggle-button" id="toggleHtmlSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg>
+              <button class="icon-button chatbar-icon-button html-sidebar-toggle-button" id="toggleHtmlSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
               </button>
               <div class="resource-editor-titlebox">
                 <div class="resource-editor-title" id="htmlWorkspaceTitle">Артефакт не выбран</div>
@@ -918,8 +941,8 @@
   <script src="js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
-  <script src="js/app-core.js?v=resource-ingestion-conversation-stream-20260826-1"></script>
-  <script src="js/app-utils.js?v=runtime-20260807-1"></script>
+  <script src="js/app-core.js?v=resource-navigation-20260826-1"></script>
+  <script src="js/app-utils.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-editors.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-markdown.js?v=log-filters-20260824-1"></script>
@@ -935,7 +958,7 @@
   <script src="js/app-models.js?v=chat-binding-20260824-1"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=resource-ingestion-20260826-1"></script>
-  <script src="js/app-resource-list.js?v=chatui-20260622-4"></script>
+  <script src="js/app-resource-list.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-tools-structured.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-tools-actions.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-tools.js?v=library-dirty-20260825-1"></script>
@@ -943,33 +966,33 @@
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
   <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>
   <script src="js/app-vba-project.js?v=userform-20260824-1"></script>
-  <script src="js/app-vba.js?v=vba-recovery-20260825-1"></script>
+  <script src="js/app-vba.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-html-workspace-preview.js?v=html-data-20260824-1"></script>
-  <script src="js/app-html-workspace-artifacts.js?v=compaction-label-20260825-1"></script>
-  <script src="js/app-html-workspace-model.js?v=html-recovery-20260825-1"></script>
-  <script src="js/app-html-workspace-editor.js?v=resource-ingestion-20260826-1"></script>
-  <script src="js/app-html-workspace-tree.js?v=html-data-20260824-1"></script>
+  <script src="js/app-html-workspace-artifacts.js?v=resource-navigation-20260826-1"></script>
+  <script src="js/app-html-workspace-model.js?v=resource-navigation-20260826-1"></script>
+  <script src="js/app-html-workspace-editor.js?v=resource-navigation-20260826-1"></script>
+  <script src="js/app-html-workspace-tree.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-recovery-20260825-1"></script>
-  <script src="js/app-html-workspace.js?v=resource-ingestion-20260826-1"></script>
+  <script src="js/app-html-workspace.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-context.js?v=context-close-20260825-1"></script>
   <script src="js/app-context-inspector.js?v=resource-ingestion-20260826-1"></script>
   <script src="js/app-agent-data.js?v=agent-ui-20260821-2"></script>
   <script src="js/app-agent-model.js?v=agent-ui-20260821-3"></script>
   <script src="js/app-chart-artifacts.js?v=log-filters-20260824-1"></script>
   <script src="js/app-html-artifacts.js?v=chatui-20260702-2"></script>
-  <script src="js/app-artifacts.js?v=compaction-label-20260825-1"></script>
+  <script src="js/app-artifacts.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-plan.js?v=ui-simplify-20260821-3"></script>
   <script src="js/app-agent-activity.js?v=agent-modules-20260823-1"></script>
   <script src="js/app-agent-approval.js?v=agent-modules-20260823-2"></script>
   <script src="js/app-agent.js?v=artifact-dedup-20260824-1"></script>
-  <script src="js/app-messages.js?v=compaction-divider-20260825-1"></script>
+  <script src="js/app-messages.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=resource-ingestion-20260826-1"></script>
   <script src="js/app-chat-session.js?v=html-workspace-auto-20260825-1"></script>
   <script src="js/app-chat-composer.js?v=resource-ingestion-20260826-1"></script>
   <script src="js/app-chat-run.js?v=resource-ingestion-20260826-1"></script>
-  <script src="js/app-chat.js?v=model-capability-inline-20260826-1"></script>
+  <script src="js/app-chat.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-chat-edit.js?v=message-edit-submit-20260825-1"></script>
-  <script src="js/app.js?v=excel-runtime-fix-20260824-1"></script>
+  <script src="js/app.js?v=resource-navigation-20260826-1"></script>
 </body>
 </html>

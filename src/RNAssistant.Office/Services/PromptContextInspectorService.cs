@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 
@@ -82,7 +83,7 @@ namespace RNAssistant.Office.Services
             {
                 Role = "user",
                 Content = draftText,
-                HtmlWorkspaceCheckpointId = previewSession.ActiveHtmlArtifactId,
+                HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(previewSession, previewSession.ActiveHtmlArtifactId),
                 Attachments = new List<ChatAttachment>(attachments)
             });
 

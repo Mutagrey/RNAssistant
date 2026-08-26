@@ -289,6 +289,30 @@ function runVbaMacro() {
   return vbaActions.runMacro();
 }
 
+function updateVbaSidebarToggle() {
+  var layout = $("vbaLayout");
+  var button = $("toggleVbaSidebarButton");
+  if (layout) layout.classList.toggle("is-sidebar-hidden", !!state.vbaSidebarHidden);
+  if (!button) return;
+  var label = state.vbaSidebarHidden ? "Показать список" : "Скрыть список";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.setAttribute("aria-pressed", state.vbaSidebarHidden ? "true" : "false");
+  button.innerHTML = state.vbaSidebarHidden
+    ? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m10 6 6 6-6 6\"/></svg>"
+    : "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m14 6-6 6 6 6\"/></svg>";
+}
+
+function toggleVbaSidebar() {
+  state.vbaSidebarHidden = !state.vbaSidebarHidden;
+  try {
+    window.localStorage.setItem("rnassistant.vba.sidebar.hidden", state.vbaSidebarHidden ? "1" : "0");
+  } catch (error) {
+  }
+  updateVbaSidebarToggle();
+  if (typeof refreshCodeEditors === "function") refreshCodeEditors(["vbaCodeInput"]);
+}
+
 function bindVbaActions() {
   $("refreshVbaButton").addEventListener("click", refreshVbaProject);
   $("refreshVbaEmptyButton").addEventListener("click", refreshVbaProject);
@@ -321,12 +345,14 @@ function bindVbaActions() {
   $("restoreVbaButton").addEventListener("click", restoreVbaBackup);
   $("reviewVbaButton").addEventListener("click", reviewVbaInChat);
   $("runVbaMacroButton").addEventListener("click", runVbaMacro);
+  $("toggleVbaSidebarButton").addEventListener("click", toggleVbaSidebar);
   Array.prototype.slice.call(document.querySelectorAll("#tab-vba details")).forEach(function (details) {
     details.addEventListener("toggle", function () {
       if (typeof refreshCodeEditors === "function") refreshCodeEditors(["vbaCodeInput"]);
     });
   });
   renderVbaProject();
+  updateVbaSidebarToggle();
   applyVbaMode();
   updateVbaMacroRunState();
 }

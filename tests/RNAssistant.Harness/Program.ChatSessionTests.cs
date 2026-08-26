@@ -55,7 +55,12 @@ namespace RNAssistant.Harness
                     Id = null,
                     Role = "user",
                     Content = "hello",
-                    ArtifactIds = new List<string> { "artifact-a", "artifact-a", "" },
+                    ResourceRefs = new List<ResourceRef>
+                    {
+                        new ResourceRef(ResourceUri.Create("document", "selection")),
+                        new ResourceRef(ResourceUri.Create("document", "selection")),
+                        new ResourceRef("not-a-resource")
+                    },
                     Activity = new ChatActivity
                     {
                         Kind = "notice",
@@ -74,7 +79,7 @@ namespace RNAssistant.Harness
                 AssertEqual("hello", loaded.Messages[0].Content, "message content");
                 AssertEqual("Stored activity", loaded.Messages[0].Activity.Title, "message activity title");
                 AssertTrue(!string.IsNullOrWhiteSpace(loaded.Messages[0].Id), "missing message id normalized");
-                AssertEqual(1, loaded.Messages[0].ArtifactIds.Count, "artifact refs deduplicated");
+                AssertEqual(1, loaded.Messages[0].ResourceRefs.Count, "resource refs validated and deduplicated");
                 AssertTrue(!string.IsNullOrWhiteSpace(loaded.Artifacts[0].Id), "missing artifact id normalized");
                 AssertTrue(loaded.Artifacts[0].RelatedArtifactIds != null, "artifact relations normalized");
                 var sessions = store.List("Word", "doc-key", "Doc");

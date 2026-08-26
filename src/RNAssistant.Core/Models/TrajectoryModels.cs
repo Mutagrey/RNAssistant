@@ -30,6 +30,7 @@ namespace RNAssistant.Core.Models
         public string StepId { get; set; }
         public string ToolCallId { get; set; }
         public string ArtifactId { get; set; }
+        public string ResourceUri { get; set; }
         public string Status { get; set; }
         public string Visibility { get; set; }
 
@@ -48,6 +49,7 @@ namespace RNAssistant.Core.Models
         public List<string> SourceEventIds { get; set; }
         public List<string> ToolCallIds { get; set; }
         public List<string> ArtifactIds { get; set; }
+        public List<ResourceRef> ResourceRefs { get; set; }
         public List<string> Statuses { get; set; }
 
         public TrajectoryEventRecord()
@@ -56,6 +58,7 @@ namespace RNAssistant.Core.Models
             SourceEventIds = new List<string>();
             ToolCallIds = new List<string>();
             ArtifactIds = new List<string>();
+            ResourceRefs = new List<ResourceRef>();
             Statuses = new List<string>();
         }
     }
@@ -212,6 +215,7 @@ namespace RNAssistant.Core.Models
         public string StepId { get; set; }
         public string ToolCallId { get; set; }
         public string ArtifactId { get; set; }
+        public string ResourceUri { get; set; }
         public string Status { get; set; }
         public string Visibility { get; set; }
         public string RedactionMode { get; set; }

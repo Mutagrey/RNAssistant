@@ -7,7 +7,7 @@ function createResourceListItem(options) {
   item.className = "tool-list-item"
     + (options.active ? " active" : "")
     + (options.compact ? " is-compact" : "")
-    + (options.icon ? " has-icon" : "")
+    + (options.icon || options.iconHtml ? " has-icon" : "")
     + (hasMeta ? " has-meta" : "")
     + (typeof options.enabled === "boolean" ? " has-badge" : "");
   item.style.setProperty("--tree-depth", String(Math.max(0, Number(options.depth || 0))));
@@ -16,10 +16,11 @@ function createResourceListItem(options) {
   var top = document.createElement("div");
   top.className = "tool-list-top";
 
-  if (options.icon) {
+  if (options.icon || options.iconHtml) {
     var icon = document.createElement("span");
     icon.className = "tool-list-icon";
-    icon.textContent = options.icon;
+    if (options.iconHtml) icon.innerHTML = options.iconHtml;
+    else icon.textContent = options.icon;
     top.appendChild(icon);
   }
 
@@ -174,20 +175,21 @@ function renderResourceList(options) {
       var item = row.item;
       var index = row.index;
       parent.appendChild(createResourceListItem({
-      title: options.title(item),
-      enabled: options.enabled(item),
-      icon: typeof options.icon === "function" ? options.icon(item) : "",
-      active: index === selectedIndex,
-      meta: options.meta(item),
-      description: options.description(item),
-      compact: !!options.compact,
-      depth: group.flat ? 0 : 1,
-      onClick: function () {
-        options.syncEditor();
-        options.setSelectedIndex(index);
-        options.renderList();
-      }
-    }));
+        title: options.title(item),
+        enabled: options.enabled(item),
+        icon: typeof options.icon === "function" ? options.icon(item) : "",
+        iconHtml: typeof options.iconHtml === "function" ? options.iconHtml(item) : "",
+        active: index === selectedIndex,
+        meta: options.meta(item),
+        description: options.description(item),
+        compact: !!options.compact,
+        depth: group.flat ? 0 : 1,
+        onClick: function () {
+          options.syncEditor();
+          options.setSelectedIndex(index);
+          options.renderList();
+        }
+      }));
     });
   });
 

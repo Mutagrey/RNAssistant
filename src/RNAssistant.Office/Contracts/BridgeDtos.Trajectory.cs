@@ -29,6 +29,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("stepId")] public string StepId { get; set; }
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
         [JsonProperty("artifactId")] public string ArtifactId { get; set; }
+        [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
         [JsonProperty("status")] public string Status { get; set; }
         [JsonProperty("visibility")] public string Visibility { get; set; }
 
@@ -47,6 +48,7 @@ namespace RNAssistant.Office.Contracts
                 StepId = StepId,
                 ToolCallId = ToolCallId,
                 ArtifactId = ArtifactId,
+                ResourceUri = ResourceUri,
                 Status = Status,
                 Visibility = Visibility
             };
@@ -54,6 +56,10 @@ namespace RNAssistant.Office.Contracts
 
         public TrajectoryViewQueryRequest ToViewQueryRequest(string view)
         {
+            if (!string.IsNullOrWhiteSpace(ResourceUri))
+            {
+                throw new InvalidOperationException("resourceUri is available only for raw trajectory queries.");
+            }
             return new TrajectoryViewQueryRequest
             {
                 View = view,
@@ -84,6 +90,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("stepId")] public string StepId { get; set; }
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
         [JsonProperty("artifactId")] public string ArtifactId { get; set; }
+        [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
         [JsonProperty("status")] public string Status { get; set; }
         [JsonProperty("visibility")] public string Visibility { get; set; }
         [JsonProperty("redactionMode")] public string RedactionMode { get; set; }
@@ -103,6 +110,7 @@ namespace RNAssistant.Office.Contracts
                 StepId = StepId,
                 ToolCallId = ToolCallId,
                 ArtifactId = ArtifactId,
+                ResourceUri = ResourceUri,
                 Status = Status,
                 Visibility = Visibility,
                 RedactionMode = RedactionMode,
@@ -248,6 +256,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("sourceEventIds")] public IReadOnlyList<string> SourceEventIds { get; set; }
         [JsonProperty("toolCallIds")] public IReadOnlyList<string> ToolCallIds { get; set; }
         [JsonProperty("artifactIds")] public IReadOnlyList<string> ArtifactIds { get; set; }
+        [JsonProperty("resourceRefs")] public IReadOnlyList<ResourceRef> ResourceRefs { get; set; }
         [JsonProperty("statuses")] public IReadOnlyList<string> Statuses { get; set; }
 
         public static SessionEventDto From(SessionEvent sessionEvent)
@@ -288,6 +297,7 @@ namespace RNAssistant.Office.Contracts
             dto.SourceEventIds = record.SourceEventIds ?? new List<string>();
             dto.ToolCallIds = record.ToolCallIds ?? new List<string>();
             dto.ArtifactIds = record.ArtifactIds ?? new List<string>();
+            dto.ResourceRefs = record.ResourceRefs ?? new List<ResourceRef>();
             dto.Statuses = record.Statuses ?? new List<string>();
             return dto;
         }

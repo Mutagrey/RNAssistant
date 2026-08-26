@@ -35,6 +35,15 @@
     if (typeof options.onSelect === "function") options.onSelect(type, id);
   }
 
+  function artifactVisuals() {
+    return window.RNAssistantArtifactVisuals || null;
+  }
+
+  function resourceIconSvg(kind) {
+    var visuals = artifactVisuals();
+    return visuals && typeof visuals.iconSvg === "function" ? visuals.iconSvg(kind) : "";
+  }
+
   function appendTreeItem(parent, itemOptions, action) {
     var row = document.createElement("div");
     row.className = "resource-tree-item-row" + (action ? " has-action" : "");
@@ -75,6 +84,7 @@
         meta: file.kind || "file",
         tooltip: file.path + " - " + (file.kind || "file"),
         icon: fileListIcon(file),
+        iconHtml: resourceIconSvg(file.kind),
         description: firstLine(file.content) || "HTML workspace file",
         compact: true,
         depth: 1,
@@ -108,6 +118,7 @@
         active: isSelected(options, "data", data.id),
         meta: binding ? sourceTool + " · " + status : "data/*.json · static",
         icon: "JSON",
+        iconHtml: resourceIconSvg("json"),
         description: binding ? (lastError || (refreshPolicy === "on_preview" ? "Обновляется при открытии" : "Обновляется вручную")) : (firstLine(data.json) || "JSON data source"),
         compact: true,
         depth: 1,
@@ -138,6 +149,7 @@
         active: isSelected(options, selectionType, artifact.id),
         meta: artifact.meta,
         description: firstLine(artifact.text) || artifact.relativePath || artifact.mimeType,
+        iconHtml: resourceIconSvg(artifact.kind),
         compact: true,
         depth: 1,
         onClick: function () { select(options, selectionType, artifact.id); }
@@ -212,7 +224,7 @@
     tree.innerHTML = "";
 
     var rendered = 0;
-    var htmlRoot = createResourceGroup({ key: "artifacts:html", title: "HTML", count: files.length + dataSources.length });
+    var htmlRoot = createResourceGroup({ key: "artifacts:html", title: "HTML workspace", count: files.length + dataSources.length });
     htmlRoot.className += " artifact-root-group";
     var htmlBody = htmlRoot.treeChildren || htmlRoot;
     var htmlRendered = 0;
@@ -229,11 +241,14 @@
     }
 
     rendered += renderArtifactGroup(tree, "Планы", "artifact-plans", options.plans || [], query, "plan", options);
-    rendered += renderArtifactGroup(tree, "Вложения", "artifact-attachments", artifacts.filter(function (artifact) {
-      return ["attachment", "image", "file"].indexOf(artifact.kind) >= 0;
+    rendered += renderArtifactGroup(tree, "Созданные", "artifact-created", artifacts.filter(function (artifact) {
+      return ["markdown", "chart"].indexOf(artifact.kind) >= 0;
     }), query, "artifact", options);
-    rendered += renderArtifactGroup(tree, "Другие", "artifact-other", artifacts.filter(function (artifact) {
-      return ["plan", "attachment", "image", "file", "html_workspace"].indexOf(artifact.kind) < 0;
+    rendered += renderArtifactGroup(tree, "Файлы", "artifact-attachments", artifacts.filter(function (artifact) {
+      return ["attachment", "image", "audio", "file"].indexOf(artifact.kind) >= 0;
+    }), query, "artifact", options);
+    rendered += renderArtifactGroup(tree, "Служебные", "artifact-system", artifacts.filter(function (artifact) {
+      return ["plan", "markdown", "chart", "attachment", "image", "audio", "file", "html_workspace"].indexOf(artifact.kind) < 0;
     }), query, "artifact", options);
     if (!rendered) tree.appendChild(createResourceEmptyState(query ? "Ничего не найдено." : "Артефактов пока нет."));
     return rendered;

@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
 {
@@ -174,7 +175,7 @@ namespace RNAssistant.Office.Services
                     ResultMessage = summaryMarkdown,
                     DataJson = artifact.MetadataJson
                 },
-                ArtifactIds = new List<string> { artifact.Id }
+                ResourceRefs = new List<ResourceRef> { ChatResourceUri.CreateArtifactRevision(session, artifact) }
             };
             artifact.SourceMessageId = eventMessage.Id;
             session.Messages.Add(eventMessage);
@@ -307,8 +308,9 @@ namespace RNAssistant.Office.Services
                     settings));
             }
             var referencedArtifactIds = new HashSet<string>(
-                prefixMessages.SelectMany(message => message.ArtifactIds ?? new List<string>())
-                    .Where(id => !string.IsNullOrWhiteSpace(id)),
+                prefixMessages.SelectMany(message => ChatResourceUri.CurrentArtifactIds(
+                    session,
+                    message.ResourceRefs ?? new List<ResourceRef>())),
                 StringComparer.OrdinalIgnoreCase);
             if (session != null && !string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) referencedArtifactIds.Add(session.ActiveHtmlArtifactId);
             if (session != null && !string.IsNullOrWhiteSpace(session.ActivePlanArtifactId)) referencedArtifactIds.Add(session.ActivePlanArtifactId);
@@ -349,7 +351,7 @@ namespace RNAssistant.Office.Services
                 {
                     artifactIndex.AppendLine(
                         ModelContextBudget.TruncateText(
-                            ChatArtifactResourceProvider.CreateRevisionUri(session, artifact), 256, settings) + " | " +
+                            ChatResourceUri.CreateArtifactRevisionUri(session, artifact), 256, settings) + " | " +
                         ModelContextBudget.TruncateText(artifact.Kind, 32, settings) + " | " +
                         ModelContextBudget.TruncateText(artifact.Title, 128, settings) +
                         " | revision=" + artifact.Revision + " | parent=" +
@@ -391,9 +393,7 @@ namespace RNAssistant.Office.Services
 
         private static ChatMessage ProjectMessage(ChatSession session, ChatMessage message)
         {
-            return HistoricalContextProjector.Project(
-                message,
-                artifactId => ChatArtifactResourceProvider.ResolveRevisionUri(session, artifactId));
+            return HistoricalContextProjector.Project(message);
         }
 
         private static JObject ParseSummary(string content)

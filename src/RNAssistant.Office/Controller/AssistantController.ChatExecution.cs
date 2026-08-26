@@ -337,7 +337,7 @@ namespace RNAssistant.Office
                         Content = text,
                         RunId = runId,
                         Sequence = 1,
-                        HtmlWorkspaceCheckpointId = session.ActiveHtmlArtifactId,
+                        HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId),
                         Attachments = new List<ChatAttachment>(attachments)
                     };
                     session.Messages.Add(userMessage);
@@ -377,7 +377,7 @@ namespace RNAssistant.Office
                     }
                     else
                     {
-                        ChatArtifactService.LinkMessageArtifacts(session, firstRunMessageIndex);
+                        ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
                     }
                     _chatStore.Save(session);
                     preparedTurnPersisted = true;
@@ -539,7 +539,7 @@ namespace RNAssistant.Office
                     }
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
-                    ChatArtifactService.LinkMessageArtifacts(session, firstRunMessageIndex);
+                    ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
                     SaveSessionChanges(session);
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                     throw;
@@ -553,7 +553,7 @@ namespace RNAssistant.Office
                 ReportProgress(runProgress, "saving", "Сохраняю историю чата...");
                 HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
                 AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                ChatArtifactService.LinkMessageArtifacts(session, firstRunMessageIndex);
+                ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
                 if (completion == null || !completion.WaitingForConfirmation)
                 {
                     session.LastRun = null;

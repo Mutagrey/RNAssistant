@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -29,8 +30,7 @@ namespace RNAssistant.Harness
                 Id = "source-message",
                 Role = "user",
                 Content = "Use notes",
-                Attachments = new List<ChatAttachment> { attachment },
-                ArtifactIds = new List<string> { "attachment_attachment-text" }
+                Attachments = new List<ChatAttachment> { attachment }
             };
             var artifact = new ChatArtifact
             {
@@ -46,8 +46,9 @@ namespace RNAssistant.Harness
                 Messages = new List<ChatMessage> { message },
                 Artifacts = new List<ChatArtifact> { artifact }
             };
+            message.ResourceRefs.Add(ArtifactReference(session, artifact));
             var gateway = new ResourceGatewayService();
-            var resourceUri = ChatArtifactResourceProvider.CreateRevisionUri(session, artifact);
+            var resourceUri = ArtifactUri(session, artifact);
 
             var listed = gateway.List(session, null, null, null, 10);
             AssertEqual(1, listed.Items.Count, "resource list count");
@@ -105,7 +106,7 @@ namespace RNAssistant.Harness
             session.Artifacts.Add(imageArtifact);
             var media = gateway.Read(
                 session,
-                ChatArtifactResourceProvider.CreateRevisionUri(session, imageArtifact),
+                ArtifactUri(session, imageArtifact),
                 "media",
                 0,
                 128);
@@ -124,7 +125,7 @@ namespace RNAssistant.Harness
             {
                 gateway.Read(
                     session,
-                    ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last()),
+                    ArtifactUri(session, session.Artifacts.Last()),
                     "media",
                     0,
                     128);
@@ -173,6 +174,26 @@ namespace RNAssistant.Harness
             AssertEqual(128, boundedSource.ReturnedCharacters, "HTML member read obeys the common bound");
             AssertTrue(boundedSource.Truncated && !string.IsNullOrWhiteSpace(boundedSource.NextCursor),
                 "HTML member read exposes the common continuation cursor");
+
+            var missingMemberRejected = false;
+            try
+            {
+                var address = ResourceUri.Parse(oldScriptResource.Reference.Uri);
+                var segments = address.Segments.ToArray();
+                segments[7] = new string('0', 64);
+                htmlGateway.Read(
+                    htmlSession,
+                    ResourceUri.Create(ChatArtifactResourceProvider.ProviderName, segments),
+                    ResourceRepresentations.Source,
+                    0,
+                    128);
+            }
+            catch (KeyNotFoundException)
+            {
+                missingMemberRejected = true;
+            }
+            AssertTrue(missingMemberRejected,
+                "unknown HTML member URI cannot fall back to the parent artifact");
 
             var dataResource = htmlGateway.List(
                 htmlSession,
@@ -224,7 +245,7 @@ namespace RNAssistant.Harness
             var activeHtmlArtifact = htmlSession.Artifacts.Single(item => item.Id == htmlSession.ActiveHtmlArtifactId);
             var structure = htmlGateway.Read(
                 htmlSession,
-                ChatArtifactResourceProvider.CreateRevisionUri(htmlSession, activeHtmlArtifact),
+                ArtifactUri(htmlSession, activeHtmlArtifact),
                 ResourceRepresentations.Structure,
                 0,
                 8000).Result;
@@ -347,14 +368,15 @@ namespace RNAssistant.Harness
                 });
             }
             session.ActivePlanArtifactId = "artifact_0";
-            session.Messages.Add(new ChatMessage
+            var latestMessage = new ChatMessage
             {
                 Role = "user",
-                Content = "latest",
-                ArtifactIds = new List<string> { "artifact_19" }
-            });
+                Content = "latest"
+            };
+            latestMessage.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Single(item => item.Id == "artifact_19")));
+            session.Messages.Add(latestMessage);
 
-            var prompt = ChatArtifactService.BuildPromptIndex(session, 5000, new AppSettings());
+            var prompt = ChatResourcePromptIndex.Build(session, 5000, new AppSettings());
             AssertContains(prompt, "showing=12/20", "artifact prompt exposes bounded working set");
             AssertContains(prompt, "artifact_0", "active artifact remains visible");
             AssertContains(prompt, "artifact_19", "recently referenced artifact remains visible");
@@ -383,7 +405,6 @@ namespace RNAssistant.Harness
                         ExtractedCharCount = 50000
                     }
                 },
-                ArtifactIds = new List<string> { "attachment_old-text" },
                 AttachmentAnalysis = new AttachmentAnalysisContext
                 {
                     Content = "HISTORICAL_ANALYSIS_MUST_NOT_REPLAY",
@@ -400,7 +421,8 @@ namespace RNAssistant.Harness
                 SourceMessageId = historicMessage.Id,
                 MetadataJson = "{\"attachmentId\":\"old-text\"}"
             });
-            var historicUri = ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last());
+            historicMessage.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
+            var historicUri = ArtifactUri(session, session.Artifacts.Last());
 
             var prompt = new ConversationPromptComposer().BuildMessages(
                 ChatModes.Agent,
@@ -464,8 +486,7 @@ namespace RNAssistant.Harness
                     Id = "historic-source",
                     Role = "user",
                     Content = "Earlier image",
-                    Attachments = new List<ChatAttachment> { image },
-                    ArtifactIds = new List<string> { "attachment_historic-image" }
+                    Attachments = new List<ChatAttachment> { image }
                 };
                 var session = NewSession(adapter);
                 session.Model = "omni";
@@ -480,7 +501,8 @@ namespace RNAssistant.Harness
                     SourceMessageId = source.Id,
                     MetadataJson = "{\"attachmentId\":\"historic-image\"}"
                 });
-                var resourceUri = ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last());
+                source.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
+                var resourceUri = ArtifactUri(session, session.Artifacts.Last());
                 var settings = new AppSettings { Model = "omni" };
                 settings.ModelCapabilities["omni"] = new ModelCapabilitySettings
                 {
@@ -507,8 +529,12 @@ namespace RNAssistant.Harness
                     {
                         AssertEqual(1, mediaMessages.Count, "media is hydrated for the next model step only");
                         AssertContains(FlattenSimple(messages), resourceUri, "hydrated media retains resource URI provenance");
-                        AssertTrue(mediaMessages[0].ArtifactIds.Contains("attachment_historic-image"),
-                            "hydrated media retains artifact provenance");
+                        AssertTrue(ReferencesArtifact(session, mediaMessages[0], "attachment_historic-image"),
+                            "hydrated media retains canonical resource provenance");
+                        AssertTrue(messages.Any(message => message != null &&
+                            string.Equals(message.ToolName, ResourceToolExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase) &&
+                            (message.ResourceRefs ?? new List<ResourceRef>()).Any(reference => reference.Uri == resourceUri)),
+                            "resource tool result carries the same durable ResourceRef");
                         return Task.FromResult(new LlmCompletionResult { Content = "invalid envelope" });
                     }
                     AssertEqual(0, mediaMessages.Count, "format repair does not resend one-shot media");
@@ -555,8 +581,7 @@ namespace RNAssistant.Harness
                     Id = "helper-source",
                     Role = "user",
                     Content = "Earlier scan",
-                    Attachments = new List<ChatAttachment> { image },
-                    ArtifactIds = new List<string> { "attachment_helper-image" }
+                    Attachments = new List<ChatAttachment> { image }
                 };
                 var session = NewSession(adapter);
                 session.Model = "text-only";
@@ -571,7 +596,8 @@ namespace RNAssistant.Harness
                     SourceMessageId = source.Id,
                     MetadataJson = "{\"attachmentId\":\"helper-image\"}"
                 });
-                var resourceUri = ChatArtifactResourceProvider.CreateRevisionUri(session, session.Artifacts.Last());
+                source.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
+                var resourceUri = ArtifactUri(session, session.Artifacts.Last());
                 var settings = new AppSettings { Model = "text-only" };
                 settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings
                 {

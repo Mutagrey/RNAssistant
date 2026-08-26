@@ -83,7 +83,7 @@ namespace RNAssistant.Harness
 
                 var durable = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
                 var artifact = durable.Artifacts.Single(item => item.Id == "attachment_" + staged.Id);
-                var uri = ChatArtifactResourceProvider.CreateRevisionUri(durable, artifact);
+                var uri = ArtifactUri(durable, artifact);
                 var modelRequest = new ConversationPromptComposer().BuildMessages(
                     ChatModes.Chat,
                     user.Content,
@@ -94,7 +94,7 @@ namespace RNAssistant.Harness
                     new AppSettings(),
                     durable,
                     null);
-                AssertTrue(durable.Messages.Single().ArtifactIds.Contains(artifact.Id),
+                AssertTrue(ReferencesArtifact(durable, durable.Messages.Single(), artifact.Id),
                     "uploaded resource is durably linked to the user turn");
                 AssertContains(FlattenSimple(modelRequest), uri,
                     "canonical resource URI is materialized before model dispatch");

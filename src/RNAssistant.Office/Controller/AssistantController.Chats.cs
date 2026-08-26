@@ -163,7 +163,7 @@ namespace RNAssistant.Office
                 session.LastRun = null;
                 session.ContextCheckpoints = new List<ContextCheckpoint>();
                 session.ActiveContextCheckpointId = null;
-                ChatArtifactService.PruneUnreachable(session);
+                ChatResourceReferenceService.PruneUnreachable(session);
                 SaveSessionChanges(session);
                 foreach (var removedMessage in removedMessages) _attachmentStore.DeleteMessage(removedMessage);
             });
@@ -214,13 +214,13 @@ namespace RNAssistant.Office
                 ChatHistoryEditService.ExcludeUnmatchedToolCalls(fork.Messages);
                 _chatStore.LoadArtifactBodies(
                     source,
-                    ChatArtifactService.ReachableForMessages(source.Artifacts, fork.Messages)
+                    ChatResourceReferenceService.ReachableForMessages(source.Artifacts, fork.Messages)
                         .Where(artifact => string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
                         .Select(artifact => artifact.Id));
                 fork.Artifacts = ChatCloneService.CloneArtifactsForMessages(source.Artifacts, fork.Messages);
                 fork.ContextCheckpoints = ChatCloneService.CloneContextCheckpoints(source.ContextCheckpoints, fork.Messages);
                 fork.ActiveContextCheckpointId = fork.ContextCheckpoints.OrderByDescending(checkpoint => checkpoint.CreatedUtc).Select(checkpoint => checkpoint.Id).FirstOrDefault();
-                var workspaceCheckpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(fork.Messages, fork.Messages.Count - 1);
+                var workspaceCheckpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(fork, fork.Messages, fork.Messages.Count - 1);
                 if (!string.IsNullOrWhiteSpace(workspaceCheckpoint) && HtmlWorkspaceArtifactService.Restore(fork, workspaceCheckpoint))
                 {
                     fork.ActiveHtmlArtifactId = workspaceCheckpoint;
@@ -238,8 +238,8 @@ namespace RNAssistant.Office
                 {
                     _attachmentStore.CloneMessageAttachments(message);
                 }
-                ChatArtifactService.LinkMessageArtifacts(fork, 0);
-                ChatArtifactService.RestoreActivePlanFromMessages(fork);
+                ChatResourceReferenceService.LinkMessageResources(fork, 0);
+                ChatResourceReferenceService.RestoreActivePlanFromMessages(fork);
                 NormalizeContext(fork.Context, fork);
                 SaveSessionChanges(fork);
                 _chatSessions.SetActiveSession(fork);

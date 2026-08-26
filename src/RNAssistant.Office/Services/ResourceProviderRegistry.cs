@@ -22,14 +22,12 @@ namespace RNAssistant.Office.Services
     {
         public ResourceReadResult Result { get; set; }
         public IReadOnlyList<ChatAttachment> ModelAttachments { get; set; }
-        public IReadOnlyList<string> ArtifactIds { get; set; }
-        public IReadOnlyList<string> ResourceUris { get; set; }
+        public IReadOnlyList<ResourceRef> ResourceRefs { get; set; }
 
         public ResourceReadSelection()
         {
             ModelAttachments = new ChatAttachment[0];
-            ArtifactIds = new string[0];
-            ResourceUris = new string[0];
+            ResourceRefs = new ResourceRef[0];
         }
     }
 

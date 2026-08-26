@@ -93,7 +93,8 @@
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
-    <Compile Include="Services\ChatArtifactService.cs" />
+    <Compile Include="Services\ChatResourceReferenceService.cs" />
+    <Compile Include="Services\ChatResourcePromptIndex.cs" />
     <Compile Include="Services\ChatArtifactResourceProvider.cs" />
     <Compile Include="Services\ChatHtmlResourceCatalog.cs" />
     <Compile Include="Services\ChatHtmlResourceCatalog.Read.cs" />

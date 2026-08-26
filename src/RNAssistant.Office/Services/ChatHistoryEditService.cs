@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
 {
@@ -56,9 +57,10 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Only user messages can be edited.");
             }
 
-            var workspaceCheckpoint = !string.IsNullOrWhiteSpace(target.HtmlWorkspaceCheckpointId)
-                ? target.HtmlWorkspaceCheckpointId
-                : HtmlWorkspaceArtifactService.CheckpointAtOrBefore(messages, targetIndex);
+            string targetCheckpointId;
+            var workspaceCheckpoint = ChatResourceUri.TryGetArtifactId(session, target.HtmlWorkspaceCheckpoint, out targetCheckpointId)
+                ? targetCheckpointId
+                : HtmlWorkspaceArtifactService.CheckpointAtOrBefore(session, messages, targetIndex);
             if (!string.IsNullOrWhiteSpace(workspaceCheckpoint) && _loadArtifactBody != null)
             {
                 _loadArtifactBody(session, workspaceCheckpoint);
@@ -88,8 +90,8 @@ namespace RNAssistant.Office.Services
             _cancelPendingActivities(session, PendingActionCancelledReason);
             session.LastRun = null;
             InvalidateContextCheckpoints(session);
-            ChatArtifactService.RestoreActivePlanFromMessages(session);
-            ChatArtifactService.PruneUnreachable(session);
+            ChatResourceReferenceService.RestoreActivePlanFromMessages(session);
+            ChatResourceReferenceService.PruneUnreachable(session);
 
             return new ChatHistoryEditResult
             {

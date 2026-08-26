@@ -22,8 +22,12 @@ function switchTab(name) {
 document.addEventListener("DOMContentLoaded", function () {
   try {
     state.chatSidebarHidden = window.localStorage.getItem("rnassistant.chat.sidebar.hidden") === "1";
+    state.htmlWorkspaceSidebarHidden = window.localStorage.getItem("rnassistant.artifacts.sidebar.hidden") === "1";
+    state.vbaSidebarHidden = window.localStorage.getItem("rnassistant.vba.sidebar.hidden") === "1";
   } catch (error) {
     state.chatSidebarHidden = false;
+    state.htmlWorkspaceSidebarHidden = false;
+    state.vbaSidebarHidden = false;
   }
   ["focusin", "focusout", "selectionchange", "mouseup", "keyup"].forEach(function (name) {
     document.addEventListener(name, scheduleFocusStateReport);

@@ -96,7 +96,7 @@ namespace RNAssistant.Office.Services
 
         public static List<ChatArtifact> CloneArtifactsForMessages(IEnumerable<ChatArtifact> artifacts, IEnumerable<ChatMessage> messages)
         {
-            return ChatArtifactService.ReachableForMessages(artifacts, messages)
+            return ChatResourceReferenceService.ReachableForMessages(artifacts, messages)
                 .Select(CloneArtifact)
                 .ToList();
         }
@@ -224,8 +224,8 @@ namespace RNAssistant.Office.Services
                     ? new List<ChatAttachment>()
                     : message.Attachments.Select(CloneAttachment).ToList(),
                 AttachmentAnalysis = CloneAttachmentAnalysis(message.AttachmentAnalysis),
-                ArtifactIds = message.ArtifactIds == null ? new List<string>() : new List<string>(message.ArtifactIds),
-                HtmlWorkspaceCheckpointId = message.HtmlWorkspaceCheckpointId,
+                ResourceRefs = CloneResourceRefs(message.ResourceRefs),
+                HtmlWorkspaceCheckpoint = CloneResourceRef(message.HtmlWorkspaceCheckpoint),
                 Activity = CloneActivity(message.Activity),
                 PromptTokens = message.PromptTokens,
                 CompletionTokens = message.CompletionTokens,
@@ -254,6 +254,19 @@ namespace RNAssistant.Office.Services
                     : new List<string>(analysis.AttachmentIds),
                 CreatedUtc = analysis.CreatedUtc
             };
+        }
+
+        private static List<ResourceRef> CloneResourceRefs(IEnumerable<ResourceRef> references)
+        {
+            return (references ?? new ResourceRef[0])
+                .Where(reference => reference != null)
+                .Select(CloneResourceRef)
+                .ToList();
+        }
+
+        private static ResourceRef CloneResourceRef(ResourceRef reference)
+        {
+            return reference == null ? null : new ResourceRef(reference.Uri, reference.Revision);
         }
 
         private static ChatArtifact CloneArtifact(ChatArtifact artifact)

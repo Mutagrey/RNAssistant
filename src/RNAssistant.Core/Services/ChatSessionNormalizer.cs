@@ -44,10 +44,16 @@ namespace RNAssistant.Core.Services
             {
                 if (string.IsNullOrWhiteSpace(message.Id)) message.Id = Guid.NewGuid().ToString("N");
                 if (message.CreatedUtc == default(DateTime)) message.CreatedUtc = session.CreatedUtc;
-                message.ArtifactIds = (message.ArtifactIds ?? new List<string>())
-                    .Where(id => !string.IsNullOrWhiteSpace(id))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                message.ResourceRefs = (message.ResourceRefs ?? new List<ResourceRef>())
+                    .Where(reference => reference != null && ResourceUri.TryParse(reference.Uri, out _))
+                    .GroupBy(reference => (reference.Uri ?? string.Empty) + "\n" + (reference.Revision ?? string.Empty), StringComparer.Ordinal)
+                    .Select(group => group.First())
                     .ToList();
+                if (message.HtmlWorkspaceCheckpoint != null &&
+                    !ResourceUri.TryParse(message.HtmlWorkspaceCheckpoint.Uri, out _))
+                {
+                    message.HtmlWorkspaceCheckpoint = null;
+                }
                 message.Attachments = (message.Attachments ?? new List<ChatAttachment>())
                     .Where(attachment => attachment != null)
                     .ToList();

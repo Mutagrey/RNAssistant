@@ -95,6 +95,7 @@ namespace RNAssistant.Core.Services
             request.StepId = TrimOrNull(request.StepId);
             request.ToolCallId = TrimOrNull(request.ToolCallId);
             request.ArtifactId = TrimOrNull(request.ArtifactId);
+            request.ResourceUri = TrimOrNull(request.ResourceUri);
             request.Status = TrimOrNull(request.Status);
             request.EventTypes = (request.EventTypes ?? new List<string>())
                 .Select(TrimOrNull)
@@ -112,6 +113,11 @@ namespace RNAssistant.Core.Services
             if ((request.Search ?? string.Empty).Length > MaxSearchChars)
             {
                 throw new ArgumentException("Trajectory search is limited to " + MaxSearchChars + " characters.", "request");
+            }
+            ResourceAddress ignoredResource;
+            if (request.ResourceUri != null && !ResourceUri.TryParse(request.ResourceUri, out ignoredResource))
+            {
+                throw new ArgumentException("Trajectory resourceUri must be canonical.", "request");
             }
             if (request.EventTypes.Count > 64 || request.EventTypes.Any(value => value.Length > 128))
             {
@@ -240,6 +246,7 @@ namespace RNAssistant.Core.Services
                     : new List<string> { sessionEvent.EventId },
                 ToolCallIds = ExtractValues(sessionEvent.Data, "ToolCallId", "tool_call_id"),
                 ArtifactIds = ExtractArtifactIds(sessionEvent),
+                ResourceRefs = ExtractResourceRefs(sessionEvent == null ? null : sessionEvent.Data),
                 Statuses = ExtractValues(sessionEvent.Data, "Status", "ExecutionStatus")
             };
         }
@@ -256,6 +263,7 @@ namespace RNAssistant.Core.Services
                 !MatchesValue(request.StepId, sessionEvent.StepId, ExtractValues(sessionEvent.Data, "StepId")) ||
                 !MatchesList(request.ToolCallId, record.ToolCallIds) ||
                 !MatchesList(request.ArtifactId, record.ArtifactIds) ||
+                !MatchesResourceUri(request.ResourceUri, record.ResourceRefs) ||
                 !MatchesList(request.Status, record.Statuses) ||
                 !string.IsNullOrWhiteSpace(request.Visibility) && !string.Equals(request.Visibility, record.Visibility, StringComparison.OrdinalIgnoreCase)) return false;
             return MatchesSearch(record, request.Search);
@@ -274,6 +282,13 @@ namespace RNAssistant.Core.Services
                 (values ?? new string[0]).Any(value => string.Equals(expected, value, StringComparison.OrdinalIgnoreCase));
         }
 
+        private static bool MatchesResourceUri(string expected, IEnumerable<ResourceRef> references)
+        {
+            return string.IsNullOrWhiteSpace(expected) ||
+                (references ?? new ResourceRef[0]).Any(reference => reference != null &&
+                    string.Equals(expected, reference.Uri, StringComparison.Ordinal));
+        }
+
         private static bool MatchesSearch(TrajectoryEventRecord record, string search)
         {
             var terms = (search ?? string.Empty).Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
@@ -289,6 +304,7 @@ namespace RNAssistant.Core.Services
                 record.Visibility,
                 string.Join(" ", record.ToolCallIds),
                 string.Join(" ", record.ArtifactIds),
+                string.Join(" ", (record.ResourceRefs ?? new List<ResourceRef>()).Select(reference => reference.Uri)),
                 string.Join(" ", record.Statuses),
                 sessionEvent.Data == null ? string.Empty : sessionEvent.Data.ToString(Formatting.None),
                 sessionEvent.Payload == null ? string.Empty : sessionEvent.Payload.Sha256 + " " + sessionEvent.Payload.ContentType
@@ -326,7 +342,7 @@ namespace RNAssistant.Core.Services
 
         private static bool IsMessageOperation(string type)
         {
-            return string.Equals(type, SessionOperationTypes.MessageUpsert, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(type, SessionOperationTypes.MessageUpdated, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, SessionOperationTypes.UserMessageAppended, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, SessionOperationTypes.AssistantMessageAppended, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, SessionOperationTypes.ToolCallRecorded, StringComparison.OrdinalIgnoreCase) ||
@@ -338,8 +354,7 @@ namespace RNAssistant.Core.Services
 
         private static bool IsArtifactOperation(string type)
         {
-            return string.Equals(type, SessionOperationTypes.ArtifactUpsert, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(type, SessionOperationTypes.ArtifactRevisionCreated, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(type, SessionOperationTypes.ArtifactRevisionCreated, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, SessionOperationTypes.ArtifactRemove, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -353,7 +368,7 @@ namespace RNAssistant.Core.Services
         private static List<string> ExtractArtifactIds(SessionEvent sessionEvent)
         {
             var values = ExtractValues(sessionEvent == null ? null : sessionEvent.Data,
-                "ArtifactId", "ArtifactIds", "ParentArtifactId", "ActiveHtmlArtifactId", "ActivePlanArtifactId", "ActiveContextCheckpointId");
+                "ArtifactId", "ParentArtifactId", "ActiveHtmlArtifactId", "ActivePlanArtifactId", "ActiveContextCheckpointId");
             foreach (var operation in Operations(sessionEvent).Where(operation => IsArtifactOperation(StringProperty(operation, "Type"))))
             {
                 var data = Property(operation, "Data") as JObject;
@@ -361,6 +376,42 @@ namespace RNAssistant.Core.Services
                 AddDistinct(values, StringProperty(value, "Id") ?? StringProperty(data, "Id"));
             }
             return values;
+        }
+
+        private static List<ResourceRef> ExtractResourceRefs(JToken token)
+        {
+            var result = new List<ResourceRef>();
+            ExtractResourceRefs(token, result);
+            return result
+                .GroupBy(reference => reference.Uri + "\n" + (reference.Revision ?? string.Empty), StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToList();
+        }
+
+        private static void ExtractResourceRefs(JToken token, ICollection<ResourceRef> result)
+        {
+            if (token == null || result == null) return;
+            var value = token as JValue;
+            if (value != null && value.Type == JTokenType.String)
+            {
+                ResourceAddress ignored;
+                var uri = (string)value;
+                if (ResourceUri.TryParse(uri, out ignored)) result.Add(new ResourceRef(uri));
+                return;
+            }
+            var obj = token as JObject;
+            if (obj != null)
+            {
+                var uriToken = Property(obj, "uri");
+                ResourceAddress ignored;
+                var uri = uriToken == null ? null : (string)uriToken;
+                if (ResourceUri.TryParse(uri, out ignored))
+                {
+                    result.Add(new ResourceRef(uri, (string)Property(obj, "revision")));
+                    return;
+                }
+            }
+            foreach (var child in token.Children()) ExtractResourceRefs(child, result);
         }
 
         private static List<string> ExtractValues(JToken token, params string[] names)

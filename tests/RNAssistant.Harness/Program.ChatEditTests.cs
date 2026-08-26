@@ -87,7 +87,7 @@ namespace RNAssistant.Harness
                     ReasoningTruncated = true,
                     RunId = "old-run",
                     Sequence = 4,
-                    HtmlWorkspaceCheckpointId = workspaceBeforeTarget
+                    HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, workspaceBeforeTarget)
                 };
                 target.Attachments.Add(targetAttachment);
                 attachmentStore.CommitToCas(target);
@@ -110,7 +110,7 @@ namespace RNAssistant.Harness
                 session.HtmlWorkspace.Files.Add(new HtmlWorkspaceFile { Id = "later", Path = "later.html", Kind = "html", Content = "later" });
                 session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Id = "later-data", Name = "later-data", Json = "{}" });
                 var workspaceAfterTarget = HtmlWorkspaceArtifactService.CaptureCurrent(session, "After edited turn");
-                ChatArtifactService.LinkMessageArtifacts(session, 0);
+                ChatResourceReferenceService.LinkMessageResources(session, 0);
                 var targetAttachmentArtifactId = "attachment_" + targetAttachment.Id;
                 var tailAttachmentArtifactId = "attachment_" + tailAttachment.Id;
                 var staleCheckpoint = new ContextCheckpoint { ThroughMessageId = target.Id, SummaryMarkdown = "stale" };
@@ -243,7 +243,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void EditingLegacyTurnClearsUnversionedHtmlWorkspace()
+        private static void EditingTurnWithoutCheckpointClearsUnversionedHtmlWorkspace()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
@@ -282,7 +282,7 @@ namespace RNAssistant.Harness
             {
                 Role = "user",
                 Content = "Пересобери страницу",
-                HtmlWorkspaceCheckpointId = broken.Id
+                HtmlWorkspaceCheckpoint = ArtifactReference(session, broken)
             };
             session.Messages.Add(user);
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Готово" });

@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Services
@@ -89,8 +90,7 @@ namespace RNAssistant.Office.Services
                         Representation = ResourceRepresentations.Metadata,
                         Complete = true
                     },
-                    ArtifactIds = new[] { member.Artifact.Id },
-                    ResourceUris = new[] { resourceUri }
+                    ResourceRefs = new[] { new ResourceRef(resourceUri, Math.Max(1, member.Artifact.Revision).ToString()) }
                 };
                 return true;
             }
@@ -108,7 +108,7 @@ namespace RNAssistant.Office.Services
             var content = JsonConvert.SerializeObject(new
             {
                 type = "rnassistant.htmlWorkspaceManifest",
-                revision = ChatArtifactResourceProvider.CreateRevisionUri(session, artifact),
+                revision = ChatResourceUri.CreateArtifactRevisionUri(session, artifact),
                 activeFileId = snapshot.ActiveFileId,
                 resources = Members(session, artifact).Select(Describe).ToList()
             });
@@ -134,7 +134,7 @@ namespace RNAssistant.Office.Services
             var length = Math.Min(maxChars, member.Content.Length - offset);
             var next = offset + length;
             var uri = member.MemberType == null
-                ? ChatArtifactResourceProvider.CreateRevisionUri(member.Session, member.Artifact)
+                ? ChatResourceUri.CreateArtifactRevisionUri(member.Session, member.Artifact)
                 : CreateUri(member);
             return new ResourceReadSelection
             {
@@ -152,8 +152,7 @@ namespace RNAssistant.Office.Services
                     Truncated = next < member.Content.Length,
                     RawContentIncluded = true
                 },
-                ArtifactIds = new[] { member.Artifact.Id },
-                ResourceUris = new[] { uri }
+                ResourceRefs = new[] { new ResourceRef(uri, Math.Max(1, member.Artifact.Revision).ToString()) }
             };
         }
 

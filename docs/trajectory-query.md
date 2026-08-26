@@ -11,13 +11,13 @@ Filters compose with AND:
 - inclusive `minSequence` / `maxSequence`;
 - exact event types;
 - run, turn and step correlation;
-- tool-call id, artifact id and status extracted from typed event data;
+- tool-call id, artifact id, exact canonical `resourceUri`, and status extracted from typed event data;
 - `current`, `shadowed` or `log-only` visibility;
 - case-insensitive tokenized full-text search over event metadata and materialized event data.
 
 CAS payload bodies are intentionally excluded from full-text search and remain lazy. Their hash, content type and size metadata remain searchable/visible, and Diagnostics loads a bounded body preview only by explicit event id.
 
-Every returned raw-event row retains `sourceEventSeqs` and `sourceEventIds`.
+Every returned raw-event row retains `sourceEventSeqs`, `sourceEventIds`, and deduplicated revision evidence in `resourceRefs`.
 
 ## Derived views
 

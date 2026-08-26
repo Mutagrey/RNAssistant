@@ -40,6 +40,7 @@ namespace RNAssistant.Core.Storage
                 {
                     if (root != null || sessionEvent.Data == null || sessionEvent.Data.Type != JTokenType.Object) return null;
                     root = (JObject)sessionEvent.Data.DeepClone();
+                    if ((int?)root["FormatVersion"] != ChatSession.CurrentFormatVersion) return null;
                     replay = new ProjectionReplayState(root);
                     continue;
                 }
@@ -107,9 +108,9 @@ namespace RNAssistant.Core.Storage
             AddSetOperation(operations, before, after, "Context", SessionOperationTypes.ContextSet);
             AddRunOperation(operations, before["LastRun"], after["LastRun"]);
             AddListOperations(operations, before, after, "Messages", "Id",
-                SessionOperationTypes.MessageUpsert, SessionOperationTypes.MessageRemove, SessionOperationTypes.MessagesReorder);
+                SessionOperationTypes.MessageUpdated, SessionOperationTypes.MessageRemove, SessionOperationTypes.MessagesReorder);
             AddListOperations(operations, before, after, "Artifacts", "Id",
-                SessionOperationTypes.ArtifactUpsert, SessionOperationTypes.ArtifactRemove, SessionOperationTypes.ArtifactsReorder);
+                SessionOperationTypes.ArtifactRevisionCreated, SessionOperationTypes.ArtifactRemove, SessionOperationTypes.ArtifactsReorder);
 
             var active = new JObject();
             foreach (var property in new[] { "ActiveContextCheckpointId", "ActiveHtmlArtifactId", "ActivePlanArtifactId" })
@@ -285,7 +286,7 @@ namespace RNAssistant.Core.Storage
                     case SessionOperationTypes.RunEnded:
                         root["LastRun"] = CloneValue(data["Value"]);
                         break;
-                    case SessionOperationTypes.MessageUpsert:
+                    case SessionOperationTypes.MessageUpdated:
                     case SessionOperationTypes.UserMessageAppended:
                     case SessionOperationTypes.AssistantMessageAppended:
                     case SessionOperationTypes.ToolCallRecorded:
@@ -300,7 +301,6 @@ namespace RNAssistant.Core.Storage
                     case SessionOperationTypes.MessagesReorder:
                         replay.Reorder("Messages", data["Ids"] as JArray);
                         break;
-                    case SessionOperationTypes.ArtifactUpsert:
                     case SessionOperationTypes.ArtifactRevisionCreated:
                         replay.Upsert("Artifacts", data["Value"]);
                         break;
@@ -520,7 +520,7 @@ namespace RNAssistant.Core.Storage
             private static bool IsCompactionMessage(ChatMessage message)
             {
                 return message != null && IsCompactionActivity(message.Activity) &&
-                    message.ArtifactIds != null && message.ArtifactIds.Count > 0;
+                    message.ResourceRefs != null && message.ResourceRefs.Count > 0;
             }
 
             private static bool IsCompactionActivity(ChatActivity activity)

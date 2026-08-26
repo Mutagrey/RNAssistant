@@ -73,6 +73,7 @@ var state = {
   htmlWorkspaceMode: "preview",
   htmlWorkspaceSelection: { type: "file", id: "" },
   htmlWorkspaceSidebarHidden: false,
+  vbaSidebarHidden: false,
   htmlWorkspaceDirty: false,
   htmlWorkspaceCreateKind: "",
   htmlWorkspace: { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } },

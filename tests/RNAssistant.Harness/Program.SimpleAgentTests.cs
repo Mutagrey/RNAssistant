@@ -1222,7 +1222,7 @@ namespace RNAssistant.Harness
                     InlineText = "RESOURCE_REPLAY_SENTINEL"
                 };
                 session.Artifacts.Add(artifact);
-                var uri = ChatArtifactResourceProvider.CreateRevisionUri(session, artifact);
+                var uri = ArtifactUri(session, artifact);
                 var responses = new Queue<string>(new[]
                 {
                     "{\"message\":\"Читаю заметку.\",\"tool_calls\":[{\"id\":\"read_first\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",

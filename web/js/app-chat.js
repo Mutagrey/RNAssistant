@@ -60,6 +60,7 @@ function setChatSearchOpen(open, clearQuery) {
 function bindChatActions() {
   bindMessageScrollControls();
   bindAttachmentActions();
+  if (typeof bindChatResourceNavigation === "function") bindChatResourceNavigation();
   if (typeof bindContextInspectorActions === "function") bindContextInspectorActions();
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);

@@ -175,7 +175,7 @@ namespace RNAssistant.Office.Services
             var artifactBudget = Math.Max(
                 192,
                 Math.Min(600, ModelContextBudget.InputBudgetTokens(settings) / 20));
-            var artifacts = ChatArtifactService.BuildPromptIndex(session, artifactBudget, settings);
+            var artifacts = ChatResourcePromptIndex.Build(session, artifactBudget, settings);
             if (!string.IsNullOrWhiteSpace(artifacts)) root["artifacts"] = artifacts;
             return root.ToString(Formatting.None);
         }

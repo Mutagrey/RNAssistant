@@ -106,9 +106,12 @@ namespace RNAssistant.Core.Storage
                 var activity = message == null ? null : message.Activity;
                 JObject chart;
                 if (activity == null || !ChartArtifactPayload.TryParse(activity.DataJson, out chart)) continue;
-                message.ArtifactIds = message.ArtifactIds ?? new List<string>();
+                message.ResourceRefs = message.ResourceRefs ?? new List<ResourceRef>();
+                var referencedIds = new HashSet<string>(
+                    ChatResourceUri.CurrentArtifactIds(session, message.ResourceRefs),
+                    StringComparer.OrdinalIgnoreCase);
                 var linked = session.Artifacts.LastOrDefault(item => item != null &&
-                    message.ArtifactIds.Contains(item.Id, StringComparer.OrdinalIgnoreCase) &&
+                    referencedIds.Contains(item.Id) &&
                     string.Equals(item.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase));
                 var normalized = chart.ToString(Formatting.None);
                 if (linked != null && string.Equals(linked.InlineText, normalized, StringComparison.Ordinal)) continue;
@@ -124,9 +127,8 @@ namespace RNAssistant.Core.Storage
                     InlineText = normalized
                 };
                 session.Artifacts.Add(artifact);
-                if (linked != null) message.ArtifactIds.RemoveAll(id =>
-                    string.Equals(id, linked.Id, StringComparison.OrdinalIgnoreCase));
-                message.ArtifactIds.Add(artifact.Id);
+                if (linked != null) RemoveArtifactReference(message, linked.Id);
+                message.ResourceRefs.Add(ChatResourceUri.CreateArtifactRevision(session, artifact));
             }
         }
 
@@ -136,12 +138,29 @@ namespace RNAssistant.Core.Storage
             foreach (var message in session.Messages ?? new List<ChatMessage>())
             {
                 if (message == null || message.Activity == null) continue;
+                var referencedIds = new HashSet<string>(
+                    ChatResourceUri.CurrentArtifactIds(session, message.ResourceRefs),
+                    StringComparer.OrdinalIgnoreCase);
                 var artifact = (session.Artifacts ?? new List<ChatArtifact>()).LastOrDefault(item => item != null &&
-                    (message.ArtifactIds ?? new List<string>()).Contains(item.Id, StringComparer.OrdinalIgnoreCase) &&
+                    referencedIds.Contains(item.Id) &&
                     string.Equals(item.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase));
                 if (artifact == null || !HydrateArtifact(artifact)) continue;
                 message.Activity.DataJson = artifact.InlineText;
             }
+        }
+
+        private static void RemoveArtifactReference(ChatMessage message, string artifactId)
+        {
+            if (message == null || message.ResourceRefs == null || string.IsNullOrWhiteSpace(artifactId)) return;
+            message.ResourceRefs.RemoveAll(reference =>
+            {
+                string ignoredSessionId;
+                string referencedArtifactId;
+                int ignoredRevision;
+                return ChatResourceUri.TryParseArtifactRevision(
+                    reference, out ignoredSessionId, out referencedArtifactId, out ignoredRevision) &&
+                    string.Equals(referencedArtifactId, artifactId, StringComparison.OrdinalIgnoreCase);
+            });
         }
 
         private void RebuildHtmlWorkspaceProjection(ChatSession session)

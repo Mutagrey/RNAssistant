@@ -81,7 +81,7 @@ namespace RNAssistant.Core.Storage
                 string.Equals(sessionEvent.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal))
             {
                 var root = sessionEvent.Data as JObject;
-                if (_seeded || root == null)
+                if (_seeded || root == null || (int?)root["FormatVersion"] != ChatSession.CurrentFormatVersion)
                 {
                     _invalid = true;
                     return;
@@ -360,7 +360,7 @@ namespace RNAssistant.Core.Storage
                     case SessionOperationTypes.RunEnded:
                         _lastRun = RunValue(data["Value"]);
                         break;
-                    case SessionOperationTypes.MessageUpsert:
+                    case SessionOperationTypes.MessageUpdated:
                     case SessionOperationTypes.UserMessageAppended:
                     case SessionOperationTypes.AssistantMessageAppended:
                     case SessionOperationTypes.ToolCallRecorded:
@@ -375,7 +375,6 @@ namespace RNAssistant.Core.Storage
                     case SessionOperationTypes.MessagesReorder:
                         _messages.Reorder(data["Ids"] as JArray);
                         break;
-                    case SessionOperationTypes.ArtifactUpsert:
                     case SessionOperationTypes.ArtifactRevisionCreated:
                         _artifacts.Upsert(HeaderArtifact.FromUpsert(data["Value"]));
                         break;

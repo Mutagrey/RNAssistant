@@ -1,3 +1,17 @@
+.vba-layout.is-sidebar-hidden {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.vba-layout.is-sidebar-hidden .vba-list-panel,
+.vba-layout.is-sidebar-hidden > .splitter {
+  display: none;
+}
+
+.vba-layout.is-sidebar-hidden .vba-editor {
+  grid-column: 1;
+}
+
 .vba-module-list {
   min-height: 0;
   overflow: auto;

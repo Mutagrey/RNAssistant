@@ -110,10 +110,7 @@ namespace RNAssistant.Core.Models
         public IReadOnlyList<ChatAttachment> ModelAttachments { get; set; }
 
         [JsonIgnore]
-        public IReadOnlyList<string> ModelArtifactIds { get; set; }
-
-        [JsonIgnore]
-        public IReadOnlyList<string> ModelResourceUris { get; set; }
+        public IReadOnlyList<ResourceRef> ModelResourceRefs { get; set; }
 
         public static ToolResult Ok(string message, string dataJson = null)
         {
