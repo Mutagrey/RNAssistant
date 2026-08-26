@@ -37,6 +37,7 @@ namespace RNAssistant.Harness
             var tests = new List<HarnessTest>
             {
                 Test("harness: native async execution", HarnessRunsNativeAsync),
+                Test("harness: production projects include all source files", ProductionProjectsIncludeAllSourceFiles),
                 Test("agent: parses final JSON", SimpleAgentParsesFinalJson),
                 Test("conversation: extracts streamed message JSON", ConversationStreamExtractorHandlesChunkedJson),
                 Test("conversation: streams message and thinking", ConversationStreamsMessageAndThinking),

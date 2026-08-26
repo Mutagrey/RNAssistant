@@ -1,0 +1,11 @@
+# Retained for offline/runtime use, but excluded from normal source searches.
+packages/
+vendor/
+web/css/vendor/
+web/js/vendor/
+
+# Generated output.
+**/bin/
+**/obj/
+artifacts/
+TestResults/

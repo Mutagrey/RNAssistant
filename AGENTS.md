@@ -1,83 +1,89 @@
 # RNAssistant Agent Rules
 
-Отвечай коротко и по делу. Не запускай тяжелые билды и тесты без явной причины.
+Отвечай коротко и по делу. Экономь контекст: сначала используй `rg`, читай только нужные диапазоны файлов и запускай только таргетированные проверки. Не запускай VSTO/Office validation на этой машине.
 
-## Цель проекта
+RNAssistant — локальный VSTO/WebView2-ассистент для Office без серверной части. Чаты и контекст принадлежат документам; Office tools выполняются локально.
 
-RNAssistant - локальный VSTO/WebView2 ассистент для Office, который хранит чаты и контекст по документам, вызывает локальные Office tools и не требует серверной части.
+## Границы слоёв
 
-## Границы слоев
+- `RNAssistant.Core`: модели, настройки, storage, LLM client, prompt/tool parsing. Без Office/VSTO/WinForms/WebView2.
+- `RNAssistant.Office`: общий runtime, typed bridge contracts, controller orchestration, services и tool execution. Без host-specific COM.
+- `RNAssistant.OfficeHosts` и `RNAssistant.*AddIn`: host adapters, ribbon, VSTO и Office COM.
+- `web`: static WebView2 UI без npm/bundler. Feature logic остаётся в тематических `app-*.js`; `app.js` — только boot/shared rendering.
+- `tools` и `%AppData%/RNAssistant/tools`: пользовательские tools; executor logic живёт в `RNAssistant.Office/Tools`.
 
-- `RNAssistant.Core`: модели, настройки, хранилища, LLM-клиент, prompt/tool parsing. Нельзя ссылаться на Office/VSTO/WinForms/WebView2.
-- `RNAssistant.Office`: общий runtime, typed bridge contracts, task pane bridge, controller orchestration, services, agent transcript, tool execution. Нельзя добавлять host-specific COM interop.
-- `RNAssistant.*AddIn`: только VSTO host adapters, ribbon, Office COM interop и built-in skills конкретного приложения.
-- `web`: статический UI без npm/build pipeline. `app-core.js` - state/bridge, `app-settings.js` - settings/models, `app-tools.js` - tools, `app-vba.js` - VBA, `app-context.js` - context, `app-chat.js` - chat, `app.js` - boot/shared rendering only.
-- `tools` и `%AppData%/RNAssistant/tools`: пользовательские tools. Executor logic живет в `RNAssistant.Office/Tools`, не в controller и не в adapters.
+## Перед изменениями
 
-## Правила изменений
+Читай только документ области, которую меняешь:
 
-- Не раздувай `Controller/AssistantController.cs`: orchestration only. Chat/session bridge methods - `Controller/AssistantController.Chats.cs`, context bridge methods - `Controller/AssistantController.Context.cs`, reusable logic - `Services`, dispatch - `Tools/OfficeToolExecutor.cs`, pipeline execution - `Tools/PipelineToolExecutor.cs`, VBA execution/patch/backup - `Tools/VbaToolExecutor.cs`.
-- Новые WebView bridge payload/response формы описывай DTO в `Contracts/BridgeDtos.cs`, а не anonymous objects и ad-hoc `JObject` parsing.
-- Не добавляй новые responsibilities в VSTO add-ins. Если код не зависит от конкретного Office host, он должен быть в `Core` или `Office`.
-- Не меняй `*.Designer.cs` и VSTO project metadata без необходимости.
-- Не запускай VSTO/Office validation на этой машине: здесь нет рабочей VSTO-среды. Для COM/VSTO изменений фиксируй, что нужна проверка на Windows + Office x64 + VS 2022.
-- Для Core и Office-neutral parser/storage/tool/service изменений используй быстрый контур `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj`.
-- Сохраняй C# 7.3 и .NET Framework 4.8 compatibility.
-- Не вводи npm/bundler без отдельного решения: текущий UI грузится как static local files в WebView2.
-- Не раздувай `web/js/app.js`; новую UI-логику клади в существующий feature-файл или выделяй новый static script в `index.html`.
-- Не храни секреты в репозитории. API key остается в DPAPI CurrentUser через `ProtectedSecretStore`.
-- Перед каждым коммитом сравни `RNAssistantVersionPrefix` в `Directory.Build.props` с версией в `HEAD`: версия нового коммита должна быть выше. Выбирай SemVer bump по самому значимому изменению: patch для исправлений, документации и совместимого рефакторинга, minor для обратно совместимой функциональности, major для breaking changes. Если версия уже корректно повышена в текущих изменениях, повторно её не повышай. Перед коммитом запускай `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateRNAssistantVersion -nologo -v:minimal`.
-- После коммита создай на нём аннотированный Git tag `v<Version>` (например, `v4.0.1`) и отправь в `origin` коммит и tag. Перед созданием проверь локальные и remote tags; опубликованные tags не перемещай и не переиспользуй.
+- общая карта и зависимости: `docs/architecture.md`;
+- resources, URI, providers, ingestion: `docs/resource-fabric.md`;
+- Chat/Agent loop, progressive tools, JSON contract: `docs/conversation-protocol.md`;
+- session events, CAS и recovery: `docs/session-events.md`;
+- trajectory/exports/GC: `docs/trajectory-query.md`, `docs/trajectory-export.md`, `docs/cas-maintenance.md`;
+- VBA mutations/packages/UserForms: `docs/vba-mutation-journal.md`, `docs/vba-tool-packages.md`, `docs/vba-userforms.md`;
+- быстрые и таргетированные тесты: `tests/RNAssistant.Harness/README.md`.
 
-## Tool/Agent Protocol
+Не загружай все документы и тесты «на всякий случай».
 
-- Целевая архитектура ресурсов и поэтапный hard cutover зафиксированы в `docs/resource-fabric.md`. Не возвращай отдельный plain-chat loop, legacy artifact readers или новые responsibilities в ручной attachment-selection; переносимый срез должен удалять заменённый путь без alias/dual-write.
-- Model-facing чтение ресурсов использует только `common.resources_list/resolve/search/read` и canonical revision-pinned `rna://` URI. `common.artifacts_*` удалены и не canonicalize.
-- Durable message/media/compaction references and trajectory projections use `ResourceRef`; internal artifact ids are not a second message transport. Pre-cutover event streams are reset-only and are not migrated.
-- Paste, drop и скрепка используют один chat-scoped `stageChatResource` path; `sendChat` принимает только `resourceDraftIds`, а CAS/artifact revision и связь с user turn сохраняются до network dispatch. Ручной `artifactIds`/«В запрос» channel удалён и не должен возвращаться.
+## Обязательные архитектурные инварианты
 
-- Поддерживаются только режимы `agent` и `chat`; новый chat создается в `agent`. Agent может отвечать без tools, отдельного auto-router режима нет.
-- Chat и Agent используют один `ConversationRunService` и raw JSON object `message` + `tool_calls`. Chat runtime жёстко оставляет только `common.resources_list/resolve/search/read`, пустой skill catalog и запрещает confirmation/mutation tools. Agent держит полный runnable catalog только как локальную execution authority; модели сначала доступны bootstrap `common.resources_*`, `common.tools_list/search/read` и `common.skills_read`, а остальные схемы загружаются прогрессивно.
-- Формат ответа общего conversation loop выбирается между `json_object` (default) и строгим `json_schema`. Для `json_schema` runtime строит response schema только из текущего callable working set; при явном отказе endpoint может один раз request-locally перейти на `json_object`, если включён `FallbackToJsonObject`. `tool_calls` пуст для финала/уточнения/отказа либо содержит вызовы с уникальным `id`, точным `name` и object `arguments`. Вызовы выполняются локально последовательно; зависимые и confirmation-requiring действия модель выбирает по одному. Fences, surrounding prose и legacy envelopes не принимаются; число request-local format repairs задаёт `MaxAgentFormatRetries` (1–20, default 10). Невалидные ответы и repair-инструкции не попадают в replay/history.
-- Каждый conversation prompt содержит один `RUNTIME_CONTEXT`: mode, document identity, точные bootstrap/loaded tools в native-like function JSON, `tool_discovery` с catalog revision и компактными namespaces, chat context, resource references и либо компактный каталог enabled skills для Agent (`id`, `name`, `description`, package `revision`, `bodyChars`, `referenceCount`), либо `skills:[]` для Chat. `common.tools_list/search` возвращают только bounded metadata; точная схема входит в callable LRU working set только после полного revision-matched `common.tools_read`. Dynamic set ограничен 8 схемами и бюджетом 8k–20k токенов; tool-call evidence восстанавливает LRU, compaction, truncation или смена revision требует повторного read. Полный Markdown выбранного skill загружается через `common.skills_read` и остаётся обычным tool result в Agent history. Skill считается загруженным только пока в активном model context есть успешный read с теми же `id`/`revision`, полным `bodyMarkdown` и top-level `data.loaded=true`, `complete=true`, `truncated=false`; после compaction или смены revision его нужно прочитать снова. Дополнительные UTF-8 Markdown-файлы custom skill допускаются только напрямую в `references/` и читаются нужными chunks через `referencePath`/`offset`/`maxChars`. Runtime не маршрутизирует запрос, не активирует skills и не ведёт скрытый phase/planner state.
-- Роль tool result выбирается независимо: `user` (default) или `developer` передают `TOOL_RESULT:` + JSON `{ok, tool_call_id, name, status, message, data, error}`; `tool` использует согласованную пару `assistant.tool_calls` → `role=tool` с тем же call id. После confirmation и success, и failure возвращаются модели; явный пользовательский cancel терминален для текущего run. Модель сама выбирает следующий шаг; runtime не делает automatic retry или отдельную verification phase.
-- Роль Markdown-инструкций выбирается отдельно из `developer` (default), `system`, `user` и применяется к Agent, Chat и служебным prompt-запросам. Provider reasoning хранится отдельно и не смешивается с agent JSON или replay history.
-- `SystemPrompt` — единый редактируемый prompt Agent. Изменение prompt через tool требует подтверждения.
-- Custom tools обязаны иметь strict object JSON Schema с `properties`, явным `required`, `additionalProperties:false`, типом и описанием каждого аргумента. Defaults, enums, limits и array items задаются в этой же схеме. В strict Agent response исходно optional properties становятся required+nullable по требованиям endpoint; перед execution runtime удаляет только синтетический `null` исходно non-nullable аргумента и применяет schema defaults, а явно разрешённый `null` сохраняет. Другие формы отклоняются без миграции.
-- Model-facing VBA discovery and reads use only provider `vba` through `common.resources_list/resolve/search/read`: `vba-project`, `vba-component`, and `vba-backup` metadata plus bounded pageable `source`. Public `common.vba_*` contains only four mutation tools in Excel, Word, and PowerPoint: whole-source upsert/rename, exact-hunk patch, delete, and restore. `vba_write_module` has mutually exclusive strict-schema branches: whole-source write requires `moduleName+code`, while identity-preserving rename requires exactly `moduleName+newModuleName+mode=rename`; rename guards/journals both names, uses the hidden `VBComponent.Name` backend, and does not rewrite textual references. `vba_apply_patch` accepts only ordered exact replacements `{op:"replace",find,text}`: no line-number/fuzzy/regex/implicit-insert modes; every `find` must be unique in current full source, all hunks apply in memory, and one whole-module write follows. Mutation tools read current state, bind a chat/document/module guard through confirmation, and revalidate before writing; no mandatory public pre-read or model-facing `expectedCodeSha256`. A prior resource source read/search supplies one stale warning automatically. Removed read/list/search/create/replace-text/read-lines ids do not canonicalize. Host-prefixed whole-module/rename/macro backends stay runtime-only.
-- Поддерживаемый UserForm-профиль — `CodeOnly UserForm`: RNAssistant создаёт пустой `MSForm`, а source code детерминированно строит runtime controls, layout и runtime-settable properties. Стабильные controls используют typed `WithEvents`; повторяющиеся динамические controls — удерживаемые event-sink class instances; запуск идёт через standard module. Designer-time controls/properties и `.frx` assets не входят в source protocol. Не называй backup/restore полным, если операция зависит от Designer/FRX state.
-- VBA packages могут включать code-only `MSForm` source как `*.form.vba`; exported `.frm/.frx` запрещены. Install/remove пишут один `package.mutation.prepared`/`terminal` manifest со всеми component before/intended CAS references и per-component assessment. Existing UserForm можно обновлять/удалять только если runtime подтвердил owned blank code-only Designer state; public `common.vba_delete_module` UserForms по-прежнему не удаляет.
-- Custom tools с `requiresConfirmation` и VBA mutation tools требуют подтверждения, если `AutoConfirmToolActions` выключен.
-- Agent authoring использует `common.tools_definition_read/validate/upsert/delete` и `common.skills_upsert/delete`; `common.tools_read` принадлежит только progressive callable-schema discovery. Skill reference изменяется теми же skill tools через `referencePath`/`referenceMarkdown`, отдельно от core. Upsert сам выбирает create/update, сохраняет неуказанные поля существующей сущности и поддерживает optional createOnly/updateOnly. Tool `parameters`, `pipeline` и `components` передаются как native JSON, не как JSON-строки.
-- Model-facing Office tools группируются по intent: `excel.inspect/read_range/write_range/upsert_chart/format_range`, `word.read_text/inspect/write_text/format_text`, `powerpoint.list_objects/read_slides/set_text/add_object`, `outlook.read_mail/create_draft/update_mail/collect_mail`. HTML workspace читается и ищется только через `common.resources_*` (`html-file`/`html-data`), а изменяется через inspect/upsert/apply-patch/delete и отдельные bind/refresh/freeze tools. Удалённые public ids не поддерживаются и не переписываются внутри pipeline.
-- Видимый план — обычный versioned chat artifact. Модель создаёт/обновляет/удаляет его через `common.plan_create/update/delete`, а читает canonical active revision через `common.resources_read`; runtime не сопоставляет tool calls с шагами и не меняет статусы автоматически.
-- Tool safety metadata живет в `ToolDefinition`: `MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`. Не добавляй новые hardcoded suffix lists в executor.
-- Pipeline tools не должны обращаться напрямую к Office adapters: они вызывают existing tool ids через `OfficeToolExecutor`.
-- VBA package rules зафиксированы в `docs/vba-tool-packages.md`; model-facing правила — во встроенном skill `common.vba_tool_authoring`.
+### Conversation и resources
 
-## Контекст и чаты
+- Поддерживаются только `agent` и `chat`; новый chat создаётся в `agent`. Оба режима используют один `ConversationRunService`.
+- Model-facing чтение идёт только через `common.resources_list/resolve/search/read` и revision-pinned `rna://` URI. Durable ссылки — только `ResourceRef`; internal artifact ids не являются вторым transport.
+- Paste/drop/скрепка используют chat-scoped `stageChatResource`; `sendChat` принимает только `resourceDraftIds`. CAS/resource revision и связь с user turn сохраняются до network dispatch. Не возвращай ручные `artifactIds`, «В запрос», legacy readers, aliases или dual-write.
+- Pre-cutover chat/context streams не мигрируются: только reset/skip.
+- Chat получает только read-only `common.resources_*`, пустой skill catalog и не может confirmation/mutation tools.
+- Agent хранит полный runnable catalog только как local execution authority. Модель начинает с bootstrap resource/tool-discovery tools; точные схемы загружаются через revision-matched `common.tools_read` в bounded LRU working set. Не возвращай full-catalog injection или скрытый router/planner state.
+- Skill body загружается только через полный revision-matched `common.skills_read`; после compaction/truncation/revision change требуется повторное чтение. References читаются bounded chunks.
+- Ответ модели — один JSON object `message + tool_calls`. Никаких fences/prose/legacy envelopes. Невалидные attempts не входят в replay/history; runtime не делает automatic tool retry или отдельную verification phase.
+- `json_schema` строится только из текущего callable set; разрешён один request-local fallback в `json_object` при явном endpoint rejection и включённом `FallbackToJsonObject`.
+- Tool result role и Markdown instruction role настраиваются независимо. Provider reasoning хранится отдельно от conversation JSON/history.
+- Tool safety определяется `ToolDefinition` (`MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`), не suffix-списками. Confirmation-required и VBA mutations подтверждаются при выключенном auto-confirm.
+- Pipeline вызывает существующие tool ids только через `OfficeToolExecutor`, без прямого доступа к adapters.
+- Discovery `common.tools_list/search/read` не смешивается с authoring `common.tools_definition_read/validate/upsert/delete`. Skills authoring использует `common.skills_upsert/delete`.
+- HTML и plan читаются через `common.resources_*`; mutations остаются отдельными tools. Не возвращай удалённые read ids.
 
-- Единственный durable source of truth чата — append-only typed `*.events.jsonl`; `ChatSession`, model history, headers и UI state являются replayable projections. Mutable chat snapshots, summary indexes и отдельные HTML body stores запрещены.
-- Финальный model request после materialization prompt/tools/attachments/schema должен быть записан до network dispatch. Model response/failure, tool boundaries и artifact revisions пишутся в тот же session stream; API key и auth headers туда не попадают.
-- Raw и derived trajectory views строятся только из validated session stream через `ITrajectoryQuery` и не сохраняются как индекс. Model/tool/artifact/confirmation/failure/turn rows обязаны хранить полный набор `sourceEventSeqs` и source event ids; историческая cost берётся только из сохранённого provider usage, не из текущих тарифов.
-- Логический пользовательский turn и каждый model step имеют first-class start/end events. `TurnId` сохраняется через confirmation continuation, streaming provider frames пишутся bounded batches как `assistant.chunk`, а startup recovery синтетически закрывает незавершённый model step.
-- Неизменяемые model payloads, artifact bodies и committed attachments хранятся в общем SHA-256 CAS `chat-blobs`; event stream хранит только проверяемые ссылки. HTML navigation, chart payload и compaction checkpoints выводятся из versioned artifacts, а не хранятся параллельно. HTML redo разрешён только в direct child revision; при нескольких детях требуется явный artifact id, отдельного redo stack нет. Обычная SHA-256 chain и plaintext остаются default; optional HMAC-SHA256 и authenticated encryption event data/committed CAS выбираются независимо в Settings. Ключ берётся из DPAPI API key либо отдельного DPAPI custom secret и никогда не пишется в settings/events.
-- HTML recovery — только derived projection. Если active artifact/body отсутствует, повреждён или не расшифровывается, HTML mutations блокируются, unrelated chat commits не создают пустую replacement revision, а восстановление требует явного выбора artifact id с повторной проверкой CAS и parse. Повреждённый ancestor обрезает undo history, но не блокирует mutation читаемого active artifact.
-- CAS GC каждый раз заново строит reachability из всех полностью проверенных chat streams и VBA journals под maintenance gate. Любой unreadable/corrupt/unsupported/misplaced/incomplete source запрещает всё удаление; удаляются только точные canonical blob paths, доказанно не достижимые ни из одного retained event.
-- Trajectory reads идут через `ITrajectoryQuery`: cursor/search/filter projections каждый раз rebuildable из проверенного session stream и не записываются как второй durable index. Каждая derived row сохраняет `sourceEventSeqs` и source event ids; CAS payload bodies остаются lazy и не входят в обычный full-text scan.
-- Trajectory export — одноразовый bounded ZIP из полностью проверенного session stream, а не durable snapshot. Default `metadata` исключает event/row data и CAS bodies; `secrets` скрывает credential-named fields, но не гарантирует content redaction; decrypted data и optional CAS допускаются только при явном `none`. Manifest/checksums сохраняют source hash evidence, но redacted export не является новой canonical hash chain; ключи защиты в bundle не попадают.
-- VBA live state принадлежит Office document. Единственный durable recovery source RNAssistant — document-scoped append-only `vba-journals/*/mutations.events.jsonl`; before/intended source и rollback backups хранятся в общем CAS. `write/patch/delete/restore` и multi-component package install/remove пишут prepared до COM и terminal после read-back, а незавершённые записи на следующем безопасном VBA-доступе только сверяются с live state и никогда автоматически не replay/restore.
-- VBA Diagnostics каждый раз строит paged module/package projection из полностью проверенного journal. Before/intended bodies читаются из CAS только по явному запросу diff; restore доступен только для retained backup, требует явного UI confirmation и проходит обычный guarded/journaled executor как новая mutation.
-- UserForm Designer/FRX state остаётся вне VBA source protocol до появления полного export/import и verification design. Code-only UserForms с пустым Designer и runtime-generated controls входят в protocol, потому что их семантический UI state воспроизводится из source.
-- Контекст принадлежит активному chat session, не глобальному документу.
-- Неподдерживаемые chat/context files не мигрируются. Runtime пропускает их и создает новый session/context.
-- Document identity migration должна сохранять чаты при смене пути/первом сохранении документа.
-- Runtime reset может очищать chats, VBA backups и WebView user data; settings, API key и custom tools не удалять без отдельного явного действия.
+### Storage и trajectory
+
+- Единственный durable source of truth чата — append-only typed `*.events.jsonl`. `ChatSession`, history, headers, UI/HTML/trajectory — replayable projections; mutable snapshots и вторичные durable indexes запрещены.
+- Финальный materialized model request сохраняется до network dispatch. Response/failure, turn/step, tool boundaries, bounded stream chunks и resource revisions пишутся в тот же stream без secrets/auth headers.
+- Неизменяемые payloads/resources хранятся в SHA-256 CAS `chat-blobs`; optional HMAC/encryption keys берутся только из DPAPI secrets.
+- CAS GC каждый раз rebuilds reachability из полностью проверенных chat streams и VBA journals. Любой corrupt/unreadable/incomplete source запрещает удаление.
+- Trajectory каждый раз строится через `ITrajectoryQuery`; rows сохраняют все source event ids/sequences. Export одноразовый и bounded; protection keys в bundle не входят.
+- Контекст принадлежит активному chat session. Document identity migration сохраняет chats при смене пути/первом save.
+- Runtime reset не удаляет settings, API key или custom tools без отдельного явного действия.
+
+### VBA
+
+- Model-facing VBA discovery/read выполняется provider `vba` через `common.resources_*`. Public `common.vba_*` содержит только mutations: whole-source upsert/rename, exact-hunk patch, delete, restore.
+- VBA mutation сама читает live state, связывает guard с chat/document/component, пишет journal `prepared` до COM и terminal после read-back. Незавершённые записи только сверяются с live state; automatic replay/restore запрещён.
+- Office document — authority для live VBA; journal и CAS — recovery evidence. Host-prefixed whole-module/rename/macro backends не публикуются модели.
+- UserForms поддерживаются только как CodeOnly: пустой Designer и runtime-generated controls. Designer/FRX не входят в source/backup protocol. Exported `.frm/.frx` в packages запрещены.
+
+## Размещение кода
+
+- `AssistantController` — orchestration only. Chat/session bridge methods — `AssistantController.Chats.cs`, context — `AssistantController.Context.cs`, reusable behavior — `Services`.
+- Dispatch — `OfficeToolExecutor`; pipeline — `PipelineToolExecutor`; VBA execution/guards/journal/packages — `VbaToolExecutor*`.
+- Новые bridge payload/response формы — typed DTO в `Contracts`, без anonymous response shapes и ad-hoc `JObject` parsing.
+- Host-neutral код не добавляй в VSTO/add-ins. Не меняй `*.Designer.cs` и VSTO metadata без необходимости.
+- Не раздувай существующие крупные файлы: новый самостоятельный behavior выноси в тематический файл/service. Partial split допустим как безопасный первый шаг, но не как оправдание нового монолита.
+- Сохраняй C# 7.3 и .NET Framework 4.8 compatibility. Новые `.cs` обязательно добавляй в old-style `.csproj`.
+- Не вводи npm/bundler и не храни secrets в репозитории. API key остаётся DPAPI CurrentUser через `ProtectedSecretStore`.
+
+## Проверка и release
+
+- Core и Office-neutral parser/storage/tool/service: запускай минимальный подходящий filter из `tests/RNAssistant.Harness/README.md`; полный harness — только когда изменение пересекает несколько подсистем.
+- COM/VSTO изменения здесь не проверяются. В отчёте укажи Windows x64 + Office + VS 2022 validation.
+- Перед коммитом версия в `Directory.Build.props` должна быть выше HEAD; patch/minor/major выбирай по SemVer и не повышай повторно уже корректную версию.
+- Перед коммитом: `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateRNAssistantVersion -nologo -v:minimal`.
+- После коммита создай новый annotated tag `v<Version>` и отправь commit + tag в `origin`; опубликованные tags не перемещай и не переиспользуй.
 
 ## Definition of Done
 
-- Зона ответственности не смешана с соседним слоем.
-- Новые файлы добавлены в old-style `.csproj`.
-- Для VSTO/COM изменений указан Windows validation step.
-- Для parser/storage/tool changes есть harness-проверка или явное объяснение, почему проверка не запускалась.
-- Документация обновлена, если меняется архитектурное правило или protocol.
+- Responsibilities не смешаны между слоями; заменённый path удалён без alias/dual-write.
+- Новые файлы внесены в old-style `.csproj`.
+- Есть минимальная релевантная harness-проверка либо явное объяснение, почему она не запускалась.
+- Для COM/VSTO указана Windows validation.
+- При изменении protocol/architecture обновлён канонический документ области.

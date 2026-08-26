@@ -936,36 +936,6 @@ namespace RNAssistant.Office.Tools
             }.ToString(Formatting.None);
         }
 
-        private void SaveBackup(string moduleName, VbaModuleState module)
-        {
-            _vbaJournalStore.Save(
-                _adapter.HostName,
-                _adapter.DocumentKey,
-                _adapter.DocumentTitle,
-                moduleName,
-                module == null ? string.Empty : module.ComponentType,
-                module == null ? string.Empty : module.Code);
-        }
-
-        private bool TrySaveBackup(string moduleName, VbaModuleState module, string operation, out ToolResult error)
-        {
-            try
-            {
-                SaveBackup(moduleName, module);
-                error = null;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                error = ToolResult.Fail(
-                    "VBA " + operation + " was blocked because the rollback backup could not be saved. " + ex.Message,
-                    null,
-                    "vba_backup_failed",
-                    false);
-                return false;
-            }
-        }
-
         private string HostToolPrefix()
         {
             return (_adapter.HostName ?? string.Empty).ToLowerInvariant();

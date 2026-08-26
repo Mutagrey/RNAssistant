@@ -461,9 +461,5 @@ namespace RNAssistant.Office.Services
             return offset;
         }
 
-        private static string SafeText(string value)
-        {
-            return (value ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
-        }
     }
 }

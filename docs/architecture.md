@@ -103,6 +103,9 @@ Run the host-neutral fast suite with:
 dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj
 ```
 
+For test discovery, category/name filters and `--no-build` usage, see
+[`tests/RNAssistant.Harness/README.md`](../tests/RNAssistant.Harness/README.md).
+
 The suite covers the Agent parser/prompt/tool-result loop, durable confirmation counters, chat revision conflicts and run leases, Chat isolation, storage, context, pipelines, tool safety, VBA package/backup behavior, attachments, HTML workspace, and typed bridge payloads. It has no Office COM dependency.
 
 Windows-only validation remains: build `Debug | x64` in VS 2022 and smoke-test each Office host, desktop attach, VSTO task panes, and VBA native-host loading.

@@ -11,11 +11,6 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class ToolAuthoringExecutor
     {
-        private static string IdSchema()
-        {
-            return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable custom tool id.\",\"minLength\":1,\"maxLength\":128}},\"required\":[\"id\"],\"additionalProperties\":false}";
-        }
-
         private static string OptionalIdSchema()
         {
             return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact custom tool id; omit to list compact metadata.\"}},\"required\":[],\"additionalProperties\":false}";
