@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -9,14 +8,10 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class VbaToolExecutor
     {
-        private static JArray ParsePatchOperations(string patchJson)
+        private static JArray ParsePatchOperations(object patchValue)
         {
-            if (string.IsNullOrWhiteSpace(patchJson))
-            {
-                return new JArray();
-            }
-
-            return JArray.Parse(patchJson);
+            var operations = patchValue as JArray;
+            return operations == null ? new JArray() : (JArray)operations.DeepClone();
         }
 
         private static ToolResult ApplyPatchOperation(string current, JObject operation, out string updated)
@@ -25,177 +20,49 @@ namespace RNAssistant.Office.Tools
             var op = ((string)operation["op"] ?? string.Empty).Trim();
             var find = MatchLineEndings((string)operation["find"], current);
             var text = MatchLineEndings((string)operation["text"] ?? string.Empty, current);
-            switch (op.ToLowerInvariant())
+            if (!string.Equals(op, "replace", StringComparison.Ordinal))
             {
-                case "replace":
-                    if (string.IsNullOrEmpty(find))
-                    {
-                        return ToolResult.Fail("Patch replace requires find.");
-                    }
-                    var exactCount = CountOccurrences(current, find);
-                    if (exactCount == 0) return ToolResult.Fail("Patch find text was not found.");
-                    if (exactCount != 1)
-                    {
-                        return ToolResult.Fail(
-                            "Patch replace requires one exact match but found " + exactCount + ". Use a narrower find or replaceAll explicitly.",
-                            JsonConvert.SerializeObject(new { matchCount = exactCount }),
-                            "vba_patch_ambiguous",
-                            true);
-                    }
-                    updated = ReplaceFirst(current, find, text);
-                    return ToolResult.Ok("Replaced one exact occurrence.");
-                case "replaceall":
-                    if (string.IsNullOrEmpty(find))
-                    {
-                        return ToolResult.Fail("Patch replace requires find.");
-                    }
-
-                    var count = CountOccurrences(current, find);
-                    if (count == 0)
-                    {
-                        return ToolResult.Fail("Patch find text was not found.");
-                    }
-
-                    updated = current.Replace(find, text);
-                    return ToolResult.Ok("Replaced " + count + " occurrence(s).");
-                case "replacefirst":
-                    return ReplaceAtMatch(current, find, text, out updated);
-                case "insertbefore":
-                    return InsertAtUniqueMatch(current, find, text, true, out updated);
-                case "insertafter":
-                    return InsertAtUniqueMatch(current, find, text, false, out updated);
-                case "replacelines":
-                    return ReplaceLines(current, operation, text, out updated);
-                case "regexreplace":
-                    var pattern = (string)operation["pattern"];
-                    if (string.IsNullOrEmpty(pattern)) return ToolResult.Fail("regexReplace requires pattern.", null, "vba_patch_invalid", true);
-                    try
-                    {
-                        var planned = TextPatternEngine.Replace(
-                            current,
-                            pattern,
-                            text,
-                            new TextPatternOptions { Mode = "regex", MatchCase = (bool?)(operation["matchCase"]) ?? true, WholeWord = (bool?)(operation["wholeWord"]) ?? false },
-                            (bool?)(operation["replaceAll"]) ?? true,
-                            Math.Max(1, Math.Min(10000, (int?)(operation["maxReplacements"]) ?? 500)));
-                        if (planned.MatchCount == 0) return ToolResult.Fail("Patch regex was not found.");
-                        updated = planned.Text;
-                        return ToolResult.Ok("Regex replaced " + planned.MatchCount + " occurrence(s).");
-                    }
-                    catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
-                default:
-                    return ToolResult.Fail("Unsupported patch op: " + op);
+                return ToolResult.Fail("Unsupported VBA patch op: " + op + ". Use replace with one exact unique source block.", null, "vba_patch_invalid", true);
             }
-        }
-
-        private static ToolResult ReplaceAtMatch(string current, string find, string replacement, out string updated)
-        {
-            updated = current;
             if (string.IsNullOrEmpty(find))
             {
-                return ToolResult.Fail("Patch operation requires find.");
+                return ToolResult.Fail("VBA patch replace requires a non-empty exact find block.", null, "vba_patch_invalid", true);
             }
-
-            var index = current.IndexOf(find, StringComparison.Ordinal);
-            if (index < 0)
-            {
-                return ToolResult.Fail("Patch find text was not found.");
-            }
-
-            updated = current.Substring(0, index) + replacement + current.Substring(index + find.Length);
-            return ToolResult.Ok("Patched first occurrence.");
-        }
-
-        private static ToolResult InsertAtUniqueMatch(string current, string find, string text, bool before, out string updated)
-        {
-            updated = current;
-            if (string.IsNullOrWhiteSpace(find)) return ToolResult.Fail("Patch insertion requires a non-empty code anchor.");
-            if (string.IsNullOrWhiteSpace(text)) return ToolResult.Fail("Patch insertion requires non-empty VBA code.", null, "vba_patch_invalid", true);
-            var count = CountOccurrences(current, find);
-            if (count == 0) return ToolResult.Fail("Patch insertion anchor was not found.");
-            if (count != 1)
+            var exactCount = CountOccurrences(current, find);
+            if (exactCount == 0)
             {
                 return ToolResult.Fail(
-                    "Patch insertion anchor occurs " + count + " times. Re-read the exact target lines and retry with a unique anchor or replaceLines; do not bypass this safety check by running a macro.",
+                    "The exact VBA source block was not found in the current module. Nothing was written; re-read the smallest relevant range and rebuild the patch from current code.",
                     JsonConvert.SerializeObject(new
                     {
-                        matchCount = count,
-                        recovery = "Use common.vba_read_module with startLine/lineCount, then retry common.vba_apply_patch with a unique anchor or replaceLines."
+                        findSha256 = TextPatternEngine.Sha256(find),
+                        inspectTool = "common.vba_read_module",
+                        retrySamePatch = false
+                    }),
+                    "vba_patch_stale_source",
+                    true);
+            }
+            if (exactCount != 1)
+            {
+                return ToolResult.Fail(
+                    "The exact VBA source block occurs " + exactCount + " times. Nothing was written; include more unchanged surrounding source so find identifies one block.",
+                    JsonConvert.SerializeObject(new
+                    {
+                        matchCount = exactCount,
+                        findSha256 = TextPatternEngine.Sha256(find),
+                        inspectTool = "common.vba_read_module",
+                        retrySamePatch = false
                     }),
                     "vba_patch_ambiguous",
                     true);
             }
             var index = current.IndexOf(find, StringComparison.Ordinal);
-            var newline = CurrentNewLine(current);
-            text = TrimOneBoundaryLineBreak(text, true);
-            text = TrimOneBoundaryLineBreak(text, false);
-            var insertionIndex = before
-                ? StartOfContainingLine(current, FirstCodeCharacter(index, find))
-                : EndOfContainingLine(current, index, find.Length);
-            var preserveFinalTerminator = insertionIndex == current.Length && insertionIndex > 0 &&
-                IsLineBreak(current[insertionIndex - 1]);
-            if (insertionIndex > 0 && !IsLineBreak(current[insertionIndex - 1]) && !StartsWithLineBreak(text))
+            updated = current.Substring(0, index) + text + current.Substring(index + find.Length);
+            if (string.Equals(updated, current, StringComparison.Ordinal))
             {
-                text = newline + text;
+                return ToolResult.Fail("The exact VBA patch makes no change.", null, "vba_patch_no_change", true);
             }
-            if (insertionIndex < current.Length && !IsLineBreak(current[insertionIndex]) && !EndsWithLineBreak(text))
-            {
-                text += newline;
-            }
-            else if (preserveFinalTerminator && !EndsWithLineBreak(text))
-            {
-                text += newline;
-            }
-            updated = current.Insert(insertionIndex, text);
-            return ToolResult.Ok("Inserted a VBA block " + (before ? "before" : "after") + " the complete line containing the unique anchor.");
-        }
-
-        private static int FirstCodeCharacter(int index, string find)
-        {
-            var offset = 0;
-            while (offset < find.Length && IsLineBreak(find[offset])) offset++;
-            return index + offset;
-        }
-
-        private static int StartOfContainingLine(string value, int index)
-        {
-            var result = Math.Max(0, Math.Min(index, (value ?? string.Empty).Length));
-            while (result > 0 && !IsLineBreak(value[result - 1])) result--;
-            return result;
-        }
-
-        private static int EndOfContainingLine(string value, int index, int matchLength)
-        {
-            value = value ?? string.Empty;
-            var matchEnd = Math.Max(index, Math.Min(value.Length, index + matchLength));
-            while (matchEnd > index && IsLineBreak(value[matchEnd - 1])) matchEnd--;
-            while (matchEnd < value.Length && !IsLineBreak(value[matchEnd])) matchEnd++;
-            if (matchEnd < value.Length && value[matchEnd] == '\r' &&
-                matchEnd + 1 < value.Length && value[matchEnd + 1] == '\n')
-            {
-                return matchEnd + 2;
-            }
-            return matchEnd < value.Length && IsLineBreak(value[matchEnd]) ? matchEnd + 1 : matchEnd;
-        }
-
-        private static string TrimOneBoundaryLineBreak(string value, bool leading)
-        {
-            if (string.IsNullOrEmpty(value)) return value;
-            if (leading)
-            {
-                if (value.StartsWith("\r\n", StringComparison.Ordinal)) return value.Substring(2);
-                return IsLineBreak(value[0]) ? value.Substring(1) : value;
-            }
-            if (value.EndsWith("\r\n", StringComparison.Ordinal)) return value.Substring(0, value.Length - 2);
-            return IsLineBreak(value[value.Length - 1]) ? value.Substring(0, value.Length - 1) : value;
-        }
-
-        private static string ReplaceFirst(string current, string find, string replacement)
-        {
-            var index = current.IndexOf(find, StringComparison.Ordinal);
-            return index < 0
-                ? current
-                : current.Substring(0, index) + replacement + current.Substring(index + find.Length);
+            return ToolResult.Ok("Replaced one exact unique VBA source block without changing text outside it.");
         }
 
         private static string MatchLineEndings(string value, string current)
@@ -210,70 +77,6 @@ namespace RNAssistant.Office.Tools
             return (value ?? string.Empty).IndexOf("\r\n", StringComparison.Ordinal) >= 0
                 ? "\r\n"
                 : (value ?? string.Empty).IndexOf('\r') >= 0 ? "\r" : "\n";
-        }
-
-        private static bool StartsWithLineBreak(string value)
-        {
-            return !string.IsNullOrEmpty(value) && IsLineBreak(value[0]);
-        }
-
-        private static bool EndsWithLineBreak(string value)
-        {
-            return !string.IsNullOrEmpty(value) && IsLineBreak(value[value.Length - 1]);
-        }
-
-        private static bool IsLineBreak(char value)
-        {
-            return value == '\r' || value == '\n';
-        }
-
-        private static ToolResult ReplaceLines(string current, JObject operation, string text, out string updated)
-        {
-            updated = current;
-            int startLine;
-            int deleteCount;
-            if (!int.TryParse(Convert.ToString(operation["startLine"]), out startLine) ||
-                !int.TryParse(Convert.ToString(operation["deleteCount"] ?? 0), out deleteCount) ||
-                startLine <= 0 || deleteCount < 0)
-            {
-                return ToolResult.Fail("replaceLines requires startLine >= 1 and deleteCount >= 0.");
-            }
-
-            var newline = CurrentNewLine(current);
-            var normalized = (current ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
-            var hadFinalTerminator = normalized.EndsWith("\n", StringComparison.Ordinal);
-            if (hadFinalTerminator) normalized = normalized.Substring(0, normalized.Length - 1);
-            var lines = normalized.Length == 0
-                ? new System.Collections.Generic.List<string>()
-                : normalized.Split('\n').ToList();
-            var index = startLine - 1;
-            if (index > lines.Count)
-            {
-                return ToolResult.Fail("replaceLines startLine is outside the module.");
-            }
-
-            if (deleteCount > lines.Count - index)
-            {
-                return ToolResult.Fail("replaceLines deleteCount extends past the end of the module.");
-            }
-            if (deleteCount > 0)
-            {
-                lines.RemoveRange(index, deleteCount);
-            }
-
-            if (!string.IsNullOrEmpty(text))
-            {
-                var inserted = text.Replace("\r\n", "\n").Replace('\r', '\n');
-                if (inserted.EndsWith("\n", StringComparison.Ordinal))
-                {
-                    inserted = inserted.Substring(0, inserted.Length - 1);
-                }
-                if (inserted.Length > 0) lines.InsertRange(index, inserted.Split('\n'));
-            }
-
-            updated = string.Join(newline, lines.ToArray());
-            if (hadFinalTerminator && updated.Length > 0) updated += newline;
-            return ToolResult.Ok("Replaced lines at " + startLine + " deleting " + deleteCount + ".");
         }
 
         private static int CountOccurrences(string value, string find)

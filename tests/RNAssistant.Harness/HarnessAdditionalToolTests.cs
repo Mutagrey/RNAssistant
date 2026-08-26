@@ -131,6 +131,65 @@ namespace RNAssistant.Harness
             AssertEqual(3, profile.RiskLevel, "nested risk propagated");
         }
 
+        private static void ManualReadOnlyRunSkipsChatLease()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                AssertTrue(!executor.RequiresSessionLeaseForManualRun("excel.read_range", tools),
+                    "read-only Excel tool can run beside an active chat");
+                AssertTrue(executor.RequiresSessionLeaseForManualRun("excel.write_range", tools),
+                    "document mutation keeps the chat lease");
+
+                var readPipeline = CustomTool("Excel", "excel.manual_read_pipeline");
+                readPipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.read_range\",\"arguments\":{\"address\":\"A1\"}}]}";
+                var writePipeline = CustomTool("Excel", "excel.manual_write_pipeline");
+                writePipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.write_range\",\"arguments\":{\"address\":\"A1\",\"values\":[[\"x\"]]}}]}";
+                tools.Add(readPipeline);
+                tools.Add(writePipeline);
+
+                AssertTrue(!executor.RequiresSessionLeaseForManualRun(readPipeline.Id, tools),
+                    "nested read-only pipeline can run beside an active chat");
+                AssertTrue(executor.RequiresSessionLeaseForManualRun(writePipeline.Id, tools),
+                    "nested mutation cannot hide from the manual-run policy");
+
+                adapter.VbaModuleCode = "A";
+                var agentSession = NewSession(adapter);
+                AssertTrue(executor.Execute(
+                    Command("common.vba_read_module", "moduleName", "Module1"),
+                    tools,
+                    new AppSettings(),
+                    false,
+                    false,
+                    agentSession).Success, "agent observes the original VBA source");
+                adapter.VbaModuleCode = "B";
+                var manualSnapshot = OfficeToolExecutor.CreateIsolatedManualSession(agentSession);
+                AssertTrue(!string.Equals(agentSession.Id, manualSnapshot.Id, StringComparison.OrdinalIgnoreCase),
+                    "manual read snapshot has an isolated observation identity");
+                AssertTrue(executor.Execute(
+                    Command("common.vba_read_module", "moduleName", "Module1"),
+                    tools,
+                    new AppSettings(),
+                    false,
+                    true,
+                    manualSnapshot).Success, "manual library read succeeds on current VBA source");
+                var staleAgent = executor.Execute(
+                    Command("common.vba_apply_patch", "moduleName", "Module1", "patch", new JArray(new JObject
+                    {
+                        ["op"] = "replace",
+                        ["find"] = "B",
+                        ["text"] = "C"
+                    })),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    agentSession);
+                AssertEqual("stale_vba_module", staleAgent.ErrorCode,
+                    "manual library read does not silently refresh the running agent snapshot");
+            });
+        }
+
         private static void UnknownAndDisabledToolsFail()
         {
             var adapter = FakeOfficeAdapter.ForHost("Excel");

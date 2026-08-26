@@ -117,20 +117,16 @@ namespace RNAssistant.Harness
 
                 var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_apply_patch");
                 var patchSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { patchTool }));
-                var patchVariants = patchSchema.SelectToken(
-                    "properties.tool_calls.items.anyOf[0].properties.arguments.properties.patch.items.anyOf") as JArray;
-                AssertEqual(7, patchVariants == null ? 0 : patchVariants.Count, "patch schema has one compact variant per operation");
-                var literalReplace = patchVariants.OfType<JObject>().Single(item =>
-                    string.Equals((string)item.SelectToken("properties.op.enum[0]"), "replace", StringComparison.Ordinal));
-                AssertEqual(3, ((JObject)literalReplace["properties"]).Properties().Count(),
-                    "literal replace exposes only op, find, and text");
-                AssertTrue(literalReplace.SelectToken("properties.replace") == null,
-                    "removed replacement field is absent from the strict model schema");
-                var regexReplace = patchVariants.OfType<JObject>().Single(item =>
-                    string.Equals((string)item.SelectToken("properties.op.enum[0]"), "regexReplace", StringComparison.Ordinal));
-                var optionalMatchCaseType = regexReplace.SelectToken("properties.matchCase.type") as JArray;
-                AssertTrue(optionalMatchCaseType != null && optionalMatchCaseType.Values<string>().Contains("null"),
-                    "nested optional regex arguments are nullable in strict output");
+                var exactReplace = patchSchema.SelectToken(
+                    "properties.tool_calls.items.anyOf[0].properties.arguments.properties.patch.items") as JObject;
+                AssertTrue(exactReplace != null, "patch schema exposes one exact replacement contract");
+                AssertEqual("replace", (string)exactReplace.SelectToken("properties.op.enum[0]"),
+                    "exact replacement is the only VBA patch operation");
+                AssertEqual(3, ((JObject)exactReplace["properties"]).Properties().Count(),
+                    "exact replacement exposes only op, find, and text");
+                AssertTrue(exactReplace.SelectToken("properties.startLine") == null &&
+                    exactReplace.SelectToken("properties.pattern") == null,
+                    "line-number and regex patch fields are absent from the model schema");
 
                 var restoreTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_restore_backup");
                 var restoreSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { restoreTool }));
@@ -149,13 +145,9 @@ namespace RNAssistant.Harness
                     ["moduleName"] = "Module1",
                     ["patch"] = new JArray(new JObject
                     {
-                        ["op"] = "regexReplace",
-                        ["pattern"] = "Old",
-                        ["text"] = "New",
-                        ["matchCase"] = JValue.CreateNull(),
-                        ["wholeWord"] = JValue.CreateNull(),
-                        ["replaceAll"] = JValue.CreateNull(),
-                        ["maxReplacements"] = JValue.CreateNull()
+                        ["op"] = "replace",
+                        ["find"] = "Old",
+                        ["text"] = "New"
                     })
                 };
                 JObject runtimePatchSchema;
@@ -164,7 +156,7 @@ namespace RNAssistant.Harness
                     "runtime patch schema parses: " + parseError);
                 ToolSchemaSupport.RemoveOptionalNulls(strictPatchArguments, runtimePatchSchema);
                 AssertEqual(3, ((JObject)((JArray)strictPatchArguments["patch"])[0]).Properties().Count(),
-                    "optional nulls are removed inside an anyOf variant");
+                    "exact patch arguments remain unchanged by strict normalization");
             });
         }
 

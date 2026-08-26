@@ -35,8 +35,8 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(ToolId("vba_read_module"), "Common", "Read-only: List VBA component metadata when moduleName is omitted, or read one component when it is supplied. Omit startLine/lineCount for the whole source. Runtime resolves case and safely normalizable names.", ReadModuleSchema());
             yield return ControllerToolDefinition.Create(ToolId("vba_search_code"), "Common", "Read-only: Search literal or regex patterns across VBA component code. Use moduleName only to limit the search to one component.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1,\"maxLength\":2048},\"moduleName\":{\"type\":\"string\",\"description\":\"Optional VBA component name; safely normalizable names are resolved by runtime.\",\"maxLength\":255},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":100,\"minimum\":1,\"maximum\":500},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80,\"minimum\":0,\"maximum\":1000}},\"required\":[\"query\"],\"additionalProperties\":false}");
             yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), "Common", "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted. Runtime snapshots current state before confirmation.", RestoreBackupSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document: The only public tool that creates a missing VBA component. Pass its complete source: mode=upsert creates when missing and replaces whole source when present. Runtime normalizes invalid new names, snapshots existing code, creates a rollback backup, and verifies read-back. componentType is used only on creation; MSForm means code-behind only. This tool does not rename components: a different missing moduleName creates a separate component, so never emulate rename with write+delete.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
-            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), "Common", "Mutates document: Patch an existing VBA component only; it never creates modules. Runtime reads and snapshots the target itself, so a separate read is optional and only needed to discover code. Combine known edits for one module into one native JSON patch array. Use common.vba_write_module with complete source when the module is missing.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document: The only public tool that creates a missing VBA component. Pass its complete source: mode=upsert creates when missing and replaces whole source when present. Never reconstruct an existing module from a truncated read or partial context; use common.vba_apply_patch for targeted edits. Runtime normalizes invalid new names, snapshots existing code, creates a rollback backup, and verifies read-back. componentType is used only on creation; MSForm means code-behind only. This tool does not rename components: a different missing moduleName creates a separate component, so never emulate rename with write+delete.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), "Common", "Mutates document: Apply ordered exact unique source-block replacements to an existing VBA component. There are no line-number, fuzzy, first-match, regex, or implicit insertion modes. Runtime patches one current full-module snapshot in memory, then performs one guarded whole-module write. Use common.vba_write_module with complete source when the module is missing.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), "Common", "Mutates document: Delete an existing StdModule or ClassModule. Runtime reads it, validates the type, and creates a rollback backup; no separate read call is required. Document modules and UserForms are not deleted.", ModuleNameSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
         }
 
@@ -398,7 +398,7 @@ namespace RNAssistant.Office.Tools
                 ToolResult written;
                 if (exists)
                 {
-                    written = WriteModule(moduleName, code, false);
+                    written = WriteModule(moduleName, code, false, CodeSha256(existing.Code));
                 }
                 else
                 {
@@ -460,6 +460,7 @@ namespace RNAssistant.Office.Tools
             {
                 var delete = new ToolCommand { ToolId = BackendToolId("vba_delete_module_internal") };
                 delete.Arguments["moduleName"] = moduleName;
+                delete.Arguments["expectedCodeSha256"] = CodeSha256(module.Code);
                 var deleted = _adapter.ExecuteTool(delete);
                 if (deleted == null || !deleted.Success)
                 {
@@ -573,7 +574,7 @@ namespace RNAssistant.Office.Tools
                 ToolResult result;
                 if (moduleExists)
                 {
-                    result = WriteModule(backup.ModuleName, backup.Code, false);
+                    result = WriteModule(backup.ModuleName, backup.Code, false, CodeSha256(current.Code));
                 }
                 else
                 {
@@ -614,15 +615,9 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail("moduleName is required.");
             }
 
-            JArray operations;
-            try
-            {
-                operations = ParsePatchOperations(ToolArgumentReader.String(command.Arguments, "patch", string.Empty));
-            }
-            catch (JsonException ex)
-            {
-                return ToolResult.Fail("Invalid patch JSON: " + ex.Message, null, "vba_patch_invalid", true);
-            }
+            object patchValue;
+            command.Arguments.TryGetValue("patch", out patchValue);
+            var operations = ParsePatchOperations(patchValue);
 
             if (operations.Count == 0)
             {
@@ -659,6 +654,10 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolResult.Fail("Each patch operation must be a JSON object.");
             }
+            if (string.Equals(updated, code, StringComparison.Ordinal))
+            {
+                return ToolResult.Fail("The ordered exact VBA patch makes no net change.", null, "vba_patch_no_change", true);
+            }
 
             var preview = JsonConvert.SerializeObject(new
             {
@@ -693,7 +692,7 @@ namespace RNAssistant.Office.Tools
 
             return ExecuteJournaledMutation(prepared, () =>
             {
-                var writeResult = WriteModule(moduleName, updated, false);
+                var writeResult = WriteModule(moduleName, updated, false, currentHash);
                 if (writeResult == null || !writeResult.Success)
                 {
                     return writeResult ?? ToolResult.Fail("VBA patch write returned no result.", null, "vba_patch_failed", false);
@@ -806,12 +805,16 @@ namespace RNAssistant.Office.Tools
             return false;
         }
 
-        private ToolResult WriteModule(string moduleName, string code, bool createIfMissing)
+        private ToolResult WriteModule(string moduleName, string code, bool createIfMissing, string expectedCodeSha256)
         {
             var write = new ToolCommand { ToolId = BackendToolId("vba_replace_module") };
             write.Arguments["moduleName"] = moduleName;
             write.Arguments["code"] = code;
             write.Arguments["createIfMissing"] = createIfMissing;
+            if (!string.IsNullOrWhiteSpace(expectedCodeSha256))
+            {
+                write.Arguments["expectedCodeSha256"] = expectedCodeSha256;
+            }
             return _adapter.ExecuteTool(write);
         }
 

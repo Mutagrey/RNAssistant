@@ -1,8 +1,11 @@
 using System;
 using System.Linq;
 using System.Threading;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office
 {
@@ -39,7 +42,7 @@ namespace RNAssistant.Office
         public VbaProjectResponse GetVbaProject()
         {
             var settings = _settingsService.Load();
-            var session = LoadSession(null);
+            var session = OfficeToolExecutor.CreateIsolatedManualSession(LoadSession(null));
             var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_read_module") };
             var result = _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true, session);
             return new VbaProjectResponse
@@ -51,12 +54,58 @@ namespace RNAssistant.Office
 
         public ToolResult GetVbaModule(string moduleName)
         {
+            const int editorReadLimit = 1000000;
             var settings = _settingsService.Load();
-            var session = LoadSession(null);
+            var session = OfficeToolExecutor.CreateIsolatedManualSession(LoadSession(null));
             var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_read_module") };
             command.Arguments["moduleName"] = moduleName;
-            command.Arguments["maxChars"] = 1000000;
-            return _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true, session);
+            command.Arguments["maxChars"] = editorReadLimit;
+            var result = _toolExecutor.Execute(command, new ToolDefinition[0], settings, false, true, session);
+            if (result == null || !result.Success || string.IsNullOrWhiteSpace(result.DataJson))
+            {
+                return result ?? ToolResult.Fail("VBA module read returned no result.", null, "vba_editor_read_missing", true);
+            }
+
+            try
+            {
+                var data = JObject.Parse(result.DataJson);
+                var codeToken = data["code"];
+                var hashToken = data["codeSha256"];
+                var truncatedToken = data["truncated"];
+                if (codeToken == null || codeToken.Type != JTokenType.String ||
+                    hashToken == null || hashToken.Type != JTokenType.String ||
+                    string.IsNullOrWhiteSpace((string)hashToken) ||
+                    truncatedToken == null || truncatedToken.Type != JTokenType.Boolean)
+                {
+                    return ToolResult.Fail(
+                        "VBA editor received an incomplete module payload. The module was not opened for saving.",
+                        null,
+                        "vba_editor_read_invalid",
+                        true);
+                }
+
+                var code = (string)codeToken;
+                if ((bool)truncatedToken || code.EndsWith("\n...[truncated]", StringComparison.Ordinal))
+                {
+                    return ToolResult.Fail(
+                        "VBA module is larger than the editor's safe read limit and was not opened. Saving a partial module is blocked.",
+                        new JObject
+                        {
+                            ["moduleName"] = (string)data["name"] ?? moduleName,
+                            ["lineCount"] = data["lineCount"],
+                            ["codeSha256"] = data["codeSha256"],
+                            ["maxChars"] = editorReadLimit
+                        }.ToString(Formatting.None),
+                        "vba_editor_source_truncated",
+                        false);
+                }
+            }
+            catch (JsonException ex)
+            {
+                return ToolResult.Fail("VBA editor received an invalid module payload: " + ex.Message, null, "vba_editor_read_invalid", true);
+            }
+
+            return result;
         }
 
         public VbaMutationQueryResponse GetVbaMutations(VbaMutationQueryPayload request)

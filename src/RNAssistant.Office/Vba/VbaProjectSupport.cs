@@ -161,7 +161,12 @@ namespace RNAssistant.Office
             }));
         }
 
-        public static ToolResult ReplaceModule(object documentObject, string moduleName, string code, bool createIfMissing)
+        public static ToolResult ReplaceModule(
+            object documentObject,
+            string moduleName,
+            string code,
+            bool createIfMissing,
+            string expectedCodeSha256 = null)
         {
             if (string.IsNullOrWhiteSpace(moduleName))
             {
@@ -173,9 +178,14 @@ namespace RNAssistant.Office
 
             dynamic vbProject = GetVbaProject(documentObject);
             dynamic component = FindComponent(vbProject, moduleName);
+            if (component == null && !string.IsNullOrWhiteSpace(expectedCodeSha256))
+            {
+                return StaleLiveModule(moduleName, expectedCodeSha256, false, null, "write");
+            }
             var created = false;
             dynamic module = null;
             var originalCode = string.Empty;
+            var mutationStarted = false;
             try
             {
                 if (component == null)
@@ -192,6 +202,15 @@ namespace RNAssistant.Office
 
                 module = component.CodeModule;
                 originalCode = created ? string.Empty : ReadComponentCode(component);
+                if (!created && !string.IsNullOrWhiteSpace(expectedCodeSha256))
+                {
+                    var actualHash = VbaToolManifestParser.LiveCodeSha256(originalCode);
+                    if (!string.Equals(expectedCodeSha256, actualHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return StaleLiveModule(moduleName, expectedCodeSha256, true, actualHash, "write");
+                    }
+                }
+                mutationStarted = true;
                 ReplaceCode(module, code);
                 VerifyComponentLiveCode(component, code, "VBA module replacement");
             }
@@ -208,7 +227,7 @@ namespace RNAssistant.Office
                             throw new InvalidOperationException("Incomplete VBA module is still present after rollback: " + moduleName);
                         }
                     }
-                    else
+                    else if (mutationStarted)
                     {
                         ReplaceCode(module, originalCode);
                         VerifyComponentLiveCode(component, originalCode, "VBA module rollback");
@@ -229,7 +248,9 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException(
                     created
                         ? "VBA module replacement failed; the incomplete module was removed."
-                        : "VBA module replacement failed; the original code was restored.",
+                        : mutationStarted
+                            ? "VBA module replacement failed; the original code was restored."
+                            : "VBA module replacement failed before source mutation.",
                     ex);
             }
             return ToolResult.Ok("VBA module replaced: " + component.Name, JsonConvert.SerializeObject(new
@@ -297,14 +318,27 @@ namespace RNAssistant.Office
             }
         }
 
-        public static ToolResult DeleteModule(object documentObject, string moduleName)
+        public static ToolResult DeleteModule(object documentObject, string moduleName, string expectedCodeSha256 = null)
         {
             dynamic vbProject = GetVbaProject(documentObject);
             dynamic component = FindComponent(vbProject, moduleName);
-            if (component == null) return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
+            if (component == null)
+            {
+                return string.IsNullOrWhiteSpace(expectedCodeSha256)
+                    ? ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true)
+                    : StaleLiveModule(moduleName, expectedCodeSha256, false, null, "delete");
+            }
             var type = (int)component.Type;
             if (type != StdModuleType && type != ClassModuleType)
                 return ToolResult.Fail("Document modules and UserForms cannot be deleted through RNAssistant.", null, "vba_component_type_read_only", false);
+            if (!string.IsNullOrWhiteSpace(expectedCodeSha256))
+            {
+                var actualHash = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(component));
+                if (!string.Equals(expectedCodeSha256, actualHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    return StaleLiveModule(moduleName, expectedCodeSha256, true, actualHash, "delete");
+                }
+            }
             vbProject.VBComponents.Remove(component);
             if (FindComponent(vbProject, moduleName) != null)
             {
@@ -314,6 +348,27 @@ namespace RNAssistant.Office
                     "vba_delete_verify_failed");
             }
             return ToolResult.Ok("VBA module deleted: " + moduleName, JsonConvert.SerializeObject(new { moduleName = moduleName, type = ComponentTypeName(type) }));
+        }
+
+        private static ToolResult StaleLiveModule(
+            string moduleName,
+            string expectedCodeSha256,
+            bool actualExists,
+            string actualCodeSha256,
+            string operation)
+        {
+            return ToolResult.Fail(
+                "VBA module changed immediately before the backend " + operation + ". The operation was not applied; re-read current code and rebuild the action.",
+                JsonConvert.SerializeObject(new
+                {
+                    moduleName = moduleName ?? string.Empty,
+                    expectedCodeSha256 = expectedCodeSha256,
+                    actualExists = actualExists,
+                    actualCodeSha256 = actualCodeSha256,
+                    inspectTool = "common.vba_read_module"
+                }),
+                "stale_vba_module",
+                true);
         }
 
         public static string RunStringFunction(object applicationObject, string macroName, string argumentsJson)

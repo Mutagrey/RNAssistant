@@ -308,7 +308,10 @@ namespace RNAssistant.OfficeHosts
                     case "word.vba_create_module_internal":
                         return VbaProjectSupport.CreateModule(RequireDocument(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty), ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"), ToolArgumentReader.String(command.Arguments, "code", string.Empty));
                     case "word.vba_delete_module_internal":
-                        return VbaProjectSupport.DeleteModule(RequireDocument(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty));
+                        return VbaProjectSupport.DeleteModule(
+                            RequireDocument(),
+                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
                     default:
                         return ToolResult.Fail("Unsupported Word tool: " + command.ToolId);
                 }
@@ -751,7 +754,8 @@ namespace RNAssistant.OfficeHosts
                 RequireDocument(),
                 ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                 ToolArgumentReader.String(command.Arguments, "code", string.Empty),
-                ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true));
+                ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true),
+                ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
         }
 
         private ToolResult RunMacro(ToolCommand command)

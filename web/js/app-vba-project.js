@@ -302,10 +302,22 @@ async function loadSelectedVbaModule() {
     }
     var dataJson = response.DataJson || response.dataJson || "{}";
     var data = JSON.parse(dataJson);
-    module.code = data.code !== undefined ? data.code : (data.Code || "");
+    var loadedTruncated = data.truncated !== undefined ? data.truncated : data.Truncated;
+    if (typeof loadedTruncated !== "boolean") {
+      throw new Error("Ответ чтения VBA-модуля не содержит признак полноты; редактирование заблокировано.");
+    }
+    if (loadedTruncated) {
+      throw new Error("VBA-модуль прочитан не полностью и не будет открыт для сохранения.");
+    }
+    var loadedCode = data.code !== undefined ? data.code : data.Code;
+    var loadedHash = data.codeSha256 || data.CodeSha256 || "";
+    if (typeof loadedCode !== "string" || !loadedHash) {
+      throw new Error("Ответ чтения VBA-модуля неполон; редактирование и сохранение заблокированы.");
+    }
+    module.code = loadedCode;
     module.type = data.type || data.Type || module.type || module.Type;
     module.lineCount = data.lineCount || data.LineCount || module.lineCount || module.LineCount;
-    module.codeSha256 = data.codeSha256 || data.CodeSha256 || "";
+    module.codeSha256 = loadedHash;
     $("vbaStatus").textContent = response.Message || response.message || "VBA-модуль загружен.";
   } catch (error) {
     $("vbaStatus").textContent = error.message;

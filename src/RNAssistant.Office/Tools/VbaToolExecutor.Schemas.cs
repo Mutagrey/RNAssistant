@@ -56,7 +56,7 @@ namespace RNAssistant.Office.Tools
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"moduleName\":{\"type\":\"string\",\"description\":\"Exact target component name, not a rename destination. Invalid punctuation, a non-letter prefix, and names over the VBE limit of 31 characters are normalized deterministically only when creating; the result returns the actual name.\",\"minLength\":1,\"maxLength\":255}," +
-                "\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source or MSForm code-behind. Empty text intentionally clears an existing component or creates an empty one.\"}," +
+                "\"code\":{\"type\":\"string\",\"description\":\"Complete VBA source or MSForm code-behind, never source reconstructed from a truncated read or partial context. Empty text intentionally clears an existing component or creates an empty one.\"}," +
                 "\"componentType\":{\"type\":\"string\",\"description\":\"Type used only if the component must be created.\",\"default\":\"StdModule\",\"enum\":[\"StdModule\",\"ClassModule\",\"MSForm\"]}," +
                 "\"mode\":{\"type\":\"string\",\"description\":\"upsert updates or creates automatically; createOnly/updateOnly are optional strict modes.\",\"default\":\"upsert\",\"enum\":[\"upsert\",\"createOnly\",\"updateOnly\"]}" +
                 "},\"required\":[\"moduleName\",\"code\"],\"additionalProperties\":false}";
@@ -101,52 +101,20 @@ namespace RNAssistant.Office.Tools
             var find = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Non-empty exact text or unique insertion anchor.",
+                ["description"] = "Exact current VBA source block copied from a recent bounded read. Include enough unchanged surrounding source for exactly one match. LF and CRLF are accepted.",
                 ["minLength"] = 1
             };
             var text = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Replacement or inserted VBA code; empty text is valid for replacement/deletion."
+                ["description"] = "Exact replacement text. Runtime does not trim boundary newlines; it only converts LF/CRLF to the module's current newline style. Empty text deletes find. For insertion, repeat find in text with the new block before or after it."
             };
-            var operations = new JArray
-            {
-                PatchOperationSchema("replace", "Replace exactly one occurrence; ambiguity is rejected.",
-                    new JObject { ["find"] = find.DeepClone(), ["text"] = text.DeepClone() }, "find", "text"),
-                PatchOperationSchema("replaceAll", "Replace every exact occurrence explicitly.",
-                    new JObject { ["find"] = find.DeepClone(), ["text"] = text.DeepClone() }, "find", "text"),
-                PatchOperationSchema("replaceFirst", "Replace the first exact occurrence.",
-                    new JObject { ["find"] = find.DeepClone(), ["text"] = text.DeepClone() }, "find", "text"),
-                PatchOperationSchema("insertBefore", "Insert a non-empty VBA block before the complete line containing one unique exact anchor; a partial-line anchor never splits that line.",
-                    new JObject
-                    {
-                        ["find"] = find.DeepClone(),
-                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Non-empty VBA block to insert.", ["minLength"] = 1 }
-                    }, "find", "text"),
-                PatchOperationSchema("insertAfter", "Insert a non-empty VBA block after the complete line containing one unique exact anchor; a partial-line anchor never splits that line.",
-                    new JObject
-                    {
-                        ["find"] = find.DeepClone(),
-                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Non-empty VBA block to insert.", ["minLength"] = 1 }
-                    }, "find", "text"),
-                PatchOperationSchema("replaceLines", "Replace or delete a current one-based line range after preceding operations.",
-                    new JObject
-                    {
-                        ["startLine"] = new JObject { ["type"] = "integer", ["description"] = "One-based first line.", ["minimum"] = 1 },
-                        ["deleteCount"] = new JObject { ["type"] = "integer", ["description"] = "Number of existing lines to delete.", ["minimum"] = 0 },
-                        ["text"] = text.DeepClone()
-                    }, "startLine", "deleteCount", "text"),
-                PatchOperationSchema("regexReplace", "Replace a bounded literal or capture-group regex match set.",
-                    new JObject
-                    {
-                        ["pattern"] = new JObject { ["type"] = "string", ["description"] = "Non-empty regular expression.", ["minLength"] = 1 },
-                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Replacement text; capture groups such as $1 are supported." },
-                        ["matchCase"] = new JObject { ["type"] = "boolean", ["description"] = "Whether matching is case-sensitive.", ["default"] = true },
-                        ["wholeWord"] = new JObject { ["type"] = "boolean", ["description"] = "Whether only whole-word matches are accepted.", ["default"] = false },
-                        ["replaceAll"] = new JObject { ["type"] = "boolean", ["description"] = "Whether every match is replaced.", ["default"] = true },
-                        ["maxReplacements"] = new JObject { ["type"] = "integer", ["description"] = "Maximum replacements allowed.", ["default"] = 500, ["minimum"] = 1, ["maximum"] = 10000 }
-                    }, "pattern", "text")
-            };
+            var exactReplace = PatchOperationSchema(
+                "replace",
+                "Replace one exact unique current source block. Missing or ambiguous source is rejected without writing.",
+                new JObject { ["find"] = find, ["text"] = text },
+                "find",
+                "text");
             return new JObject
             {
                 ["type"] = "object",
@@ -162,10 +130,10 @@ namespace RNAssistant.Office.Tools
                     ["patch"] = new JObject
                     {
                         ["type"] = "array",
-                        ["description"] = "Native JSON array of ordered patch operations applied to one current module snapshot; never encode this array as a string.",
+                        ["description"] = "Native JSON array of ordered exact replacements applied in memory to one current module snapshot. Each later find sees earlier replacements. Never encode this array as a string.",
                         ["minItems"] = 1,
                         ["maxItems"] = 100,
-                        ["items"] = new JObject { ["anyOf"] = operations }
+                        ["items"] = exactReplace
                     }
                 },
                 ["required"] = new JArray("moduleName", "patch"),

@@ -361,7 +361,10 @@ namespace RNAssistant.OfficeHosts
                     case "excel.vba_create_module_internal":
                         return VbaProjectSupport.CreateModule(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty), ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"), ToolArgumentReader.String(command.Arguments, "code", string.Empty));
                     case "excel.vba_delete_module_internal":
-                        return VbaProjectSupport.DeleteModule(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty));
+                        return VbaProjectSupport.DeleteModule(
+                            RequireWorkbook(),
+                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
                     default:
                         return ToolResult.Fail("Unsupported Excel tool: " + command.ToolId);
                 }
@@ -1343,7 +1346,12 @@ namespace RNAssistant.OfficeHosts
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
             var createIfMissing = ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true);
-            return VbaProjectSupport.ReplaceModule(workbook, moduleName, code, createIfMissing);
+            return VbaProjectSupport.ReplaceModule(
+                workbook,
+                moduleName,
+                code,
+                createIfMissing,
+                ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
         }
 
         private ToolResult RunMacro(ToolCommand command)

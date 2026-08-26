@@ -368,7 +368,19 @@ namespace RNAssistant.Harness
                 var moduleName = Argument(command, "moduleName", "Module1");
                 var code = Argument(command, "code", string.Empty);
                 FakeVbaModule existing;
-                var componentType = _vbaModules.TryGetValue(moduleName, out existing) ? existing.Type : VbaModuleType;
+                var exists = _vbaModules.TryGetValue(moduleName, out existing);
+                var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
+                var actualCodeSha256 = exists ? VbaToolManifestParser.LiveCodeSha256(existing.Code) : null;
+                if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
+                    (!exists || !string.Equals(expectedCodeSha256, actualCodeSha256, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return ToolResult.Fail(
+                        "stale VBA backend write",
+                        JsonConvert.SerializeObject(new { moduleName = moduleName, actualExists = exists, actualCodeSha256 = actualCodeSha256 }),
+                        "stale_vba_module",
+                        true);
+                }
+                var componentType = exists ? existing.Type : VbaModuleType;
                 SetVbaModule(moduleName, VbaWriteTransform == null ? code : VbaWriteTransform(code), componentType);
                 return ToolResult.Ok("replaced " + command.ToolId);
             }
@@ -420,7 +432,21 @@ namespace RNAssistant.Harness
 
             if ((command.ToolId ?? string.Empty).EndsWith(".vba_delete_module_internal", StringComparison.OrdinalIgnoreCase))
             {
-                _vbaModules.Remove(Argument(command, "moduleName", "Module1"));
+                var moduleName = Argument(command, "moduleName", "Module1");
+                FakeVbaModule existing;
+                var exists = _vbaModules.TryGetValue(moduleName, out existing);
+                var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
+                var actualCodeSha256 = exists ? VbaToolManifestParser.LiveCodeSha256(existing.Code) : null;
+                if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
+                    (!exists || !string.Equals(expectedCodeSha256, actualCodeSha256, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return ToolResult.Fail(
+                        "stale VBA backend delete",
+                        JsonConvert.SerializeObject(new { moduleName = moduleName, actualExists = exists, actualCodeSha256 = actualCodeSha256 }),
+                        "stale_vba_module",
+                        true);
+                }
+                _vbaModules.Remove(moduleName);
                 return ToolResult.Ok("fake VBA module deleted");
             }
 

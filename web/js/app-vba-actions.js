@@ -18,6 +18,10 @@
     async function refreshProject() {
       return runWork(async function () {
         var response = await options.send("getVbaProject", {});
+        var result = response && (response.Result || response.result || response);
+        if (!result || result.Success === false || result.success === false) {
+          throw new Error((result && (result.Message || result.message)) || "VBA-проект не загружен.");
+        }
         options.applyProjectResponse(response);
         await options.loadSelectedModule();
       });
@@ -71,6 +75,9 @@
           code: options.getEditorCode(),
           expectedCodeSha256: typeof options.getModuleHash === "function" ? options.getModuleHash() : ""
         });
+        if (response.Success === false || response.success === false) {
+          throw new Error(response.Message || response.message || "VBA-модуль не сохранён.");
+        }
         options.setStatus(response.Message || response.message || "VBA-модуль сохранен.");
       });
       if (saved) {
@@ -88,6 +95,9 @@
           backupId: backupId,
           moduleName: moduleName
         });
+        if (response.Success === false || response.success === false) {
+          throw new Error(response.Message || response.message || "Резервная копия VBA не восстановлена.");
+        }
         options.setStatus(response.Message || response.message || "Резервная копия VBA восстановлена.");
       });
       if (restored) {
@@ -107,6 +117,9 @@
       options.setMacroBusy(true);
       try {
         var response = await options.send("runVbaMacro", { macroName: macroName });
+        if (response.Success === false || response.success === false) {
+          throw new Error(response.Message || response.message || "VBA-макрос не выполнен.");
+        }
         options.setMacroStatus(response.Message || response.message || "Макрос выполнен: " + macroName, "ok");
         options.logToolResult("Запуск макроса", "VBA", response);
       } catch (error) {

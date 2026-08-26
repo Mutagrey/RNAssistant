@@ -65,14 +65,13 @@ namespace RNAssistant.Harness
 
                 var patch = new JArray(new JObject
                 {
-                    ["op"] = "regexReplace",
-                    ["pattern"] = "old(Value)",
-                    ["text"] = "new$1",
-                    ["replaceAll"] = true
+                    ["op"] = "replace",
+                    ["find"] = "Dim oldValue As Long\noldValue = 1",
+                    ["text"] = "Dim newValue As Long\nnewValue = 1"
                 });
                 var patched = executor.Execute(Command("common.vba_apply_patch", "moduleName", "Module1", "patch", patch), tools, settings, false, false);
-                AssertTrue(patched.Success, "VBA regex patch succeeds");
-                AssertContains(adapter.GetVbaModuleCode("Module1"), "newValue", "VBA regex patch applies captures");
+                AssertTrue(patched.Success, "VBA exact patch succeeds after regex discovery");
+                AssertContains(adapter.GetVbaModuleCode("Module1"), "newValue", "VBA exact patch updates discovered source");
 
                 var blockedDelete = executor.Execute(Command("common.vba_delete_module", "moduleName", "ThisWorkbook"), tools, settings, false, false);
                 AssertEqual("vba_component_type_read_only", blockedDelete.ErrorCode, "document module delete blocked");

@@ -154,7 +154,31 @@ namespace RNAssistant.Office
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
             if (dryRun)
             {
-                return _toolExecutor.Execute(command, tools, settings, true, true, session, cancellationToken);
+                return _toolExecutor.Execute(
+                    command,
+                    tools,
+                    settings,
+                    true,
+                    true,
+                    OfficeToolExecutor.CreateIsolatedManualSession(session),
+                    cancellationToken);
+            }
+
+            if (!_toolExecutor.RequiresSessionLeaseForManualRun(toolId, tools))
+            {
+                // Read-only library checks do not modify chat state and may safely use an
+                // isolated snapshot while the active chat is waiting on the model/tools.
+                var manualSnapshot = OfficeToolExecutor.CreateIsolatedManualSession(session);
+                return _toolExecutor.Execute(command, tools, settings, false, true, manualSnapshot, cancellationToken);
+            }
+
+            if (_chatRuns.IsExternallyRunning(session.Id))
+            {
+                return ToolResult.Fail(
+                    "A mutating library tool cannot run while this chat is active. Read-only tools can still be tested; stop the chat before testing document or local-state mutations.",
+                    null,
+                    "manual_tool_chat_busy",
+                    true);
             }
 
             return WithReservedSession(session, current =>

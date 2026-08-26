@@ -356,11 +356,12 @@ Patch operations support:
 
 ```json
 [
-  { "op": "replace", "find": "old code", "text": "new code" },
-  { "op": "insertAfter", "find": "anchor", "text": "\nnew code" },
-  { "op": "replaceLines", "startLine": 10, "deleteCount": 2, "text": "new code" }
+  { "op": "replace", "find": "exact current unique block", "text": "exact replacement block" },
+  { "op": "replace", "find": "exact anchor", "text": "exact anchor\nnew code" }
 ]
 ```
+
+VBA patching has no line-number or fuzzy mode. Every exact hunk is applied to one current full-module snapshot in memory; missing or ambiguous source fails without writing. Strings and boundary newlines are preserved, with only LF/CRLF converted to the module's current style.
 
 ## Tool Usage
 

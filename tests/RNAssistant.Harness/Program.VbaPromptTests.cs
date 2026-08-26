@@ -324,9 +324,9 @@ namespace RNAssistant.Harness
                     },
                     new JObject
                     {
-                        ["op"] = "insertAfter",
+                        ["op"] = "replace",
                         ["find"] = "End Sub",
-                        ["text"] = "Public Sub Added()\nEnd Sub"
+                        ["text"] = "End Sub\nPublic Sub Added()\nEnd Sub"
                     }
                 };
 
@@ -334,8 +334,8 @@ namespace RNAssistant.Harness
 
                 AssertTrue(result.Success, "patch result");
                 AssertContains(adapter.GetVbaModuleCode("Module2"), "\"new\"", "module2 updated");
-                AssertContains(adapter.GetVbaModuleCode("Module2"), "End Sub\nPublic Sub Added()", "insertAfter adds a safe line boundary");
-                AssertTrue(adapter.GetVbaModuleCode("Module2").IndexOf("End SubPublic", StringComparison.Ordinal) < 0, "insertAfter does not concatenate procedures");
+                AssertContains(adapter.GetVbaModuleCode("Module2"), "End Sub\nPublic Sub Added()", "exact hunk adds the requested line boundary");
+                AssertTrue(adapter.GetVbaModuleCode("Module2").IndexOf("End SubPublic", StringComparison.Ordinal) < 0, "exact hunk does not concatenate procedures");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "\"untouched\"", "module1 untouched");
                 var backups = backupStore.List("Excel", "doc");
                 AssertEqual(1, backups.Count, "backup count");
@@ -353,14 +353,14 @@ namespace RNAssistant.Harness
                 var emptyAnchor = Command(
                     "common.vba_apply_patch",
                     "moduleName", "Module2",
-                    "patch", new JArray(new JObject { ["op"] = "insertBefore", ["find"] = string.Empty, ["text"] = "Debug.Print 1" }));
+                    "patch", new JArray(new JObject { ["op"] = "replace", ["find"] = string.Empty, ["text"] = "Debug.Print 1" }));
                 var emptyAnchorResult = executor.Execute(emptyAnchor, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
-                AssertTrue(!emptyAnchorResult.Success, "empty insertion anchor rejected");
-                AssertContains(emptyAnchorResult.Message, "shorter than minLength", "empty insertion anchor schema diagnostic");
+                AssertTrue(!emptyAnchorResult.Success, "empty exact block rejected");
+                AssertContains(emptyAnchorResult.Message, "shorter than minLength", "empty exact block schema diagnostic");
             });
         }
 
-        private static void VbaInsertPatchPreservesCompleteLines()
+        private static void VbaExactPatchPreservesCompleteLines()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -372,28 +372,26 @@ namespace RNAssistant.Harness
                         "patch", new JArray(
                             new JObject
                             {
-                                ["op"] = "insertBefore",
-                                ["find"] = "Debug.Print",
-                                ["text"] = "\nDim value As Long\n"
+                                ["op"] = "replace",
+                                ["find"] = "Debug.Print 1",
+                                ["text"] = "Dim value As Long\nDebug.Print 1"
                             },
                             new JObject
                             {
-                                ["op"] = "insertAfter",
+                                ["op"] = "replace",
                                 ["find"] = "Debug.Print 1",
-                                ["text"] = "value = 2"
+                                ["text"] = "Debug.Print 1\nvalue = 2"
                             })),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
 
-                AssertTrue(result.Success, "partial-line anchors patch successfully");
+                AssertTrue(result.Success, "ordered exact hunks patch successfully");
                 AssertEqual(
                     "Option Explicit\r\nPublic Sub Run()\r\nDim value As Long\r\nDebug.Print 1\r\nvalue = 2\r\nEnd Sub",
                     adapter.VbaModuleCode,
-                    "insertions target whole lines and preserve CRLF");
-                AssertTrue(adapter.VbaModuleCode.IndexOf("Debug.Print\r\n", StringComparison.Ordinal) < 0,
-                    "partial anchor never splits its containing VBA statement");
+                    "exact hunks preserve CRLF and untouched source");
             });
 
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -405,19 +403,18 @@ namespace RNAssistant.Harness
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
-                            ["op"] = "replaceLines",
-                            ["startLine"] = 3,
-                            ["deleteCount"] = 0,
-                            ["text"] = "C\r\n"
+                            ["op"] = "replace",
+                            ["find"] = "B",
+                            ["text"] = "B\nC"
                         })),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
 
-                AssertTrue(appended.Success, "line insertion may append after the last logical line");
+                AssertTrue(appended.Success, "exact replacement can append after a unique block");
                 AssertEqual("A\r\nB\r\nC\r\n", adapter.VbaModuleCode,
-                    "replaceLines preserves one existing transport terminator without a phantom blank line");
+                    "exact replacement normalizes LF to CRLF without trimming content");
             });
 
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -429,18 +426,18 @@ namespace RNAssistant.Harness
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
-                            ["op"] = "insertAfter",
+                            ["op"] = "replace",
                             ["find"] = "A",
-                            ["text"] = "B"
+                            ["text"] = "A\nB"
                         })),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
 
-                AssertTrue(appended.Success, "insertAfter may append to a terminated module");
+                AssertTrue(appended.Success, "exact hunk may append to a terminated module");
                 AssertEqual("A\r\nB\r\n", adapter.VbaModuleCode,
-                    "insertAfter preserves the module's final transport terminator");
+                    "unchanged suffix preserves the module's final transport terminator");
             });
         }
 
@@ -472,9 +469,9 @@ namespace RNAssistant.Harness
                     "moduleName", "MissingModule",
                     "patch", new Newtonsoft.Json.Linq.JArray(new Newtonsoft.Json.Linq.JObject
                     {
-                        ["op"] = "insertAfter",
+                        ["op"] = "replace",
                         ["find"] = "Option Explicit",
-                        ["text"] = "Sub Added()\nEnd Sub"
+                        ["text"] = "Option Explicit\nSub Added()\nEnd Sub"
                     }));
                 var missingPatchResult = executor.Execute(missingPatch, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertEqual("vba_module_not_found", missingPatchResult.ErrorCode, "patch cannot masquerade as module creation");
@@ -483,7 +480,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaPatchRejectsLineOverrun()
+        private static void VbaPatchRejectsAddressingModes()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -501,9 +498,66 @@ namespace RNAssistant.Harness
 
                 var result = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
 
-                AssertTrue(!result.Success, "line overrun rejected");
-                AssertContains(result.Message, "past the end", "line overrun message");
-                AssertEqual("Sub Main()\nEnd Sub", adapter.VbaModuleCode, "line overrun leaves module unchanged");
+                AssertTrue(!result.Success, "line-number patch mode rejected by schema");
+                AssertEqual("invalid_arguments", result.ErrorCode, "removed addressing mode fails before patch execution");
+                AssertEqual("Sub Main()\nEnd Sub", adapter.VbaModuleCode, "removed addressing mode leaves module unchanged");
+            });
+        }
+
+        private static void VbaPatchRejectsStaleExactSource()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "A\nB\nC";
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var session = NewSession(adapter);
+                AssertTrue(executor.Execute(
+                    Command("common.vba_read_module", "moduleName", "Module1", "startLine", 1, "lineCount", 3),
+                    tools,
+                    new AppSettings(),
+                    false,
+                    false,
+                    session).Success, "initial line snapshot read");
+
+                var first = executor.Execute(
+                    Command(
+                        "common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["op"] = "replace",
+                            ["find"] = "B",
+                            ["text"] = "X\nB"
+                        })),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+                AssertTrue(first.Success, "first exact patch changes the surrounding source");
+                AssertEqual("A\nX\nB\nC", adapter.VbaModuleCode, "first patch applied in memory then replaced whole module");
+
+                var staleSource = Command(
+                    "common.vba_apply_patch",
+                    "moduleName", "Module1",
+                    "patch", new JArray(new JObject
+                    {
+                        ["op"] = "replace",
+                        ["find"] = "A\nB",
+                        ["text"] = "A\nY"
+                    }));
+                var rejected = executor.Execute(
+                    staleSource,
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+                AssertEqual("vba_patch_stale_source", rejected.ErrorCode,
+                    "a stale exact hunk cannot target shifted current text");
+                AssertEqual("A\nX\nB\nC", adapter.VbaModuleCode, "stale exact patch leaves current module intact");
+                AssertEqual(1, adapter.Executed.Count(item => item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase)),
+                    "stale exact hunk never reaches the backend writer");
             });
         }
 
@@ -597,6 +651,26 @@ namespace RNAssistant.Harness
                 "read-back code is VBE-equivalent");
         }
 
+        private static void VbaBackendCompareAndSwapRejectsDrift()
+        {
+            var document = new FakeVbaDocumentObject();
+            var component = document.VBProject.VBComponents.Seed("Module1", "Sub ExternalChange()\nEnd Sub");
+            var staleHash = VbaToolManifestParser.LiveCodeSha256("Sub EarlierSnapshot()\nEnd Sub");
+
+            var write = VbaProjectSupport.ReplaceModule(
+                document,
+                "Module1",
+                "Sub Requested()\nEnd Sub",
+                false,
+                staleHash);
+            AssertEqual("stale_vba_module", write.ErrorCode, "backend rejects a late write race");
+            AssertContains(component.CodeModule.Code, "ExternalChange", "late write race preserves current code");
+
+            var delete = VbaProjectSupport.DeleteModule(document, "Module1", staleHash);
+            AssertEqual("stale_vba_module", delete.ErrorCode, "backend rejects a late delete race");
+            AssertEqual(1, document.VBProject.VBComponents.Count, "late delete race preserves current component");
+        }
+
         private static void VbaUserFormCreateAndCodeEdit()
         {
             var document = new FakeVbaDocumentObject();
@@ -670,7 +744,7 @@ namespace RNAssistant.Harness
                 StringComparison.OrdinalIgnoreCase));
             AssertContains(editing.Description, "Use whenever a request changes VBA source", "catalog reliably triggers VBA editing guidance");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
-            AssertContains(editing.BodyMarkdown, "complete source line", "insertions preserve full VBA statements");
+            AssertContains(editing.BodyMarkdown, "repeat the exact anchor block", "insertions use explicit exact replacement text");
             AssertContains(editing.BodyMarkdown, "never imitate rename with write plus delete", "skill forbids unsafe rename emulation");
             AssertContains(editing.BodyMarkdown, "Option Explicit", "skill includes baseline VBA code quality");
             AssertContains(editing.BodyMarkdown, "complete Option block", "skill preserves all leading Option directives");
@@ -731,7 +805,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaPatchRejectsAmbiguousAnchors()
+        private static void VbaPatchRejectsAmbiguousExactSource()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -742,24 +816,23 @@ namespace RNAssistant.Harness
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
-                            ["op"] = "insertBefore",
+                            ["op"] = "replace",
                             ["find"] = "End Sub",
-                            ["text"] = "Debug.Print 1\n"
+                            ["text"] = "Debug.Print 1\nEnd Sub"
                         })),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = false },
                     false,
                     false);
-                AssertTrue(!result.Success, "ambiguous anchor rejected");
-                AssertEqual("vba_patch_ambiguous", result.ErrorCode, "ambiguous anchor error");
+                AssertTrue(!result.Success, "ambiguous exact block rejected");
+                AssertEqual("vba_patch_ambiguous", result.ErrorCode, "ambiguous exact block error");
                 AssertTrue(!string.Equals("waiting_confirmation", result.Status, StringComparison.OrdinalIgnoreCase), "ambiguous patch fails before confirmation");
-                AssertContains(result.Message, "replaceLines", "ambiguous anchor recovery guidance");
-                AssertContains(result.Message, "do not bypass", "ambiguous anchor bypass guidance");
+                AssertContains(result.Message, "surrounding source", "ambiguous exact block recovery guidance");
                 AssertTrue(adapter.VbaModuleCode.IndexOf("Debug.Print", StringComparison.Ordinal) < 0, "module unchanged");
             });
         }
 
-        private static void VbaLinePatchDoesNotInsertTrailingBlankLine()
+        private static void VbaExactPatchPreservesBoundaryNewlines()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -770,17 +843,57 @@ namespace RNAssistant.Harness
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
-                            ["op"] = "replaceLines",
-                            ["startLine"] = 2,
-                            ["deleteCount"] = 1,
+                            ["op"] = "replace",
+                            ["find"] = "B",
                             ["text"] = "X\n"
                         })),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
-                AssertTrue(result.Success, "line patch result");
-                AssertEqual("A\nX\nC", adapter.VbaModuleCode, "single text terminator does not add a blank line");
+                AssertTrue(result.Success, "exact newline patch result");
+                AssertEqual("A\nX\n\nC", adapter.VbaModuleCode,
+                    "runtime preserves the newline explicitly supplied inside replacement text");
+            });
+
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "A\nB\n\nC";
+                var result = executor.Execute(
+                    Command(
+                        "common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["op"] = "replace",
+                            ["find"] = "B\n",
+                            ["text"] = "X"
+                        })),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertTrue(result.Success, "exact source may include a blank-line boundary");
+                AssertEqual("A\nX\nC", adapter.VbaModuleCode, "only the exact matched bytes are replaced");
+            });
+
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "P\r\nA\r\nB\r\nS";
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var parsed = new AgentResponseParser().Parse(
+                    "{\"message\":\"patch\",\"tool_calls\":[{\"id\":\"call_vba\",\"name\":\"common.vba_apply_patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"A\\nB\",\"text\":\"\\nA\\n\\nB\\n\"}]}}]}",
+                    tools);
+                AssertTrue(parsed.Success, "raw model JSON with escaped newlines parses");
+                var result = executor.Execute(
+                    AgentJsonProtocol.ToCommand(parsed.Response.ToolCalls[0]),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertTrue(result.Success, "model-originated exact patch executes");
+                AssertEqual("P\r\n\r\nA\r\n\r\nB\r\n\r\nS", adapter.VbaModuleCode,
+                    "JSON normalization preserves leading, internal, and trailing newlines and only converts them to CRLF");
             });
         }
 

@@ -214,6 +214,30 @@ namespace RNAssistant.Office.Tools
                 : validation;
         }
 
+        internal bool RequiresSessionLeaseForManualRun(
+            string toolId,
+            IEnumerable<ToolDefinition> tools)
+        {
+            var known = KnownTools(tools);
+            var tool = known.FirstOrDefault(item => item != null &&
+                string.Equals(item.Id, toolId, StringComparison.OrdinalIgnoreCase));
+            if (tool == null) return false;
+            var safety = ToolSafetyPolicy.Resolve(tool, known);
+            return safety.Valid && (safety.MutatesDocument || safety.MutatesLocalState);
+        }
+
+        internal static ChatSession CreateIsolatedManualSession(ChatSession session)
+        {
+            var snapshot = ChatCloneService.CloneSessionSnapshot(session);
+            if (snapshot != null)
+            {
+                // Keep document/run identity for execution guards, but do not let a library read
+                // advance chat-scoped observations that the running model never received.
+                snapshot.Id = "manual_" + Guid.NewGuid().ToString("N");
+            }
+            return snapshot;
+        }
+
         public ToolResult InstallVbaTool(
             ToolDefinition tool,
             bool dryRun,
