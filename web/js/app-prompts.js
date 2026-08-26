@@ -4,7 +4,7 @@
     { key: "systemPrompt", label: "Агент · общие", group: "Основные", source: "root", field: "SystemPrompt", description: "Роль, runtime context, формат ответа и условие завершения Agent-потока." },
     { key: "agentToolsPrompt", label: "Агент · tools", group: "Основные", source: "root", field: "AgentToolsPrompt", description: "Общие правила выбора и выполнения tools; конкретные аргументы остаются в схемах tools." },
     { key: "agentSkillsPrompt", label: "Агент · skills", group: "Основные", source: "root", field: "AgentSkillsPrompt", description: "Правила выбора, обязательного чтения и повторной загрузки skills." },
-    { key: "chatSystemPrompt", label: "Чат", group: "Основные", source: "root", field: "ChatSystemPrompt", description: "Прямой ответ без локальных tools." },
+    { key: "chatSystemPrompt", label: "Чат", group: "Основные", source: "root", field: "ChatSystemPrompt", description: "Прямой ответ и доступ только к read-only resource tools." },
     { key: "contextCompactionPrompt", label: "Сжатие контекста", group: "Служебные", source: "root", field: "ContextCompactionPrompt", description: "Правила создания checkpoint активной истории." },
     { key: "chatTitlePrompt", label: "Название чата", group: "Служебные", source: "root", field: "ChatTitlePrompt", description: "Короткий запрос для генерации названия." },
     { key: "attachmentAnalysisPrompt", label: "Анализ вложений", group: "Служебные", source: "root", field: "AttachmentAnalysisPrompt", description: "Инструкции вспомогательной модели для изображений и аудио." }

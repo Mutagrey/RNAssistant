@@ -268,7 +268,7 @@ namespace RNAssistant.Harness
             };
             foreach (var pair in expectedHostCounts)
             {
-                var runnable = AgentRunService.PrepareToolsForRun(FakeOfficeAdapter.ForHost(pair.Key).GetBuiltInTools());
+                var runnable = ConversationRunService.PrepareToolsForRun(FakeOfficeAdapter.ForHost(pair.Key).GetBuiltInTools());
                 AssertEqual(pair.Value, runnable.Count, pair.Key + " compact runnable tool count");
             }
 
@@ -303,7 +303,7 @@ namespace RNAssistant.Harness
 
                 var removedPipeline = CustomTool("Excel", "excel.removed_id_pipeline");
                 removedPipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.list_shapes\",\"arguments\":{}}]}";
-                var prepared = AgentRunService.PrepareToolsForRun(adapter.GetBuiltInTools().Concat(new[] { removedPipeline }));
+                var prepared = ConversationRunService.PrepareToolsForRun(adapter.GetBuiltInTools().Concat(new[] { removedPipeline }));
                 AssertTrue(prepared.All(item => item.Id != removedPipeline.Id), "pipeline with removed id stays invalid");
             });
         }

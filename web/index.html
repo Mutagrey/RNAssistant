@@ -656,7 +656,7 @@
                 <div class="agent-protocol-head">
                   <div>
                     <h3 id="agentProtocolTitle">Протокол</h3>
-                    <p>Фактический контракт текущего Agent runtime.</p>
+                    <p>Единый контракт Chat и Agent; доступные tools задаются политикой режима.</p>
                   </div>
                   <span class="agent-protocol-badge">единый JSON-поток</span>
                 </div>
@@ -685,7 +685,7 @@
                     </label>
                   </div>
                   <div class="agent-protocol-facts">
-                    <div class="agent-protocol-fact"><span>Agent envelope</span><code>message + tool_calls[]</code></div>
+                    <div class="agent-protocol-fact"><span>Conversation envelope</span><code>message + tool_calls[]</code></div>
                     <div class="agent-protocol-fact"><span>Аргументы tools</span><code>strict JSON Schema</code></div>
                   </div>
                 </div>
@@ -698,11 +698,11 @@
                 <div class="form-grid two-columns agent-settings-grid">
                   <label class="checkline"><input id="autoConfirmToolsInput" type="checkbox"><span>Автоподтверждение действий</span></label>
                   <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
-                  <label><span>Макс. итераций агента</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
+                  <label><span>Макс. итераций запуска</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
                   <label><span>Повторов при ошибке формата</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20"></label>
                   <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
                 </div>
-                <div class="setting-note">Agent получает tools и каталог skills в RUNTIME_CONTEXT. Независимые вызовы выполняются последовательно за один model turn; зависимые и требующие подтверждения выбираются по одному.</div>
+                <div class="setting-note">Chat получает только read-only resource tools без skills; Agent — полный разрешённый каталог и skills. В обоих режимах вызовы идут через один JSON-loop.</div>
               </section>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
                 <div class="model-compatibility-head">

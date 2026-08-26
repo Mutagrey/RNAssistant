@@ -36,8 +36,7 @@ namespace RNAssistant.Office
         private readonly SkillCatalogService _skillCatalog;
         private readonly ChatSessionService _chatSessions;
         private readonly ChatHistoryEditService _chatHistoryEditService;
-        private readonly AgentRunService _agentRunService;
-        private readonly PlainChatService _plainChatService;
+        private readonly ConversationRunService _conversationRunService;
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
         private readonly ContextService _contextService;
@@ -161,8 +160,7 @@ namespace RNAssistant.Office
             _llmCompletion = completion;
             _attachmentAnalysisService = new AttachmentAnalysisService(completion);
             _contextCompactionService = new ContextCompactionService(completion);
-            _agentRunService = new AgentRunService(_adapter, _toolExecutor, completion, _contextCompactionService);
-            _plainChatService = new PlainChatService(completion, _contextCompactionService);
+            _conversationRunService = new ConversationRunService(_adapter, _toolExecutor, completion, _contextCompactionService);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);

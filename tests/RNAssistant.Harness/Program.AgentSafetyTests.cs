@@ -33,6 +33,9 @@ namespace RNAssistant.Harness
             AssertContains(settings.AgentSkillsPrompt, "do not retry unchanged", "skill prompt prevents truncated skill loops");
             AssertContains(settings.AgentSkillsPrompt, "referencePath", "skill prompt explains progressive reference reads");
             AssertTrue(settings.ChatSystemPrompt.StartsWith("# RNAssistant Chat", StringComparison.Ordinal), "chat prompt Markdown heading");
+            AssertContains(settings.ChatSystemPrompt, "common.resources_*", "chat prompt documents read-only resource access");
+            AssertContains(settings.ChatSystemPrompt, "## Response contract", "chat uses the structured response envelope");
+            AssertContains(settings.ChatSystemPrompt, "multimodal model", "chat prompt keeps current media direct when supported");
             AssertTrue(settings.ContextCompactionPrompt.StartsWith("# Context compaction", StringComparison.Ordinal), "compaction prompt Markdown heading");
             AssertContains(settings.ContextCompactionPrompt, "Skill ids and revisions", "compaction preserves pending skill references");
             AssertTrue(settings.ChatTitlePrompt.StartsWith("# Chat title", StringComparison.Ordinal), "title prompt Markdown heading");
@@ -214,7 +217,8 @@ namespace RNAssistant.Harness
                     AgentResponseMode = AgentResponseModes.JsonSchema,
                     FallbackToJsonObject = true
                 };
-                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent,
                     "Test.", NewSession(adapter), NewContext(adapter), settings, new ToolDefinition[0],
                     null, null, null, CancellationToken.None).GetAwaiter().GetResult();
 
@@ -281,7 +285,8 @@ namespace RNAssistant.Harness
                 };
                 var tools = adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.inspect").ToList();
 
-                var turn = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                var turn = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent,
                     "List sheets.", NewSession(adapter), NewContext(adapter), settings, tools,
                     null, null, null, null, CancellationToken.None, true).GetAwaiter().GetResult();
 

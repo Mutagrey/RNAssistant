@@ -109,8 +109,8 @@ namespace RNAssistant.Office
                 try
                 {
                     ReportProgress(runProgress, "executing", "Выполняю подтверждённое действие...");
-                    var runnableTools = AgentRunService.PrepareToolsForRun(tools);
-                    var currentCatalogFingerprint = AgentRunService.ToolExecutionFingerprint(
+                    var runnableTools = ConversationRunService.PrepareToolsForRun(tools);
+                    var currentCatalogFingerprint = ConversationRunService.ToolExecutionFingerprint(
                         runnableTools,
                         pending.Command.ToolId);
                     var catalogMatches = !string.IsNullOrWhiteSpace(pending.CatalogFingerprint) &&
@@ -164,7 +164,7 @@ namespace RNAssistant.Office
                         runProgress,
                         runCancellation.Token).ConfigureAwait(false);
                     continuationAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
-                    var completion = await _agentRunService.ContinueAfterToolAsync(
+                    var completion = await _conversationRunService.ContinueAfterToolAsync(
                         CloneCommand(pending.Command),
                         result,
                         session,

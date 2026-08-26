@@ -200,7 +200,8 @@ namespace RNAssistant.Harness
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Old answer" });
             session.Messages.Add(new ChatMessage { Role = "user", Content = "New request" });
 
-            var prompt = new AgentPromptComposer().BuildMessages(
+            var prompt = new ConversationPromptComposer().BuildMessages(
+                ChatModes.Agent,
                 "New request", adapter, new ToolDefinition[0], new SkillDefinition[0],
                 new DocumentContext(), new AppSettings(), session, null);
             var old = prompt.First(message => (message.Content ?? string.Empty).StartsWith("Old request", StringComparison.Ordinal));
@@ -322,7 +323,8 @@ namespace RNAssistant.Harness
                     });
                 };
                 var tools = executor.GetControllerTools().ToList();
-                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent,
                     "Прочитай старое изображение.",
                     session,
                     NewContext(adapter),
@@ -422,7 +424,8 @@ namespace RNAssistant.Harness
                     });
                 };
 
-                var result = new AgentRunService(adapter, executor, completion).ExecuteAsync(
+                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent,
                     "Какое число на старом скане?",
                     session,
                     NewContext(adapter),

@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Status: accepted target architecture. Core contracts/canonical URIs and the chat resource provider with `common.resources_*` are implemented. Remaining slices are delivered vertically; replaced readers are removed, not retained as aliases.
+Status: accepted target architecture. Core resource contracts, the chat provider, `common.resources_*`, and the unified Chat/Agent conversation loop are implemented. Remaining slices are delivered vertically; replaced paths are removed, not retained as aliases.
 
 ## Goals
 
@@ -43,9 +43,9 @@ Every provider implements bounded `list`, `resolve`, `search`, and `read`. Searc
 
 Chat and Agent use one buffered structured loop. The policy differs, the transport and transcript do not:
 
-- Chat receives resource discovery/read tools and no mutation tools or skills.
-- Agent receives discovery/read tools, progressively discovered domain tools, enabled skills, and mutation tools allowed by safety policy.
-- Tool discovery is progressive: the initial prompt contains compact namespaces and `tools_search`/`tools_read`; exact schemas enter the working set only when read.
+- Chat receives exactly the four resource discovery/read tools and no mutation tools, confirmation, or skills.
+- Agent currently receives all runnable tools plus enabled skills and mutations allowed by safety policy.
+- A later slice makes Agent tool discovery progressive: the initial prompt will contain compact namespaces and discovery tools, and exact schemas will enter the working set only when read.
 - A schema or skill body remains loaded only while its exact revision is present in active model context.
 
 The prompt contains compact resource references relevant to the conversation. On a later question such as “что на той картинке?” the model resolves or reads the referenced URI again. Raw media is hydrated only for the next model step and then released; the durable reference remains.
@@ -87,7 +87,7 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 
 1. **Done:** Core resource contracts and canonical URI validation.
 2. **Done:** Provider registry plus chat-artifact provider; `common.artifacts_*` removed and replaced by `common.resources_*` without aliases.
-3. Unified `ConversationRunService`; enable read-only resource loop in Chat.
+3. **Done:** Unified `ConversationRunService`; read-only resource loop in Chat; removed `PlainChatService` and `ChatContextWindowBuilder`.
 4. Automatic UI ingestion and durable message references; remove explicit selection mechanics.
 5. Office, VBA, HTML, and plan providers; remove duplicated read tools.
 6. Progressive tool discovery and bounded working-set eviction.

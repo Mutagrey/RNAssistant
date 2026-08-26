@@ -186,49 +186,59 @@ namespace RNAssistant.Harness
 
         private static void EditingLatestUserMessageDoesNotDuplicateUserTurn()
         {
-            var session = new ChatSession();
-            var edited = new ChatMessage { Role = "user", Content = "Измененный вопрос" };
-            session.Messages.Add(edited);
-            var captured = new List<ChatMessage>();
-            var service = new PlainChatService(
-                delegate(
-                    AppSettings settings,
-                    IEnumerable<ChatMessage> messages,
-                    LlmRequestOptions requestOptions,
-                    Action<LlmStreamUpdate> streamProgress,
-                    CancellationToken cancellationToken)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    captured = new List<ChatMessage>(messages ?? new ChatMessage[0]);
-                    return Task.FromResult(new LlmCompletionResult
+            WithTempExecutor((executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Chat;
+                var edited = new ChatMessage { Role = "user", Content = "Измененный вопрос" };
+                session.Messages.Add(edited);
+                var captured = new List<ChatMessage>();
+                var service = new ConversationRunService(
+                    adapter,
+                    executor,
+                    delegate(
+                        AppSettings settings,
+                        IEnumerable<ChatMessage> messages,
+                        LlmRequestOptions requestOptions,
+                        Action<LlmStreamUpdate> streamProgress,
+                        CancellationToken cancellationToken)
                     {
-                        Content = "Обновленный ответ.",
-                        PromptTokens = 10,
-                        CompletionTokens = 2,
-                        TotalTokens = 12
+                        cancellationToken.ThrowIfCancellationRequested();
+                        captured = new List<ChatMessage>(messages ?? new ChatMessage[0]);
+                        return Task.FromResult(new LlmCompletionResult
+                        {
+                            Content = "{\"message\":\"Обновленный ответ.\",\"tool_calls\":[]}",
+                            PromptTokens = 10,
+                            CompletionTokens = 2,
+                            TotalTokens = 12
+                        });
                     });
-                });
 
-            service.ExecuteAsync(
-                edited.Content,
-                session,
-                new DocumentContext(),
-                new AppSettings(),
-                edited.Attachments,
-                null,
-                CancellationToken.None,
-                false).GetAwaiter().GetResult();
+                service.ExecuteAsync(
+                    ChatModes.Chat,
+                    edited.Content,
+                    session,
+                    new DocumentContext(),
+                    new AppSettings(),
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    edited.Attachments,
+                    null,
+                    null,
+                    null,
+                    CancellationToken.None,
+                    false).GetAwaiter().GetResult();
 
-            var users = session.Messages.Where(message =>
-                message != null && string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase)).ToList();
-            AssertEqual(2, session.Messages.Count, "replay keeps a single exchange");
-            AssertEqual(1, users.Count, "replay does not duplicate user turn");
-            AssertEqual(edited.Id, users[0].Id, "replay preserves edited user id");
-            AssertEqual("Обновленный ответ.", session.Messages.Last().Content, "replay appends assistant answer");
-            AssertEqual(
-                1,
-                FlattenMessages(captured).Split(new[] { edited.Content }, StringSplitOptions.None).Length - 1,
-                "edited prompt appears once");
+                var users = session.Messages.Where(message =>
+                    message != null && string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase)).ToList();
+                AssertEqual(2, session.Messages.Count, "replay keeps a single exchange");
+                AssertEqual(1, users.Count, "replay does not duplicate user turn");
+                AssertEqual(edited.Id, users[0].Id, "replay preserves edited user id");
+                AssertEqual("Обновленный ответ.", session.Messages.Last().Content, "replay appends assistant answer");
+                AssertEqual(
+                    1,
+                    FlattenMessages(captured).Split(new[] { edited.Content }, StringSplitOptions.None).Length - 1,
+                    "edited prompt appears once");
+            });
         }
 
         private static void EditingLegacyTurnClearsUnversionedHtmlWorkspace()

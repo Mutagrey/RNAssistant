@@ -9,9 +9,10 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed class AgentPromptComposer
+    internal sealed class ConversationPromptComposer
     {
         public List<ChatMessage> BuildMessages(
+            string mode,
             string userText,
             IOfficeApplicationAdapter adapter,
             IReadOnlyList<ToolDefinition> tools,
@@ -24,8 +25,9 @@ namespace RNAssistant.Office.Services
             int historyBudgetTokens = 0)
         {
             settings = settings ?? new AppSettings();
-            var instruction = BuildInstruction(settings);
-            var runtimeContext = BuildRuntimeContext(adapter, tools, skills, context, session, settings);
+            mode = ChatModes.Normalize(mode);
+            var instruction = BuildInstruction(mode, settings);
+            var runtimeContext = BuildRuntimeContext(mode, adapter, tools, skills, context, session, settings);
             var role = NormalizeInstructionRole(settings.SystemPromptRole);
             var messages = new List<ChatMessage>();
             if (!string.Equals(role, "user", StringComparison.Ordinal))
@@ -82,7 +84,14 @@ namespace RNAssistant.Office.Services
             return messages;
         }
 
-        internal static string BuildInstruction(AppSettings settings)
+        internal static string BuildInstruction(string mode, AppSettings settings)
+        {
+            return string.Equals(ChatModes.Normalize(mode), ChatModes.Chat, StringComparison.Ordinal)
+                ? ResolveChatPrompt(settings)
+                : BuildAgentInstruction(settings);
+        }
+
+        internal static string BuildAgentInstruction(AppSettings settings)
         {
             return string.Join("\n\n", new[]
             {
@@ -90,6 +99,11 @@ namespace RNAssistant.Office.Services
                 ResolveToolPrompt(settings),
                 ResolveSkillPrompt(settings)
             }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
+        }
+
+        internal static string ResolveChatPrompt(AppSettings settings)
+        {
+            return ResolvePrompt(settings == null ? null : settings.ChatSystemPrompt, AgentPromptDefaults.ChatInstructions);
         }
 
         internal static string ResolveGeneralPrompt(AppSettings settings)
@@ -108,6 +122,7 @@ namespace RNAssistant.Office.Services
         }
 
         internal static string BuildRuntimeContext(
+            string mode,
             IOfficeApplicationAdapter adapter,
             IReadOnlyList<ToolDefinition> tools,
             IReadOnlyList<SkillDefinition> skills,
@@ -115,6 +130,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             AppSettings settings = null)
         {
+            mode = ChatModes.Normalize(mode);
             var adapterHost = SafeAdapterValue(adapter, item => item.HostName);
             var adapterDocumentKey = SafeAdapterValue(adapter, item => item.DocumentKey);
             var adapterDocumentTitle = SafeAdapterValue(adapter, item => item.DocumentTitle);
@@ -132,15 +148,18 @@ namespace RNAssistant.Office.Services
                 : OfficeDocumentExecutionGuardState.SessionMatchesAdapter(adapter, session);
             var root = new JObject
             {
+                ["mode"] = mode,
                 ["host"] = host ?? string.Empty,
                 ["document"] = new JObject
                 {
                     ["key"] = documentKey ?? string.Empty,
                     ["title"] = documentTitle ?? string.Empty,
                     ["office_tools_available"] = officeToolsAvailable,
-                    ["office_tool_policy"] = officeToolsAvailable
-                        ? "Office object-model tools may target this open document."
-                        : "The chat document is closed or inactive. Do not call Office object-model tools until it is opened; continue with non-Office tools such as the HTML workspace when useful."
+                    ["office_tool_policy"] = string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal)
+                        ? "Chat cannot call Office object-model or mutation tools. It may only use the read-only tools listed in this runtime context."
+                        : officeToolsAvailable
+                            ? "Office object-model tools may target this open document."
+                            : "The chat document is closed or inactive. Do not call Office object-model tools until it is opened; continue with non-Office tools such as the HTML workspace when useful."
                 },
                 ["tools"] = BuildTools(tools),
                 ["skills"] = BuildSkills(skills),
@@ -229,7 +248,7 @@ namespace RNAssistant.Office.Services
 
         private static JArray BuildUserContext(DocumentContext context)
         {
-            return new JArray((context == null ? null : context.Notes ?? new List<ContextNote>())
+            return new JArray((context == null ? new List<ContextNote>() : context.Notes ?? new List<ContextNote>())
                 .Where(note => note != null)
                 .Select(note => new JObject
                 {

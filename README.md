@@ -207,12 +207,12 @@ Word, Excel and PowerPoint use an existing `RNAssistantDocumentId` property when
 ## Tool Protocol
 
 The API is OpenAI-compatible chat completions: `/v1/chat/completions`.
-Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`; the Agent flow is in `docs/agent-protocol.md`.
+Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`; the shared flow is in `docs/conversation-protocol.md`.
 
 Each chat stores an explicit execution mode:
 
-- `Chat` sends a normal completion without tools, skills, agent JSON, or Office execution.
-- `Agent` is the default and uses a direct model/tool loop. It can also answer ordinary questions without tools.
+- `Chat` uses the structured model loop with only read-only `common.resources_list/resolve/search/read`; it has no skills, confirmation, Office tools, or mutations.
+- `Agent` is the default and uses the same loop with all runnable tools and enabled skill metadata. It can also answer ordinary questions without tools.
 
 Editable Agent instructions use `developer` by default and may use `system` or `user`. The stable Agent instruction is composed from separately editable general, tool-use, and skill-use Markdown; `RUNTIME_CONTEXT` is appended after it. The Prompts page also edits the Chat, context-compaction, title, and attachment-analysis prompts. Agent-side prompt changes use `common.prompts_read` with `includeDefaults:true` and confirmed `common.prompts_save`. Wire-format repair and endpoint compatibility probes remain runtime protocol and are intentionally not user prompts.
 

@@ -1,26 +1,28 @@
-# Agent JSON flow
+# Conversation JSON flow
 
-RNAssistant has two explicit modes.
+RNAssistant has two explicit modes and one `ConversationRunService` transport/transcript loop.
 
-- `chat`: a normal text completion. The request contains no tool catalog or skill bodies and the response is not parsed as an agent command.
-- `agent`: a prompt-driven loop over local Office tools. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate agent stage. It may make bounded request-local format corrections when the model violates the JSON contract.
+- `chat`: the editable `ChatSystemPrompt`, a dynamic `RUNTIME_CONTEXT`, and exactly the safe read-only `common.resources_list/resolve/search/read` catalog. Skills, Office tools, local mutations, and confirmation are unavailable by runtime policy.
+- `agent`: the same structured loop with the full runnable catalog and enabled skill metadata. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
-## Agent context
+Both modes return the same raw `message + tool_calls[]` JSON envelope and use the same bounded request-local format repair. The tool catalog, not model wording, is the authority: a Chat response naming any other tool is rejected before execution.
 
-Every Agent request contains one stable editable instruction composed, in order, from general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown, followed by one dynamic `RUNTIME_CONTEXT` JSON object. Its instruction role is selected independently as `developer` (default), `system`, or `user`:
+## Conversation context
+
+Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:
 
 - current host and document identity;
-- every enabled, schema-valid tool that the agent may run in this request;
-- the enabled skill catalog with `id`, `name`, `description`, package `revision`, `bodyChars`, and `referenceCount`;
+- every enabled, schema-valid tool allowed by the current mode policy;
+- the enabled skill catalog with `id`, `name`, `description`, package `revision`, `bodyChars`, and `referenceCount` in Agent, or an empty catalog in Chat;
 - chat-owned user context and artifact references.
 
-These three Agent prompts use an explicit settings schema version. Settings without the current marker are hard-reset to all three current defaults; RNAssistant does not merge or preserve legacy combined/custom Agent prompt text. Once the current marker is saved, current custom values are preserved normally.
+The Agent sections and Chat prompt use one explicit settings schema version. Settings without the current marker are hard-reset to the current defaults; RNAssistant does not merge an older no-tools Chat contract into the structured loop. Once the current marker is saved, current custom values are preserved normally.
 
 Visible planning is optional data, not a protocol phase. `common.plan_create/read/update/delete` stores a versioned plan artifact for the active chat. The model explicitly supplies every step status; runtime does not infer progress from tool calls. The active plan artifact id appears in the artifact index.
 
 The resource index is a bounded working-set manifest, not a body store. `common.resources_list` pages metadata, `common.resources_resolve` validates one exact reference, `common.resources_search` returns bounded literal matches, and `common.resources_read` reads one exact `metadata`, `text`, or `media` representation by canonical revision-pinned `rna://` URI. Text uses `nextCursor`; media is attached only to the immediately following model step, with the resource URI kept as provenance and no base64 in tool JSON. A capable main model reads it directly; missing Vision/Audio capability uses the isolated attachment helper. Query-specific helper output is not advertised as a reusable resource representation.
 
-A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. An explicit user cancellation is terminal for that run and does not invoke the model again.
+A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
 The catalog is metadata only: a listed name/description does not load or replace the skill Markdown. When the user names a skill or a catalog description clearly matches the task, the model calls `common.skills_read` with the exact id before skill-governed work. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. A revision is loaded only while that exact top-level evidence remains in active model context. Generic bounding replaces oversized data with top-level `truncated:true` and therefore cannot preserve a false loaded marker. Compaction or a revision mismatch requires another core read; an unchanged truncated core read is not retried.
 
@@ -57,7 +59,7 @@ Custom tools must have a strict object JSON Schema with explicit `properties`, `
 
 ## Model response
 
-Agent mode always returns the same raw JSON envelope with no Markdown or surrounding prose. `AgentResponseMode` selects its transport constraint:
+Both modes always return the same raw JSON envelope with no Markdown or surrounding prose. `AgentResponseMode` selects its transport constraint for the shared loop:
 
 - `json_object` (default) asks the endpoint for a generic JSON object and relies on the local parser and tool argument validators;
 - `json_schema` sends a strict response schema generated from the exact currently runnable tool catalog. The schema fixes the root fields, exact tool names, and each tool's argument contract.
@@ -123,6 +125,7 @@ Chat-local plan/HTML mutations are serialized by the per-chat lease. Manual libr
 ## Local invariants
 
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.
+- Chat exposes only the four exact `common.resources_*` read tools after schema and safety validation; it never receives skills, confirmation, document mutations, or local-state mutations.
 - Confirmation and mutation safety remain local executor rules.
 - HTML workspace is an ordinary Agent capability, not a separate chat mode or preference flag; the model chooses it from the request and tool catalog.
 - Agent mode remains available for an archived or closed document. Its request catalog keeps document-independent local tools, including HTML workspace tools, while Office/VBA tools and Office-backed HTML bindings are omitted until that document is open again.

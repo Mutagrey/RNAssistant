@@ -79,7 +79,8 @@ namespace RNAssistant.Harness
             var legacy = JsonConvert.DeserializeObject<AppSettings>(
                 "{\"SystemPrompt\":\"legacy custom combined\"," +
                 "\"AgentToolsPrompt\":\"legacy custom tools\"," +
-                "\"AgentSkillsPrompt\":\"legacy custom skills\"}");
+                "\"AgentSkillsPrompt\":\"legacy custom skills\"," +
+                "\"ChatSystemPrompt\":\"legacy plain chat\"}");
             AssertEqual(0, legacy.AgentPromptSchemaVersion, "missing schema marker identifies legacy settings");
 
             legacy.NormalizeAgentPrompts();
@@ -91,10 +92,13 @@ namespace RNAssistant.Harness
                 "legacy tool prompt is replaced with the current default");
             AssertEqual(AgentPromptDefaults.SkillInstructions, legacy.AgentSkillsPrompt,
                 "legacy skill prompt is replaced with the current default");
+            AssertEqual(AgentPromptDefaults.ChatInstructions, legacy.ChatSystemPrompt,
+                "legacy no-tools Chat prompt is replaced with the structured resource default");
 
             legacy.SystemPrompt = "current custom general";
             legacy.AgentToolsPrompt = "current custom tools";
             legacy.AgentSkillsPrompt = "current custom skills";
+            legacy.ChatSystemPrompt = "current custom chat";
             var serialized = JsonConvert.SerializeObject(legacy);
             var current = JsonConvert.DeserializeObject<AppSettings>(serialized);
             current.NormalizeAgentPrompts();
@@ -104,6 +108,8 @@ namespace RNAssistant.Harness
                 "current-version tool prompt is preserved");
             AssertEqual("current custom skills", current.AgentSkillsPrompt,
                 "current-version skill prompt is preserved");
+            AssertEqual("current custom chat", current.ChatSystemPrompt,
+                "current-version Chat prompt is preserved");
             AssertContains(serialized, "AgentPromptSchemaVersion",
                 "saved settings persist the Agent prompt schema marker");
 
@@ -111,6 +117,8 @@ namespace RNAssistant.Harness
             current.NormalizeAgentPrompts();
             AssertEqual(AgentPromptDefaults.GeneralInstructions, current.SystemPrompt,
                 "unknown Agent prompt schema is not treated as current");
+            AssertEqual(AgentPromptDefaults.ChatInstructions, current.ChatSystemPrompt,
+                "unknown schema resets the Chat protocol too");
         }
 
         private static void SettingsNormalizeInvalidNumericValues()

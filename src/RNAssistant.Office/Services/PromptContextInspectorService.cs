@@ -87,12 +87,9 @@ namespace RNAssistant.Office.Services
             });
 
             var mode = ChatModes.Normalize(previewSession.Mode);
-            var runnableTools = mode == ChatModes.Agent
-                ? AgentRunService.PrepareToolsForRun(tools)
-                : new List<ToolDefinition>();
-            var enabledSkills = mode == ChatModes.Agent
-                ? (skills ?? new SkillDefinition[0]).Where(item => item != null && item.Enabled).ToList()
-                : new List<SkillDefinition>();
+            var policy = ConversationRunPolicy.For(mode);
+            var runnableTools = ConversationRunService.PrepareToolsForMode(mode, tools);
+            var enabledSkills = policy.SelectSkills(skills);
 
             var relaxed = false;
             List<ChatMessage> messages;
@@ -108,13 +105,12 @@ namespace RNAssistant.Office.Services
                     runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens);
             }
 
-            var options = mode == ChatModes.Agent
-                ? AgentRunService.BuildRequestOptions(
-                    AgentResponseModes.Normalize(settings.AgentResponseMode),
-                    runnableTools,
-                    previewSession,
-                    null)
-                : null;
+            var options = ConversationRunService.BuildRequestOptions(
+                mode,
+                AgentResponseModes.Normalize(settings.AgentResponseMode),
+                runnableTools,
+                previewSession,
+                null);
             var usedTokens = EstimateMessagesTokens(messages) +
                 EstimateRequestOptionsTokens(options);
             var inputLimit = ModelContextBudget.InputBudgetTokens(settings);
@@ -147,10 +143,9 @@ namespace RNAssistant.Office.Services
             var estimateNotice = calibrationSamples > 0
                 ? "≈ уточнено по " + calibrationSamples + " API usage для этой модели."
                 : "≈ рассчитано по UTF-8 объёму.";
-            if (mode == ChatModes.Agent)
-            {
-                estimateNotice += " Даже пустой чат включает system prompt, схемы tools и каталог skills.";
-            }
+            estimateNotice += mode == ChatModes.Agent
+                ? " Даже пустой Agent включает system prompt, схемы tools и каталог skills."
+                : " Даже пустой Chat включает system prompt и схемы read-only resource tools.";
 
             var response = new PromptContextInspectorResponse
             {
@@ -209,18 +204,8 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatAttachment> attachments,
             int historyBudgetTokens)
         {
-            if (mode == ChatModes.Chat)
-            {
-                return new ChatContextWindowBuilder().BuildPlainMessages(
-                    draftText,
-                    session,
-                    context,
-                    settings,
-                    attachments,
-                    historyBudgetTokens);
-            }
-
-            return new AgentPromptComposer().BuildMessages(
+            return new ConversationPromptComposer().BuildMessages(
+                mode,
                 draftText,
                 _adapter,
                 tools,
@@ -263,59 +248,36 @@ namespace RNAssistant.Office.Services
             string runtimeJson = string.Empty;
             if (mode == ChatModes.Agent)
             {
-                agentGeneralInstruction = AgentPromptComposer.ResolveGeneralPrompt(settings);
-                agentToolInstruction = AgentPromptComposer.ResolveToolPrompt(settings);
-                agentSkillInstruction = AgentPromptComposer.ResolveSkillPrompt(settings);
-                instruction = AgentPromptComposer.BuildInstruction(settings);
-                runtimeJson = AgentPromptComposer.BuildRuntimeContext(
-                    _adapter,
-                    tools,
-                    skills,
-                    context,
-                    previewSession,
-                    settings);
-                instructionEnvelope = instruction + "\n\nRUNTIME_CONTEXT:\n" + runtimeJson;
+                agentGeneralInstruction = ConversationPromptComposer.ResolveGeneralPrompt(settings);
+                agentToolInstruction = ConversationPromptComposer.ResolveToolPrompt(settings);
+                agentSkillInstruction = ConversationPromptComposer.ResolveSkillPrompt(settings);
             }
             else
             {
-                instruction = string.IsNullOrWhiteSpace(settings.ChatSystemPrompt)
-                    ? new AppSettings().ChatSystemPrompt
-                    : settings.ChatSystemPrompt.Trim();
-                instructionEnvelope = instruction;
+                agentGeneralInstruction = ConversationPromptComposer.ResolveChatPrompt(settings);
             }
+            instruction = ConversationPromptComposer.BuildInstruction(mode, settings);
+            runtimeJson = ConversationPromptComposer.BuildRuntimeContext(
+                mode,
+                _adapter,
+                tools,
+                skills,
+                context,
+                previewSession,
+                settings);
+            instructionEnvelope = instruction + "\n\nRUNTIME_CONTEXT:\n" + runtimeJson;
 
             var embeddedInstructionTokens = hasStandaloneInstruction || current == null
                 ? 0
                 : Math.Min(currentTokens, EstimateTextTokens(instructionEnvelope));
             var runtimeBudget = hasStandaloneInstruction ? instructionMessageTokens : embeddedInstructionTokens;
-            if (mode == ChatModes.Agent)
-            {
-                AddAllocatedSections(sections, BuildAgentRuntimeSeeds(
-                    agentGeneralInstruction,
-                    agentToolInstruction,
-                    agentSkillInstruction,
-                    runtimeJson,
-                    sourceSession), runtimeBudget);
-            }
-            else
-            {
-                AddAllocatedSections(sections, new List<SectionSeed>
-                {
-                    new SectionSeed
-                    {
-                        Id = "instructions",
-                        Title = "Инструкции",
-                        Detail = "Chat system prompt",
-                        RawTokens = Math.Max(1, EstimateTextTokens(instruction)),
-                        Count = 1,
-                        Items = new List<PromptContextItemDto>
-                        {
-                            Item("chat-system-prompt", "instruction", "Chat system prompt", string.Empty,
-                                EstimateTextTokens(instruction), instruction)
-                        }
-                    }
-                }, runtimeBudget);
-            }
+            AddAllocatedSections(sections, BuildRuntimeSeeds(
+                mode,
+                agentGeneralInstruction,
+                agentToolInstruction,
+                agentSkillInstruction,
+                runtimeJson,
+                sourceSession), runtimeBudget);
 
             var historyStart = hasStandaloneInstruction ? 1 : 0;
             var history = new List<ChatMessage>();
@@ -329,25 +291,12 @@ namespace RNAssistant.Office.Services
             AddMessageSection(sections, "tool_history", "Tool calls и результаты", "Только записи, повторно отправляемые модели", protocolHistory);
 
             var currentBudget = Math.Max(0, currentTokens - embeddedInstructionTokens);
-            if (mode == ChatModes.Chat)
-            {
-                AddAllocatedSections(sections, BuildChatCurrentSeeds(
-                    current,
-                    instructionEnvelope,
-                    embeddedInstructionTokens > 0,
-                    context,
-                    sourceSession,
-                    attachments), currentBudget);
-            }
-            else
-            {
-                AddAllocatedSections(sections, BuildAgentCurrentSeeds(
-                    current,
-                    instructionEnvelope,
-                    embeddedInstructionTokens > 0,
-                    attachments,
-                    draftText), currentBudget);
-            }
+            AddAllocatedSections(sections, BuildCurrentSeeds(
+                current,
+                instructionEnvelope,
+                embeddedInstructionTokens > 0,
+                attachments,
+                draftText), currentBudget);
 
             var optionsTokens = EstimateRequestOptionsTokens(options);
             if (optionsTokens > 0)
@@ -373,7 +322,7 @@ namespace RNAssistant.Office.Services
                 });
             }
 
-            var excluded = BuildExcludedSection(sourceSession, previewSession, mode == ChatModes.Agent);
+            var excluded = BuildExcludedSection(sourceSession, previewSession, true);
             if (excluded != null) sections.Add(excluded);
 
             var estimateIntercept = TokenEstimateCalibration.EffectiveInterceptTokens(settings);
@@ -405,7 +354,8 @@ namespace RNAssistant.Office.Services
             return included;
         }
 
-        private List<SectionSeed> BuildAgentRuntimeSeeds(
+        private List<SectionSeed> BuildRuntimeSeeds(
+            string mode,
             string generalInstruction,
             string toolInstruction,
             string skillInstruction,
@@ -419,12 +369,13 @@ namespace RNAssistant.Office.Services
             var artifactIndex = (string)root["artifacts"] ?? string.Empty;
             var baseJson = new JObject
             {
+                ["mode"] = root["mode"] == null ? mode : root["mode"].DeepClone(),
                 ["host"] = root["host"] == null ? string.Empty : root["host"].DeepClone(),
                 ["document"] = root["document"] == null ? new JObject() : root["document"].DeepClone()
             }.ToString(Formatting.None);
             var baseItems = new List<PromptContextItemDto>
             {
-                Item("agent-system-prompt", "instruction", "Agent system prompt", string.Empty,
+                Item(mode + "-system-prompt", "instruction", mode == ChatModes.Agent ? "Agent system prompt" : "Chat system prompt", string.Empty,
                     EstimateTextTokens(generalInstruction), generalInstruction),
                 Item("runtime-document", "runtime", "Документ и host", string.Empty,
                     EstimateTextTokens(baseJson), baseJson)
@@ -435,7 +386,7 @@ namespace RNAssistant.Office.Services
                 {
                     Id = "instructions",
                     Title = "Общие инструкции и runtime",
-                    Detail = "Agent general prompt, document identity и JSON-обвязка",
+                    Detail = (mode == ChatModes.Agent ? "Agent" : "Chat") + " prompt, document identity и JSON-обвязка",
                     RawTokens = Math.Max(1, baseItems.Sum(item => item.Tokens) + 8),
                     Count = baseItems.Count,
                     Items = baseItems
@@ -578,7 +529,7 @@ namespace RNAssistant.Office.Services
                 item.ToString(Formatting.Indented));
         }
 
-        private List<SectionSeed> BuildAgentCurrentSeeds(
+        private List<SectionSeed> BuildCurrentSeeds(
             ChatMessage current,
             string instructionEnvelope,
             bool instructionEmbedded,
@@ -609,87 +560,6 @@ namespace RNAssistant.Office.Services
                     Items = requestItems
                 }
             };
-            AddAttachmentSeed(seeds, attachments);
-            return seeds;
-        }
-
-        private List<SectionSeed> BuildChatCurrentSeeds(
-            ChatMessage current,
-            string instructionEnvelope,
-            bool instructionEmbedded,
-            DocumentContext context,
-            ChatSession session,
-            IReadOnlyList<ChatAttachment> attachments)
-        {
-            var content = current == null ? string.Empty : current.Content ?? string.Empty;
-            var prefix = instructionEnvelope + "\n\n";
-            if (instructionEmbedded && content.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                content = content.Substring(prefix.Length);
-            }
-
-            var artifactMarker = content.IndexOf("CHAT_RESOURCE_INDEX", StringComparison.Ordinal);
-            var artifactText = artifactMarker < 0 ? string.Empty : content.Substring(artifactMarker);
-            var withoutArtifacts = artifactMarker < 0 ? content : content.Substring(0, artifactMarker).TrimEnd();
-            var contextMarker = withoutArtifacts.IndexOf("USER_ADDED_CONTEXT:", StringComparison.Ordinal);
-            var contextText = contextMarker < 0 ? string.Empty : withoutArtifacts.Substring(contextMarker);
-            var requestText = contextMarker < 0 ? withoutArtifacts : withoutArtifacts.Substring(0, contextMarker).TrimEnd();
-            var seeds = new List<SectionSeed>
-            {
-                new SectionSeed
-                {
-                    Id = "current_request",
-                    Title = "Текущий запрос",
-                    Detail = "Текст в поле и transport overhead",
-                    RawTokens = Math.Max(1, EstimateTextTokens(requestText) + 5),
-                    Count = 1,
-                    Items = new List<PromptContextItemDto>
-                    {
-                        Item("current-user", "message", "Текущий запрос", "user",
-                            EstimateTextTokens(requestText), requestText)
-                    }
-                }
-            };
-
-            if (!string.IsNullOrWhiteSpace(contextText))
-            {
-                var notes = context == null || context.Notes == null ? new List<ContextNote>() : context.Notes.Where(note => note != null).ToList();
-                var items = notes.Select(note => Item(
-                    note.Id,
-                    "context",
-                    note.Title ?? note.Kind ?? "Контекст",
-                    string.Join(" · ", new[] { note.Kind, note.Reference }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray()),
-                    EstimateTextTokens(note.Text ?? note.Preview),
-                    note.Text ?? note.Preview ?? string.Empty)).ToList();
-                if (items.Count == 0)
-                {
-                    items.Add(Item("chat-context", "context", "Переданный контекст", string.Empty,
-                        EstimateTextTokens(contextText), contextText));
-                }
-                seeds.Add(new SectionSeed
-                {
-                    Id = "document_context",
-                    Title = "Контекст документа",
-                    Detail = items.Count + " элементов",
-                    RawTokens = Math.Max(1, EstimateTextTokens(contextText)),
-                    Count = items.Count,
-                    Items = items
-                });
-            }
-
-            if (!string.IsNullOrWhiteSpace(artifactText))
-            {
-                var items = BuildArtifactItems(session, artifactText);
-                seeds.Add(new SectionSeed
-                {
-                    Id = "artifacts",
-                    Title = "Индекс артефактов",
-                    Detail = items.Count + " ссылок; содержимое не вставляется целиком",
-                    RawTokens = Math.Max(1, EstimateTextTokens(artifactText)),
-                    Count = items.Count,
-                    Items = items
-                });
-            }
             AddAttachmentSeed(seeds, attachments);
             return seeds;
         }

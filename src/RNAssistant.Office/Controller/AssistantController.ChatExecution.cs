@@ -515,42 +515,30 @@ namespace RNAssistant.Office
                             "Не удалось обновить сжатый контекст; продолжаю с сохранённой историей.", null, activity));
                         runProgress("compaction_failed", activity.ResultMessage, activity);
                     }
-                    if (executionMode == ChatModes.Chat)
+                    var tools = _toolCatalog.GetVisibleTools().Where(tool => tool.Enabled).ToList();
+                    var skills = executionMode == ChatModes.Agent
+                        ? _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList()
+                        : new List<SkillDefinition>();
+                    try
                     {
-                        completion = await _plainChatService.ExecuteAsync(
+                        completion = await _conversationRunService.ExecuteAsync(
+                            executionMode,
                             primaryText,
                             session,
                             documentContext,
                             settings,
+                            tools,
                             primaryAttachments,
                             runProgress,
+                            executionMode == ChatModes.Agent ? RegisterPendingAgentTool : null,
+                            skills,
                             runCancellation.Token,
                             false).ConfigureAwait(false);
                     }
-                    else
+                    finally
                     {
-                        var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-                        var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                        try
-                        {
-                            completion = await _agentRunService.ExecuteAsync(
-                                primaryText,
-                                session,
-                                documentContext,
-                                settings,
-                                tools,
-                                primaryAttachments,
-                                runProgress,
-                                RegisterPendingAgentTool,
-                                skills,
-                                runCancellation.Token,
-                                false).ConfigureAwait(false);
-                        }
-                        finally
-                        {
-                            // Auto-confirmed VBA mutations bypass the explicit VBA bridge methods.
-                            _toolCatalog.InvalidateDocumentVbaTools();
-                        }
+                        // Auto-confirmed VBA mutations bypass the explicit VBA bridge methods.
+                        if (executionMode == ChatModes.Agent) _toolCatalog.InvalidateDocumentVbaTools();
                     }
                 }
                 catch (Exception ex)

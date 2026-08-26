@@ -104,35 +104,44 @@ namespace RNAssistant.Harness
 
         private static void PromptContextInspectorRawJsonIsOptIn()
         {
-            var adapter = FakeOfficeAdapter.ForHost("Excel");
-            var session = NewSession(adapter);
-            session.Mode = ChatModes.Chat;
-            session.Messages.Add(new ChatMessage { Role = "user", Content = "История" });
-            var service = new PromptContextInspectorService(adapter, null);
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Chat;
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "История" });
+                var service = new PromptContextInspectorService(adapter, null);
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
 
-            var compact = service.Inspect(
-                session,
-                NewContext(adapter),
-                new AppSettings(),
-                new ToolDefinition[0],
-                new SkillDefinition[0],
-                new ChatAttachment[0],
-                "Новый вопрос",
-                false);
-            var raw = service.Inspect(
-                session,
-                NewContext(adapter),
-                new AppSettings(),
-                new ToolDefinition[0],
-                new SkillDefinition[0],
-                new ChatAttachment[0],
-                "Новый вопрос",
-                true);
+                var compact = service.Inspect(
+                    session,
+                    NewContext(adapter),
+                    new AppSettings(),
+                    tools,
+                    new SkillDefinition[0],
+                    new ChatAttachment[0],
+                    "Новый вопрос",
+                    false);
+                var raw = service.Inspect(
+                    session,
+                    NewContext(adapter),
+                    new AppSettings(),
+                    tools,
+                    new SkillDefinition[0],
+                    new ChatAttachment[0],
+                    "Новый вопрос",
+                    true);
 
-            AssertTrue(compact.RawRequestJson == null, "compact inspection skips raw serialization");
-            AssertContains(raw.RawRequestJson, "Новый вопрос", "raw structure is generated explicitly");
-            AssertTrue(!raw.Sections.Any(section => section.Id == "tools" || section.Id == "skills"),
-                "chat mode has no agent catalogs");
+                AssertTrue(compact.RawRequestJson == null, "compact inspection skips raw serialization");
+                AssertContains(raw.RawRequestJson, "Новый вопрос", "raw structure is generated explicitly");
+                AssertTrue(raw.Sections.Any(section => section.Id == "tools"),
+                    "chat inspector shows read-only resource schemas");
+                AssertTrue(!raw.Sections.Any(section => section.Id == "skills"),
+                    "chat inspector excludes skills");
+                AssertContains(raw.RawRequestJson, "common.resources_read", "chat raw request includes resource reads");
+                AssertTrue(raw.RawRequestJson.IndexOf("excel.inspect", StringComparison.OrdinalIgnoreCase) < 0,
+                    "chat raw request excludes Office tools");
+                AssertContains(raw.RawRequestJson, "json_object", "chat raw request includes structured response format");
+            });
         }
 
         private static void PromptContextInspectorIsolatesConcurrentSettings()

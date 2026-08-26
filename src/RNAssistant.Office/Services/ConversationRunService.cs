@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Services
         public bool WaitingForConfirmation { get; set; }
     }
 
-    public sealed class AgentRunService
+    public sealed class ConversationRunService
     {
         private const int ToolResultEnvelopeReserveTokens = 1200;
 
@@ -31,12 +31,12 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly LlmCompletionDelegate _completeAsync;
-        private readonly AgentPromptComposer _promptComposer;
+        private readonly ConversationPromptComposer _promptComposer;
         private readonly AgentResponseParser _responseParser;
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
 
-        public AgentRunService(
+        public ConversationRunService(
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
             LlmCompletionDelegate completeAsync)
@@ -44,7 +44,7 @@ namespace RNAssistant.Office.Services
         {
         }
 
-        internal AgentRunService(
+        internal ConversationRunService(
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
             LlmCompletionDelegate completeAsync,
@@ -53,13 +53,14 @@ namespace RNAssistant.Office.Services
             _adapter = adapter;
             _toolExecutor = toolExecutor;
             _completeAsync = completeAsync;
-            _promptComposer = new AgentPromptComposer();
+            _promptComposer = new ConversationPromptComposer();
             _responseParser = new AgentResponseParser();
             _contextCompactionService = contextCompactionService;
             _attachmentAnalysisService = new AttachmentAnalysisService(completeAsync);
         }
 
         public Task<ChatTurnResult> ExecuteAsync(
+            string mode,
             string text,
             ChatSession session,
             DocumentContext documentContext,
@@ -70,11 +71,12 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecuteAsync(text, session, documentContext, settings, tools, null, progress,
+            return ExecuteAsync(mode, text, session, documentContext, settings, tools, null, progress,
                 pendingToolRegistrar, skills, cancellationToken, true);
         }
 
         public Task<ChatTurnResult> ExecuteAsync(
+            string mode,
             string text,
             ChatSession session,
             DocumentContext documentContext,
@@ -87,6 +89,7 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken,
             bool appendUserMessage = true)
         {
+            mode = ValidateMode(mode, session);
             if (appendUserMessage)
             {
                 session.Messages.Add(new ChatMessage
@@ -99,7 +102,7 @@ namespace RNAssistant.Office.Services
                         : new List<ChatAttachment>(attachments)
                 });
             }
-            return RunLoopAsync(text, session, documentContext, settings, tools, attachments, progress,
+            return RunLoopAsync(mode, text, session, documentContext, settings, tools, attachments, progress,
                 pendingToolRegistrar, skills, null, null, cancellationToken);
         }
 
@@ -118,12 +121,17 @@ namespace RNAssistant.Office.Services
             int initialIterationsUsed = 0,
             int initialToolStepsUsed = 0)
         {
-            return RunLoopAsync(LatestUserRequest(session), session, documentContext, settings, tools, attachments,
+            if (!string.Equals(ChatModes.Normalize(session == null ? null : session.Mode), ChatModes.Agent, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Only Agent mode can continue a confirmed tool call.");
+            }
+            return RunLoopAsync(ChatModes.Agent, LatestUserRequest(session), session, documentContext, settings, tools, attachments,
                 progress, pendingToolRegistrar, skills, confirmedCommand, confirmedResult, cancellationToken,
                 initialIterationsUsed, initialToolStepsUsed);
         }
 
         private async Task<ChatTurnResult> RunLoopAsync(
+            string mode,
             string text,
             ChatSession session,
             DocumentContext documentContext,
@@ -140,11 +148,14 @@ namespace RNAssistant.Office.Services
             int initialToolStepsUsed = 0)
         {
             settings = settings ?? new AppSettings();
+            var policy = ConversationRunPolicy.For(mode);
             ReleaseHydratedArtifactMedia(session == null ? null : session.Messages);
             var availableTools = PrepareToolsForRun(tools);
-            availableTools = _toolExecutor.AvailableAgentToolsForSession(availableTools, session);
-            var enabledSkills = (skills ?? new SkillDefinition[0]).Where(skill => skill != null && skill.Enabled).ToList();
-            var messages = await BuildMessagesAsync(text, session, documentContext, settings, availableTools,
+            availableTools = _toolExecutor.AvailableConversationToolsForSession(availableTools, session);
+            availableTools = policy.SelectTools(availableTools);
+            var enabledSkills = policy.SelectSkills(skills);
+            if (!policy.AllowsConfirmation) pendingToolRegistrar = null;
+            var messages = await BuildMessagesAsync(policy.Mode, text, session, documentContext, settings, availableTools,
                 enabledSkills, attachments, initialCommand != null && initialResult != null, progress, cancellationToken).ConfigureAwait(false);
             var results = new List<object>();
             var toolSteps = Math.Max(0, initialToolStepsUsed);
@@ -171,8 +182,8 @@ namespace RNAssistant.Office.Services
                 cancellationToken.ThrowIfCancellationRequested();
                 iterationsUsed += 1;
                 UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "thinking");
-                Report(progress, "thinking", "Агент выбирает следующий шаг...", null);
-                var options = BuildRequestOptions(responseMode, availableTools, session, runCache);
+                Report(progress, "thinking", "Модель выбирает следующий шаг...", null);
+                var options = BuildRequestOptions(policy.Mode, responseMode, availableTools, session, runCache);
                 string budgetError;
                 if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                 {
@@ -192,7 +203,7 @@ namespace RNAssistant.Office.Services
                         settings.FallbackToJsonObject)
                     {
                         responseMode = AgentResponseModes.JsonObject;
-                        options = BuildRequestOptions(responseMode, availableTools, session, runCache);
+                        options = BuildRequestOptions(policy.Mode, responseMode, availableTools, session, runCache);
                         Report(progress, "thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
                         if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                         {
@@ -252,7 +263,7 @@ namespace RNAssistant.Office.Services
                 if (!parsed.Success)
                 {
                     return FinishWithDiagnostic(session, results, contextUsage,
-                        "Ответ агента не выполнен после " + maxFormatRetries + " попыток исправить формат: " + parsed.Error);
+                        "Ответ модели не выполнен после " + maxFormatRetries + " попыток исправить формат: " + parsed.Error);
                 }
 
                 var response = parsed.Response;
@@ -306,7 +317,7 @@ namespace RNAssistant.Office.Services
                     ToolResult toolResult;
                     if (toolSteps >= Math.Max(1, settings.MaxAgentToolSteps))
                     {
-                        toolResult = ToolResult.Fail("Agent tool step limit reached.", null, "tool_step_limit_reached", false);
+                        toolResult = ToolResult.Fail("Conversation tool step limit reached.", null, "tool_step_limit_reached", false);
                     }
                     else
                     {
@@ -320,6 +331,16 @@ namespace RNAssistant.Office.Services
                             Math.Max(1, settings.MaxAgentToolSteps - toolSteps),
                             enabledSkills,
                             cancellationToken) ?? ToolResult.Fail("Tool returned no result.", null, "missing_result", true);
+                    }
+                    if (!policy.AllowsConfirmation && AgentTranscript.IsWaitingResult(toolResult))
+                    {
+                        var consumedSteps = Math.Max(1, toolResult.ToolStepsConsumed);
+                        toolResult = ToolResult.Fail(
+                            "Chat mode cannot execute a tool that requires confirmation.",
+                            null,
+                            "conversation_policy_denied",
+                            false);
+                        toolResult.ToolStepsConsumed = consumedSteps;
                     }
                     toolSteps += Math.Max(1, toolResult.ToolStepsConsumed);
                     UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "tool_result");
@@ -390,7 +411,7 @@ namespace RNAssistant.Office.Services
                 }
             }
 
-            var limitText = "Агент остановлен: достигнут лимит шагов.";
+            var limitText = "Выполнение остановлено: достигнут лимит шагов.";
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(limitText, null));
             return Result(limitText, results, contextUsage, false);
             }
@@ -401,6 +422,7 @@ namespace RNAssistant.Office.Services
         }
 
         internal static LlmRequestOptions BuildRequestOptions(
+            string mode,
             string responseMode,
             IReadOnlyList<ToolDefinition> tools,
             ChatSession session,
@@ -418,11 +440,12 @@ namespace RNAssistant.Office.Services
                 ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled,
                 RunCache = runCache,
                 TraceSession = session,
-                TracePurpose = "agent"
+                TracePurpose = ChatModes.Normalize(mode)
             };
         }
 
         private async Task<List<ChatMessage>> BuildMessagesAsync(
+            string mode,
             string text,
             ChatSession session,
             DocumentContext context,
@@ -437,7 +460,7 @@ namespace RNAssistant.Office.Services
             try
             {
                 return _promptComposer.BuildMessages(
-                    text, _adapter, tools, skills, context, settings, session, attachments, replayCurrentUserInHistory);
+                    mode, text, _adapter, tools, skills, context, settings, session, attachments, replayCurrentUserInHistory);
             }
             catch (PromptBudgetExceededException ex) when (
                 ex.CanCompact && settings.AutoCompressContext && _contextCompactionService != null)
@@ -446,7 +469,7 @@ namespace RNAssistant.Office.Services
                     session, settings, string.Empty, true, progress, cancellationToken).ConfigureAwait(false);
                 if (checkpoint == null) throw;
                 return _promptComposer.BuildMessages(
-                    text, _adapter, tools, skills, context, settings, session, attachments, replayCurrentUserInHistory);
+                    mode, text, _adapter, tools, skills, context, settings, session, attachments, replayCurrentUserInHistory);
             }
         }
 
@@ -464,7 +487,7 @@ namespace RNAssistant.Office.Services
                 if (!string.IsNullOrEmpty(update.ReasoningDelta)) reasoning.Append(update.ReasoningDelta);
                 if (reasoning.Length == 0) return;
                 if (reasoning.Length < 256 && !update.Completed) return;
-                Report(progress, "thinking", "Агент анализирует запрос...", new ChatActivity
+                Report(progress, "thinking", "Модель анализирует запрос...", new ChatActivity
                 {
                     Kind = "reasoning",
                     Title = "Анализ",
@@ -506,6 +529,13 @@ namespace RNAssistant.Office.Services
             }
             RemovePipelinesWithOmittedDependencies(result);
             return result.OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        internal static List<ToolDefinition> PrepareToolsForMode(
+            string mode,
+            IEnumerable<ToolDefinition> tools)
+        {
+            return ConversationRunPolicy.For(mode).SelectTools(PrepareToolsForRun(tools));
         }
 
         internal static string ToolExecutionFingerprint(IEnumerable<ToolDefinition> tools, string rootToolId)
@@ -613,8 +643,8 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<object> results,
             object contextUsage,
             string text,
-            string title = "Некорректный ответ агента",
-            string executionStatus = "invalid_agent_response")
+            string title = "Некорректный ответ модели",
+            string executionStatus = "invalid_model_response")
         {
             var activity = new ChatActivity
             {
@@ -750,7 +780,7 @@ namespace RNAssistant.Office.Services
                 return true;
             }
 
-            error = "Агент остановлен до следующего запроса модели: контекст занимает ≈" + estimated +
+            error = "Выполнение остановлено до следующего запроса модели: контекст занимает ≈" + estimated +
                 " токенов при доступном лимите " + inputBudget +
                 ". Сузьте диапазон/объём результата или начните новый чат.";
             return false;
@@ -762,6 +792,19 @@ namespace RNAssistant.Office.Services
                 .LastOrDefault(item => item != null && !item.ProtocolMessage &&
                     string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase));
             return message == null ? string.Empty : message.Content ?? string.Empty;
+        }
+
+        private static string ValidateMode(string mode, ChatSession session)
+        {
+            if (session == null) throw new ArgumentNullException(nameof(session));
+            var requested = ChatModes.Normalize(mode);
+            var persisted = ChatModes.Normalize(session.Mode);
+            if (!string.Equals(requested, persisted, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Conversation mode does not match the active chat session.");
+            }
+            return requested;
         }
 
         private static void Report(Action<string, string, ChatActivity> progress, string phase, string message, ChatActivity activity)
@@ -783,7 +826,7 @@ namespace RNAssistant.Office.Services
                 Model = options.TraceSession == null ? null : options.TraceSession.Model,
                 ResponseFormat = options.ResponseFormat,
                 Attempt = attempt,
-                FailureKind = "invalid_agent_response",
+                FailureKind = "invalid_model_response",
                 Error = error,
                 PayloadJson = completion == null ? null : completion.Content,
                 PayloadContentType = "application/json"

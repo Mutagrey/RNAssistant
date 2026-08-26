@@ -98,13 +98,12 @@
     <Compile Include="Services\ResourceGatewayService.cs" />
     <Compile Include="Services\ResourceProviderRegistry.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
-    <Compile Include="Services\AgentRunService.cs" />
+    <Compile Include="Services\ConversationRunService.cs" />
+    <Compile Include="Services\ConversationRunPolicy.cs" />
     <Compile Include="Services\AgentJsonProtocol.cs" />
-    <Compile Include="Services\AgentPromptComposer.cs" />
+    <Compile Include="Services\ConversationPromptComposer.cs" />
     <Compile Include="Services\ApplicationVersionService.cs" />
-    <Compile Include="Services\ChatContextWindowBuilder.cs" />
     <Compile Include="Services\ContextCompactionService.cs" />
-    <Compile Include="Services\PlainChatService.cs" />
     <Compile Include="Services\PromptBudgetComposer.cs" />
     <Compile Include="Services\PromptContextInspectorService.cs" />
     <Compile Include="Services\AttachmentImageService.cs" />

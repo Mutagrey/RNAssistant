@@ -74,7 +74,7 @@ namespace RNAssistant.Harness
                 oversizedCatalogEntry.Description = new string('x', 7000);
                 AssertTrue(executor.ValidateToolDefinition(oversizedCatalogEntry).Success,
                     "storage validation does not duplicate runtime prompt budgeting");
-                AssertTrue(AgentRunService.PrepareToolsForRun(
+                AssertTrue(ConversationRunService.PrepareToolsForRun(
                         adapter.GetBuiltInTools().Concat(new[] { oversizedCatalogEntry }))
                     .Any(tool => string.Equals(tool.Id, oversizedCatalogEntry.Id, StringComparison.OrdinalIgnoreCase)),
                     "valid catalog entry remains runnable and the complete prompt budget decides whether the request fits");
@@ -159,7 +159,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!safety.Valid, "pipeline with removed VBA ids is invalid");
                 AssertContains(safety.Error, "unknown tool", "removed pipeline id has an actionable error");
 
-                var prepared = AgentRunService.PrepareToolsForRun(
+                var prepared = ConversationRunService.PrepareToolsForRun(
                     excel.GetBuiltInTools().Concat(excelExecutor.GetControllerTools()).Concat(new[] { legacyPipeline }));
                 var preparedPipeline = FindTool(prepared, legacyPipeline.Id);
                 AssertTrue(preparedPipeline == null, "pipeline with removed VBA ids stays out of the Agent catalog");
@@ -380,7 +380,8 @@ namespace RNAssistant.Harness
             {
                 var tools = new List<ToolDefinition>(fake.GetBuiltInTools());
                 tools.AddRange(executor.GetControllerTools());
-                var prompt = FlattenMessages(new AgentPromptComposer().BuildMessages(
+                var prompt = FlattenMessages(new ConversationPromptComposer().BuildMessages(
+                    ChatModes.Agent,
                     "Test request",
                     fake,
                     tools,
@@ -397,7 +398,7 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "common.tools_validate", "prompt includes tool validation");
                 AssertContains(prompt, "common.prompts_read", "prompt includes prompt reader");
 
-                var promptTools = AgentPromptComposer.BuildTools(tools);
+                var promptTools = ConversationPromptComposer.BuildTools(tools);
                 var bindParameters = (JObject)promptTools.OfType<JObject>()
                     .Single(item => string.Equals((string)item.SelectToken("function.name"), HtmlArtifactToolExecutor.BindDataToolId, StringComparison.OrdinalIgnoreCase))
                     .SelectToken("function.parameters");

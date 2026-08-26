@@ -75,7 +75,7 @@ namespace RNAssistant.Office.Tools
             return _controllerTools;
         }
 
-        internal List<ToolDefinition> AvailableAgentToolsForSession(
+        internal List<ToolDefinition> AvailableConversationToolsForSession(
             IEnumerable<ToolDefinition> tools,
             ChatSession session)
         {

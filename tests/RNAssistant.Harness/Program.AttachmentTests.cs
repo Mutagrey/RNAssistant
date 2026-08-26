@@ -360,11 +360,15 @@ namespace RNAssistant.Harness
             AssertTrue(analysis == null, "no auxiliary evidence is created");
             AssertEqual(0, helperCalls, "no duplicate model call");
 
-            var prompt = new ChatContextWindowBuilder().BuildPlainMessages(
+            var prompt = new ConversationPromptComposer().BuildMessages(
+                ChatModes.Chat,
                 sourceMessage.Content,
-                session,
                 null,
+                new ToolDefinition[0],
+                new SkillDefinition[0],
+                new DocumentContext(),
                 routing.Settings,
+                session,
                 routing.PrimaryAttachments);
             AssertTrue(prompt.Any(message =>
                 (message.Content ?? string.Empty).IndexOf("NORMAL_HISTORY", StringComparison.Ordinal) >= 0),
