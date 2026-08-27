@@ -159,12 +159,38 @@ namespace RNAssistant.Office.Tools
                 maxExecutionSteps,
                 skillCatalog);
             var initialSteps = context.RemainingSteps;
-            var result = ExecuteForExpectedDocument(
-                session,
-                RequiresOfficeDocument(command, context.Tools),
-                () => ExecuteCommandSafely(command, context, 0, dryRun, manualRun, cancellationToken));
-            if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
-            return result;
+            TraceExecution(command, "tool.execution.started", null, null);
+            try
+            {
+                var result = ExecuteForExpectedDocument(
+                    session,
+                    RequiresOfficeDocument(command, context.Tools),
+                    () => ExecuteCommandSafely(command, context, 0, dryRun, manualRun, cancellationToken));
+                if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
+                TraceExecution(command, "tool.execution.completed",
+                    result == null ? "missing_result" : result.Status, result == null ? null : result.ErrorCode);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                TraceExecution(command, "tool.execution.completed",
+                    ex is OperationCanceledException ? "cancelled" : "threw", null);
+                throw;
+            }
+        }
+
+        private static void TraceExecution(ToolCommand command, string stage, string status, string code)
+        {
+            RunCausalTrace.Record(new CausalTraceRecord
+            {
+                Stage = stage,
+                StepId = command == null ? null : command.RuntimeStepId,
+                ToolCallId = command == null ? null : command.ToolCallId,
+                ToolId = command == null ? null : command.ToolId,
+                Status = status,
+                Code = code,
+                Boundary = "office_tool_executor"
+            });
         }
 
         private ToolResult ExecuteForExpectedDocument(

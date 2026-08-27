@@ -70,6 +70,20 @@ Some assertions intentionally capture known false completion; passing this slice
 does **not** mean that release safety is fixed. Phase 1C must introduce red→green
 runtime-health assertions. See [Phase 1A evidence](../../docs/stabilization/PHASE_1A_CHARACTERIZATION.md).
 
+## Stabilization causal trace
+
+```bash
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "causal trace:"
+```
+
+Phase 1B uses `Program.SimpleAgentTests.cs` and `Program.SessionEventStoreTests.cs`:
+ok/error/journal unknown, twentieth-response repair correlation, confirmation,
+async scope isolation and harmless optional trace failures. Real host-neutral
+runtime/store/journal run with fake LLM/Office. Controller wiring is not executed:
+this harness uses `AssistantControllerBridgeStub`. Scope/projection marker tests
+do not prove production bridge delivery or WebView rendering. See
+[trace evidence and boundaries](../../docs/stabilization/PHASE_1B_CAUSAL_TRACE.md).
+
 ## Full suite
 
 Run the complete harness only for broad cross-cutting changes:

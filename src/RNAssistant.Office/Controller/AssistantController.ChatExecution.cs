@@ -292,6 +292,7 @@ namespace RNAssistant.Office
 
             var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             ChatRunLease runLease;
+            RunCausalTrace causalTrace = null;
             try
             {
                 runLease = _chatRuns.Start(sessionId, runId, session, runCancellation);
@@ -383,6 +384,8 @@ namespace RNAssistant.Office
                     }
                     _chatStore.Save(session);
                     preparedTurnPersisted = true;
+                    causalTrace = RunCausalTrace.Begin(_chatStore, session);
+                    RunCausalTrace.Record(new CausalTraceRecord { Stage = "run.started", Status = "running" });
                     _chatSessions.NotifySaved(session);
                     if (commitUserAttachments && appendedUserMessage != null)
                     {
@@ -421,6 +424,7 @@ namespace RNAssistant.Office
                         try
                         {
                             SaveSessionChanges(session);
+                            RunCausalTrace.Summary(session);
                         }
                         catch
                         {
@@ -549,6 +553,7 @@ namespace RNAssistant.Office
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
                     ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
                     SaveSessionChanges(session);
+                    RunCausalTrace.Summary(session);
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                     throw;
                 }
@@ -567,9 +572,12 @@ namespace RNAssistant.Office
                     ApplyTerminalRunResult(session, completion);
                 }
                 SaveSessionChanges(session);
+                RunCausalTrace.Summary(session);
                 _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                 runLease.Dispose();
                 var response = CreateSendChatResponse(session, settings, completion);
+                RunCausalTrace.Projected("SendChatResponse");
+                causalTrace.Dispose();
                 if (shouldGenerateLlmTitle)
                 {
                     StartChatTitleGeneration(
@@ -585,6 +593,7 @@ namespace RNAssistant.Office
             }
             finally
             {
+                if (causalTrace != null) causalTrace.Dispose();
                 runLease.Dispose();
             }
         }

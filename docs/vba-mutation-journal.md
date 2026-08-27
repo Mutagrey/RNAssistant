@@ -35,6 +35,15 @@ Tool results expose `mutationId`, `rollbackBackupId`, and `journalStatus`. Resto
 
 Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope and every component's before/intended existence, type, normalized and VBE-comparable package source hashes, and CAS reference. The comparable hash also excludes import headers and RNAssistant ownership markers. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hashes and whether it matches before and/or intended state. Mixed or unreadable component state is `unknown`, never partial success.
 
+Phase 1B observes the existing journalled module/rename/package wrappers through
+metadata-only `domain.effect.prepared/dispatched/verified` events in the chat stream.
+They carry the real mutation id, call/step, observed runtime document id and
+`JournalRunId` (which may precede the confirmation execution run). `verified` records
+the existing assessment, including `unknown`, before terminal journal persistence;
+it is not a success assertion. Optional trace failures never alter journal or tool
+outcomes. Read-back, guards, recovery and the journal format are unchanged. See
+[causal trace semantics](stabilization/PHASE_1B_CAUSAL_TRACE.md).
+
 ## Recovery
 
 On the next safe VBA access for the active document, runtime finds module and package preparations without a terminal record and compares live state with recorded before/intended hashes and types. It appends `committed`, `not_applied`, or `unknown`. Package reconciliation assesses the complete set and retains mixed per-component evidence. Recovery never retries a write, creates/deletes a component, or restores a backup automatically.

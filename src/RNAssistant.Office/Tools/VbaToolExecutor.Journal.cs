@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
@@ -191,10 +192,12 @@ namespace RNAssistant.Office.Tools
 
         private ToolResult ExecuteJournaledMutation(VbaMutationPreparation prepared, Func<ToolResult> action)
         {
+            TraceMutation(prepared, "domain.effect.prepared", null);
             ToolResult result;
             Exception actionException = null;
             try
             {
+                if (action != null) TraceMutation(prepared, "domain.effect.dispatched", null);
                 result = action == null ? null : action();
             }
             catch (Exception ex)
@@ -227,6 +230,7 @@ namespace RNAssistant.Office.Tools
                 }
             }
 
+            TraceMutation(prepared, "domain.effect.verified", assessment.Status);
             try
             {
                 _vbaJournalStore.CompleteMutation(
@@ -509,12 +513,14 @@ namespace RNAssistant.Office.Tools
 
         private ToolResult ExecuteJournaledPackageMutation(VbaPackageMutationPreparation prepared, Func<ToolResult> action)
         {
+            TraceMutation(prepared, "domain.effect.prepared", null);
             var rename = prepared != null && string.Equals(prepared.Operation, "rename", StringComparison.OrdinalIgnoreCase);
             var mutationLabel = rename ? "VBA rename" : "VBA package mutation";
             ToolResult result;
             Exception actionException = null;
             try
             {
+                if (action != null) TraceMutation(prepared, "domain.effect.dispatched", null);
                 result = action == null ? null : action();
             }
             catch (Exception ex)
@@ -536,6 +542,7 @@ namespace RNAssistant.Office.Tools
             }
 
             var assessment = InspectPackageMutation(prepared, result, actionException);
+            TraceMutation(prepared, "domain.effect.verified", assessment.Status);
             try
             {
                 _vbaJournalStore.CompletePackageMutation(
@@ -765,6 +772,38 @@ namespace RNAssistant.Office.Tools
                 data["actualCodeSha256"] = assessment.ActualCodeSha256;
             }
             return data.ToString(Formatting.None);
+        }
+
+        private static void TraceMutation(VbaMutationPreparation prepared, string stage, string status)
+        {
+            if (prepared == null) return;
+            RunCausalTrace.Record(new CausalTraceRecord
+            {
+                Stage = stage,
+                StepId = prepared.StepId,
+                ToolCallId = prepared.ToolCallId,
+                DocumentRuntimeId = prepared.RuntimeDocumentKey,
+                MutationId = prepared.MutationId,
+                JournalRunId = prepared.RunId,
+                Status = status,
+                Boundary = "vba_mutation"
+            });
+        }
+
+        private static void TraceMutation(VbaPackageMutationPreparation prepared, string stage, string status)
+        {
+            if (prepared == null) return;
+            RunCausalTrace.Record(new CausalTraceRecord
+            {
+                Stage = stage,
+                StepId = prepared.StepId,
+                ToolCallId = prepared.ToolCallId,
+                DocumentRuntimeId = prepared.RuntimeDocumentKey,
+                MutationId = prepared.MutationId,
+                JournalRunId = prepared.RunId,
+                Status = status,
+                Boundary = "vba_package_mutation"
+            });
         }
 
         private sealed class MutationAssessment

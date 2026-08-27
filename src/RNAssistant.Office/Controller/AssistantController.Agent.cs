@@ -34,6 +34,7 @@ namespace RNAssistant.Office
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
             var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             ChatRunLease runLease;
+            RunCausalTrace causalTrace = null;
             try
             {
                 runLease = _chatRuns.Start(sessionId, runId, session, runCancellation);
@@ -79,6 +80,8 @@ namespace RNAssistant.Office
                     StartedUtc = DateTime.UtcNow
                 };
                 SaveSessionChanges(session);
+                causalTrace = RunCausalTrace.Begin(_chatStore, session);
+                RunCausalTrace.Record(new CausalTraceRecord { Stage = "run.started", Status = "running" });
                 _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
 
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
@@ -189,6 +192,7 @@ namespace RNAssistant.Office
                         ApplyTerminalRunResult(session, completion);
                     }
                     SaveSessionChanges(session);
+                    RunCausalTrace.Summary(session);
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                 }
                 catch (Exception ex)
@@ -219,15 +223,19 @@ namespace RNAssistant.Office
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
                     ChatResourceReferenceService.LinkMessageResources(session, 0);
                     SaveSessionChanges(session);
+                    RunCausalTrace.Summary(session);
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                     throw;
                 }
 
                 runLease.Dispose();
-                return ChatState(session);
+                var response = ChatState(session);
+                RunCausalTrace.Projected("ChatStateResponse");
+                return response;
             }
             finally
             {
+                if (causalTrace != null) causalTrace.Dispose();
                 runLease.Dispose();
             }
         }

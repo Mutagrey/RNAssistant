@@ -599,6 +599,126 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void CausalTraceCorrelatesMutation(string outcome, int invalidAttempts)
+        {
+            WithTempPaths(paths =>
+            {
+                const string before = "Sub Main()\nDebug.Print \"before\"\nEnd Sub";
+                const string intended = "Sub Main()\nDebug.Print \"after\"\nEnd Sub";
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.VbaModuleCode = before;
+                if (outcome == "unknown") adapter.VbaWriteTransform = code => code.Replace("\"after\"", "\"diverged\"");
+                if (outcome == "error") adapter.QueueResult("excel.vba_replace_module",
+                    ToolResult.Fail("Write rejected.", null, "write_rejected", false));
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var store = new ChatStore(paths);
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "trace-run", TurnId = "trace-turn", Status = "running",
+                    DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow
+                };
+                store.Save(session);
+                var responses = new Queue<string>(Enumerable.Repeat("REJECTED_TRACE_SENTINEL", invalidAttempts).Concat(new[]
+                {
+                    LoadToolSchemaResponse("common.vba_write_module", "trace-schema"),
+                    new JObject
+                    {
+                        ["status"] = "in_progress", ["message"] = "Update module.",
+                        ["tool_calls"] = new JArray(new JObject
+                        {
+                            ["id"] = "trace-write", ["name"] = "common.vba_write_module",
+                            ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
+                        })
+                    }.ToString(Formatting.None),
+                    "{\"status\":\"completed\",\"message\":\"Done.\",\"tool_calls\":[]}"
+                }));
+                var trace = new ModelTracePersistenceService(store);
+                var requestCount = 0;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    AssertTrue(!FlattenSimple(messages.ToList()).Contains("REJECTED_TRACE_SENTINEL"),
+                        "rejected payload is absent from every subsequent prompt");
+                    trace.Configure(options);
+                    var requestId = "transport-" + (++requestCount);
+                    // Fake transport records; exact real HTTP materialization has its own existing test.
+                    options.TraceSink(new LlmTraceRecord
+                    {
+                        Type = "request", RequestId = requestId, Purpose = "agent",
+                        PayloadJson = "{\"fake_transport\":true}", PayloadContentType = "application/json"
+                    });
+                    var content = responses.Dequeue();
+                    options.TraceSink(new LlmTraceRecord
+                    {
+                        Type = "response", RequestId = requestId, Purpose = "agent",
+                        PayloadJson = content, PayloadContentType = "application/json"
+                    });
+                    return Task.FromResult(new LlmCompletionResult { Content = content });
+                };
+                ChatTurnResult result;
+                using (RunCausalTrace.Begin(store, session))
+                {
+                    result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                        ChatModes.Agent, "Update Module1.", session, NewContext(adapter),
+                        new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 20 },
+                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null)
+                        .GetAwaiter().GetResult();
+                }
+                store.Save(session);
+                var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
+                var requests = events.Where(item => item.Type == SessionEventTypes.LlmRequest).ToList();
+                var rejected = events.Where(item => item.Type == SessionEventTypes.AgentResponseRejected).ToList();
+                var accepted = events.Where(item => item.Type == "model.response.accepted").ToList();
+                AssertEqual(invalidAttempts + 3, requestCount, "trace introduces no retry or model request");
+                AssertEqual(invalidAttempts, rejected.Count, "every rejected attempt has a diagnostic event");
+                AssertEqual(3, accepted.Count, "only valid schema/write/final responses are accepted");
+                AssertEqual(requestCount, requests.Select(item => (string)item.Data["ModelAttemptId"]).Distinct().Count(),
+                    "each completion attempt has a distinct id");
+                AssertTrue(requests.All(item => !string.IsNullOrWhiteSpace((string)item.Data["ModelAttemptId"])), "attempt ids exist");
+                AssertEqual(1, requests.Take(invalidAttempts + 1).Select(item => (string)item.Data["StepId"]).Distinct().Count(),
+                    "repair attempts keep the same logical step");
+                AssertEqual(3, requests.Select(item => (string)item.Data["StepId"]).Distinct().Count(), "next iteration starts a new step");
+                foreach (var verdict in rejected.Concat(accepted))
+                {
+                    var request = requests.Single(item => item.StepId == (string)verdict.Data["RequestId"]);
+                    AssertEqual((string)request.Data["ModelAttemptId"], (string)verdict.Data["ModelAttemptId"], "verdict links its exact attempt");
+                    AssertEqual((string)request.Data["StepId"], (string)verdict.Data["StepId"], "verdict retains logical step");
+                    AssertTrue(request.Sequence < verdict.Sequence, "prepared request precedes parser verdict");
+                }
+                var acceptedWrite = accepted.Single(item => ((JArray)item.Data["ToolCallIds"]).Values<string>().Contains("trace-write"));
+                var toolStart = events.Single(item => item.Type == "tool.execution.started" && (string)item.Data["ToolCallId"] == "trace-write");
+                var toolEnd = events.Single(item => item.Type == "tool.execution.completed" && (string)item.Data["ToolCallId"] == "trace-write");
+                AssertEqual((string)acceptedWrite.Data["StepId"], toolStart.StepId, "accepted response and tool use one step id");
+                AssertTrue(acceptedWrite.Sequence < toolStart.Sequence && toolStart.Sequence < toolEnd.Sequence, "accepted call precedes execution");
+                var mutation = journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
+                var effects = events.Where(item => item.Type.StartsWith("domain.effect.", StringComparison.Ordinal)).ToList();
+                AssertEqual("domain.effect.prepared,domain.effect.dispatched,domain.effect.verified",
+                    string.Join(",", effects.Select(item => item.Type)), "domain boundaries preserve order");
+                AssertTrue(effects.All(item => toolStart.Sequence < item.Sequence && item.Sequence < toolEnd.Sequence), "domain lies inside tool execution");
+                foreach (var effect in effects)
+                {
+                    AssertEqual(mutation.Prepared.MutationId, (string)effect.Data["MutationId"], "trace links the real journal id");
+                    AssertEqual(mutation.Prepared.StepId, effect.StepId, "journal and tool step agree");
+                    AssertEqual("trace-write", (string)effect.Data["ToolCallId"], "domain links original call");
+                    AssertEqual(mutation.Prepared.RunId, (string)effect.Data["JournalRunId"], "journal origin remains explicit");
+                }
+                var expected = outcome == "unknown" ? VbaMutationStatuses.Unknown : outcome == "error" ? VbaMutationStatuses.NotApplied : VbaMutationStatuses.Committed;
+                AssertEqual(expected, (string)effects.Last().Data["Status"], "trace reports actual domain assessment without promoting unknown");
+                AssertEqual(expected, mutation.Terminal.Status, "durable journal agrees with assessment");
+                foreach (var item in requests.Concat(rejected).Concat(accepted).Concat(effects).Concat(new[] { toolStart, toolEnd }))
+                {
+                    AssertEqual(session.Id, item.SessionId, "session correlation");
+                    AssertEqual("trace-run", item.RunId, "run correlation");
+                    AssertEqual("trace-turn", item.TurnId, "turn correlation");
+                    AssertEqual(adapter.RuntimeDocumentKey, (string)item.Data["DocumentRuntimeId"], "runtime document correlation");
+                }
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.vba_replace_module"), "exactly one write dispatch");
+                AssertEqual("completed", result.RunStatus, "Phase 1B preserves existing outcome; Phase 1C owns the guard");
+                AssertTrue(!FlattenSimple(store.Load(session.Id).Messages).Contains("REJECTED_TRACE_SENTINEL"), "trace never enters accepted history");
+            });
+        }
+
         private static void SimpleAgentCharacterizesCompletedWithoutWrite()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>

@@ -184,12 +184,15 @@ namespace RNAssistant.Harness
                 AssertEqual(2, calls, "status/tool_calls mismatch gets one repair request");
                 AssertContains(requests[1].Last().Content, "status in_progress requires at least one tool call",
                     "repair receives the first parser rejection");
-                AssertEqual(1, traces.Count, "only the rejected attempt is traced");
+                AssertEqual(2, traces.Count, "rejected and accepted parser verdicts are traced");
                 AssertEqual("rejected", traces[0].Type, "trace identifies the rejected response");
                 AssertContains(traces[0].PayloadJson, "Жил-был потоковый черновик.",
                     "trace preserves the first rejected payload");
                 AssertContains(traces[0].Error, "status in_progress requires at least one tool call",
                     "trace preserves the exact parser error");
+                AssertEqual("accepted", traces[1].Type, "repair acceptance has its own marker");
+                AssertEqual("completed", traces[1].ResponseStatus, "accepted marker retains declared status");
+                AssertTrue(traces[1].PayloadJson == null, "accepted marker does not duplicate model content");
                 AssertEqual(4, streamEvents.Count, "each attempt emits reset and visible message");
                 AssertEqual(string.Empty, streamEvents[0], "first attempt reset");
                 AssertEqual("Жил-был потоковый черновик.", streamEvents[1], "first attempt message");

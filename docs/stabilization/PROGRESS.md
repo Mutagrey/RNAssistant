@@ -2,7 +2,7 @@
 
 Current target: 16.1.0
 Current phase: Phase 1
-Current task: Phase 1A завершена; следующая — Phase 1B, ещё не начата
+Current task: Phase 1B завершена; следующая — Phase 1C, ещё не начата. Known baseline test failure: R22
 
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
@@ -11,7 +11,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | Phase | Status | Commit/PR | Tests | Windows validation | Notes |
 |---|---|---|---|---|---|
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
-| 1 | in progress | Этот commit: `test(runtime): characterize false completion and repair limits` | characterization 7/7; ValidateVersionFormat pass | not performed | 1A done; 1B/1C pending; общий DoD Phase 1 не выполнен |
+| 1 | in progress | 1A: `a24feb1`; 1B: этот commit `obs(runtime): add run step tool and mutation correlation trace` | causal trace 6/6; full 320/321 (R22 baseline); ValidateVersionFormat pass | not performed | 1A/1B done; 1C pending; общий DoD Phase 1 не выполнен |
 | 2 | pending | — | — | — | ModelProtocol |
 | 3 | pending | — | — | — | AgentKernel |
 | 4 | pending | — | — | — | ToolRuntime |
@@ -69,11 +69,35 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Windows x64 + Office x64 + VS 2022 / VSTO / COM — not performed.
 - Подробные доказательства и границы: [PHASE_1A_CHARACTERIZATION.md](PHASE_1A_CHARACTERIZATION.md).
 
+## Phase 1B substeps
+
+- Baseline — `a24feb1`, clean working tree; одна тема: causal trace, без completion guard.
+- Logical step создаётся до первого model request; repair/fallback сохраняют step и получают отдельные modelAttemptId.
+- Request/rejected/accepted diagnostics связаны с transport RequestId; accepted trace связывает точные toolCallIds.
+- Top-level executor отмечает start/completion без изменения validation, dispatch, результата или retry.
+- Journalled VBA module/rename/package action получает prepared/dispatched/verified markers с существующим mutationId; journal и read-back не меняются.
+- Run/turn/document ids сохраняются в async logging scope; confirmation различает execution run и JournalRunId.
+- Controller добавляет run.started, legacy run.summary.created и marker построения send/confirmation DTO. Это не runtime health и не подтверждение отрисовки WebView.
+- Все metadata markers идут в существующий stream, без новых payload bodies, storage/index или decision state; новые trace failures не меняют execution.
+- Version остаётся `16.1.0-dev`; tags не создаются. Phase 1C и последующие фазы не начаты.
+
+## Phase 1B verification
+
+- `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "causal trace:"` — 6/6 pass.
+- `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "conversation: resets stream and thinking between repairs"` — 1/1 pass после обновления expectation для accepted trace.
+- Первый full harness — 319/321: старое streaming expectation исправлено; compact catalog failure воспроизведён отдельно на исходном `a24feb1` (expected 16, got 15), R22.
+- `dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj` — 320/321 pass; единственный failure — R22, такой же на baseline. Полный harness не green; новые trace tests и все 7 characterization tests проходят.
+- `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal` — pass. `git diff --check` и relative Markdown links — pass.
+- Baseline failure проверен в отдельном detached worktree; после проверки он удалён. Tags/working files основной ветки им не изменялись.
+- Actual controller исключён из harness и заменён stub: его wiring проверено только чтением кода. Scope/summary/projection tests проверяют writer, не реальный controller/bridge delivery.
+- Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed.
+- Подробности и границы: [PHASE_1B_CAUSAL_TRACE.md](PHASE_1B_CAUSAL_TRACE.md).
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Нет новых adapters в Phases 0/1A | — | — | — |
+| Нет новых adapters в Phases 0/1A/1B | — | — | — |
 
 Существующие runtime paths остаются текущей реализацией, а не введёнными adapters.
 Их владельцы и фазы замены указаны в [MIGRATION_MAP.md](MIGRATION_MAP.md).
@@ -85,4 +109,5 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.
 - R20: лимит model requests расходится с двадцатью attempts; owner ModelProtocol, Phase 2.
+- R22: compact catalog harness failure воспроизведён до изменений 1B; owner ToolPack/Tests, Phase 8.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).

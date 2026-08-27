@@ -3,6 +3,8 @@
 Исходная база: `v16.0.4`. Приоритеты ниже — стартовая оценка из master plan,
 не утверждение о воспроизведённых дефектах. Phase 0 не проверяла runtime/Office.
 Отдельно отмеченные результаты Phase 1A получены с fake LLM/Office, не на реальном COM.
+Phase 1B проверяет host-neutral correlation; production controller/Office/WebView
+не исполнялись. Known baseline failure указан отдельно от новых trace tests.
 
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |
 |---|---|---|---|---|---|
@@ -26,6 +28,8 @@
 | R18 | P2 | Source archive без Git потеряет build identity | Build | Явные SHA/branch/tree-state properties; отказ вместо скрытого fallback | documented |
 | R19 | P1 | Release script ещё не выполнен на release workstation | Release process | Проверить PowerShell workflow до milestone; обычные commits его не запускают | open |
 | R20 | P1 | Лимит 20 retries допускает 21 model request вместо 20 attempts | ModelProtocol | Явно разделить initial request/retry/total attempts в Phase 2; characterization фиксирует текущую границу | reproduced 1A; open |
+| R21 | P2 | Optional trace может быть неполным; controller wiring/реальная UI delivery не проверены | Diagnostics / Application | Fixed-stage error log без payload; no effect decisions from trace; `ui.projected` — только DTO, CAS failure допускает пропуск marker после release lease; Windows validation в Phases 1C/5–9/12 | documented 1B; open |
+| R22 | P1 | Full harness: compact catalog ожидает 16 Excel tools, получает 15 | ToolPack / Tests | Проверить актуальный catalog и expectation в Phase 8; targeted failure воспроизведён на baseline a24feb1 в отдельном disposable worktree | reproduced baseline + 1B; open |
 
 Новые дефекты вне текущей фазы фиксировать здесь или в [BACKLOG.md](BACKLOG.md),
 не исправлять попутно. Исключение P0 требует отдельного явно ограниченного изменения.

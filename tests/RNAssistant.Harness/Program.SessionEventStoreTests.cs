@@ -288,6 +288,144 @@ namespace RNAssistant.Harness
             AssertEqual(0, queue.QueueCount, "drained per-session queues are evicted");
         }
 
+        private static void CausalTraceScopesAreIsolated()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var sessions = Enumerable.Range(1, 2).Select(index =>
+                {
+                    var session = store.Create("Excel", "trace-doc-" + index, "Trace", "Trace");
+                    session.LastRun = new ChatRunRecord
+                    {
+                        RunId = "run-" + index, TurnId = "turn-" + index, Status = "completed",
+                        DocumentRuntimeKey = "runtime-" + index, StartedUtc = DateTime.UtcNow
+                    };
+                    store.Save(session);
+                    return session;
+                }).ToList();
+                Task.WhenAll(sessions.Select(session => Task.Run(async () =>
+                {
+                    using (RunCausalTrace.Begin(store, session))
+                    {
+                        RunCausalTrace.Record(new CausalTraceRecord { Stage = "run.started" });
+                        await Task.Yield();
+                        RunCausalTrace.Summary(session);
+                        RunCausalTrace.Projected("test_projection");
+                    }
+                    RunCausalTrace.Projected("outside_scope");
+                }))).GetAwaiter().GetResult();
+                foreach (var session in sessions)
+                {
+                    var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                        .Where(item => item.Type == "run.started" || item.Type == "run.summary.created" || item.Type == "ui.projected").ToList();
+                    AssertEqual(3, events.Count, "scope ends without leaking into unrelated work");
+                    AssertTrue(events.All(item => item.RunId == session.LastRun.RunId && item.TurnId == session.LastRun.TurnId),
+                        "async concurrent sessions retain their own run and turn");
+                    AssertEqual("completed", (string)events[1].Data["Status"], "summary only observes the existing run record");
+                    AssertEqual("test_projection", (string)events[2].Data["Boundary"], "projection boundary is explicit");
+                }
+                var gate = new TaskCompletionSource<bool>();
+                Task late;
+                using (RunCausalTrace.Begin(store, sessions[0]))
+                {
+                    late = Task.Run(async () => { await gate.Task; RunCausalTrace.Projected("late_child"); });
+                }
+                var before = sessions[0].Revision;
+                gate.SetResult(true);
+                late.GetAwaiter().GetResult();
+                AssertEqual(before, store.Load(sessions[0].Id).Revision, "disposed scope cannot write from inherited background context");
+            });
+        }
+
+        private static void CausalTraceConfirmationKeepsTurnAndJournalOrigin()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var store = new ChatStore(paths);
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "before-confirm", TurnId = "logical-turn", Status = "running",
+                    DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow
+                };
+                store.Save(session);
+                var command = new ToolCommand
+                {
+                    ToolId = "common.vba_write_module", ToolCallId = "confirmed", RuntimeStepId = "original-step",
+                    Arguments = new Dictionary<string, object>
+                    {
+                        { "moduleName", "Module1" }, { "code", "Sub Main()\nDebug.Print 42\nEnd Sub" }
+                    }
+                };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var settings = new AppSettings { AutoConfirmToolActions = false };
+                using (RunCausalTrace.Begin(store, session))
+                {
+                    AssertEqual("waiting_confirmation", executor.Execute(command, tools, settings, false, false, session).Status,
+                        "first run pauses before mutation");
+                }
+                AssertEqual(0, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count, "confirmation pause has no mutation");
+                session.LastRun.RunId = "after-confirm";
+                store.Save(session);
+                using (RunCausalTrace.Begin(store, session))
+                {
+                    AssertTrue(executor.Execute(command, tools, settings, false, true, session).Success, "confirmed call executes");
+                }
+                var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                    .Where(item => item.Type.StartsWith("tool.execution.", StringComparison.Ordinal) || item.Type.StartsWith("domain.effect.", StringComparison.Ordinal)).ToList();
+                var starts = events.Where(item => item.Type == "tool.execution.started").ToList();
+                AssertEqual("before-confirm,after-confirm", string.Join(",", starts.Select(item => item.RunId)), "confirmation creates a distinct execution run");
+                AssertTrue(events.All(item => item.TurnId == "logical-turn" && item.StepId == "original-step" &&
+                    (string)item.Data["ToolCallId"] == "confirmed"), "turn, originating step and call survive confirmation");
+                var mutation = journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
+                var effects = events.Where(item => item.Type.StartsWith("domain.effect.", StringComparison.Ordinal)).ToList();
+                AssertEqual(3, effects.Count, "only confirmed run reaches domain boundaries");
+                AssertTrue(effects.All(item => item.RunId == "after-confirm" &&
+                    (string)item.Data["JournalRunId"] == mutation.Prepared.RunId &&
+                    (string)item.Data["MutationId"] == mutation.Prepared.MutationId), "actual execution run and journal guard origin are not confused");
+                AssertEqual(1, adapter.Executed.Count(item => item.ToolId == "excel.vba_replace_module"), "confirmation writes once");
+            });
+        }
+
+        private static void CausalTraceFailureDoesNotChangeExecution()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
+                var session = NewSession(adapter); // Deliberately not persisted: optional appends must fail harmlessly.
+                session.LastRun = new ChatRunRecord { RunId = "unsaved-run", TurnId = "unsaved-turn" };
+                using (RunCausalTrace.Begin(store, session))
+                {
+                    var result = executor.Execute(new ToolCommand
+                    {
+                        ToolId = "excel.add_sheet", ToolCallId = "one-write",
+                        Arguments = new Dictionary<string, object> { { "name", "TraceFailure" } }
+                    }, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                    AssertTrue(result.Success && adapter.HasSheet("TraceFailure"), "trace failure does not block or reinterpret a tool");
+                }
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    options.TraceSink = record => { throw new InvalidOperationException("optional acceptance trace failed"); };
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = "{\"status\":\"completed\",\"message\":\"Answer.\",\"tool_calls\":[]}"
+                    });
+                };
+                var final = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent, "Answer.", session, NewContext(adapter), new AppSettings(),
+                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                AssertEqual("Answer.", final.AssistantText, "optional accepted trace failure preserves response");
+                AssertEqual("completed", final.RunStatus, "optional accepted trace failure preserves outcome");
+                AssertEqual(1, adapter.Executed.Count(item => item.ToolId == "excel.add_sheet"), "trace failure never retries a write");
+            });
+        }
+
         private static void StreamingTraceQueueDrainsBeforeTerminal()
         {
             WithTempPaths(paths =>
@@ -331,6 +469,8 @@ namespace RNAssistant.Harness
                 var request = events.Single(item => item.Type == SessionEventTypes.LlmRequest);
                 var chunk = events.Single(item => item.Type == SessionEventTypes.AssistantChunk);
                 var response = events.Single(item => item.Type == SessionEventTypes.LlmResponse);
+                AssertEqual("request-queue", (string)request.Data["ModelAttemptId"], "non-loop request uses its existing transport id as attempt");
+                AssertEqual("request-queue", (string)request.Data["StepId"], "non-loop request uses its existing transport step");
                 AssertEqual("{\"request\":\"точно\"}", store.ReadEventPayload(request),
                     "request CAS preserves the exact HTTP UTF-8 payload");
                 AssertTrue(chunk.Sequence < response.Sequence, "terminal response is durable after queued chunks");

@@ -201,8 +201,10 @@ namespace RNAssistant.Office.Services
                 iterationsUsed += 1;
                 UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "thinking");
                 Report(progress, "thinking", "Модель выбирает следующий шаг...", null);
+                var stepId = Guid.NewGuid().ToString("N");
                 var activeTools = workingSet.Tools;
                 var options = BuildRequestOptions(policy.Mode, responseMode, activeTools, session, runCache);
+                options.TraceStepId = stepId;
                 string budgetError;
                 if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                 {
@@ -224,6 +226,7 @@ namespace RNAssistant.Office.Services
                         responseMode = AgentResponseModes.JsonObject;
                         activeTools = workingSet.Tools;
                         options = BuildRequestOptions(policy.Mode, responseMode, activeTools, session, runCache);
+                        options.TraceStepId = stepId;
                         Report(progress, "thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
                         if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                         {
@@ -242,6 +245,7 @@ namespace RNAssistant.Office.Services
                 string refusal;
                 if (TryGetRefusal(completion, out refusal))
                 {
+                    TraceAcceptedResponse(options, AgentResponseStatuses.Refused, new string[0]);
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(
                         refusal, completion, null, AgentResponseStatuses.Refused));
                     return Result(refusal, results, contextUsage, false,
@@ -275,6 +279,7 @@ namespace RNAssistant.Office.Services
                         completion == null ? null : completion.PromptTokens, options);
                     if (TryGetRefusal(completion, out refusal))
                     {
+                        TraceAcceptedResponse(options, AgentResponseStatuses.Refused, new string[0]);
                         session.Messages.Add(AgentTranscript.CreateAssistantMessage(
                             refusal, completion, null, AgentResponseStatuses.Refused));
                         return Result(refusal, results, contextUsage, false,
@@ -293,6 +298,8 @@ namespace RNAssistant.Office.Services
                 }
 
                 var response = parsed.Response;
+                TraceAcceptedResponse(options, response.Status,
+                    response.ToolCalls.Select(call => call.Id).ToArray());
                 if (response.ToolCalls.Count == 0)
                 {
                     var finalText = response.Message.Trim();
@@ -301,7 +308,6 @@ namespace RNAssistant.Office.Services
                     return Result(finalText, results, contextUsage, false, response.Status, response.Status);
                 }
 
-                var stepId = Guid.NewGuid().ToString("N");
                 var stepMessage = string.IsNullOrWhiteSpace(response.Message) ? string.Empty : response.Message.Trim();
                 if (!string.IsNullOrWhiteSpace(stepMessage))
                 {
@@ -570,6 +576,8 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
+            options.TraceModelAttemptId = Guid.NewGuid().ToString("N");
+            options.TraceRequestId = null;
             var streamProgress = new ConversationStreamProgressProjector(progress);
             streamProgress.Start(settings != null && settings.StreamResponses);
             var completion = await _completeAsync(
@@ -953,6 +961,7 @@ namespace RNAssistant.Office.Services
             options.TraceSink(new LlmTraceRecord
             {
                 Type = "rejected",
+                RequestId = options.TraceRequestId,
                 Purpose = options.TracePurpose,
                 Model = options.TraceSession == null ? null : options.TraceSession.Model,
                 ResponseFormat = options.ResponseFormat,
@@ -962,6 +971,28 @@ namespace RNAssistant.Office.Services
                 PayloadJson = completion == null ? null : completion.Content,
                 PayloadContentType = "application/json"
             });
+        }
+
+        private static void TraceAcceptedResponse(LlmRequestOptions options, string status, string[] toolCallIds)
+        {
+            if (options == null || options.TraceSink == null) return;
+            try
+            {
+                options.TraceSink(new LlmTraceRecord
+                {
+                    Type = "accepted",
+                    RequestId = options.TraceRequestId,
+                    Purpose = options.TracePurpose,
+                    Model = options.TraceSession == null ? null : options.TraceSession.Model,
+                    ResponseFormat = options.ResponseFormat,
+                    ResponseStatus = status,
+                    ToolCallIds = toolCallIds
+                });
+            }
+            catch (Exception)
+            {
+                Diagnostics.RuntimeLog.Error("Causal trace append failed at model.response.accepted.");
+            }
         }
 
         private sealed class ConversationMaterialization

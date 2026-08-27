@@ -72,6 +72,12 @@ namespace RNAssistant.Core.Llm
         public Action<LlmTraceRecord> TraceSink { get; set; }
         [JsonIgnore]
         public bool TraceSinkConfigured { get; set; }
+        [JsonIgnore]
+        public string TraceStepId { get; set; }
+        [JsonIgnore]
+        public string TraceModelAttemptId { get; set; }
+        [JsonIgnore]
+        public string TraceRequestId { get; set; }
 
         public LlmRequestOptions()
         {
@@ -85,6 +91,8 @@ namespace RNAssistant.Core.Llm
 
         public string Type { get; set; }
         public string RequestId { get; set; }
+        public string ResponseStatus { get; set; }
+        public string[] ToolCallIds { get; set; }
         public string Purpose { get; set; }
         public string Endpoint { get; set; }
         public string Model { get; set; }

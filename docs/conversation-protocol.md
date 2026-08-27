@@ -156,6 +156,16 @@ The `tool` form uses the same JSON as its message content without the text prefi
 
 Chat-local plan/HTML mutations are serialized by the per-chat lease. Manual library checks and VBA-editor reads use an isolated session snapshot, so they do not advance observations visible only to the running model. Effective safety metadata allows read-only library tools to run while that chat is active; document/local-state mutations return `manual_tool_chat_busy` until the chat stops. HTML bindings may replay only adapter tools explicitly marked `CanSourceHtmlData`; they must remain read-only, confirmation-free, enabled, and Agent-runnable. Bind and refresh revalidate the exact schema and enter the same reentrant document gate as live providers; refresh keeps the last good JSON on source failure. Document and shared-local-state mutations are serialized by effective safety metadata, including nested pipeline safety. Live `document`/`vba` provider calls use the shared gate so reads and journal reconciliation cannot cross an in-flight mutation; chat/CAS resource reads do not acquire it. Waiting for another mutation is bounded and returns retryable `tool_mutation_busy`. If an unexpected exception occurs after mutation execution may have started, the result is `tool_effect_uncertain`, is not automatically retried, and tells the model/user to inspect state first.
 
+## Stabilization causal trace
+
+Phase 1B gives each conversation iteration a logical step id before its first model
+request, and each completion call a model attempt id. Repair/schema fallback retain
+the step and receive a new attempt; tool commands retain that same logical step.
+Accepted/rejected parser diagnostics link the transport request, attempt and step;
+accepted diagnostics also carry the exact tool-call ids. They never enter replay.
+The v2 response, retry limits and outcome behavior are unchanged. See the
+[causal trace contract and validation limits](stabilization/PHASE_1B_CAUSAL_TRACE.md).
+
 ## Local invariants
 
 - Disabled, unavailable, or `AgentCanRun=false` tools are not exposed to Agent mode.

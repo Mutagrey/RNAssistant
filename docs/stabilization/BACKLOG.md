@@ -6,8 +6,8 @@
 | Phase | Работа | Условие начала / проверки |
 |---|---|---|
 | 1A | Characterization failure/unknown/no-write, repair/history и status map | done; 7/7, production behavior не изменён |
-| 1B | Causal trace и correlation на model/tool/domain/UI boundaries | next; отдельное изменение после 1A |
-| 1C | Transitional completion guard / runtime execution health | После 1B; целевые safety assertions сначала red на текущем runtime, затем green после guard |
+| 1B | Causal trace и correlation на model/tool/domain/UI boundaries | done; 6/6 targeted, full 320/321 с known baseline failure R22; ограничения в PHASE_1B_CAUSAL_TRACE |
+| 1C | Transitional completion guard / runtime execution health | next, ещё не начата; целевые safety assertions сначала red на текущем runtime, затем green после guard |
 | 2 | Извлечь ModelProtocol, stateless bounded repair | Characterization покрывает текущий loop |
 | 3 | Минимальный AgentKernel и runtime-owned RunSummary | ModelProtocol выделен |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
@@ -22,6 +22,11 @@
 
 R20: текущий `MaxAgentFormatRetries=20` разрешает initial + 20 retries. В Phase 2
 согласовать явный общий лимит attempts с master plan; не исправлять это попутно в 1A.
+R21: на Windows проверить production controller trace wiring, COM boundaries и
+реальную WebView delivery; `ui.projected` сейчас фиксирует только построение DTO.
+R22: тест `tools: compact catalog rejects removed aliases` ожидает 16 Excel tools,
+получает 15; одинаково падает на baseline `a24feb1` и после 1B. Проверить catalog и
+ожидание в Phase 8, не менять tool catalog в observability commit.
 Phase 1 не завершена, пока 1B/1C и общий Definition of Done не выполнены.
 
 ## Отложенная проверка versioning

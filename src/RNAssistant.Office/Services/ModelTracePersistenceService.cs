@@ -26,25 +26,40 @@ namespace RNAssistant.Office.Services
             if (options == null || options.TraceSession == null || options.TraceSinkConfigured) return;
             var session = options.TraceSession;
             var previousSink = options.TraceSink;
+            var run = session.LastRun;
+            var runId = run == null ? null : run.RunId;
+            var turnId = run == null || string.IsNullOrWhiteSpace(run.TurnId) ? runId : run.TurnId;
+            var documentRuntimeId = run == null ? null : run.DocumentRuntimeKey;
             options.TraceSink = record =>
             {
-                if (previousSink != null) previousSink(record);
                 if (record == null) return;
-                Persist(session, record);
+                if (string.Equals(record.Type, "request", StringComparison.OrdinalIgnoreCase))
+                {
+                    options.TraceRequestId = record.RequestId;
+                }
+                if (previousSink != null) previousSink(record);
+                Persist(session, options, record, runId, turnId, documentRuntimeId);
             };
             options.TraceSinkConfigured = true;
         }
 
-        private void Persist(ChatSession session, LlmTraceRecord record)
+        private void Persist(ChatSession session, LlmRequestOptions options, LlmTraceRecord record,
+            string runId, string turnId, string documentRuntimeId)
         {
             var type = EventType(record.Type);
-            var runId = session.LastRun == null ? null : session.LastRun.RunId;
-            var turnId = session.LastRun == null || string.IsNullOrWhiteSpace(session.LastRun.TurnId)
-                ? runId
-                : session.LastRun.TurnId;
             var data = new
             {
+                Stage = Stage(record.Type),
+                SessionId = session.Id,
+                RunId = runId,
+                TurnId = turnId,
+                // Helper requests (title/compaction/media) have one transport attempt per step.
+                StepId = options.TraceStepId ?? record.RequestId,
+                ModelAttemptId = options.TraceModelAttemptId ?? record.RequestId,
+                DocumentRuntimeId = documentRuntimeId,
                 record.RequestId,
+                record.ResponseStatus,
+                record.ToolCallIds,
                 record.Purpose,
                 record.Endpoint,
                 record.Model,
@@ -105,7 +120,16 @@ namespace RNAssistant.Office.Services
             if (string.Equals(type, "response", StringComparison.OrdinalIgnoreCase)) return SessionEventTypes.LlmResponse;
             if (string.Equals(type, "chunk", StringComparison.OrdinalIgnoreCase)) return SessionEventTypes.AssistantChunk;
             if (string.Equals(type, "rejected", StringComparison.OrdinalIgnoreCase)) return SessionEventTypes.AgentResponseRejected;
+            if (string.Equals(type, "accepted", StringComparison.OrdinalIgnoreCase)) return "model.response.accepted";
             return SessionEventTypes.LlmFailure;
+        }
+
+        private static string Stage(string type)
+        {
+            if (string.Equals(type, "request", StringComparison.OrdinalIgnoreCase)) return "model.request.prepared";
+            if (string.Equals(type, "rejected", StringComparison.OrdinalIgnoreCase)) return "model.attempt.rejected";
+            if (string.Equals(type, "accepted", StringComparison.OrdinalIgnoreCase)) return "model.response.accepted";
+            return null;
         }
     }
 }

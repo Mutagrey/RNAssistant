@@ -38,6 +38,17 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
 - `llm.failure` records endpoint/status/failure metadata and any bounded provider error body.
 - `agent.response.rejected` keeps malformed Agent output for diagnosis without adding it to model replay or visible chat history.
 
+Phase 1B adds metadata-only causal observations in this same stream: top-level
+`run.started`, `model.response.accepted`, `tool.execution.started/completed`,
+`domain.effect.prepared/dispatched/verified`, `run.summary.created`, and
+`ui.projected`. Existing request/rejection events carry `Data.Stage` instead of
+duplicating their payloads. Model `Data.StepId` is the logical conversation step;
+their envelope `StepId` remains the transport request id for existing lifecycle and
+recovery. `Data.ModelAttemptId` links each completion attempt. No event schema bump,
+new replay decisions, second store or durable index is introduced. New observations
+are best effort; mandatory pre-dispatch request persistence is unchanged. See
+[correlation, stage semantics and limits](stabilization/PHASE_1B_CAUSAL_TRACE.md).
+
 The default SHA-256 hash-chain detects accidental edits, truncation in the middle of the log, and reordered records. Optional HMAC-SHA256 prevents recomputing valid edited records without the selected secret. Neither mode prevents deletion of an unanchored final suffix.
 
 ## Blobs and artifacts
