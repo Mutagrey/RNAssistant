@@ -57,6 +57,21 @@ unchanged product versions across ordinary builds/commits, invalid metadata,
 release-only gates, tag uniqueness and SDK/old-style assembly attributes. No Office
 projects or PowerShell release workflow are executed by this slice.
 
+## Stabilization characterization
+
+```bash
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- characterization
+```
+
+Phase 1A extends `Program.SimpleAgentTests.cs`: write ok/error/unknown/no-write,
+twentieth-response recovery, rejected history isolation and the current 20-retry
+(21-request) cap. These tests use fake LLM/Office and the real local VBA journal.
+Some assertions intentionally capture known false completion; passing this slice
+does **not** mean that release safety is fixed. Phase 1C must introduce red→green
+runtime-health assertions. See [Phase 1A evidence](../../docs/stabilization/PHASE_1A_CHARACTERIZATION.md).
+
+## Full suite
+
 Run the complete harness only for broad cross-cutting changes:
 
 ```bash

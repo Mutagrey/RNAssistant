@@ -5,7 +5,9 @@
 
 | Phase | Работа | Условие начала / проверки |
 |---|---|---|
-| 1 | Characterization failure/unknown, causal trace, transitional completion guard | Phase 0 завершена; отдельное задание, без protocol cutover |
+| 1A | Characterization failure/unknown/no-write, repair/history и status map | done; 7/7, production behavior не изменён |
+| 1B | Causal trace и correlation на model/tool/domain/UI boundaries | next; отдельное изменение после 1A |
+| 1C | Transitional completion guard / runtime execution health | После 1B; целевые safety assertions сначала red на текущем runtime, затем green после guard |
 | 2 | Извлечь ModelProtocol, stateless bounded repair | Characterization покрывает текущий loop |
 | 3 | Минимальный AgentKernel и runtime-owned RunSummary | ModelProtocol выделен |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
@@ -17,6 +19,10 @@
 | 10 | Удаление заменённых paths и architecture tests | Нет consumers; закрыть MIGRATION_MAP |
 | 11 | Optional contours | Только после отдельной миграции; не расширять release-critical scope |
 | 12 | Release qualification и packaging | Все gates master plan; Windows x64 + Office x64 + VS 2022 |
+
+R20: текущий `MaxAgentFormatRetries=20` разрешает initial + 20 retries. В Phase 2
+согласовать явный общий лимит attempts с master plan; не исправлять это попутно в 1A.
+Phase 1 не завершена, пока 1B/1C и общий Definition of Done не выполнены.
 
 ## Отложенная проверка versioning
 

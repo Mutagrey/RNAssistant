@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -475,14 +476,19 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var service = new ConversationRunService(adapter, executor, completion);
+                var session = NewSession(adapter);
                 var result = service.ExecuteAsync(
                     ChatModes.Agent,
-                    "Создай лист Report.", NewSession(adapter), NewContext(adapter),
+                    "Создай лист Report.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 },
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual("Лист Report создан.", result.AssistantText, "final response");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "successful write keeps the accepted model status");
+                AssertEqual("completed", result.RunStatus, "successful write completes the current run");
+                AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "final status enters accepted history");
                 AssertTrue(adapter.HasSheet("Report"), "tool executed");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "one write dispatch");
                 AssertEqual(3, calls.Count, "schema read, execution, and final model turns");
                 AssertTrue(FlattenSimple(calls[0]).IndexOf(
                     "\"function\":{\"name\":\"excel.add_sheet\"", StringComparison.Ordinal) < 0,
@@ -493,6 +499,132 @@ namespace RNAssistant.Harness
                 AssertContains(finalRequest, "\"ok\":true", "tool result ok");
                 AssertContains(finalRequest, "\"name\":\"excel.add_sheet\"", "tool result name");
                 AssertContains(finalRequest, "\"message\":", "tool result message");
+            });
+        }
+
+        // Phase 1A records current false completion, not the desired safety contract.
+        // Phase 1C must replace these completion expectations with runtime health assertions.
+        private static void SimpleAgentCharacterizesCompletedAfterWriteError()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                adapter.QueueResult("excel.add_sheet",
+                    ToolResult.Fail("Write rejected before the effect.", null, "write_rejected", false));
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("excel.add_sheet", "schema_failed_write"),
+                    "{\"status\":\"in_progress\",\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"failed_write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Лист Report создан.\",\"tool_calls\":[]}"
+                });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var session = NewSession(adapter);
+                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent, "Создай лист Report.", session, NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+
+                var write = result.ToolResults.Select(item => JObject.FromObject(item))
+                    .Single(item => (string)item["toolId"] == "excel.add_sheet");
+                AssertEqual(false, (bool)write["success"], "write failure is preserved");
+                AssertEqual("write_rejected", (string)write["errorCode"], "actual failure code is preserved");
+                AssertTrue(!adapter.HasSheet("Report"), "the claimed sheet was not created");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "failed write is not retried");
+                AssertContains(FlattenSimple(requests.Last()), "\"ok\":false", "the final model request saw the error");
+                AssertEqual("completed", result.RunStatus, "KNOWN FALSE COMPLETION: write error does not change run status");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after write error");
+                AssertEqual("Лист Report создан.", result.AssistantText, "false mutation claim is not filtered");
+                AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "false completion enters accepted history");
+            });
+        }
+
+        private static void SimpleAgentCharacterizesCompletedAfterWriteUnknown()
+        {
+            WithTempPaths(paths =>
+            {
+                const string before = "Sub Main()\nDebug.Print \"before\"\nEnd Sub";
+                const string intended = "Sub Main()\nDebug.Print \"after\"\nEnd Sub";
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.VbaModuleCode = before;
+                adapter.VbaWriteTransform = code => code.Replace("\"after\"", "\"diverged\"");
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("common.vba_write_module", "schema_unknown_write"),
+                    new JObject
+                    {
+                        ["status"] = "in_progress",
+                        ["message"] = "Обновляю модуль.",
+                        ["tool_calls"] = new JArray(new JObject
+                        {
+                            ["id"] = "unknown_write", ["name"] = "common.vba_write_module",
+                            ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
+                        })
+                    }.ToString(Formatting.None),
+                    "{\"status\":\"completed\",\"message\":\"Модуль Module1 обновлён.\",\"tool_calls\":[]}"
+                });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var session = NewSession(adapter);
+                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent, "Обнови модуль Module1.", session, NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+
+                var write = result.ToolResults.Select(item => JObject.FromObject(item))
+                    .Single(item => (string)item["toolId"] == "common.vba_write_module");
+                AssertEqual(false, (bool)write["success"], "unverified effect is not a successful tool result");
+                AssertEqual("partial_failure", (string)write["status"], "current unknown transport is partial_failure");
+                AssertEqual("vba_mutation_unknown", (string)write["errorCode"], "real journal classified the divergent effect");
+                AssertEqual(false, (bool)write["retryable"], "unknown write cannot be retried automatically");
+                AssertEqual("unknown", (string)JObject.Parse((string)write["dataJson"])["journalStatus"], "unknown evidence reaches the loop");
+                AssertEqual(VbaMutationStatuses.Unknown,
+                    journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status, "durable journal also records unknown");
+                AssertContains(adapter.VbaModuleCode, "\"diverged\"", "fake host state matches neither before nor intended");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.vba_replace_module"), "unknown write is dispatched once");
+                AssertContains(FlattenSimple(requests.Last()), "vba_mutation_unknown", "model receives unknown effect evidence");
+                AssertEqual("completed", result.RunStatus, "KNOWN FALSE COMPLETION: unknown effect does not change run status");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after unknown write");
+                AssertEqual("Модуль Module1 обновлён.", result.AssistantText, "unverified mutation claim survives");
+                AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "unknown and completed coexist in history");
+            });
+        }
+
+        private static void SimpleAgentCharacterizesCompletedWithoutWrite()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var calls = 0;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    calls++;
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = "{\"status\":\"completed\",\"message\":\"Лист Report создан.\",\"tool_calls\":[]}"
+                    });
+                };
+                var session = NewSession(adapter);
+                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent, "Создай лист Report.", session, NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+
+                AssertEqual(1, calls, "terminal no-call response stops the loop");
+                AssertEqual(0, result.ToolResults.Count, "there is no tool effect evidence");
+                AssertEqual(0, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no requested write was dispatched");
+                AssertTrue(!adapter.HasSheet("Report"), "model text did not create a sheet");
+                AssertEqual("completed", result.RunStatus, "CURRENT BEHAVIOR: no-write response has the same completed run status");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "no-write response carries model completed");
+                AssertEqual("Лист Report создан.", session.Messages.Last().Content, "unsupported mutation claim reaches visible history");
             });
         }
 
@@ -745,34 +877,87 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var responses = new Queue<string>(new[] { "INVALID_FIRST", "INVALID_SECOND", "INVALID_THIRD" });
-                var calls = 0;
+                var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
-                    calls += 1;
+                    requests.Add(messages.ToList());
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = responses.Dequeue(),
+                        Content = "PROTECTION_RESPONSE_" + requests.Count,
                         ReasoningContent = "INVALID_DIAGNOSTIC_REASONING"
                     });
                 };
                 var session = NewSession(adapter);
                 var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Do something.", session, NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 2 },
+                    "Do something.", session, NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 19 },
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
 
-                AssertEqual(3, calls, "initial request plus configured repair retries");
-                AssertContains(result.AssistantText, "после 2 попыток", "clear bounded-repair diagnostic");
+                AssertEqual(20, requests.Count, "twenty total responses with initial request plus nineteen repairs");
+                AssertContains(result.AssistantText, "после 19 попыток", "current diagnostic counts repairs, not total requests");
+                AssertEqual("failed", result.RunStatus, "all invalid responses fail the run");
+                AssertTrue(string.IsNullOrWhiteSpace(result.ResponseStatus), "no accepted model status after exhausted repair");
+                AssertEqual(0, result.ToolResults.Count, "invalid responses never execute tools");
                 AssertTrue(session.Messages.Last().Activity != null, "diagnostic activity recorded");
                 AssertTrue(session.Messages.Last().ExcludeFromModelContext, "diagnostic excluded from replay");
                 AssertTrue(!session.Messages.Any(message =>
-                    (message.Content ?? string.Empty).IndexOf("INVALID_FIRST", StringComparison.Ordinal) >= 0 ||
-                    (message.Content ?? string.Empty).IndexOf("INVALID_SECOND", StringComparison.Ordinal) >= 0 ||
-                    (message.Content ?? string.Empty).IndexOf("INVALID_THIRD", StringComparison.Ordinal) >= 0 ||
+                    (message.Content ?? string.Empty).IndexOf("PROTECTION_RESPONSE_", StringComparison.Ordinal) >= 0 ||
                     (message.Content ?? string.Empty).IndexOf("FORMAT_REPAIR", StringComparison.Ordinal) >= 0 ||
                     (message.ReasoningContent ?? string.Empty).IndexOf("INVALID_DIAGNOSTIC_REASONING", StringComparison.Ordinal) >= 0),
                     "failed completions do not enter stored context");
+                AssertTrue(!requests.SelectMany(request => request).Any(message =>
+                    (message.Content ?? string.Empty).Contains("PROTECTION_RESPONSE_") ||
+                    (message.ReasoningContent ?? string.Empty).Contains("INVALID_DIAGNOSTIC_REASONING")),
+                    "rejected responses do not enter later repair requests");
+            });
+        }
+
+        private static void SimpleAgentRepairsOnTwentiethAttempt()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(requests.Count < 20
+                        ? new LlmCompletionResult
+                        {
+                            Content = "PROTECTION_RESPONSE_" + requests.Count,
+                            ReasoningContent = "REJECTED_REASONING"
+                        }
+                        : new LlmCompletionResult
+                        {
+                            Content = "{\"status\":\"completed\",\"message\":\"Ответ принят.\",\"tool_calls\":[]}",
+                            ReasoningContent = "ACCEPTED_REASONING"
+                        });
+                };
+                var session = NewSession(adapter);
+                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent, "Ответь на вопрос.", session, NewContext(adapter),
+                    new AppSettings { MaxAgentFormatRetries = 20 },
+                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+
+                AssertEqual(20, requests.Count, "nineteen protection responses followed by one valid response");
+                AssertEqual("completed", result.RunStatus, "twentieth request can complete the run");
+                AssertEqual(0, result.ToolResults.Count, "repair attempts do not dispatch tools");
+                var accepted = session.Messages.Where(message => message.Role == "assistant" && !message.ExcludeFromModelContext).ToList();
+                AssertEqual(1, accepted.Count, "only one assistant response enters accepted history");
+                AssertEqual("Ответ принят.", accepted[0].Content, "accepted message is preserved");
+                AssertEqual("ACCEPTED_REASONING", accepted[0].ReasoningContent, "only accepted provider reasoning is retained");
+                AssertTrue(!session.Messages.Concat(requests.SelectMany(request => request)).Any(message =>
+                    (message.Content ?? string.Empty).Contains("PROTECTION_RESPONSE_") ||
+                    (message.ReasoningContent ?? string.Empty).Contains("REJECTED_REASONING")),
+                    "all nineteen rejected attempts stay out of accepted history and requests");
+                AssertTrue(!session.Messages.Any(message => (message.Content ?? string.Empty).Contains("FORMAT_REPAIR")),
+                    "repair instructions are ephemeral");
+                var initialPrompt = FlattenSimple(requests[0]);
+                foreach (var request in requests.Skip(1))
+                {
+                    AssertEqual(1, request.Count(message => (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal)),
+                        "each retry carries one current repair instruction");
+                    AssertEqual(initialPrompt, FlattenSimple(request.Take(request.Count - 1)), "repair starts from the same clean accepted prompt");
+                }
             });
         }
 
