@@ -2,17 +2,20 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <!-- Single source of truth for the RNAssistant product version. -->
-    <RNAssistantVersionPrefix>16.0.4</RNAssistantVersionPrefix>
-    <RNAssistantVersionSuffix></RNAssistantVersionSuffix>
+    <RNAssistantVersionPrefix>16.1.0</RNAssistantVersionPrefix>
+    <RNAssistantVersionSuffix>dev</RNAssistantVersionSuffix>
+    <!-- Preserve baseline assembly binding until Windows/VSTO qualification. -->
+    <RNAssistantAssemblyVersion>16.0.4.0</RNAssistantAssemblyVersion>
+    <RNAssistantBuildNumber Condition="'$(RNAssistantBuildNumber)' == ''">0</RNAssistantBuildNumber>
 
     <VersionPrefix>$(RNAssistantVersionPrefix)</VersionPrefix>
     <VersionSuffix>$(RNAssistantVersionSuffix)</VersionSuffix>
     <Version Condition="'$(RNAssistantVersionSuffix)' == ''">$(RNAssistantVersionPrefix)</Version>
     <Version Condition="'$(RNAssistantVersionSuffix)' != ''">$(RNAssistantVersionPrefix)-$(RNAssistantVersionSuffix)</Version>
-    <AssemblyVersion>$(RNAssistantVersionPrefix).0</AssemblyVersion>
-    <FileVersion>$(RNAssistantVersionPrefix).0</FileVersion>
+    <AssemblyVersion>$(RNAssistantAssemblyVersion)</AssemblyVersion>
+    <FileVersion>$(RNAssistantVersionPrefix).$(RNAssistantBuildNumber)</FileVersion>
     <InformationalVersion>$(Version)</InformationalVersion>
-    <ApplicationVersion>$(RNAssistantVersionPrefix).0</ApplicationVersion>
+    <ApplicationVersion>$(FileVersion)</ApplicationVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 </Project>

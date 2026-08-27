@@ -127,15 +127,15 @@ The add-in projects use the VSTO project flavor (`ProjectTypeGuids`) so Visual S
 
 ## Versioning
 
-The product version has one source of truth: `RNAssistantVersionPrefix` in `Directory.Build.props`. Before every commit, ensure it is higher than the version in `HEAD`. Use SemVer based on the highest-impact change: patch for fixes, documentation, and compatible refactoring; minor for backward-compatible features; and major for breaking changes. Set `RNAssistantVersionSuffix` only for prereleases such as `beta.1`; the UI adds the leading `v` itself.
+Commit is not a release. The stabilization branch is `stabilization/16.1`, with historical baseline `v16.0.4` and development target `16.1.0-dev`. Ordinary commits neither change the product version nor create Git tags. New product features are frozen; follow the current phase in the mandatory [stabilization master plan](docs/stabilization/STABILIZATION_MASTER_PLAN.md) and [progress record](docs/stabilization/PROGRESS.md).
 
-C# assembly, file, informational, and VSTO application versions are derived automatically. If the working tree already contains the correct version bump, do not increment it again. Every build validates the version. Before committing, run the same lightweight check without compiling:
+The product version comes from `RNAssistantVersionPrefix` and `RNAssistantVersionSuffix` in `Directory.Build.props`. Build identity adds the commit SHA without changing that product version. Assembly compatibility, numeric file/application versions and protocol versions are separate; see [VERSIONING.md](docs/operations/VERSIONING.md). Every ordinary build validates format and derived metadata, without comparing against `HEAD` or requiring a clean tree. The same check runs without compiling:
 
 ```powershell
-dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateRNAssistantVersion -nologo -v:minimal
+dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal
 ```
 
-After committing, create an annotated `v<Version>` Git tag on that commit and push both the branch and tag to `origin`. Check local and remote tags first; never move or reuse a published version tag.
+Product version changes and annotated tags belong only to qualified release milestones. Release checks are separate from ordinary builds; the explicit release workflow is [RELEASE_PROCESS.md](docs/operations/RELEASE_PROCESS.md). Never move or reuse a tag, and never tag an ordinary commit. Internal refactoring does not justify a major bump. User-visible changes go into [CHANGELOG.md](CHANGELOG.md); internal stabilization work goes into `PROGRESS.md`.
 
 ## Visual Studio Debug
 

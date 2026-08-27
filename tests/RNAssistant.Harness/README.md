@@ -43,6 +43,20 @@ Filtering limits executed tests. The harness source-links Core and Office-neutra
 
 The `harness:` slice also verifies that every production `.cs` file is explicitly included in its old-style `.csproj`, preventing source-linked harness globs from hiding a broken production project.
 
+Versioning changes use the existing `Program.ProjectStructureTests.cs` suite:
+
+```bash
+dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "harness:"
+```
+
+The `versioning` substring selects only versioning cases. These need Git and dotnet;
+they invoke MSBuild against disposable small projects, commits and local bare remotes.
+Fixture refs never affect the working repository or its origin. Coverage includes
+unchanged product versions across ordinary builds/commits, invalid metadata,
+release-only gates, tag uniqueness and SDK/old-style assembly attributes. No Office
+projects or PowerShell release workflow are executed by this slice.
+
 Run the complete harness only for broad cross-cutting changes:
 
 ```bash

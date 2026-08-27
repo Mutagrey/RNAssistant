@@ -3,25 +3,69 @@
   <Import Project="$(MSBuildThisFileDirectory)Directory.Build.local.props" Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.local.props')" />
 
   <PropertyGroup>
+    <_RNAssistantRepositoryRoot>$(MSBuildThisFileDirectory)</_RNAssistantRepositoryRoot>
     <_RNAssistantExpectedVersion Condition="'$(RNAssistantVersionSuffix)' == ''">$(RNAssistantVersionPrefix)</_RNAssistantExpectedVersion>
     <_RNAssistantExpectedVersion Condition="'$(RNAssistantVersionSuffix)' != ''">$(RNAssistantVersionPrefix)-$(RNAssistantVersionSuffix)</_RNAssistantExpectedVersion>
     <_RNAssistantVersionPrefixValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionPrefix)', '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'))</_RNAssistantVersionPrefixValid>
     <_RNAssistantVersionSuffixValid Condition="'$(RNAssistantVersionSuffix)' != ''">$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionSuffix)', '^((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*$'))</_RNAssistantVersionSuffixValid>
   </PropertyGroup>
 
-  <Target Name="ValidateRNAssistantVersion" BeforeTargets="PrepareForBuild">
+  <Target Name="ResolveRNAssistantBuildIdentity" BeforeTargets="GetAssemblyAttributes">
+    <Error Condition="!Exists('$(_RNAssistantRepositoryRoot).git') and ('$(RNAssistantCommitSha)' == '' or '$(RNAssistantBranch)' == '' or '$(RNAssistantWorkingTreeState)' == '')"
+           Text="A source archive must supply RNAssistantCommitSha, RNAssistantBranch and RNAssistantWorkingTreeState explicitly." />
+    <Exec Command="git rev-parse --verify HEAD" WorkingDirectory="$(_RNAssistantRepositoryRoot)"
+          Condition="'$(RNAssistantCommitSha)' == ''" ConsoleToMSBuild="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="RNAssistantCommitSha" />
+    </Exec>
+    <Exec Command="git rev-parse --abbrev-ref HEAD" WorkingDirectory="$(_RNAssistantRepositoryRoot)"
+          Condition="'$(RNAssistantBranch)' == ''" ConsoleToMSBuild="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="RNAssistantBranch" />
+    </Exec>
+    <Exec Command="git status --porcelain=v1 --untracked-files=all" WorkingDirectory="$(_RNAssistantRepositoryRoot)"
+          Condition="'$(RNAssistantWorkingTreeState)' == ''" ConsoleToMSBuild="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_RNAssistantBuildChanges" />
+    </Exec>
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantCommitSha)', '^([0-9a-f]{40}|[0-9a-f]{64})$'))"
+           Text="RNAssistantCommitSha must be a full Git commit SHA." />
+    <PropertyGroup>
+      <RNAssistantWorkingTreeState Condition="'$(RNAssistantWorkingTreeState)' == '' and '@(_RNAssistantBuildChanges)' != ''">dirty</RNAssistantWorkingTreeState>
+      <RNAssistantWorkingTreeState Condition="'$(RNAssistantWorkingTreeState)' == ''">clean</RNAssistantWorkingTreeState>
+      <RNAssistantBuildUtc Condition="'$(RNAssistantBuildUtc)' == ''">$([System.DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))</RNAssistantBuildUtc>
+      <RNAssistantChannel Condition="'$(RNAssistantVersionSuffix)' == ''">stable</RNAssistantChannel>
+      <RNAssistantChannel Condition="'$(RNAssistantVersionSuffix)' != ''">$([System.Text.RegularExpressions.Regex]::Replace('$(RNAssistantVersionSuffix)', '\..*$', ''))</RNAssistantChannel>
+      <_RNAssistantExpectedInformationalVersion>$(Version)+g$(RNAssistantCommitSha.Substring(0, 12))</_RNAssistantExpectedInformationalVersion>
+      <_RNAssistantExpectedInformationalVersion Condition="'$(RNAssistantWorkingTreeState)' == 'dirty'">$(_RNAssistantExpectedInformationalVersion).dirty</_RNAssistantExpectedInformationalVersion>
+      <InformationalVersion Condition="'$(InformationalVersion)' == '$(Version)'">$(_RNAssistantExpectedInformationalVersion)</InformationalVersion>
+    </PropertyGroup>
+    <ItemGroup>
+      <AssemblyMetadata Include="ProductVersion" Value="$(Version)" />
+      <AssemblyMetadata Include="CommitSha" Value="$(RNAssistantCommitSha)" />
+      <AssemblyMetadata Include="BuildUtc" Value="$(RNAssistantBuildUtc)" />
+      <AssemblyMetadata Include="Branch" Value="$(RNAssistantBranch)" />
+      <AssemblyMetadata Include="Channel" Value="$(RNAssistantChannel)" />
+      <AssemblyMetadata Include="WorkingTreeState" Value="$(RNAssistantWorkingTreeState)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="ValidateVersionFormat" BeforeTargets="PrepareForBuild" DependsOnTargets="ResolveRNAssistantBuildIdentity">
     <Error Condition="'$(_RNAssistantVersionPrefixValid)' != 'True'" Text="RNAssistantVersionPrefix must be a SemVer core such as 2.0.0." />
     <Error Condition="'$(RNAssistantVersionSuffix)' != '' and '$(_RNAssistantVersionSuffixValid)' != 'True'" Text="RNAssistantVersionSuffix must contain dot-separated SemVer prerelease identifiers, for example beta.1." />
     <Error Condition="'$(Version)' != '$(_RNAssistantExpectedVersion)'" Text="Version must be derived from RNAssistantVersionPrefix and RNAssistantVersionSuffix." />
-    <Error Condition="'$(AssemblyVersion)' != '$(RNAssistantVersionPrefix).0'" Text="AssemblyVersion must be derived from RNAssistantVersionPrefix." />
-    <Error Condition="'$(FileVersion)' != '$(RNAssistantVersionPrefix).0'" Text="FileVersion must be derived from RNAssistantVersionPrefix." />
-    <Error Condition="'$(InformationalVersion)' != '$(_RNAssistantExpectedVersion)'" Text="InformationalVersion must match the RNAssistant product version." />
-    <Error Condition="'$(ApplicationVersion)' != '$(RNAssistantVersionPrefix).0'" Text="VSTO ApplicationVersion must be derived from RNAssistantVersionPrefix." />
+    <Error Condition="'$(AssemblyVersion)' != '$(RNAssistantAssemblyVersion)'" Text="AssemblyVersion must match RNAssistantAssemblyVersion, independently of the product version." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantBuildNumber)', '^(0|[1-9][0-9]{0,4})$'))" Text="RNAssistantBuildNumber must be an integer from 0 to 65534." />
+    <Error Condition="$(RNAssistantBuildNumber) &gt; 65534" Text="RNAssistantBuildNumber must be an integer from 0 to 65534." />
+    <Error Condition="'$(FileVersion)' != '$(RNAssistantVersionPrefix).$(RNAssistantBuildNumber)'" Text="FileVersion must use the product prefix and RNAssistantBuildNumber." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(FileVersion)', '^[0-9]{1,5}(\.[0-9]{1,5}){3}$')) or !$([System.Text.RegularExpressions.Regex]::IsMatch('$(AssemblyVersion)', '^[0-9]{1,5}(\.[0-9]{1,5}){3}$'))" Text="Numeric versions require four components from 0 to 65534." />
+    <Error Condition="$([System.Version]::Parse('$(FileVersion)').Major) &gt; 65534 or $([System.Version]::Parse('$(FileVersion)').Minor) &gt; 65534 or $([System.Version]::Parse('$(FileVersion)').Build) &gt; 65534 or $([System.Version]::Parse('$(AssemblyVersion)').Major) &gt; 65534 or $([System.Version]::Parse('$(AssemblyVersion)').Minor) &gt; 65534 or $([System.Version]::Parse('$(AssemblyVersion)').Build) &gt; 65534 or $([System.Version]::Parse('$(AssemblyVersion)').Revision) &gt; 65534" Text="Numeric version components cannot exceed 65534." />
+    <Error Condition="'$(InformationalVersion)' != '$(_RNAssistantExpectedInformationalVersion)'" Text="InformationalVersion must include the product version and commit identity." />
+    <Error Condition="'$(ApplicationVersion)' != '$(FileVersion)'" Text="VSTO ApplicationVersion must match numeric FileVersion." />
+    <Error Condition="'$(RNAssistantWorkingTreeState)' != 'clean' and '$(RNAssistantWorkingTreeState)' != 'dirty'" Text="RNAssistantWorkingTreeState must be clean or dirty." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantBuildUtc)', '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'))" Text="RNAssistantBuildUtc must be an explicit UTC timestamp (yyyy-MM-ddTHH:mm:ssZ)." />
   </Target>
 
   <Target Name="GenerateRNAssistantVersionInfo"
           BeforeTargets="CoreCompile"
-          DependsOnTargets="ValidateRNAssistantVersion"
+          DependsOnTargets="ValidateVersionFormat"
           Condition="'$(MSBuildProjectExtension)' == '.csproj' and '$(UsingMicrosoftNETSdk)' != 'true'">
     <ItemGroup>
       <_RNAssistantAssemblyAttribute Include="System.Reflection.AssemblyVersionAttribute">
@@ -33,6 +77,10 @@
       <_RNAssistantAssemblyAttribute Include="System.Reflection.AssemblyInformationalVersionAttribute">
         <_Parameter1>$(InformationalVersion)</_Parameter1>
       </_RNAssistantAssemblyAttribute>
+      <_RNAssistantAssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>%(AssemblyMetadata.Identity)</_Parameter1>
+        <_Parameter2>%(AssemblyMetadata.Value)</_Parameter2>
+      </_RNAssistantAssemblyAttribute>
     </ItemGroup>
     <WriteCodeFragment
       Language="C#"
@@ -41,4 +89,6 @@
       <Output TaskParameter="OutputFile" ItemName="Compile" />
     </WriteCodeFragment>
   </Target>
+
+  <Import Project="$(MSBuildThisFileDirectory)build/RNAssistant.Release.targets" />
 </Project>

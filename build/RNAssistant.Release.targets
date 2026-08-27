@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <RNAssistantReleaseRemote Condition="'$(RNAssistantReleaseRemote)' == ''">origin</RNAssistantReleaseRemote>
+  </PropertyGroup>
+
+  <!-- No release gate runs in an ordinary build or ordinary version check. -->
+  <Target Name="_ValidateRNAssistantReleaseBuild" BeforeTargets="PrepareForBuild"
+          Condition="'$(RNAssistantReleaseBuild)' == 'true' or '$(RNAssistantReleaseTag)' != ''"
+          DependsOnTargets="ValidateRNAssistantRelease" />
+
+  <Target Name="ValidateRNAssistantRelease"
+          DependsOnTargets="ValidateReleaseTagMatchesProductVersion;ValidateReleaseTreeClean;ValidateReleaseChangelog" />
+
+  <Target Name="ValidateReleaseTagMatchesProductVersion" DependsOnTargets="ValidateVersionFormat">
+    <Error Condition="'$(RNAssistantReleaseTag)' != 'v$(Version)'"
+           Text="RNAssistantReleaseTag must exactly match v$(Version)." />
+    <Error Condition="'$(RNAssistantVersionSuffix)' != '' and !$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionSuffix)', '^(alpha|beta|rc)\.[1-9][0-9]*$'))"
+           Text="Release milestones require stable, alpha.N, beta.N or rc.N; development builds cannot be tagged." />
+  </Target>
+
+  <Target Name="ValidateReleaseTreeClean">
+    <Exec Command="git status --porcelain=v1 --untracked-files=all" WorkingDirectory="$(_RNAssistantRepositoryRoot)"
+          ConsoleToMSBuild="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_RNAssistantReleaseChanges" />
+    </Exec>
+    <Error Condition="'@(_RNAssistantReleaseChanges)' != ''"
+           Text="Release requires a clean working tree, including the index and untracked files." />
+  </Target>
+
+  <Target Name="ValidateReleaseChangelog" DependsOnTargets="ValidateReleaseTagMatchesProductVersion">
+    <Error Condition="!Exists('$(_RNAssistantRepositoryRoot)CHANGELOG.md')" Text="Release requires CHANGELOG.md." />
+    <PropertyGroup>
+      <_RNAssistantReleaseNotes>$([System.IO.File]::ReadAllText('$(_RNAssistantRepositoryRoot)CHANGELOG.md'))</_RNAssistantReleaseNotes>
+      <_RNAssistantReleaseVersionPattern>$([System.Text.RegularExpressions.Regex]::Escape('$(Version)'))</_RNAssistantReleaseVersionPattern>
+      <_RNAssistantReleaseNotesPattern>(?ms)^## \[$(_RNAssistantReleaseVersionPattern)\] - [0-9]{4}-[0-9]{2}-[0-9]{2}\r?\n(?:(?!^## ).)*^[-*] \S</_RNAssistantReleaseNotesPattern>
+    </PropertyGroup>
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(_RNAssistantReleaseNotes)', '$(_RNAssistantReleaseNotesPattern)'))"
+           Text="CHANGELOG.md requires a dated [$(Version)] section with at least one release note." />
+  </Target>
+
+  <!-- Preparation only: a tagged build may reuse its existing immutable tag. -->
+  <Target Name="ValidateTagDoesNotExist" DependsOnTargets="ValidateReleaseTagMatchesProductVersion">
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantReleaseRemote)', '^[A-Za-z0-9][A-Za-z0-9._/-]*$'))"
+           Text="RNAssistantReleaseRemote must be a configured Git remote name." />
+    <Exec Command="git show-ref --verify --quiet refs/tags/$(RNAssistantReleaseTag)"
+          WorkingDirectory="$(_RNAssistantRepositoryRoot)" IgnoreExitCode="true"
+          StandardErrorImportance="Low">
+      <Output TaskParameter="ExitCode" PropertyName="_RNAssistantLocalTagExitCode" />
+    </Exec>
+    <Error Condition="'$(_RNAssistantLocalTagExitCode)' == '0'" Text="Release tag already exists locally; tags must never be moved or reused." />
+    <Error Condition="'$(_RNAssistantLocalTagExitCode)' != '1'" Text="Unable to verify local release tag absence." />
+    <Exec Command="git ls-remote --exit-code --tags &quot;$(RNAssistantReleaseRemote)&quot; refs/tags/$(RNAssistantReleaseTag)"
+          WorkingDirectory="$(_RNAssistantRepositoryRoot)" IgnoreExitCode="true"
+          ConsoleToMSBuild="true" StandardOutputImportance="Low" StandardErrorImportance="Low"
+          EnvironmentVariables="GIT_TERMINAL_PROMPT=0" Timeout="15000">
+      <Output TaskParameter="ExitCode" PropertyName="_RNAssistantRemoteTagExitCode" />
+    </Exec>
+    <Error Condition="'$(_RNAssistantRemoteTagExitCode)' == '0'" Text="Release tag already exists remotely; tags must never be moved or reused." />
+    <Error Condition="'$(_RNAssistantRemoteTagExitCode)' != '2'" Text="Unable to verify remote release tag absence; release is blocked." />
+  </Target>
+</Project>

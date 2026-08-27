@@ -38,6 +38,11 @@ namespace RNAssistant.Harness
             {
                 Test("harness: native async execution", HarnessRunsNativeAsync),
                 Test("harness: production projects include all source files", ProductionProjectsIncludeAllSourceFiles),
+                Test("harness: versioning ordinary builds and commits need no bump", VersioningOrdinaryBuildsNeedNoBump),
+                Test("harness: versioning rejects malformed metadata", VersioningRejectsMalformedMetadata),
+                Test("harness: versioning release gates are explicit", VersioningReleaseGatesAreExplicit),
+                Test("harness: versioning tags cannot be reused", VersioningTagsCannotBeReused),
+                Test("harness: versioning SDK and old-style assembly metadata", VersioningGeneratesAssemblyMetadata),
                 Test("agent: parses final JSON", SimpleAgentParsesFinalJson),
                 Test("conversation: extracts streamed message JSON", ConversationStreamExtractorHandlesChunkedJson),
                 Test("conversation: streams message and thinking", ConversationStreamsMessageAndThinking),

@@ -4,6 +4,15 @@
 
 RNAssistant — локальный VSTO/WebView2-ассистент для Office без серверной части. Чаты и контекст принадлежат документам; Office tools выполняются локально.
 
+## Stabilization freeze
+
+- Обязательные требования: `docs/stabilization/STABILIZATION_MASTER_PLAN.md`. Текущая фаза и результаты — в `docs/stabilization/PROGRESS.md`.
+- Работай только в текущей фазе и подэтапе. Не начинай следующую фазу в том же изменении; новые product features заморожены.
+- Главная ветка — `stabilization/16.1`; короткие рабочие ветки — `stab/<phase>-<task>`. Не коммить стабилизацию в `main`.
+- Один commit — один инвариант или чёткий этап. Дефекты вне текущего контура записывай в `RISK_REGISTER.md` / `BACKLOG.md`, не исправляй попутно.
+- Текущие runtime-инварианты ниже остаются правилами существующей реализации до соответствующей фазы master plan; целевые контракты не вводятся заранее.
+- После каждого подэтапа обновляй `PROGRESS.md`; отчёт — строго по разделу 23 master plan. У compatibility adapters должны быть owner, consumers и removal phase в `MIGRATION_MAP.md`.
+
 ## Границы слоёв
 
 - `RNAssistant.Core`: модели, настройки, storage, LLM client, prompt/tool parsing. Без Office/VSTO/WinForms/WebView2.
@@ -23,6 +32,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 - trajectory/exports/GC: `docs/trajectory-query.md`, `docs/trajectory-export.md`, `docs/cas-maintenance.md`;
 - VBA mutations/packages/UserForms: `docs/vba-mutation-journal.md`, `docs/vba-tool-packages.md`, `docs/vba-userforms.md`;
 - быстрые и таргетированные тесты: `tests/RNAssistant.Harness/README.md`.
+- versioning/release: `docs/operations/VERSIONING.md`, `docs/operations/RELEASE_PROCESS.md`.
 
 Не загружай все документы и тесты «на всякий случай».
 
@@ -77,9 +87,11 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 
 - Core и Office-neutral parser/storage/tool/service: запускай минимальный подходящий filter из `tests/RNAssistant.Harness/README.md`; полный harness — только когда изменение пересекает несколько подсистем.
 - COM/VSTO изменения здесь не проверяются. В отчёте укажи Windows x64 + Office + VS 2022 validation.
-- Перед коммитом версия в `Directory.Build.props` должна быть выше HEAD; patch/minor/major выбирай по SemVer и не повышай повторно уже корректную версию.
-- Перед коммитом: `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateRNAssistantVersion -nologo -v:minimal`.
-- После коммита создай новый annotated tag `v<Version>` и отправь commit + tag в `origin`; опубликованные tags не перемещай и не переиспользуй.
+- Commit не является release. Требование повышать версию и создавать tag на каждый commit отменено.
+- Historical baseline — `v16.0.4`; development target один раз установлен в `16.1.0-dev`. Обычные commits не меняют product version и не получают tags.
+- Перед коммитом: `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal`. Проверка не сравнивает версию с HEAD и не требует clean tree.
+- Release-only checks и annotated tags запускаются только для явно согласованного release milestone по `docs/operations/RELEASE_PROCESS.md`. Обычный commit не вызывает `tools/Prepare-Release.ps1`.
+- Не перемещай и не переиспользуй tags; push release допускается только с явным параметром. Major не повышается из-за внутреннего refactoring; protocol versions независимы от product version.
 
 ## Definition of Done
 
