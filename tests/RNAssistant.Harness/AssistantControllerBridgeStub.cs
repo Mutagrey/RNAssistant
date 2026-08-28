@@ -168,11 +168,14 @@ namespace RNAssistant.Office
         public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }
         public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }
 
-        public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret)
+        public bool LastReviewAgentPrompts { get; private set; }
+
+        public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret, bool reviewAgentPrompts = false)
         {
             LastSettings = settings;
             LastApiKey = apiKey;
             LastHistorySecret = historySecret;
+            LastReviewAgentPrompts = reviewAgentPrompts;
             return GetSettings();
         }
 

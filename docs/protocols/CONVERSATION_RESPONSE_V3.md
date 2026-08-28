@@ -1,8 +1,8 @@
 # Conversation Response v3
 
-Status: **contract/context prepared; runtime and probes share one active wire owner; live protocol still v2** (Phase 2C3A).
+Status: **contract/context prepared; shared wire owner and explicit saved-prompt review; live protocol still v2** (Phase 2C3B).
 Canonical requirements: [master plan §7.1](../stabilization/STABILIZATION_MASTER_PLAN.md#71-conversation-response-v3).
-The active wire/history version remains v2 until the coordinated Phase 2C3B
+The active wire/history version remains v2 until the coordinated Phase 2C3C
 cutover. Product version remains `16.1.0-dev`; protocol version is independent.
 
 ## Envelope
@@ -157,19 +157,22 @@ can update runtime and qualification coherently without editing probe internals.
 ## Remaining cutover gates
 
 Per [change budget §14.3](../stabilization/STABILIZATION_MASTER_PLAN.md#143-change-budget),
-2C1 introduced the contract, 2C2 adapted context and 2C3A removed duplicate wire
-ownership. Phase 2C3B must coordinate switch/delete, rechecking the change budget:
+2C1 introduced the contract, 2C2 adapted context, 2C3A removed duplicate wire
+ownership and 2C3B handles saved-prompt review. Phase 2C3C must coordinate
+switch/delete, rechecking the change budget:
 
 1. Switch ModelProtocol result/parser/repair, mode instructions and compatibility
    probes together through ModelProtocolWire. Resolve saved custom v2 prompts explicitly; never silently
    accept a v2 response on a v3 request. Preserve provider-native refusal metadata
-   separately from model-authored status. **R27:** current NormalizeAgentPrompts
-   replaces custom prompts on a schema-version mismatch. Before any prompt-version
-   bump, replace that behavior with explicit review/reset handling and tests;
-   do not erase saved custom prompts as a hidden part of the protocol switch.
+   separately from model-authored status. Advance the prompt schema marker with
+   that switch so saved v2 instructions require the explicit review implemented
+   in 2C3B. Recheck preservation/reset with actual v3 defaults; never erase saved
+   custom prompts as a hidden part of the protocol switch.
 2. Require complete `CallContext` before v3 dispatch and pass it to the local
    parser on every attempt. Incomplete history is a runtime boundary failure,
-   not something model repair can fix. Verify run-wide duplicates and singleton
+   not something model repair can fix. Controller attachment analysis/compaction
+   can precede the neutral loop, so guard the full request before those calls too.
+   Verify run-wide duplicates and singleton
    enforcement through the live v3 client. No tool retries/planner/policy changes.
 3. Handle all accepted-history forms of the current v3 run (JSON envelope, native
    tool role and plain final text) with the prepared reader, including actual
@@ -184,7 +187,30 @@ ownership. Phase 2C3B must coordinate switch/delete, rechecking the change budge
    at the switch per master plan §15.1. Run integration tests for repair, history,
    confirmation, streaming, tools and completion guard. Phase 3 remains separate.
 
-Current evidence: [Phase 2C3A](../stabilization/PHASE_2C3A_WIRE_OWNER.md).
+## Saved-prompt review (Phase 2C3B)
+
+R27's automatic reset path is removed. AppSettings normalization preserves all five
+authored instructions and a missing/old/future marker. SettingsService stages a
+save on a clone and advances a stored unreviewed marker only for the explicit,
+request-local `reviewAgentPrompts` command. Failed saves do not mutate the draft's
+marker; no approval flag becomes a durable setting. Blank fields still select
+defaults, but normalizing them does not itself imply review.
+
+The existing settings bridge carries that typed flag from the Library → Prompts
+**«Подтвердить проверку»** action after user confirmation. Users can retain edited
+text or explicitly clear prompts with the existing reset action before review.
+Ordinary form/tool/diagnostic saves do not approve prompts. Plan instructions and
+stored text without a loaded editor are preserved in the form payload.
+
+The shared AppSettings guard runs before controller preparation/auxiliary model
+calls, before pending confirmation is consumed, and at neutral loop entry. It is
+a configuration precondition, not format repair. Controller wiring is code-reviewed
+only here; Windows x64 + Office + VS 2022 and DPAPI remain qualification gates.
+Host-neutral persistence/loop and JS action tests pass. Active response version 2,
+prompt schema 11 and product `16.1.0-dev` do not change in 2C3B.
+
+Current evidence: [Phase 2C3B](../stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
+Wire ownership: [Phase 2C3A](../stabilization/PHASE_2C3A_WIRE_OWNER.md).
 Context adaptation: [Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
 Historical contract introduction: [Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md).
 Decision: [ADR-0002](../decisions/ADR-0002-model-protocol-boundary.md).

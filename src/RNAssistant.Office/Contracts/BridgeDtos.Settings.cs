@@ -22,6 +22,9 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("historySecret")]
         public string HistorySecret { get; set; }
+
+        [JsonProperty("reviewAgentPrompts")]
+        public bool ReviewAgentPrompts { get; set; }
     }
 
     public sealed class SaveToolsPayload

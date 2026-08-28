@@ -222,7 +222,8 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.SaveSettings(
                             saveSettings.Settings ?? new AppSettings(),
                             saveSettings.ApiKey,
-                            saveSettings.HistorySecret);
+                            saveSettings.HistorySecret,
+                            saveSettings.ReviewAgentPrompts);
                         break;
                     case "testModelCompatibility":
                         responsePayload = await _controller.TestModelCompatibilityAsync(cancellationToken).ConfigureAwait(false);

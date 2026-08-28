@@ -47,6 +47,69 @@ namespace RNAssistant.Harness
             return session;
         }
 
+        private static void SettingsPromptReviewGatesConversationDispatch()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var rawCalls = 0;
+                var boundaryCalls = 0;
+                var progressCalls = 0;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    rawCalls++;
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = "{\"status\":\"completed\",\"message\":\"Done\",\"tool_calls\":[]}"
+                    });
+                };
+                var service = new ConversationRunService(adapter, executor, completion, null,
+                    () => { boundaryCalls++; return new ModelProtocolClient(completion); });
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var settingsForRun = new AppSettings { AgentPromptSchemaVersion = 0 };
+                Action<Action> expectReview = attempt =>
+                {
+                    var blocked = false;
+                    try { attempt(); }
+                    catch (InvalidOperationException ex)
+                    {
+                        AssertContains(ex.Message, "Подтвердить проверку", "actionable review guidance");
+                        blocked = true;
+                    }
+                    AssertTrue(blocked, "unreviewed prompts must block the run");
+                };
+                foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
+                {
+                    var session = NewSession(adapter);
+                    session.Mode = mode;
+                    var before = JsonConvert.SerializeObject(session);
+                    expectReview(() => service.ExecuteAsync(mode, "Request", session, NewContext(adapter), settingsForRun, tools,
+                        (phase, message, activity) => progressCalls++).GetAwaiter().GetResult());
+                    AssertEqual(before, JsonConvert.SerializeObject(session), "direct blocked entry does not append a user message or mutate history");
+                }
+                var continuation = ContextContinuationSession();
+                var continuationBefore = JsonConvert.SerializeObject(continuation);
+                expectReview(() => service.ContinueAfterToolAsync(new ToolCommand { ToolCallId = "pending_id" }, null,
+                    continuation, NewContext(adapter), settingsForRun, tools, null,
+                    (phase, message, activity) => progressCalls++).GetAwaiter().GetResult());
+                AssertEqual(continuationBefore, JsonConvert.SerializeObject(continuation), "blocked continuation does not rewrite accepted history");
+                AssertEqual(0, rawCalls, "no model or auxiliary request before review");
+                AssertEqual(0, boundaryCalls, "guard runs before materialization reaches the model boundary");
+                AssertEqual(0, progressCalls, "no execution progress is published for a blocked entry");
+
+                settingsForRun.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion;
+                foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
+                {
+                    var session = NewSession(adapter);
+                    session.Mode = mode;
+                    var result = service.ExecuteAsync(mode, "Request", session, NewContext(adapter), settingsForRun, tools, null)
+                        .GetAwaiter().GetResult();
+                    AssertEqual("Done", result.AssistantText, "reviewed settings retain the current conversation behavior");
+                    AssertEqual(2, result.ResponseProtocolVersion, "prompt review is not a partial v3 cutover");
+                }
+                AssertEqual(3, rawCalls, "each reviewed mode makes one normal request");
+            });
+        }
+
         private static void ProtocolContextSnapshotsAreIndependent()
         {
             var ids = new List<string> { "accepted" };

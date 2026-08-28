@@ -35,6 +35,7 @@ Filtering limits executed tests. The harness source-links Core and Office-neutra
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
 | Active wire / compatibility probes | `Program.AgentSafetyTests.cs` | `model compatibility:`, `agent: supports selectable`, `model protocol:` |
+| Prompt schema review / settings | `Program.ChatSettingsTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ContextBridgeTests.cs` | `settings:`, `bridge: typed settings`, `chat: prompt save` |
 | Conversation v3 contract/context | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v3:`, `protocol context:` |
 | Resources and attachments | `Program.ResourceFabricTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.AttachmentTests.cs` | `resources:`, `attachments:` |
 | Session storage and CAS | `Program.SessionEventStoreTests.cs`, `Program.CasMaintenanceTests.cs` | `storage:` |
@@ -119,9 +120,20 @@ the active v2 path. Context evidence: [2C2](../../docs/stabilization/PHASE_2C2_P
 
 Phase 2C3A extends the two `model compatibility:` cases across both formats and all
 three tool-result roles, strict sentinels/status/casing and one raw attempt per
-probe. Runtime/probes share ModelProtocolWire; v3 is still not active. The existing
-`settings: hard cutover legacy Agent prompts` case characterizes R27's automatic
-custom-prompt reset; it is not proof of safe v3 migration. See [2C3A evidence](../../docs/stabilization/PHASE_2C3A_WIRE_OWNER.md).
+probe. Runtime/probes share ModelProtocolWire; v3 is still not active.
+See [2C3A evidence](../../docs/stabilization/PHASE_2C3A_WIRE_OWNER.md).
+
+Phase 2C3B replaces the obsolete destructive-reset characterization with prompt
+preservation/review tests: missing/old/current/future markers, real settings
+load/save, failed approval, explicit reset, and neutral Agent/Chat/Plan/continuation
+entry guards. SettingsService is now source-linked; ProtectedSecretStore remains
+excluded and a test-only stub throws on any secret-file read/write. Absent fixture
+secrets are supported; DPAPI/protection changes are not being qualified.
+The existing typed-settings bridge test uses the controller stub, not production
+controller execution. `node tests/web/prompt-review.test.js` verifies actual form
+serialization and action handlers with minimal DOM/transport substitutes, including
+cancel/failure/reset and Plan preservation; it does not verify WebView layout.
+See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
 ## Full suite
 

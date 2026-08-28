@@ -1,7 +1,7 @@
 # ADR-0002: ModelProtocol owns raw model attempts
 
 Date: 2026-08-28
-Status: Accepted (2A boundary, 2B retry policy, 2C1 v3 contract, 2C2 context, 2C3A shared wire owner; runtime cutover remains)
+Status: Accepted (2A boundary, 2B retry policy, 2C1 v3 contract, 2C2 context, 2C3A shared wire, 2C3B prompt review; runtime cutover remains)
 
 ## Context
 
@@ -179,8 +179,8 @@ The seven-production-file preparation preserves v2. Probes derive fixed sentinel
 from the active writer, compare validated DTOs locally (not as a wire serialization),
 and keep their single raw attempt without retries/fallback. Their native-call
 history uses the actual transcript writer. Prompt-authoring guidance points to the
-active defaults instead of copying v2 status rules. The next 2C3B change can switch
-the shared owner and remove remaining v2 implementations without rediscovering
+active defaults instead of copying v2 status rules. After the 2C3B prompt-review
+prerequisite below, 2C3C can switch the shared owner and remove remaining v2 implementations without rediscovering
 probe internals. No second runtime, conditional protocol mode or historical adapter.
 
 Verification extends the two existing compatibility tests across both formats,
@@ -188,6 +188,32 @@ all three result roles, wrong sentinels/status/casing and unchanged request coun
 R27 records the existing prompt normalizer's automatic reset on version mismatch;
 the existing characterization test confirms it. Settings/prompt versions are not
 changed here; explicit custom-prompt handling must precede the v3 cutover.
+
+### Explicit saved-prompt review (Phase 2C3B)
+
+The remaining switch requires a prompt-schema bump, but the existing normalizer
+silently replaced custom instructions on any mismatch. Resolve R27 first as a
+bounded settings/protocol prerequisite, not as a partial v3 switch. Ten production
+files change; no Office tool, resource, VBA or event-storage contract changes.
+
+Normalization preserves authored text and the version marker. SettingsService owns
+explicit review, stages changes on a clone and keeps stored mismatched markers on
+ordinary saves. The existing typed saveSettings bridge accepts a request-local
+reviewAgentPrompts flag; a confirmed Library action opts in. The form preserves all
+five conversation prompts, including the formerly omitted PlanSystemPrompt.
+The old reset branch, duplicate Chat/Plan defaulting and obsolete reset test go away.
+
+Readiness is checked before controller turn preparation/attachment analysis/
+compaction and before pending confirmation is consumed, as well as at neutral-loop
+entry. It is a configuration error, never a model repair. No compatibility adapter,
+automatic settings migration or protocol-version selector is introduced.
+The raw model path remains v2 and the prompt schema remains 11.
+
+Persistence tests now source-link the real SettingsService with a test-only DPAPI
+boundary that throws on secret-file reads/writes. It does not simulate encryption.
+Host-neutral loop/settings and JS actions are verified; production controllers,
+WebView and Windows DPAPI are not. Phase 2C3C still needs the coordinated v3 switch,
+full-context/old-chat guards before any model call, and its own integration tests.
 
 The old loop completion/parse/repair/fallback/trace methods and
 `AgentJsonProtocol.CreateFormatRepairMessage` are removed, without aliases or dual
@@ -201,4 +227,5 @@ Evidence and exact commands: [Phase 2A](../stabilization/PHASE_2A_MODEL_PROTOCOL
 [Phase 2B](../stabilization/PHASE_2B_RETRY_POLICY.md),
 [Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md),
 [Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md),
-[Phase 2C3A](../stabilization/PHASE_2C3A_WIRE_OWNER.md).
+[Phase 2C3A](../stabilization/PHASE_2C3A_WIRE_OWNER.md),
+[Phase 2C3B](../stabilization/PHASE_2C3B_PROMPT_REVIEW.md).

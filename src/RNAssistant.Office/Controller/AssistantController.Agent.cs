@@ -54,6 +54,8 @@ namespace RNAssistant.Office
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
                 EnsureCurrentResponseProtocol(session);
+                var settings = ResolveChatSettings(session);
+                settings.EnsureAgentPromptsReviewed();
                 var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
                 if (!MarkPendingActivityExecuting(session, pending.PendingId, runId))
                 {
@@ -108,7 +110,6 @@ namespace RNAssistant.Office
                     ReportExternalProgress(progress, phase, message, activity);
                 };
 
-                var settings = ResolveChatSettings(session);
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
                 var continuationAttachments = pending.Attachments ?? LatestUserAttachments(session);
                 var tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();

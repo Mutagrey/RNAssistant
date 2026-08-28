@@ -258,14 +258,14 @@ function readSettings() {
   }
   var promptSettings = typeof readPromptSettings === "function"
     ? readPromptSettings()
-    : { SystemPrompt: "", AgentToolsPrompt: "", AgentSkillsPrompt: "", ChatSystemPrompt: "", ContextCompactionPrompt: "", ChatTitlePrompt: "", AttachmentAnalysisPrompt: "" };
+    : (state.settings || {});
   var reasoningRequestMode = $("reasoningRequestModeInput").value;
   var reasoningCustomJson = readReasoningCustomJson(reasoningRequestMode);
   return {
     BaseUrl: $("baseUrlInput").value.trim(),
     ModelsConfigUrl: $("modelsConfigUrlInput").value.trim(),
     Model: $("modelInput").value.trim(),
-    AgentPromptSchemaVersion: Number(compatibilityValue(state.settings, "AgentPromptSchemaVersion", "agentPromptSchemaVersion", 1) || 1),
+    AgentPromptSchemaVersion: Number(compatibilityValue(state.settings, "AgentPromptSchemaVersion", "agentPromptSchemaVersion", 0)),
     ReasoningRequestMode: reasoningRequestMode,
     ReasoningCustomJson: reasoningCustomJson,
     MaxTokens: Number($("maxTokensInput").value || modelSettingsDefaults.maxTokens),
@@ -295,14 +295,15 @@ function readSettings() {
     AgentResponseMode: $("agentResponseModeInput").value,
     ToolResultRole: $("toolResultRoleInput").value,
     FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
-    SystemPrompt: promptSettings.SystemPrompt,
-    AgentToolsPrompt: promptSettings.AgentToolsPrompt,
-    AgentSkillsPrompt: promptSettings.AgentSkillsPrompt,
-    ChatSystemPrompt: promptSettings.ChatSystemPrompt,
+    SystemPrompt: compatibilityValue(promptSettings, "SystemPrompt", "systemPrompt", ""),
+    AgentToolsPrompt: compatibilityValue(promptSettings, "AgentToolsPrompt", "agentToolsPrompt", ""),
+    AgentSkillsPrompt: compatibilityValue(promptSettings, "AgentSkillsPrompt", "agentSkillsPrompt", ""),
+    ChatSystemPrompt: compatibilityValue(promptSettings, "ChatSystemPrompt", "chatSystemPrompt", ""),
+    PlanSystemPrompt: compatibilityValue(promptSettings, "PlanSystemPrompt", "planSystemPrompt", ""),
     SystemPromptRole: $("systemPromptRoleInput").value,
-    ContextCompactionPrompt: promptSettings.ContextCompactionPrompt,
-    ChatTitlePrompt: promptSettings.ChatTitlePrompt,
-    AttachmentAnalysisPrompt: promptSettings.AttachmentAnalysisPrompt,
+    ContextCompactionPrompt: compatibilityValue(promptSettings, "ContextCompactionPrompt", "contextCompactionPrompt", ""),
+    ChatTitlePrompt: compatibilityValue(promptSettings, "ChatTitlePrompt", "chatTitlePrompt", ""),
+    AttachmentAnalysisPrompt: compatibilityValue(promptSettings, "AttachmentAnalysisPrompt", "attachmentAnalysisPrompt", ""),
     ModelImageSupportOverrides: modelImageSupportOverrides(),
     ModelAudioSupportOverrides: modelAudioSupportOverrides(),
     ModelCapabilities: modelCapabilitiesForSettings(),
@@ -312,14 +313,15 @@ function readSettings() {
   };
 }
 
-async function persistSettingsFromForm() {
+async function persistSettingsFromForm(reviewAgentPrompts) {
   var apiKey = $("apiKeyInput").value;
   var historySecret = $("historySecretInput").value;
   var nextSettings = readSettings();
   var response = await send("saveSettings", {
     settings: nextSettings,
     apiKey: apiKey || null,
-    historySecret: historySecret || null
+    historySecret: historySecret || null,
+    reviewAgentPrompts: reviewAgentPrompts === true
   });
   state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
   state.settings = response.settings || response.Settings || nextSettings;
@@ -497,6 +499,14 @@ function bindSettingsActions() {
       updateSettingsSaveButton();
       log(error.message, "error");
     }
+  });
+  $("reviewAgentPromptsButton").addEventListener("click", async function () {
+    if (!window.confirm("Вы проверили Agent (общие/tools/skills), Chat и Plan на соответствие текущему протоколу?\n\n" +
+      "Сохранить текущие настройки и тексты, подтвердив проверку? Для встроенных инструкций сначала выберите «Сбросить все промпты».")) return;
+    setControlBusy("reviewAgentPromptsButton", true);
+    try { await persistSettingsFromForm(true); log("Промпты сохранены; проверка текущей схемы подтверждена."); }
+    catch (error) { log(error.message, "error"); }
+    finally { setControlBusy("reviewAgentPromptsButton", false); }
   });
   $("testModelCompatibilityButton").addEventListener("click", async function () {
     var button = $("testModelCompatibilityButton");

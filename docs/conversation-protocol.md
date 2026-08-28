@@ -13,8 +13,9 @@ Phase 2C2 adapts full-turn ID/safety snapshots to the boundary and prepares a
 v3-only history reader, **without switching this runtime**. The unused v2 read
 adapter is removed. Active prompts, retry, schema selection and accepted history
 remain v2; coordinated switch/delete and explicit old-chat skip/reset are Phase
-2C3B gates. Phase 2C3A gives runtime and probes one active ModelProtocolWire owner;
-no new v3 events, historical migration or dual-write exist yet.
+2C3C gates. Phase 2C3A gives runtime and probes one active ModelProtocolWire owner;
+2C3B replaces destructive prompt reset with explicit schema review. No new v3
+events, historical migration or dual-write exist yet.
 
 ## Conversation context
 
@@ -27,7 +28,27 @@ Every request contains one editable instruction followed by one dynamic `RUNTIME
 
 Explicitly addressed background work (runs, context operations, diagnostics, resource staging) loads its target session without changing the user's selected chat. Only navigation actions such as select/create/activate change the active session.
 
-The Agent sections and Plan/Chat prompts use one explicit settings schema version. Settings without the current marker are hard-reset to the current defaults; RNAssistant does not merge an older no-tools Chat contract into the structured loop. Once the current marker is saved, current custom values are preserved normally.
+The Agent sections and Plan/Chat prompts use one explicit settings schema version.
+Missing, older or unknown markers require review: normalization preserves authored
+text and the marker, filling only blank fields with defaults. It never merges or
+silently approves an older contract. Ordinary saves can change unrelated settings
+but cannot approve stored unreviewed prompts, including when a caller supplies a
+fresh current marker. `SettingsService.Save` stages normalization/review on a clone.
+
+In Library → Prompts → actions, **«Подтвердить проверку»** explicitly saves the
+current form and approves the five conversation instructions after confirmation.
+Existing **«Сбросить все промпты»** clears drafts; save/review then selects defaults.
+The typed `saveSettings.reviewAgentPrompts` flag defaults to false, is request-local,
+and is never persisted as a setting. Normal saves, diagnostics and
+`common.prompts_save` do not opt in. The form preserves PlanSystemPrompt and retains
+stored text if the prompt editor is unavailable.
+
+`EnsureAgentPromptsReviewed` runs before controller turn preparation, attachment
+analysis/compaction, and before confirmation consumes pending state. The neutral
+loop also guards direct entry/continuation before materialization. A mismatch is
+an actionable configuration error, not a model response to repair. Fixed endpoint
+probes remain available. This does not validate the user's instruction semantics;
+the active strict response parser remains authoritative. See [prompt review](protocols/CONVERSATION_RESPONSE_V3.md#saved-prompt-review-phase-2c3b).
 
 Agent bootstrap schemas are `common.resources_list/resolve/search/read` and `common.capabilities_search/read`. `RUNTIME_CONTEXT.capabilities.items` immediately exposes the complete compact schema-free index of exact runnable tool and enabled skill ids for the run; it is never paged or silently truncated. `common.capabilities_search` is only an optional metadata filter over that same index. `common.capabilities_read` accepts one exact catalog id. For `kind:"tool"` it returns `kind:"tool-schema"`, the descriptor revision, complete native-like descriptor, and explicit `loaded:true`, `complete:true`, `truncated:false`; for `kind:"skill"` it returns the complete Markdown skill evidence described below. The local parser and strict response schema admit a non-bootstrap tool only after matching tool-schema evidence. Tool and skill ids share one namespace, and a collision aborts request construction instead of choosing one implicitly. Catalog sources are rebuilt at every user-run and confirmation-continuation boundary (including fresh document-local VBA discovery), then revision-pinned for that run so schemas and execution authority cannot drift mid-run.
 

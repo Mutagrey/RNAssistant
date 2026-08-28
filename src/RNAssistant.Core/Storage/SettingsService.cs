@@ -34,10 +34,20 @@ namespace RNAssistant.Core.Storage
             Save(settings, null, null);
         }
 
-        public void Save(AppSettings settings, string apiKey, string historySecret)
+        public void Save(AppSettings settings, string apiKey, string historySecret, bool reviewAgentPrompts = false)
         {
-            var normalized = Normalize(settings ?? new AppSettings());
+            var normalized = Normalize((settings ?? new AppSettings()).Clone());
             var current = Load();
+            if (reviewAgentPrompts)
+            {
+                normalized.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion;
+            }
+            else if (current.AgentPromptSchemaVersion != AppSettings.CurrentAgentPromptSchemaVersion)
+            {
+                // Unrelated saves cannot acknowledge old prompts, even if their
+                // caller constructed fresh settings with the current marker.
+                normalized.AgentPromptSchemaVersion = current.AgentPromptSchemaVersion;
+            }
             var currentApiKey = LoadApiKey();
             var currentHistorySecret = LoadHistorySecret();
             var effectiveApiKey = apiKey == null ? currentApiKey : apiKey;
@@ -148,11 +158,6 @@ namespace RNAssistant.Core.Storage
                 : settings.ModelsConfigUrl.Trim();
             settings.Model = (settings.Model ?? string.Empty).Trim();
             settings.NormalizeAgentPrompts();
-            if (string.IsNullOrWhiteSpace(settings.ChatSystemPrompt))
-            {
-                settings.ChatSystemPrompt = defaults.ChatSystemPrompt;
-            }
-            if (string.IsNullOrWhiteSpace(settings.PlanSystemPrompt)) settings.PlanSystemPrompt = defaults.PlanSystemPrompt;
             settings.SystemPromptRole = NormalizePromptRole(settings.SystemPromptRole, defaults.SystemPromptRole);
             settings.AgentResponseMode = AgentResponseModes.Normalize(settings.AgentResponseMode);
             settings.ToolResultRole = ToolResultRoles.Normalize(settings.ToolResultRole);

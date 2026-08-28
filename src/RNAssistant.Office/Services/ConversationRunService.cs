@@ -95,6 +95,8 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken,
             bool appendUserMessage = true)
         {
+            settings = settings ?? new AppSettings();
+            settings.EnsureAgentPromptsReviewed();
             mode = ValidateMode(mode, session);
             if (appendUserMessage)
             {
@@ -156,6 +158,7 @@ namespace RNAssistant.Office.Services
             RunSummaryBuilder summaryBuilder = null)
         {
             settings = settings ?? new AppSettings();
+            settings.EnsureAgentPromptsReviewed();
             var policy = ConversationRunPolicy.For(mode);
             ReleaseHydratedArtifactMedia(session == null ? null : session.Messages);
             var runnableCatalog = PrepareToolsForRun(tools);

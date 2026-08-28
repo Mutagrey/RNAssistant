@@ -379,20 +379,22 @@ namespace RNAssistant.Core.Models
 
         public void NormalizeAgentPrompts()
         {
-            if (AgentPromptSchemaVersion != CurrentAgentPromptSchemaVersion)
-            {
-                SystemPrompt = AgentPromptDefaults.GeneralInstructions;
-                AgentToolsPrompt = AgentPromptDefaults.ToolInstructions;
-                AgentSkillsPrompt = AgentPromptDefaults.SkillInstructions;
-                ChatSystemPrompt = AgentPromptDefaults.ChatInstructions;
-                PlanSystemPrompt = AgentPromptDefaults.PlanInstructions;
-                AgentPromptSchemaVersion = CurrentAgentPromptSchemaVersion;
-            }
+            // A schema mismatch requires explicit review, never replacement of
+            // saved instructions or automatic approval during load/save.
             SystemPrompt = DefaultPrompt(SystemPrompt, AgentPromptDefaults.GeneralInstructions);
             AgentToolsPrompt = DefaultPrompt(AgentToolsPrompt, AgentPromptDefaults.ToolInstructions);
             AgentSkillsPrompt = DefaultPrompt(AgentSkillsPrompt, AgentPromptDefaults.SkillInstructions);
             ChatSystemPrompt = DefaultPrompt(ChatSystemPrompt, AgentPromptDefaults.ChatInstructions);
             PlanSystemPrompt = DefaultPrompt(PlanSystemPrompt, AgentPromptDefaults.PlanInstructions);
+        }
+
+        public void EnsureAgentPromptsReviewed()
+        {
+            if (AgentPromptSchemaVersion == CurrentAgentPromptSchemaVersion) return;
+            throw new InvalidOperationException(
+                "Промпты требуют проверки для текущего протокола. Откройте «Библиотека → Промпты», " +
+                "проверьте Agent (общие/tools/skills), Chat и Plan, затем выберите «Подтвердить проверку». " +
+                "Для встроенных инструкций сначала используйте «Сбросить все промпты». Сохранённые тексты не удалены.");
         }
 
         internal void NormalizeSamplingAndUiValues()

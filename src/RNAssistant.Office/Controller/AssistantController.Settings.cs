@@ -44,9 +44,9 @@ namespace RNAssistant.Office
             };
         }
 
-        public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret)
+        public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret, bool reviewAgentPrompts = false)
         {
-            _settingsService.Save(settings, apiKey, historySecret);
+            _settingsService.Save(settings, apiKey, historySecret, reviewAgentPrompts);
             var response = GetSettings();
             var settingsChanged = SettingsChanged;
             if (settingsChanged != null)

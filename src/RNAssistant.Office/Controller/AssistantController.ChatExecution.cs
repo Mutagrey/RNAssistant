@@ -309,6 +309,7 @@ namespace RNAssistant.Office
             {
                 session = ReloadReservedSession(session);
                 settings = ResolveChatSettings(session, settings);
+                settings.EnsureAgentPromptsReviewed();
                 if (prepareTurn == null && HasPendingAgentConfirmation(session))
                 {
                     throw new InvalidOperationException("Сначала подтвердите или отмените ожидающее действие агента.");

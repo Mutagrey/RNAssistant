@@ -597,6 +597,24 @@ namespace RNAssistant.Harness
             AssertEqual(HistoryEncryptionModes.Aes256CbcHmacSha256, controller.LastSettings.HistoryEncryptionMode, "history encryption mode");
             AssertEqual(HistoryKeySources.CustomSecret, controller.LastSettings.HistoryKeySource, "history key source");
             AssertEqual("portable secret", controller.LastHistorySecret, "history secret");
+            AssertTrue(!controller.LastReviewAgentPrompts, "ordinary settings save never opts into prompt review");
+
+            var reviewPayload = new JObject
+            {
+                ["id"] = "review-prompts", ["type"] = "saveSettings", ["bridgeToken"] = token,
+                ["payload"] = new JObject
+                {
+                    ["settings"] = JObject.FromObject(new AppSettings { AgentPromptSchemaVersion = 0, PlanSystemPrompt = "reviewed Plan text" }),
+                    ["reviewAgentPrompts"] = true
+                }
+            };
+            var reviewResponse = JObject.Parse(bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult());
+            AssertTrue(reviewResponse["ok"].Value<bool>() && controller.LastReviewAgentPrompts, "typed bridge forwards explicit review");
+            AssertEqual(0, controller.LastSettings.AgentPromptSchemaVersion, "bridge does not silently relabel the prompt draft");
+            AssertEqual("reviewed Plan text", controller.LastSettings.PlanSystemPrompt, "Plan instructions reach the save boundary");
+            ((JObject)reviewPayload["payload"]).Remove("reviewAgentPrompts");
+            bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult();
+            AssertTrue(!controller.LastReviewAgentPrompts, "review is request-local, not remembered by later saves");
 
             var runtimeLog = JObject.Parse(bridge.HandleMessageAsync(
                 "{\"id\":\"log1\",\"type\":\"getRuntimeLog\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
