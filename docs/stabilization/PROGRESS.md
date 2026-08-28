@@ -4,9 +4,11 @@ Current target: 16.1.0
 Current phase: Phase 2
 Current task: Phase 2C3B завершена host-neutral/JS: custom prompts сохраняются, schema review только явный, guard стоит до model preparation/confirmation. Active wire/history v2, prompt schema 11; Phase 3 не начата. Windows/controller/WebView/DPAPI validation pending; known baseline test failure: R22
 
-Next step: отдельная Phase 2C3C — coordinated v3 switch/delete с повторной проверкой change budget. Prompt marker переключить вместе с v3; проверить review/reset уже на v3 defaults.
+Next step: отдельная Phase 2C3C — coordinated v3 switch/delete; по §14.3 число файлов само по себе не требует нового подготовительного подэтапа, связанный scope обосновать. Prompt marker переключить вместе с v3; проверить review/reset уже на v3 defaults.
 Required context: [saved-prompt review](../protocols/CONVERSATION_RESPONSE_V3.md#saved-prompt-review-phase-2c3b), [remaining cutover gates](../protocols/CONVERSATION_RESPONSE_V3.md#remaining-cutover-gates), [migration map](MIGRATION_MAP.md), R26/R27 в risk register; master plan Phase 2 и §§15.1–15.2. Исторические evidence — только по необходимости.
 Open gates / remaining legacy: R26 — complete-context enforcement и old-chat skip/reset до controller attachment analysis/compaction, не только loop. Live v2 parser/schema/DTO и typed-ID helper нужны до switch 2C3C. Native refusal, prompts, writer/version marker переключаются согласованно. R27 host-neutral/JS исправлен; Windows controller/DPAPI qualification открыта.
+
+Workflow update (2026-08-28, docs-only): §§14.3, 22–23 — обоснованный единый switch может затронуть более 10 файлов; проверки применяются по изменению, повторные прогоны без новой причины не нужны; отчёт краткий. Runtime и открытые gates не изменены. Docs diff/links — OK; pre-commit ValidateVersionFormat — pass; build/tests для этой правки не запускались.
 
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
