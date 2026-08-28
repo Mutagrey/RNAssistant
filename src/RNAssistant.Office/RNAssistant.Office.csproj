@@ -148,8 +148,6 @@
     <Compile Include="Tools\OfficeToolExecutor.cs" />
     <Compile Include="Tools\OfficeBuiltInToolCatalog.cs" />
     <Compile Include="Tools\ControllerToolDefinition.cs" />
-    <Compile Include="Tools\PipelineToolExecutor.cs" />
-    <Compile Include="Tools\PipelineDefinition.cs" />
     <Compile Include="Tools\SkillToolExecutor.cs" />
     <Compile Include="Tools\CapabilityDiscoveryExecutor.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.cs" />

@@ -450,6 +450,7 @@ namespace RNAssistant.Office.Tools
         {
             return (tools ?? new ToolDefinition[0])
                 .Where(tool => tool != null && tool.Enabled && tool.AgentCanRun &&
+                    !string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) &&
                     !string.IsNullOrWhiteSpace(tool.Id) && Descriptor(tool) != null)
                 .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.First())

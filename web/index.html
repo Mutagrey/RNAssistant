@@ -311,7 +311,7 @@
               <div class="form-grid tool-editor-page" data-tool-page-view="main">
                 <label>ID инструмента<input id="toolIdInput" placeholder="excel.normalize_table"></label>
                 <label>Приложение<select id="toolHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
-                <label>Исполнитель<select id="toolExecutorInput"><option>pipeline</option><option>vba</option><option>builtin</option></select></label>
+                <label>Исполнитель<select id="toolExecutorInput"><option>vba</option><option>builtin</option></select></label>
                 <div class="tool-form-flags"><label class="checkline"><input type="checkbox" id="toolEnabledInput"> Включён</label><label class="checkline"><input type="checkbox" id="toolConfirmInput"> Требует подтверждения</label></div>
                 <label class="wide">Описание<textarea id="toolDescriptionInput" rows="4" placeholder="Описание для модели"></textarea></label>
                 <div class="setting-note wide" id="toolPackageMeta"></div>
@@ -323,12 +323,6 @@
                 <div class="editor-inline-error" id="toolSchemaError" role="alert"></div>
               </div>
               <div class="tool-editor-page hidden" data-tool-page-view="implementation">
-                <div class="pipeline-tool-editor" id="pipelineToolEditor">
-                  <div class="editor-section-head"><div><strong>Pipeline</strong><span>Последовательность существующих tools</span></div><div class="mode-toggle compact-toggle"><button class="mode-button tool-pipeline-mode active" type="button" data-tool-pipeline-mode="form">Форма</button><button class="mode-button tool-pipeline-mode" type="button" data-tool-pipeline-mode="json">JSON</button></div></div>
-                  <div id="toolPipelineVisual" class="structured-editor"></div>
-                  <div class="tool-pipeline-json hidden"><div class="json-editor-toolbar"><span>Pipeline JSON</span><button class="secondary" id="formatToolPipelineButton" type="button">Форматировать</button></div><textarea id="toolPipelineInput" rows="14" spellcheck="false"></textarea></div>
-                  <div class="editor-inline-error" id="toolPipelineError" role="alert"></div>
-                </div>
                 <div class="vba-package-editor hidden" id="vbaToolEditor">
                   <div class="component-toolbar"><label>Компонент<select id="toolComponentSelect"></select></label><button class="secondary" id="addToolModuleButton" type="button">+ Module</button><button class="secondary" id="addToolClassButton" type="button">+ Class</button><button class="secondary" id="addToolFormButton" type="button">+ UserForm</button><button class="secondary danger-soft" id="deleteToolComponentButton" type="button">Удалить</button></div>
                   <div class="form-grid"><label>Имя компонента<input id="toolComponentNameInput" maxlength="40" placeholder="RNA_MyTool"></label><label>Тип<select id="toolComponentTypeInput"><option value="StdModule">Standard module</option><option value="ClassModule">Class module</option><option value="MSForm">Code-only UserForm</option></select></label><label class="wide">VBA source<textarea id="toolCodeInput" rows="14" spellcheck="false" placeholder="Option Explicit"></textarea></label></div>

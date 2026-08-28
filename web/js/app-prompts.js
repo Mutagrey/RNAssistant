@@ -140,7 +140,7 @@
     var value = row.value || {};
     var meta = "Промпт";
     if (row.kind === "skill") meta = value.BuiltIn ? "Встроенный" : "Пользовательский";
-    if (row.kind === "tool") meta = value.BuiltIn ? "Встроенный" : (value.Executor || "pipeline");
+    if (row.kind === "tool") meta = value.BuiltIn ? "Встроенный" : (value.Executor || "vba");
     parent.appendChild(createResourceListItem({
       title: row.kind === "prompt" ? value.label : (value.Id || value.Name || (row.kind === "tool" ? "Инструмент" : "Навык")),
       meta: meta,

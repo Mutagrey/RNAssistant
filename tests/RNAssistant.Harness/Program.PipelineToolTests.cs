@@ -1,234 +1,97 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Services;
-using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
-using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
-using RNAssistant.Office.WebView;
-using RNAssistant.Desktop;
-using RNAssistant.OfficeHosts;
 
 namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void PipelineDryRunResolvesPlaceholders()
+        private static ToolDefinition DisabledPipeline()
         {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            return new ToolDefinition
             {
-                var tools = BuildPipelineTools(false);
-                var command = new ToolCommand { ToolId = "excel.make_report" };
-                command.Arguments["sheet"] = "Report";
-
-                var result = executor.Execute(command, tools, new AppSettings(), true, false);
-
-                AssertTrue(result.Success, "pipeline dry-run result");
-                AssertContains(result.Message, "Dry run completed", "dry-run message");
-                AssertContains(result.DataJson, "Report", "pipeline data");
-                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
-            });
+                Id = "excel.old_pipeline", Host = "Excel", Executor = "pipeline",
+                Enabled = true, AgentCanRun = true, RequiresConfirmation = true,
+                ArgumentSchemaJson = EmptyFormalToolSchema,
+            };
         }
 
-        private static void PipelineExecutesFakeAdapterSteps()
+        private static void PipelinesCannotExecute()
         {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            WithTempExecutor((executor, adapter) =>
             {
-                var tools = BuildPipelineTools(false);
-                var command = new ToolCommand { ToolId = "excel.make_report" };
-                command.Arguments["sheet"] = "Report";
-
-                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
-
-                AssertTrue(result.Success, "pipeline result");
-                AssertEqual(2, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "first tool");
-                AssertEqual("Report", adapter.Executed[0].Arguments["name"], "first arg");
-                AssertEqual("excel.write_range", adapter.Executed[1].ToolId, "second tool");
-                AssertEqual("table", adapter.Executed[1].Arguments["kind"], "table mode preserved");
-                AssertEqual("Report", adapter.Executed[1].Arguments["sheet"], "second arg");
-            });
-        }
-
-        private static void PipelineResolvesStepOutputPlaceholders()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var tools = BuildStepPlaceholderPipelineTools();
-                var command = new ToolCommand { ToolId = "excel.chain_report" };
-
-                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
-
-                AssertTrue(result.Success, "pipeline result");
-                AssertEqual(2, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("added sheet Report", adapter.CellValue("Report", "A1"), "step message placeholder");
-                AssertEqual("True", adapter.CellValue("Report", "B1"), "step success placeholder");
-
-                var dotted = new ToolDefinition
+                var pipeline = DisabledPipeline();
+                pipeline.Executor = "PiPeLiNe";
+                foreach (var manual in new[] { false, true })
+                foreach (var dry in new[] { false, true })
                 {
-                    Id = "excel.dotted_placeholder",
-                    Host = "Excel",
-                    Name = "Dotted placeholder",
-                    Executor = "pipeline",
-                    Enabled = true,
-                    ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
-                    PipelineJson = "{\"steps\":[" +
-                        "{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Dotted\"}}," +
-                        "{\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"value\",\"sheet\":\"Dotted\",\"address\":\"A1\",\"value\":\"{{steps.excel.add_sheet.message}}\"}}]}"
-                };
-                var dottedTools = adapter.GetBuiltInTools().Concat(new[] { dotted }).ToList();
-                var dottedResult = executor.Execute(new ToolCommand { ToolId = dotted.Id }, dottedTools, new AppSettings { AutoConfirmToolActions = true }, false, false);
-                AssertTrue(dottedResult.Success, "default dotted step id placeholder result: " + dottedResult.Message);
-                AssertEqual("added sheet Dotted", adapter.CellValue("Dotted", "A1"), "default dotted step id resolves");
+                    var result = executor.Execute(Command(pipeline.Id), new[] { pipeline },
+                        new AppSettings { AutoConfirmToolActions = true }, dry, manual);
+                    AssertEqual("pipeline_disabled", result.ErrorCode, "pipeline rejected before dispatch/confirmation");
+                    AssertEqual(false, result.Retryable, "disabled feature is not retryable");
+                }
+                AssertEqual(0, adapter.Executed.Count, "no nested tool executed");
+                AssertTrue(!ToolSafetyPolicy.Resolve(pipeline, new[] { pipeline }).Valid, "no nested safety traversal");
+                var direct = executor.Execute(Command("excel.add_sheet", "name", "Direct"), adapter.GetBuiltInTools().ToList(),
+                    new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(direct.Success && adapter.HasSheet("Direct"), "direct tools remain available");
+            });
+        }
 
-                var nested = new ToolDefinition
+        private static void PipelinesAreNotLoadedOrAdvertised()
+        {
+            WithTempPaths(paths =>
+            {
+                var pipeline = DisabledPipeline();
+                var directory = Path.Combine(paths.ToolsDirectory, "excel", "old_pipeline");
+                Directory.CreateDirectory(directory);
+                var metadata = JsonConvert.SerializeObject(pipeline);
+                var path = Path.Combine(directory, "tool.json");
+                File.WriteAllText(path, metadata);
+                File.WriteAllText(Path.Combine(directory, "pipeline.json"), "invalid obsolete sidecar");
+                var store = new ToolStore(paths);
+                AssertEqual(0, store.Load().Count, "old pipelines skipped without sidecar parsing");
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
+                AssertTrue(!HasTool(new ToolCatalogService(adapter, executor, store).GetVisibleTools(), pipeline.Id), "manual catalog excludes pipelines");
+                AssertTrue(!HasTool(ConversationRunService.PrepareToolsForRun(new[] { pipeline }), pipeline.Id), "injected model catalog excludes pipelines");
+                AssertEqual(string.Empty, ConversationRunService.ToolExecutionFingerprint(new[] { pipeline }, pipeline.Id), "no resumable pipeline fingerprint");
+                var read = executor.Execute(Command(CapabilityDiscoveryExecutor.ReadToolId, "id", pipeline.Id),
+                    new[] { pipeline }, new AppSettings(), false, true);
+                AssertTrue(!read.Success, "direct capability read cannot advertise an injected pipeline");
+                store.Save(new[] { CustomTool("Excel", "excel.current") }, "Excel");
+                AssertEqual(metadata, File.ReadAllText(path), "unrelated save does not migrate or delete old files");
+            });
+        }
+
+        private static void PipelinesCannotBeAuthored()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new ToolStore(paths);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
+                var pipeline = DisabledPipeline();
+                AssertEqual("pipeline_disabled", executor.ValidateToolDefinition(pipeline).ErrorCode, "UI save validation rejects pipeline");
+                var rejected = false;
+                try { store.SaveOne(pipeline); }
+                catch (NotSupportedException) { rejected = true; }
+                AssertTrue(rejected && store.Load().Count == 0, "storage rejects pipeline writes");
+                foreach (var id in new[] { "common.tools_validate", "common.tools_upsert" })
                 {
-                    Id = "excel.nested_placeholder",
-                    Host = "Excel",
-                    Name = "Nested placeholder",
-                    Executor = "pipeline",
-                    Enabled = true,
-                    ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\",\"description\":\"Header text.\"}},\"required\":[\"header\"],\"additionalProperties\":false}",
-                    PipelineJson = "{\"steps\":[{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"Nested\",\"address\":\"A1\",\"values\":[[\"{{args.header}}\"]]}}]}"
-                };
-                var nestedTools = adapter.GetBuiltInTools().Concat(new[] { nested }).ToList();
-                var nestedResult = executor.Execute(Command(nested.Id, "header", "Revenue"), nestedTools, new AppSettings { AutoConfirmToolActions = true }, false, false);
-                AssertTrue(nestedResult.Success, "nested pipeline placeholder result");
-                AssertEqual("Revenue", adapter.CellValue("Nested", "A1"), "nested pipeline placeholder value");
-            });
-        }
-
-        private static void PipelineRejectsUnresolvedPlaceholders()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var pipeline = CustomTool("Excel", "excel.unresolved_placeholder");
-                pipeline.PipelineJson = "{\"steps\":[{\"id\":\"write\",\"toolId\":\"excel.write_range\",\"arguments\":{" +
-                    "\"kind\":\"scalar\",\"sheet\":\"Report\",\"address\":\"A1\",\"value\":\"{{args.missing}}\"}}]}";
-
-                var result = executor.Execute(
-                    new ToolCommand { ToolId = pipeline.Id },
-                    adapter.GetBuiltInTools().Concat(new[] { pipeline }).ToList(),
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false);
-
-                AssertTrue(!result.Success, "unresolved placeholder fails");
-                AssertEqual("invalid_pipeline_placeholder", result.ErrorCode, "unresolved placeholder error code");
-                AssertContains(result.Message, "Unresolved pipeline placeholder", "unresolved placeholder diagnostic");
-                AssertEqual(0, adapter.Executed.Count, "unresolved placeholder does not execute adapter");
-            });
-        }
-
-        private static void PipelineStopsAfterFailedStep()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                adapter.QueueResult("excel.write_range", ToolResult.Fail("No table values provided."));
-                var tools = BuildThreeStepPipelineTools();
-                var command = new ToolCommand { ToolId = "excel.full_report" };
-                command.Arguments["sheet"] = "Report";
-
-                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
-
-                AssertTrue(!result.Success, "pipeline should fail");
-                AssertEqual("partial_failure", result.Status, "pipeline partial failure status");
-                AssertEqual(false, result.Retryable, "pipeline partial failure retryable");
-                AssertContains(result.Message, "Pipeline step failed: table", "failure message");
-                AssertContains(result.DataJson, "\"id\":\"table\"", "failure data keeps failed step");
-                AssertEqual(2, adapter.Executed.Count, "adapter execution count");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "first tool");
-                AssertEqual("excel.write_range", adapter.Executed[1].ToolId, "failed tool");
-            });
-        }
-
-        private static void PipelineRejectsMissingStepToolId()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var tools = new List<ToolDefinition>
-                {
-                    new ToolDefinition
-                    {
-                        Id = "excel.bad_step",
-                        Host = "Excel",
-                        Name = "Bad step",
-                        Executor = "pipeline",
-                        Enabled = true,
-                        PipelineJson = "{\"steps\":[{\"id\":\"prepare\",\"arguments\":{\"name\":\"Report\"}}]}"
-                    }
-                };
-
-                var result = executor.Execute(new ToolCommand { ToolId = "excel.bad_step" }, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
-
-                AssertTrue(!result.Success, "pipeline should fail");
-                AssertContains(result.Message, "Pipeline step has no toolId", "missing tool id message");
-                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
-            });
-        }
-
-        private static void PipelineRejectsDuplicateStepIds()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var pipeline = CustomTool("Excel", "excel.duplicate_steps");
-                pipeline.PipelineJson = "{\"steps\":[" +
-                    "{\"id\":\"read\",\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}," +
-                    "{\"id\":\"read\",\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}";
-
-                var validation = executor.ValidateToolDefinition(pipeline);
-                var execution = executor.Execute(
-                    new ToolCommand { ToolId = pipeline.Id },
-                    new List<ToolDefinition> { pipeline },
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false);
-
-                AssertTrue(!validation.Success, "duplicate ids rejected during validation");
-                AssertTrue(!execution.Success, "duplicate ids rejected during execution");
-                AssertContains(execution.Message, "step id must be unique", "duplicate id message");
-                AssertEqual(0, adapter.Executed.Count, "duplicate pipeline adapter count");
-            });
-        }
-
-        private static void CustomPipelineNeedsConfirmation()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var tools = BuildPipelineTools(true);
-                var command = new ToolCommand { ToolId = "excel.make_report" };
-                command.Arguments["sheet"] = "Report";
-
-                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false);
-
-                AssertTrue(!result.Success, "pipeline should fail");
-                AssertContains(result.Message, "requires confirmation", "confirmation message");
-                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
-            });
-        }
-
-        private static void AgentModeGatesBuiltInMutation()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var tools = BuildPipelineTools(false);
-                var command = new ToolCommand { ToolId = "excel.make_report" };
-                command.Arguments["sheet"] = "Report";
-
-                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false);
-
-                AssertTrue(!result.Success, "pipeline should fail");
-                AssertContains(result.Message, "requires confirmation", "confirmation message");
-                AssertEqual(0, adapter.Executed.Count, "adapter execution count");
+                    var schema = JObject.Parse(FindTool(executor.GetControllerTools(), id).ArgumentSchemaJson);
+                    AssertTrue(schema.SelectToken("properties.pipeline") == null && schema.SelectToken("properties.pipelineSteps") == null,
+                        "pipeline authoring fields removed");
+                    var result = executor.Execute(Command(id, "id", pipeline.Id, "executor", "pipeline"),
+                        executor.GetControllerTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, true);
+                    AssertTrue(!result.Success && result.Status != "waiting_confirmation", "model/manual authoring rejected");
+                }
             });
         }
     }

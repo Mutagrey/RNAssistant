@@ -3,7 +3,6 @@
   var configs = {
     toolSchemaInput: { mode: { name: "javascript", json: true }, minHeight: 120 },
     toolRunArgsInput: { mode: { name: "javascript", json: true }, minHeight: 120 },
-    toolPipelineInput: { mode: { name: "javascript", json: true }, minHeight: 210 },
     toolCodeInput: { mode: "vb", minHeight: 210 },
     toolReadmeInput: { mode: "markdown", minHeight: 150, lineWrapping: true },
     skillBodyInput: { mode: "markdown", minHeight: 0, lineWrapping: true },
@@ -75,7 +74,7 @@
       if (id === "promptEditInput" && typeof markPromptEditorDirty === "function") {
         markPromptEditorDirty();
       }
-      if (["toolSchemaInput", "toolPipelineInput", "toolCodeInput", "toolReadmeInput"].indexOf(id) >= 0 &&
+      if (["toolSchemaInput", "toolCodeInput", "toolReadmeInput"].indexOf(id) >= 0 &&
           typeof markToolLibraryDirty === "function") {
         markToolLibraryDirty();
       }

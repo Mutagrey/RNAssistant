@@ -26,9 +26,7 @@ namespace RNAssistant.Office.Tools
                 ["description"] = BoundedStringProperty("Clear model-facing description of what the tool does.", 8000),
                 ["parameters"] = ParametersProperty(),
                 ["parameterDefinitions"] = ParameterDefinitionsProperty(),
-                ["executor"] = EnumProperty("Execution type.", "pipeline", "vba"),
-                ["pipeline"] = PipelineProperty(),
-                ["pipelineSteps"] = PipelineStepsProperty(),
+                ["executor"] = EnumProperty("Execution type.", "vba"),
                 ["components"] = new JObject
                 {
                     ["type"] = "array",
@@ -163,109 +161,6 @@ namespace RNAssistant.Office.Tools
                         ["maxItems"] = new JObject { ["type"] = "integer", ["description"] = "Optional array maximum item count.", ["minimum"] = 0 }
                     },
                     ["required"] = new JArray("name", "type", "description"),
-                    ["additionalProperties"] = false
-                }
-            };
-        }
-
-        private static JObject PipelineProperty()
-        {
-            return new JObject
-            {
-                ["type"] = "object",
-                ["description"] = "Advanced native pipeline object with ordered calls to existing tools. Use pipelineSteps in Agent mode because arbitrary nested argument names cannot be represented by strict structured output; never encode this object as a JSON string.",
-                ["properties"] = new JObject
-                {
-                    ["version"] = new JObject { ["type"] = "integer", ["description"] = "Pipeline format version.", ["default"] = 1 },
-                    ["steps"] = new JObject
-                    {
-                        ["type"] = "array",
-                        ["description"] = "Ordered pipeline steps.",
-                        ["minItems"] = 1,
-                        ["maxItems"] = 50,
-                        ["items"] = new JObject
-                        {
-                            ["type"] = "object",
-                            ["properties"] = new JObject
-                            {
-                                ["id"] = Property("string", "Unique step id used by result placeholders."),
-                                ["toolId"] = Property("string", "Exact existing tool id."),
-                                ["arguments"] = Property("object", "Arguments for the nested tool; placeholders may reference args or prior step results.")
-                            },
-                            ["required"] = new JArray("toolId"),
-                            ["additionalProperties"] = false
-                        }
-                    }
-                },
-                ["required"] = new JArray("steps"),
-                ["additionalProperties"] = false
-            };
-        }
-
-        private static JObject PipelineStepsProperty()
-        {
-            var primitive = new JArray
-            {
-                new JObject { ["type"] = "string", ["description"] = "String value or placeholder such as {{args.name}}." },
-                new JObject { ["type"] = "number", ["description"] = "Numeric value." },
-                new JObject { ["type"] = "boolean", ["description"] = "Boolean value." },
-                new JObject { ["type"] = "null", ["description"] = "Explicit JSON null." }
-            };
-            var flatArray = new JObject
-            {
-                ["type"] = "array",
-                ["description"] = "Flat array of primitive values.",
-                ["maxItems"] = 10000,
-                ["items"] = new JObject { ["anyOf"] = (JArray)primitive.DeepClone() }
-            };
-            var table = new JObject
-            {
-                ["type"] = "array",
-                ["description"] = "Two-dimensional table of primitive cell values.",
-                ["maxItems"] = 10000,
-                ["items"] = new JObject
-                {
-                    ["type"] = "array",
-                    ["maxItems"] = 10000,
-                    ["items"] = new JObject { ["anyOf"] = (JArray)primitive.DeepClone() }
-                }
-            };
-            return new JObject
-            {
-                ["type"] = "array",
-                ["description"] = "Agent-friendly ordered pipeline steps. Arguments are a native name/value array compiled into the canonical pipeline object; values stay native JSON and may be scalars, null, flat primitive arrays, tables, or placeholders.",
-                ["minItems"] = 1,
-                ["maxItems"] = 50,
-                ["items"] = new JObject
-                {
-                    ["type"] = "object",
-                    ["properties"] = new JObject
-                    {
-                        ["id"] = BoundedStringProperty("Optional unique step id used by result placeholders.", 128),
-                        ["toolId"] = BoundedStringProperty("Exact existing tool id.", 128),
-                        ["arguments"] = new JObject
-                        {
-                            ["type"] = "array",
-                            ["description"] = "Nested tool arguments as unique name/value entries; omit for a no-argument tool.",
-                            ["maxItems"] = 100,
-                            ["items"] = new JObject
-                            {
-                                ["type"] = "object",
-                                ["properties"] = new JObject
-                                {
-                                    ["name"] = BoundedStringProperty("Exact nested argument name.", 128),
-                                    ["value"] = new JObject
-                                    {
-                                        ["description"] = "Native nested argument value.",
-                                        ["anyOf"] = new JArray(primitive.Concat(new JToken[] { flatArray, table }))
-                                    }
-                                },
-                                ["required"] = new JArray("name", "value"),
-                                ["additionalProperties"] = false
-                            }
-                        }
-                    },
-                    ["required"] = new JArray("toolId"),
                     ["additionalProperties"] = false
                 }
             };

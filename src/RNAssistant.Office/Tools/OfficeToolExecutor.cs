@@ -18,7 +18,6 @@ namespace RNAssistant.Office.Tools
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly IReadOnlyList<ToolDefinition> _adapterTools;
-        private readonly PipelineToolExecutor _pipelineExecutor;
         private readonly VbaToolExecutor _vbaExecutor;
         private readonly SkillToolExecutor _skillExecutor;
         private readonly CapabilityDiscoveryExecutor _capabilityDiscoveryExecutor;
@@ -49,7 +48,6 @@ namespace RNAssistant.Office.Tools
         {
             _adapter = adapter;
             _adapterTools = (_adapter.GetBuiltInTools() ?? new ToolDefinition[0]).ToArray();
-            _pipelineExecutor = new PipelineToolExecutor();
             _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore);
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
             _capabilityDiscoveryExecutor = new CapabilityDiscoveryExecutor(_skillExecutor);
@@ -107,14 +105,7 @@ namespace RNAssistant.Office.Tools
                 return source;
             }
 
-            var catalog = source
-                .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-            return source.Where(tool => CanRunWithoutOfficeDocument(
-                tool,
-                catalog,
-                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-                0)).ToList();
+            return source.Where(tool => !RequiresOfficeDocument(tool)).ToList();
         }
 
         public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CancellationToken cancellationToken = default(CancellationToken))
@@ -165,7 +156,7 @@ namespace RNAssistant.Office.Tools
                 var result = ExecuteForExpectedDocument(
                     session,
                     RequiresOfficeDocument(command, context.Tools),
-                    () => ExecuteCommandSafely(command, context, 0, dryRun, manualRun, cancellationToken));
+                    () => ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken));
                 if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
                 TraceExecution(command, "tool.execution.completed",
                     result == null ? "missing_result" : result.Status, result == null ? null : result.ErrorCode);
@@ -358,11 +349,11 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.GetInstallationStatus(tool);
         }
 
-        private ToolResult ExecuteCommandSafely(ToolCommand command, ToolExecutionContext context, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken)
+        private ToolResult ExecuteCommandSafely(ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken)
         {
             try
             {
-                return ExecuteCommand(command, context, depth, dryRun, manualRun, cancellationToken);
+                return ExecuteCommand(command, context, dryRun, manualRun, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -387,17 +378,12 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private ToolResult ExecuteCommand(ToolCommand command, ToolExecutionContext context, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken)
+        private ToolResult ExecuteCommand(ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
             {
                 return ToolResult.Fail("Tool command is empty.");
-            }
-
-            if (depth > 8)
-            {
-                return ToolResult.Fail("Pipeline nesting limit exceeded.");
             }
 
             var tool = context.Find(command.ToolId);
@@ -408,6 +394,10 @@ namespace RNAssistant.Office.Tools
             if (!tool.Enabled)
             {
                 return DisabledTool(command.ToolId, context.Tools);
+            }
+            if (string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("Pipelines are disabled during stabilization.", null, "pipeline_disabled", false);
             }
             if (!string.IsNullOrWhiteSpace(tool.CapabilityStatus) &&
                 !string.Equals(tool.CapabilityStatus, "available", StringComparison.OrdinalIgnoreCase) &&
@@ -478,11 +468,11 @@ namespace RNAssistant.Office.Tools
 
             if (!context.TryConsumeStep())
             {
-                return ToolResult.Fail("Tool execution budget exceeded (including nested pipeline steps).", null, "tool_step_limit_exceeded", false);
+                return ToolResult.Fail("Tool execution budget exceeded.", null, "tool_step_limit_exceeded", false);
             }
 
-            var needsMutationScope = !dryRun && context.MutationScopeDepth == 0 &&
-                (depth == 0 && (safety.MutatesDocument || safety.MutatesLocalState) || isVbaController);
+            var needsMutationScope = !dryRun &&
+                (safety.MutatesDocument || safety.MutatesLocalState || isVbaController);
             if (needsMutationScope)
             {
                 return ExecuteMutation(
@@ -490,12 +480,10 @@ namespace RNAssistant.Office.Tools
                     safety.MutatesLocalState && !string.Equals(tool.Scope, "session", StringComparison.OrdinalIgnoreCase),
                     safety.MutatesDocument || isVbaController,
                     cancellationToken,
-                    () => ExecuteInMutationScope(
-                        context,
-                        () => ExecuteResolvedCommand(command, context, depth, dryRun, manualRun, cancellationToken, customTool)));
+                    () => ExecuteResolvedCommand(command, context, dryRun, manualRun, cancellationToken, customTool));
             }
 
-            return ExecuteResolvedCommand(command, context, depth, dryRun, manualRun, cancellationToken, customTool);
+            return ExecuteResolvedCommand(command, context, dryRun, manualRun, cancellationToken, customTool);
         }
 
         private static ToolResult ValidateCommandArguments(ToolCommand command, ToolDefinition tool)
@@ -548,21 +536,8 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private ToolResult ExecuteResolvedCommand(ToolCommand command, ToolExecutionContext context, int depth, bool dryRun, bool manualRun, CancellationToken cancellationToken, ToolDefinition customTool)
+        private ToolResult ExecuteResolvedCommand(ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken, ToolDefinition customTool)
         {
-
-            if (customTool != null && string.Equals(customTool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
-            {
-                return _pipelineExecutor.Execute(
-                    customTool,
-                    command,
-                    depth + 1,
-                    dryRun,
-                    manualRun,
-                    (nested, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken) =>
-                        ExecuteCommandSafely(nested, context, nestedDepth, nestedDryRun, nestedManualRun, nestedCancellationToken),
-                    cancellationToken);
-            }
 
             if (customTool != null && string.Equals(customTool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
@@ -794,19 +769,6 @@ namespace RNAssistant.Office.Tools
                 exception.Retryable);
         }
 
-        private static ToolResult ExecuteInMutationScope(ToolExecutionContext context, Func<ToolResult> action)
-        {
-            context.MutationScopeDepth += 1;
-            try
-            {
-                return action();
-            }
-            finally
-            {
-                context.MutationScopeDepth -= 1;
-            }
-        }
-
         private sealed class MutationLockException : InvalidOperationException
         {
             public MutationLockException(string message, bool retryable, Exception innerException = null)
@@ -906,57 +868,23 @@ namespace RNAssistant.Office.Tools
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
             ToolDefinition tool;
             if (string.IsNullOrWhiteSpace(id) || !catalog.TryGetValue(id, out tool)) return false;
-            return !CanRunWithoutOfficeDocument(
-                tool,
-                catalog,
-                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-                0);
+            return RequiresOfficeDocument(tool);
         }
 
-        private bool CanRunWithoutOfficeDocument(
-            ToolDefinition tool,
-            IDictionary<string, ToolDefinition> catalog,
-            ISet<string> path,
-            int depth)
+        private bool RequiresOfficeDocument(ToolDefinition tool)
         {
-            if (tool == null || depth > 8) return true;
             var id = tool.Id;
-            if (string.IsNullOrWhiteSpace(id) || !path.Add(id)) return true;
-            try
+            if (string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) return false;
+            if (_adapterTools.Any(candidate => candidate != null &&
+                string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase))) return true;
+
+            ControllerExecutorKind controller;
+            if (_controllerExecutors.TryGetValue(id, out controller))
             {
-                if (_adapterTools.Any(candidate => candidate != null &&
-                    string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase)))
-                {
-                    return false;
-                }
-
-                ControllerExecutorKind controller;
-                if (_controllerExecutors.TryGetValue(id, out controller))
-                {
-                    return controller != ControllerExecutorKind.Vba &&
-                        (controller != ControllerExecutorKind.HtmlArtifact ||
-                         !_htmlArtifactExecutor.RequiresOfficeDocument(id));
-                }
-
-                if (string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase)) return false;
-                if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) return false;
-
-                PipelineDefinition pipeline;
-                string error;
-                if (!PipelineDefinitionParser.TryParse(tool.Id, tool.PipelineJson, out pipeline, out error)) return true;
-                foreach (var step in pipeline.Steps)
-                {
-                    var stepId = step.ToolId;
-                    ToolDefinition nested;
-                    if (string.IsNullOrWhiteSpace(stepId) || !catalog.TryGetValue(stepId, out nested)) return true;
-                    if (!CanRunWithoutOfficeDocument(nested, catalog, path, depth + 1)) return false;
-                }
-                return true;
+                return controller == ControllerExecutorKind.Vba ||
+                    (controller == ControllerExecutorKind.HtmlArtifact && _htmlArtifactExecutor.RequiresOfficeDocument(id));
             }
-            finally
-            {
-                path.Remove(id);
-            }
+            return true;
         }
 
         private IReadOnlyList<ToolDefinition> KnownTools(IEnumerable<ToolDefinition> providedTools)
@@ -1097,8 +1025,6 @@ namespace RNAssistant.Office.Tools
             public IReadOnlyList<SkillDefinition> SkillCatalog { get; private set; }
 
             public int RemainingSteps { get; private set; }
-
-            public int MutationScopeDepth { get; set; }
 
             public bool TryConsumeStep()
             {

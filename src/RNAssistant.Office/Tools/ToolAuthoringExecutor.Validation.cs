@@ -32,7 +32,6 @@ namespace RNAssistant.Office.Tools
             if ((tool.Name ?? string.Empty).Length > 200 ||
                 (tool.Description ?? string.Empty).Length > 8000 ||
                 (tool.ArgumentSchemaJson ?? string.Empty).Length > 64000 ||
-                (tool.PipelineJson ?? string.Empty).Length > 250000 ||
                 (tool.Code ?? string.Empty).Length > 1000000 ||
                 (tool.Readme ?? string.Empty).Length > 500000 ||
                 (tool.UseWhen ?? string.Empty).Length > 4000 ||
@@ -65,9 +64,13 @@ namespace RNAssistant.Office.Tools
             }
 
             var executor = (tool.Executor ?? string.Empty).Trim().ToLowerInvariant();
-            if (executor != "pipeline" && executor != "vba")
+            if (executor == "pipeline")
             {
-                return ToolResult.Fail("Tool executor must be pipeline or vba.");
+                return ToolResult.Fail("Pipelines are disabled during stabilization.", null, "pipeline_disabled", false);
+            }
+            if (executor != "vba")
+            {
+                return ToolResult.Fail("Tool executor must be vba.");
             }
 
             JObject normalizedSchema;
@@ -75,16 +78,6 @@ namespace RNAssistant.Office.Tools
             if (!ToolSchemaSupport.TryParse(tool, out normalizedSchema, out schemaError))
             {
                 return ToolResult.Fail(schemaError, null, "invalid_tool_schema", false);
-            }
-
-            if (executor == "pipeline")
-            {
-                PipelineDefinition definition;
-                string error;
-                if (!PipelineDefinitionParser.TryParse(tool.Id, tool.PipelineJson, out definition, out error))
-                {
-                    return ToolResult.Fail(error);
-                }
             }
 
             if (executor == "vba" && string.IsNullOrWhiteSpace(tool.Code))

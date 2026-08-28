@@ -453,8 +453,7 @@
   margin-top: 2px;
 }
 
-.rn-code-editor-toolCodeInput,
-.rn-code-editor-toolPipelineInput {
+.rn-code-editor-toolCodeInput {
   min-height: 220px !important;
 }
 
@@ -490,14 +489,10 @@
 .schema-property-row input, .schema-property-row select { width: 100%; min-width: 0; height: 31px; }
 .schema-property-row input[type="checkbox"] { width: 16px; height: 16px; justify-self: center; }
 .schema-property-row button { width: 30px; min-width: 30px; padding: 0; }
-.pipeline-step-card { display: grid; grid-template-columns: 26px minmax(80px,.6fr) minmax(130px,1fr); gap: 7px; align-items: start; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
-.pipeline-step-card > strong { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--secondary-bg); color: var(--muted); font-size: 11px; }
-.pipeline-step-card textarea { grid-column: 2 / -1; min-height: 68px; }
-.pipeline-step-actions { grid-column: 2 / -1; display: flex; gap: 5px; }
 .editor-inline-error { min-height: 16px; color: var(--danger); font-size: 11px; }
 .json-editor-toolbar { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: var(--label-font-weight); }
 .json-editor-toolbar button { min-height: 27px; padding: 2px 8px; font-size: 11px; }
-.tool-schema-json textarea, .tool-pipeline-json textarea { width: 100%; }
+.tool-schema-json textarea { width: 100%; }
 .component-toolbar, .tool-test-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; }
 .component-toolbar label { flex: 1 1 180px; }
 .advanced-json summary { color: var(--muted); cursor: pointer; font-size: 12px; }

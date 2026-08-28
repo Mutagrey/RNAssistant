@@ -30,8 +30,8 @@ namespace RNAssistant.Office.Tools
             }
 
             yield return ControllerToolDefinition.Create(DefinitionReadToolId, "Common", "Read-only authoring inspection: Read one custom tool definition including its implementation fields; omit id to list compact custom-tool metadata. This does not load a callable schema.", OptionalIdSchema());
-            yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a complete custom pipeline or manifest-based VBA tool definition without saving it. Agent authoring may use compact parameterDefinitions and pipelineSteps; advanced callers may pass complete native parameters/pipeline objects.", ToolPayloadSchema(false));
-            yield return ControllerToolDefinition.Create("common.tools_upsert", "Common", "Mutates settings: Create or update one custom tool after validating the effective definition. In Agent mode prefer compact parameterDefinitions and pipelineSteps; parameters/pipeline remain the advanced native forms. Omitted update fields are preserved.", ToolUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
+            yield return ControllerToolDefinition.Create("common.tools_validate", "Common", "Read-only: Validate a manifest-based VBA tool definition without saving it. Agent authoring may use compact parameterDefinitions; advanced callers may pass complete native parameters objects.", ToolPayloadSchema(false));
+            yield return ControllerToolDefinition.Create("common.tools_upsert", "Common", "Mutates settings: Create or update one custom tool after validating the effective definition. In Agent mode prefer compact parameterDefinitions; parameters remains the advanced native form. Omitted update fields are preserved.", ToolUpsertSchema(), mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
             yield return ControllerToolDefinition.Create("common.tools_delete", "Common", "Mutates settings: Delete a custom RNAssistant tool by id.", "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}", mutatesLocalState: true, requiresConfirmation: true, riskLevel: 1);
         }
 
@@ -103,8 +103,6 @@ namespace RNAssistant.Office.Tools
         {
             var parameterError = ValidateParameterInput(command);
             if (parameterError != null) return parameterError;
-            var pipelineError = ValidatePipelineInput(command);
-            if (pipelineError != null) return pipelineError;
             var tool = ReadToolDefinition(command);
             var validation = ValidateToolDefinition(tool);
             if (!validation.Success)
@@ -119,8 +117,6 @@ namespace RNAssistant.Office.Tools
         {
             var parameterError = ValidateParameterInput(command);
             if (parameterError != null) return parameterError;
-            var pipelineError = ValidatePipelineInput(command);
-            if (pipelineError != null) return pipelineError;
             var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
             var mode = ToolArgumentReader.String(command.Arguments, "mode", "upsert");
             var existing = _toolStore.Load().FirstOrDefault(tool => string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -198,8 +194,7 @@ namespace RNAssistant.Office.Tools
                 Name = ToolArgumentReader.String(command.Arguments, "name", id),
                 Description = ToolArgumentReader.String(command.Arguments, "description", string.Empty),
                 ArgumentSchemaJson = ResolveParameterSchema(command, "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
-                Executor = ToolArgumentReader.String(command.Arguments, "executor", "pipeline"),
-                PipelineJson = ResolvePipelineJson(command, string.Empty),
+                Executor = ToolArgumentReader.String(command.Arguments, "executor", "vba"),
                 Readme = ToolArgumentReader.String(command.Arguments, "readme", string.Empty),
                 Enabled = ReadBool(command, "enabled", true),
                 RequiresConfirmation = ReadBool(command, "requiresConfirmation", false),
@@ -228,10 +223,7 @@ namespace RNAssistant.Office.Tools
                 tool.ArgumentSchemaJson = ResolveParameterSchema(command, tool.ArgumentSchemaJson);
             }
             SetString(command, "executor", value => tool.Executor = value);
-            if (HasArgument(command, "pipeline") || HasArgument(command, "pipelineSteps"))
-            {
-                tool.PipelineJson = ResolvePipelineJson(command, tool.PipelineJson);
-            }
+
             SetString(command, "readme", value => tool.Readme = value);
             SetString(command, "useWhen", value => tool.UseWhen = value);
             SetString(command, "doNotUseWhen", value => tool.DoNotUseWhen = value);
@@ -273,32 +265,6 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static ToolResult ValidatePipelineInput(ToolCommand command)
-        {
-            if (HasArgument(command, "pipeline") && HasArgument(command, "pipelineSteps"))
-            {
-                return ToolResult.Fail(
-                    "Supply either pipeline or pipelineSteps, not both. Prefer pipelineSteps in Agent mode.",
-                    null,
-                    "tool_pipeline_ambiguous",
-                    true);
-            }
-            if (!HasArgument(command, "pipelineSteps")) return null;
-            try
-            {
-                BuildPipelineJson(ToolArgumentReader.String(command.Arguments, "pipelineSteps", "[]"));
-                return null;
-            }
-            catch (InvalidOperationException ex)
-            {
-                return ToolResult.Fail(ex.Message, null, "invalid_tool_pipeline_steps", true);
-            }
-            catch (JsonException ex)
-            {
-                return ToolResult.Fail("pipelineSteps must be a native JSON array: " + ex.Message, null, "invalid_tool_pipeline_steps", true);
-            }
-        }
-
         private static string ResolveParameterSchema(ToolCommand command, string fallback)
         {
             if (HasArgument(command, "parameterDefinitions"))
@@ -306,52 +272,6 @@ namespace RNAssistant.Office.Tools
                 return BuildParameterSchema(ToolArgumentReader.String(command.Arguments, "parameterDefinitions", "[]"));
             }
             return ToolArgumentReader.String(command.Arguments, "parameters", fallback);
-        }
-
-        private static string ResolvePipelineJson(ToolCommand command, string fallback)
-        {
-            if (HasArgument(command, "pipelineSteps"))
-            {
-                return BuildPipelineJson(ToolArgumentReader.String(command.Arguments, "pipelineSteps", "[]"));
-            }
-            return ToolArgumentReader.String(command.Arguments, "pipeline", fallback);
-        }
-
-        private static string BuildPipelineJson(string stepsJson)
-        {
-            var sourceSteps = JArray.Parse(string.IsNullOrWhiteSpace(stepsJson) ? "[]" : stepsJson);
-            if (sourceSteps.Count == 0) throw new InvalidOperationException("pipelineSteps requires at least one step.");
-            var steps = new JArray();
-            for (var index = 0; index < sourceSteps.Count; index++)
-            {
-                var sourceStep = sourceSteps[index] as JObject;
-                if (sourceStep == null) throw new InvalidOperationException("pipelineSteps item " + (index + 1) + " must be an object.");
-                var toolId = ((string)sourceStep["toolId"] ?? string.Empty).Trim();
-                if (string.IsNullOrWhiteSpace(toolId)) throw new InvalidOperationException("pipelineSteps item " + (index + 1) + " requires toolId.");
-
-                var arguments = new JObject();
-                var sourceArguments = sourceStep["arguments"] as JArray ?? new JArray();
-                foreach (var argumentToken in sourceArguments)
-                {
-                    var argument = argumentToken as JObject;
-                    if (argument == null) throw new InvalidOperationException("pipelineSteps arguments for " + toolId + " must be objects.");
-                    var name = ((string)argument["name"] ?? string.Empty).Trim();
-                    if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Every pipelineSteps argument requires a non-empty name.");
-                    if (arguments[name] != null) throw new InvalidOperationException("pipelineSteps contains duplicate argument " + name + " for " + toolId + ".");
-                    if (argument["value"] == null) throw new InvalidOperationException("pipelineSteps argument " + name + " requires value; use an explicit JSON null when needed.");
-                    arguments[name] = argument["value"].DeepClone();
-                }
-
-                var step = new JObject
-                {
-                    ["toolId"] = toolId,
-                    ["arguments"] = arguments
-                };
-                var id = ((string)sourceStep["id"] ?? string.Empty).Trim();
-                if (!string.IsNullOrWhiteSpace(id)) step["id"] = id;
-                steps.Add(step);
-            }
-            return new JObject { ["version"] = 1, ["steps"] = steps }.ToString(Formatting.None);
         }
 
         private static string BuildParameterSchema(string definitionsJson)
@@ -497,7 +417,6 @@ namespace RNAssistant.Office.Tools
                 ["description"] = tool.Description ?? string.Empty,
                 ["parameters"] = ParseJsonObject(tool.ArgumentSchemaJson),
                 ["executor"] = tool.Executor ?? string.Empty,
-                ["pipeline"] = ParseJsonObject(tool.PipelineJson),
                 ["components"] = new JArray((tool.Components ?? new List<VbaToolComponent>())
                     .Where(component => component != null)
                     .Select(component => new JObject

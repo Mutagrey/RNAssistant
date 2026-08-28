@@ -17,7 +17,6 @@ namespace RNAssistant.Core.Models
         public bool MutatesLocalState { get; set; }
         public bool CanSourceHtmlData { get; set; }
         public bool AgentCanRun { get; set; }
-        public string PipelineJson { get; set; }
         public string Code { get; set; }
         public string Readme { get; set; }
         public string StoragePath { get; set; }

@@ -16,122 +16,6 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void PipelineRejectsInvalidDefinitions()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var invalid = CustomTool("Excel", "excel.bad_pipeline");
-                invalid.PipelineJson = "{ bad json";
-                var invalidResult = executor.Execute(
-                    new ToolCommand { ToolId = "excel.bad_pipeline" },
-                    new List<ToolDefinition> { invalid },
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false);
-
-                AssertTrue(!invalidResult.Success, "invalid pipeline should fail");
-                AssertContains(invalidResult.Message, "Invalid pipeline JSON", "invalid pipeline message");
-                AssertEqual(0, adapter.Executed.Count, "invalid pipeline adapter count");
-
-                var empty = CustomTool("Excel", "excel.empty_pipeline");
-                empty.PipelineJson = "{\"steps\":[]}";
-                var emptyResult = executor.Execute(
-                    new ToolCommand { ToolId = "excel.empty_pipeline" },
-                    new List<ToolDefinition> { empty },
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false);
-
-                AssertTrue(!emptyResult.Success, "empty pipeline should fail");
-                AssertContains(emptyResult.Message, "Pipeline has no steps", "empty pipeline message");
-                AssertEqual(0, adapter.Executed.Count, "empty pipeline adapter count");
-
-                var ambiguous = CustomTool("Excel", "excel.ambiguous_pipeline");
-                ambiguous.PipelineJson = "{\"version\":1,\"steps\":[{\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\",\"Kind\":\"selection\"}}]}";
-                var ambiguousValidation = executor.ValidateToolDefinition(ambiguous);
-                AssertTrue(!ambiguousValidation.Success, "case-insensitive duplicate pipeline arguments are rejected");
-                AssertContains(ambiguousValidation.Message, "duplicate", "ambiguous pipeline diagnostic");
-
-                var unsupported = CustomTool("Excel", "excel.unsupported_pipeline");
-                unsupported.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.inspect\",\"arguments\":{},\"retry\":true}]}";
-                var unsupportedValidation = executor.ValidateToolDefinition(unsupported);
-                AssertTrue(!unsupportedValidation.Success, "unsupported pipeline control fields are rejected");
-                AssertContains(unsupportedValidation.Message, "unsupported", "unsupported pipeline diagnostic");
-
-                var blankId = CustomTool("Excel", "excel.blank_step_id");
-                blankId.PipelineJson = "{\"steps\":[{\"id\":\" \",\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}";
-                var blankIdValidation = executor.ValidateToolDefinition(blankId);
-                AssertTrue(!blankIdValidation.Success, "blank pipeline step id is rejected");
-                AssertContains(blankIdValidation.Message, "cannot be blank", "blank pipeline step id diagnostic");
-            });
-        }
-
-        private static void PipelineRejectsCycles()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var recursive = CustomTool("Excel", "excel.recursive_pipeline");
-                recursive.PipelineJson = "{\"steps\":[{\"id\":\"self\",\"toolId\":\"excel.recursive_pipeline\"}]}";
-
-                var result = executor.Execute(
-                    new ToolCommand { ToolId = "excel.recursive_pipeline" },
-                    new List<ToolDefinition> { recursive },
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false);
-
-                AssertTrue(!result.Success, "recursive pipeline should fail");
-                AssertContains(result.Message, "Pipeline cycle detected", "cycle message");
-                AssertEqual(0, adapter.Executed.Count, "recursive pipeline adapter count");
-            });
-        }
-
-        private static void PipelineResolvesNestedConfirmationBeforeExecution()
-        {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var pipeline = CustomTool("Excel", "excel.read_then_create_skill");
-                pipeline.PipelineJson = "{\"steps\":[" +
-                    "{\"toolId\":\"excel.read_range\",\"arguments\":{\"address\":\"A1\"}}," +
-                    "{\"toolId\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.saved\",\"description\":\"Saved test skill.\",\"bodyMarkdown\":\"test\"}}" +
-                    "]}";
-
-                var result = executor.Execute(
-                    new ToolCommand { ToolId = pipeline.Id },
-                    new List<ToolDefinition> { pipeline },
-                    new AppSettings { AutoConfirmToolActions = false },
-                    false,
-                    false);
-
-                AssertEqual("waiting_confirmation", result.Status, "nested confirmation status");
-                AssertEqual(0, adapter.Executed.Count, "pipeline does not partially execute");
-            });
-        }
-
-        private static void PipelineEffectiveSafetyPropagatesNestedRisk()
-        {
-            var write = new ToolDefinition
-            {
-                Id = "excel.write_range",
-                Host = "Excel",
-                BuiltIn = true,
-                Enabled = true,
-                MutatesDocument = true,
-                RiskLevel = 3
-            };
-            var pipeline = CustomTool("Excel", "excel.hidden_mutation");
-            pipeline.MutatesDocument = false;
-            pipeline.RiskLevel = 0;
-            pipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.write_range\",\"arguments\":{}}]}";
-
-            var profile = ToolSafetyPolicy.Resolve(pipeline, new[] { pipeline, write });
-
-            AssertTrue(profile.Valid, "nested safety profile");
-            AssertTrue(profile.MutatesDocument, "nested mutation propagated");
-            AssertTrue(profile.RequiresConfirmation, "implicit custom mutation confirmation propagated");
-            AssertEqual(3, profile.RiskLevel, "nested risk propagated");
-        }
-
         private static void ManualReadOnlyRunSkipsChatLease()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -142,19 +26,8 @@ namespace RNAssistant.Harness
                 AssertTrue(executor.RequiresSessionLeaseForManualRun("excel.write_range", tools),
                     "document mutation keeps the chat lease");
 
-                var readPipeline = CustomTool("Excel", "excel.manual_read_pipeline");
-                readPipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.read_range\",\"arguments\":{\"address\":\"A1\"}}]}";
-                var writePipeline = CustomTool("Excel", "excel.manual_write_pipeline");
-                writePipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.write_range\",\"arguments\":{\"address\":\"A1\",\"values\":[[\"x\"]]}}]}";
-                tools.Add(readPipeline);
-                tools.Add(writePipeline);
-
-                AssertTrue(!executor.RequiresSessionLeaseForManualRun(readPipeline.Id, tools),
-                    "nested read-only pipeline can run beside an active chat");
                 AssertTrue(!executor.RequiresSessionLeaseForManualRun("common.resources_read", tools),
                     "resource reads can run beside an active chat");
-                AssertTrue(executor.RequiresSessionLeaseForManualRun(writePipeline.Id, tools),
-                    "nested mutation cannot hide from the manual-run policy");
 
                 adapter.VbaModuleCode = "A";
                 var agentSession = NewSession(adapter);
@@ -203,14 +76,13 @@ namespace RNAssistant.Harness
                 AssertEqual(0, fake.Executed.Count, "unknown adapter count");
 
                 fake.Executed.Clear();
-                var disabled = CustomTool("Excel", "excel.disabled_pipeline");
+                var disabled = CustomTool("Excel", "excel.disabled_custom");
                 disabled.Enabled = false;
-                disabled.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Disabled\"}}]}";
                 var tools = new List<ToolDefinition>(builtIns);
                 tools.Add(disabled);
 
                 var disabledResult = executor.Execute(
-                    new ToolCommand { ToolId = "excel.disabled_pipeline" },
+                    new ToolCommand { ToolId = "excel.disabled_custom" },
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
@@ -303,10 +175,6 @@ namespace RNAssistant.Harness
                     AssertEqual("unknown_tool", result.ErrorCode, id + " is removed");
                 }
 
-                var removedPipeline = CustomTool("Excel", "excel.removed_id_pipeline");
-                removedPipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.list_shapes\",\"arguments\":{}}]}";
-                var prepared = ConversationRunService.PrepareToolsForRun(adapter.GetBuiltInTools().Concat(new[] { removedPipeline }));
-                AssertTrue(prepared.All(item => item.Id != removedPipeline.Id), "pipeline with removed id stays invalid");
             });
         }
 
@@ -763,59 +631,24 @@ namespace RNAssistant.Harness
 
         private static void ToolValidateChecksPayloadWithoutSaving()
         {
-            WithTempPaths(delegate(AppDataPaths paths)
+            WithTempPaths(paths =>
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
-                var toolStore = new ToolStore(paths);
-                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), toolStore);
-                var command = new ToolCommand { ToolId = "common.tools_validate" };
-                command.Arguments["id"] = "excel.validated";
-                command.Arguments["host"] = "Excel";
-                command.Arguments["name"] = "Validated";
-                command.Arguments["description"] = "Validated pipeline.";
+                var store = new ToolStore(paths);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
+                var tool = CustomTool("Excel", "excel.validated");
+                var command = Command("common.tools_validate", "id", tool.Id, "host", tool.Host,
+                    "description", tool.Description, "executor", "vba", "components", ToolComponentsPayload(tool));
+                var result = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings(), false, false);
+                AssertTrue(result.Success, "VBA tool validates: " + result.Message);
+                AssertTrue(!HasTool(store.Load(), tool.Id), "validation does not save");
+                command.Arguments["parameterDefinitions"] = new JArray();
+                var compact = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings(), false, false);
+                AssertTrue(compact.Success, "compact parameters remain supported");
+                AssertContains(compact.DataJson, "\"parameters\":{", "native parameter schema returned");
                 command.Arguments["parameters"] = JObject.Parse(EmptyFormalToolSchema);
-                command.Arguments["executor"] = "pipeline";
-                command.Arguments["pipeline"] = JObject.Parse("{\"version\":1,\"steps\":[{\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}");
-
-                var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
-
-                AssertTrue(result.Success, "tool validate succeeds");
-                AssertContains(result.Message, "valid", "tool validate message");
-                AssertTrue(!HasTool(toolStore.Load(), "excel.validated"), "tool validate does not save");
-
-                var simplified = new ToolCommand { ToolId = "common.tools_validate" };
-                simplified.Arguments["id"] = "excel.validated_definitions";
-                simplified.Arguments["host"] = "Excel";
-                simplified.Arguments["description"] = "Validated from agent-friendly definitions.";
-                simplified.Arguments["parameterDefinitions"] = new JArray(new JObject
-                {
-                    ["name"] = "sheet",
-                    ["type"] = "string",
-                    ["description"] = "Worksheet name to create.",
-                    ["required"] = true,
-                    ["maxLength"] = 31
-                });
-                simplified.Arguments["executor"] = "pipeline";
-                simplified.Arguments["pipelineSteps"] = new JArray(new JObject
-                {
-                    ["toolId"] = "excel.add_sheet",
-                    ["arguments"] = new JArray(new JObject
-                    {
-                        ["name"] = "name",
-                        ["value"] = "{{args.sheet}}"
-                    })
-                });
-                var simplifiedResult = executor.Execute(simplified, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
-                AssertTrue(simplifiedResult.Success, "tool validate accepts compact parameter and pipeline definitions");
-                AssertContains(simplifiedResult.DataJson, "\"sheet\":{", "parameterDefinitions compile to a native strict parameters object");
-                AssertContains(simplifiedResult.DataJson, "\"arguments\":{\"name\":\"{{args.sheet}}\"}", "pipelineSteps compile to native keyed arguments");
-
-                var authoringTool = executor.GetControllerTools().Single(item => item.Id == "common.tools_validate");
-                var authoringResponseSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { authoringTool }));
-                AssertTrue(authoringResponseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.parameterDefinitions.items.properties.name") != null,
-                    "strict Agent schema exposes parameterDefinitions");
-                AssertTrue(authoringResponseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.pipelineSteps.items.properties.arguments.items.properties.value.anyOf") != null,
-                    "strict Agent schema exposes compact native pipeline values");
+                var ambiguous = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings(), false, false);
+                AssertEqual("tool_parameters_ambiguous", ambiguous.ErrorCode, "ambiguous parameter input rejected");
             });
         }
 
@@ -833,45 +666,5 @@ namespace RNAssistant.Harness
             return string.Join("\n", values.ToArray());
         }
 
-        private static void ConfirmationMatrixCoversDryAndManualRuns()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var tools = BuildPipelineTools(true);
-                var command = new ToolCommand { ToolId = "excel.make_report" };
-                command.Arguments["sheet"] = "Report";
-
-                var blocked = executor.Execute(
-                    command,
-                    tools,
-                    new AppSettings { AutoConfirmToolActions = false },
-                    false,
-                    false);
-                AssertTrue(!blocked.Success, "normal custom run should require confirmation");
-                AssertContains(blocked.Message, "requires confirmation", "blocked custom message");
-                AssertEqual(0, adapter.Executed.Count, "blocked adapter count");
-
-                var dryRun = executor.Execute(
-                    command,
-                    tools,
-                    new AppSettings { AutoConfirmToolActions = false },
-                    true,
-                    false);
-                AssertTrue(dryRun.Success, "dry-run custom tool should be allowed");
-                AssertContains(dryRun.Message, "Dry run completed", "dry-run message");
-                AssertEqual(0, adapter.Executed.Count, "dry-run adapter count");
-
-                var manualRun = executor.Execute(
-                    command,
-                    tools,
-                    new AppSettings { AutoConfirmToolActions = false },
-                    false,
-                    true);
-                AssertTrue(manualRun.Success, "manual custom tool should be allowed");
-                AssertEqual(2, adapter.Executed.Count, "manual adapter count");
-                AssertEqual("excel.add_sheet", adapter.Executed[0].ToolId, "manual first tool");
-                AssertEqual("excel.write_range", adapter.Executed[1].ToolId, "manual second tool");
-            });
-        }
     }
 }

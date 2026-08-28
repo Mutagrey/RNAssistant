@@ -138,11 +138,6 @@ namespace RNAssistant.Office
                 DataJson = BoundActivityData(result, rawDataJson)
             };
 
-            foreach (var child in ParsePipelineChildren(rawDataJson))
-            {
-                activity.Children.Add(child);
-            }
-
             return activity;
         }
 
@@ -268,66 +263,6 @@ namespace RNAssistant.Office
             }
             builder.AppendLine("Status: " + (activity == null ? "completed" : activity.Status));
             return builder.ToString();
-        }
-
-        private static IEnumerable<ChatActivity> ParsePipelineChildren(string dataJson)
-        {
-            if (string.IsNullOrWhiteSpace(dataJson))
-            {
-                return new ChatActivity[0];
-            }
-
-            try
-            {
-                var root = JObject.Parse(dataJson);
-                var steps = root["steps"] as JArray;
-                if (steps == null || steps.Count == 0)
-                {
-                    return new ChatActivity[0];
-                }
-
-                var children = new List<ChatActivity>();
-                foreach (var stepToken in steps)
-                {
-                    var step = stepToken as JObject;
-                    if (step == null)
-                    {
-                        continue;
-                    }
-
-                    var toolId = (string)step["toolId"];
-                    var id = (string)step["id"];
-                    var successToken = step["success"];
-                    var success = successToken != null && successToken.Type == JTokenType.Boolean && successToken.Value<bool>();
-                    var status = (string)step["status"];
-                    var retryableToken = step["retryable"];
-                    if (string.IsNullOrWhiteSpace(status))
-                    {
-                        status = success ? "completed" : "failed";
-                    }
-                    children.Add(new ChatActivity
-                    {
-                        Kind = "tool",
-                        Title = string.IsNullOrWhiteSpace(id) ? toolId : id,
-                        Subtitle = toolId,
-                        Status = success ? "completed" : "failed",
-                        ExecutionStatus = status,
-                        ErrorCode = (string)step["errorCode"],
-                        Retryable = retryableToken == null || retryableToken.Type == JTokenType.Null
-                            ? (bool?)null
-                            : retryableToken.Value<bool>(),
-                        ToolId = toolId,
-                        ResultMessage = BoundText((string)step["message"], MaxTranscriptMessageChars),
-                        DataJson = BoundJson((string)step["dataJson"], MaxTranscriptDataChars, false, false)
-                    });
-                }
-
-                return children;
-            }
-            catch (JsonException)
-            {
-                return new ChatActivity[0];
-            }
         }
 
     }

@@ -69,3 +69,7 @@ providers всё ещё требуют qualification. До Phase 4 external/uncl
 
 Незакоммиченные до начала Phase 0 изменения protocol, runtime, OfficeHosts, tests
 и web сохраняются отдельно и не считаются выполнением Phase 1.
+
+## Deferred pipelines (2026-08-28)
+
+Отключены по решению пользователя: execution, discovery, storage loading/authoring и UI закрыты; старый executor/parser и вложенные зависимости удалены. Не восстанавливать по пути Phases 3–10/12. Вернуться только отдельной задачей Phase 11 после stable core, через общие ToolRuntime/contracts, без поддержки старых pipelines. Старые файлы не мигрируются и автоматически не удаляются. Это сокращение scope, не незавершённый adapter и не новый prerequisite миграции.

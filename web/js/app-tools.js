@@ -69,9 +69,8 @@ function toolLibraryComparable(tool) {
       Name: tool.Name || tool.Id || "",
       Description: tool.Description || "",
       ArgumentSchemaJson: tool.ArgumentSchemaJson || emptyToolSchema(),
-      Executor: tool.Executor || "pipeline",
+      Executor: tool.Executor || "vba",
       RequiresConfirmation: !!tool.RequiresConfirmation,
-      PipelineJson: tool.PipelineJson || "",
       Code: tool.Code || "",
       Readme: tool.Readme || "",
       Enabled: tool.Enabled !== false,
@@ -263,16 +262,15 @@ function renderToolEditor() {
       : "Выберите инструмент слева или создайте новый.";
   }
   if ($("toolEditorTitle")) $("toolEditorTitle").textContent = skill ? (skill.Id || skill.Name || "Инструмент") : "Инструмент";
-  if ($("toolEditorMeta")) $("toolEditorMeta").textContent = skill ? ((builtIn ? "Встроенный" : "Пользовательский") + " · " + (skill.Host || "Common") + " · " + (skill.Executor || "pipeline")) : "";
+  if ($("toolEditorMeta")) $("toolEditorMeta").textContent = skill ? ((builtIn ? "Встроенный" : "Пользовательский") + " · " + (skill.Host || "Common") + " · " + (skill.Executor || "vba")) : "";
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
   $("toolHostInput").value = skill ? (skill.Host || "Common") : "Common";
-  $("toolExecutorInput").value = skill ? (skill.Executor || (builtIn ? "builtin" : "pipeline")) : "pipeline";
+  $("toolExecutorInput").value = skill ? (skill.Executor || (builtIn ? "builtin" : "vba")) : "vba";
   $("toolConfirmInput").checked = skill ? !!skill.RequiresConfirmation : false;
   $("toolDescriptionInput").value = skill ? (skill.Description || "") : "";
   $("toolSchemaInput").value = skill ? (skill.ArgumentSchemaJson || emptyToolSchema()) : emptyToolSchema();
   $("toolRunArgsInput").value = skill ? "{}" : "";
-  $("toolPipelineInput").value = skill ? (skill.PipelineJson || "") : "";
   var components = isVba ? toolComponents(skill) : [];
   var component = isVba ? selectedToolComponent(skill) : null;
   $("toolComponentSelect").innerHTML = "";
@@ -297,23 +295,18 @@ function renderToolEditor() {
   if (typeof setCodeEditorValue === "function") {
     setCodeEditorValue("toolSchemaInput", $("toolSchemaInput").value);
     setCodeEditorValue("toolRunArgsInput", $("toolRunArgsInput").value);
-    setCodeEditorValue("toolPipelineInput", $("toolPipelineInput").value);
     setCodeEditorValue("toolCodeInput", $("toolCodeInput").value);
     setCodeEditorValue("toolReadmeInput", $("toolReadmeInput").value);
   }
   $("toolRunOutput").textContent = "";
   state.toolSchemaVisualDraft = null;
-  state.toolPipelineVisualDraft = null;
   toolStructuredEditor.syncSchemaDraft();
-  toolStructuredEditor.syncPipelineDraft();
   state.toolLibraryRendering = true;
   try {
-    toolStructuredEditor.setMode("schema", state.toolSchemaMode || "form");
-    toolStructuredEditor.setMode("pipeline", state.toolPipelineMode || "form");
+    toolStructuredEditor.setMode(state.toolSchemaMode || "form");
   } finally {
     state.toolLibraryRendering = false;
   }
-  if ($("pipelineToolEditor")) $("pipelineToolEditor").classList.toggle("hidden", !skill || String(skill.Executor || "").toLowerCase() !== "pipeline");
   if ($("vbaToolEditor")) $("vbaToolEditor").classList.toggle("hidden", !isVba);
   applyToolEditorPage();
 
@@ -326,7 +319,6 @@ function renderToolEditor() {
     "toolDescriptionInput",
     "toolSchemaInput",
     "toolRunArgsInput",
-    "toolPipelineInput",
     "toolCodeInput",
     "toolReadmeInput"
   ].forEach(function (id) {
@@ -336,7 +328,6 @@ function renderToolEditor() {
   if (typeof setCodeEditorReadOnly === "function") {
     setCodeEditorReadOnly("toolSchemaInput", disabled || readOnly);
     setCodeEditorReadOnly("toolRunArgsInput", disabled);
-    setCodeEditorReadOnly("toolPipelineInput", disabled || readOnly);
     setCodeEditorReadOnly("toolCodeInput", disabled || readOnly || !isVba);
     setCodeEditorReadOnly("toolReadmeInput", disabled || readOnly);
   }
@@ -348,7 +339,7 @@ function renderToolEditor() {
   $("deleteToolButton").disabled = disabled || readOnly;
   $("dryRunToolButton").disabled = disabled;
   $("runToolButton").disabled = disabled;
-  $("cloneToolButton").disabled = disabled;
+  $("cloneToolButton").disabled = disabled || builtIn;
   $("copyToolContextButton").disabled = disabled;
   $("askToolBuilderButton").disabled = disabled;
   $("addToolButton").disabled = !!state.bridgeUnavailable;
@@ -360,7 +351,7 @@ function renderToolEditor() {
 
 function syncSelectedToolFromEditor() {
   if (typeof syncCodeEditors === "function") {
-    syncCodeEditors(["toolSchemaInput", "toolRunArgsInput", "toolPipelineInput", "toolCodeInput", "toolReadmeInput"]);
+    syncCodeEditors(["toolSchemaInput", "toolRunArgsInput", "toolCodeInput", "toolReadmeInput"]);
   }
   var skill = state.tools[state.selectedToolIndex];
   if (!skill || skill.BuiltIn) {
@@ -376,7 +367,6 @@ function syncSelectedToolFromEditor() {
   skill.RequiresConfirmation = $("toolConfirmInput").checked;
   skill.Description = $("toolDescriptionInput").value;
   skill.ArgumentSchemaJson = $("toolSchemaInput").value || emptyToolSchema();
-  skill.PipelineJson = $("toolPipelineInput").value;
   if (String(skill.Executor || "").toLowerCase() !== "vba") {
     skill.Code = $("toolCodeInput").value;
   }
@@ -390,7 +380,6 @@ function validateSelectedToolEditors() {
   var tool = state.tools[state.selectedToolIndex];
   if (!tool) return true;
   if (!toolStructuredEditor.syncSchemaDraft()) { state.toolEditorPage = "schema"; applyToolEditorPage(); return false; }
-  if (String($("toolExecutorInput").value || "").toLowerCase() === "pipeline" && !toolStructuredEditor.syncPipelineDraft()) { state.toolEditorPage = "implementation"; applyToolEditorPage(); return false; }
   return true;
 }
 
@@ -399,10 +388,7 @@ function validateAllToolDefinitions() {
     var tool = state.tools[index] || {};
     try { JSON.parse(tool.ArgumentSchemaJson || emptyToolSchema()); }
     catch (error) { throw new Error("Некорректная schema у " + (tool.Id || "инструмента") + ": " + error.message); }
-    if (String(tool.Executor || "").toLowerCase() === "pipeline") {
-      try { JSON.parse(tool.PipelineJson || "{}"); }
-      catch (error2) { throw new Error("Некорректный pipeline у " + (tool.Id || "инструмента") + ": " + error2.message); }
-    }
+
   }
 }
 
@@ -415,9 +401,8 @@ function readTools() {
       Name: skill.Name || skill.Id || "",
       Description: skill.Description || "",
       ArgumentSchemaJson: skill.ArgumentSchemaJson || emptyToolSchema(),
-      Executor: skill.Executor || (skill.BuiltIn ? "builtin" : "pipeline"),
+      Executor: skill.Executor || (skill.BuiltIn ? "builtin" : "vba"),
       RequiresConfirmation: !!skill.RequiresConfirmation,
-      PipelineJson: skill.PipelineJson || "",
       Code: skill.Code || "",
       Readme: skill.Readme || "",
       Enabled: skill.Enabled !== false,
@@ -459,7 +444,7 @@ function selectedToolContext() {
     "# Tool",
     "id: " + (skill.Id || ""),
     "host: " + (skill.Host || "Common"),
-    "executor: " + (skill.Executor || "pipeline"),
+    "executor: " + (skill.Executor || "vba"),
     "requiresConfirmation: " + (!!skill.RequiresConfirmation),
     "",
     "## Description",
@@ -468,11 +453,6 @@ function selectedToolContext() {
     "## Argument schema",
     "```json",
     skill.ArgumentSchemaJson || "{}",
-    "```",
-    "",
-    "## Pipeline",
-    "```json",
-    skill.PipelineJson || "",
     "```",
     "",
     "## Code",
@@ -553,9 +533,8 @@ function bindToolActions() {
       Name: "new_tool",
       Description: "",
       ArgumentSchemaJson: emptyToolSchema(),
-      Executor: "pipeline",
+      Executor: "vba",
       RequiresConfirmation: true,
-      PipelineJson: "{\n  \"version\": 1,\n  \"steps\": []\n}",
       Code: "",
       Readme: "",
       Enabled: true,
@@ -566,7 +545,7 @@ function bindToolActions() {
       CapabilityStatus: "available",
       Scope: "global",
       PackageVersion: "1.0.0",
-      Components: []
+      Components: [{ Name: "RNA_NewTool", Type: "StdModule", FileName: "RNA_NewTool.bas", Code: "Option Explicit\n" }]
     });
     state.selectedToolIndex = state.tools.length - 1;
     state.selectedInstructionKind = "tool";
@@ -577,7 +556,7 @@ function bindToolActions() {
   $("cloneToolButton").addEventListener("click", function () {
     syncSelectedToolFromEditor();
     var source = state.tools[state.selectedToolIndex];
-    if (!source) {
+    if (!source || source.BuiltIn) {
       return;
     }
 
@@ -588,9 +567,8 @@ function bindToolActions() {
       Name: id,
       Description: source.Description || "",
       ArgumentSchemaJson: source.ArgumentSchemaJson || emptyToolSchema(),
-      Executor: source.BuiltIn ? "pipeline" : (source.Executor || "pipeline"),
+      Executor: source.BuiltIn ? "vba" : (source.Executor || "vba"),
       RequiresConfirmation: source.BuiltIn ? true : !!source.RequiresConfirmation,
-      PipelineJson: source.PipelineJson || "{\n  \"version\": 1,\n  \"steps\": []\n}",
       Code: source.Code || "",
       Readme: source.Readme || "",
       Enabled: true,
@@ -647,7 +625,7 @@ function bindToolActions() {
       }
 
       switchTab("chat");
-      setChatInputText("Отредактируй RNAssistant-инструмент из добавленного контекста. Верни обновленные tool.json, pipeline или VBA .bas/.cls components; не выполняй действия без подтверждения.", true);
+      setChatInputText("Отредактируй RNAssistant-инструмент из добавленного контекста. Верни обновленные tool.json и VBA .bas/.cls components; не выполняй действия без подтверждения.", true);
     }).catch(function (error) {
       log(error.detail || error.message, "error");
     });

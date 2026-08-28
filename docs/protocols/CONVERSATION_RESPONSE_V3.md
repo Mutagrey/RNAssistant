@@ -134,8 +134,9 @@ Until ToolPolicy has external-effect metadata, the Office projection permits
 only audited built-in local reads: `common.resources_list/resolve/search/read`,
 `common.capabilities_search/read`, `excel.inspect/read_range/find_cells`. Enabled,
 built-in binding and effective `ToolSafetyPolicy` must also permit Agent execution
-without document/local mutation or confirmation. All other IDs, including pure
-pipelines and unclassified/external calls, conservatively stay singleton. No tool
+without document/local mutation or confirmation. All other IDs, including
+unclassified/external calls, conservatively stay singleton. Pipelines are disabled
+and excluded from the callable catalog. No tool
 definition/executor policy changes here. Rebuild the projection for each new run
 or confirmation; do not infer safety from false legacy flags alone.
 

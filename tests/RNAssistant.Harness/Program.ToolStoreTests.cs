@@ -40,31 +40,15 @@ namespace RNAssistant.Harness
                     Host = "Excel",
                     Executor = "pipeline",
                     ArgumentSchemaJson = EmptyFormalToolSchema,
-                    PipelineJson = "{\"steps\":[]}",
                     Enabled = true
                 };
 
                 var invalidResult = executor.ValidateToolDefinition(invalid);
                 AssertTrue(!invalidResult.Success, "invalid tool rejected");
-                AssertContains(invalidResult.Message, "at least one step", "invalid tool error");
+                AssertContains(invalidResult.Message, "disabled", "invalid tool error");
 
-                var valid = new ToolDefinition
-                {
-                    Id = "excel.safe_report",
-                    Host = "Excel",
-                    Name = "Safe report",
-                    Description = "Create report.",
-                    ArgumentSchemaJson = SheetFormalToolSchema,
-                    Executor = "pipeline",
-                    PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}",
-                    Enabled = true,
-                    RequiresConfirmation = true,
-                    MutatesDocument = true,
-                    AgentCanRun = false,
-                    RiskLevel = 2,
-                    UseWhen = "Create a report.",
-                    CapabilityStatus = "available"
-                };
+                var valid = CustomTool("Excel", "excel.safe_report", "Safe report");
+                valid.UseWhen = "Create a report.";
 
                 AssertTrue(executor.ValidateToolDefinition(valid).Success, "valid tool accepted");
                 var invalidHost = valid.Clone();
@@ -75,6 +59,8 @@ namespace RNAssistant.Harness
                 oversizedCatalogEntry.Description = new string('x', 7000);
                 AssertTrue(executor.ValidateToolDefinition(oversizedCatalogEntry).Success,
                     "storage validation does not duplicate runtime prompt budgeting");
+                oversizedCatalogEntry.AgentCanRun = true;
+                oversizedCatalogEntry.Description = new string('x', 7000);
                 AssertTrue(ConversationRunService.PrepareToolsForRun(
                         adapter.GetBuiltInTools().Concat(new[] { oversizedCatalogEntry }))
                     .Any(tool => string.Equals(tool.Id, oversizedCatalogEntry.Id, StringComparison.OrdinalIgnoreCase)),
@@ -83,7 +69,7 @@ namespace RNAssistant.Harness
                 var loaded = store.Load().First(t => string.Equals(t.Id, valid.Id, StringComparison.OrdinalIgnoreCase));
                 AssertTrue(loaded.MutatesDocument, "mutation metadata preserved");
                 AssertTrue(!loaded.AgentCanRun, "agent run metadata preserved");
-                AssertEqual(2, loaded.RiskLevel, "risk metadata preserved");
+                AssertEqual(3, loaded.RiskLevel, "risk metadata preserved");
                 AssertEqual(valid.UseWhen, loaded.UseWhen, "useWhen preserved");
             });
         }
@@ -96,7 +82,6 @@ namespace RNAssistant.Harness
                 var toolStore = new ToolStore(paths);
                 toolStore.Save(new[]
                 {
-                    CustomTool("Common", "common.inspect"),
                     CustomTool("Excel", "excel.custom"),
                     CustomTool("Word", "word.hidden")
                 });
@@ -105,7 +90,7 @@ namespace RNAssistant.Harness
 
                 AssertTrue(HasTool(catalog, "excel.add_sheet"), "built-in tool visible");
                 AssertTrue(HasTool(catalog, "common.vba_apply_patch"), "common controller VBA tool visible");
-                AssertTrue(HasTool(catalog, "common.inspect"), "common custom tool visible");
+                AssertTrue(HasTool(catalog, "common.resources_read"), "common built-in tool visible");
                 AssertTrue(HasTool(catalog, "excel.custom"), "host custom tool visible");
                 AssertTrue(!HasTool(catalog, "word.hidden"), "other host custom tool hidden");
             });
@@ -158,25 +143,7 @@ namespace RNAssistant.Harness
 
                 var excel = FakeOfficeAdapter.ForHost("Excel");
                 var store = new ToolStore(paths);
-                var legacyPipeline = CustomTool("Excel", "excel.legacy_vba_pipeline");
-                legacyPipeline.PipelineJson = "{\"steps\":[" +
-                    "{\"toolId\":\"excel.vba_read_lines\",\"arguments\":{\"moduleName\":\"Module1\"}}," +
-                    "{\"toolId\":\"excel.vba_replace_text\",\"arguments\":{\"moduleName\":\"Module1\",\"find\":\"old\",\"replace\":\"new\"}}," +
-                    "{\"toolId\":\"excel.vba_create_module\",\"arguments\":{\"moduleName\":\"NewModule\",\"code\":\"Option Explicit\"}}]}";
-                store.SaveOne(legacyPipeline);
                 var excelExecutor = new OfficeToolExecutor(excel, new VbaJournalStore(paths), new SkillStore(paths), store);
-                var loaded = FindTool(new ToolCatalogService(excel, excelExecutor, store).GetVisibleTools(), legacyPipeline.Id);
-                AssertContains(loaded.PipelineJson, "excel.vba_read_lines", "removed pipeline ids are not silently rewritten");
-                var safety = ToolSafetyPolicy.Resolve(
-                    loaded,
-                    excel.GetBuiltInTools().Concat(excelExecutor.GetControllerTools()).Concat(new[] { loaded }));
-                AssertTrue(!safety.Valid, "pipeline with removed VBA ids is invalid");
-                AssertContains(safety.Error, "unknown tool", "removed pipeline id has an actionable error");
-
-                var prepared = ConversationRunService.PrepareToolsForRun(
-                    excel.GetBuiltInTools().Concat(excelExecutor.GetControllerTools()).Concat(new[] { legacyPipeline }));
-                var preparedPipeline = FindTool(prepared, legacyPipeline.Id);
-                AssertTrue(preparedPipeline == null, "pipeline with removed VBA ids stays out of the Agent catalog");
 
                 foreach (var removedId in new[]
                 {
@@ -209,7 +176,6 @@ namespace RNAssistant.Harness
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var shadow = CustomTool("Excel", "excel.add_sheet");
-                shadow.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}";
                 var store = new ToolStore(paths);
                 store.SaveOne(shadow);
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
@@ -223,15 +189,15 @@ namespace RNAssistant.Harness
                 AssertTrue(result.Success, "built-in executes despite custom collision");
                 AssertTrue(adapter.HasSheet("Protected"), "built-in add sheet was executed");
                 AssertEqual(1, adapter.Executed.Count(item => string.Equals(item.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase)), "built-in add sheet executed once");
-                AssertEqual(0, adapter.Executed.Count(item => string.Equals(item.ToolId, "excel.inspect", StringComparison.OrdinalIgnoreCase)), "shadow pipeline was not executed");
+                AssertEqual(0, adapter.Executed.Count(item => string.Equals(item.ToolId, "excel.inspect", StringComparison.OrdinalIgnoreCase)), "shadow custom tool was not executed");
 
                 var save = new ToolCommand { ToolId = "common.tools_upsert" };
                 save.Arguments["id"] = shadow.Id;
                 save.Arguments["host"] = "Excel";
                 save.Arguments["description"] = "Invalid shadow.";
-                save.Arguments["executor"] = "pipeline";
+                save.Arguments["executor"] = "vba";
                 save.Arguments["parameters"] = JObject.Parse(EmptyFormalToolSchema);
-                save.Arguments["pipeline"] = JObject.Parse(shadow.PipelineJson);
+                save.Arguments["components"] = ToolComponentsPayload(shadow);
                 var saveResult = executor.Execute(save, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(!saveResult.Success, "controller rejects reserved id");
                 AssertEqual("reserved_tool_id", saveResult.ErrorCode, "reserved id error code");
@@ -244,18 +210,17 @@ namespace RNAssistant.Harness
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = adapter.GetBuiltInTools().ToList();
-                var pipeline = CustomTool("Excel", "excel.dynamic_mutation");
-                pipeline.AgentCanRun = false;
-                pipeline.MutatesDocument = false;
-                pipeline.RiskLevel = 0;
-                pipeline.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Dynamic\"}}]}";
+                var tool = CustomTool("Excel", "excel.dynamic_mutation");
+                tool.AgentCanRun = false;
+                tool.MutatesDocument = false;
+                tool.RiskLevel = 0;
 
-                tools.Add(pipeline);
-                var profile = ToolSafetyPolicy.Resolve(pipeline, tools);
-                AssertTrue(profile.MutatesDocument, "nested mutation propagated");
-                AssertTrue(!profile.AgentCanRun, "nested mutation agent safety propagated");
-                AssertTrue(profile.RiskLevel > 0, "nested mutation risk propagated");
-                AssertTrue(!pipeline.MutatesDocument, "source tool remains unchanged");
+                tools.Add(tool);
+                var profile = ToolSafetyPolicy.Resolve(tool, tools);
+                AssertTrue(profile.MutatesDocument, "VBA mutation propagated");
+                AssertTrue(!profile.AgentCanRun, "VBA mutation agent safety propagated");
+                AssertTrue(profile.RiskLevel > 0, "VBA mutation risk propagated");
+                AssertTrue(!tool.MutatesDocument, "source tool remains unchanged");
             });
         }
 
@@ -446,9 +411,7 @@ namespace RNAssistant.Harness
             WithTempPaths(delegate(AppDataPaths paths)
             {
                 var store = new ToolStore(paths);
-                var initial = CustomTool("Excel", "excel.custom_report");
-                initial.Name = "Initial report";
-                initial.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}";
+                var initial = CustomTool("Excel", "excel.custom_report", "Initial report");
                 initial.Readme = "Creates a report sheet.";
                 var otherHost = CustomTool("Word", "word.review");
                 store.Save(new[] { initial, otherHost });
@@ -456,16 +419,14 @@ namespace RNAssistant.Harness
                 var loadedInitial = FindTool(store.Load(), "excel.custom_report");
                 AssertTrue(loadedInitial != null, "initial custom tool loaded");
                 AssertEqual("Initial report", loadedInitial.Name, "initial name");
-                AssertContains(loadedInitial.PipelineJson, "excel.add_sheet", "initial pipeline");
+                AssertContains(loadedInitial.Code, "Initial report", "initial source");
                 AssertContains(loadedInitial.Readme, "report sheet", "initial readme");
                 AssertTrue(!string.IsNullOrWhiteSpace(loadedInitial.StoragePath), "storage path set");
 
-                var edited = CustomTool("Excel", "excel.custom_report");
-                edited.Name = "Updated report";
+                var edited = CustomTool("Excel", "excel.custom_report", "Updated report");
                 edited.RequiresConfirmation = true;
                 edited.MutatesDocument = true;
                 edited.RiskLevel = 2;
-                edited.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"Report\",\"address\":\"A1\",\"values\":[[\"A\"]]}}]}";
                 store.Save(new[] { edited }, "Excel");
 
                 var loaded = store.Load();
@@ -473,7 +434,7 @@ namespace RNAssistant.Harness
                 AssertTrue(updated != null, "updated custom tool loaded");
                 AssertEqual("Updated report", updated.Name, "updated name");
                 AssertTrue(updated.RequiresConfirmation, "updated confirmation flag");
-                AssertContains(updated.PipelineJson, "excel.write_range", "updated pipeline");
+                AssertContains(updated.Code, "Updated report", "updated source");
                 AssertTrue(HasTool(loaded, "word.review"), "other host preserved");
             });
         }
@@ -493,10 +454,12 @@ namespace RNAssistant.Harness
                 Directory.CreateDirectory(duplicateDirectory);
                 Directory.CreateDirectory(invalidUtf8Directory);
                 File.WriteAllText(Path.Combine(validDirectory, "tool.json"), JsonConvert.SerializeObject(CustomTool("Excel", "excel.valid")));
-                File.WriteAllText(Path.Combine(validDirectory, "pipeline.json"), "{\"steps\":[]}");
+                Directory.CreateDirectory(Path.Combine(validDirectory, "src"));
+                File.WriteAllText(Path.Combine(validDirectory, "src", "RNA_Test.bas"), CustomTool("Excel", "excel.valid").Code);
                 File.WriteAllText(Path.Combine(brokenDirectory, "tool.json"), "{ broken");
                 File.WriteAllText(Path.Combine(oversizedDirectory, "tool.json"), JsonConvert.SerializeObject(CustomTool("Excel", "excel.oversized")));
-                File.WriteAllText(Path.Combine(oversizedDirectory, "pipeline.json"), new string('x', 1100001));
+                Directory.CreateDirectory(Path.Combine(oversizedDirectory, "src"));
+                File.WriteAllText(Path.Combine(oversizedDirectory, "src", "RNA_Test.bas"), new string('x', 4100001));
                 var duplicateJson = JsonConvert.SerializeObject(CustomTool("Excel", "excel.duplicate"));
                 File.WriteAllText(Path.Combine(duplicateDirectory, "tool.json"),
                     duplicateJson.Insert(1, "\"Id\":\"excel.shadow\","));
@@ -507,7 +470,7 @@ namespace RNAssistant.Harness
 
                 AssertEqual(1, loaded.Count, "loaded tool count");
                 AssertEqual("excel.valid", loaded[0].Id, "loaded tool id");
-                AssertContains(loaded[0].PipelineJson, "steps", "sidecar loaded");
+                AssertContains(loaded[0].Code, "Public Function Run", "source sidecar loaded");
                 new ToolStore(paths).SaveOne(CustomTool("Excel", "excel.new"));
                 AssertTrue(File.Exists(Path.Combine(brokenDirectory, "tool.json")), "broken tool preserved during save");
             });
@@ -519,9 +482,7 @@ namespace RNAssistant.Harness
             {
                 var store = new ToolStore(paths);
                 var first = CustomTool("Excel", "excel.first");
-                first.PipelineJson = "{\"steps\":[{\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}";
                 var second = CustomTool("Word", "word.second");
-                second.PipelineJson = "{\"steps\":[{\"toolId\":\"word.read_text\",\"arguments\":{\"source\":\"document\"}}]}";
                 store.Save(new[] { first, second });
 
                 var firstStored = FindTool(store.Load(), first.Id);
@@ -579,8 +540,8 @@ namespace RNAssistant.Harness
                 command.Arguments["name"] = "Generated report";
                 command.Arguments["description"] = "Create a generated report sheet.";
                 command.Arguments["parameters"] = JObject.Parse(SheetFormalToolSchema);
-                command.Arguments["executor"] = "pipeline";
-                command.Arguments["pipeline"] = JObject.Parse("{\"version\":1,\"steps\":[{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}]}");
+                command.Arguments["executor"] = "vba";
+                command.Arguments["components"] = ToolComponentsPayload(CustomTool("Excel", "excel.generated_report"));
                 command.Arguments["enabled"] = true;
                 command.Arguments["requiresConfirmation"] = true;
                 command.Arguments["mutatesDocument"] = true;
@@ -597,16 +558,16 @@ namespace RNAssistant.Harness
 
                 var update = new ToolCommand { ToolId = "common.tools_upsert" };
                 update.Arguments["id"] = "excel.generated_report";
-                update.Arguments["name"] = "Updated report";
+                update.Arguments["readme"] = "Updated report notes";
                 var updated = executor.Execute(update, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(updated.Success, "partial tool update should succeed");
 
                 var read = executor.Execute(new ToolCommand { ToolId = ToolAuthoringExecutor.DefinitionReadToolId, Arguments = { ["id"] = "excel.generated_report" } }, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
                 AssertTrue(read.Success, "tool read should succeed");
-                AssertContains(read.DataJson, "excel.add_sheet", "saved pipeline");
+                AssertContains(read.DataJson, "Public Function Run", "saved VBA source");
                 AssertContains(read.DataJson, "\"parameters\":{", "schema returned as native object");
                 AssertContains(read.DataJson, "Updated report", "updated field returned");
-                AssertContains(read.DataJson, "Create a generated report sheet", "omitted description preserved");
+                AssertContains(read.DataJson, "Test custom tool.", "omitted manifest description preserved");
 
                 var emptyUpdate = executor.Execute(Command("common.tools_upsert", "id", "excel.generated_report"), new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
                 AssertTrue(!emptyUpdate.Success, "empty tool update fails before confirmation");

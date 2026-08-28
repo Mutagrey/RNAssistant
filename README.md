@@ -242,11 +242,11 @@ The configured transport remains `json_object` (default) or a strict schema gene
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. Tool-result data is bounded and oversized data is replaced by a structured preview; the prompt budget is checked before every model request. Excel value/formula/profile reads reject ranges above 100000 cells before loading COM `Value2`. The runtime also enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 
-The model-facing catalog groups uniform intents behind selectors: Excel inspect/read/write/chart-upsert/format, Word read/inspect/write/format, PowerPoint read/list/set-text/add-object, and Outlook read/draft/update/collect. Superseded public ids are removed completely: they are neither shown to the model nor rewritten when encountered in a saved pipeline.
+The model-facing catalog groups uniform intents behind selectors: Excel inspect/read/write/chart-upsert/format, Word read/inspect/write/format, PowerPoint read/list/set-text/add-object, and Outlook read/draft/update/collect. Superseded public ids are removed completely: they are neither shown to the model nor compatibility-rewritten.
 
 Complex work has two distinct artifacts. A temporary Task List (`common.task_list_create/update/close`) tracks the current execution stages and is normally used for work with at least three meaningful steps. Plan mode performs read-only discovery, asks up to three typed material questions, and maintains one broad Markdown plan through `common.plan_doc_create/update/delete`. Each plan update is an immutable chat-artifact revision; handoff to Agent cites its exact canonical `rna://` URI. Runtime never infers progress or maps tool calls to steps.
 
-Context compaction preserves the full stored transcript and replays a checkpoint plus an exact tail. The current request and `LastRun` are persisted before the endpoint call, and each tool-start/result boundary is checkpointed. Confirmation state and cumulative limits survive restart; the runtime and UI block new input until the pending action is confirmed or cancelled. Stale chat revisions are rejected instead of overwriting another window. Interrupted in-flight actions are recovered as unknown-effect diagnostics without automatic retry, while already persisted tool results remain replayable. Pipeline safety is resolved recursively, so nested mutation, risk, confirmation, missing-reference, and cycle errors cannot be hidden by top-level metadata.
+Context compaction preserves the full stored transcript and replays a checkpoint plus an exact tail. The current request and `LastRun` are persisted before the endpoint call, and each tool-start/result boundary is checkpointed. Confirmation state and cumulative limits survive restart; the runtime and UI block new input until the pending action is confirmed or cancelled. Stale chat revisions are rejected instead of overwriting another window. Interrupted in-flight actions are recovered as unknown-effect diagnostics without automatic retry, while already persisted tool results remain replayable. Pipelines are unavailable; supported tools retain metadata-based mutation, risk and confirmation checks.
 
 ## HTML Workspace
 
@@ -280,41 +280,25 @@ Each tool is a folder with editable files:
 ```text
 tools/<host>/<tool-name>/
   tool.json
-  pipeline.json                 # pipeline executor only
   src/
     EntryModule.bas
     SupportingClass.cls
   README.md
 ```
 
-Tool package text files are strict UTF-8. `tool.json` contains metadata shown to the LLM and the task pane; duplicate JSON properties invalidate it. `pipeline.json` can call existing built-in tools in sequence. VBA packages keep each standard/class component in `src/*.bas` or `src/*.cls`; their complete contract is documented in `docs/vba-tool-packages.md`.
+Tool package text files are strict UTF-8. `tool.json` contains metadata shown to the LLM and the task pane; duplicate JSON properties invalidate it. VBA packages keep each standard/class component in `src/*.bas` or `src/*.cls`; their complete contract is documented in `docs/vba-tool-packages.md`.
 Tools marked `requiresConfirmation` require manual Run or the `Auto-confirm tool actions` setting.
 Tool and skill updates are written per item and atomically; unrelated hosts, unrecognized entries, and additional user files are not removed.
 
-Pipeline tools use:
+Pipelines are disabled and deferred until a separate Phase 11 decision after stable core. Old definitions are skipped without migration or replay; their files are not automatically deleted. The pipeline executor, parser, authoring fields and UI editor have been removed. Custom tools currently use VBA only.
 
-```json
-{
-  "version": 1,
-  "steps": [
-    {
-      "id": "read",
-      "toolId": "excel.read_range",
-      "arguments": { "address": "{{args.address}}" }
-    }
-  ]
-}
-```
-
-Pipeline version may be omitted or equal `1`; the root accepts only `version` and `steps`, with at most 50 steps. Each step accepts only `id`, `toolId`, and `arguments`. `toolId` is required; an explicit `id` must be non-empty and unique case-insensitively, while an omitted id defaults to the exact tool id, including dots. Supported placeholders are `{{args.name}}`, `{{steps.stepId.message}}`, `{{steps.stepId.dataJson}}`, and `{{steps.stepId.success}}`. Every `args`/`steps` placeholder must resolve before its call; an unresolved placeholder fails the pipeline instead of being passed as literal input.
-
-The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` resolves pipeline steps without changing the Office document. `Run` is treated as explicit user confirmation.
+The Tools tab can run a selected tool with ad hoc JSON arguments. `Dry Run` validates/previews supported tools without changing the Office document. `Run` is treated as explicit user confirmation.
 
 For Excel, Word, and PowerPoint, `executor: "vba"` uses a strict comment manifest and a `Public Function ... As String` entry point with typed positional arguments. A global package is injected for one run and cleaned in `finally`; explicit persistent installation is allowed only in macro-enabled documents. RNAssistant also discovers valid document-local tools through the VBA project object model. Both paths require Trust Access to the VBA project object model.
 
 Agent no longer injects every tool schema into each model request. Its bootstrap contains resource reads and `common.capabilities_search/read`, while the runtime context immediately carries a bounded compact list of exact tool and skill ids. Search returns schema-free metadata only when needed; the unified reader loads one exact revisioned callable descriptor or skill body. Up to eight dynamic tool schemas stay in an evidence-derived LRU working set, additionally bounded to 8k–20k estimated tokens. Exact calls update recency, replay rebuilds the same set, and compaction, truncation, eviction, or revision drift requires another read. Strict `json_schema` is generated only from this callable set.
 
-Agent mode manages custom tool definitions through `common.tools_definition_read/validate/upsert/delete`; `tools_definition_read` without id lists compact custom metadata and never loads a callable schema. Upsert creates a missing id or preserves omitted fields while updating an existing one, then validates the effective definition automatically. Optional `createOnly`/`updateOnly` modes retain strict existence semantics; `tools_validate` is only a no-save preflight. In strict Agent output, `parameterDefinitions` and `pipelineSteps` provide compact native name/value arrays which runtime compiles to canonical strict `parameters` and keyed `pipeline` objects. Advanced callers may still pass `parameters` and `pipeline` directly; VBA `components` remains a native array. None of these forms is an escaped JSON string. The supported schema dialect is closed to `type`, `description`, `properties`, `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `const`, `default`, `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, and `maxItems`; unsupported assertion keywords are rejected instead of being advertised to the endpoint while ignored locally. A compact model-facing descriptor over 24,000 characters is omitted instead of partially advertised. Upsert/delete requires confirmation unless auto-confirm is enabled. Built-in, controller, and private backend ids are reserved; a stored collision remains on disk for manual recovery but is omitted from the runnable catalog. The catalog refreshes after confirmation or on the next user run.
+Agent mode manages custom tool definitions through `common.tools_definition_read/validate/upsert/delete`; `tools_definition_read` without id lists compact custom metadata and never loads a callable schema. Upsert creates a missing id or preserves omitted fields while updating an existing one, then validates the effective definition automatically. Optional `createOnly`/`updateOnly` modes retain strict existence semantics; `tools_validate` is only a no-save preflight. In strict Agent output, `parameterDefinitions` provides compact native entries which runtime compiles to a canonical strict `parameters` object. Advanced callers may still pass `parameters` directly; VBA `components` remains a native array. None of these forms is an escaped JSON string. The supported schema dialect is closed to `type`, `description`, `properties`, `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `const`, `default`, `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, and `maxItems`; unsupported assertion keywords are rejected instead of being advertised to the endpoint while ignored locally. A compact model-facing descriptor over 24,000 characters is omitted instead of partially advertised. Upsert/delete requires confirmation unless auto-confirm is enabled. Built-in, controller, and private backend ids are reserved; a stored collision remains on disk for manual recovery but is omitted from the runnable catalog. The catalog refreshes after confirmation or on the next user run.
 
 ## Skill Library
 
@@ -386,8 +370,7 @@ trace; a no-write answer does not claim confirmed changes. See the
 
 Use the Tools tab to create or edit reusable tools:
 
-- `New Tool` creates an editable custom tool.
-- `Pipeline JSON` defines ordered calls to existing tools.
+- `New Tool` creates an editable VBA tool draft.
 - `VBA components` edits the `.bas`/`.cls` sources of an `executor: "vba"` package.
 - `Dry Run` previews execution without changing the document.
 - `Run` executes the selected tool and counts as explicit user confirmation.

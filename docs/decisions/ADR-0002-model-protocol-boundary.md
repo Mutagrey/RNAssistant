@@ -154,7 +154,8 @@ skip/reset; no compatibility parser, silent truncation or historical rewrite.
 
 Legacy ToolDefinition lacks external-effect metadata. The context therefore uses
 an explicit audited local-read set intersected with built-in binding and existing
-effective safety; unknown/external tools and all pipelines remain singleton.
+effective safety; unknown/external tools remain singleton. Pipelines are disabled
+and excluded from the callable catalog by the separate stabilization scope decision.
 This is a conservative projection for the future parser, not a new executor
 policy. Ownership/removal: bookkeeping to AgentKernel in Phase 3; replace the
 positive registry with typed ToolPolicy and nested/external tests in Phase 4.

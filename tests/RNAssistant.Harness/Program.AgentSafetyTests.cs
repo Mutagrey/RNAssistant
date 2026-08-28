@@ -376,8 +376,7 @@ namespace RNAssistant.Harness
             var read = OfficeBuiltInToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.inspect");
             var write = OfficeBuiltInToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.add_sheet");
             var external = new ToolDefinition { Id = "external.lookup", BuiltIn = true };
-            var pipeline = new ToolDefinition { Id = "pipeline.read", Executor = "pipeline", PipelineJson =
-                "{\"steps\":[{\"id\":\"read\",\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}" };
+            var pipeline = new ToolDefinition { Id = "pipeline.read", Executor = "pipeline" };
             var scope = ConversationProtocolContext.Begin(null, new[] { read, write, external, pipeline }, null);
             AssertTrue(scope.Snapshot().BatchSafeReadOnlyToolIds.SequenceEqual(new[] { "excel.inspect" }),
                 "only audited local reads with safe metadata can batch; external/unclassified/pipelines stay singleton");
@@ -391,7 +390,6 @@ namespace RNAssistant.Harness
                 changed.Enabled = kind != "disabled";
                 changed.BuiltIn = kind != "custom";
                 if (kind == "vba" || kind == "pipeline") changed.Executor = kind;
-                if (kind == "pipeline") changed.PipelineJson = "{\"steps\":[{\"id\":\"write\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}";
                 var context = ConversationProtocolContext.Begin(null, new[] { changed, write }, null).Snapshot();
                 AssertTrue(context.IsComplete && context.BatchSafeReadOnlyToolIds.Count == 0, "batch permission cannot override " + kind + " metadata/binding");
             }
@@ -962,8 +960,7 @@ namespace RNAssistant.Harness
                 new ToolDefinition { Id = "test.write_named_read" },
                 new ToolDefinition { Id = "test.inspect", MutatesDocument = true },
                 new ToolDefinition { Id = "test.local", MutatesLocalState = true },
-                new ToolDefinition { Id = "test.pipeline", Executor = "pipeline",
-                    PipelineJson = "{\"steps\":[{\"id\":\"nested\",\"toolId\":\"test.inspect\",\"arguments\":{}}]}" }
+                new ToolDefinition { Id = "test.partial_mutation", MutatesDocument = true }
             };
             var builder = new RunSummaryBuilder(catalog);
             builder.Observe(new ToolCommand { ToolId = catalog[0].Id }, ToolResult.Ok("unknown; all writes applied"));
@@ -974,12 +971,12 @@ namespace RNAssistant.Harness
             AssertEqual(0, builder.Snapshot().WriteOk + builder.Snapshot().WriteError, "pending has no final effect");
             builder.Observe(new ToolCommand { ToolId = catalog[2].Id }, ToolResult.Ok("Local state saved"));
             var uncertain = new ToolCommand { ToolId = catalog[3].Id, ToolCallId = "same_model_id" };
-            builder.Observe(uncertain, ToolResult.PartialFailure("Some nested writes completed", null, "pipeline_partial_failure"));
+            builder.Observe(uncertain, ToolResult.PartialFailure("Some writes completed", null, "mutation_partial_failure"));
             builder.Observe(uncertain, ToolResult.Fail("Later result delivery failed"));
             builder.Observe(new ToolCommand { ToolId = catalog[1].Id }, ToolResult.Fail("No change", null, "write_rejected"));
             var snapshot = builder.Snapshot();
             AssertEqual("unknown", snapshot.ExecutionHealth, "unknown wins over both read and write errors");
-            AssertEqual(1, snapshot.WriteUnknown, "nested policy marks pipeline write; re-observation is not a second call");
+            AssertEqual(1, snapshot.WriteUnknown, "partial mutation is unknown; re-observation is not a second call");
             AssertEqual(1, snapshot.WriteError, "definite write error counted separately");
             AssertEqual(1, snapshot.ReadError, "read error is not a write error");
             builder.Observe(new ToolCommand { ToolId = catalog[1].Id, ToolCallId = "same_model_id" }, ToolResult.Ok("Saved"));
@@ -1523,9 +1520,7 @@ namespace RNAssistant.Harness
                     new { id = "nested", toolId = "excel.read_range", success = true, dataJson = nestedData }
                 }
             })), "tool");
-            AssertEqual(1, pipeline.Children.Count, "pipeline child retained");
-            AssertContains(pipeline.Children[0].DataJson, "truncated", "nested pipeline data is bounded");
-            AssertTrue(pipeline.Children[0].DataJson.Length < 10000, "nested pipeline preview is bounded");
+            AssertEqual(0, pipeline.Children.Count, "raw result steps do not create legacy pipeline activities");
         }
 
         private static void AgentToolResultFitsRemainingPromptBudget()

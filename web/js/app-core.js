@@ -69,7 +69,6 @@ var state = {
   promptEditorMode: "edit",
   toolEditorPage: "main",
   toolSchemaMode: "form",
-  toolPipelineMode: "form",
   vbaEditorMode: "edit",
   vbaEditorDirty: false,
   htmlWorkspaceMode: "preview",

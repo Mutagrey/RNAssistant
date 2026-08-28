@@ -43,8 +43,9 @@ namespace RNAssistant.Office.Services
             }
 
             foreach (var tool in _toolStore.Load().Where(s =>
-                string.Equals(s.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase)))
+                !string.Equals(s.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(s.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase))))
             {
                 if (!string.IsNullOrWhiteSpace(tool.Id) &&
                     !result.ContainsKey(tool.Id) &&

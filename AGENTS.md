@@ -55,7 +55,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 - `json_schema` строится только из текущего callable set; разрешён один request-local fallback в `json_object` при явном endpoint rejection и включённом `FallbackToJsonObject`.
 - Tool result role и Markdown instruction role настраиваются независимо. Provider reasoning хранится отдельно от conversation JSON/history.
 - Tool safety определяется `ToolDefinition` (`MutatesDocument`, `AgentCanRun`, `RequiresConfirmation`), не suffix-списками. Confirmation-required и VBA mutations подтверждаются при выключенном auto-confirm.
-- Pipeline вызывает существующие tool ids только через `OfficeToolExecutor`, без прямого доступа к adapters.
+- Pipelines отключены и отложены до отдельного решения Phase 11 после stable core. Не возвращай их в catalog, execution, authoring или UI и не поддерживай старые определения.
 - Unified discovery/read `common.capabilities_search/read` не смешивается с authoring `common.tools_definition_read/validate/upsert/delete`. Skills authoring использует `common.skills_upsert/delete`.
 - HTML и plan читаются через `common.resources_*`; mutations остаются отдельными tools. Не возвращай удалённые read ids.
 
@@ -79,7 +79,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 ## Размещение кода
 
 - `AssistantController` — orchestration only. Chat/session bridge methods — `AssistantController.Chats.cs`, context — `AssistantController.Context.cs`, reusable behavior — `Services`.
-- Dispatch — `OfficeToolExecutor`; pipeline — `PipelineToolExecutor`; VBA execution/guards/journal/packages — `VbaToolExecutor*`.
+- Dispatch — `OfficeToolExecutor`; VBA execution/guards/journal/packages — `VbaToolExecutor*`.
 - Новые bridge payload/response формы — typed DTO в `Contracts`, без anonymous response shapes и ad-hoc `JObject` parsing.
 - Host-neutral код не добавляй в VSTO/add-ins. Не меняй `*.Designer.cs` и VSTO metadata без необходимости.
 - Не раздувай существующие крупные файлы: новый самостоятельный behavior выноси в тематический файл/service. Partial split допустим как безопасный первый шаг, но не как оправдание нового монолита.

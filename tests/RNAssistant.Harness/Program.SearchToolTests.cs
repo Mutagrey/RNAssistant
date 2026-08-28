@@ -25,21 +25,6 @@ namespace RNAssistant.Harness
             AssertTrue(limited.Truncated, "truncated search flag");
         }
 
-        private static void PipelineExecutionValidatesArgumentsAndNestedBudget()
-        {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
-                var tool = BuildThreeStepPipelineTools()[0];
-                var invalid = executor.Execute(Command(tool.Id, "sheet", "Report", "unexpected", true), new[] { tool }, new AppSettings { AutoConfirmToolActions = true }, false, false);
-                AssertEqual("invalid_arguments", invalid.ErrorCode, "unexpected custom argument rejected");
-
-                var limited = executor.Execute(Command(tool.Id, "sheet", "Report"), new[] { tool }, new AppSettings { AutoConfirmToolActions = true, MaxAgentToolSteps = 2 }, false, false);
-                AssertTrue(!limited.Success, "nested budget stops pipeline");
-                AssertContains(limited.DataJson, "tool_step_limit_exceeded", "nested budget error is recorded");
-                AssertEqual(1, adapter.Executed.Count, "only one nested adapter step executes within budget");
-            });
-        }
-
         private static void VbaSearchRegexpPatchAndDeleteAreSafe()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

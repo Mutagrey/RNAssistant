@@ -1920,6 +1920,8 @@ Resource provider можно добавить без изменения AgentKer
 
 ## Phase 11 — Optional contours
 
+**Pipelines: отключены по явному решению пользователя (2026-08-28).** Это сокращение действующего scope в Phase 2, не начало Phase 11. Нет исполнения (включая manual/dry-run/confirmation resume), discovery, authoring и UI; parser/executor и обходы вложенных зависимостей удалены. Старые определения не поддерживаются, не мигрируются и не replay-ятся; файлы пользователя автоматически не удаляются. Pipelines не участвуют в gates Phases 3–10/12. Их возврат — отдельное решение после stable core через общие ToolRuntime/contracts с собственными тестами; совместимость со старым форматом не требуется.
+
 Phase 11 — отдельная ветка после stable core, не prerequisite Phase 12. Каждый контур переносится отдельной minor feature. Более ранний post-beta milestone допустим только по отдельному явному решению, со своими gates и без автоматического расширения scope первого stable.
 
 Порядок:

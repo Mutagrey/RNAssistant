@@ -1,6 +1,6 @@
 # VBA Tool Packages v1
 
-VBA tools нужны для узких повторяемых Office-действий, которых нет среди built-in tools и которые неудобно выразить pipeline. Для обычной автоматизации предпочтителен built-in или pipeline: VBA требует Trust Access, несёт больший риск и проверяется только в реальном Windows + Office runtime.
+VBA tools нужны для узких повторяемых Office-действий, которых нет среди built-in tools. Pipelines отключены на время стабилизации. Для обычной автоматизации предпочтителен built-in: VBA требует Trust Access, несёт больший риск и проверяется только в реальном Windows + Office runtime.
 
 ## Где хранятся tools
 

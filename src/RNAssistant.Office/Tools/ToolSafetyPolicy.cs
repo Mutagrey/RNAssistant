@@ -67,60 +67,9 @@ namespace RNAssistant.Office.Tools
 
         public static ToolSafetyProfile Resolve(ToolDefinition tool, IEnumerable<ToolDefinition> knownTools)
         {
-            var catalog = BuildCatalog(knownTools);
-            if (tool != null && !string.IsNullOrWhiteSpace(tool.Id))
-            {
-                catalog[tool.Id] = tool;
-            }
-            return Resolve(tool, catalog, new Dictionary<string, ToolSafetyProfile>(StringComparer.OrdinalIgnoreCase), new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
-        }
-
-        public static IDictionary<string, ToolSafetyProfile> ResolveAll(IEnumerable<ToolDefinition> tools)
-        {
-            var catalog = BuildCatalog(tools);
-            var profiles = new Dictionary<string, ToolSafetyProfile>(StringComparer.OrdinalIgnoreCase);
-            foreach (var pair in catalog)
-            {
-                Resolve(pair.Value, catalog, profiles, new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
-            }
-            return profiles;
-        }
-
-        private static bool CanAgentRunMutation(ToolDefinition tool, ToolSafetyProfile profile)
-        {
-            return tool != null &&
-                tool.BuiltIn &&
-                profile != null &&
-                profile.AgentCanRun;
-        }
-
-        private static ToolSafetyProfile Resolve(
-            ToolDefinition tool,
-            IDictionary<string, ToolDefinition> knownTools,
-            IDictionary<string, ToolSafetyProfile> cache,
-            ISet<string> path,
-            int depth)
-        {
-            if (tool == null)
-            {
-                return Invalid("Tool definition is missing.");
-            }
-
-            var id = tool.Id ?? string.Empty;
-            ToolSafetyProfile cached;
-            if (cache.TryGetValue(id, out cached))
-            {
-                return cached;
-            }
-            if (depth > 8)
-            {
-                return Invalid("Pipeline nesting limit exceeded: " + id);
-            }
-
-            if (!path.Add(id))
-            {
-                return Invalid("Pipeline cycle detected: " + id);
-            }
+            if (tool == null) return Invalid("Tool definition is missing.");
+            if (string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
+                return Invalid("Pipelines are disabled during stabilization.");
 
             var isVba = string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase);
             var profile = new ToolSafetyProfile
@@ -132,51 +81,26 @@ namespace RNAssistant.Office.Tools
                 AgentCanRun = tool.AgentCanRun,
                 RiskLevel = tool.RiskLevel
             };
-            if (profile.MutatesDocument && profile.RiskLevel <= 0)
-            {
-                profile.RiskLevel = 2;
-            }
-            if (isVba)
-            {
-                profile.RiskLevel = Math.Max(3, profile.RiskLevel);
-            }
-
-            if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
-            {
-                ApplyImplicitConfirmation(tool, profile);
-                return Complete(id, profile, cache, path);
-            }
-
-            PipelineDefinition pipeline;
-            string parseError;
-            if (!PipelineDefinitionParser.TryParse(id, tool.PipelineJson, out pipeline, out parseError))
-            {
-                return Complete(id, Invalid(parseError), cache, path);
-            }
-
-            foreach (var step in pipeline.Steps)
-            {
-                ToolDefinition nested;
-                if (!knownTools.TryGetValue(step.ToolId, out nested))
-                {
-                    return Complete(id, Invalid("Pipeline references unknown tool: " + step.ToolId), cache, path);
-                }
-
-                var nestedProfile = Resolve(nested, knownTools, cache, path, depth + 1);
-                if (!nestedProfile.Valid)
-                {
-                    return Complete(id, nestedProfile, cache, path);
-                }
-
-                profile.MutatesDocument |= nestedProfile.MutatesDocument;
-                profile.MutatesLocalState |= nestedProfile.MutatesLocalState;
-                profile.RequiresConfirmation |= nestedProfile.RequiresConfirmation;
-                profile.AgentCanRun &= nestedProfile.AgentCanRun;
-                profile.RiskLevel = Math.Max(profile.RiskLevel, nestedProfile.RiskLevel);
-            }
-
+            if (profile.MutatesDocument && profile.RiskLevel <= 0) profile.RiskLevel = 2;
+            if (isVba) profile.RiskLevel = Math.Max(3, profile.RiskLevel);
             ApplyImplicitConfirmation(tool, profile);
-            return Complete(id, profile, cache, path);
+            return profile;
+        }
+
+        public static IDictionary<string, ToolSafetyProfile> ResolveAll(IEnumerable<ToolDefinition> tools)
+        {
+            return (tools ?? new ToolDefinition[0])
+                .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
+                .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => Resolve(group.First(), null), StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static bool CanAgentRunMutation(ToolDefinition tool, ToolSafetyProfile profile)
+        {
+            return tool != null &&
+                tool.BuiltIn &&
+                profile != null &&
+                profile.AgentCanRun;
         }
 
         private static void ApplyImplicitConfirmation(ToolDefinition tool, ToolSafetyProfile profile)
@@ -185,29 +109,6 @@ namespace RNAssistant.Office.Tools
             {
                 profile.RequiresConfirmation = true;
             }
-        }
-
-        private static Dictionary<string, ToolDefinition> BuildCatalog(IEnumerable<ToolDefinition> tools)
-        {
-            var catalog = new Dictionary<string, ToolDefinition>(StringComparer.OrdinalIgnoreCase);
-            var toolList = (tools ?? new ToolDefinition[0])
-                .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
-                .ToList();
-            foreach (var tool in toolList)
-            {
-                if (!catalog.ContainsKey(tool.Id))
-                {
-                    catalog.Add(tool.Id, tool);
-                }
-            }
-            return catalog;
-        }
-
-        private static ToolSafetyProfile Complete(string id, ToolSafetyProfile profile, IDictionary<string, ToolSafetyProfile> cache, ISet<string> path)
-        {
-            path.Remove(id);
-            cache[id] = profile;
-            return profile;
         }
 
         private static ToolSafetyProfile Invalid(string error)

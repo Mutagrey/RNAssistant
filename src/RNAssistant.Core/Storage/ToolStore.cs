@@ -15,7 +15,6 @@ namespace RNAssistant.Core.Storage
     public sealed class ToolStore
     {
         private const long MaxToolMetadataFileBytes = 2100000;
-        private const long MaxPipelineFileBytes = 1100000;
         private const long MaxReadmeFileBytes = 2100000;
         private const long MaxComponentFileBytes = 4100000;
         private const long MaxComponentPackageBytes = 8100000;
@@ -46,24 +45,15 @@ namespace RNAssistant.Core.Storage
                     continue;
                 }
 
+                // Obsolete executors are skipped without loading sidecars or migrating user files.
+                if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase)) continue;
+
                 var directory = Path.GetDirectoryName(file);
                 tool.BuiltIn = false;
-                tool.Executor = string.IsNullOrWhiteSpace(tool.Executor) ? "pipeline" : tool.Executor;
                 tool.ArgumentSchemaJson = string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson;
                 tool.StoragePath = directory;
                 string sidecar;
-                if (string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
-                {
-                    tool.PipelineJson = string.Empty;
-                    if (!LoadVbaSources(directory, tool) || !TryApplyVbaManifest(tool)) continue;
-                }
-                else
-                {
-                    if (!TryReadOptional(Path.Combine(directory, "pipeline.json"), tool.PipelineJson, MaxPipelineFileBytes, out sidecar)) continue;
-                    tool.PipelineJson = sidecar;
-                    tool.Code = string.Empty;
-                    tool.Components = new List<VbaToolComponent>();
-                }
+                if (!LoadVbaSources(directory, tool) || !TryApplyVbaManifest(tool)) continue;
                 if (!TryReadOptional(Path.Combine(directory, "README.md"), tool.Readme, MaxReadmeFileBytes, out sidecar)) continue;
                 tool.Readme = sidecar;
                 if (!HasSupportedMetadata(tool)) continue;
@@ -141,6 +131,7 @@ namespace RNAssistant.Core.Storage
             var incoming = (tools ?? new ToolDefinition[0])
                 .Where(t => t != null && !t.BuiltIn && !string.IsNullOrWhiteSpace(t.Id))
                 .ToList();
+            foreach (var tool in incoming) RequireSupportedExecutor(tool);
             var incomingDirectories = new HashSet<string>(incoming.Select(ToolDirectory), StringComparer.OrdinalIgnoreCase);
             var existingTools = Load();
             foreach (var tool in incoming)
@@ -160,8 +151,15 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        private static void RequireSupportedExecutor(ToolDefinition tool)
+        {
+            if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException("Only VBA custom tools are supported. Pipelines are disabled during stabilization.");
+        }
+
         private void SaveTool(ToolDefinition tool)
         {
+            RequireSupportedExecutor(tool);
             var directory = ToolDirectory(tool);
             StorageFileSystem.EnsureRegularDirectory(_paths.ToolsDirectory);
             StorageFileSystem.EnsureRegularDirectory(Path.GetDirectoryName(directory));
@@ -188,7 +186,7 @@ namespace RNAssistant.Core.Storage
                 Name = string.IsNullOrWhiteSpace(tool.Name) ? tool.Id : tool.Name,
                 Description = tool.Description ?? string.Empty,
                 ArgumentSchemaJson = tool.ArgumentSchemaJson,
-                Executor = string.IsNullOrWhiteSpace(tool.Executor) ? "pipeline" : tool.Executor,
+                Executor = "vba",
                 RequiresConfirmation = tool.RequiresConfirmation,
                 MutatesDocument = tool.MutatesDocument,
                 MutatesLocalState = tool.MutatesLocalState,
@@ -214,9 +212,7 @@ namespace RNAssistant.Core.Storage
             };
 
             _json.Save(Path.Combine(directory, "tool.json"), metadata);
-            WriteOptional(
-                Path.Combine(directory, "pipeline.json"),
-                string.Equals(metadata.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) ? tool.PipelineJson : string.Empty);
+
             WriteVbaSources(directory, tool);
             WriteOptional(Path.Combine(directory, "README.md"), tool.Readme);
         }
@@ -369,13 +365,11 @@ namespace RNAssistant.Core.Storage
                 tool.Id.Any(char.IsWhiteSpace)) return false;
             if (!new[] { "Common", "Excel", "Word", "PowerPoint", "Outlook" }
                 .Any(host => string.Equals(host, tool.Host, StringComparison.OrdinalIgnoreCase))) return false;
-            if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase)) return false;
             if (tool.RiskLevel < 0 || tool.RiskLevel > 3 || tool.MutatesDocument && tool.RiskLevel == 0) return false;
             return (tool.Name ?? string.Empty).Length <= 200 &&
                 (tool.Description ?? string.Empty).Length <= 8000 &&
                 (tool.ArgumentSchemaJson ?? string.Empty).Length <= 64000 &&
-                (tool.PipelineJson ?? string.Empty).Length <= 250000 &&
                 (tool.Readme ?? string.Empty).Length <= 500000 &&
                 (tool.UseWhen ?? string.Empty).Length <= 4000 &&
                 (tool.DoNotUseWhen ?? string.Empty).Length <= 4000 &&

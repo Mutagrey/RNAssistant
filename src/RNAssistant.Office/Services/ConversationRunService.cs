@@ -572,7 +572,6 @@ namespace RNAssistant.Office.Services
                 tool.RiskLevel = profile.RiskLevel;
                 result.Add(tool);
             }
-            RemovePipelinesWithOmittedDependencies(result);
             return result.OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
@@ -589,27 +588,10 @@ namespace RNAssistant.Office.Services
                 .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
                 .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-            var selected = new List<ToolDefinition>();
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var pending = new Stack<string>();
-            pending.Push(rootToolId ?? string.Empty);
-            while (pending.Count > 0)
-            {
-                var id = pending.Pop();
-                ToolDefinition tool;
-                if (!visited.Add(id)) continue;
-                if (!catalog.TryGetValue(id, out tool)) return string.Empty;
-                selected.Add(tool);
-                if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) continue;
-
-                PipelineDefinition pipeline;
-                string error;
-                if (!PipelineDefinitionParser.TryParse(tool.Id, tool.PipelineJson, out pipeline, out error))
-                {
-                    return string.Empty;
-                }
-                foreach (var step in pipeline.Steps) pending.Push(step.ToolId);
-            }
+            ToolDefinition root;
+            if (!catalog.TryGetValue(rootToolId ?? string.Empty, out root) ||
+                string.Equals(root.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) return string.Empty;
+            var selected = new[] { root };
 
             var canonical = selected
                 .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
@@ -620,7 +602,6 @@ namespace RNAssistant.Office.Services
                     tool.Scope,
                     tool.ArgumentSchemaJson,
                     tool.Executor,
-                    tool.PipelineJson,
                     codeSha256 = Sha256Text(tool.Code),
                     tool.EntryPoint,
                     argumentOrder = tool.ArgumentOrder ?? new List<string>(),
@@ -652,29 +633,6 @@ namespace RNAssistant.Office.Services
                 return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty)))
                     .Replace("-", string.Empty)
                     .ToLowerInvariant();
-            }
-        }
-
-        private static void RemovePipelinesWithOmittedDependencies(List<ToolDefinition> tools)
-        {
-            var changed = true;
-            while (changed)
-            {
-                changed = false;
-                var ids = new HashSet<string>(tools.Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
-                for (var index = tools.Count - 1; index >= 0; index--)
-                {
-                    var tool = tools[index];
-                    if (!string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) continue;
-                    PipelineDefinition pipeline;
-                    string error;
-                    if (!PipelineDefinitionParser.TryParse(tool.Id, tool.PipelineJson, out pipeline, out error) ||
-                        pipeline.Steps.Any(step => !ids.Contains(step.ToolId)))
-                    {
-                        tools.RemoveAt(index);
-                        changed = true;
-                    }
-                }
             }
         }
 

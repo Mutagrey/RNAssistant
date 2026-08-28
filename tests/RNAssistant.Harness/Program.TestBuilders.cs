@@ -21,19 +21,29 @@ namespace RNAssistant.Harness
         private const string EmptyFormalToolSchema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
         private const string SheetFormalToolSchema = "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name.\"}},\"required\":[\"sheet\"],\"additionalProperties\":false}";
 
-        private static ToolDefinition CustomTool(string host, string id)
+        private static ToolDefinition CustomTool(string host, string id, string name = null)
         {
-            return new ToolDefinition
+            var manifest = new
             {
-                Id = id,
-                Host = host,
-                Name = id,
-                Executor = "pipeline",
-                ArgumentSchemaJson = EmptyFormalToolSchema,
-                Enabled = true,
-                BuiltIn = false,
-                PipelineJson = "{\"steps\":[]}"
+                protocolVersion = 1, id, host, name = name ?? id, description = "Test custom tool.",
+                packageVersion = "1.0.0", entryPoint = "Run", components = new[] { "RNA_Test" },
+                argumentOrder = new string[0], parameters = Newtonsoft.Json.Linq.JObject.Parse(EmptyFormalToolSchema),
+                mutatesDocument = true, agentCanRun = false, requiresConfirmation = true
             };
+            var code = "Option Explicit\n' <RNAssistantTool>\n' " + JsonConvert.SerializeObject(manifest) +
+                "\n' </RNAssistantTool>\nPublic Function Run() As String\n    Run = \"ok\"\nEnd Function";
+            var parsed = new VbaToolManifestParser().Parse(code);
+            AssertTrue(parsed.Success, "custom VBA fixture manifest: " + parsed.ErrorMessage);
+            return parsed.Tool;
+        }
+
+        private static Newtonsoft.Json.Linq.JArray ToolComponentsPayload(ToolDefinition tool)
+        {
+            return new Newtonsoft.Json.Linq.JArray(tool.Components.Select(component =>
+                new Newtonsoft.Json.Linq.JObject
+                {
+                    ["name"] = component.Name, ["type"] = component.Type, ["code"] = component.Code
+                }));
         }
 
         private static bool HasTool(IEnumerable<ToolDefinition> tools, string id)
@@ -73,71 +83,6 @@ namespace RNAssistant.Harness
             }
 
             return null;
-        }
-
-        private static List<ToolDefinition> BuildPipelineTools(bool requiresConfirmation)
-        {
-            return new List<ToolDefinition>
-            {
-                new ToolDefinition
-                {
-                    Id = "excel.make_report",
-                    Host = "Excel",
-                    Name = "Make report",
-                    Executor = "pipeline",
-                    Enabled = true,
-                    RequiresConfirmation = requiresConfirmation,
-                    ArgumentSchemaJson = SheetFormalToolSchema,
-                    PipelineJson = "{" +
-                        "\"steps\":[" +
-                        "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +
-                        "{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"{{args.sheet}}\",\"address\":\"A1\",\"values\":[[\"Month\",\"Sales\"]]}}" +
-                        "]}"
-                }
-            };
-        }
-
-        private static List<ToolDefinition> BuildStepPlaceholderPipelineTools()
-        {
-            return new List<ToolDefinition>
-            {
-                new ToolDefinition
-                {
-                    Id = "excel.chain_report",
-                    Host = "Excel",
-                    Name = "Chain report",
-                    Executor = "pipeline",
-                    Enabled = true,
-                    ArgumentSchemaJson = EmptyFormalToolSchema,
-                    PipelineJson = "{" +
-                        "\"steps\":[" +
-                        "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}," +
-                        "{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"Report\",\"address\":\"A1\",\"values\":[[\"{{steps.sheet.message}}\",\"{{steps.sheet.success}}\"]]}}" +
-                        "]}"
-                }
-            };
-        }
-
-        private static List<ToolDefinition> BuildThreeStepPipelineTools()
-        {
-            return new List<ToolDefinition>
-            {
-                new ToolDefinition
-                {
-                    Id = "excel.full_report",
-                    Host = "Excel",
-                    Name = "Full report",
-                    Executor = "pipeline",
-                    Enabled = true,
-                    ArgumentSchemaJson = SheetFormalToolSchema,
-                    PipelineJson = "{" +
-                        "\"steps\":[" +
-                        "{\"id\":\"sheet\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"{{args.sheet}}\"}}," +
-                        "{\"id\":\"table\",\"toolId\":\"excel.write_range\",\"arguments\":{\"kind\":\"table\",\"sheet\":\"{{args.sheet}}\",\"address\":\"A1\",\"values\":[[\"Header\"]]}}," +
-                        "{\"id\":\"chart\",\"toolId\":\"excel.upsert_chart\",\"arguments\":{\"sheet\":\"{{args.sheet}}\",\"sourceRange\":\"A1:B2\",\"chartType\":\"column\",\"title\":\"Report\"}}" +
-                        "]}"
-                }
-            };
         }
 
         private static ToolCommand Command(string id, params object[] keyValues)

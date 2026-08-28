@@ -97,42 +97,6 @@
       renderRunArguments();
     }
 
-    function syncPipelineDraft() {
-      try {
-        state.toolPipelineVisualDraft = editorJson("toolPipelineInput");
-        state.toolPipelineVisualDraft.steps = Array.isArray(state.toolPipelineVisualDraft.steps) ? state.toolPipelineVisualDraft.steps : [];
-        showJsonError("toolPipelineError", "");
-        return true;
-      } catch (error) {
-        showJsonError("toolPipelineError", "Ошибка JSON: " + error.message);
-        return false;
-      }
-    }
-
-    function renderPipeline() {
-      var root = $("toolPipelineVisual");
-      if (!root) return;
-      if (!state.toolPipelineVisualDraft && !syncPipelineDraft()) return;
-      var pipeline = state.toolPipelineVisualDraft;
-      root.innerHTML = "";
-      pipeline.steps.forEach(function (step, index) {
-        var card = document.createElement("div"); card.className = "pipeline-step-card";
-        var number = document.createElement("strong"); number.textContent = String(index + 1);
-        var id = document.createElement("input"); id.value = step.id || ""; id.placeholder = "ID шага";
-        var toolId = document.createElement("input"); toolId.value = step.toolId || ""; toolId.placeholder = "excel.read_range";
-        var args = document.createElement("textarea"); args.rows = 3; args.value = JSON.stringify(step.arguments || {}, null, 2); args.placeholder = "Arguments JSON";
-        var controls = document.createElement("div"); controls.className = "pipeline-step-actions";
-        [["↑", -1], ["↓", 1]].forEach(function (move) { var button = document.createElement("button"); button.type = "button"; button.className = "secondary"; button.textContent = move[0]; button.disabled = index + move[1] < 0 || index + move[1] >= pipeline.steps.length; button.addEventListener("click", function () { var target = index + move[1]; var item = pipeline.steps.splice(index, 1)[0]; pipeline.steps.splice(target, 0, item); setEditorJson("toolPipelineInput", pipeline); renderPipeline(); }); controls.appendChild(button); });
-        var remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary danger-soft"; remove.textContent = "Удалить"; remove.addEventListener("click", function () { pipeline.steps.splice(index, 1); setEditorJson("toolPipelineInput", pipeline); renderPipeline(); }); controls.appendChild(remove);
-        id.addEventListener("input", function () { step.id = id.value; setEditorJson("toolPipelineInput", pipeline); });
-        toolId.addEventListener("input", function () { step.toolId = toolId.value; setEditorJson("toolPipelineInput", pipeline); });
-        args.addEventListener("change", function () { try { var value = JSON.parse(args.value || "{}"); if (!value || Array.isArray(value) || typeof value !== "object") throw new Error("ожидается object"); step.arguments = value; showJsonError("toolPipelineError", ""); setEditorJson("toolPipelineInput", pipeline); } catch (error) { showJsonError("toolPipelineError", "Аргументы шага: " + error.message); } });
-        [number, id, toolId, args, controls].forEach(function (node) { card.appendChild(node); }); root.appendChild(card);
-      });
-      var add = document.createElement("button"); add.type = "button"; add.className = "secondary"; add.textContent = "+ Шаг"; add.addEventListener("click", function () { pipeline.steps.push({ id: "step" + (pipeline.steps.length + 1), toolId: "", arguments: {} }); setEditorJson("toolPipelineInput", pipeline); renderPipeline(); }); root.appendChild(add);
-      Array.prototype.slice.call(root.querySelectorAll("input,select,textarea,button")).forEach(function (control) { control.disabled = !!state.toolBuilderReadOnly; });
-    }
-
     function renderRunArguments() {
       var root = $("toolRunArgsVisual");
       if (!root) return;
@@ -152,28 +116,19 @@
       if (!Object.keys(properties).length) root.appendChild(createResourceEmptyState("У инструмента нет параметров."));
     }
 
-    function setMode(kind, mode) {
-      var isSchema = kind === "schema";
-      var editorId = isSchema ? "toolSchemaInput" : "toolPipelineInput";
-      var errorId = isSchema ? "toolSchemaError" : "toolPipelineError";
-      var valid = isSchema ? syncSchemaDraft() : syncPipelineDraft();
+    function setMode(mode) {
+      var valid = syncSchemaDraft();
       if (mode === "json" && valid) {
-        var formatted = formatJson(editorId, errorId);
-        if (formatted) {
-          if (isSchema) state.toolSchemaVisualDraft = formatted;
-          else {
-            state.toolPipelineVisualDraft = formatted;
-            state.toolPipelineVisualDraft.steps = Array.isArray(formatted.steps) ? formatted.steps : [];
-          }
-        }
+        var formatted = formatJson("toolSchemaInput", "toolSchemaError");
+        if (formatted) state.toolSchemaVisualDraft = formatted;
       }
       if (mode === "form" && !valid) mode = "json";
-      if (isSchema) state.toolSchemaMode = mode; else state.toolPipelineMode = mode;
-      Array.prototype.slice.call(document.querySelectorAll(isSchema ? ".tool-schema-mode" : ".tool-pipeline-mode")).forEach(function (button) { button.classList.toggle("active", button.getAttribute(isSchema ? "data-tool-schema-mode" : "data-tool-pipeline-mode") === mode); });
-      var visual = $(isSchema ? "toolSchemaVisual" : "toolPipelineVisual"); if (visual) visual.classList.toggle("hidden", mode !== "form");
-      Array.prototype.slice.call(document.querySelectorAll(isSchema ? ".tool-schema-json" : ".tool-pipeline-json")).forEach(function (node) { node.classList.toggle("hidden", mode !== "json"); });
-      if (mode === "form") { if (isSchema) renderSchema(); else renderPipeline(); }
-      else if (typeof refreshCodeEditors === "function") refreshCodeEditors([editorId]);
+      state.toolSchemaMode = mode;
+      Array.prototype.slice.call(document.querySelectorAll(".tool-schema-mode")).forEach(function (button) { button.classList.toggle("active", button.getAttribute("data-tool-schema-mode") === mode); });
+      var visual = $("toolSchemaVisual"); if (visual) visual.classList.toggle("hidden", mode !== "form");
+      Array.prototype.slice.call(document.querySelectorAll(".tool-schema-json")).forEach(function (node) { node.classList.toggle("hidden", mode !== "json"); });
+      if (mode === "form") renderSchema();
+      else if (typeof refreshCodeEditors === "function") refreshCodeEditors(["toolSchemaInput"]);
     }
 
     function readRunArguments() {
@@ -183,26 +138,18 @@
     }
 
     function bind() {
-      Array.prototype.slice.call(document.querySelectorAll(".tool-schema-mode")).forEach(function (button) { button.addEventListener("click", function () { setMode("schema", button.getAttribute("data-tool-schema-mode")); }); });
-      Array.prototype.slice.call(document.querySelectorAll(".tool-pipeline-mode")).forEach(function (button) { button.addEventListener("click", function () { setMode("pipeline", button.getAttribute("data-tool-pipeline-mode")); }); });
+      Array.prototype.slice.call(document.querySelectorAll(".tool-schema-mode")).forEach(function (button) { button.addEventListener("click", function () { setMode(button.getAttribute("data-tool-schema-mode")); }); });
       $("formatToolSchemaButton").addEventListener("click", function () {
         var value = formatJson("toolSchemaInput", "toolSchemaError");
         if (value) state.toolSchemaVisualDraft = value;
       });
-      $("formatToolPipelineButton").addEventListener("click", function () {
-        var value = formatJson("toolPipelineInput", "toolPipelineError");
-        if (value) {
-          state.toolPipelineVisualDraft = value;
-          state.toolPipelineVisualDraft.steps = Array.isArray(value.steps) ? value.steps : [];
-        }
-      });
+
     }
 
     return {
       bind: bind,
       readRunArguments: readRunArguments,
       setMode: setMode,
-      syncPipelineDraft: syncPipelineDraft,
       syncSchemaDraft: syncSchemaDraft
     };
   }
