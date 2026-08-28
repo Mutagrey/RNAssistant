@@ -1026,11 +1026,11 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Do something.", session, NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 19 },
+                    "Do something.", session, NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 20 },
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
 
-                AssertEqual(20, requests.Count, "twenty total responses with initial request plus nineteen repairs");
-                AssertContains(result.AssistantText, "после 19 попыток", "current diagnostic counts repairs, not total requests");
+                AssertEqual(20, requests.Count, "twenty total responses including the initial request");
+                AssertContains(result.AssistantText, "после 20 попыток", "diagnostic counts total protocol responses");
                 AssertEqual("failed", result.RunStatus, "all invalid responses fail the run");
                 AssertRuntimeExecutionSummary(result, session, "clean", 0, 0, 0);
                 AssertTrue(string.IsNullOrWhiteSpace(result.ResponseStatus), "no accepted model status after exhausted repair");
@@ -1114,8 +1114,8 @@ namespace RNAssistant.Harness
                     "Do something.", NewSession(adapter), NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 99 },
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
 
-                AssertEqual(21, calls, "initial request plus at most twenty repairs");
-                AssertContains(result.AssistantText, "после 20 попыток", "clamped repair diagnostic");
+                AssertEqual(20, calls, "at most twenty protocol responses including the initial request");
+                AssertContains(result.AssistantText, "после 20 попыток", "clamped total-attempt diagnostic");
             });
         }
 
@@ -1525,7 +1525,7 @@ namespace RNAssistant.Harness
                     new AppSettings { MaxAgentFormatRetries = 1 }, executor.GetControllerTools().ToList(), null)
                     .GetAwaiter().GetResult();
                 AssertContains(empty.AssistantText, "Ответ модели не выполнен", "chat reports bounded structured-response failure");
-                AssertEqual(2, emptyCalls, "chat uses the same bounded format repair loop");
+                AssertEqual(1, emptyCalls, "Chat limit includes the initial empty response");
             });
         }
 

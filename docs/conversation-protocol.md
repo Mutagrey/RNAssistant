@@ -79,7 +79,7 @@ With SSE enabled, transport chunks still contain that raw JSON envelope. The liv
 
 Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; immediately before normal validation, runtime removes those optional nulls and applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.
 
-When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json_schema` on the first raw call of a logical step, ModelProtocol retries once with `json_object` and keeps that choice for the rest of the run; the saved selection is unchanged. An explicit rejection during a later format repair still fails under the legacy policy; remaining Phase 2 work covers that boundary. This is not model routing or general error retry.
+When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json_schema`, ModelProtocol retries once with `json_object`, including during format repair, and keeps that choice for the rest of the run. The exact current prompt is reused and the saved selection is unchanged. This compatibility fallback has its own limit and is not model routing.
 
 Tool call:
 
@@ -132,18 +132,18 @@ The parser accepts at most 32 calls, requires a non-empty user-facing `message` 
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. The pending id, cumulative iteration/tool-step counters, and execution fingerprint of that tool and its pipeline dependencies are persisted with the chat, so confirmation survives a WebView or Office restart but cannot execute a replaced definition. Cosmetic changes to unrelated tools do not invalidate it. A new request in that chat is blocked until the action is confirmed or cancelled. After confirmation, the model receives that result and chooses the remaining work normally using the remaining original budget. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
 
-If parsing fails, `ModelProtocolClient` makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20 retries **plus the initial request**). Phase 2A preserves that legacy maximum of 21 requests; the target total 1–20 attempt limit remains R20 / Phase 2B. Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored in accepted history. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. A refusal is valid user-facing content only as `status:"refused"` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
+`ModelProtocolClient` permits `MaxAgentFormatRetries` total protocol responses per logical step (default 10, normalized 1–20), **including the first response**. Limit 1 means no format repair; limit 20 accepts a valid twentieth response and stops after twenty invalid responses. Every repair starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored in accepted history. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. A refusal is valid user-facing content only as `status:"refused"` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
 The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections plus `ChatSystemPrompt`, `PlanSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
 
-## ModelProtocol boundary (Phase 2A)
+## ModelProtocol boundary (Phases 2A–2B)
 
 One `IModelProtocol` instance serves a conversation run. `GetResponseAsync` receives
 the accepted materialized messages, current callable schemas, runnable catalog and
 request-local transport options. It returns an accepted `AgentResponse` and only
 that completion's metadata, or a typed `ModelProtocolFailure`. Provider failures,
-cancellation, prompt-budget rejection and protocol exhaustion are distinct; no
-provider backoff or general transport retry has been added in this substage.
+cancellation, prompt-budget rejection and protocol exhaustion are distinct. The
+separate bounded provider retry policy is defined below.
 
 The loop owns step ids, tool execution, summaries and transcript append. Core owns
 raw attempt ids, parsing, fixed repair instructions, format fallback and the
@@ -160,10 +160,38 @@ or load/evict tool schemas between attempts.
 
 The nonserialized `Failure.Cause` adapter rethrows provider/cancellation and
 infrastructure exceptions into the existing controller handling until the Phase 3
-AgentKernel switch. V2 parsing/history, response status and legacy retry semantics
-remain current. V3 and its compatibility adapter are not introduced by Phase 2A.
+AgentKernel switch. V2 parsing/history and response status remain current. V3 and
+its compatibility adapter are not introduced by Phases 2A/2B.
 See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) and the
 [validation evidence](stabilization/PHASE_2A_MODEL_PROTOCOL.md).
+
+## Retry policy (Phase 2B)
+
+| Outcome | Action | Budget |
+|---|---|---|
+| Received completion fails the v2 contract | Retry from accepted prompt + one fresh repair instruction | Total 1–20 responses, including first |
+| Typed timeout, network failure or HTTP 5xx/server failure | Retry the exact current prompt after a cancellable delay | Two extra requests for the whole step, delays 1s then 2s |
+| Explicit `json_schema` rejection with fallback enabled | Switch to `json_object`, including during repair | One extra request, independent of other budgets |
+| Authorization/other HTTP errors, 429, size limits, invalid provider envelope | Typed provider failure | No automatic retry |
+| Cancellation | Typed cancelled failure | No further dispatch or acceptance |
+
+The provider budget does not reset between format attempts; the next logical
+step gets a new budget. With protocol limit N, no more than N+3 raw completion
+requests can be made (maximum 23). Provider failures do not create format-repair
+messages or consume protocol response slots. This wrapper does not change the
+LLM adapter's HTTP classification, configure endpoint failover or retry tools.
+
+The `MaxAgentFormatRetries` settings/bridge key and its stored number are kept;
+the number now means total responses, not additional corrections. The form label
+and tooltip state that distinction. Default 10 and normalization to 1–20 remain.
+No second setting key or settings migration is introduced.
+
+Every raw attempt retains step correlation and gets a distinct modelAttemptId.
+Existing rejected trace `Attempt` stays zero-based; repair instructions and the
+exhaustion diagnostic use one-based total response counts. Cancellation during
+backoff, a final rejection or a late completion cannot turn into acceptance.
+Provider retries can repeat billable generation after a lost response (R25).
+See [Phase 2B evidence](stabilization/PHASE_2B_RETRY_POLICY.md).
 
 ## Tool result
 

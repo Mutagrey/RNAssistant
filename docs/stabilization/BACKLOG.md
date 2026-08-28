@@ -9,8 +9,8 @@
 | 1B | Causal trace и correlation на model/tool/domain/UI boundaries | done; 6/6 targeted, full 320/321 с known baseline failure R22; ограничения в PHASE_1B_CAUSAL_TRACE |
 | 1C | Transitional completion guard / runtime execution health | done (host-neutral); red 4 cases → green; 61 targeted harness + 8 UI pass; Windows/controller/WebView не проверены |
 | 2A | Выделить IModelProtocol, raw attempts/repair/fallback и typed failure | done; 68 targeted harness pass; v2 и legacy retry semantics сохранены |
-| 2B | Общий лимит 1–20 attempts, provider/protocol retry policy | next, отдельное изменение; R20, fallback при rejection во время repair; не менять tools |
-| 2C | v3 parser/schema, явный v2 adapter, canonical v3 doc и cutover | После retry policy; Phase 2 DoD пока не выполнен полностью |
+| 2B | Общий лимит 1–20 attempts, provider/protocol retry policy | done; 74 targeted harness pass, 4 red→green cases; R20 закрыт host-neutral, fallback работает во время repair |
+| 2C | v3 parser/schema, явный v2 adapter, canonical v3 doc и cutover | next, отдельное изменение; Phase 2 DoD пока не выполнен полностью |
 | 3 | Минимальный AgentKernel и runtime-owned RunSummary | Вся Phase 2 завершена, не только boundary extraction |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests смены активной книги и lifetime |
@@ -22,8 +22,8 @@
 | 11 | Optional contours | Только после отдельной миграции; не расширять release-critical scope |
 | 12 | Release qualification и packaging | Все gates master plan; Windows x64 + Office x64 + VS 2022 |
 
-R20: текущий `MaxAgentFormatRetries=20` разрешает initial + 20 retries. В Phase 2
-реализовать явный общий лимит attempts из master plan; extraction 2A не меняет настройку.
+R20 закрыт в 2B: `MaxAgentFormatRetries=20` допускает ровно двадцать protocol responses,
+включая первую. Provider failures и один schema fallback имеют отдельные бюджеты.
 R21: на Windows проверить production controller trace wiring, COM boundaries и
 реальную WebView delivery; `ui.projected` сейчас фиксирует только построение DTO.
 R22: тест `tools: compact catalog rejects removed aliases` ожидает 16 Excel tools,
@@ -35,10 +35,12 @@ Phase 4; counts mutating invocations не означают число измен
 R24: проверить traffic/memory budget повторной передачи media через реальные
 endpoint retries; одна materialization сохраняется до окончания protocol step,
 затем release в `finally`. URI/provider/CAS не менялись.
+R25: перед release проверить реальную latency, timeout и стоимость генерации при
+двух provider retries; raw ceiling N+3 на step, не на весь conversation run.
 Phase 1 host-neutral containment выполнена; production controller, Office и WebView
 qualification остаются в R21/R16 и не объявляются выполненными.
 
-Phase 2A не вводит общий provider retry/backoff, новый parser или runtime lifecycle.
+Phase 2B добавляет bounded provider retry/backoff, но не новый parser или lifecycle.
 `Failure.Cause` временно сохраняет прежний controller exception path; удалить при
 переключении на AgentKernel в Phase 3, не вводить второй loop.
 

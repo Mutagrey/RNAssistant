@@ -7,11 +7,13 @@ Phase 1B проверяет host-neutral correlation; production controller/Offi
 не исполнялись. Known baseline failure указан отдельно от новых trace tests.
 Phase 1C проверяет runtime guard, replay/DTO и JS-проекцию без Windows execution.
 Phase 2A проверяет ModelProtocol с fake endpoint; live tLLM не проверен.
+Phase 2B закрывает R20 на host-neutral tests; provider retries проверены с fake
+transport и injected delay, без реального network/backoff qualification.
 
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |
 |---|---|---|---|---|---|
 | R01 | P0 | Model completed скрывает write error/unknown или отсутствие write | AgentKernel / Application / UI | Guard Phase 1C: red→green + отдельный UI warning; RunSummary Phase 3; production validation R21 | contained host-neutral 1C; Windows qualification open |
-| R02 | P1 | tLLM protection вместо JSON | ModelProtocol | 2A: typed boundary, clean repair и fake protection/HTML tests; retry policy/v3 ещё в Phase 2, live endpoint qualification отдельно | contained for fake content 2A; open |
+| R02 | P1 | tLLM protection вместо JSON | ModelProtocol | 2A/2B: typed boundary, clean repair, общий лимит и fake protection/HTML tests; v3 ещё в Phase 2, live endpoint qualification отдельно | contained for fake content 2A/2B; open |
 | R03 | P0 | Write применён, ответ потерян | Domain/Host | unknown + reconciliation, Phases 4–7 | open |
 | R04 | P0 | Patch направлен не в ту книгу | HostRuntime | Bound DocumentSession, Phase 5 | open |
 | R05 | P1 | LRU удалил schema | ToolPack | No eviction in run, Phase 8 | open |
@@ -29,11 +31,12 @@ Phase 2A проверяет ModelProtocol с fake endpoint; live tLLM не пр�
 | R17 | P2 | Чужие незакоммиченные изменения попадут в Phase 0 | Governance | Проверить исходные файлы и stage только явный список Phase 0 | monitored |
 | R18 | P2 | Source archive без Git потеряет build identity | Build | Явные SHA/branch/tree-state properties; отказ вместо скрытого fallback | documented |
 | R19 | P1 | Release script ещё не выполнен на release workstation | Release process | Проверить PowerShell workflow до milestone; обычные commits его не запускают | open |
-| R20 | P1 | Лимит 20 retries допускает 21 model request вместо 20 attempts | ModelProtocol | Phase 2B: общий лимит attempts и provider policy; 2A переносит прежнюю семантику, characterization остаётся green | reproduced 1A; preserved 2A; open |
+| R20 | P1 | Лимит 20 retries допускал 21 invalid response вместо 20 attempts | ModelProtocol | Phase 2B: initial включён в total 1–20, valid на 20 принимается; provider retries/fallback считаются отдельно; red→green boundary tests | resolved host-neutral 2B |
 | R21 | P2 | Optional trace может быть неполным; controller wiring/реальная UI delivery не проверены | Diagnostics / Application | Fixed-stage error log без payload; no effect decisions from trace; `ui.projected` — только DTO, CAS failure допускает пропуск marker после release lease; Windows validation в Phases 1C/5–9/12 | documented 1B; open |
 | R22 | P1 | Full harness: compact catalog ожидает 16 Excel tools, получает 15 | ToolPack / Tests | Проверить актуальный catalog и expectation в Phase 8; targeted failure воспроизведён на baseline a24feb1 в отдельном disposable worktree | reproduced baseline + 1B; open |
 | R23 | P2 | Legacy ToolResult не всегда различает частичный/неизвестный effect; успешный mutating call может быть no-op или иметь слабую domain verification | ToolRuntime / Domains | 1C консервативно маркирует partial/missing/uncertain как unknown; counts — top-level вызовы, не document diff; заменить adapter typed evidence Phase 4, domain qualification Phases 6/7 | documented 1C; open |
 | R24 | P2 | Media сохраняются и могут отправляться повторно на protocol repair: больше traffic и дольше lifetime | ModelProtocol / Resources | Один materialized accepted prompt, bounded retry/budget и release в finally; fake image integration pass; проверить реальные media/endpoint budgets до qualification Phase 12 | documented 2A; open |
+| R25 | P2 | Provider retry после timeout/потери ответа может повторить оплачиваемую генерацию и увеличить latency | ModelProtocol / Release | Не более двух transient retries на весь step, delays 1s/2s с cancellation; raw ceiling N+3; no Office tool replay, no auth/429 retry; проверить реальные timeout/media/endpoint budgets до Phase 12 | documented 2B; open |
 
 Новые дефекты вне текущей фазы фиксировать здесь или в [BACKLOG.md](BACKLOG.md),
 не исправлять попутно. Исключение P0 требует отдельного явно ограниченного изменения.

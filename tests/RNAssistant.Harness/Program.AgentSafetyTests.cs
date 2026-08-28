@@ -20,11 +20,11 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static ModelProtocolRequest NewProtocolRequest(int retries = 2, bool strict = false)
+        private static ModelProtocolRequest NewProtocolRequest(int attempts = 2, bool strict = false)
         {
             return new ModelProtocolRequest
             {
-                Settings = new AppSettings { MaxAgentFormatRetries = retries, FallbackToJsonObject = true,
+                Settings = new AppSettings { MaxAgentFormatRetries = attempts, FallbackToJsonObject = true,
                     AgentResponseMode = strict ? AgentResponseModes.JsonSchema : AgentResponseModes.JsonObject },
                 AcceptedMessages = new[]
                 {
@@ -54,7 +54,7 @@ namespace RNAssistant.Harness
                 "",
                 "{\"status\":\"completed\",\"message\":\"REJECTED_TRUNCATED"
             };
-            var request = NewProtocolRequest(invalid.Length);
+            var request = NewProtocolRequest(invalid.Length + 1);
             var originalPrompt = JsonConvert.SerializeObject(request.AcceptedMessages);
             var trace = new List<LlmTraceRecord>();
             var attemptIds = new HashSet<string>();
@@ -71,7 +71,14 @@ namespace RNAssistant.Harness
                     "every raw attempt starts from the same accepted messages");
                 AssertEqual(request.AcceptedMessages.Count + (calls == 1 ? 0 : 1), prompt.Count,
                     "repairs neither accumulate nor append rejected responses");
-                if (calls > 1) AssertContains(prompt.Last().Content, "FORMAT_REPAIR:", "one transient repair instruction");
+                if (calls > 1)
+                {
+                    const string prefix = "FORMAT_REPAIR:\n";
+                    AssertTrue(prompt.Last().Content.StartsWith(prefix, StringComparison.Ordinal), "one transient repair instruction");
+                    var repair = JObject.Parse(prompt.Last().Content.Substring(prefix.Length));
+                    AssertEqual(calls, (int)repair["attempt"], "repair names the total protocol attempt, including the initial response");
+                    AssertEqual(invalid.Length + 1, (int)repair["max_attempts"], "repair reports the configured total limit");
+                }
                 AssertTrue(prompt.All(message => string.IsNullOrEmpty(message.ReasoningContent)), "rejected reasoning never enters prompt");
                 AssertEqual(stepId, options.TraceStepId, "one logical step across repairs");
                 AssertTrue(attemptIds.Add(options.TraceModelAttemptId), "distinct raw attempt identity");
@@ -117,7 +124,7 @@ namespace RNAssistant.Harness
             var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
             AssertEqual(ModelProtocolFailureKind.ProtocolExhausted, result.Failure.Kind, "format exhaustion is a typed failure");
             AssertTrue(result.Response == null && result.Completion == null, "no rejected completion crosses the result boundary");
-            AssertEqual(2, calls, "Phase 2A preserves one initial request plus configured retries (R20)");
+            AssertEqual(1, calls, "one configured protocol attempt includes the initial response");
             AssertEqual(calls, trace.Count(record => record.Type == "rejected"), "all rejected attempts remain diagnostic evidence");
             AssertTrue(trace.All(record => record.Type != "accepted"), "exhaustion has no accepted response");
             AssertTrue(!JsonConvert.SerializeObject(result).Contains("REJECTED_"), "failure projection excludes raw bodies and reasoning");
@@ -126,36 +133,45 @@ namespace RNAssistant.Harness
         private static async Task ModelProtocolSeparatesProviderFailures()
         {
             foreach (var kind in new[] { LlmFailureKind.Timeout, LlmFailureKind.Network,
-                LlmFailureKind.TransientServer, LlmFailureKind.RateLimited })
+                LlmFailureKind.TransientServer, LlmFailureKind.RateLimited, LlmFailureKind.Http,
+                LlmFailureKind.InvalidResponse, LlmFailureKind.RequestTooLarge, LlmFailureKind.ResponseTooLarge })
             foreach (var afterInvalid in new[] { false, true })
             {
                 var request = NewProtocolRequest(3, true);
-                var failure = new LlmRequestException(kind, "provider failure", statusCode: 503);
+                var transient = kind == LlmFailureKind.Timeout || kind == LlmFailureKind.Network || kind == LlmFailureKind.TransientServer;
+                var failure = new LlmRequestException(kind, "provider failure", statusCode:
+                    kind == LlmFailureKind.TransientServer ? 503 : kind == LlmFailureKind.RateLimited ? 429 : kind == LlmFailureKind.Http ? 401 : (int?)null);
                 var calls = 0;
+                var delays = new List<TimeSpan>();
+                string retryPrompt = null;
                 var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
                 {
                     calls++;
                     if (afterInvalid && calls == 1) return Task.FromResult(new LlmCompletionResult { Content = "invalid response" });
+                    var currentPrompt = JsonConvert.SerializeObject(messages);
+                    if (retryPrompt == null) retryPrompt = currentPrompt;
+                    AssertEqual(retryPrompt, currentPrompt, "provider retries do not create or change a repair prompt");
                     throw failure;
-                });
+                }, (delay, token) => { delays.Add(delay); return Task.CompletedTask; });
                 var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
                 AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "provider failure is not format exhaustion");
                 AssertEqual(kind, result.Failure.ProviderKind.Value, "transport failure kind is retained");
-                AssertEqual(503, result.Failure.StatusCode.Value, "transport status is retained");
+                AssertEqual(failure.StatusCode, result.Failure.StatusCode, "transport status is retained");
                 AssertTrue(ReferenceEquals(failure, result.Failure.Cause), "legacy exception adapter retains the original exception");
                 AssertTrue(result.Response == null && result.Completion == null, "transport failure has no accepted model response");
-                AssertEqual(afterInvalid ? 2 : 1, calls, "transport failures never enter another protocol retry or fallback");
+                AssertEqual((afterInvalid ? 1 : 0) + (transient ? 3 : 1), calls, "only transient transport failures retry, within a separate bounded budget");
+                AssertEqual(transient ? "1,2" : "", string.Join(",", delays.Select(delay => delay.TotalSeconds)), "transient retries use cancellable 1s/2s delays");
                 AssertEqual(LlmResponseFormats.JsonSchema, request.Options.ResponseFormat, "only explicit schema rejection permits fallback");
             }
         }
 
         private static async Task ModelProtocolCancellationStopsAttempts()
         {
-            // Before dispatch, while waiting for a response, and after rejected diagnostics.
-            foreach (var point in new[] { 0, 1, 2 })
+            // Before dispatch, during response, at the final rejection, and a late valid response.
+            foreach (var point in new[] { 0, 1, 2, 3 })
             using (var cancellation = new CancellationTokenSource())
             {
-                var request = NewProtocolRequest();
+                var request = NewProtocolRequest(1);
                 var calls = 0;
                 request.Options.TraceSink = record => { if (point == 2 && record.Type == "rejected") cancellation.Cancel(); };
                 var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
@@ -165,6 +181,11 @@ namespace RNAssistant.Harness
                     {
                         cancellation.Cancel();
                         return Task.FromCanceled<LlmCompletionResult>(token);
+                    }
+                    if (point == 3)
+                    {
+                        cancellation.Cancel();
+                        return Task.FromResult(new LlmCompletionResult { Content = "{\"status\":\"completed\",\"message\":\"Late response.\",\"tool_calls\":[]}" });
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = "invalid response" });
                 });
@@ -224,6 +245,131 @@ namespace RNAssistant.Harness
                 AssertEqual(enabled ? 2 : 1, calls, "fallback requires opt-in and never repeats");
                 AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "fallback failure remains a provider failure");
                 AssertTrue(result.Completion == null, "failed fallback cannot produce an accepted completion");
+            }
+        }
+
+        private static async Task ModelProtocolFallbackDuringRepair()
+        {
+            var request = NewProtocolRequest(2, true);
+            var formats = new List<string>();
+            var prompts = new List<string>();
+            var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+            {
+                formats.Add(options.ResponseFormat);
+                prompts.Add(JsonConvert.SerializeObject(messages));
+                if (formats.Count == 2) throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema rejected during repair");
+                return Task.FromResult(new LlmCompletionResult
+                {
+                    Content = formats.Count == 1 ? "invalid model response" :
+                        "{\"status\":\"completed\",\"message\":\"Accepted after fallback.\",\"tool_calls\":[]}"
+                });
+            });
+            var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
+            AssertTrue(result.Failure == null, "explicit schema rejection during repair permits the one local fallback");
+            AssertEqual("json_schema,json_schema,json_object", string.Join(",", formats), "fallback does not consume a protocol response attempt");
+            AssertEqual(prompts[1], prompts[2], "fallback reuses the exact current repair prompt");
+            AssertEqual("Accepted after fallback.", result.Response.Message, "the second protocol response can accept");
+        }
+
+        private static async Task ModelProtocolProviderRecoveryKeepsProtocolSlots()
+        {
+            var request = NewProtocolRequest(2);
+            var prompts = new List<string>();
+            var trace = new List<LlmTraceRecord>();
+            var attempts = new HashSet<string>();
+            request.Options.TraceSink = trace.Add;
+            var delays = new List<TimeSpan>();
+            var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+            {
+                prompts.Add(JsonConvert.SerializeObject(messages));
+                AssertTrue(attempts.Add(options.TraceModelAttemptId), "every raw request has a distinct model attempt id");
+                options.TraceRequestId = "recovered-request-" + prompts.Count;
+                if (prompts.Count == 1 || prompts.Count == 3)
+                    throw new LlmRequestException(prompts.Count == 1 ? LlmFailureKind.Timeout : LlmFailureKind.Network, "temporary failure");
+                return Task.FromResult(new LlmCompletionResult { Content = prompts.Count == 2 ? "invalid response" :
+                    "{\"status\":\"completed\",\"message\":\"Recovered.\",\"tool_calls\":[]}" });
+            }, (delay, token) => { delays.Add(delay); return Task.CompletedTask; });
+            var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
+            AssertTrue(result.Failure == null, "two transient failures do not consume either protocol response slot");
+            AssertEqual("Recovered.", result.Response.Message, "valid second response accepts");
+            AssertEqual(4, prompts.Count, "two responses plus two provider retries");
+            AssertEqual(prompts[0], prompts[1], "initial provider retry keeps the exact accepted prompt");
+            AssertEqual(prompts[2], prompts[3], "repair provider retry keeps the exact repair prompt");
+            AssertEqual("1,2", string.Join(",", delays.Select(delay => delay.TotalSeconds)), "provider budget is not reset by a protocol rejection");
+            AssertEqual(1, trace.Count(record => record.Type == "rejected"), "only the received invalid completion is a protocol rejection");
+            AssertEqual(1, trace.Count(record => record.Type == "accepted"), "only the recovered completion accepts");
+            AssertEqual("recovered-request-4", trace.Last().RequestId, "acceptance identifies the recovered request");
+        }
+
+        private static async Task ModelProtocolProviderBudgetSpansWholeStep()
+        {
+            var calls = 0;
+            var delays = new List<TimeSpan>();
+            var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+            {
+                calls++;
+                if (calls == 1 || calls == 3 || calls == 5 || calls == 6)
+                    throw new LlmRequestException(LlmFailureKind.TransientServer, "gateway unavailable", statusCode: 502);
+                return Task.FromResult(new LlmCompletionResult { Content = calls < 5 ? "invalid response" :
+                    "{\"status\":\"completed\",\"message\":\"Next step.\",\"tool_calls\":[]}" });
+            }, (delay, token) => { delays.Add(delay); return Task.CompletedTask; });
+            var failed = await protocol.GetResponseAsync(NewProtocolRequest(3), null, CancellationToken.None);
+            AssertEqual(ModelProtocolFailureKind.Provider, failed.Failure.Kind, "third transient failure ends the step");
+            AssertEqual(5, calls, "provider retries are not multiplied by each protocol attempt");
+            AssertEqual("1,2", string.Join(",", delays.Select(delay => delay.TotalSeconds)), "whole step gets two retries total");
+            var recovered = await protocol.GetResponseAsync(NewProtocolRequest(1), null, CancellationToken.None);
+            AssertTrue(recovered.Failure == null, "a new logical step gets a fresh provider budget");
+            AssertEqual(7, calls, "one new provider retry followed by the first valid response");
+            AssertEqual("1,2,1", string.Join(",", delays.Select(delay => delay.TotalSeconds)), "new step starts its delay sequence again");
+        }
+
+        private static async Task ModelProtocolCombinedBudgetsAreBounded()
+        {
+            var request = NewProtocolRequest(20, true);
+            var trace = new List<LlmTraceRecord>();
+            request.Options.TraceSink = trace.Add;
+            var calls = 0;
+            var delays = 0;
+            var fallbacks = 0;
+            var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+            {
+                calls++;
+                if (calls == 1) throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema unsupported");
+                if (calls == 2 || calls == 4) throw new LlmRequestException(LlmFailureKind.Network, "connection lost");
+                return Task.FromResult(new LlmCompletionResult { Content = "invalid response" });
+            }, (delay, token) => { delays++; return Task.CompletedTask; });
+            var result = await protocol.GetResponseAsync(request,
+                new ModelProtocolProgress { JsonObjectFallback = () => fallbacks++ }, CancellationToken.None);
+            AssertEqual(ModelProtocolFailureKind.ProtocolExhausted, result.Failure.Kind, "received-response budget still exhausts at twenty");
+            AssertEqual(20, trace.Count(record => record.Type == "rejected"), "twenty invalid responses, not twenty-one");
+            AssertEqual(23, calls, "total raw ceiling is protocol limit plus two provider retries plus one fallback");
+            AssertEqual(2, delays, "provider retry budget remains independent");
+            AssertEqual(1, fallbacks, "fallback budget remains independent");
+            AssertTrue(trace.All(record => record.Type != "accepted"), "no acceptance after exhaustion");
+        }
+
+        private static async Task ModelProtocolCancellationDuringBackoff()
+        {
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var calls = 0;
+                var delays = 0;
+                var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+                {
+                    calls++;
+                    throw new LlmRequestException(LlmFailureKind.Timeout, "temporary timeout");
+                }, (delay, token) =>
+                {
+                    delays++;
+                    AssertEqual(cancellation.Token, token, "backoff uses the caller cancellation token");
+                    cancellation.Cancel();
+                    return Task.FromCanceled(token);
+                });
+                var result = await protocol.GetResponseAsync(NewProtocolRequest(), null, cancellation.Token);
+                AssertEqual(ModelProtocolFailureKind.Cancelled, result.Failure.Kind, "backoff cancellation is not a provider failure");
+                AssertEqual(1, calls, "cancellation prevents retry dispatch");
+                AssertEqual(1, delays, "only the first backoff begins");
+                AssertTrue(result.Response == null && result.Completion == null, "backoff cannot create a model or tool result");
             }
         }
 

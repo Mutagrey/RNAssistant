@@ -195,7 +195,7 @@ namespace RNAssistant.Harness
                 var settings = new AppSettings
                 {
                     AgentResponseMode = AgentResponseModes.JsonSchema,
-                    MaxAgentFormatRetries = 1,
+                    MaxAgentFormatRetries = 2,
                     AutoConfirmToolActions = true
                 };
                 var catalog = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();

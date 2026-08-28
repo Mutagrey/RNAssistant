@@ -14,12 +14,19 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ModelProtocolClient : IModelProtocol
     {
         private readonly LlmCompletionDelegate _completeAsync;
+        private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
         private readonly AgentResponseParser _parser = new AgentResponseParser();
         private bool _useJsonObject;
 
         public ModelProtocolClient(LlmCompletionDelegate completeAsync)
+            : this(completeAsync, (delay, token) => Task.Delay(delay, token))
+        {
+        }
+
+        internal ModelProtocolClient(LlmCompletionDelegate completeAsync, Func<TimeSpan, CancellationToken, Task> delayAsync)
         {
             _completeAsync = completeAsync ?? throw new ArgumentNullException(nameof(completeAsync));
+            _delayAsync = delayAsync ?? throw new ArgumentNullException(nameof(delayAsync));
         }
 
         public async Task<ModelProtocolResult> GetResponseAsync(
@@ -35,57 +42,69 @@ namespace RNAssistant.Core.ModelProtocol
             object contextUsage = null;
             try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                string budgetError;
-                if (!TryValidatePromptBudget(accepted, settings, options, out budgetError))
-                    return BudgetFailure(budgetError, contextUsage);
-
-                LlmCompletionResult completion;
-                try
+                var budget = new ModelProtocolRetryBudget(settings);
+                var fallbackUsed = false;
+                string lastError = null;
+                for (var attempt = 1; attempt <= budget.ProtocolAttemptLimit; attempt++)
                 {
-                    completion = await CompleteAsync(settings, accepted, options, progress, cancellationToken).ConfigureAwait(false);
-                }
-                catch (LlmRequestException ex) when (
-                    ex.Kind == LlmFailureKind.ResponseFormatUnsupported &&
-                    string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal) &&
-                    settings.FallbackToJsonObject)
-                {
-                    // The existing run-local compatibility fallback, not a protocol retry.
-                    _useJsonObject = true;
-                    UseJsonObject(options);
-                    if (progress != null && progress.JsonObjectFallback != null) progress.JsonObjectFallback();
-                    if (!TryValidatePromptBudget(accepted, settings, options, out budgetError))
-                        return BudgetFailure(budgetError, contextUsage);
-                    completion = await CompleteAsync(settings, accepted, options, progress, cancellationToken).ConfigureAwait(false);
-                }
-                contextUsage = ContextUsageEstimator.FromPrompt(accepted, settings, completion.PromptTokens, options);
-                var parsed = Parse(completion, request);
-                if (!parsed.Success) TraceRejected(options, completion, parsed.Error, 0);
-
-                // Phase 2A preserves the old setting's retry semantics. R20 (total
-                // attempts vs retries) is an explicit remaining Phase 2 task.
-                var configuredRetries = settings.MaxAgentFormatRetries > 0
-                    ? settings.MaxAgentFormatRetries : new AppSettings().MaxAgentFormatRetries;
-                var maxRetries = Math.Max(1, Math.Min(AppSettings.MaximumAgentFormatRetries, configuredRetries));
-                for (var retry = 1; !parsed.Success && retry <= maxRetries; retry++)
-                {
-                    var repairMessages = new List<ChatMessage>(accepted)
+                    cancellationToken.ThrowIfCancellationRequested();
+                    IReadOnlyList<ChatMessage> attemptMessages = accepted;
+                    if (lastError != null)
                     {
-                        CreateFormatRepairMessage(parsed.Error, retry, maxRetries)
-                    };
-                    if (!TryValidatePromptBudget(repairMessages, settings, options, out budgetError))
-                        return BudgetFailure(budgetError, contextUsage);
-                    completion = await CompleteAsync(settings, repairMessages, options, progress, cancellationToken).ConfigureAwait(false);
-                    contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings, completion.PromptTokens, options);
-                    parsed = Parse(completion, request);
-                    if (!parsed.Success) TraceRejected(options, completion, parsed.Error, retry);
-                }
-                if (!parsed.Success)
-                    return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ProtocolExhausted,
-                        "Ответ модели не выполнен после " + maxRetries + " попыток исправить формат: " + parsed.Error), contextUsage);
+                        attemptMessages = new List<ChatMessage>(accepted)
+                        {
+                            CreateFormatRepairMessage(lastError, attempt, budget.ProtocolAttemptLimit)
+                        };
+                    }
+                    LlmCompletionResult completion;
+                    while (true)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        string budgetError;
+                        if (!TryValidatePromptBudget(attemptMessages, settings, options, out budgetError))
+                            return BudgetFailure(budgetError, contextUsage);
+                        try
+                        {
+                            completion = await CompleteAsync(settings, attemptMessages, options, progress, cancellationToken).ConfigureAwait(false);
+                            break;
+                        }
+                        catch (LlmRequestException ex) when (
+                            ex.Kind == LlmFailureKind.ResponseFormatUnsupported && !fallbackUsed &&
+                            string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal) &&
+                            settings.FallbackToJsonObject)
+                        {
+                            // Compatibility fallback is separate from both retry budgets.
+                            // Reuse this exact prompt/options instance, including during repair.
+                            cancellationToken.ThrowIfCancellationRequested();
+                            fallbackUsed = true;
+                            _useJsonObject = true;
+                            UseJsonObject(options);
+                            if (progress != null && progress.JsonObjectFallback != null) progress.JsonObjectFallback();
+                        }
+                        catch (LlmRequestException ex)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            TimeSpan delay;
+                            if (!budget.TryTakeProviderRetry(ex, out delay)) throw;
+                            await _delayAsync(delay, cancellationToken).ConfigureAwait(false);
+                        }
+                    }
 
-                TraceAccepted(options, parsed.Response, progress);
-                return ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage);
+                    contextUsage = ContextUsageEstimator.FromPrompt(attemptMessages, settings, completion.PromptTokens, options);
+                    var parsed = Parse(completion, request);
+                    if (parsed.Success)
+                    {
+                        TraceAccepted(options, parsed.Response, progress);
+                        return ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage);
+                    }
+                    lastError = parsed.Error;
+                    // Preserve the existing zero-based diagnostic index; the limit and
+                    // repair instruction count total protocol responses, starting at one.
+                    TraceRejected(options, completion, lastError, attempt - 1);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+                return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ProtocolExhausted,
+                    "Ответ модели не выполнен после " + budget.ProtocolAttemptLimit + " попыток получить корректный ответ: " + lastError), contextUsage);
             }
             catch (OperationCanceledException ex)
             {
@@ -124,6 +143,7 @@ namespace RNAssistant.Core.ModelProtocol
             if (progress != null && progress.AttemptStarted != null) progress.AttemptStarted(settings.StreamResponses);
             var completion = await _completeAsync(settings, messages, options,
                 progress == null ? null : progress.StreamUpdate, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             if (progress != null && progress.AttemptCompleted != null) progress.AttemptCompleted();
             if (completion == null) throw new InvalidOperationException("Model returned no completion.");
             return completion;

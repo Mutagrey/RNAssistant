@@ -4,7 +4,8 @@
 governance/versioning; Phase 1A добавила characterization tests и карту, Phase 1B —
 только correlation/observability на существующих runtime boundaries. Phase 1C
 добавляет runtime completion guard и минимальную health-проекцию. Phase 2A выделяет
-Core/ModelProtocol, сохраняя v2 и текущие retry limits.
+Core/ModelProtocol, сохраняя v2 и прежние retry limits. Phase 2B заменяет initial +
+retries общим лимитом protocol responses и отдельным provider budget; v2 остаётся.
 Текущие domain docs остаются canonical до своей фазы.
 
 | Current path / policy | Target | Owner | Consumers сейчас | Switch / removal gate | Статус |
@@ -14,6 +15,8 @@ Core/ModelProtocol, сохраняя v2 и текущие retry limits.
 | AssistantController orchestration | Application Facade | Application | Bridge, Office runtime | Phases 3–5; затем cleanup Phase 10 | current |
 | `src/RNAssistant.Office/Services/ConversationRunService.cs` | Core/ModelProtocol + Core/Agent/AgentKernel | Model/Runtime | Agent/Chat/Plan, confirmation continuation | Model boundary извлечена 2A; сам loop заменить Phase 3 | current loop; model attempts removed 2A |
 | Loop CompleteAsync/parser/format retries/fallback/trace helpers; `AgentJsonProtocol.CreateFormatRepairMessage` | `Core/ModelProtocol/ModelProtocolClient.cs` | ModelProtocol | Старых callers нет; loop использует IModelProtocol | Phase 2A: переключено и физически удалено без aliases | removed |
+| Initial + MaxAgentFormatRetries; fallback только до первого repair | Total 1–20 protocol responses + отдельные provider retries/fallback | ModelProtocol | ModelProtocolClient, loop только как typed caller | Phase 2B: старый control flow заменён, лишняя попытка удалена | removed |
+| Settings/bridge key `MaxAgentFormatRetries` | Тот же ключ, теперь total protocol responses | ModelProtocol / Settings | SettingsService, bridge, static settings form, retry budget | Phase 2B: значение не переписывается, caption уточнён; стабильный ключ остаётся | retained contract, не adapter/alias |
 | `ModelProtocolFailure.Cause` → ExceptionDispatchInfo rethrow | Typed AgentKernel failure/lifecycle handling | Runtime / Application | ConversationRunService → существующий controller catch/cancel path | Phase 3: удалить rethrow adapter после switch на kernel | introduced adapter 2A; nonserialized |
 | `Services/RunSummaryBuilder.cs`: legacy ToolResult + effective safety mapping | Core/Agent RunSummaryBuilder + typed ToolExecutionRecord evidence | Runtime / ToolRuntime | ConversationRunService, controller confirmation | Перенести builder Phase 3; заменить legacy mapping Phase 4; не дублировать rules в UI | introduced adapter 1C |
 | `RunExecutionSummary` на ChatMessage/ChatRunRecord; отсутствующая summary у old pending/history | Canonical RunSummary / revisioned runtime projection | Application / Persistence / UI | Clone service, send/confirmation DTO, history UI | Полный RunSummary/projection switch Phases 3/9; obsolete adapter paths удалить Phase 10; historical records не backfill | introduced adapter 1C |

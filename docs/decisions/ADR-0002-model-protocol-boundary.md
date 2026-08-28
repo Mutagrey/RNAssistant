@@ -1,7 +1,7 @@
 # ADR-0002: ModelProtocol owns raw model attempts
 
 Date: 2026-08-28
-Status: Accepted (Phase 2A boundary; remaining Phase 2 work is not complete)
+Status: Accepted (Phase 2A boundary + Phase 2B retry policy; v3 work remains)
 
 ## Context
 
@@ -32,18 +32,49 @@ concerns to Core and requires the loop to consume one typed outcome per step.
   reset per attempt through callbacks. It is not accepted history. No UI code or
   storage format changes are part of this extraction.
 - Transport errors and cancellation return distinct typed failures; they never
-  consume another format retry or become tool errors. No general provider retry
-  is introduced. The existing explicit, enabled strict-schema fallback remains
+  consume a protocol response slot or become tool errors. Phase 2B adds the
+  bounded provider policy below. The explicit, enabled strict-schema fallback is
   bounded to one extra request, using the same options object as its trace sink.
+
+## Retry policy (Phase 2B)
+
+`ModelProtocolRetryBudget` is created once per `GetResponseAsync`, not for each
+repair or raw request. A protocol attempt counts a received completion submitted
+to the v2 parser (or accepted native refusal), including the first response.
+
+| Budget | Limit | On exhaustion |
+|---|---|---|
+| Protocol responses | `MaxAgentFormatRetries`, default 10, normalized 1–20 total | `ProtocolExhausted`, no accepted completion |
+| Transient provider retries | Two for the entire step; cancellable delays of 1s, then 2s | `Provider` with the original failure kind/status/cause |
+| Explicit schema fallback | One, enabled by `FallbackToJsonObject`; also during repair | No second fallback |
+
+Only typed `Timeout`, `Network` and `TransientServer` failures retry. Other HTTP
+errors (including authorization failures), rate limiting, size limits and invalid
+provider envelopes remain terminal provider failures. No body-text heuristics or
+endpoint failover are introduced. This policy acts on the existing LLM adapter's
+typed classification; it does not change HTTP parsing/classification.
+
+Provider retries/fallback reuse the exact current prompt, including any single
+repair instruction. They do not advance the protocol counter. The provider budget
+does not reset after a rejected completion; it resets at the next logical step.
+The json_object choice remains run-local and never changes saved settings. With
+limit N the raw request ceiling is N+3, at most 23; a healthy transport with twenty
+invalid responses makes exactly twenty requests. Every raw request gets its own
+modelAttemptId. Existing rejected trace `Attempt` remains a zero-based index;
+repair instruction `attempt`/`max_attempts` and diagnostics use total responses.
+
+Cancellation is checked before dispatch, during backoff, after a completion and
+after rejection. A late completion cannot be accepted once cancellation is
+observed. Tools, resources, summaries and accepted-history appends stay outside
+the retry loops.
 
 ## Transitional contracts
 
-Phase 2A preserves v2 parsing/status/history and the legacy setting's meaning:
-initial request plus `MaxAgentFormatRetries` (default 10, clamp 1–20 retries).
-Thus the old maximum is still 21 requests, excluding schema fallback (R20).
-Fallback is still handled for the first raw call of a logical step, not for an
-explicit endpoint rejection during a later format repair. Its choice remains
-local to the run and never changes saved settings.
+Phase 2A preserved initial + configured retries; Phase 2B removes that extra
+attempt (R20). The existing `MaxAgentFormatRetries` settings/bridge key and stored
+numeric values remain; the value now means total protocol responses. The caption
+and tooltip explain this change. There is no second key, alias or settings rewrite.
+V2 parsing/status/history remain unchanged.
 
 `ModelProtocolFailure.Cause` is a nonserialized exception adapter. Owner: Runtime /
 Application. Consumer: the loop rethrows it with its original stack into the
@@ -52,8 +83,7 @@ integration. Accepted `LlmCompletionResult` and the existing context-usage
 projection are metadata for current transcript consumers, not a second protocol
 or durable result store.
 
-The total 1–20 attempt policy, complete provider/protocol retry policy, v3
-parser/schema, explicit v2 adapter and v3 canonical document remain in Phase 2.
+The v3 parser/schema, explicit v2 adapter and v3 canonical document remain in Phase 2.
 This ADR does not declare that phase complete or authorize Phase 3 in this commit.
 
 ## Consequences and verification
@@ -62,6 +92,9 @@ The old loop completion/parse/repair/fallback/trace methods and
 `AgentJsonProtocol.CreateFormatRepairMessage` are removed, without aliases or dual
 execution. Tool orchestration, completion guard and native refusal behavior stay
 unchanged. Media may now be sent again on a repair; memory/traffic cost is tracked
-as R24. Real provider, Windows/Office/controller/WebView qualification remains open.
+as R24. Provider retries may repeat billable generation or extend latency after a
+lost response (R25); they cannot replay Office tool execution. Real provider,
+Windows/Office/controller/WebView qualification remains open.
 
-Evidence and exact commands: [Phase 2A](../stabilization/PHASE_2A_MODEL_PROTOCOL.md).
+Evidence and exact commands: [Phase 2A](../stabilization/PHASE_2A_MODEL_PROTOCOL.md),
+[Phase 2B](../stabilization/PHASE_2B_RETRY_POLICY.md).

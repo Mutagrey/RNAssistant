@@ -94,6 +94,7 @@
     <Compile Include="Models\ToolModels.cs" />
     <Compile Include="ModelProtocol\ModelProtocolContracts.cs" />
     <Compile Include="ModelProtocol\ModelProtocolClient.cs" />
+    <Compile Include="ModelProtocol\ModelProtocolRetryBudget.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />

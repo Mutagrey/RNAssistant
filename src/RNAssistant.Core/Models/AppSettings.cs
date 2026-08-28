@@ -279,6 +279,8 @@ namespace RNAssistant.Core.Models
         public bool AutoConfirmToolActions { get; set; }
         public bool SmartChatTitles { get; set; }
         public int MaxAgentIterations { get; set; }
+        // Legacy settings key: total protocol responses including the initial attempt (1–20).
+        // Transport retries and the explicit schema fallback have separate budgets.
         public int MaxAgentFormatRetries { get; set; }
         public int MaxAgentToolSteps { get; set; }
         public bool AutoCompressContext { get; set; }

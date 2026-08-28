@@ -167,7 +167,7 @@ namespace RNAssistant.Harness
                     "Исправь формат.",
                     session,
                     NewContext(adapter),
-                    new AppSettings { StreamResponses = true, MaxAgentFormatRetries = 1 },
+                    new AppSettings { StreamResponses = true, MaxAgentFormatRetries = 2 },
                     new ToolDefinition[0],
                     (phase, message, activity) => progressEvents.Add(Tuple.Create(phase, message, activity)))
                     .GetAwaiter().GetResult();

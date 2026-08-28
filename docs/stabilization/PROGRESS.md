@@ -2,7 +2,7 @@
 
 Current target: 16.1.0
 Current phase: Phase 2
-Current task: Phase 2A завершена (ModelProtocol boundary); следующая — Phase 2B, общий лимит attempts и provider/protocol retry policy. V3/cutover ещё не выполнены; Phase 3 не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
+Current task: Phase 2B завершена (total protocol attempts + provider retry/fallback policy); следующая — Phase 2C, v3/parser/schema/adapter/cutover. Phase 3 не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
 
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
@@ -12,7 +12,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 |---|---|---|---|---|---|
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
 | 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: `40282c0` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
-| 2 | in progress | 2A: этот commit `refactor(model): extract protocol attempts from conversation loop` | 68 targeted harness pass; ValidateVersionFormat pass | not performed | Boundary выделена; retry policy/R20, v3 parser/schema/adapter/cutover ещё не выполнены |
+| 2 | in progress | 2A: `d911826`; 2B: этот commit `fix(model): bound protocol attempts and provider retries` | 74 targeted harness pass; 4 red→green cases; ValidateVersionFormat pass | not performed | Boundary/retry policy done, R20 закрыт; v3 parser/schema/adapter/cutover ещё не выполнены |
 | 3 | pending | — | — | — | AgentKernel |
 | 4 | pending | — | — | — | ToolRuntime |
 | 5 | pending | — | — | — | Bound DocumentSession |
@@ -139,6 +139,25 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Fake endpoint tests не являются live tLLM validation. Production controller — stub в harness; Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed.
 - Точные команды, legacy paths и границы: [PHASE_2A_MODEL_PROTOCOL.md](PHASE_2A_MODEL_PROTOCOL.md).
 
+## Phase 2B substeps
+
+- Baseline — `d911826`, clean working tree. Один model retry contour: 4 Core production files + caption/tooltip в web/index.html. Loop, tools, Resource Fabric, VBA и persistence не менялись.
+- ModelProtocolRetryBudget считает 1–20 total protocol responses, включая первую. Default 10 и значения/ключ настройки MaxAgentFormatRetries сохраняются; initial + N удалён без alias (R20).
+- Timeout/Network/TransientServer получают до двух provider retries на весь logical step, с cancellable delays 1s/2s. Ошибки HTTP/auth/429, size и invalid provider envelope не повторяются; transport parser/classification не менялись.
+- Explicit enabled schema fallback работает также во время repair, один раз независимо от других budgets; exact current prompt/options повторно используются. N+3 raw requests maximum (23), не N×3.
+- Cancellation проверяется до dispatch, во время backoff, после completion и rejection; запоздалый ответ не принимается. Нет повторного исполнения tools или новых accepted/history events.
+- Canonical docs, ADR-0002 и changelog обновлены. V2/Failure.Cause остаются; новых compatibility adapters, v3 или AgentKernel нет. Phase 2C/3 не начаты.
+- Product остаётся `16.1.0-dev`; bump/tag/push/release script не выполняются.
+
+## Phase 2B verification
+
+- Baseline: model protocol — 8/8, characterization — 7/7. До production fix: новые assertions дали 2 failures в model protocol и 2 в characterization (limits 1/20/clamp и fallback during repair).
+- После fix: `model protocol:` — 13/13; `agent:` — 41/41 (включая characterization), `conversation:` — 4/4; `causal trace:` — 6/6; `completion guard:` — 5/5.
+- `plan mode:` — 2/2; `chat: uses only read-only resource loop` — 1/1; `harness: production projects` — 1/1; `settings: invalid numeric values` — 1/1. Всего 74 разных targeted harness cases.
+- C# 7.3 linked source build и ValidateVersionFormat — pass. Provider delays в tests инъецированы; реального ожидания/endpoint requests нет. Full harness/Node UI не запускались; изменены только model retry policy и текст одной настройки. Последний full — 320/321 в 1B, R22 открыт.
+- Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed; production controller остаётся stub в harness. Live provider/timeout/media costs — R25/R24, qualification pending.
+- Точные команды и ограничения: [PHASE_2B_RETRY_POLICY.md](PHASE_2B_RETRY_POLICY.md).
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
@@ -157,6 +176,5 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - R02–R11: остальные сценарии из master plan ожидают проверки/исправления в своих фазах.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.
-- R20: лимит model requests расходится с двадцатью attempts; owner ModelProtocol, Phase 2.
 - R22: compact catalog harness failure воспроизведён до изменений 1B; owner ToolPack/Tests, Phase 8.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).
