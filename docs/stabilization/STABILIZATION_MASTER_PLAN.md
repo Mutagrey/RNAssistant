@@ -12,6 +12,8 @@
 
 Этот документ предназначен для агента, который будет менять репозиторий. Его нельзя исполнять как одну большую задачу или один огромный patch.
 
+Аудит 2026-08-28 уточняет целевые контракты §§5–10 и gates Phases 4–9. Это docs-only изменение поверх Phase 3B2, не начало этих фаз и не подтверждение runtime/Windows validation. Текущий v3 действует до отдельного исправления R29 (§7.1); текущий LRU — до Phase 8. Найденные противоречия и оставшиеся проверки записаны в [risk register](RISK_REGISTER.md#архитектурный-аудит-2026-08-28).
+
 ### Обязательные правила для агента
 
 1. Выполнять только текущую фазу и текущий подэтап.
@@ -256,9 +258,11 @@ tool_calls empty?
 
 ## 5.4. Tool Runtime
 
-Отвечает только за exact tool id lookup, argument schema validation, policy validation, confirmation gate до исполнения, вызов `IToolHandler`, преобразование infrastructure exception в `ToolResult` и запись `ToolExecutionRecord`.
+Отвечает только за exact tool id lookup, argument schema validation, policy validation, confirmation gate до исполнения, вызов `IToolHandler`, преобразование infrastructure exception с учётом dispatch evidence и возврат `ToolExecutionRecord`.
 
 Он не знает внутренности VBA, Excel, HTML или Plan.
+
+Проверка всего response/batch принадлежит ModelProtocol и kernel до первого dispatch, на одном runtime-owned policy snapshot. `ToolRuntime` проверяет один call и не получает model envelope ради batch validation. Kernel единожды учитывает record и сохраняет его через `IRunStore`; ToolRuntime не ведёт второй run store/accumulator. Domain journal остаётся во владении domain service. Confirmation gate запрещает dispatch, kernel хранит pending/lifecycle, Application только принимает решение пользователя и возобновляет тот же call.
 
 ## 5.5. Tool Domains
 
@@ -400,7 +404,9 @@ web
 
 ## 7.1. Conversation Response v3
 
-Текущий model-owned `status` удаляется.
+Model-owned `status` в действующем v3 отсутствует.
+
+Ниже зафиксирован **действующий v3**, а не окончательное решение о владельце call IDs. R29 — открытый баг: требование генерировать уникальный ID моделью подлежит отдельному protocol switch; Phase 3B2 его не исправляет.
 
 ### Вызов tool
 
@@ -439,8 +445,14 @@ web
 - неизвестные root fields отклоняются;
 - модель не возвращает `status`, `phase`, `completed`, `retry`, `verified`;
 - один и тот же `tool_call_id` не повторяется в accepted run;
-- write/external/confirmation-required call должен быть единственным call в ответе;
-- несколько независимых read-only calls допускаются и выполняются последовательно.
+- write/external/confirmation-required/unclassified call должен быть единственным call в ответе;
+- несколько независимых local read-only calls допускаются и выполняются последовательно.
+
+### Обязательное исправление R29
+
+Целевой model-facing call содержит только `name` и `arguments`; модель не генерирует call ID. Код назначает ID каждому принятому вызову после валидации ответа, до accepted persistence, confirmation и execution. Соответствие позиции call в исходном ответе и runtime ID сохраняется в том же accepted event; raw response не переписывается. Results, native tool-role history и continuation используют тот же ID, replay его восстанавливает, а не создаёт заново.
+
+Это явное изменение protocol version/schema/prompts/history readers и consumers, не тихое удаление поля или переименование дубликатов в v3. До switch прежняя проверка сохраняется; после switch коллизия runtime ID — infrastructure fault до dispatch, не причина model repair. Проверки: валидный длинный payload проходит без новой генерации из-за ID, разные calls получают разные IDs, confirmation/replay сохраняют их. Идентификатор связывает записи, но не является семантической дедупликацией действий и не разрешает auto retry. Детальные критерии — [R29](RISK_REGISTER.md#r29--runtime-должен-владеть-идентификаторами-вызовов).
 
 ### Совместимость
 
@@ -488,6 +500,7 @@ Runtime-only metadata хранится отдельно:
   "effect": "write",
   "verification": "tool",
   "requires_confirmation": true,
+  "independent_local_read": false,
   "allowed_modes": ["agent"],
   "risk_level": 2
 }
@@ -507,6 +520,8 @@ verification:
 ```
 
 `write` включает document/local mutation. `external` — действие за пределами локального состояния, например отправка сообщения или browser action.
+
+`read` сам по себе не означает batch safety. В batch допускаются только явно классифицированные independent local reads без confirmation; external/unclassified calls остаются singleton. Источник policy — локальная execution authority, не JSON/название tool или текст модели. `verification` задаёт требование к handler, но не является доказательством проверки конкретного вызова.
 
 ## 7.4. Tool Result v1
 
@@ -564,6 +579,10 @@ unknown
 
 Богатые состояния могут существовать внутри domain service и domain journal.
 
+Упрощение результата не удаляет resource transport: optional `resources:[{uri,revision,relation?}]` сохраняет точные `ResourceRef`, включая `relation:"result"` для полного externalized `data`. CAS hash, internal artifact ID и путь не становятся альтернативными адресами для модели. Bounded materialization и media остаются вне kernel; source/reference сохраняется до следующего model dispatch.
+
+Awaiting confirmation, запрос ответа пользователя и доказанный non-dispatch — typed runtime control/evidence, а не ещё один model-facing status. Adapter передаёт их kernel отдельно; сериализатор не восстанавливает их из `message`/`data.code`. Изменение v1 не должно превращать паузу в успешную запись или ошибку tool.
+
 ## 7.5. Tool Execution Record
 
 Это runtime-only запись, не новый model protocol:
@@ -573,6 +592,8 @@ ToolCall
 ToolDescriptor identity
 ToolPolicy snapshot
 ToolResult
+Dispatch evidence
+Domain effect / verification evidence
 StartedAt
 CompletedAt
 DocumentRuntimeId
@@ -580,6 +601,8 @@ Correlation ids
 ```
 
 Она нужна, чтобы runtime формировал итог независимо от текста модели.
+
+Policy описывает возможный эффект, record — факты конкретного execution. Сохранить различие «dispatch не было», «мог быть dispatch», «эффект проверен» и «проверенный no-op»; не выводить verification из `status=ok` или `policy.verification=tool`. Domain передаёт typed evidence, kernel только агрегирует; доменные hashes/журналы не становятся логикой kernel. Определённая ошибка может сопровождаться подтверждённым частичным эффектом; неизвестное конечное состояние write/external остаётся `unknown`. Потеря результата после возможного dispatch не превращается в обычный `error`.
 
 ## 7.6. Run Summary
 
@@ -614,7 +637,8 @@ unknown
 5. Protocol exhaustion завершает lifecycle = `failed`.
 6. Pending confirmation даёт lifecycle = `awaiting_confirmation`.
 7. Cancellation после возможного dispatch не может маскировать unknown effect.
-8. UI не показывает «все изменения применены», если health не `clean`.
+8. `clean` означает отсутствие известных execution errors/unknowns, но не выполнение задачи или наличие изменений. UI не выводит «все изменения применены» только из health, `completed`, `WriteOk` или текста модели.
+9. Counts отражают вызовы, не изменённые объекты. Verified writes требуют отдельного typed effect evidence; подтверждённый no-op не увеличивает число фактических записей. Read без надёжного результата — read error, не неопределённый write-effect.
 
 Пример:
 
@@ -665,29 +689,24 @@ Tool registry остаётся динамическим, но набор callabl
 - если pack не помещается в budget, runtime завершает подготовку явной ошибкой;
 - model не должна «чинить» собственный execution environment.
 
+Snapshot фиксирует содержимое descriptor/schema, policy и binding/package fingerprint, а не только список tool IDs. Подмена handler под тем же именем не меняет уже принятый call: runtime использует pinned definition либо явно отклоняет несовпадение до dispatch; запрет/отзыв execution permissions проверяется заново. Confirmation проверяет тот же fingerprint. Расширение snapshot допускается только на границе step, не посередине batch.
+
+Полный core pack — конечный явно перечисленный набор, не весь dynamic catalog. Compact catalog остаётся discovery index, а `callable set` — только материализованные exact schemas текущего snapshot. Admission проверяет весь request budget, включая schema, history/media, output reserve и repair overhead, до изменения snapshot. Не поместившаяся optional extension отклоняется без partial publication и без удаления уже загруженных schemas. На compaction активные tool schemas заново материализуются из pinned snapshot в пределах budget; краткое summary не заменяет схему. Skill bodies сохраняют свой отдельный revision/read-evidence contract. Это целевой переход Phase 8; прежний bounded LRU не отключается заранее.
+
 ## 7.8. Resource v1
 
-```json
-{
-  "uri": "rna://vba/component/Module1",
-  "revision": "sha256:...",
-  "content_type": "text/plain",
-  "content": "..."
-}
-```
-
-Или для большого content:
+Model-facing и durable identity — существующий `ResourceRef`:
 
 ```json
 {
-  "uri": "rna://...",
-  "revision": "sha256:...",
-  "content_type": "application/json",
-  "content_ref": "sha256:..."
+  "uri": "rna://chat/s1/artifact/a1/revision/2",
+  "revision": "2"
 }
 ```
 
-Resource не содержит execution authority или tool state.
+Descriptor/lineage и bounded `ResourceReadResult` остаются отдельными моделями. Immutable URI pin-ит revision; для live Office/VBA URI сохраняет identity, а revision/cursor фиксируют наблюдённое содержимое. Большое тело читается через `common.resources_read` по тому же `ResourceRef`, не через model-facing `content_ref`, CAS hash, internal artifact ID или local path. Content hash может быть metadata/evidence, но не вторым transport.
+
+Resource не содержит execution authority или tool state. Не вводить новый read envelope при переносе Phase 8; сохранять [canonical Resource Fabric](../resource-fabric.md#domain-model), representation/chunk bounds и stale cursor rejection.
 
 ## 7.9. Document Session v1
 
@@ -711,6 +730,10 @@ MutationGate
 - mutation сериализуется по `RuntimeDocumentId`;
 - закрытый document не заменяется другим Active document;
 - fallback на `ActiveWorkbook` внутри agent path запрещён.
+
+Один reentrant document gate охватывает live guard-read → validation → prepare → dispatch → read-back → terminal evidence; сериализации только самого write недостаточно. Live resource reads и ручные mutations используют тот же gate, чтобы не наблюдать промежуточное состояние. Проверка bound identity/lifetime выполняется внутри STA непосредственно перед доступом. `RuntimeDocumentId` обозначает живой документ, не имя файла или случайный COM proxy; Save As меняет durable key, не target/gate текущего execution.
+
+Document gate не удерживается при ожидании модели или решения пользователя. После confirmation guard/fingerprint повторно проверяется под gate; UI не может подтвердить другой call/target. Порядок chat lease → document gate → короткие storage locks должен быть зафиксирован и проверен без обратного захвата/ожидания UI под lock. Это требования Phase 5, не новый общий transaction framework.
 
 ---
 
@@ -737,7 +760,7 @@ MutationGate
 - malformed JSON;
 - schema violation;
 - неизвестный tool id в strict contract;
-- duplicate call id.
+- duplicate model call id — только действующий v3 до исправления R29 (§7.1).
 
 Сохраняется configurable limit `1–20`. Не уменьшать лимит без отдельного решения.
 
@@ -759,6 +782,8 @@ ModelProtocolFailure
 ```
 
 Это не `ToolResult.error` и не `unknown`.
+
+Валидный JSON доказывает только корректность envelope/arguments, а не работоспособность HTML/VBA или выполнение запроса пользователя. После R29 ошибка локальной выдачи/восстановления ID не расходует model protocol attempts.
 
 ## 8.3. Tool retry
 
@@ -877,9 +902,9 @@ CanonicalText
 VbeComparableText
 ```
 
-В нём определяются CRLF/LF, пустые строки, VBE normalization, transport escaping и comparable hashing.
+В нём определяются допустимые CRLF/LF, финальные пустые строки, VBE normalization и comparable hashing уже декодированного VBA source. JSON transport escaping декодируется один раз в protocol parser; canonicalizer не выполняет второй unescape строк/комментариев.
 
-Hash/CAS/read-back не реализуют собственную нормализацию.
+Разделять raw content hash и domain comparable hash. CAS сохраняет и хеширует точные исходные bytes, не нормализует VBA и не зависит от domain canonicalizer. Сравнение read-back использует один VBA comparable normalizer; metadata/evidence называет нужный вид hash явно. Эквивалентность для VBE не означает идентичность CAS payload.
 
 ### VbaMutationService
 
@@ -1684,17 +1709,20 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 - [ ] Проверить schema validation.
 - [ ] Проверить confirmation gate до execution.
 - [ ] Runtime enforce:
-  - [ ] write/external call единственный в response;
-  - [ ] read-only calls могут быть последовательным списком;
+  - [ ] whole-response guard в ModelProtocol/kernel проверяет общий policy snapshot до первого dispatch; ToolRuntime не получает model envelope;
+  - [ ] write/external/confirmation-required/unclassified call единственный в response;
+  - [ ] только independent local reads могут быть последовательным списком;
   - [ ] никакого generic auto retry.
 - [ ] Убрать дублирующий `Success + Status` в новом contract.
 - [ ] Добавить model-facing serializer Tool Result v1.
+- [ ] Сохранить runtime-only pending/awaiting-user/non-dispatch signals и `ResourceRef` transport; serializer не читает narrative для восстановления execution state.
+- [ ] Отделить policy verification от actual effect evidence; покрыть read ok/error, write no-op/verified/unknown, confirmation и exception до/после возможного dispatch fake handler tests. Kernel считает каждый record один раз; запись run events остаётся через один `IRunStore`.
 - [ ] Обновить protocol docs.
 - [ ] Добавить ADR-0003.
 
 ### Definition of Done
 
-Новый read-only tool добавляется через descriptor + policy + handler + tests без изменения AgentKernel.
+Новый read-only tool добавляется через descriptor + policy + handler + tests без изменения AgentKernel. Общие batch/confirmation/effect contracts проверены на fake handlers, включая отсутствие partial dispatch unsafe batch; отсутствие COM-теста не подменяется обещанием verification в policy. Domain qualification остаётся Phases 6/7.
 
 ---
 
@@ -1711,6 +1739,7 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 - [ ] Выделить выбор/удержание workbook из `ExcelAdapter` и границу document access/serialization из `OfficeToolExecutor`; read-back должен получать тот же bound object. Charts/formatting и прочие host adapters не рефакторить попутно.
 - [ ] Bind конкретного document object до execution.
 - [ ] Сериализовать writes по `RuntimeDocumentId`.
+- [ ] Gate охватывает guard/live read, dispatch и read-back; resource/manual paths используют тот же reentrant gate. Не держать его при model request или confirmation; проверить lock order и повторную проверку guard после ожидания.
 - [ ] Удалить fallback на `ActiveWorkbook` из agent mutation path.
 - [ ] `ActiveWorkbook` оставить только для user action «выбрать текущую книгу».
 - [ ] Write и read-back выполнять через один bound object.
@@ -1723,7 +1752,8 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
   - [ ] close bound workbook;
   - [ ] Save As identity change;
   - [ ] two chats write same workbook;
-  - [ ] two workbooks with same visible name.
+  - [ ] two workbooks with same visible name;
+  - [ ] queued write после изменения guard, live read во время mutation, разные COM proxies одного документа и отсутствие deadlock при confirmation/cancel.
 - [ ] Добавить ADR-0005.
 - [ ] Обновить concurrency docs.
 
@@ -1755,6 +1785,7 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 - [ ] Извлечь `VbaPatchEngine` из `VbaToolExecutor.Patching`: текстовая логика отдельно от `ToolResult`, resource-подсказок, COM и journal orchestration.
 - [ ] Извлечь `VbaTextCanonicalizer`, включая используемые правила из `VbaToolManifestParser`; переключить patch/verification/package consumers без второй реализации нормализации и без изменения journal/CAS protocol.
 - [ ] Определить Transport/Canonical/VBE-comparable representations.
+- [ ] Raw CAS hash остаётся hash точных bytes; comparable hash отдельно. Проверить CRLF/LF, literal backslash sequences и строки/комментарии: source не декодируется повторно и не теряет семантику.
 - [ ] Извлечь `VbaReader`.
 - [ ] Извлечь `VbaMutationService`.
 - [ ] Извлечь `VbaVerifier`.
@@ -1783,7 +1814,7 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 
 ### Definition of Done
 
-Любой VBA write завершается одним из трёх model-facing результатов, причём `ok` для built-in verified tool означает успешный read-back.
+При нормальном durable завершении VBA write возвращает один из трёх model-facing результатов, причём `ok` для built-in verified tool означает успешный read-back. Crash/ошибка terminal persistence не обязаны иметь записанный результат: сохраняются имеющиеся durable start/preparation, дальнейший dispatch останавливается, после reload выполняется только reconciliation. Нельзя выдавать выдуманный durable terminal или повторять mutation ради записи результата.
 
 ---
 
@@ -1800,6 +1831,7 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 - [ ] Выделить только необходимый read/write backend из `ExcelAdapter` на подготовленной в Phase 5 DocumentSession; размер остальных частей adapter не является поводом расширять slice.
 - [ ] Write tool использует bound `ExcelDocumentSession`.
 - [ ] Добавить read-back/verification для write.
+- [ ] Отделить успешный call/no-op от подтверждённого изменения; read-back сравнивает ожидаемый scope и значения/formulas по domain rules, а не только отсутствие COM exception.
 - [ ] Сохранить range limits до COM materialization.
 - [ ] Добавить tests:
   - [ ] values;
@@ -1831,6 +1863,7 @@ Excel read/write добавлены через ToolRuntime и DocumentSession, A
 - [ ] Сохранить `rna://`, revisions, CAS, cursors.
 - [ ] Заменить оставленную вне AgentKernel реализацию resource capability lifecycle; сохранить проверенную в Phase 3 границу, не менять kernel loop ради ToolPack.
 - [ ] Ввести `ToolPackSnapshot`.
+- [ ] Pin descriptor/schema + policy + binding/package fingerprint (§7.7); одинаковый ID не разрешает замену implementation в принятом call/confirmation.
 - [ ] Core Excel/VBA pack передавать полностью.
 - [ ] Отключить LRU eviction в stabilized runtime.
 - [ ] Optional schema loading делать monotonic:
@@ -1841,7 +1874,9 @@ Excel read/write добавлены через ToolRuntime и DocumentSession, A
 - [ ] Global dynamic registry сохранить.
 - [ ] Новые dynamic tools активировать в следующем run либо через явный snapshot extension.
 - [ ] Если pack не помещается, fail visibly.
+- [ ] Проверять admission до snapshot publication; compaction повторно материализует pinned schemas. Проверить overflow без partial extension, изменение handler/policy при том же ID и сохранение schema evidence после compaction.
 - [ ] Resource tools оставить read-only.
+- [ ] Сохранить `ResourceRef` и существующие bounded read results (§7.8); не вводить CAS/content_ref transport или новый reader.
 - [ ] Capability discovery и tool authoring разделить.
 - [ ] Добавить ADR-0004 и ADR-0006.
 
@@ -1866,6 +1901,7 @@ Resource provider можно добавить без изменения AgentKer
 - [ ] Разделить:
   - [ ] Agent Events;
   - [ ] Domain Diagnostic Events.
+- [ ] Разделение является typed classification в существующем chat stream, не вторым durable run store; domain journals сохраняют свою recovery authority. Ports не получают независимые writable snapshots и не выполняют двойную запись одного outcome.
 - [ ] Accepted model/tool events остаются canonical.
 - [ ] Rejected model attempts остаются diagnostics.
 - [ ] Расширить минимальное replay coverage Phase 3 до полной persistence/UI матрицы; replay должен восстанавливать тот же `RunSummary`.
@@ -1882,6 +1918,8 @@ Resource provider можно добавить без изменения AgentKer
 - [ ] Проверить stale projection и multi-window updates.
 - [ ] Не переписывать CAS/event framework целиком.
 - [ ] Не вводить второй durable source of truth.
+- [ ] Сохранить ordered durability: referenced CAS payload durable до ссылающегося event; accepted call/start до effect, result evidence до следующего model step. Mandatory append failure до dispatch запрещает effect; после возможного dispatch — остановка и reload/reconciliation, без fabricated terminal и auto retry.
+- [ ] Проверить result-append failure после write, restart при незавершённом tool start, CAS failure и конфликт revision при queued stream chunks. Optional trace не заменяет mandatory run/tool events; replay не выполняет tools и не пересчитывает прошлое по новой policy.
 
 ### Definition of Done
 
@@ -1953,6 +1991,8 @@ Phase 11 — отдельная ветка после stable core, не prerequi
 - не добавляет hidden fallback;
 - не меняет Resource Fabric execution semantics.
 
+Для HTML/Plan whole-content mutations отдельно проверить сохранение точного payload и revision lineage, отсутствие тихой обрезки и восстановление предыдущей revision. Валидный model envelope не является проверкой синтаксиса/работоспособности содержимого; UI/результат не обещает такую проверку без отдельного domain evidence. R29/R28 не считаются закрытыми самим включением optional contour.
+
 Если добавление контура требует изменения AgentKernel, сначала создаётся ADR и доказывается недостаточность текущего контракта.
 
 ---
@@ -2003,6 +2043,8 @@ Phase 11 — отдельная ветка после stable core, не prerequi
 - [ ] Полный host-neutral harness.
 - [ ] Architecture tests.
 - [ ] ModelProtocol 20-attempt scenarios.
+- [ ] R29: runtime-generated IDs без потери payload, confirmation/replay сохраняют IDs; explicit protocol cutover квалифицирован.
+- [ ] R28: live streaming message/reasoning проверен по SSE → projector → bridge → реальный WebView, включая reset при repair.
 - [ ] VBA fault matrix.
 - [ ] Excel fault matrix.
 - [ ] Windows x64 + Office x64 smoke.
@@ -2042,9 +2084,11 @@ v16.1.0           stable
 | Write мог быть dispatched, read-back невозможен | `unknown`, auto retry запрещён |
 | Model пишет «патч внесён» после error | UI показывает runtime error |
 | Model пишет «патч внесён» после unknown | UI показывает unverified state |
-| Write ok и read-back verified | `ok`, verified write count увеличен |
+| Write изменил состояние и read-back verified | `ok`, verified write count увеличен |
+| Успешный mutating call оказался no-op | invocation count может увеличиться, число фактических writes — нет |
+| Policy обещает verification, но actual evidence отсутствует | нет verified-success claim; для требующего read-back write результат `unknown` |
 | Один write ok, другой error | health `errors`, нельзя показать «всё применено» |
-| Любой unknown среди calls | health `unknown` |
+| Любой unknown write/external среди calls | health `unknown` |
 | Write + confirmation в batch | runtime отклоняет batch; write должен быть single call |
 | Несколько независимых reads | выполняются последовательно |
 | Переключение active workbook | bound target не меняется |
@@ -2056,6 +2100,12 @@ v16.1.0           stable
 | Replay event stream | тот же RunSummary |
 | Dynamic tool установлен mid-run | не появляется скрыто; новый snapshot/event |
 | ToolPack не помещается | явная ошибка, не silent truncation |
+| Handler/policy изменены под тем же ID | pinned definition либо отказ до dispatch, без скрытой подмены |
+| Compaction после загрузки schemas | следующий request содержит точные pinned schemas; summary не заменяет evidence |
+| Большой tool result | bounded preview + exact ResourceRef, без второго CAS transport |
+| Терминальный append не удался после possible write | остановка, durable start/preparation остаётся, reload/reconciliation без replay write |
+| Model call после R29 не содержит ID | runtime выдаёт ID до persistence/dispatch и сохраняет его через confirmation/replay |
+| Runtime ID collision после R29 | infrastructure failure до dispatch, без model repair |
 | Resource cursor stale | fail closed |
 | UI получает старую projection | revision mismatch, no overwrite |
 
@@ -2085,6 +2135,8 @@ Stable release запрещён, пока не выполнены все усл�
 18. Architecture dependency tests проходят.
 19. Version/tag создаются только release process.
 20. Документация соответствует коду.
+21. Call IDs назначает runtime по исправленному контракту R29; неизменный валидный payload не регенерируется ради ID.
+22. Model-facing большие результаты используют exact ResourceRef, не CAS/content_ref transport; actual verification не выводится из policy или invocation counts.
 
 ---
 
@@ -2257,7 +2309,10 @@ LLM вернул не JSON
 Agent завершился неверно
 → AgentKernel / RunSummary
 
-Tool не найден или args invalid
+Модель вернула неизвестный tool или schema-invalid args
+→ ModelProtocol
+
+Policy/binding/args не проходят runtime recheck или manual execution
 → ToolRuntime
 
 VBA patch построен неверно

@@ -5,6 +5,13 @@ Canonical requirements: [master plan §7.1](../stabilization/STABILIZATION_MASTE
 Prompt schema is 12; saved instructions require explicit review. Product version
 remains `16.1.0-dev`; protocol version is independent. Windows qualification is open.
 
+**Open design bug R29:** v3 currently asks the model to generate unique call IDs.
+The planned correction assigns them in runtime before accepted persistence and
+execution, retaining the same IDs through results/confirmation/replay. This needs
+an explicit protocol switch; it is not implemented by Phase 3B2 and must not be
+approximated by silently rewriting duplicate IDs. This document specifies the
+active v3 until that switch; see [the correction contract](../stabilization/STABILIZATION_MASTER_PLAN.md#обязательное-исправление-r29).
+
 ## Envelope
 
 ```json
@@ -38,8 +45,8 @@ remains `16.1.0-dev`; protocol version is independent. Windows qualification is 
   repeat within the response or the accepted run; comparison remains conservatively
   case-insensitive. A new user turn starts a fresh scope; confirmation continues
   the same logical scope even when its runtime RunId changes.
-- Write, external and confirmation-required calls must be singleton. Multiple
-  independent read-only calls may be returned in order and executed sequentially.
+- Write, external, confirmation-required and unclassified calls must be singleton. Multiple
+  independent local read-only calls may be returned in order and executed sequentially.
   Parsing does not execute or schedule calls and does not prove independence.
 - Empty calls mean only that the model ended its loop. Neither that fact nor
   `message` proves a successful write, a verified result, or a clean execution.

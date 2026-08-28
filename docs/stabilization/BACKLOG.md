@@ -19,15 +19,17 @@
 | 3A | Отделить model context/materialization от извлекаемого loop по §15.2 | done host-neutral; ConversationModelSession и существующий AgentTranscript, прежние loop helpers удалены, semantics сохранены |
 | 3B1 | Ввести pure AgentKernel, typed evidence и generic ports | done introduce-only; fake model/tool/store tests; production loop остаётся прежним |
 | 3B2 | Kernel production switch и existing event-store replay | done host-neutral; guards сохранены, старые loop/accounting удалены; Windows/controller delivery и полная Phase 9 matrix открыты |
-| 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
-| 5 | Bound DocumentSession / HostRuntime | Windows tests смены активной книги и lifetime |
-| 6 | VBA vertical slice; отдельно оценить необходимость пользовательского package lifecycle для stable | Canonicalization, exact patch, journal, read-back/fault matrix; общий package journal нужен rename, сокращение scope пока не согласовано |
+| 4 | Tool contracts / ToolRuntime | Actual effect evidence, typed control signals, ResourceRef result transport (R30); batch guard до dispatch в ModelProtocol/kernel, один call в ToolRuntime; fake error/unknown/no-op/confirmation cases |
+| 5 | Bound DocumentSession / HostRuntime | Windows tests identity/lifetime и guard-read/dispatch/read-back под одним gate; manual/resource concurrency, confirmation без удержания document lock |
+| 6 | VBA vertical slice; отдельно оценить необходимость пользовательского package lifecycle для stable | Raw CAS bytes отдельно от comparable normalization; exact patch, journal/read-back/fault matrix, no fabricated terminal при persistence failure; общий package journal нужен rename, scope пока не сокращён |
 | 7 | Excel read/write vertical slice | Bound target, write-effect evidence |
-| 8 | Resource read plane / immutable ToolPack | Заменить внешний lifecycle без переделки kernel; нет LRU eviction во время run |
-| 9 | Persistence / UI projection | Расширить минимальный replay Phase 3; replay не принимает execution decisions |
+| 8 | Resource read plane / immutable ToolPack | Заменить внешний lifecycle без переделки kernel; bounded pinned schema/policy/binding, compaction materialization, atomic admission; no LRU eviction и no CAS transport (R30) |
+| 9 | Persistence / UI projection | Расширить minimal replay Phase 3: один event authority, mandatory durable barriers/result-append faults, typed verification projection; replay не принимает execution decisions |
 | 10 | Финальная структурная сверка и architecture tests | Чистка и проверки границ уже выполняются при switch; дополнить coverage, закрыть core-миграции; optional consumers оставить с gates Phase 11 |
 | 12 | Release qualification и packaging | Gates основного маршрута; Windows x64 + Office x64 + VS 2022; Phase 11 не блокирует |
 | 11 | Optional contours | После stable core либо отдельно согласованный post-beta milestone; не расширять release-critical scope автоматически |
+
+До каждого switch сверять его scope и acceptance с [архитектурным аудитом](RISK_REGISTER.md#архитектурный-аудит-2026-08-28) и соответствующим разделом master plan. Уточнение target contracts не запускает будущую фазу и не закрывает runtime gates; R29 исправляется отдельным protocol change, а не случайным ослаблением v3 при Phase 4.
 
 R20 закрыт в 2B: `MaxAgentFormatRetries=20` допускает ровно двадцать protocol responses,
 включая первую. Provider failures и один schema fallback имеют отдельные бюджеты.

@@ -24,10 +24,10 @@ safety, refusal и review/reset на prompt schema 12. Windows/live-provider gat
 | R01 | P0 | Model completed скрывает write error/unknown или отсутствие write | AgentKernel / Application / UI | Phase 1C warning + Phase 3B2 shared kernel summary, actual event replay; production delivery R21 | contained host-neutral 1C; Windows qualification open |
 | R02 | P1 | tLLM protection вместо JSON | ModelProtocol | 2A/2B: typed boundary, clean repair, общий лимит и fake protection/HTML tests; v3 validation/repair проверены в 2C3C; live endpoint qualification отдельно | contained for fake content 2A/2B; open |
 | R03 | P0 | Write применён, ответ потерян | Domain/Host | unknown + reconciliation, Phases 4–7 | open |
-| R04 | P0 | Patch направлен не в ту книгу | HostRuntime | Bound DocumentSession, Phase 5 | open |
-| R05 | P1 | LRU удалил schema | ToolPack | No eviction in run, Phase 8 | open |
+| R04 | P0 | Patch направлен не в ту книгу | HostRuntime | Phase 5: bound document и единый gate для guard/live read/dispatch/read-back; повторная проверка после confirmation, manual/resource paths используют тот же target/gate | open |
+| R05 | P1 | Schema исчезла из контекста либо snapshot изменился под тем же tool ID | ToolPack | Phase 8: no eviction, pinned schema/policy/binding, bounded admission и повторная materialization после compaction | open |
 | R06 | P1 | Модель не знает о tool | ToolPack/Discovery | Deterministic core pack, Phase 8 | open |
-| R07 | P1 | VBE нормализует source | VBA | Single canonicalizer, Phase 6 | open |
+| R07 | P1 | VBE нормализует source | VBA | Phase 6: один comparable canonicalizer; raw CAS hash отдельно, без повторного JSON unescape или нормализации CAS bytes | open |
 | R08 | P0 | Journal расходится с live state | VBA | Read-only recovery, Phase 6 | open |
 | R09 | P0 | Cancellation после COM dispatch | Host/Domain | Unknown/reconciliation, Phases 5–7 | open |
 | R10 | P1 | UI показывает устаревший статус | UI/Persistence | Revisioned projection, Phase 9 | open |
@@ -50,6 +50,24 @@ safety, refusal и review/reset на prompt schema 12. Windows/live-provider gat
 | R27 | P1 | Schema mismatch / UI save могли молча заменить custom prompts или подтвердить старую схему; PlanSystemPrompt отсутствовал в UI payload | ModelProtocol / Settings | 2C3B удаляет reset и проверяет explicit review/JS; 2C3C сохраняет schema 11 custom text, ordinary/failed save не подтверждают её; explicit review/reset проверены на actual v3 defaults/schema 12. Shared guard до preparation/confirmation | fixed host-neutral; production controller/WebView/DPAPI qualification pending |
 | R28 | P2 | Пользователь сообщает об отсутствии live streaming на последнем HEAD; transport / projector / WebView причина не установлена | ModelProtocol / Application / UI | Сохранить progress forwarding при switch 3B2; диагностика существующего SSE → message/reasoning → bridge path, UI qualification Phase 9 и live-provider gate Phase 12 | reported 2026-08-28; not reproduced |
 | R29 | P1 | Архитектурный баг: уникальность tool-call ID возложена на модель; служебная коллизия отклоняет весь ответ и вызывает повторную генерацию полезного payload | ModelProtocol / Runtime | Отдельное исправление контракта Phase 2 с согласованным switch потребителей Phase 3: runtime назначает ID до execution, сохраняет его для result/confirmation/replay; детали ниже | open bug; подтверждён контрактом и duplicate-ID rejection, ухудшение HTML после repair сообщено пользователем; 3B2 не закрывает |
+| R30 | P1 | Target Resource/Tool Result contract возвращает CAS `content_ref` как второй model transport либо теряет `ResourceRef` при упрощении результата | Resources / ToolRuntime | §§7.4/7.8 и gates Phases 4/8 сохраняют exact ResourceRef + bounded reader, без нового transport | противоречие плана исправлено docs-only; runtime regression gates Phases 4/8 открыты |
+
+## Архитектурный аудит 2026-08-28
+
+Baseline `15dea46` (Phase 3B2). Проверены target contracts и Phases 4–12 master plan против canonical conversation/resource/session/VBA docs и точечных runtime contracts. Это аудит документов и границ, не повторная проверка всего runtime или Windows qualification. R29 — подтверждённый design bug; остальные строки уточняют противоречия/пробелы плана и существующие риски, не объявляют новые runtime failures воспроизведёнными.
+
+| Контур / риск | Найденное противоречие или пробел | Исправленное требование и gate |
+|---|---|---|
+| ID / R29 | Master §7.1 продолжал представлять model-generated ID как окончательный контракт | Действующий v3 отделён от обязательного runtime-ID correction. Raw response неизменяем, mapping хранится в accepted event; replay не генерирует ID, collision не вызывает model repair после switch |
+| Effect evidence / R01, R23 | `WriteOk` invocation count можно было принять за verified writes; policy `verification` не доказывает actual read-back | §§7.3–7.6: typed evidence отдельно от policy/status, no-op отдельно от фактической записи; Phase 4 fake-handler и Phases 6/7 domain cases |
+| Batch/control ownership / R26 | Phase 4 поручала whole-response batching ToolRuntime, хотя порт исполняет один call; target v1 не объяснял pending/awaiting-user | Полный batch проверяют ModelProtocol/kernel до первого dispatch, на runtime policy; ToolRuntime сохраняет typed control signals и возвращает record, kernel учитывает/сохраняет один раз. Не считать любой read independent local |
+| Resources / R30 | §7.8 предлагал CAS `content_ref`, а §7.4 не сохранял transport для больших результатов | Удалён новый envelope/transport; сохраняются ResourceRef и существующие bounded readers/serializer references. Gates Phases 4/8 |
+| ToolPack / R05, R06 | Snapshot по IDs и запрет LRU не определяли изменение handler/policy, compaction и admission limits | §7.7/Phase 8 pin-ят schema+policy+binding, проверяют budget до publication, восстанавливают exact schemas после compaction. Намеренный переход к конечному immutable core pack сохранён, текущий LRU не меняется заранее |
+| Host / R04, R09 | Сериализация только writes оставляла guard-read/read-back вне явно заданного критического окна | §7.9/Phase 5: один bound target/reentrant gate для live read/prepare/write/read-back и manual/resource paths, без ожидания LLM/пользователя под document lock; tests гонок/identity/lock order |
+| VBA / R07 | Нормализация transport/comparable source не была явно отделена от raw CAS identity | §10/Phase 6: JSON decode один раз, raw bytes и comparable hash различаются; literal backslashes/строки/комментарии не меняют смысл |
+| Persistence / R03, R11 | «Разделить events» и «каждый write возвращает terminal result» допускали второй store или выдуманный terminal при сбое persistence | Phases 6/9 сохраняют один chat stream и domain journals, ordered durable barriers и unresolved evidence после сбоя; no replay effects. Actual minimal replay из 3B2 не объявляется полной Phase 9 матрицей |
+
+Также исправлены stale v2/model-owned status и media-repair формулировки в canonical session/conversation docs: они противоречили active v3 и существующей materialized-step lifetime. Последующая реализация должна читать актуальный контракт, а не исторический пример. Diff/локальные ссылки проверяются без build/tests; R28/R29 и Windows gates этим аудитом не закрываются.
 
 ## Live report 2026-08-28 — duplicate call ID и streaming
 
