@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Tools
 {
@@ -27,34 +28,31 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return ControllerToolDefinition.Create(
-                ListToolId,
-                "Common",
-                "Read-only: Discover providers or list bounded resource metadata from one provider. If multiple providers exist, omit provider once to receive their ids, then select one. Bodies are never returned. Continue only with nextCursor from the same result and the identical provider/kind query.",
-                ListSchema(),
-                name: "resources_list",
-                scope: "session");
+            yield return LegacyToolDefinitionAdapter.ProjectRead(ResourceListToolHandler.Descriptor, ResourceListToolHandler.Policy, "resources_list");
             yield return ControllerToolDefinition.Create(
                 ResolveToolId,
                 "Common",
                 "Read-only: Resolve one canonical rna:// resource URI to current metadata and available representations.",
                 ResolveSchema(),
                 name: "resources_resolve",
-                scope: "session");
+                scope: "session",
+                independentLocalRead: true);
             yield return ControllerToolDefinition.Create(
                 SearchToolId,
                 "Common",
                 "Read-only: Search resource metadata and locally available text. Returns bounded snippets and canonical URIs; match/snippet offsets are informational and are never resources_read arguments. It never returns raw binary media.",
                 SearchSchema(),
                 name: "resources_search",
-                scope: "session");
+                scope: "session",
+                independentLocalRead: true);
             yield return ControllerToolDefinition.Create(
                 ReadToolId,
                 "Common",
                 "Read-only: Read one exact resource representation by canonical URI. Text is bounded and pageable; media is hydrated only for the next model step and base64 is never embedded in JSON. Continue only with nextCursor from the immediately preceding read of the same URI, revision, and representation.",
                 ReadSchema(),
                 name: "resources_read",
-                scope: "session");
+                scope: "session",
+                independentLocalRead: true);
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, ChatSession session)
@@ -66,16 +64,6 @@ namespace RNAssistant.Office.Tools
             }
             try
             {
-                if (string.Equals(command.ToolId, ListToolId, StringComparison.OrdinalIgnoreCase))
-                {
-                    var data = _gateway.List(
-                        session,
-                        ToolArgumentReader.String(command.Arguments, "provider", string.Empty),
-                        ToolArgumentReader.String(command.Arguments, "kind", string.Empty),
-                        ToolArgumentReader.String(command.Arguments, "cursor", string.Empty),
-                        ToolArgumentReader.Int32(command.Arguments, "limit", 20));
-                    return ToolResult.Ok("Resources listed.", Serialize(data));
-                }
                 if (string.Equals(command.ToolId, ResolveToolId, StringComparison.OrdinalIgnoreCase))
                 {
                     var data = _gateway.Resolve(
@@ -131,16 +119,6 @@ namespace RNAssistant.Office.Tools
         private static string Serialize(object value)
         {
             return JsonConvert.SerializeObject(value, ResultJsonSettings);
-        }
-
-        private static string ListSchema()
-        {
-            return "{\"type\":\"object\",\"properties\":{" +
-                "\"provider\":{\"type\":\"string\",\"description\":\"Optional exact provider id; omit when only one provider is available.\",\"maxLength\":64}," +
-                "\"kind\":{\"type\":\"string\",\"description\":\"Optional exact resource kind filter.\",\"maxLength\":64}," +
-                "\"cursor\":{\"type\":\"string\",\"description\":\"Optional continuation: copy nextCursor only from the immediately preceding resources_list result with the identical provider and kind. Omit it for the first page, after changing any filter, or when nextCursor is absent. Never use a resources_read cursor.\",\"maxLength\":256}," +
-                "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum metadata rows.\",\"minimum\":1,\"maximum\":50,\"default\":20}" +
-                "},\"required\":[],\"additionalProperties\":false}";
         }
 
         private static string ResolveSchema()

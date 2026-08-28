@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.Tools;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Services;
@@ -15,6 +17,46 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void NativeResourceListUsesRuntimeForManualAndModelCalls()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = new ChatSession { Mode = ChatModes.Chat };
+                session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "First", InlineText = "body" });
+                var tools = executor.GetControllerTools().ToArray();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Chat, false);
+                var call = new ToolCall("native_read", ResourceToolExecutor.ListToolId, "{\"provider\":\"chat\"}");
+                var policy = runtime.Describe(call);
+                AssertTrue(policy != null && policy.IndependentLocalRead && !policy.MayHaveSideEffects,
+                    "native resource list has source-owned read policy");
+                var record = runtime.ExecuteAsync(new ToolExecutionContext(call, policy, "run", "turn", "step",
+                    DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "native resource list succeeds in chat mode");
+                AssertEqual(ToolDispatchEvidence.MayHaveDispatched, record.Evidence.Dispatch, "provider invocation is recorded");
+                AssertEqual(ToolEffectEvidence.None, record.Evidence.Effect, "read success does not manufacture verified effect");
+                AssertContains(record.Result.DataJson, "rna://", "native list retains canonical resource references");
+                var manual = executor.Execute(Command(ResourceToolExecutor.ListToolId, "provider", "chat"), tools,
+                    new AppSettings(), false, true, session);
+                AssertTrue(manual.Success, "manual executor uses migrated read handler");
+                AssertEqual(record.Result.DataJson, manual.DataJson, "manual and kernel paths share one domain implementation");
+                AssertTrue(runtime.Describe(new ToolCall("wrong_case", "COMMON.RESOURCES_LIST", "{}")) == null,
+                    "native dispatch has no case alias");
+                foreach (var arguments in new[] { "{\"limit\":51}", "{\"limit\":\"1\"}", "{\"unknown\":true}" })
+                {
+                    var invalid = new ToolCall("invalid_read", ResourceToolExecutor.ListToolId, arguments);
+                    var rejected = runtime.ExecuteAsync(new ToolExecutionContext(invalid, policy, "run", "turn", "step",
+                        DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome, "native schema rejects invalid arguments");
+                    AssertEqual(ToolDispatchEvidence.NotDispatched, rejected.Evidence.Dispatch, "schema validation precedes provider access");
+                    AssertEqual(ToolEffectEvidence.None, rejected.Evidence.Effect, "rejected read has no effect");
+                }
+                var invalidManual = executor.Execute(Command(ResourceToolExecutor.ListToolId, "limit", 51), tools,
+                    new AppSettings(), false, true, session);
+                AssertTrue(!invalidManual.Success && invalidManual.ErrorCode == "invalid_arguments",
+                    "manual command uses the same native validation boundary");
+            });
+        }
+
         private static void ResourceGatewayReadsSearchesAndPages()
         {
             var attachment = new ChatAttachment

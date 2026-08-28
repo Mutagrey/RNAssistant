@@ -349,6 +349,7 @@ namespace RNAssistant.Office.Services
                 Subtitle = activity.Subtitle,
                 Status = activity.Status,
                 ExecutionStatus = activity.ExecutionStatus,
+                ExecutionEvidence = activity.ExecutionEvidence,
                 ErrorCode = activity.ErrorCode,
                 Retryable = activity.Retryable,
                 PendingId = activity.PendingId,

@@ -395,6 +395,24 @@ namespace RNAssistant.Harness
             var scope = ConversationProtocolContext.BatchSafeReadIds(new[] { read, write, external, pipeline });
             AssertTrue(scope.SequenceEqual(new[] { "excel.inspect" }),
                 "only audited local reads with safe metadata can batch; external/unclassified/pipelines stay singleton");
+            var renamedRead = read.Clone();
+            renamedRead.Id = "fixture.explicit_read";
+            AssertTrue(ConversationProtocolContext.BatchSafeReadIds(new[] { renamedRead }).SequenceEqual(new[] { renamedRead.Id }),
+                "declared policy, not a central name list, grants independent read batching");
+            var untyped = new ToolDefinition { Id = read.Id, BuiltIn = true };
+            AssertEqual(0, ConversationProtocolContext.BatchSafeReadIds(new[] { untyped }).Length,
+                "a known read name without source-owned policy is unclassified");
+            var serialized = JsonConvert.SerializeObject(read);
+            AssertTrue(serialized.IndexOf("RuntimePolicy", StringComparison.Ordinal) < 0,
+                "source-owned authority is not a custom tool JSON field");
+            var forged = JsonConvert.DeserializeObject<ToolDefinition>("{\"Id\":\"external.fake\",\"BuiltIn\":true,\"RuntimePolicy\":{\"Effect\":\"Read\",\"IndependentLocalRead\":true}}");
+            AssertEqual(0, ConversationProtocolContext.BatchSafeReadIds(new[] { forged }).Length,
+                "serialized authority cannot forge independent local read permission");
+            var originalFingerprint = ConversationRunService.ToolExecutionFingerprint(new[] { read }, read.Id);
+            var changedPolicy = read.Clone();
+            changedPolicy.RuntimePolicy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent" });
+            AssertTrue(originalFingerprint != ConversationRunService.ToolExecutionFingerprint(new[] { changedPolicy }, changedPolicy.Id),
+                "captured authority revision includes the typed policy");
             foreach (var kind in new[] { "document", "local", "confirmation", "not_agent", "disabled", "custom", "vba", "pipeline" })
             {
                 var changed = read.Clone();

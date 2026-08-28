@@ -15,11 +15,12 @@
 | 2C3A | Общий active wire owner для runtime/probes, удалить duplicated schema/JSON/validation paths | done host-neutral; 76 targeted tests pass; v2 сохранён |
 | 2C3B | R27: сохранять custom prompts, явный review/reset, guard до model preparation/confirmation | done host-neutral/JS; 22 harness + 5 Node pass; active v2 и prompt schema 11 сохранены; Windows pending |
 | 2C3C | Switch/delete: shared wire/client/prompts/history/version, complete-context enforcement и explicit old-chat skip/reset | done host-neutral; actual v3, 100 targeted cases; explicit review/reset на schema 12; Windows/live-provider qualification открыта |
-| 2 follow-up / 3 consumers | R29/P1: runtime-owned IDs, atomic wire/history v4 | done host-neutral; [evidence](R29_RUNTIME_CALL_IDS.md). Назначение до accepted append, immutable origin/raw mapping, payload/confirmation/replay tests. Windows/live-provider gates открыты; Phase 4 не начата |
+| 2 follow-up / 3 consumers | R29/P1: runtime-owned IDs, atomic wire/history v4 | done host-neutral; [evidence](R29_RUNTIME_CALL_IDS.md). Назначение до accepted append, immutable origin/raw mapping, payload/confirmation/replay tests. Windows/live-provider gates открыты; отдельный R29 switch завершён до Phase 4 |
 | 3A | Отделить model context/materialization от извлекаемого loop по §15.2 | done host-neutral; ConversationModelSession и существующий AgentTranscript, прежние loop helpers удалены, semantics сохранены |
 | 3B1 | Ввести pure AgentKernel, typed evidence и generic ports | done introduce-only; fake model/tool/store tests; production loop остаётся прежним |
 | 3B2 | Kernel production switch и existing event-store replay | done host-neutral; guards сохранены, старые loop/accounting удалены; Windows/controller delivery и полная Phase 9 matrix открыты |
-| 4 | Tool contracts / ToolRuntime | Actual effect evidence, typed control signals, ResourceRef result transport (R30); batch guard до dispatch в ModelProtocol/kernel, один call в ToolRuntime; fake error/unknown/no-op/confirmation cases |
+| 4A | Typed ToolRuntime / first native resources_list | done host-neutral; [135 targeted checks / evidence](PHASE_4A_TOOL_RUNTIME.md#verification). Source policy, exact registry, dispatch/effect separation, same-stream replay; legacy domain preparation retained |
+| 4B | Tool Result v1 wire и removal старых result readers | Atomic writer + schema/skill evidence + prompts/probes (включая R31) + resource materialization + full-history result gate; удалить ProjectLegacy/old writer, сохранить typed pending/awaiting-user/ResourceRef; Phase 5 не начинать |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests identity/lifetime и guard-read/dispatch/read-back под одним gate; manual/resource concurrency, confirmation без удержания document lock |
 | 6 | VBA vertical slice; отдельно оценить необходимость пользовательского package lifecycle для stable | Raw CAS bytes отдельно от comparable normalization; exact patch, journal/read-back/fault matrix, no fabricated terminal при persistence failure; общий package journal нужен rename, scope пока не сокращён |
 | 7 | Excel read/write vertical slice | Bound target, write-effect evidence |
@@ -72,6 +73,8 @@ providers всё ещё требуют qualification. До Phase 4 external/uncl
 - Расширение diagnostics UI и protocol versions остаётся за пределами Phase 0.
 
 ## Вне текущего изменения
+
+- R31/P2: в `BuiltInSkillProvider` / `common.prompt_authoring` осталось требование unique call id. Оно противоречит v4 runtime ownership и может вернуть старую инструкцию при редактировании prompts. Удалить в 4B вместе с атомарным обновлением prompt consumers, добавить targeted skill-content regression; wire/parser/kernel R29 не менять. Source review подтвердил текст; live incident с этим skill не воспроизведён.
 
 Незакоммиченные до начала Phase 0 изменения protocol, runtime, OfficeHosts, tests
 и web сохраняются отдельно и не считаются выполнением Phase 1.

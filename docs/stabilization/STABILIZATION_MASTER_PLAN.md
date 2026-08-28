@@ -1679,33 +1679,37 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 
 ### Выполнить
 
+4A закрыт host-neutral: [contracts/runtime/evidence](PHASE_4A_TOOL_RUNTIME.md).
+4B — отдельный атомарный switch model result writer/readers/prompts/history gate;
+internal typed result не закрывает wire gate и всю Phase 4.
+
 - [ ] Ввести:
-  - [ ] `ToolDescriptor`;
-  - [ ] `ToolPolicy`;
-  - [ ] `ToolBinding`;
-  - [ ] `ToolPackageMetadata`;
-  - [ ] `ToolResult v1`;
-  - [ ] `IToolHandler`;
-  - [ ] `ToolRuntime`;
-  - [ ] `ToolHandlerRegistry`.
-- [ ] Добавить `LegacyToolDefinitionAdapter`.
-- [ ] Из `OfficeToolExecutor` извлекать общий validation/policy/confirmation/dispatch runtime, переиспользуя уже выделенные domain executors; не дробить каждый dispatch branch и не менять document binding до Phase 5.
-- [ ] Не удалять текущие tools сразу.
-- [ ] Перенести один read-only tool первым.
-- [ ] Проверить exact id lookup.
-- [ ] Проверить schema validation.
-- [ ] Проверить confirmation gate до execution.
-- [ ] Runtime enforce:
-  - [ ] whole-response guard в ModelProtocol/kernel проверяет общий policy snapshot до первого dispatch; ToolRuntime не получает model envelope;
-  - [ ] write/external/confirmation-required/unclassified call единственный в response;
-  - [ ] только independent local reads могут быть последовательным списком;
-  - [ ] никакого generic auto retry.
-- [ ] Убрать дублирующий `Success + Status` в новом contract.
+  - [x] `ToolDescriptor`;
+  - [x] `ToolPolicy`;
+  - [x] `ToolBinding`;
+  - [x] `ToolPackageMetadata`;
+  - [ ] `ToolResult v1` — internal typed result введён в 4A; model-facing wire ожидает 4B;
+  - [x] `IToolHandler`;
+  - [x] `ToolRuntime`;
+  - [x] `ToolHandlerRegistry`.
+- [x] Добавить `LegacyToolDefinitionAdapter`.
+- [x] Из `OfficeToolExecutor` извлекать общий validation/policy/confirmation/dispatch runtime, переиспользуя уже выделенные domain executors; не дробить каждый dispatch branch и не менять document binding до Phase 5. В 4A переключён `resources_list`; legacy domain preparation остаётся до switch соответствующих handlers.
+- [x] Не удалять текущие tools сразу.
+- [x] Перенести один read-only tool первым.
+- [x] Проверить exact id lookup.
+- [x] Проверить schema validation.
+- [x] Проверить confirmation gate до execution.
+- [x] Runtime enforce:
+  - [x] whole-response guard в ModelProtocol/kernel проверяет общий policy snapshot до первого dispatch; ToolRuntime не получает model envelope;
+  - [x] write/external/confirmation-required/unclassified call единственный в response;
+  - [x] только independent local reads могут быть последовательным списком;
+  - [x] никакого generic auto retry.
+- [x] Убрать дублирующий `Success + Status` в новом contract.
 - [ ] Добавить model-facing serializer Tool Result v1.
-- [ ] Сохранить runtime-only pending/awaiting-user/non-dispatch signals и `ResourceRef` transport; serializer не читает narrative для восстановления execution state.
-- [ ] Отделить policy verification от actual effect evidence; покрыть read ok/error, write no-op/verified/unknown, confirmation и exception до/после возможного dispatch fake handler tests. Kernel считает каждый record один раз; запись run events остаётся через один `IRunStore`.
-- [ ] Обновить protocol docs.
-- [ ] Добавить ADR-0003.
+- [ ] Сохранить runtime-only pending/awaiting-user/non-dispatch signals и `ResourceRef` transport; 4A typed evidence покрыта, serializer/resource transport проверяется при wire switch 4B. Serializer не читает narrative для восстановления execution state.
+- [x] Отделить policy verification от actual effect evidence; покрыть read ok/error, write no-op/verified/unknown, confirmation и exception до/после возможного dispatch fake handler tests. Kernel считает каждый record один раз; запись run events остаётся через один `IRunStore`.
+- [x] Обновить protocol docs.
+- [x] Добавить ADR-0003.
 
 ### Definition of Done
 

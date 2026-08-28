@@ -77,7 +77,7 @@ namespace RNAssistant.Office.Tools
                 Valid = true,
                 MutatesDocument = tool.MutatesDocument || isVba,
                 MutatesLocalState = tool.MutatesLocalState,
-                RequiresConfirmation = tool.RequiresConfirmation,
+                RequiresConfirmation = tool.RequiresConfirmation || tool.RuntimePolicy != null && tool.RuntimePolicy.RequiresConfirmation,
                 AgentCanRun = tool.AgentCanRun,
                 RiskLevel = tool.RiskLevel
             };

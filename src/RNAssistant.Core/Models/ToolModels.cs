@@ -17,6 +17,9 @@ namespace RNAssistant.Core.Models
         public bool MutatesLocalState { get; set; }
         public bool CanSourceHtmlData { get; set; }
         public bool AgentCanRun { get; set; }
+        // Trusted, source-owned runtime authority. Custom tool JSON cannot set it.
+        [JsonIgnore]
+        public Tools.ToolPolicy RuntimePolicy { get; set; }
         public string Code { get; set; }
         public string Readme { get; set; }
         public string StoragePath { get; set; }

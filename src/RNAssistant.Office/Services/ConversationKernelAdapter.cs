@@ -11,6 +11,7 @@ using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
+using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Services
 {
@@ -61,6 +62,7 @@ namespace RNAssistant.Office.Services
         private IReadOnlyList<SkillDefinition> _skills;
         private ConversationModelSession _modelSession;
         private ModelProtocolResult _lastModel;
+        private NativeToolRuntimeAdapter _nativeTools;
         private AgentModelResult _preparationFailure;
         private object _contextUsage;
         private long _cursor;
@@ -101,6 +103,7 @@ namespace RNAssistant.Office.Services
             CapabilityDiscoveryExecutor.ThrowOnCollision(_catalog, _skills);
             _catalog = _policy.SelectTools(_executor.AvailableConversationToolsForSession(_catalog, _session));
             CapabilityDiscoveryExecutor.BindReadSchema(_catalog, _skills);
+            _nativeTools = _executor.CreateNativeRuntime(_session, _catalog, _input.Settings, _policy.Mode);
         }
 
         internal ChatTurnResult Result(RunSummary summary)

@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Services
 {
@@ -14,19 +15,25 @@ namespace RNAssistant.Office.Services
     {
         public ToolPolicySnapshot Describe(ToolCall call)
         {
+            if (NativeToolRuntimeAdapter.Owns(call.Name)) return _nativeTools.Describe(call);
             var tool = _catalog.SingleOrDefault(item => string.Equals(item.Id, call.Name, StringComparison.Ordinal));
             if (tool == null) return null;
             return new ToolPolicySnapshot(tool.Id, ConversationRunService.ToolExecutionFingerprint(_catalog, tool.Id),
-                tool.MutatesDocument || tool.MutatesLocalState, tool.RequiresConfirmation,
-                ConversationProtocolContext.BatchSafeReadIds(_catalog).Contains(tool.Id, StringComparer.Ordinal));
+                LegacyToolDefinitionAdapter.PolicyFor(tool, _policy.Mode));
         }
 
-        public Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken)
+        public async Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken)
         {
             if (_preparationFailure != null)
-                return Task.FromResult(new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched,
-                    DateTime.UtcNow, "Model input preparation failed; remaining calls were not dispatched.", mayHaveDispatched: false));
+                return new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched,
+                    DateTime.UtcNow, "Model input preparation failed; remaining calls were not dispatched.", mayHaveDispatched: false);
             cancellationToken.ThrowIfCancellationRequested();
+            if (NativeToolRuntimeAdapter.Owns(context.Call.Name))
+            {
+                var record = await _nativeTools.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
+                _results[context.Call.Id] = NativeToolRuntimeAdapter.ProjectLegacy(record);
+                return record;
+            }
             var command = Command(context.Call, context.StepId, context.IsConfirmed);
             var result = _executor.Execute(command, _catalog, _input.Settings, false, context.IsConfirmed,
                 _session, context.RemainingToolSteps, _skills, cancellationToken);
@@ -45,11 +52,11 @@ namespace RNAssistant.Office.Services
             }
             _results[context.Call.Id] = result;
             var outcome = LegacyToolOutcomeAdapter.Map(context.Policy, result);
-            return Task.FromResult(new ToolExecutionRecord(context, outcome, DateTime.UtcNow, result.Message,
+            return new ToolExecutionRecord(context, outcome, DateTime.UtcNow, result.Message,
                 mayHaveDispatched: outcome != ToolExecutionOutcome.AwaitingConfirmation,
                 pendingId: outcome == ToolExecutionOutcome.AwaitingConfirmation ? result.PendingId : null,
                 awaitingUser: AgentTranscript.IsAwaitingUserResult(result), toolStepsConsumed: Math.Max(1, result.ToolStepsConsumed),
-                documentRuntimeId: _session.LastRun.DocumentRuntimeKey));
+                documentRuntimeId: _session.LastRun.DocumentRuntimeKey);
         }
 
         private ToolCommand Command(ToolCall call, string stepId, bool confirmed)
@@ -75,7 +82,7 @@ namespace RNAssistant.Office.Services
         }
     }
 
-    // Phase 4 removes this legacy result mapping. It classifies ONE invocation;
+    // Each domain handler switch removes its legacy mapping. This classifies ONE invocation;
     // only AgentKernel accumulates counts/health across calls and confirmations.
     internal static class LegacyToolOutcomeAdapter
     {

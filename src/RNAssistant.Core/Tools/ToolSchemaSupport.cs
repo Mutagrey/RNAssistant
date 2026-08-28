@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -30,9 +31,16 @@ namespace RNAssistant.Core.Tools
             JObject parsed;
             try
             {
-                parsed = JObject.Parse(
-                    string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson,
-                    new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+                using (var reader = new JsonTextReader(new StringReader(
+                    string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson))
+                {
+                    DateParseHandling = DateParseHandling.None
+                })
+                {
+                    parsed = JObject.Load(reader,
+                        new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+                    if (reader.Read()) throw new JsonReaderException("More than one JSON value in argumentSchemaJson.");
+                }
             }
             catch (JsonException ex)
             {

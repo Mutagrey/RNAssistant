@@ -36,14 +36,16 @@ namespace RNAssistant.Office.Tools
                 "Read-only: Filter the complete compact RUNTIME_CONTEXT.capabilities catalog by id or metadata. Results identify tools and skills but load neither; use the exact id with common.capabilities_read.",
                 SearchSchema(),
                 name: "capabilities_search",
-                scope: "session");
+                scope: "session",
+                independentLocalRead: true);
             yield return ControllerToolDefinition.Create(
                 ReadToolId,
                 "Common",
                 "Read-only: Read one exact capability id from RUNTIME_CONTEXT.capabilities or capabilities_search. A tool result loads its exact callable schema; a skill result loads its complete Markdown body. Never invent or derive an id.",
                 ReadSchema(null, null),
                 name: "capabilities_read",
-                scope: "session");
+                scope: "session",
+                independentLocalRead: true);
         }
 
         public ToolResult ExecuteControllerTool(

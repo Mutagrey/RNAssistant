@@ -1294,6 +1294,7 @@ namespace RNAssistant.Harness
                 MutatesLocalState = tool.MutatesLocalState,
                 CanSourceHtmlData = tool.CanSourceHtmlData,
                 AgentCanRun = tool.AgentCanRun,
+                RuntimePolicy = tool.RuntimePolicy,
                 Code = tool.Code,
                 Readme = tool.Readme,
                 StoragePath = tool.StoragePath,

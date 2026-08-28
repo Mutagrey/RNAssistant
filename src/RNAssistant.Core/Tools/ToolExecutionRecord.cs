@@ -4,7 +4,8 @@ using RNAssistant.Core.Agent;
 
 namespace RNAssistant.Core.Tools
 {
-    // A captured execution policy, not the descriptor/policy/binding migration of Phase 4.
+    // Legacy callers retain captured safety; registered handlers also capture the
+    // complete typed policy. A typed contract cannot match an untyped snapshot.
     public sealed class ToolPolicySnapshot
     {
         public string ToolId { get; private set; }
@@ -12,19 +13,31 @@ namespace RNAssistant.Core.Tools
         public bool MayHaveSideEffects { get; private set; }
         public bool RequiresConfirmation { get; private set; }
         public bool IndependentLocalRead { get; private set; }
+        public ToolPolicy Policy { get; private set; }
 
+        [JsonConstructor]
         public ToolPolicySnapshot(string toolId, string revision, bool mayHaveSideEffects,
-            bool requiresConfirmation = false, bool independentLocalRead = false)
+            bool requiresConfirmation = false, bool independentLocalRead = false, ToolPolicy policy = null)
         {
             if (string.IsNullOrWhiteSpace(toolId)) throw new ArgumentException("Tool id is required.", nameof(toolId));
             if (string.IsNullOrWhiteSpace(revision)) throw new ArgumentException("Policy revision is required.", nameof(revision));
             if (independentLocalRead && (mayHaveSideEffects || requiresConfirmation))
                 throw new ArgumentException("An independent local read cannot have effects or require confirmation.");
+            if (policy != null && (policy.MayHaveSideEffects != mayHaveSideEffects ||
+                policy.RequiresConfirmation != requiresConfirmation || policy.IndependentLocalRead != independentLocalRead))
+                throw new ArgumentException("Typed and captured policy metadata disagree.", nameof(policy));
             ToolId = toolId;
             Revision = revision;
             MayHaveSideEffects = mayHaveSideEffects;
             RequiresConfirmation = requiresConfirmation;
             IndependentLocalRead = independentLocalRead;
+            Policy = policy;
+        }
+
+        public ToolPolicySnapshot(string toolId, string revision, ToolPolicy policy)
+            : this(toolId, revision, (policy ?? throw new ArgumentNullException(nameof(policy))).MayHaveSideEffects,
+                policy.RequiresConfirmation, policy.IndependentLocalRead, policy)
+        {
         }
 
         public bool Matches(ToolPolicySnapshot other)
@@ -33,7 +46,8 @@ namespace RNAssistant.Core.Tools
                 string.Equals(Revision, other.Revision, StringComparison.Ordinal) &&
                 MayHaveSideEffects == other.MayHaveSideEffects &&
                 RequiresConfirmation == other.RequiresConfirmation &&
-                IndependentLocalRead == other.IndependentLocalRead;
+                IndependentLocalRead == other.IndependentLocalRead &&
+                (Policy == null ? other.Policy == null : Policy.Matches(other.Policy));
         }
     }
 
@@ -51,7 +65,7 @@ namespace RNAssistant.Core.Tools
         public int RemainingToolSteps { get; private set; }
 
         [JsonConstructor]
-        internal ToolExecutionContext(ToolCall call, ToolPolicySnapshot policy, string runId, string turnId,
+        public ToolExecutionContext(ToolCall call, ToolPolicySnapshot policy, string runId, string turnId,
             string stepId, DateTime startedUtc, bool isConfirmed, int remainingToolSteps)
         {
             if (call == null || policy == null || !string.Equals(call.Name, policy.ToolId, StringComparison.Ordinal) ||
@@ -84,10 +98,14 @@ namespace RNAssistant.Core.Tools
         public string PendingId { get; private set; }
         public bool AwaitingUser { get; private set; }
         public int ToolStepsConsumed { get; private set; }
+        public ToolExecutionEvidence Evidence { get; private set; }
+        [JsonIgnore]
+        public Contracts.ToolResult Result { get; private set; }
 
         public ToolExecutionRecord(ToolExecutionContext context, ToolExecutionOutcome outcome, DateTime completedUtc,
             string message = null, string modelResultJson = null, bool mayHaveDispatched = true,
-            string pendingId = null, bool awaitingUser = false, int toolStepsConsumed = 1, string documentRuntimeId = null)
+            string pendingId = null, bool awaitingUser = false, int toolStepsConsumed = 1, string documentRuntimeId = null,
+            ToolExecutionEvidence evidence = null, Contracts.ToolResult result = null)
         {
             Context = context ?? throw new ArgumentNullException(nameof(context));
             if (!Enum.IsDefined(typeof(ToolExecutionOutcome), outcome)) throw new ArgumentOutOfRangeException(nameof(outcome));
@@ -102,6 +120,9 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("A non-dispatched call cannot have been dispatched.", nameof(mayHaveDispatched));
             if (awaitingUser && outcome != ToolExecutionOutcome.Ok)
                 throw new ArgumentException("Only a successful local interaction can await user input.", nameof(awaitingUser));
+            var dispatch = mayHaveDispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched;
+            if (evidence != null && evidence.Dispatch != dispatch)
+                throw new ArgumentException("Dispatch evidence disagrees with the execution record.", nameof(evidence));
             Outcome = outcome;
             CompletedUtc = completedUtc;
             Message = message ?? string.Empty;
@@ -111,6 +132,8 @@ namespace RNAssistant.Core.Tools
             AwaitingUser = awaitingUser;
             ToolStepsConsumed = outcome == ToolExecutionOutcome.NotDispatched ? 0 : Math.Max(1, toolStepsConsumed);
             DocumentRuntimeId = documentRuntimeId;
+            Evidence = evidence ?? new ToolExecutionEvidence(dispatch, ToolEffectEvidence.Unreported);
+            Result = result;
         }
     }
 }

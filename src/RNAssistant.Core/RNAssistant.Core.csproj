@@ -97,6 +97,10 @@
     <Compile Include="Agent\AgentRunContracts.cs" />
     <Compile Include="Agent\AgentKernel.cs" />
     <Compile Include="Tools\ToolExecutionRecord.cs" />
+    <Compile Include="Tools\ToolContracts.cs" />
+    <Compile Include="Tools\ToolExecutionEvidence.cs" />
+    <Compile Include="Tools\ToolHandlerContracts.cs" />
+    <Compile Include="Tools\Contracts\ToolResult.cs" />
     <Compile Include="Tools\IToolRuntime.cs" />
     <Compile Include="Persistence\IRunStore.cs" />
     <Compile Include="Persistence\AgentRunState.cs" />

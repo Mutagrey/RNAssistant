@@ -77,6 +77,54 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void KernelNativeResourceReadEvidenceReplays()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var expectedEvidence = JsonConvert.SerializeObject(new ToolExecutionEvidence(
+                    ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.None));
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"message\":\"List chat resources.\",\"tool_calls\":[{\"name\":\"common.resources_list\",\"arguments\":{\"provider\":\"chat\",\"limit\":1}}]}",
+                    "{\"message\":\"Resources listed.\",\"tool_calls\":[]}"
+                });
+                var modelCalls = 0;
+                var completedSaves = 0;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    modelCalls++;
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var service = new ConversationRunService(adapter, executor, new ChatStore(FixturePaths.Value), completion, null, saved: saved =>
+                {
+                    if (saved.LastRun.ExecutionSummary.ReadOk != 1) return;
+                    var durable = new ChatStore(FixturePaths.Value).Load(saved.Host, saved.DocumentKey, saved.Id);
+                    var activity = durable.Messages.Single(message => message.Activity != null &&
+                        message.Activity.ToolId == ResourceToolExecutor.ListToolId).Activity;
+                    AssertEqual(expectedEvidence, JsonConvert.SerializeObject(activity.ExecutionEvidence),
+                        "native read evidence is durable at completion and every later materialization save");
+                    completedSaves++;
+                });
+                var result = service.ExecuteAsync(ChatModes.Agent, "List chat resources", session, NewContext(adapter),
+                    new AppSettings(), executor.GetControllerTools().ToList(), null).GetAwaiter().GetResult();
+
+                AssertEqual("completed", result.RunStatus, "native resource read finishes normally");
+                AssertEqual(1, result.ExecutionSummary.ReadOk, "native read is counted once");
+                AssertEqual(2, modelCalls, "native bootstrap read needs no repair or extra schema request");
+                AssertTrue(completedSaves >= 2, "evidence is checked before and after result materialization");
+                var replay = AssertKernelReplay(session);
+                var clone = ChatCloneService.CloneSessionSnapshot(replay);
+                foreach (var projection in new[] { session, replay, clone })
+                {
+                    var activity = projection.Messages.Single(message => message.Activity != null &&
+                        message.Activity.ToolId == ResourceToolExecutor.ListToolId).Activity;
+                    AssertEqual(expectedEvidence, JsonConvert.SerializeObject(activity.ExecutionEvidence),
+                        "producer evidence survives session replay and clone without inference");
+                }
+            });
+        }
+
         private static ChatSession AssertKernelReplay(ChatSession session)
         {
             var loaded = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
@@ -795,6 +843,55 @@ namespace RNAssistant.Harness
                     "mutable session snapshot is absent");
                 AssertEqual(1, Directory.GetFiles(SessionDirectory(paths, session), "*.events.jsonl").Length,
                     "one canonical event stream");
+
+                var evidenceCases = new ToolExecutionEvidence[]
+                {
+                    new ToolExecutionEvidence(ToolDispatchEvidence.NotDispatched, ToolEffectEvidence.Unreported),
+                    new ToolExecutionEvidence(ToolDispatchEvidence.NotDispatched, ToolEffectEvidence.None),
+                    new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.Unreported),
+                    new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.None),
+                    new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.VerifiedNoChange),
+                    new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.VerifiedChange),
+                    new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.Unknown),
+                    null
+                };
+                const string payloadMarker = "large-tool-evidence-payload";
+                var activityMessages = evidenceCases.Select((evidence, index) => new ChatMessage
+                {
+                    Role = "assistant",
+                    Activity = new ChatActivity
+                    {
+                        Kind = "tool", ToolId = "fixture.tool", ToolCallId = "evidence-" + index,
+                        Status = "completed", ExecutionStatus = "completed", ExecutionEvidence = evidence,
+                        DataJson = index == 0 ? "{\"value\":\"" + payloadMarker + new string('x', 32768) + "\"}" : null
+                    }
+                }).ToArray();
+                session.Messages.AddRange(activityMessages);
+                var previousRevision = session.Revision;
+                store.Save(session);
+                var commit = store.ReadEvents(session.Host, session.DocumentKey, session.Id).Last();
+                AssertEqual(previousRevision + 1, session.Revision, "compact evidence uses one existing session commit");
+                AssertEqual(SessionEventTypes.SessionCommit, commit.Type, "no separate evidence event or index is introduced");
+                var compactEvidence = commit.Data.SelectTokens("$..ExecutionEvidence").OfType<JObject>().ToArray();
+                AssertEqual(evidenceCases.Length - 1, compactEvidence.Length, "historical null evidence is omitted from the commit");
+                AssertTrue(compactEvidence.All(value => value.Count == 2 && value["Dispatch"] != null && value["Effect"] != null),
+                    "persisted evidence contains only compact dispatch and effect facts");
+                AssertEqual(1, commit.Data.ToString(Formatting.None).Split(new[] { payloadMarker }, StringSplitOptions.None).Length - 1,
+                    "large result data is not duplicated inside compact evidence");
+
+                loaded = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
+                var clone = ChatCloneService.CloneSessionSnapshot(loaded);
+                foreach (var original in activityMessages)
+                {
+                    var expected = JsonConvert.SerializeObject(original.Activity.ExecutionEvidence);
+                    var replayed = loaded.Messages.Single(message => message.Id == original.Id).Activity;
+                    var cloned = clone.Messages.Single(message => message.Id == original.Id).Activity;
+                    AssertEqual(expected, JsonConvert.SerializeObject(replayed.ExecutionEvidence), "event replay preserves each evidence pair including null");
+                    AssertEqual(expected, JsonConvert.SerializeObject(cloned.ExecutionEvidence), "clone preserves immutable compact evidence");
+                    if (original.Activity.ExecutionEvidence == null)
+                        AssertTrue(JObject.FromObject(replayed)["ExecutionEvidence"] == null,
+                            "successful historical activity without evidence is not assigned a verified effect");
+                }
             });
         }
 

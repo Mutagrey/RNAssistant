@@ -44,6 +44,7 @@
     <Compile Include="..\..\src\RNAssistant.Core\Agent\*.cs" Link="Core\Agent\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\Persistence\*.cs" Link="Core\Persistence\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\Tools\*.cs" Link="Core\Tools\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Core\Tools\Contracts\*.cs" Link="Core\Tools\Contracts\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\Skills\*.cs" Link="Core\Skills\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\*.cs" Link="Core\Services\%(Filename)%(Extension)" />
     <Compile
@@ -63,6 +64,10 @@
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\DocumentIdentity.cs" Link="Office\Runtime\DocumentIdentity.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeDocumentExecutionGuard.cs" Link="Office\Runtime\OfficeDocumentExecutionGuard.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeStaDispatcher.cs" Link="Office\Runtime\OfficeStaDispatcher.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\LegacyToolDefinitionAdapter.cs" Link="Office\Runtime\LegacyToolDefinitionAdapter.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\NativeToolRuntimeAdapter.cs" Link="Office\Runtime\NativeToolRuntimeAdapter.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolHandlerRegistry.cs" Link="Office\Runtime\ToolHandlerRegistry.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolRuntime.cs" Link="Office\Runtime\ToolRuntime.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\WebViewSecurityPolicy.cs" Link="Office\WebView\WebViewSecurityPolicy.cs" />

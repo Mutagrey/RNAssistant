@@ -236,6 +236,13 @@ See [Phase 2B evidence](stabilization/PHASE_2B_RETRY_POLICY.md).
 
 ## Tool result
 
+Phase 4A adds a typed internal `Core.Tools.Contracts.ToolResult` with one terminal
+status and separate dispatch/effect evidence. Only `common.resources_list` is a
+native handler so far; its temporary result projection feeds the current writer
+below. Tool Result v1 **wire is not active**: the writer, schema-evidence readers,
+prompts/probes and full-history result gate switch together in 4B. See
+[ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate).
+
 Office tools execute locally. `ToolResultRole` is independent from the instruction role and controls only replay transport:
 
 - `user` (default) or `developer`: the next turn receives a protocol message with that role and the `TOOL_RESULT:` prefix;
@@ -301,9 +308,13 @@ a new chat. No backfill or fallback loop exists.
 
 ## Legacy effect mapping and UI projections
 
-`LegacyToolOutcomeAdapter` classifies a single legacy result using effective
-safety flags. Only the kernel aggregates records. Full typed ToolRuntime/effect
-classification remains Phase 4; complete persistence/UI projection is Phase 9.
+`ToolRuntime` classifies each native invocation from a captured typed policy and
+handler-supplied dispatch/effect facts. `LegacyToolOutcomeAdapter` remains only for
+unmigrated results; their absent effect evidence is `Unreported`, never fabricated
+verification. Only the kernel aggregates records. `ChatActivity.ExecutionEvidence`
+preserves compact native facts through existing event operations and clone; a
+present incomplete evidence/policy object fails deserialization. Full UI and
+persistence normalization remain Phase 9.
 
 `RunExecutionSummary` contains `ExecutionHealth` (`clean`, `errors`, `unknown`) and
 `ReadOk`, `ReadError`, `WriteOk`, `WriteError`, `WriteUnknown` invocation counts.
@@ -317,7 +328,10 @@ An exception escaping a possible mutation dispatch cannot certify its effect.
 Other unsuccessful results are errors. Missing/invalid policy cannot certify a
 successful read or write. Counts describe top-level tool invocations, including
 local mutations and possible no-ops, not changed cells or verified document diffs.
-ToolRuntime must replace this adapter with typed evidence in Phase 4.
+Migrated handlers remove this mapping at their switch; 4B removes the legacy
+model-result writer/readers, not the still-needed VBA/domain preparation paths.
+`VerifiedNoChange` and `VerifiedChange` are independent facts, not inferred from
+`WriteOk`, policy verification requirements or model wording.
 
 A new user turn starts fresh counts. Confirmation retains the logical turn's
 summary and counts its execution once. Known execution evidence is saved before

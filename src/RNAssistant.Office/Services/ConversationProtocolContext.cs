@@ -5,37 +5,20 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
-using RNAssistant.Office.Tools;
+using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Services
 {
-    // Full-history preflight and legacy local-read classification. Accepted ids
+    // Full-history preflight and source-owned runtime policy projection. Accepted ids
     // are owned by AgentKernel; this adapter only reconstructs a validated continuation.
     internal static class ConversationProtocolContext
     {
-        // Legacy ToolDefinition has no external-effect classification. Until typed
-        // ToolPolicy (Phase 4), batch only these audited local reads AND safe metadata.
-        // Other tools (including pure pipelines) conservatively remain singleton.
-        private static readonly HashSet<string> LocalReadIds = new HashSet<string>(new[]
-        {
-            "common.resources_list", "common.resources_resolve", "common.resources_search", "common.resources_read",
-            "common.capabilities_search", "common.capabilities_read",
-            "excel.inspect", "excel.read_range", "excel.find_cells"
-        }, StringComparer.Ordinal);
-
         internal static string[] BatchSafeReadIds(IEnumerable<ToolDefinition> catalog)
         {
-            var tools = (catalog ?? new ToolDefinition[0]).Where(tool => tool != null).ToArray();
-            var safety = ToolSafetyPolicy.ResolveAll(tools);
-            return tools.Where(tool =>
-            {
-                ToolSafetyProfile profile;
-                return tool.Enabled && tool.BuiltIn && tool.AgentCanRun &&
-                    string.Equals(tool.Executor, "builtin", StringComparison.OrdinalIgnoreCase) &&
-                    LocalReadIds.Contains(tool.Id ?? string.Empty) && safety.TryGetValue(tool.Id, out profile) &&
-                    profile.Valid && profile.AgentCanRun && !profile.MutatesDocument &&
-                    !profile.MutatesLocalState && !profile.RequiresConfirmation;
-            }).Select(tool => tool.Id).Distinct(StringComparer.Ordinal).ToArray();
+            return (catalog ?? new ToolDefinition[0])
+                .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id) &&
+                    LegacyToolDefinitionAdapter.PolicyFor(tool).IndependentLocalRead)
+                .Select(tool => tool.Id).Distinct(StringComparer.Ordinal).ToArray();
         }
 
         internal static void EnsureCurrentHistory(ChatSession session)

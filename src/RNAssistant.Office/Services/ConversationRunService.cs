@@ -218,6 +218,10 @@ namespace RNAssistant.Office.Services
                 })
                 .ToList();
             var json = JsonConvert.SerializeObject(canonical, Formatting.None);
+            // Preserve unmigrated fingerprints, but pin source-owned policy for
+            // migrated contracts as well as the legacy schema/binding fields.
+            if (root.RuntimePolicy != null)
+                json += "\npolicy:" + JsonConvert.SerializeObject(root.RuntimePolicy, Formatting.None);
             return Sha256Text(json);
         }
 

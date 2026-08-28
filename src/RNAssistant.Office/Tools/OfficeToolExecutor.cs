@@ -9,6 +9,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Tools
 {
@@ -92,6 +93,12 @@ namespace RNAssistant.Office.Tools
         }
 
         internal ResourceGatewayService ResourceGateway { get { return _resourceGateway; } }
+
+        internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolDefinition> catalog,
+            AppSettings settings, string mode, bool trace = true)
+        {
+            return new NativeToolRuntimeAdapter(_resourceGateway, session, catalog, settings, mode, trace);
+        }
 
         internal List<ToolDefinition> AvailableConversationToolsForSession(
             IEnumerable<ToolDefinition> tools,
@@ -408,6 +415,16 @@ namespace RNAssistant.Office.Tools
                     null,
                     "tool_capability_unavailable",
                     false);
+            }
+
+            if (NativeToolRuntimeAdapter.Owns(command.ToolId))
+            {
+                var remainingSteps = context.RemainingSteps;
+                if (!context.TryConsumeStep())
+                    return ToolResult.Fail("Tool execution budget exceeded.", null, "tool_step_limit_exceeded", false);
+                return CreateNativeRuntime(context.Session, new[] { tool }, context.Settings,
+                    ChatModes.Normalize(context.Session == null ? null : context.Session.Mode), false)
+                    .ExecuteCommand(command, remainingSteps, manualRun, cancellationToken);
             }
 
             var argumentValidation = ValidateCommandArguments(command, tool);

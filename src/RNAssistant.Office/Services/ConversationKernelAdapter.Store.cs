@@ -100,6 +100,7 @@ namespace RNAssistant.Office.Services
             if (!_session.Messages.Contains(activity)) _session.Messages.Add(activity);
             activity.RunId = _session.LastRun.RunId;
             AgentTranscript.CompleteToolActivityMessage(_session, activity, command, result, record.Context.StepId, _stepMessage);
+            activity.Activity.ExecutionEvidence = record.Evidence;
             activity.Activity.RunId = _session.LastRun.RunId;
             activity.ExecutionSummary = _session.LastRun.ExecutionSummary;
             return activity;
@@ -141,6 +142,7 @@ namespace RNAssistant.Office.Services
             }
             var activity = FindActivity(record.Context.Call.Id);
             AgentTranscript.CompleteToolActivityMessage(_session, activity, command, result, record.Context.StepId, _stepMessage);
+            activity.Activity.ExecutionEvidence = record.Evidence;
             activity.Activity.RunId = _session.LastRun.RunId;
             activity.ExecutionSummary = _session.LastRun.ExecutionSummary;
             _projectedResults.Add(AgentTranscript.DescribeResult(command, result));

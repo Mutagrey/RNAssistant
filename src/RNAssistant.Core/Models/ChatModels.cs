@@ -225,6 +225,8 @@ namespace RNAssistant.Core.Models
         public string Subtitle { get; set; }
         public string Status { get; set; }
         public string ExecutionStatus { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Core.Tools.ToolExecutionEvidence ExecutionEvidence { get; set; }
         public string ErrorCode { get; set; }
         public bool? Retryable { get; set; }
         public string PendingId { get; set; }

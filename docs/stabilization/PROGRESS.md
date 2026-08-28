@@ -1,14 +1,14 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: R29 — Phase 2 protocol correction / Phase 3 consumers (done host-neutral)
-Current task: Runtime-owned call IDs / atomic v4 switch завершены; kernel/accepted history/raw origins согласованы. 141 distinct targeted cases pass; MockDemo compile 0 errors / 3 existing warnings. Known baseline R22 вне scope.
+Current phase: Phase 4A — Tool contracts / first read-only runtime slice
+Current task: Phase 4A закрыт host-neutral: typed descriptor/policy/binding, single-call ToolRuntime, native common.resources_list и compact dispatch/effect evidence в existing events. [Evidence / 135 targeted tests](PHASE_4A_TOOL_RUNTIME.md#verification).
 
-Next step: отдельная Phase 4 — typed ToolRuntime/effect evidence, ResourceRef results и замена temporary read registry. Batch validation остаётся у ModelProtocol/kernel; R29 qualification и R28 не подменять этим этапом.
-Required context: [master plan Phase 4](STABILIZATION_MASTER_PLAN.md#phase-4--tool-contracts-и-toolruntime), [архитектурный аудит](RISK_REGISTER.md#архитектурный-аудит-2026-08-28), [architecture](../architecture.md), [v4 contract](../protocols/CONVERSATION_RESPONSE_V4.md), [migration map](MIGRATION_MAP.md), [R29 evidence](R29_RUNTIME_CALL_IDS.md).
-Open gates / remaining legacy: Windows x64 + Office + VS 2022, production controller/WebView/DPAPI/providers; original HTML incident trace не предоставлен. R29 исправлен локально, Windows/live-provider qualification открыта; R28 streaming остаётся reported/not reproduced. Legacy effect mapping/read registry — Phase 4; flat bridge/message projections и полная replay/UI matrix — Phase 9. V2/v3 runtime adapters, pipelines и fallback loop не возвращаются.
+Next step: отдельный Phase 4B — Tool Result v1 writer + schema/skill-evidence readers + prompts/probes (включая R31) + result-history gate. Удалить старый wire и ProjectLegacy одновременно; Phase 5 не начинать до закрытия Phase 4.
+Required context: [master plan Phase 4](STABILIZATION_MASTER_PLAN.md#phase-4--tool-contracts-и-toolruntime), [ADR-0003 / 4B gate](../decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate), [4A boundary](PHASE_4A_TOOL_RUNTIME.md#phase-4b-boundary), [conversation protocol](../conversation-protocol.md#tool-result), [migration map](MIGRATION_MAP.md).
+Open gates / remaining legacy: Windows x64 + Office + VS 2022; R28 streaming и R29 live-provider qualification открыты. Legacy tool handlers сохраняют текущие domain preparation/document binding до своих switches. Tool Result legacy writer/evidence reader — removal gate 4B; persistence/UI redesign — Phase 9. Product 16.1.0-dev, no release/tag.
 
-R29 (это изменение): model wire содержит только name/arguments, kernel выдаёт ID до accepted append/confirmation/dispatch; ToolCallId + immutable attempt/position origin сохраняются в том же stream без переписывания raw response. Tests покрывают long HTML, allocator failure, native pairing, repair correlation, confirmation/replay и ISO-preserving clone. [Evidence/ограничения/чистка](R29_RUNTIME_CALL_IDS.md); Phase 4 не начата, product version остаётся 16.1.0-dev.
+R29 (предыдущий commit `6a256f0`): model wire содержит только name/arguments, kernel выдаёт ID до accepted append/confirmation/dispatch; ToolCallId + immutable attempt/position origin сохраняются в том же stream без переписывания raw response. Tests покрывают long HTML, allocator failure, native pairing, repair correlation, confirmation/replay и ISO-preserving clone. [Evidence/ограничения/чистка](R29_RUNTIME_CALL_IDS.md); этот protocol switch завершён до Phase 4, product version остаётся 16.1.0-dev.
 
 Architecture audit (2026-08-28, docs-only commit `1f65f5d`, baseline `15dea46`): уточнены ID ownership, batch/control boundaries, actual effect evidence, ResourceRef transport (R30), pinned/bounded ToolPack, host gate, raw/comparable hashes и durable barriers будущих Phases 4–9. Убраны stale v2/media указания в canonical docs. Решение Phase 8 о конечном immutable pack сохранено; active v3/LRU/runtime не менялись. Критерии привязаны к фазам в master/backlog; R28/R29 и Windows gates открыты. Diff/13 затронутых ссылок — OK; pre-commit `ValidateVersionFormat` — pass. Build/tests не запускались, новые runtime-инварианты не объявлены проверенными. Phase 4 остаётся отдельным следующим этапом.
 
@@ -37,7 +37,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 2 | done (host-neutral) | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: `c9f8b07`; 2C3A: `330aa79`; 2C3B: `4bbb039`; 2C3C: `dbb8ce1` | 2C3C: 100 targeted cases; ValidateVersionFormat pass; подробности в evidence | not performed | 2C3C был v3; current v4 — отдельный R29 correction ниже; old-chat skip/reset и prompt review/reset проверены локально; Windows/live-provider gates открыты |
 | 3 | done host-neutral | 3A: `f01c3f2`; 3B1: `c1628ce`; 3B2: `15dea46` | 130 unique targeted cases; MockDemo compile; [evidence](PHASE_3B2_KERNEL_CUTOVER.md) | not performed | Production kernel switch + minimal real-store replay; Phase 4 отдельно |
 | 2/3 R29 | done host-neutral | этот commit | 141 unique targeted cases; MockDemo compile; [evidence](R29_RUNTIME_CALL_IDS.md) | not performed | Runtime IDs + v4; no v3 fallback, product version unchanged |
-| 4 | pending | — | — | — | ToolRuntime |
+| 4 | in progress: 4A done | this commit | 135 targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime/evidence](PHASE_4A_TOOL_RUNTIME.md); 4B wire still open |
 | 5 | pending | — | — | — | Bound DocumentSession |
 | 6 | pending | — | — | — | VBA vertical slice |
 | 7 | pending | — | — | — | Excel vertical slice |
@@ -262,9 +262,10 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Legacy ToolResult → LegacyToolOutcomeAdapter / captured safety | ToolRuntime | ConversationKernelAdapter.Tools → kernel records | Phase 4: typed effects, no single-result legacy classification; R23 остаётся |
+| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | 4B wire switch; corresponding handler migrations 6–7 / optional 11 remove mapping; R23 remains |
 | RunExecutionSummary projection / old flat read records | Application / Persistence / UI | Messages, ChatRunRecord getter, clones, bridge, static UI | Phase 9: полная projection; старые pending не исполняются и не backfill |
-| Legacy safety + positive local-read registry | ToolRuntime | Captured policy / materialized ModelProtocolCallContext | Phase 4 typed external metadata + safety tests; неизвестные/external singleton |
+| LegacyToolDefinitionAdapter | ToolRuntime | Current catalog/schema/authoring, legacy execution, source policy projection | Phase 8 typed catalog/ToolPack; domain switches 6–7 / optional authoring 11; central name list removed in 4A |
+| NativeToolRuntimeAdapter.ProjectLegacy | ToolRuntime / ModelProtocol | Native result → AgentJsonProtocol/materialization/schema-evidence readers | 4B: atomic writer/readers/prompts/history gate, no dual wire |
 
 Permanent model-session/metadata owners не являются compatibility adapters.
 Остальные consumers/removal gates — в [MIGRATION_MAP.md](MIGRATION_MAP.md).
