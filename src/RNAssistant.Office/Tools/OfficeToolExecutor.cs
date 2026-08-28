@@ -158,6 +158,7 @@ namespace RNAssistant.Office.Tools
                 var result = _hostRuntime.ExecuteForExpectedDocument(
                     DocumentTarget(session),
                     RequiresOfficeDocument(command, context.Tools),
+                    cancellationToken,
                     () => ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken));
                 if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
                 TraceExecution(command, "tool.execution.completed",
@@ -230,12 +231,11 @@ namespace RNAssistant.Office.Tools
 
         private ToolResult ExecuteLiveVbaEditorRead(ChatSession session, Func<ToolResult> action)
         {
+            // An editor request is a separate operation, not a nested read from an
+            // unrelated UI callback that happens to run on the same STA.
             try
             {
-                using (BeginLiveOfficeRead(session))
-                {
-                    return _hostRuntime.ExecuteForExpectedDocument(DocumentTarget(session), true, action);
-                }
+                return _hostRuntime.ExecuteForExpectedDocument(DocumentTarget(session), true, action);
             }
             catch (ResourceRequestException ex)
             {
@@ -296,7 +296,8 @@ namespace RNAssistant.Office.Tools
         {
             if (dryRun)
             {
-                return _hostRuntime.ExecuteForExpectedDocument(DocumentTarget(session), true, () => _vbaExecutor.InstallCustomTool(tool, false, true, session));
+                return _hostRuntime.ExecuteForExpectedDocument(DocumentTarget(session), true, cancellationToken,
+                    () => _vbaExecutor.InstallCustomTool(tool, false, true, session));
             }
             return ExecuteDirectMutation(
                 session,
@@ -562,6 +563,7 @@ namespace RNAssistant.Office.Tools
                 return _hostRuntime.ExecuteForExpectedDocument(
                     DocumentTarget(session),
                     true,
+                    cancellationToken,
                     () => _hostRuntime.ExecuteMutation(DocumentTarget(session), mutatesSharedLocalState, mutatesDocument, cancellationToken, action));
             }
             catch (HostRuntime.MutationLockException ex)
@@ -588,6 +590,10 @@ namespace RNAssistant.Office.Tools
             try
             {
                 return _hostRuntime.BeginDocumentAccess(DocumentTarget(session));
+            }
+            catch (OfficeDocumentGuardException ex)
+            {
+                throw new ResourceRequestException(ex.Message, ex.ErrorCode, ex.Retryable);
             }
             catch (HostRuntime.MutationLockException ex)
             {

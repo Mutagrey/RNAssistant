@@ -52,6 +52,14 @@ namespace RNAssistant.Office
             if (adapter == null || expectation == null) return null;
             try
             {
+                var provider = adapter as IOfficeDocumentSessionProvider;
+                var bound = provider == null ? null : provider.DocumentSession;
+                if (bound != null)
+                {
+                    if (bound.StaDispatcher == null)
+                        return ToolResult.Fail("The bound document has no owner STA.", null, "document_session_unavailable", false);
+                    return bound.StaDispatcher.Invoke(() => ValidateBoundSession(bound, expectation));
+                }
                 var hostMatches = string.Equals(
                     expectation.Host,
                     adapter.HostName,
@@ -91,6 +99,39 @@ namespace RNAssistant.Office
         {
             var mismatch = Validate(adapter, expectation);
             if (mismatch != null) throw new OfficeDocumentGuardException(mismatch);
+        }
+
+        // Called on the bound session's owner STA. A stable path never overrides
+        // a different live identity; metadata snapshots are not liveness evidence.
+        internal static ToolResult ValidateBoundSession(
+            IOfficeDocumentSession session, OfficeDocumentExecutionExpectation expectation)
+        {
+            if (session == null || session.StaDispatcher == null || !session.StaDispatcher.CheckAccess)
+                return ToolResult.Fail("The bound document must be checked on its owner STA.",
+                    null, "document_session_unavailable", false);
+            try
+            {
+                if (string.IsNullOrWhiteSpace(session.Host) || string.IsNullOrWhiteSpace(session.RuntimeDocumentId) ||
+                    session.BoundDocumentObject == null || session.MutationGate == null)
+                    return ToolResult.Fail("The bound document session is incomplete.", null, "document_session_unavailable", false);
+                if (!session.IsAlive)
+                    return ToolResult.Fail("The bound Office document is closed. No replacement document was selected.",
+                        null, "active_document_changed", false);
+                if (expectation == null) return null;
+                var hostMatches = string.Equals(expectation.Host, session.Host, StringComparison.OrdinalIgnoreCase);
+                var identityMatches = !string.IsNullOrWhiteSpace(expectation.RuntimeDocumentKey)
+                    ? string.Equals(expectation.RuntimeDocumentKey, session.RuntimeDocumentId, StringComparison.Ordinal)
+                    : !string.IsNullOrWhiteSpace(expectation.DocumentKey) &&
+                        string.Equals(expectation.DocumentKey, session.StableDocumentId, StringComparison.OrdinalIgnoreCase);
+                return hostMatches && identityMatches ? null : ToolResult.Fail(
+                    "The bound Office document no longer matches this run. No Office action was started.",
+                    null, "active_document_changed", false);
+            }
+            catch (Exception ex)
+            {
+                return ToolResult.Fail("The bound Office document could not be verified: " + ex.Message,
+                    null, "document_identity_unavailable", false);
+            }
         }
 
         internal static bool IdentityMatches(

@@ -5,7 +5,7 @@ using System.Threading;
 
 namespace RNAssistant.Office
 {
-    public sealed class OfficeStaDispatcher : IDisposable
+    public sealed class OfficeStaDispatcher : IOfficeStaDispatcher, IDisposable
     {
         private readonly BlockingCollection<WorkItem> _queue;
         private readonly Thread _thread;
@@ -24,6 +24,11 @@ namespace RNAssistant.Office
             _thread.Start();
         }
 
+        public bool CheckAccess
+        {
+            get { return Thread.CurrentThread.ManagedThreadId == _threadId; }
+        }
+
         public T Invoke<T>(Func<T> action)
         {
             if (action == null)
@@ -31,7 +36,7 @@ namespace RNAssistant.Office
                 throw new ArgumentNullException("action");
             }
 
-            if (Thread.CurrentThread.ManagedThreadId == _threadId)
+            if (CheckAccess)
             {
                 return action();
             }

@@ -88,6 +88,7 @@
     <Compile Include="Runtime\ToolHandlerRegistry.cs" />
     <Compile Include="Runtime\ToolRuntime.cs" />
     <Compile Include="Runtime\HostRuntime.cs" />
+    <Compile Include="Runtime\DocumentAccessGate.cs" />
     <Compile Include="Tools\ResourceListToolHandler.cs" />
     <Compile Include="Runtime\DispatchedOfficeApplicationAdapter.cs" />
     <Compile Include="Agent\AgentTranscript.cs" />
@@ -97,6 +98,7 @@
     <Compile Include="Runtime\OfficeUiDispatcher.cs" />
     <Compile Include="Runtime\UiThreadOfficeApplicationAdapter.cs" />
     <Compile Include="Contracts\IOfficeApplicationAdapter.cs" />
+    <Compile Include="Contracts\IOfficeDocumentSession.cs" />
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ChatCloneService.cs" />

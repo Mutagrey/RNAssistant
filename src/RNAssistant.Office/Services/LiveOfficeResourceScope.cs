@@ -1,5 +1,6 @@
 using System;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Services
 {
@@ -29,6 +30,19 @@ namespace RNAssistant.Office.Services
                     ? string.Empty
                     : session.LastRun.DocumentRuntimeKey ?? string.Empty
             };
+            var provider = _adapter as IOfficeDocumentSessionProvider;
+            var bound = provider == null ? null : provider.DocumentSession;
+            if (bound != null)
+            {
+                if (bound.StaDispatcher == null)
+                    throw new ResourceRequestException("The bound document has no owner STA.", "document_session_unavailable", false);
+                return DocumentAccessGate.Invoke(bound.StaDispatcher, () => ReadExpected(expectation, action));
+            }
+            return ReadExpected(expectation, action);
+        }
+
+        private T ReadExpected<T>(OfficeDocumentExecutionExpectation expectation, Func<T> action)
+        {
             var mismatch = OfficeDocumentExecutionGuardState.Validate(_adapter, expectation);
             if (mismatch != null)
             {

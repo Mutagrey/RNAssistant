@@ -88,6 +88,12 @@ namespace RNAssistant.Harness
 
                 var persistedCommand = JsonConvert.DeserializeObject<ToolCommand>(JsonConvert.SerializeObject(command));
                 AssertTrue(!string.IsNullOrWhiteSpace(persistedCommand.RuntimeGuardJson), "runtime guard survives persistence");
+                var otherExecutor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                using (var accessDeadline = new CancellationTokenSource(2000))
+                {
+                    var available = otherExecutor.RunVbaMacro("Module1.Main", NewSession(adapter), accessDeadline.Token);
+                    AssertTrue(available.Success, "another executor acquires document access while confirmation waits");
+                }
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"changed elsewhere\"\nEnd Sub";
                 var stale = executor.Execute(persistedCommand, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
 
@@ -1611,63 +1617,188 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaReconciliationWaitsForActiveMutation()
+        private static void VbaQueuedGuardReadsWaitForMutation()
         {
             WithTempPaths(paths =>
             {
                 const string before = "Sub Main()\nDebug.Print \"before\"\nEnd Sub";
                 const string after = "Sub Main()\nDebug.Print \"after\"\nEnd Sub";
                 var adapter = new FakeOfficeAdapter { VbaModuleCode = before };
-                var enteredWrite = new ManualResetEventSlim(false);
-                var releaseWrite = new ManualResetEventSlim(false);
-                adapter.VbaWriteTransform = code =>
+                var journal = new VbaJournalStore(paths);
+                var first = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var second = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var tools = adapter.GetBuiltInTools().Concat(first.GetControllerTools()).ToList();
+                var settings = new AppSettings { AutoConfirmToolActions = true };
+                var firstSession = NewSession(adapter);
+                var secondSession = NewSession(adapter);
+                AssertEqual(before, ReadVbaSource(second, secondSession, "Module1").Text,
+                    "second chat observes the source before another mutation");
+                var queuedCommand = Command("common.vba_apply_patch", "moduleName", "Module1", "patch",
+                    new JArray(new JObject { ["op"] = "replace", ["find"] = "\"before\"", ["text"] = "\"queued\"" }));
+                AssertTrue(string.IsNullOrWhiteSpace(queuedCommand.RuntimeGuardJson), "queued call has not prepared a guard");
+
+                using (var enteredWrite = new ManualResetEventSlim(false))
+                using (var releaseWrite = new ManualResetEventSlim(false))
+                using (var queuedStarted = new ManualResetEventSlim(false))
+                using (var prematureRead = new ManualResetEventSlim(false))
                 {
-                    enteredWrite.Set();
-                    if (!releaseWrite.Wait(5000)) throw new InvalidOperationException("test write was not released");
-                    return code;
-                };
+                    var mutationPaused = 0;
+                    var writeCalls = 0;
+                    adapter.BeforeExecuteTool = command =>
+                    {
+                        if (command.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
+                            Interlocked.Increment(ref writeCalls);
+                        if (Volatile.Read(ref mutationPaused) != 0 &&
+                            (command.ToolId.EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase) ||
+                             command.ToolId.EndsWith(".vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)))
+                            prematureRead.Set();
+                    };
+                    adapter.VbaWriteTransform = code =>
+                    {
+                        Volatile.Write(ref mutationPaused, 1);
+                        enteredWrite.Set();
+                        if (!releaseWrite.Wait(5000)) throw new InvalidOperationException("test write was not released");
+                        Volatile.Write(ref mutationPaused, 0);
+                        return code;
+                    };
+                    var writeTask = Task.Run(() => first.Execute(
+                        Command("common.vba_write_module", "moduleName", "Module1", "code", after),
+                        tools, settings, false, false, firstSession));
+                    Task<ToolResult> queuedTask = null;
+                    try
+                    {
+                        AssertTrue(enteredWrite.Wait(5000), "first write owns the live mutation window");
+                        queuedTask = Task.Run(() =>
+                        {
+                            queuedStarted.Set();
+                            return second.Execute(queuedCommand, tools, settings, false, false, secondSession);
+                        });
+                        AssertTrue(queuedStarted.Wait(5000), "unprepared mutation starts on the second executor");
+                        AssertTrue(!prematureRead.Wait(150), "queued preparation cannot read inside another mutation");
+                        AssertTrue(!queuedTask.IsCompleted, "unprepared mutation waits for the document gate");
+                    }
+                    finally
+                    {
+                        releaseWrite.Set();
+                        AssertTrue(writeTask.Wait(5000), "first mutation completes after release");
+                        if (queuedTask != null)
+                            AssertTrue(queuedTask.Wait(5000), "queued mutation completes after release");
+                    }
+
+                    AssertTrue(writeTask.GetAwaiter().GetResult().Success, "first mutation succeeds");
+                    AssertEqual("stale_vba_module", queuedTask.GetAwaiter().GetResult().ErrorCode,
+                        "queued preparation checks the changed source after acquiring the gate");
+                    AssertEqual(1, writeCalls, "stale queued mutation never dispatches a second write");
+                    AssertEqual(after, adapter.VbaModuleCode, "first mutation source is preserved");
+                    AssertEqual(1, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                        "stale queued mutation creates no second prepared journal entry");
+                }
+            });
+        }
+
+        private static void VbaReconciliationWaitsForActiveMutation(string consumer)
+        {
+            WithTempPaths(paths =>
+            {
+                const string before = "Sub Main()\nDebug.Print \"before\"\nEnd Sub";
+                const string after = "Sub Main()\nDebug.Print \"after\"\nEnd Sub";
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = before };
                 var journal = new VbaJournalStore(paths);
                 var first = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
                 var second = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
                 var tools = adapter.GetBuiltInTools().Concat(first.GetControllerTools()).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
                 var session = NewSession(adapter);
-
-                var writeTask = Task.Run(() => first.Execute(
-                    Command("common.vba_write_module", "moduleName", "Module1", "code", after),
-                    tools, settings, false, false, session));
-                AssertTrue(enteredWrite.Wait(5000), "first mutation reached the active effect window");
-                var readStarted = new ManualResetEventSlim(false);
-                var readTask = Task.Run(() =>
+                var readSession = OfficeToolExecutor.CreateIsolatedManualSession(session);
+                using (var enteredWrite = new ManualResetEventSlim(false))
+                using (var releaseWrite = new ManualResetEventSlim(false))
+                using (var readStarted = new ManualResetEventSlim(false))
+                using (var prematureAccess = new ManualResetEventSlim(false))
                 {
-                    readStarted.Set();
-                    return ReadVbaSource(second, session, "Module1");
-                });
-                AssertTrue(readStarted.Wait(5000), "second VBA access started");
-
-                var prematureTerminal = false;
-                var deadline = DateTime.UtcNow.AddMilliseconds(500);
-                while (DateTime.UtcNow < deadline)
-                {
-                    var record = journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
-                    if (record.Terminal != null)
+                    var mutationPaused = 0;
+                    adapter.BeforeExecuteTool = command =>
                     {
-                        prematureTerminal = true;
-                        break;
+                        if (Volatile.Read(ref mutationPaused) != 0) prematureAccess.Set();
+                    };
+                    adapter.VbaWriteTransform = code =>
+                    {
+                        Volatile.Write(ref mutationPaused, 1);
+                        enteredWrite.Set();
+                        if (!releaseWrite.Wait(5000)) throw new InvalidOperationException("test write was not released");
+                        Volatile.Write(ref mutationPaused, 0);
+                        return code;
+                    };
+                    var snapshotReads = adapter.DocumentSnapshotReadCount;
+                    var observedCode = string.Empty;
+                    var writeTask = Task.Run(() => first.Execute(
+                        Command("common.vba_write_module", "moduleName", "Module1", "code", after),
+                        tools, settings, false, false, session));
+                    Task<string> readTask = null;
+                    try
+                    {
+                        AssertTrue(enteredWrite.Wait(5000), "first mutation reached the active effect window");
+                        readTask = Task.Run(() =>
+                        {
+                            readStarted.Set();
+                            var payload = ReadDuringVbaMutation(consumer, second, readSession, tools, settings);
+                            observedCode = adapter.VbaModuleCode;
+                            return payload;
+                        });
+                        AssertTrue(readStarted.Wait(5000), consumer + " starts document access");
+                        AssertTrue(!readTask.Wait(150), consumer + " waits for the active mutation");
+                        AssertTrue(!prematureAccess.IsSet, consumer + " does not call the backend inside the mutation");
+                        AssertEqual(snapshotReads, adapter.DocumentSnapshotReadCount,
+                            consumer + " does not capture an intermediate document snapshot");
+                        AssertTrue(journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal == null,
+                            "reconciliation cannot close the mutation while its document gate is held");
                     }
-                    Thread.Sleep(10);
-                }
-                releaseWrite.Set();
-                var write = writeTask.GetAwaiter().GetResult();
-                var read = readTask.GetAwaiter().GetResult();
-                var terminal = journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal;
+                    finally
+                    {
+                        releaseWrite.Set();
+                        AssertTrue(writeTask.Wait(5000), "mutation completes after release");
+                        if (readTask != null)
+                            AssertTrue(readTask.Wait(5000), consumer + " completes after mutation release");
+                    }
 
-                AssertTrue(write.Success && read != null && !string.IsNullOrWhiteSpace(read.Text),
-                    "mutation and concurrent VBA resource read both complete");
-                AssertEqual(VbaMutationStatuses.Committed, terminal.Status,
-                    "journal terminal agrees with the verified committed effect");
-                AssertTrue(!prematureTerminal, "reconciliation does not close a mutation that owns the document lock");
+                    AssertTrue(writeTask.GetAwaiter().GetResult().Success, "mutation succeeds");
+                    AssertTrue(!string.IsNullOrWhiteSpace(readTask.GetAwaiter().GetResult()), consumer + " returns a payload");
+                    AssertEqual(after, observedCode, consumer + " observes only the completed mutation");
+                    AssertEqual(VbaMutationStatuses.Committed,
+                        journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status,
+                        "journal terminal agrees with the verified committed effect");
+                }
             });
+        }
+
+        private static string ReadDuringVbaMutation(
+            string consumer,
+            OfficeToolExecutor executor,
+            ChatSession session,
+            IReadOnlyList<ToolDefinition> tools,
+            AppSettings settings)
+        {
+            if (consumer == "vba resource") return ReadVbaSource(executor, session, "Module1").Text;
+            if (consumer == "document resource")
+            {
+                var document = executor.ResourceGateway.List(session, LiveDocumentResourceProvider.ProviderName,
+                    LiveDocumentResourceProvider.DocumentKind, null, 20).Items.Single();
+                return ReadResource(executor.ResourceGateway, session, document.Reference.Uri,
+                    ResourceRepresentations.Text, null, 128).Result.Text;
+            }
+
+            ToolResult result;
+            if (consumer == "editor module")
+                result = executor.ReadVbaModuleForEditor(session, "Module1", 32000);
+            else if (consumer == "editor project")
+                result = executor.ReadVbaProjectForEditor(session);
+            else if (consumer == "manual read")
+                result = executor.Execute(Command("excel.read_range", "sheet", "Data", "address", "A1:B2"),
+                    tools, settings, false, true, session);
+            else
+                throw new InvalidOperationException("Unknown concurrent read consumer: " + consumer);
+            AssertTrue(result.Success, consumer + " succeeds after the document mutation; " +
+                result.ErrorCode + ": " + result.Message);
+            return result.DataJson ?? result.Message;
         }
 
         private static void VbaJournalUsesHistoryProtection()

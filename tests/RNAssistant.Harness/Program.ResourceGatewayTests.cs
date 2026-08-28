@@ -10,6 +10,8 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Office;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -21,7 +23,8 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
-                var session = new ChatSession { Mode = ChatModes.Chat };
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Chat;
                 session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "First", InlineText = "body" });
                 var tools = executor.GetControllerTools().ToArray();
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Chat, false);
@@ -54,6 +57,35 @@ namespace RNAssistant.Harness
                     new AppSettings(), false, true, session);
                 AssertTrue(!invalidManual.Success && invalidManual.ErrorCode == "invalid_arguments",
                     "manual command uses the same native validation boundary");
+
+                var hostRuntime = new HostRuntime(adapter, FixturePaths.Value);
+                var target = new OfficeDocumentExecutionExpectation
+                {
+                    Host = adapter.HostName,
+                    DocumentKey = adapter.DocumentKey,
+                    RuntimeDocumentKey = adapter.RuntimeDocumentKey
+                };
+                var backendCalls = adapter.Executed.Count;
+                var liveListArguments = "{\"provider\":\"vba\",\"kind\":\"vba-component\"}";
+                using (hostRuntime.BeginDocumentAccess(target))
+                {
+                    var blockedCall = new ToolCall("blocked_live_list", ResourceToolExecutor.ListToolId,
+                        liveListArguments);
+                    var blocked = runtime.ExecuteAsync(new ToolExecutionContext(blockedCall, policy, "run", "turn", "step",
+                        DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(ToolExecutionOutcome.Error, blocked.Outcome,
+                        "new native command cannot borrow document access held on the same thread");
+                    AssertEqual("tool_mutation_busy", (string)JObject.Parse(blocked.Result.DataJson)["code"],
+                        "native live list reports the occupied document gate");
+                    AssertEqual(backendCalls, adapter.Executed.Count, "blocked native live list never reaches Office backend");
+                }
+
+                var releasedCall = new ToolCall("released_live_list", ResourceToolExecutor.ListToolId,
+                    liveListArguments);
+                var released = runtime.ExecuteAsync(new ToolExecutionContext(releasedCall, policy, "run", "turn", "step",
+                    DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolExecutionOutcome.Ok, released.Outcome, "native live list succeeds after document access release");
+                AssertTrue(adapter.Executed.Count > backendCalls, "released native live list reaches the Office backend");
             });
         }
 

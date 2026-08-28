@@ -18,6 +18,7 @@ namespace RNAssistant.Harness
         public readonly List<string> RanMacros = new List<string>();
         public bool FailUnknownSkills { get; set; }
         public string ThrowOnToolId { get; set; }
+        public Action<ToolCommand> BeforeExecuteTool { get; set; }
         public Func<string, string> VbaWriteTransform { get; set; }
         public int VbaReportedLineCountOffset { get; set; }
         public string DocumentKeyValue { get; set; }
@@ -277,6 +278,8 @@ namespace RNAssistant.Harness
 
         public ToolResult ExecuteTool(ToolCommand command)
         {
+            var beforeExecute = BeforeExecuteTool;
+            if (beforeExecute != null) beforeExecute(command);
             Executed.Add(Clone(command));
             if (!string.IsNullOrWhiteSpace(ThrowOnToolId) &&
                 string.Equals(ThrowOnToolId, command == null ? null : command.ToolId, StringComparison.OrdinalIgnoreCase))

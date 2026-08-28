@@ -1,7 +1,8 @@
 # ADR-0005: Bound document sessions and host access
 
-Status: accepted target design. Phase 5A extracts the existing access boundary;
-the bound-session and Excel switch is still Phase 5B, including Windows qualification.
+Status: accepted. Phase 5A extracted the access boundary; 5B1 introduces its neutral
+session contract and operation gate. Actual Excel binding/identity remains 5B2,
+including Windows qualification.
 
 ## Context
 
@@ -17,7 +18,7 @@ that a live object survived close/reopen or an active-window change.
   catalog policy and domain preparation stay with their current owners. The runtime
   receives only the document expectation, access flags and the synchronous operation;
   it does not receive a chat session, controller, model client or tool catalog.
-- Phase 5B introduces `IOfficeDocumentSession` and `ExcelDocumentSession` under the
+- Phase 5B1 introduces `IOfficeDocumentSession`; 5B2 adds `ExcelDocumentSession` under the
   [Document Session v1 contract](../stabilization/STABILIZATION_MASTER_PLAN.md#79-document-session-v1).
   A session holds one live document object, its stable/runtime identities, STA
   dispatcher, liveness check and gate. Descriptor/active-document resolution occurs
@@ -41,18 +42,50 @@ The current executor, manual VBA and live resource/editor paths call `HostRuntim
 The former executor-owned guard, file-lock, monitor, nesting and lease helpers are
 removed; resource/tool error mapping stays at the caller boundary.
 
-This extraction preserves the existing ten-second lock timeout, `local_state` then
+That extraction preserved the existing ten-second lock timeout, `local_state` then
 stable-document file-lock order, global monitor fallback without storage, and
-per-runtime nested-read depth. It does **not** make that depth target-aware, extend
+per-runtime nested-read depth. It did **not** make that depth target-aware, extend
 the gate over pre-confirmation preparation, or replace stable-key/OR identity checks.
 The copied expectation is execution input, not a bound document or lifetime proof.
 
+## Delivered in 5B1
+
+`HostRuntime` takes document access before guard reads and domain preparation and
+retains it through dispatch, read-back and the existing journal terminal. Resource,
+HTML data, manual tool and VBA editor reads share that access. Native resource-list
+dispatch establishes its own operation root. Confirmation returns after releasing
+access; a confirmed call rechecks its guard under a fresh gate.
+
+`DocumentAccessGate` replaces per-runtime async depth and the global monitor with
+one keyed semaphore registry plus the existing bounded file lock. Reentry requires
+the same synchronous operation and target; only explicit STA handoff carries that
+permission. New roots/child tasks cannot borrow it. Order is document then shared
+local state, after the caller's chat lease. The owner STA returns busy instead of
+waiting on an occupied gate. Cancellation is checked again on the STA before the
+action; cancellation or access failure after mutation starts remains nonretryable
+uncertainty, without replacing domain-returned evidence.
+
+The session port distinguishes cached immutable host/runtime/gate/dispatcher
+metadata from STA-only stable identity, bound object and liveness. Wrappers cache
+one session at initialization; a new lifetime requires a new adapter. For a bound
+session, runtime identity takes precedence over a matching saved path, and the
+whole synchronous action runs on its owner STA. Fake sessions exercise this port;
+no production Excel factory supplies it yet. Legacy production adapters still use
+stable-key locks and stable-key OR runtime-key validation.
+
 ## Remaining switch and qualification
 
-Phase 5B replaces those semantics together with all Excel factories and access
+Phase 5B2 replaces the remaining legacy identity/binding together with all Excel factories and access
 consumers. The active-workbook fallback and repeated descriptor lookup still have
 live consumers; their removal requires the bound switch and Windows tests recorded
 in the [migration map](../stabilization/MIGRATION_MAP.md).
+
+One live identity must be shared by desktop, VSTO and native clients/proxies. The
+current local `IUnknown` address is not proof of that identity across apartments or
+processes; a path, HWND or per-adapter GUID is not a substitute. The identity and
+ownership mechanism must be chosen and qualified before switching factories.
+Direct context capture/selection and VBA catalog reads still need the same access
+boundary in 5B2; they are not gateway consumers protected by 5B1.
 
 Fake host checks can cover ordering, cancellation and access release. They cannot
 close the Windows x64 + Office + VS 2022 gates for STA/COM identity, workbook switches,

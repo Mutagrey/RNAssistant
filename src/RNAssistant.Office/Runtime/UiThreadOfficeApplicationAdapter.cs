@@ -6,22 +6,38 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
-    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard
+    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider
     {
         private readonly IOfficeApplicationAdapter _inner;
         private readonly OfficeUiDispatcher _dispatcher;
+        private readonly IOfficeDocumentSession _documentSession;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
         {
             _inner = inner ?? throw new ArgumentNullException("inner");
             _dispatcher = dispatcher ?? throw new ArgumentNullException("dispatcher");
+            _documentSession = _dispatcher.Invoke(delegate
+            {
+                var provider = _inner as IOfficeDocumentSessionProvider;
+                return provider == null ? null : provider.DocumentSession;
+            });
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
         public string DocumentKey { get { return ReadExpected(delegate { return _inner.DocumentKey; }); } }
         public string RuntimeDocumentKey { get { return ReadExpected(delegate { return _inner.RuntimeDocumentKey; }); } }
         public string DocumentTitle { get { return ReadExpected(delegate { return _inner.DocumentTitle; }); } }
+
+        public IOfficeStaDispatcher StaDispatcher { get { return _dispatcher; } }
+
+        public IOfficeDocumentSession DocumentSession
+        {
+            get
+            {
+                return _documentSession;
+            }
+        }
 
         public string GetDocumentSnapshot(int maxChars)
         {

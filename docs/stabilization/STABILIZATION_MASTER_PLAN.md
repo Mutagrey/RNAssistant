@@ -1726,23 +1726,25 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 ### Подэтапы
 
 - 5A: выделить текущую document-access boundary из executor без смены binding/locking semantics; [ADR-0005](../decisions/ADR-0005-bound-document-session.md). Завершено host-neutral, 16 targeted checks.
-- 5B: bound sessions/Excel factories, runtime gate и полный identity/lifetime/Windows switch. 5A не закрывает R04 и не вводит bound object.
+- 5B1: нейтральный session port и общий operation gate; guard/preparation, manual/resource/editor access, STA handoff и cancellation. Production Excel binding этим подэтапом не вводится, R04 открыт.
+- 5B2: ExcelDocumentSession/factories и единая runtime lifetime identity для desktop/VSTO/native; direct context/catalog reads и полный identity/lifetime/Windows switch. Локальный IUnknown pointer, path/HWND или per-adapter GUID не подменяют identity одного живого документа.
 
 ### Выполнить
 
-- [ ] Ввести `IOfficeDocumentSession`.
+- [x] 5B1: ввести `IOfficeDocumentSession` и нейтрального consumer в HostRuntime; production providers появятся только в 5B2.
 - [ ] Ввести `ExcelDocumentSession`.
 - [x] 5A: выделить текущую document access/serialization из `OfficeToolExecutor` в `HostRuntime`; старые helpers удалить.
-- [ ] 5B: выделить выбор/удержание workbook из `ExcelAdapter`; write/read-back должны получать тот же bound object. Charts/formatting и прочие host adapters не рефакторить попутно.
+- [ ] 5B2: выделить выбор/удержание workbook из `ExcelAdapter`; write/read-back должны получать тот же bound object. Charts/formatting и прочие host adapters не рефакторить попутно.
 - [ ] Bind конкретного document object до execution.
 - [ ] Сериализовать writes по `RuntimeDocumentId`.
-- [ ] Gate охватывает guard/live read, dispatch и read-back; resource/manual paths используют тот же reentrant gate. Не держать его при model request или confirmation; проверить lock order и повторную проверку guard после ожидания.
+- [x] 5B1: gate охватывает guard/preparation/live read, dispatch и read-back; resource/manual/editor paths используют тот же gate. Reentry только для той же operation/target, порядок document → shared; release при confirmation, повторная проверка после ожидания. Evidence — [PROGRESS](PROGRESS.md#phase-5b1--document-access-gate); Windows gate ниже остаётся открыт.
+- [ ] 5B2: прямые selection/context capture и VBA catalog reads переключить на bound access; UI reentrancy не должна наследовать доступ текущей mutation.
 - [ ] Удалить fallback на `ActiveWorkbook` из agent mutation path.
 - [ ] `ActiveWorkbook` оставить только для user action «выбрать текущую книгу».
 - [ ] Write и read-back выполнять через один bound object.
 - [ ] Проверять `IsAlive` до dispatch.
-- [ ] Явно определить close/cancel semantics.
-- [ ] Добавить fake host tests.
+- [x] 5B1: определить neutral close/cancel semantics — closed/replaced session не допускает action; cancellation до dispatch не запускает action, после начала mutation не доказывает отсутствие effect. Реальный COM lifetime — 5B2.
+- [x] 5B1: добавить fake host tests; они не подтверждают реальную Excel identity.
 - [ ] Добавить Windows integration scenarios:
   - [ ] switch workbook before write;
   - [ ] switch workbook during operation;
@@ -1751,8 +1753,8 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
   - [ ] two chats write same workbook;
   - [ ] two workbooks with same visible name;
   - [ ] queued write после изменения guard, live read во время mutation, разные COM proxies одного документа и отсутствие deadlock при confirmation/cancel.
-- [x] Добавить ADR-0005; delivered 5A отделён от target 5B.
-- [ ] Обновить concurrency docs.
+- [x] Добавить ADR-0005; delivered 5A/5B1 отделены от production target 5B2.
+- [x] 5B1: обновить concurrency docs и перечислить оставшиеся consumers/removal gates.
 
 ### Definition of Done
 

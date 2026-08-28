@@ -70,6 +70,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolHandlerRegistry.cs" Link="Office\Runtime\ToolHandlerRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolRuntime.cs" Link="Office\Runtime\ToolRuntime.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\HostRuntime.cs" Link="Office\Runtime\HostRuntime.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\DocumentAccessGate.cs" Link="Office\Runtime\DocumentAccessGate.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\WebViewSecurityPolicy.cs" Link="Office\WebView\WebViewSecurityPolicy.cs" />

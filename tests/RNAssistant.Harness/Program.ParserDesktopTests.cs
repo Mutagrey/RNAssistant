@@ -246,6 +246,25 @@ namespace RNAssistant.Harness
                     "cancellation after action entry preserves possible document effect");
                 AssertEqual(false, uncertain.Retryable, "uncertain mutation is not automatically retryable");
 
+                var appliedEffects = 0;
+                var postActionFailures = new Exception[]
+                {
+                    new HostRuntime.MutationLockException("gate failure after effect", true),
+                    new OfficeDocumentGuardException(ToolResult.Fail("guard failure after effect", null, "active_document_changed", false))
+                };
+                foreach (var failure in postActionFailures)
+                {
+                    var failed = waiter.ExecuteForExpectedDocument(target, true, () =>
+                        waiter.ExecuteMutation(target, false, true, CancellationToken.None, () =>
+                        {
+                            appliedEffects++;
+                            throw failure;
+                        }));
+                    AssertEqual("tool_effect_uncertain", failed.ErrorCode, "post-action guard/gate failure retains possible effect");
+                    AssertEqual(false, failed.Retryable, "post-action failure is not reported as a safe retry");
+                }
+                AssertEqual(postActionFailures.Length, appliedEffects, "each simulated effect precedes its failure");
+
                 var next = new HostRuntime(adapter, paths);
                 var result = next.ExecuteMutation(target, false, true, CancellationToken.None,
                     () => ToolResult.Ok("next mutation"));
@@ -319,6 +338,327 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void HostRuntimeBoundSessionPreservesTargetAcrossSaveAsAndRejectsReopen()
+        {
+            WithTempPaths(paths =>
+            {
+                using (var dispatcher = new OfficeStaDispatcher())
+                {
+                    var document = new BoundTestDocument { StableId = "Excel:Path:original.xlsx", IsAlive = true };
+                    var session = new BoundTestOfficeSession(dispatcher, document, "bound-lifetime-one", new object());
+                    var adapter = new BoundTestOfficeAdapter(session);
+                    var runtime = new HostRuntime(adapter, paths);
+                    var target = BoundTestTarget(session);
+                    var actionCalls = 0;
+                    Func<ToolResult> action = () =>
+                    {
+                        actionCalls++;
+                        AssertTrue(dispatcher.CheckAccess, "bound action executes on its owner dispatcher");
+                        AssertTrue(ReferenceEquals(document, session.BoundDocumentObject), "action retains the exact bound object");
+                        return ToolResult.Ok("bound access");
+                    };
+
+                    AssertTrue(runtime.ExecuteForExpectedDocument(target, true, action).Success, "initial bound access succeeds");
+                    dispatcher.Invoke(() => document.StableId = "Excel:Path:saved-as.xlsx");
+                    AssertTrue(runtime.ExecuteForExpectedDocument(target, true, action).Success,
+                        "Save As does not invalidate the matching runtime lifetime");
+
+                    var savedTarget = BoundTestTarget(session);
+                    dispatcher.Invoke(() => document.IsAlive = false);
+                    var closed = runtime.ExecuteForExpectedDocument(savedTarget, true, action);
+                    AssertTrue(!closed.Success, "a closed bound session refuses access");
+
+                    var reopened = new BoundTestDocument { StableId = document.StableId, IsAlive = true };
+                    var reopenedAdapter = new BoundTestOfficeAdapter(
+                        new BoundTestOfficeSession(dispatcher, reopened, "bound-lifetime-two", new object()));
+                    var replaced = new HostRuntime(reopenedAdapter, paths).ExecuteForExpectedDocument(savedTarget, true, action);
+                    AssertTrue(!replaced.Success, "matching saved path cannot override a different runtime lifetime");
+                    AssertEqual(2, actionCalls, "neither closed nor reopened targets reach the action");
+                }
+            });
+        }
+
+        private static void HostRuntimeBoundOwnerStaBusyAndNestedReads()
+        {
+            WithTempPaths(paths =>
+            {
+                using (var dispatcher = new OfficeStaDispatcher())
+                using (var held = new ManualResetEventSlim(false))
+                using (var release = new ManualResetEventSlim(false))
+                {
+                    var document = new BoundTestDocument { StableId = "Excel:Path:before-save.xlsx", IsAlive = true };
+                    var session = new BoundTestOfficeSession(dispatcher, document, "bound-shared-lifetime", new object());
+                    var adapter = new BoundTestOfficeAdapter(session);
+                    var owner = new HostRuntime(adapter, paths);
+                    var contender = new HostRuntime(adapter, paths);
+                    var target = BoundTestTarget(session);
+                    var unexpectedCalls = 0;
+                    Task<ToolResult> attempted = null;
+                    var worker = Task.Run(() =>
+                    {
+                        using (owner.BeginDocumentAccess(target))
+                        {
+                            held.Set();
+                            AssertTrue(release.Wait(10000), "worker receives access-release signal");
+                        }
+                    });
+                    OfficeDocumentExecutionExpectation savedTarget = null;
+                    try
+                    {
+                        AssertTrue(held.Wait(5000), "worker holds the bound document gate");
+                        dispatcher.Invoke(() => document.StableId = "Excel:Path:after-save.xlsx");
+                        savedTarget = BoundTestTarget(session);
+                        attempted = Task.Run(() => dispatcher.Invoke(() =>
+                            contender.ExecuteForExpectedDocument(savedTarget, true, () =>
+                            {
+                                Interlocked.Increment(ref unexpectedCalls);
+                                return ToolResult.Ok("unexpected owner-thread dispatch");
+                            })));
+                        AssertTrue(attempted.Wait(3000), "owner dispatcher reports busy without waiting for worker release");
+                        var busy = attempted.GetAwaiter().GetResult();
+                        AssertEqual("tool_mutation_busy", busy.ErrorCode, "Save As retains the occupied runtime gate");
+                        AssertEqual(true, busy.Retryable, "owner-thread contention is an explicit retryable result");
+                        AssertEqual(0, unexpectedCalls, "busy owner-thread request never enters its action");
+                    }
+                    finally
+                    {
+                        release.Set();
+                        AssertTrue(worker.Wait(5000), "worker releases the document gate");
+                        if (attempted != null) AssertTrue(attempted.Wait(5000), "owner-thread attempt completes after cleanup");
+                    }
+
+                    var nestedCalls = 0;
+                    var nested = contender.ExecuteForExpectedDocument(target, true, () =>
+                    {
+                        using (contender.BeginDocumentAccess(savedTarget))
+                        {
+                            return contender.ExecuteMutation(savedTarget, false, true, CancellationToken.None, () =>
+                            {
+                                using (contender.BeginDocumentAccess(savedTarget))
+                                {
+                                    nestedCalls++;
+                                    return ToolResult.Ok("nested bound read");
+                                }
+                            });
+                        }
+                    });
+                    AssertTrue(nested.Success, "same-operation nested mutation/read reuses access on the owner dispatcher");
+                    AssertEqual(1, nestedCalls, "nested action executes exactly once after contention ends");
+                }
+            });
+        }
+
+        private static void HostRuntimeBoundOperationDoesNotLeakAccess()
+        {
+            WithTempPaths(paths =>
+            {
+                using (var dispatched = CreateBoundTestDispatchedAdapter(
+                    new BoundTestDocument { StableId = "Excel:Path:first.xlsx", IsAlive = true }, "bound-first"))
+                using (var childStarted = new ManualResetEventSlim(false))
+                using (var cancellation = new CancellationTokenSource())
+                {
+                    var first = (BoundTestOfficeSession)dispatched.DocumentSession;
+                    var second = new BoundTestOfficeSession(dispatched.StaDispatcher,
+                        new BoundTestDocument { StableId = "Excel:Path:second.xlsx", IsAlive = true }, "bound-second", new object());
+                    var runtime = new HostRuntime(dispatched, paths);
+                    var other = new HostRuntime(new BoundTestOfficeAdapter(second), paths);
+                    var target = BoundTestTarget(first);
+                    var otherTarget = BoundTestTarget(second);
+                    var unexpectedCalls = 0;
+                    Task<bool> child = null;
+                    try
+                    {
+                        var result = runtime.ExecuteForExpectedDocument(target, true, () =>
+                        {
+                            var nestedRoot = runtime.ExecuteForExpectedDocument(target, true, () =>
+                            {
+                                unexpectedCalls++;
+                                return ToolResult.Ok("unexpected new-root dispatch");
+                            });
+                            AssertEqual("tool_mutation_busy", nestedRoot.ErrorCode, "a new root on the same thread cannot borrow the current operation");
+
+                            var differentTargetBlocked = false;
+                            try
+                            {
+                                using (other.BeginDocumentAccess(otherTarget)) { unexpectedCalls++; }
+                            }
+                            catch (HostRuntime.MutationLockException ex)
+                            {
+                                differentTargetBlocked = ex.Retryable;
+                            }
+                            AssertTrue(differentTargetBlocked, "nested access cannot treat another target as the held document");
+
+                            child = Task.Run(() =>
+                            {
+                                childStarted.Set();
+                                try
+                                {
+                                    runtime.ExecuteForExpectedDocument(target, true, cancellation.Token, () =>
+                                    {
+                                        Interlocked.Increment(ref unexpectedCalls);
+                                        return ToolResult.Ok("unexpected child dispatch");
+                                    });
+                                    return false;
+                                }
+                                catch (OperationCanceledException) { return true; }
+                            });
+                            AssertTrue(childStarted.Wait(5000), "child task starts a separate operation");
+                            AssertTrue(!child.Wait(150), "child task cannot bypass its parent's occupied document gate");
+                            cancellation.Cancel();
+                            AssertTrue(child.Wait(5000), "cached wrapper metadata lets queued child cancel while the owner dispatcher is occupied");
+                            AssertTrue(child.GetAwaiter().GetResult(), "child cancellation occurs before dispatch");
+                            using (runtime.BeginDocumentAccess(target)) { }
+                            return ToolResult.Ok("parent retains access");
+                        });
+                        AssertTrue(result.Success, "blocked nested attempts preserve the parent operation's access");
+                    }
+                    finally
+                    {
+                        cancellation.Cancel();
+                        if (child != null) AssertTrue(child.Wait(5000), "child exits after parent access cleanup");
+                    }
+                    AssertEqual(0, unexpectedCalls, "new root, different target and child never enter unauthorized actions");
+                }
+            });
+        }
+
+        private static void HostRuntimeBoundQueuedCancellationSkipsActionAndReleasesGate()
+        {
+            WithTempPaths(paths =>
+            {
+                using (var owner = new OfficeStaDispatcher())
+                using (var queued = new ManualResetEventSlim(false))
+                using (var admit = new ManualResetEventSlim(false))
+                using (var cancellation = new CancellationTokenSource())
+                {
+                    var dispatcher = new BoundTestQueuedDispatcher(owner, queued, admit);
+                    var session = new BoundTestOfficeSession(dispatcher,
+                        new BoundTestDocument { StableId = "Excel:Path:queued.xlsx", IsAlive = true }, "bound-queued", new object());
+                    var runtime = new HostRuntime(new BoundTestOfficeAdapter(session), paths);
+                    var target = BoundTestTarget(session);
+                    var actionCalls = 0;
+                    dispatcher.PauseNextDispatch();
+                    var pending = Task.Run(() =>
+                    {
+                        try
+                        {
+                            runtime.ExecuteForExpectedDocument(target, true, cancellation.Token, () =>
+                            {
+                                Interlocked.Increment(ref actionCalls);
+                                return ToolResult.Ok("unexpected queued action");
+                            });
+                            return false;
+                        }
+                        catch (OperationCanceledException) { return true; }
+                    });
+                    try
+                    {
+                        AssertTrue(queued.Wait(5000), "bound callback reaches the owner admission boundary after gate acquisition");
+                        cancellation.Cancel();
+                        admit.Set();
+                        AssertTrue(pending.Wait(5000), "cancelled callback leaves its owner queue");
+                        AssertTrue(pending.GetAwaiter().GetResult(), "cancellation before owner execution remains cancellation");
+                        AssertEqual(0, actionCalls, "cancelled callback never starts its action");
+                    }
+                    finally
+                    {
+                        cancellation.Cancel();
+                        admit.Set();
+                        AssertTrue(pending.Wait(5000), "queued callback completes after admission cleanup");
+                    }
+                    var next = runtime.ExecuteForExpectedDocument(target, true, () => ToolResult.Ok("next bound action"));
+                    AssertTrue(next.Success, "cancelled queued callback releases its document gate");
+                }
+            });
+        }
+
+        private static void HostRuntimeGateOrderAndFailedAcquisitionCleanup()
+        {
+            WithTempPaths(paths =>
+            {
+                var documentKey = "order_document|" + paths.Root;
+                var sharedKey = "order_shared|" + paths.Root;
+                var documentToken = new object();
+                using (DocumentAccessGate.BeginOperation())
+                using (DocumentAccessGate.Enter(documentKey, documentToken, null, null, false, CancellationToken.None))
+                using (DocumentAccessGate.Enter(sharedKey, null, null, null, false, CancellationToken.None, false))
+                using (DocumentAccessGate.Enter(documentKey, documentToken, null, null, false, CancellationToken.None))
+                {
+                    // Document -> shared -> already-held document is safe reentry, not reverse acquisition.
+                }
+
+                var reverseBlocked = false;
+                using (DocumentAccessGate.BeginOperation())
+                using (DocumentAccessGate.Enter(sharedKey, null, null, null, false, CancellationToken.None, false))
+                {
+                    try
+                    {
+                        using (DocumentAccessGate.Enter(documentKey, documentToken, null, null, false, CancellationToken.None)) { }
+                    }
+                    catch (HostRuntime.MutationLockException ex) { reverseBlocked = ex.Retryable; }
+                }
+                AssertTrue(reverseBlocked, "shared state cannot acquire a new document gate in reverse order");
+
+                var inconsistentBlocked = false;
+                using (DocumentAccessGate.BeginOperation())
+                using (DocumentAccessGate.Enter(documentKey, documentToken, null, null, false, CancellationToken.None))
+                {
+                    try
+                    {
+                        using (DocumentAccessGate.Enter(documentKey, new object(), null, null, false, CancellationToken.None)) { }
+                    }
+                    catch (HostRuntime.MutationLockException ex) { inconsistentBlocked = !ex.Retryable; }
+                }
+                AssertTrue(inconsistentBlocked, "conflicting bound tokens cannot share one runtime identity");
+
+                var validDirectory = Path.Combine(paths.Root, "gate-cleanup");
+                var invalidDirectory = Path.Combine(paths.Root, "not-a-directory");
+                Directory.CreateDirectory(validDirectory);
+                File.WriteAllText(invalidDirectory, "blocks directory creation");
+                foreach (var fileContention in new[] { false, true })
+                {
+                    var key = "failed_acquire|" + paths.Root + "|" + fileContention;
+                    var directory = fileContention ? validDirectory : invalidDirectory;
+                    var rejected = false;
+                    using (fileContention
+                        ? new FileStream(Path.Combine(validDirectory, "blocked.lck"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)
+                        : null)
+                    using (DocumentAccessGate.BeginOperation())
+                    {
+                        try
+                        {
+                            using (DocumentAccessGate.Enter(key, new object(), directory, "blocked", false, CancellationToken.None)) { }
+                        }
+                        catch (HostRuntime.MutationLockException ex) { rejected = ex.Retryable == fileContention; }
+                    }
+                    AssertTrue(rejected, "directory/file lock failure retains its failure classification");
+                    using (DocumentAccessGate.BeginOperation())
+                    using (DocumentAccessGate.Enter(key, new object(), validDirectory, "blocked", false, CancellationToken.None))
+                    {
+                        // A new token can succeed only after the failed entry and semaphore were released.
+                    }
+                }
+            });
+        }
+
+        private static DispatchedOfficeApplicationAdapter CreateBoundTestDispatchedAdapter(BoundTestDocument document, string runtimeId)
+        {
+            DispatchedOfficeApplicationAdapter adapter = null;
+            adapter = new DispatchedOfficeApplicationAdapter(() => new BoundTestOfficeAdapter(
+                new BoundTestOfficeSession(adapter.StaDispatcher, document, runtimeId, new object())));
+            return adapter;
+        }
+
+        private static OfficeDocumentExecutionExpectation BoundTestTarget(BoundTestOfficeSession session)
+        {
+            return session.StaDispatcher.Invoke(() => new OfficeDocumentExecutionExpectation
+            {
+                Host = session.Host,
+                DocumentKey = session.StableDocumentId,
+                RuntimeDocumentKey = session.RuntimeDocumentId
+            });
+        }
+
         private static void DocumentCatalogActivatesSelectedDocument()
         {
             var adapter = FakeOfficeAdapter.ForHost("Excel");
@@ -382,6 +722,108 @@ namespace RNAssistant.Harness
                 "Excel:Runtime:first",
                 delegate { return properties; });
             AssertEqual("Excel:DocumentId:legacy-id", legacy, "existing persisted identity remains supported");
+        }
+
+        // Contract-only fixtures: caller-supplied identities do not simulate Excel COM identity resolution.
+        private sealed class BoundTestDocument
+        {
+            public string StableId { get; set; }
+            public bool IsAlive { get; set; }
+        }
+
+        private sealed class BoundTestOfficeSession : IOfficeDocumentSession
+        {
+            private readonly BoundTestDocument _document;
+
+            public BoundTestOfficeSession(IOfficeStaDispatcher dispatcher, BoundTestDocument document, string runtimeId, object gate)
+            {
+                StaDispatcher = dispatcher;
+                _document = document;
+                RuntimeDocumentId = runtimeId;
+                MutationGate = gate;
+            }
+
+            public string Host { get { return "Excel"; } }
+            public string StableDocumentId
+            {
+                get
+                {
+                    AssertTrue(StaDispatcher.CheckAccess, "stable document identity is inspected on its owner dispatcher");
+                    return _document.StableId;
+                }
+            }
+            public string RuntimeDocumentId { get; private set; }
+            public IOfficeStaDispatcher StaDispatcher { get; private set; }
+            public object MutationGate { get; private set; }
+
+            public object BoundDocumentObject
+            {
+                get
+                {
+                    AssertTrue(StaDispatcher.CheckAccess, "bound object is inspected on its owner dispatcher");
+                    return _document;
+                }
+            }
+
+            public bool IsAlive
+            {
+                get
+                {
+                    AssertTrue(StaDispatcher.CheckAccess, "liveness is inspected on its owner dispatcher");
+                    return _document.IsAlive;
+                }
+            }
+        }
+
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider
+        {
+            private readonly FakeOfficeAdapter _inner = new FakeOfficeAdapter();
+
+            public BoundTestOfficeAdapter(BoundTestOfficeSession session) { Session = session; }
+            public BoundTestOfficeSession Session { get; private set; }
+            public IOfficeDocumentSession DocumentSession { get { return Session; } }
+            public IOfficeStaDispatcher StaDispatcher { get { return Session.StaDispatcher; } }
+            public string HostName { get { return Session.Host; } }
+            public string DocumentKey { get { return StaDispatcher.Invoke(() => Session.StableDocumentId); } }
+            public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
+            public string DocumentTitle { get { return "Bound test document"; } }
+            public string GetDocumentSnapshot(int maxChars) { return _inner.GetDocumentSnapshot(maxChars); }
+            public void PrepareForContextCapture() { _inner.PrepareForContextCapture(); }
+            public ContextNote CaptureSelectionContext(string mode, int maxChars) { return _inner.CaptureSelectionContext(mode, maxChars); }
+            public IEnumerable<ToolDefinition> GetBuiltInTools() { return _inner.GetBuiltInTools(); }
+            public ToolResult ExecuteTool(ToolCommand command) { return _inner.ExecuteTool(command); }
+        }
+
+        private sealed class BoundTestQueuedDispatcher : IOfficeStaDispatcher
+        {
+            private readonly IOfficeStaDispatcher _owner;
+            private readonly ManualResetEventSlim _queued;
+            private readonly ManualResetEventSlim _admit;
+            private int _pauseNext;
+
+            public BoundTestQueuedDispatcher(IOfficeStaDispatcher owner, ManualResetEventSlim queued, ManualResetEventSlim admit)
+            {
+                _owner = owner;
+                _queued = queued;
+                _admit = admit;
+            }
+
+            public bool CheckAccess { get { return _owner.CheckAccess; } }
+            public void PauseNextDispatch() { Interlocked.Exchange(ref _pauseNext, 1); }
+
+            public T Invoke<T>(Func<T> action)
+            {
+                var pause = !CheckAccess && Interlocked.Exchange(ref _pauseNext, 0) != 0;
+                return _owner.Invoke(() =>
+                {
+                    if (pause)
+                    {
+                        _queued.Set();
+                        AssertTrue(_admit.Wait(10000), "owner admits the queued bound callback");
+                    }
+                    return action();
+                });
+            }
         }
 
         public sealed class FakeDocumentProperties

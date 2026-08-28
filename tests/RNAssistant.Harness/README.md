@@ -37,7 +37,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
 | Tool Result v1 / strict JSON | `Program.ToolResultWireTests.cs`; projection checks in `Program.ToolRuntimeTests.cs` | `tool result wire:`, `tool result materialization:` |
 | Native ToolRuntime / typed contracts and effect evidence | `Program.ToolRuntimeTests.cs`; native read in `Program.ResourceGatewayTests.cs` | `tool runtime:` |
-| Host document access boundary | `Program.ParserDesktopTests.cs`; existing live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `desktop com: adapter dispatches calls`, `vba: reconciliation waits for active mutation` |
+| Host document gate / neutral bound session | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
 | Office model-context owner | `Program.ToolDiscoveryTests.cs`; result/projection coverage in `Program.AgentSafetyTests.cs` | `agent: model session`, `agent: bounds oversized`, `context inspector:`, `protocol context:` |
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
@@ -54,6 +54,11 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Desktop/WebView-neutral | `Program.ParserDesktopTests.cs`, `Program.WebViewSecurityTests.cs` | `desktop target:`, `webview:` |
 
 The `harness:` slice also verifies that every production `.cs` file is explicitly included in its old-style `.csproj`, preventing source-linked harness globs from hiding a broken production project.
+
+The bound-session fixtures test operation ownership, STA handoff/cancellation,
+Save As, close/reopen rejection and gate cleanup using supplied fake identities.
+They do not validate real Excel COM identity, production binding or Windows UI
+reentrancy. Those remain Phase 5B2 gates in [ADR-0005](../../docs/decisions/ADR-0005-bound-document-session.md).
 
 Versioning changes use the existing `Program.ProjectStructureTests.cs` suite:
 

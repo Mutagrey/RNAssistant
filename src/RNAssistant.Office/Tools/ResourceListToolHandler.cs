@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
@@ -36,15 +37,20 @@ namespace RNAssistant.Office.Tools
                 return Failure("Resource tools require an active chat session.", "resource_session_required", false);
             try
             {
-                context.MarkDispatchPossible();
-                var data = _gateway.List(_session,
-                    ToolArgumentReader.String(context.Arguments, "provider", string.Empty),
-                    ToolArgumentReader.String(context.Arguments, "kind", string.Empty),
-                    ToolArgumentReader.String(context.Arguments, "cursor", string.Empty),
-                    ToolArgumentReader.Int32(context.Arguments, "limit", 20));
-                return Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("Resources listed.",
-                    JsonConvert.SerializeObject(data, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })),
-                    ToolEffectEvidence.None));
+                // Native model dispatch bypasses OfficeToolExecutor's root scope.
+                // Keep ownership within this synchronous body, never across an await.
+                using (DocumentAccessGate.BeginOperation())
+                {
+                    context.MarkDispatchPossible();
+                    var data = _gateway.List(_session,
+                        ToolArgumentReader.String(context.Arguments, "provider", string.Empty),
+                        ToolArgumentReader.String(context.Arguments, "kind", string.Empty),
+                        ToolArgumentReader.String(context.Arguments, "cursor", string.Empty),
+                        ToolArgumentReader.Int32(context.Arguments, "limit", 20));
+                    return Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("Resources listed.",
+                        JsonConvert.SerializeObject(data, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })),
+                        ToolEffectEvidence.None));
+                }
             }
             catch (KeyNotFoundException ex) { return Failure(ex.Message, "resource_not_found", false); }
             catch (ResourceRequestException ex) { return Failure(ex.Message, ex.ErrorCode, ex.Retryable); }

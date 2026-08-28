@@ -6,12 +6,14 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
-    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IDisposable
+    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IDisposable
     {
         private readonly Func<IOfficeApplicationAdapter> _adapterFactory;
         private readonly OfficeStaDispatcher _dispatcher;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
         private IOfficeApplicationAdapter _inner;
+        private IOfficeDocumentSession _documentSession;
+        private volatile bool _innerInitialized;
         private bool _disposed;
 
         public DispatchedOfficeApplicationAdapter(Func<IOfficeApplicationAdapter> adapterFactory)
@@ -45,13 +47,36 @@ namespace RNAssistant.Office
             get { return ReadExpected(delegate { return Inner.DocumentTitle; }); }
         }
 
+        public IOfficeStaDispatcher StaDispatcher { get { return _dispatcher; } }
+
+        public IOfficeDocumentSession DocumentSession
+        {
+            get
+            {
+                if (!_innerInitialized)
+                {
+                    _dispatcher.Invoke(delegate
+                    {
+                        var initialized = Inner;
+                        return initialized != null;
+                    });
+                }
+                return _documentSession;
+            }
+        }
+
         private IOfficeApplicationAdapter Inner
         {
             get
             {
-                if (_inner == null)
+                if (!_innerInitialized)
                 {
-                    _inner = _adapterFactory();
+                    if (_inner == null) _inner = _adapterFactory();
+                    var provider = _inner as IOfficeDocumentSessionProvider;
+                    _documentSession = provider == null ? null : provider.DocumentSession;
+                    // Publish the owner-initialized session once. Rebinding requires
+                    // another adapter; metadata access must not queue behind a run.
+                    _innerInitialized = true;
                 }
 
                 return _inner;

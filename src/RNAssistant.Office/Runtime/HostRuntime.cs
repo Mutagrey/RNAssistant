@@ -6,15 +6,10 @@ using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Runtime
 {
-    // Owns the current synchronous document-access boundary. Bound document objects,
-    // runtime-identity gates and preparation under that gate are the Phase 5B switch.
     internal sealed class HostRuntime
     {
-        private static readonly TimeSpan MutationLockTimeout = TimeSpan.FromSeconds(10);
-        private static readonly object FallbackMutationGate = new object();
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly string _mutationLockDirectory;
-        private readonly AsyncLocal<int> _documentAccessDepth = new AsyncLocal<int>();
 
         internal HostRuntime(IOfficeApplicationAdapter adapter, AppDataPaths paths)
         {
@@ -27,27 +22,37 @@ namespace RNAssistant.Office.Runtime
             bool requiresOfficeDocument,
             Func<ToolResult> action)
         {
-            if (!requiresOfficeDocument) return action();
-            var expectation = target == null ||
-                string.IsNullOrWhiteSpace(target.Host) ||
-                (string.IsNullOrWhiteSpace(target.DocumentKey) && string.IsNullOrWhiteSpace(target.RuntimeDocumentKey))
-                ? null
-                : target;
-            var documentGuard = _adapter as IOfficeDocumentExecutionGuard;
-            if (expectation != null && documentGuard == null)
-            {
-                var mismatch = OfficeDocumentExecutionGuardState.Validate(_adapter, expectation);
-                if (mismatch != null) return mismatch;
-            }
+            return ExecuteForExpectedDocument(target, requiresOfficeDocument, CancellationToken.None, action);
+        }
 
-            using (documentGuard == null || expectation == null
-                ? null
-                : documentGuard.BeginExpectedDocument(
-                    expectation.Host,
-                    expectation.DocumentKey,
-                    expectation.RuntimeDocumentKey))
+        internal ToolResult ExecuteForExpectedDocument(
+            OfficeDocumentExecutionExpectation target,
+            bool requiresOfficeDocument,
+            CancellationToken cancellationToken,
+            Func<ToolResult> action)
+        {
+            // A public execution entry is never reentrant merely because a UI callback
+            // happened on the thread of a different, still-running operation.
+            using (DocumentAccessGate.BeginOperation())
             {
-                return action();
+                if (!requiresOfficeDocument) return action();
+                try
+                {
+                    var access = CaptureAccess(target);
+                    using (EnterAccess(access, cancellationToken))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        return ExecuteGuarded(access, target, cancellationToken, action);
+                    }
+                }
+                catch (OfficeDocumentGuardException ex)
+                {
+                    return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+                }
+                catch (MutationLockException ex)
+                {
+                    return LockFailure(ex);
+                }
             }
         }
 
@@ -58,148 +63,174 @@ namespace RNAssistant.Office.Runtime
             CancellationToken cancellationToken,
             Func<ToolResult> action)
         {
-            var actionStarted = false;
-            try
+            var access = mutatesDocument ? CaptureAccess(target) : null;
+            // The outer document scope also covers preparation. Direct callers
+            // take the same gate here, always before the short shared-state lock.
+            using (access == null ? null : EnterAccess(access, cancellationToken))
+            using (!mutatesSharedLocalState ? null : DocumentAccessGate.Enter(
+                "shared_local_state|" + (_mutationLockDirectory ?? string.Empty), null,
+                _mutationLockDirectory, "local_state", MayWait(access), cancellationToken, false))
             {
-                if (!mutatesSharedLocalState && !mutatesDocument)
+                cancellationToken.ThrowIfCancellationRequested();
+                Func<ToolResult> execute = delegate
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    actionStarted = true;
-                    return action();
-                }
-                if (string.IsNullOrWhiteSpace(_mutationLockDirectory))
-                {
-                    EnterMutationGate(FallbackMutationGate, cancellationToken);
-                    try
+                    try { return action(); }
+                    catch (OperationCanceledException)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        actionStarted = true;
-                        return InDocumentAccessScope(mutatesDocument, action);
+                        return ToolResult.Fail(
+                            "Cancellation was observed after mutation execution started. The external effect may have been applied; inspect state before retrying.",
+                            null, "tool_effect_uncertain", false);
                     }
-                    finally
+                    catch (Exception ex) when (ex is MutationLockException || ex is OfficeDocumentGuardException)
                     {
-                        Monitor.Exit(FallbackMutationGate);
+                        // A nested read/guard may fail after a write. Do not let the outer
+                        // access boundary misclassify that as a retryable pre-dispatch refusal.
+                        return ToolResult.Fail(
+                            "Document access failed after mutation execution started. The external effect may have been applied; inspect state before retrying. " + ex.Message,
+                            null, "tool_effect_uncertain", false);
                     }
-                }
-
-                using (AcquireMutationFileLock(mutatesSharedLocalState ? "local_state" : null, cancellationToken))
-                using (AcquireMutationFileLock(
-                    mutatesDocument ? "document_" + AppDataPaths.SafeFileName(DocumentMutationKey(target)) : null,
-                    cancellationToken))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    actionStarted = true;
-                    return InDocumentAccessScope(mutatesDocument, action);
-                }
-            }
-            catch (OperationCanceledException) when (actionStarted)
-            {
-                return ToolResult.Fail(
-                    "Cancellation was observed after mutation execution started. The external effect may have been applied; inspect state before retrying.",
-                    null,
-                    "tool_effect_uncertain",
-                    false);
+                };
+                return access == null ? execute() : ExecuteGuarded(access, target, cancellationToken, execute);
             }
         }
 
         internal IDisposable BeginDocumentAccess(OfficeDocumentExecutionExpectation target)
         {
-            if (_documentAccessDepth.Value > 0) return new ActionLease(null);
-            IDisposable lockLease;
-            if (string.IsNullOrWhiteSpace(_mutationLockDirectory))
-            {
-                EnterMutationGate(FallbackMutationGate, CancellationToken.None);
-                lockLease = new ActionLease(delegate { Monitor.Exit(FallbackMutationGate); });
-            }
-            else
-            {
-                lockLease = AcquireMutationFileLock(
-                    "document_" + AppDataPaths.SafeFileName(DocumentMutationKey(target)),
-                    CancellationToken.None);
-            }
-            _documentAccessDepth.Value += 1;
-            return new ActionLease(delegate
-            {
-                _documentAccessDepth.Value = Math.Max(0, _documentAccessDepth.Value - 1);
-                if (lockLease != null) lockLease.Dispose();
-            });
-        }
-
-        private ToolResult InDocumentAccessScope(bool enabled, Func<ToolResult> action)
-        {
-            if (!enabled) return action();
-            _documentAccessDepth.Value += 1;
+            var access = CaptureAccess(target);
+            var lease = EnterAccess(access, CancellationToken.None);
             try
             {
-                return action();
+                var mismatch = CheckTarget(access, target);
+                if (mismatch != null) throw new OfficeDocumentGuardException(mismatch);
+                return lease;
             }
-            finally
+            catch
             {
-                _documentAccessDepth.Value = Math.Max(0, _documentAccessDepth.Value - 1);
+                lease.Dispose();
+                throw;
             }
         }
 
-        private static void EnterMutationGate(object gate, CancellationToken cancellationToken)
+        private ToolResult ExecuteGuarded(DocumentAccess access,
+            OfficeDocumentExecutionExpectation target, CancellationToken cancellationToken, Func<ToolResult> action)
         {
-            var deadline = DateTime.UtcNow.Add(MutationLockTimeout);
-            while (!Monitor.TryEnter(gate, 100))
+            Func<ToolResult> guarded = delegate
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (DateTime.UtcNow >= deadline)
-                {
-                    throw new MutationLockException(
-                        "Another RNAssistant action is still changing the same state. Retry after it finishes.",
-                        true);
-                }
-            }
-        }
-
-        private string DocumentMutationKey(OfficeDocumentExecutionExpectation target)
-        {
-            return target == null
-                ? (_adapter.HostName + "|" + _adapter.DocumentKey)
-                : ((target.Host ?? _adapter.HostName) + "|" + (target.DocumentKey ?? _adapter.DocumentKey));
-        }
-
-        private IDisposable AcquireMutationFileLock(string lockName, CancellationToken cancellationToken)
-        {
-            if (string.IsNullOrWhiteSpace(_mutationLockDirectory) || string.IsNullOrWhiteSpace(lockName)) return null;
-            try
-            {
-                Directory.CreateDirectory(_mutationLockDirectory);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                throw new MutationLockException("RNAssistant cannot access its mutation lock directory.", false, ex);
-            }
-            catch (IOException ex)
-            {
-                throw new MutationLockException("RNAssistant cannot access its mutation lock directory.", false, ex);
-            }
-            var path = Path.Combine(_mutationLockDirectory, lockName + ".lck");
-            var deadline = DateTime.UtcNow.Add(MutationLockTimeout);
-            while (true)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                }
-                catch (IOException ex)
-                {
-                    if (DateTime.UtcNow >= deadline)
+                var mismatch = CheckTarget(access, target);
+                if (mismatch != null) return mismatch;
+                var expectation = HasExpectation(target) ? target : access.Session == null ? null :
+                    new OfficeDocumentExecutionExpectation
                     {
-                        throw new MutationLockException(
-                            "Another RNAssistant action is still changing the same state. Retry after it finishes.",
-                            true,
-                            ex);
-                    }
-                    if (cancellationToken.WaitHandle.WaitOne(100)) cancellationToken.ThrowIfCancellationRequested();
-                }
-                catch (UnauthorizedAccessException ex)
+                        Host = access.Session.Host,
+                        DocumentKey = access.Session.StableDocumentId,
+                        RuntimeDocumentKey = access.Session.RuntimeDocumentId
+                    };
+                var guard = _adapter as IOfficeDocumentExecutionGuard;
+                using (guard == null || expectation == null ? null : guard.BeginExpectedDocument(
+                    expectation.Host, expectation.DocumentKey, expectation.RuntimeDocumentKey))
                 {
-                    throw new MutationLockException("RNAssistant cannot acquire its mutation lock.", false, ex);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return action();
                 }
+            };
+            // A bound host operation stays on its owner STA. Legacy adapters keep
+            // their current per-access dispatcher until the Excel identity switch.
+            return access.Session == null ? guarded() :
+                DocumentAccessGate.Invoke(access.Dispatcher, guarded);
+        }
+
+        private ToolResult CheckTarget(DocumentAccess access, OfficeDocumentExecutionExpectation target)
+        {
+            if (access.Session != null)
+            {
+                return DocumentAccessGate.Invoke(access.Dispatcher,
+                    () => OfficeDocumentExecutionGuardState.ValidateBoundSession(access.Session, target));
+            }
+            return HasExpectation(target) ? OfficeDocumentExecutionGuardState.Validate(_adapter, target) : null;
+        }
+
+        private IDisposable EnterAccess(DocumentAccess access, CancellationToken cancellationToken)
+        {
+            return DocumentAccessGate.Enter(access.Key, access.Gate, _mutationLockDirectory,
+                access.LockName, MayWait(access), cancellationToken);
+        }
+
+        private bool MayWait(DocumentAccess access)
+        {
+            var dispatcher = access == null ? null : access.Dispatcher;
+            if (dispatcher == null)
+            {
+                var provider = _adapter as IOfficeDispatcherProvider;
+                dispatcher = provider == null ? null : provider.StaDispatcher;
+            }
+            // Waiting on the owner STA can deadlock a worker that holds this gate
+            // while waiting for its queued COM callback. Busy is explicit and retryable.
+            return dispatcher == null || !dispatcher.CheckAccess;
+        }
+
+        private DocumentAccess CaptureAccess(OfficeDocumentExecutionExpectation target)
+        {
+            var provider = _adapter as IOfficeDocumentSessionProvider;
+            var session = provider == null ? null : provider.DocumentSession;
+            var dispatchProvider = _adapter as IOfficeDispatcherProvider;
+            var dispatcher = session == null
+                ? (dispatchProvider == null ? null : dispatchProvider.StaDispatcher)
+                : session.StaDispatcher;
+            if (session != null)
+            {
+                if (string.IsNullOrWhiteSpace(session.Host) || string.IsNullOrWhiteSpace(session.RuntimeDocumentId) ||
+                    session.MutationGate == null || dispatcher == null)
+                {
+                    throw new OfficeDocumentGuardException(ToolResult.Fail(
+                        "The bound Office document session is incomplete. No Office action was started.",
+                        null, "document_session_unavailable", false));
+                }
+                var identity = session.Host.ToLowerInvariant() + "|" + session.RuntimeDocumentId;
+                return new DocumentAccess("bound_document|" + identity,
+                    "runtime_document_" + AppDataPaths.SafeFileName(identity),
+                    session.MutationGate, session, dispatcher);
+            }
+
+            // Compatibility boundary for the not-yet-switched production hosts.
+            // These keys do not identify a live workbook across lifetimes.
+            var host = target == null ? _adapter.HostName : target.Host ?? _adapter.HostName;
+            var document = target == null ? _adapter.DocumentKey : target.DocumentKey ?? _adapter.DocumentKey;
+            var legacyIdentity = (host ?? string.Empty) + "|" + (document ?? string.Empty);
+            return new DocumentAccess("legacy_document|" + legacyIdentity.ToLowerInvariant(),
+                "document_" + AppDataPaths.SafeFileName(legacyIdentity), null, null, dispatcher);
+        }
+
+        private static bool HasExpectation(OfficeDocumentExecutionExpectation target)
+        {
+            return target != null && !string.IsNullOrWhiteSpace(target.Host) &&
+                (!string.IsNullOrWhiteSpace(target.DocumentKey) || !string.IsNullOrWhiteSpace(target.RuntimeDocumentKey));
+        }
+
+        private static ToolResult LockFailure(MutationLockException exception)
+        {
+            return ToolResult.Fail(exception.Message, null,
+                exception.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable",
+                exception.Retryable);
+        }
+
+        private sealed class DocumentAccess
+        {
+            internal readonly string Key;
+            internal readonly string LockName;
+            internal readonly object Gate;
+            internal readonly IOfficeDocumentSession Session;
+            internal readonly IOfficeStaDispatcher Dispatcher;
+
+            internal DocumentAccess(string key, string lockName, object gate,
+                IOfficeDocumentSession session, IOfficeStaDispatcher dispatcher)
+            {
+                Key = key;
+                LockName = lockName;
+                Gate = gate;
+                Session = session;
+                Dispatcher = dispatcher;
             }
         }
 
@@ -212,22 +243,6 @@ namespace RNAssistant.Office.Runtime
             }
 
             public bool Retryable { get; private set; }
-        }
-
-        private sealed class ActionLease : IDisposable
-        {
-            private Action _dispose;
-
-            public ActionLease(Action dispose)
-            {
-                _dispose = dispose;
-            }
-
-            public void Dispose()
-            {
-                var dispose = Interlocked.Exchange(ref _dispose, null);
-                if (dispose != null) dispose();
-            }
         }
     }
 }

@@ -4,7 +4,7 @@ using System.Windows.Forms;
 
 namespace RNAssistant.Office
 {
-    public sealed class OfficeUiDispatcher : IDisposable
+    public sealed class OfficeUiDispatcher : IOfficeStaDispatcher, IDisposable
     {
         private readonly Control _control;
         private readonly int _threadId;
@@ -21,11 +21,16 @@ namespace RNAssistant.Office
             }
         }
 
+        public bool CheckAccess
+        {
+            get { return Thread.CurrentThread.ManagedThreadId == _threadId; }
+        }
+
         public T Invoke<T>(Func<T> action)
         {
             if (action == null) throw new ArgumentNullException("action");
             ThrowIfDisposed();
-            if (Thread.CurrentThread.ManagedThreadId == _threadId) return action();
+            if (CheckAccess) return action();
             return (T)_control.Invoke(action);
         }
 
