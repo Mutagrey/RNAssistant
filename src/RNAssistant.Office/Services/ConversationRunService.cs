@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -35,9 +37,8 @@ namespace RNAssistant.Office.Services
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
-        private readonly LlmCompletionDelegate _completeAsync;
+        private readonly Func<IModelProtocol> _modelProtocolFactory;
         private readonly ConversationPromptComposer _promptComposer;
-        private readonly AgentResponseParser _responseParser;
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
 
@@ -57,9 +58,8 @@ namespace RNAssistant.Office.Services
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor;
-            _completeAsync = completeAsync;
+            _modelProtocolFactory = () => new ModelProtocolClient(completeAsync);
             _promptComposer = new ConversationPromptComposer();
-            _responseParser = new AgentResponseParser();
             _contextCompactionService = contextCompactionService;
             _attachmentAnalysisService = new AttachmentAnalysisService(completeAsync);
         }
@@ -188,7 +188,8 @@ namespace RNAssistant.Office.Services
             var iterationsUsed = Math.Max(0, initialIterationsUsed);
             object contextUsage = null;
             var runCache = new LlmRunCache();
-            var responseMode = AgentResponseModes.Normalize(settings.AgentResponseMode);
+            var modelProtocol = _modelProtocolFactory();
+            var protocolProgress = ConversationStreamProgressProjector.ForProtocol(progress);
 
             try
             {
@@ -211,106 +212,42 @@ namespace RNAssistant.Office.Services
                 Report(progress, "thinking", "Модель выбирает следующий шаг...", null);
                 var stepId = Guid.NewGuid().ToString("N");
                 var activeTools = workingSet.Tools;
-                var options = BuildRequestOptions(policy.Mode, responseMode, activeTools, session, runCache);
+                var options = BuildRequestOptions(policy.Mode, settings.AgentResponseMode, activeTools, session, runCache);
                 options.TraceStepId = stepId;
-                string budgetError;
-                if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
-                {
-                    return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, budgetError,
-                        "Контекст переполнен", "prompt_budget_exceeded");
-                }
-                LlmCompletionResult completion;
+                ModelProtocolResult protocolResult;
                 try
                 {
-                    try
+                    protocolResult = await modelProtocol.GetResponseAsync(new ModelProtocolRequest
                     {
-                        completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
-                    }
-                    catch (LlmRequestException ex) when (
-                        ex.Kind == LlmFailureKind.ResponseFormatUnsupported &&
-                        string.Equals(responseMode, AgentResponseModes.JsonSchema, StringComparison.Ordinal) &&
-                        settings.FallbackToJsonObject)
-                    {
-                        responseMode = AgentResponseModes.JsonObject;
-                        activeTools = workingSet.Tools;
-                        options = BuildRequestOptions(policy.Mode, responseMode, activeTools, session, runCache);
-                        options.TraceStepId = stepId;
-                        Report(progress, "thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
-                        if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
-                        {
-                            return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, budgetError,
-                                "Контекст переполнен", "prompt_budget_exceeded");
-                        }
-                        completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
-                    }
+                        Settings = settings,
+                        AcceptedMessages = messages,
+                        CallableTools = activeTools,
+                        RunnableCatalog = runnableCatalog,
+                        Options = options
+                    }, protocolProgress, cancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
+                    // Every internal attempt sees the same materialized prompt. Release
+                    // ephemeral media only after the protocol step accepts or terminates.
                     ReleaseHydratedArtifactMedia(messages);
                 }
-                contextUsage = ContextUsageEstimator.FromPrompt(messages, settings,
-                    completion == null ? null : completion.PromptTokens, options);
-                string refusal;
-                if (TryGetRefusal(completion, out refusal))
+                contextUsage = protocolResult.ContextUsage ?? contextUsage;
+                if (protocolResult.Failure != null)
                 {
-                    TraceAcceptedResponse(options, AgentResponseStatuses.Refused, new string[0]);
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(
-                        refusal, completion, null, AgentResponseStatuses.Refused));
-                    return Result(session, summaryBuilder, refusal, results, contextUsage, false,
-                        AgentResponseStatuses.Refused, AgentResponseStatuses.Refused);
+                    var failure = protocolResult.Failure;
+                    // Phase 2A adapter to the existing controller failure/cancellation path.
+                    if (failure.Cause != null) ExceptionDispatchInfo.Capture(failure.Cause).Throw();
+                    var budgetFailure = failure.Kind == ModelProtocolFailureKind.PromptBudgetExceeded;
+                    return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, failure.Message,
+                        budgetFailure ? "Контекст переполнен" : "Некорректный ответ модели",
+                        budgetFailure ? "prompt_budget_exceeded" : "invalid_model_response");
                 }
-                var parsed = _responseParser.Parse(
-                    completion == null ? null : completion.Content,
-                    activeTools,
-                    runnableCatalog);
-                if (!parsed.Success) TraceRejectedResponse(options, completion, parsed.Error, 0);
-                var configuredFormatRetries = settings.MaxAgentFormatRetries > 0
-                    ? settings.MaxAgentFormatRetries
-                    : new AppSettings().MaxAgentFormatRetries;
-                var maxFormatRetries = Math.Max(
-                    1,
-                    Math.Min(AppSettings.MaximumAgentFormatRetries, configuredFormatRetries));
-                for (var retry = 1; !parsed.Success && retry <= maxFormatRetries; retry++)
-                {
-                    // Repair is transport-internal; the rejected payload and parser error remain in trace diagnostics.
-                    var repairMessages = new List<ChatMessage>(messages)
-                    {
-                        AgentJsonProtocol.CreateFormatRepairMessage(parsed.Error, retry, maxFormatRetries)
-                    };
-                    if (!TryValidatePromptBudget(repairMessages, settings, options, out budgetError))
-                    {
-                        return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, budgetError,
-                            "Контекст переполнен", "prompt_budget_exceeded");
-                    }
-                    completion = await CompleteAsync(settings, repairMessages, options, progress, cancellationToken).ConfigureAwait(false);
-                    contextUsage = ContextUsageEstimator.FromPrompt(repairMessages, settings,
-                        completion == null ? null : completion.PromptTokens, options);
-                    if (TryGetRefusal(completion, out refusal))
-                    {
-                        TraceAcceptedResponse(options, AgentResponseStatuses.Refused, new string[0]);
-                        session.Messages.Add(AgentTranscript.CreateAssistantMessage(
-                            refusal, completion, null, AgentResponseStatuses.Refused));
-                        return Result(session, summaryBuilder, refusal, results, contextUsage, false,
-                            AgentResponseStatuses.Refused, AgentResponseStatuses.Refused);
-                    }
-                    parsed = _responseParser.Parse(
-                        completion == null ? null : completion.Content,
-                        activeTools,
-                        runnableCatalog);
-                    if (!parsed.Success) TraceRejectedResponse(options, completion, parsed.Error, retry);
-                }
-                if (!parsed.Success)
-                {
-                    return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage,
-                        "Ответ модели не выполнен после " + maxFormatRetries + " попыток исправить формат: " + parsed.Error);
-                }
-
-                var response = parsed.Response;
-                TraceAcceptedResponse(options, response.Status,
-                    response.ToolCalls.Select(call => call.Id).ToArray());
+                var response = protocolResult.Response;
+                var completion = protocolResult.Completion;
                 if (response.ToolCalls.Count == 0)
                 {
-                    var finalText = response.Message.Trim();
+                    var finalText = response.Message;
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(
                         finalText, completion, null, response.Status));
                     return Result(session, summaryBuilder, finalText, results, contextUsage, false, response.Status, response.Status);
@@ -593,28 +530,6 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private async Task<LlmCompletionResult> CompleteAsync(
-            AppSettings settings,
-            IReadOnlyList<ChatMessage> messages,
-            LlmRequestOptions options,
-            Action<string, string, ChatActivity> progress,
-            CancellationToken cancellationToken)
-        {
-            options.TraceModelAttemptId = Guid.NewGuid().ToString("N");
-            options.TraceRequestId = null;
-            var streamProgress = new ConversationStreamProgressProjector(progress);
-            streamProgress.Start(settings != null && settings.StreamResponses);
-            var completion = await _completeAsync(
-                settings,
-                messages,
-                options,
-                streamProgress.OnUpdate,
-                cancellationToken).ConfigureAwait(false);
-            streamProgress.Complete();
-            if (completion == null) throw new InvalidOperationException("Model returned no completion.");
-            return completion;
-        }
-
         internal static List<ToolDefinition> PrepareToolsForRun(IEnumerable<ToolDefinition> tools)
         {
             var source = (tools ?? new ToolDefinition[0])
@@ -819,13 +734,6 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(phase)) session.LastRun.Phase = phase;
         }
 
-        private static bool TryGetRefusal(LlmCompletionResult completion, out string refusal)
-        {
-            refusal = completion == null ? string.Empty : completion.RefusalContent ?? string.Empty;
-            return string.IsNullOrWhiteSpace(completion == null ? null : completion.Content) &&
-                !string.IsNullOrWhiteSpace(refusal);
-        }
-
         private static ChatMessage CreateBoundedToolResultMessage(
             ToolCommand command,
             ToolResult result,
@@ -933,27 +841,6 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private static bool TryValidatePromptBudget(
-            IReadOnlyList<ChatMessage> messages,
-            AppSettings settings,
-            LlmRequestOptions options,
-            out string error)
-        {
-            var inputBudget = ModelContextBudget.InputBudgetTokens(settings);
-            var estimated = ModelContextBudget.EstimateMessagesTokens(messages, settings) +
-                ModelContextBudget.EstimateRequestOptionsTokens(options, settings);
-            if (estimated <= inputBudget)
-            {
-                error = null;
-                return true;
-            }
-
-            error = "Выполнение остановлено до следующего запроса модели: контекст занимает ≈" + estimated +
-                " токенов при доступном лимите " + inputBudget +
-                ". Сузьте диапазон/объём результата или начните новый чат.";
-            return false;
-        }
-
         private static string LatestUserRequest(ChatSession session)
         {
             var message = (session == null ? null : session.Messages ?? new List<ChatMessage>())
@@ -978,50 +865,6 @@ namespace RNAssistant.Office.Services
         private static void Report(Action<string, string, ChatActivity> progress, string phase, string message, ChatActivity activity)
         {
             if (progress != null) progress(phase, message ?? string.Empty, activity);
-        }
-
-        private static void TraceRejectedResponse(
-            LlmRequestOptions options,
-            LlmCompletionResult completion,
-            string error,
-            int attempt)
-        {
-            if (options == null || options.TraceSink == null) return;
-            options.TraceSink(new LlmTraceRecord
-            {
-                Type = "rejected",
-                RequestId = options.TraceRequestId,
-                Purpose = options.TracePurpose,
-                Model = options.TraceSession == null ? null : options.TraceSession.Model,
-                ResponseFormat = options.ResponseFormat,
-                Attempt = attempt,
-                FailureKind = "invalid_model_response",
-                Error = error,
-                PayloadJson = completion == null ? null : completion.Content,
-                PayloadContentType = "application/json"
-            });
-        }
-
-        private static void TraceAcceptedResponse(LlmRequestOptions options, string status, string[] toolCallIds)
-        {
-            if (options == null || options.TraceSink == null) return;
-            try
-            {
-                options.TraceSink(new LlmTraceRecord
-                {
-                    Type = "accepted",
-                    RequestId = options.TraceRequestId,
-                    Purpose = options.TracePurpose,
-                    Model = options.TraceSession == null ? null : options.TraceSession.Model,
-                    ResponseFormat = options.ResponseFormat,
-                    ResponseStatus = status,
-                    ToolCallIds = toolCallIds
-                });
-            }
-            catch (Exception)
-            {
-                Diagnostics.RuntimeLog.Error("Causal trace append failed at model.response.accepted.");
-            }
         }
 
         private sealed class ConversationMaterialization

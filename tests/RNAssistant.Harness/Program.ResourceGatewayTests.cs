@@ -775,6 +775,7 @@ namespace RNAssistant.Harness
                     MaxContextTokens = 32768
                 };
                 var calls = 0;
+                string materializedPrompt = null;
                 LlmCompletionDelegate completion = (requestSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls += 1;
@@ -792,6 +793,7 @@ namespace RNAssistant.Harness
                     if (calls == 2)
                     {
                         AssertEqual(1, mediaMessages.Count, "media is hydrated for the next model step only");
+                        materializedPrompt = JsonConvert.SerializeObject(messages);
                         AssertContains(FlattenSimple(messages), resourceUri, "hydrated media retains resource URI provenance");
                         AssertTrue(ReferencesArtifact(session, mediaMessages[0], "attachment_historic-image"),
                             "hydrated media retains canonical resource provenance");
@@ -801,10 +803,13 @@ namespace RNAssistant.Harness
                             "resource tool result carries the same durable ResourceRef");
                         return Task.FromResult(new LlmCompletionResult { Content = "invalid envelope" });
                     }
-                    AssertEqual(0, mediaMessages.Count, "format repair does not resend one-shot media");
-                    AssertTrue(!messages.Any(message => message != null && !message.ExcludeFromModelContext &&
+                    AssertEqual(1, mediaMessages.Count, "format repair retains media from the same accepted prompt");
+                    AssertEqual(materializedPrompt, JsonConvert.SerializeObject(messages.Where(message =>
+                        !(message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal))),
+                        "repair does not change the materialized prompt or resource evidence");
+                    AssertTrue(messages.Any(message => message != null && !message.ExcludeFromModelContext &&
                         (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal)),
-                        "consumed media marker is excluded from later model context");
+                        "media stays available until the logical model step accepts or fails");
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = "{\"status\":\"completed\",\"message\":\"Изображение прочитано.\",\"tool_calls\":[]}"
@@ -825,6 +830,9 @@ namespace RNAssistant.Harness
                 AssertTrue(session.Messages.Where(message => message != null && message.ProtocolMessage)
                     .All(message => (message.Attachments ?? new List<ChatAttachment>()).Count == 0),
                     "hydrated media is released after the following model step");
+                AssertTrue(session.Messages.Where(message => message != null &&
+                    (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal))
+                    .All(message => message.ExcludeFromModelContext), "consumed media stays out of later steps");
             });
         }
 

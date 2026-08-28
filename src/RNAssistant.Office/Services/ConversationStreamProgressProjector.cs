@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
@@ -8,6 +9,26 @@ namespace RNAssistant.Office.Services
 {
     internal sealed class ConversationStreamProgressProjector
     {
+        public static ModelProtocolProgress ForProtocol(Action<string, string, ChatActivity> progress)
+        {
+            ConversationStreamProgressProjector current = null;
+            return new ModelProtocolProgress
+            {
+                AttemptStarted = streamingEnabled =>
+                {
+                    current = new ConversationStreamProgressProjector(progress);
+                    current.Start(streamingEnabled);
+                },
+                StreamUpdate = update => { if (current != null) current.OnUpdate(update); },
+                AttemptCompleted = () => { if (current != null) current.Complete(); },
+                JsonObjectFallback = () =>
+                {
+                    if (progress != null) progress("thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
+                },
+                OptionalTraceFailed = () => Diagnostics.RuntimeLog.Error("Causal trace append failed at model.response.accepted.")
+            };
+        }
+
         private readonly Action<string, string, ChatActivity> _progress;
         private readonly ConversationMessageStreamExtractor _messageExtractor;
         private readonly StringBuilder _pendingContent;

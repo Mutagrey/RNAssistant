@@ -92,6 +92,8 @@
     <Compile Include="Models\ContextModels.cs" />
     <Compile Include="Models\SkillModels.cs" />
     <Compile Include="Models\ToolModels.cs" />
+    <Compile Include="ModelProtocol\ModelProtocolContracts.cs" />
+    <Compile Include="ModelProtocol\ModelProtocolClient.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />

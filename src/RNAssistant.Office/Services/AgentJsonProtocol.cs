@@ -14,31 +14,6 @@ namespace RNAssistant.Office.Services
         internal const int DefaultMaxToolResultDataTokens = 8192;
         private const int MaxToolResultMessageTokens = 512;
 
-        public static ChatMessage CreateFormatRepairMessage(string error, int attempt, int maxAttempts)
-        {
-            var root = new JObject
-            {
-                ["error"] = string.IsNullOrWhiteSpace(error) ? "Invalid Agent JSON response." : error.Trim(),
-                ["attempt"] = attempt,
-                ["max_attempts"] = maxAttempts,
-                ["instruction"] =
-                    "Return a new response to the current user request as exactly one conversation-response-v2 JSON object " +
-                    "with required status, message, and tool_calls. Do not use Markdown, fences, or surrounding prose. " +
-                    "Choose tool_calls before status. If tool_calls is empty, never use in_progress; use completed, " +
-                    "awaiting_user, blocked, or refused. If tool_calls is non-empty, use in_progress. planned is unavailable. " +
-                    "Message wording never determines status. " +
-                    "Every call requires a unique id, exact name, and object arguments. Follow the error action exactly. " +
-                    "If a known tool schema is not loaded, replace the rejected call with common.capabilities_read for that exact id, " +
-                    "wait for its successful complete tool-schema result, and call the loaded tool only in a later response."
-            };
-            return new ChatMessage
-            {
-                Role = "user",
-                Content = "FORMAT_REPAIR:\n" + root.ToString(Formatting.None),
-                ProtocolMessage = true
-            };
-        }
-
         public static ToolCommand ToCommand(AgentToolCall call)
         {
             return new ToolCommand

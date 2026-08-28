@@ -79,7 +79,7 @@ With SSE enabled, transport chunks still contain that raw JSON envelope. The liv
 
 Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; immediately before normal validation, runtime removes those optional nulls and applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.
 
-When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json_schema`, that run is retried once with `json_object`; the saved selection is unchanged. This is not model routing or general error retry.
+When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json_schema` on the first raw call of a logical step, ModelProtocol retries once with `json_object` and keeps that choice for the rest of the run; the saved selection is unchanged. An explicit rejection during a later format repair still fails under the legacy policy; remaining Phase 2 work covers that boundary. This is not model routing or general error retry.
 
 Tool call:
 
@@ -132,9 +132,38 @@ The parser accepts at most 32 calls, requires a non-empty user-facing `message` 
 
 If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. The pending id, cumulative iteration/tool-step counters, and execution fingerprint of that tool and its pipeline dependencies are persisted with the chat, so confirmation survives a WebView or Office restart but cannot execute a replaced definition. Cosmetic changes to unrelated tools do not invalidate it. A new request in that chat is blocked until the action is confirmed or cancelled. After confirmation, the model receives that result and chooses the remaining work normally using the remaining original budget. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
 
-If parsing fails, the runtime makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20). Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. A refusal is valid user-facing content only as `status:"refused"` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
+If parsing fails, `ModelProtocolClient` makes up to `MaxAgentFormatRetries` correction requests (default 10, clamped to 1–20 retries **plus the initial request**). Phase 2A preserves that legacy maximum of 21 requests; the target total 1–20 attempt limit remains R20 / Phase 2B. Every attempt starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored in accepted history. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. A refusal is valid user-facing content only as `status:"refused"` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
 The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections plus `ChatSystemPrompt`, `PlanSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
+
+## ModelProtocol boundary (Phase 2A)
+
+One `IModelProtocol` instance serves a conversation run. `GetResponseAsync` receives
+the accepted materialized messages, current callable schemas, runnable catalog and
+request-local transport options. It returns an accepted `AgentResponse` and only
+that completion's metadata, or a typed `ModelProtocolFailure`. Provider failures,
+cancellation, prompt-budget rejection and protocol exhaustion are distinct; no
+provider backoff or general transport retry has been added in this substage.
+
+The loop owns step ids, tool execution, summaries and transcript append. Core owns
+raw attempt ids, parsing, fixed repair instructions, format fallback and the
+accepted/rejected diagnostics sent through the existing configured trace sink.
+Rejected diagnostic append failure stops the step; optional accepted marker
+failure preserves acceptance. Transient streaming still uses the Office projector
+and is not accepted history. No new store or model self-repair events are introduced.
+
+Hydrated media stays in the unchanged accepted prompt throughout all attempts of
+one logical step. It is released in `finally` after acceptance, failure or
+cancellation, before any following tool execution or model step. This may repeat
+media traffic during repair (R24); it does not reread resources, change revisions
+or load/evict tool schemas between attempts.
+
+The nonserialized `Failure.Cause` adapter rethrows provider/cancellation and
+infrastructure exceptions into the existing controller handling until the Phase 3
+AgentKernel switch. V2 parsing/history, response status and legacy retry semantics
+remain current. V3 and its compatibility adapter are not introduced by Phase 2A.
+See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) and the
+[validation evidence](stabilization/PHASE_2A_MODEL_PROTOCOL.md).
 
 ## Tool result
 
@@ -152,7 +181,7 @@ TOOL_RESULT:
 
 The `tool` form uses the same JSON as its message content without the text prefix. `resources` is optional and contains exact references produced by the tool or used to externalize its full result; the latter is marked `relation:"result"` so it is not confused with another produced/cited resource. On failure, `ok` is `false`, `data` may still contain partial details, and `error` contains `code`, `message`, and `retryable`. The model chooses the next step from this JSON; the runtime does not infer one. A later successful action cannot erase an earlier error or unknown effect from the runtime summary.
 
-`message` and `data` are bounded before they enter model context. Eligible oversized generic `data` up to 2,000,000 characters is stored as a CAS-backed `tool_result` artifact before the next model dispatch; the envelope contains its exact reference and replaces inline data with `{truncated, original_chars, original_estimated_tokens, preview, hint}`. The model can page the full value through `common.resources_read` or request a smaller scope. Resource/tool/skill discovery evidence is not copied into an untrusted artifact. A specialized chart payload is materialized once at the result boundary, exposes its exact URI to the next model step, and is reused by storage/UI projection. Before every model request, including format repair and continuation after confirmation, the runtime verifies the estimated prompt against the current input budget and stops with a visible diagnostic instead of sending an oversized request.
+`message` and `data` are bounded before they enter model context. Eligible oversized generic `data` up to 2,000,000 characters is stored as a CAS-backed `tool_result` artifact before the next model dispatch; the envelope contains its exact reference and replaces inline data with `{truncated, original_chars, original_estimated_tokens, preview, hint}`. The model can page the full value through `common.resources_read` or request a smaller scope. Resource/tool/skill discovery evidence is not copied into an untrusted artifact. A specialized chart payload is materialized once at the result boundary, exposes its exact URI to the next model step, and is reused by storage/UI projection. Before every conversation model request, including format repair and continuation after confirmation, ModelProtocol verifies the estimated prompt against the current input budget and stops with a visible diagnostic instead of sending an oversized request.
 
 Chat-local plan/HTML mutations are serialized by the per-chat lease. Manual library checks and VBA-editor reads use an isolated session snapshot, so they do not advance observations visible only to the running model. Effective safety metadata allows read-only library tools to run while that chat is active; document/local-state mutations return `manual_tool_chat_busy` until the chat stops. HTML bindings may replay only adapter tools explicitly marked `CanSourceHtmlData`; they must remain read-only, confirmation-free, enabled, and Agent-runnable. Bind and refresh revalidate the exact schema and enter the same reentrant document gate as live providers; refresh keeps the last good JSON on source failure. Document and shared-local-state mutations are serialized by effective safety metadata, including nested pipeline safety. Live `document`/`vba` provider calls use the shared gate so reads and journal reconciliation cannot cross an in-flight mutation; chat/CAS resource reads do not acquire it. Waiting for another mutation is bounded and returns retryable `tool_mutation_busy`. If an unexpected exception occurs after mutation execution may have started, the result is `tool_effect_uncertain`, is not automatically retried, and tells the model/user to inspect state first.
 

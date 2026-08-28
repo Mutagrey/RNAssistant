@@ -16,6 +16,8 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ### Fixed
 
+- Format repair now retains explicitly loaded media until the model step finishes,
+  so a corrected response sees the same image/audio context as the first attempt.
 - Runtime warnings now remain visible after failed or uncertain tool mutations,
   even when the model reports completion. Answers without writes do not certify
   applied changes.

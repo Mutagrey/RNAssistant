@@ -1,8 +1,8 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 1
-Current task: Phase 1C завершена (host-neutral containment); следующая — Phase 2, ещё не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
+Current phase: Phase 2
+Current task: Phase 2A завершена (ModelProtocol boundary); следующая — Phase 2B, общий лимит attempts и provider/protocol retry policy. V3/cutover ещё не выполнены; Phase 3 не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
 
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
@@ -11,8 +11,8 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | Phase | Status | Commit/PR | Tests | Windows validation | Notes |
 |---|---|---|---|---|---|
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
-| 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: этот commit `fix(runtime): derive execution health from actual tool results` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
-| 2 | pending | — | — | — | ModelProtocol |
+| 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: `40282c0` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
+| 2 | in progress | 2A: этот commit `refactor(model): extract protocol attempts from conversation loop` | 68 targeted harness pass; ValidateVersionFormat pass | not performed | Boundary выделена; retry policy/R20, v3 parser/schema/adapter/cutover ещё не выполнены |
 | 3 | pending | — | — | — | AgentKernel |
 | 4 | pending | — | — | — | ToolRuntime |
 | 5 | pending | — | — | — | Bound DocumentSession |
@@ -116,12 +116,37 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Production controller исключён из harness: его wiring проверено только чтением. Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed.
 - Подробные команды, red→green evidence и границы: [PHASE_1C_COMPLETION_GUARD.md](PHASE_1C_COMPLETION_GUARD.md).
 
+## Phase 2A substeps
+
+- Baseline — `40282c0`, clean working tree. Один model/conversation contour, 6 production files включая Core csproj.
+- В Core введены IModelProtocol, ModelProtocolClient и typed response/failure boundary. Loop больше не вызывает endpoint, не парсит JSON и не считает raw attempts.
+- Parse/repair/native refusal/prompt budget/fallback/accepted-rejected diagnostics физически удалены из старого loop; fixed repair builder удалён из AgentJsonProtocol. Aliases/dual execution нет.
+- Каждая попытка использует один accepted prompt; rejected body/reasoning/repair не входят в accepted history. Media сохраняются до конца protocol step и освобождаются в finally (R24).
+- Provider/network/timeout/cancellation отделены от protocol exhaustion; прежний controller exception path сохранён через nonserialized Failure.Cause adapter до Phase 3.
+- One enabled explicit schema fallback остаётся run-local; saved settings не меняются. Progress projector и trace sink сохраняют прежние semantics, step/attempt/request correlation.
+- V2, tool policies/dispatch/summary и legacy initial + 1–20 retries сохранены. R20 и fallback при endpoint rejection внутри repair — оставшаяся Phase 2B.
+- ADR-0002 фиксирует boundary, временные contracts и границы проверки. V3/schema/adapter/canonical v3 doc — Phase 2C; Phase 3 не начата.
+- Product остаётся `16.1.0-dev`; bump/tag/push/release script не выполняются.
+
+## Phase 2A verification
+
+- Baseline characterization — 7/7; после переноса — 7/7.
+- `model protocol:` — 8/8; `agent:` — 41/41 (включая characterization и media lifetime); `conversation:` — 4/4; `causal trace:` — 6/6; `completion guard:` — 5/5.
+- `plan mode:` — 2/2; `chat: uses only read-only resource loop` — 1/1; `harness: production projects` — 1/1.
+- Всего 68 различных targeted harness cases. C# 7.3 linked source build pass; ValidateVersionFormat pass. Новый Core source включён в old-style csproj.
+- Прежнее media expectation после extraction дало expected 0 / got 1; обновлённый тест подтверждает одинаковый materialized prompt на repair и release после logical step. Это намеренное изменение lifetime, не новый baseline red→green case.
+- Full harness/Node UI повторно не запускались: изменён только model/conversation contour, нет изменений UI или domain/storage algorithms. Последний full — 320/321 в 1B, R22 открыт.
+- Fake endpoint tests не являются live tLLM validation. Production controller — stub в harness; Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed.
+- Точные команды, legacy paths и границы: [PHASE_2A_MODEL_PROTOCOL.md](PHASE_2A_MODEL_PROTOCOL.md).
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
 | Legacy ToolResult/safety → RunSummaryBuilder | Runtime / ToolRuntime | Loop, confirmation continuation | Перенос builder Phase 3; typed result mapping Phase 4 |
 | Optional RunExecutionSummary / отсутствующая legacy evidence | Application / Persistence / UI | Messages, LastRun, clones, bridge, static UI | Полный RunSummary/projection switch Phases 3/9; obsolete paths cleanup Phase 10 |
+| Nonserialized ModelProtocolFailure.Cause rethrow | Runtime / Application | ConversationRunService → controller cancellation/failure path | Phase 3 AgentKernel switch |
+| Accepted completion / current context-usage metadata | ModelProtocol / Application | Loop → transcript / turn result | Пересмотреть при v3/kernel Phases 2/3; заменить current transcript consumer при switch |
 
 Существующие runtime paths остаются текущей реализацией, а не введёнными adapters.
 Их владельцы и фазы замены указаны в [MIGRATION_MAP.md](MIGRATION_MAP.md).
