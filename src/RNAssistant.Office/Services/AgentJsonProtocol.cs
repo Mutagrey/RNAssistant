@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
@@ -223,22 +224,7 @@ namespace RNAssistant.Office.Services
                 nativeMessage.ProtocolMessage = true;
                 return nativeMessage;
             }
-            var content = new JObject
-            {
-                ["status"] = AgentResponseStatuses.InProgress,
-                ["message"] = message ?? string.Empty,
-                ["tool_calls"] = new JArray
-                {
-                    new JObject
-                    {
-                        ["id"] = call == null ? string.Empty : call.Id ?? string.Empty,
-                        ["name"] = call == null ? string.Empty : call.Name ?? string.Empty,
-                        ["arguments"] = call == null || call.Arguments == null
-                            ? new JObject()
-                            : JObject.FromObject(call.Arguments)
-                    }
-                }
-            }.ToString(Formatting.None);
+            var content = ModelProtocolWire.Write(message, new[] { call });
             var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
             protocolMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             protocolMessage.ResponseStatus = AgentResponseStatuses.InProgress;

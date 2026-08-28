@@ -12,6 +12,8 @@ transport и injected delay, без реального network/backoff qualifica
 Phase 2C1 проверяет только новый Core v3 contract; live parser/history остаются v2.
 Phase 2C2 проверяет context wiring на host-neutral loop и current-v3 history reader;
 active v2 client context не enforce. V3 cutover/old-chat guard и Windows ещё не проверены.
+Phase 2C3A проверяет shared active wire и probes; v2 остаётся. Existing prompt-reset
+characterization подтверждает R27 как gate будущего cutover, не как новый regression.
 
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |
 |---|---|---|---|---|---|
@@ -40,7 +42,8 @@ active v2 client context не enforce. V3 cutover/old-chat guard и Windows ещ
 | R23 | P2 | Legacy ToolResult не всегда различает частичный/неизвестный effect; успешный mutating call может быть no-op или иметь слабую domain verification | ToolRuntime / Domains | 1C консервативно маркирует partial/missing/uncertain как unknown; counts — top-level вызовы, не document diff; заменить adapter typed evidence Phase 4, domain qualification Phases 6/7 | documented 1C; open |
 | R24 | P2 | Media сохраняются и могут отправляться повторно на protocol repair: больше traffic и дольше lifetime | ModelProtocol / Resources | Один materialized accepted prompt, bounded retry/budget и release в finally; fake image integration pass; проверить реальные media/endpoint budgets до qualification Phase 12 | documented 2A; open |
 | R25 | P2 | Provider retry после timeout/потери ответа может повторить оплачиваемую генерацию и увеличить latency | ModelProtocol / Release | Не более двух transient retries на весь step, delays 1s/2s с cancellation; raw ceiling N+3; no Office tool replay, no auth/429 retry; проверить реальные timeout/media/endpoint budgets до Phase 12 | documented 2B; open |
-| R26 | P1 | Неполный accepted-run ID scope или неверная batch-safe projection при v3 cutover допустят повтор IDs / unsafe batch | ModelProtocol / Runtime | 2C2: detached snapshots, полный user-turn seed через compaction/RunId changes, incomplete context не пустой set; local-read registry + effective metadata, external/unclassified/pipelines singleton. Host-neutral boundary tests pass. 2C3: require complete context до dispatch, v3 client enforcement и writer/confirmation/explicit old-chat guard tests. Registry заменить typed ToolPolicy в Phase 4 | contained context wiring 2C2; live v3 enforcement/skip-reset gates open |
+| R26 | P1 | Неполный accepted-run ID scope или неверная batch-safe projection при v3 cutover допустят повтор IDs / unsafe batch | ModelProtocol / Runtime | 2C2: detached snapshots, полный user-turn seed через compaction/RunId changes, incomplete context не пустой set; local-read registry + effective metadata, external/unclassified/pipelines singleton. Host-neutral boundary tests pass. 2C3B: require complete context до dispatch, v3 client enforcement и writer/confirmation/explicit old-chat guard tests. Registry заменить typed ToolPolicy в Phase 4 | contained context wiring 2C2; live v3 enforcement/skip-reset gates open |
+| R27 | P1 | Prompt schema-version bump автоматически заменит saved custom prompts defaults: NormalizeAgentPrompts сбрасывает пять conversation instructions при любом mismatch | ModelProtocol / Settings | 2C3A: code audit и existing prompt-reset characterization подтверждают поведение; settings/version не изменены. До bump в 2C3B нужны сохранение custom text и explicit review/reset handling, без скрытой перезаписи, с tests | existing behavior documented 2C3A; cutover gate open |
 
 Новые дефекты вне текущей фазы фиксировать здесь или в [BACKLOG.md](BACKLOG.md),
 не исправлять попутно. Исключение P0 требует отдельного явно ограниченного изменения.

@@ -1308,56 +1308,88 @@ namespace RNAssistant.Harness
 
         private static void ModelCompatibilityAcceptsExactSentinels()
         {
-            var responses = new Queue<string>(new[]
+            const string toolJson = "{\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}";
+            const string finalJson = "{\"status\":\"completed\",\"message\":\"RESULT_OK\",\"tool_calls\":[]}";
+            foreach (var mode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
             {
-                "ROLE_OK",
-                "{\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}",
-                "{\"status\":\"completed\",\"message\":\"RESULT_OK\",\"tool_calls\":[]}"
-            });
-            var requests = new List<Tuple<List<ChatMessage>, LlmRequestOptions>>();
-            LlmCompletionDelegate completion = (providerSettings, messages, options, stream, cancellationToken) =>
-            {
-                requests.Add(Tuple.Create(messages.ToList(), options));
-                return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-            };
+                var responses = new Queue<string>(new[] { "ROLE_OK", toolJson, finalJson });
+                var requests = new List<Tuple<List<ChatMessage>, LlmRequestOptions>>();
+                LlmCompletionDelegate completion = (providerSettings, messages, options, stream, cancellationToken) =>
+                {
+                    requests.Add(Tuple.Create(messages.ToList(), options));
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var settings = new AppSettings
+                {
+                    SystemPromptRole = "system", AgentResponseMode = mode, ToolResultRole = role,
+                    MaxAgentFormatRetries = 20, FallbackToJsonObject = true
+                };
+                var result = new ModelCompatibilityService(completion).TestAsync(settings, CancellationToken.None)
+                    .GetAwaiter().GetResult();
 
-            var settings = new AppSettings
-            {
-                SystemPromptRole = "system",
-                AgentResponseMode = AgentResponseModes.JsonSchema,
-                ToolResultRole = ToolResultRoles.Tool
-            };
-            var result = new ModelCompatibilityService(completion).TestAsync(settings, CancellationToken.None)
-                .GetAwaiter().GetResult();
-
-            AssertTrue(result.Compatible, "exact compatibility flow accepted");
-            AssertTrue(result.Checks.All(check => check.Passed), "all exact probes pass");
-            AssertEqual("system", result.InstructionRole, "selected instruction role reported");
-            AssertEqual(AgentResponseModes.JsonSchema, result.ResponseMode, "selected response mode reported");
-            AssertEqual(ToolResultRoles.Tool, result.ToolResultRole, "selected tool result role reported");
-            AssertEqual(LlmResponseFormats.JsonSchema, requests[1].Item2.ResponseFormat, "compatibility uses selected schema mode");
-            AssertTrue(requests[2].Item1.Any(message => string.Equals(message.Role, "tool", StringComparison.Ordinal)),
-                "compatibility uses selected tool role");
-            AssertTrue(requests[2].Item1.Any(message => message.ToolCalls != null && message.ToolCalls.Count == 1),
-                "compatibility sends matched assistant tool call");
+                AssertTrue(result.Compatible && result.Checks.All(check => check.Passed), "exact compatibility flow accepted: " + mode + "/" + role);
+                AssertEqual(3, requests.Count, "probes remain single attempts, not conversation retry loops");
+                AssertEqual("system", result.InstructionRole, "selected instruction role reported");
+                AssertEqual(mode, result.ResponseMode, "selected response mode reported");
+                AssertEqual(role, result.ToolResultRole, "selected tool result role reported");
+                AssertEqual(mode == AgentResponseModes.JsonSchema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
+                    requests[1].Item2.ResponseFormat, "shared options preserve selected format");
+                AssertEqual("Return exactly one JSON object: " + toolJson, requests[1].Item1.Single().Content,
+                    "shared writer retains the fixed active-v2 probe instruction");
+                AssertEqual("Reply with " + finalJson + ".", requests[2].Item1.Last().Content, "final probe stays in the active contract");
+                AssertTrue(!ReferenceEquals(requests[1].Item2, requests[2].Item2), "shared builder never shares mutable options between probes");
+                var accepted = requests[2].Item1[0];
+                AssertEqual(2, accepted.ResponseProtocolVersion, "no partial v3 switch");
+                AssertEqual("call_1", accepted.ToolCallId, "probe history uses actual accepted-call metadata");
+                AssertEqual("compat.echo", accepted.ToolName, "canonical tool id retained for current-run history");
+                var resultMessage = requests[2].Item1[1];
+                AssertEqual(role, resultMessage.Role, "selected result role reaches transport");
+                if (role == ToolResultRoles.Tool)
+                {
+                    AssertEqual("call_1", accepted.ToolCalls.Single().Id, "native call id");
+                    AssertEqual("call_1", resultMessage.ToolCallId, "matched native result id");
+                    AssertEqual(AgentJsonProtocol.ApiToolName("compat.echo"), accepted.ToolCalls[0].Name, "native wire name stays provider-safe");
+                }
+                else AssertEqual(toolJson, accepted.Content, "shared transcript writer preserves JSON envelope");
+            }
         }
 
         private static void ModelCompatibilityRejectsLooseResponses()
         {
-            var responses = new Queue<string>(new[]
+            const string toolJson = "{\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}";
+            const string finalJson = "{\"status\":\"completed\",\"message\":\"RESULT_OK\",\"tool_calls\":[]}";
+            var cases = new List<string[]>
             {
-                "Any non-empty response",
-                "{\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"WRONG\"}}]}",
-                "{\"status\":\"completed\",\"message\":\"Any final message\",\"tool_calls\":[]}"
-            });
-            LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
-                Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-
-            var result = new ModelCompatibilityService(completion).TestAsync(new AppSettings(), CancellationToken.None)
-                .GetAwaiter().GetResult();
-
-            AssertTrue(!result.Compatible, "loose compatibility flow rejected");
-            AssertTrue(result.Checks.All(check => !check.Passed), "each loose probe fails");
+                new[] { "Any non-empty response", toolJson.Replace("\"A\"", "\"WRONG\""), finalJson.Replace("RESULT_OK", "Any final message") }
+            };
+            foreach (var final in new[]
+            {
+                finalJson.Replace("completed", "refused"), finalJson.Replace("completed", "blocked"),
+                finalJson.Replace("RESULT_OK", " RESULT_OK "), "<html>RESULT_OK</html>"
+            }) cases.Add(new[] { "ROLE_OK", toolJson, final });
+            foreach (var tool in new[]
+            {
+                toolJson.Replace("call_1", "CALL_1"), toolJson.Replace("compat.echo", "compat.other"),
+                toolJson.Replace("\"value\"", "\"VALUE\""), toolJson.Replace("TOOL_OK", "tool_ok")
+            }) cases.Add(new[] { "ROLE_OK", tool, finalJson });
+            foreach (var values in cases)
+            {
+                var responses = new Queue<string>(values);
+                var calls = 0;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    calls++;
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var result = new ModelCompatibilityService(completion).TestAsync(
+                    new AppSettings { MaxAgentFormatRetries = 20, FallbackToJsonObject = true }, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertTrue(!result.Compatible, "loose or wrong-status sentinel is not qualification");
+                AssertEqual(3, calls, "failed probes do not retry or invoke format fallback");
+                if (values[0] != "ROLE_OK") AssertTrue(result.Checks.All(check => !check.Passed), "each loose probe fails");
+                else AssertEqual(1, result.Checks.Count(check => !check.Passed), "only the changed probe fails");
+            }
         }
 
         private static void ModelConnectionProbeReportsTimings()

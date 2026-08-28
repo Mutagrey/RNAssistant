@@ -449,20 +449,12 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             LlmRunCache runCache)
         {
-            var jsonSchema = string.Equals(
-                AgentResponseModes.Normalize(responseMode),
-                AgentResponseModes.JsonSchema,
-                StringComparison.Ordinal);
-            return new LlmRequestOptions
-            {
-                ResponseFormat = jsonSchema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
-                ResponseSchemaName = jsonSchema ? AgentResponseSchemaBuilder.SchemaName : null,
-                ResponseSchemaJson = jsonSchema ? AgentResponseSchemaBuilder.Build(tools) : null,
-                ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled,
-                RunCache = runCache,
-                TraceSession = session,
-                TracePurpose = ChatModes.Normalize(mode)
-            };
+            var options = ModelProtocolWire.CreateRequestOptions(responseMode, tools);
+            options.ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled;
+            options.RunCache = runCache;
+            options.TraceSession = session;
+            options.TracePurpose = ChatModes.Normalize(mode);
+            return options;
         }
 
         private async Task<ConversationMaterialization> BuildMessagesAsync(

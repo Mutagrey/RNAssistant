@@ -2,11 +2,11 @@
 
 Current target: 16.1.0
 Current phase: Phase 2
-Current task: Phase 2C2 завершена host-neutral: validation context и локальная чистка. Параллельные governance-правки включены с явного разрешения пользователя. Active wire/history остаются v2; Phase 3 не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
+Current task: Phase 2C3A завершена host-neutral: единый active wire owner для runtime/probes, дубли удалены. Active wire/history остаются v2; Phase 3 не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
 
-Next step: отдельная Phase 2C3 — coordinated v3 switch/delete. Не начинать её в текущем изменении.
-Required context: [v3 context](../protocols/CONVERSATION_RESPONSE_V3.md#accepted-context-and-current-v3-history-phase-2c2) и [remaining cutover gates](../protocols/CONVERSATION_RESPONSE_V3.md#remaining-cutover-gates), [active model boundary](../conversation-protocol.md#modelprotocol-boundary-phase-2), [migration map](MIGRATION_MAP.md); master plan Phase 2 и §§15.1–15.2. [2C2 evidence](PHASE_2C2_PROTOCOL_CONTEXT.md) — по необходимости; предыдущая история не обязательна.
-Open gates / remaining legacy: R26 — enforce complete context до dispatch/в каждом v3 parse; saved prompts/probes, v3 writes/version marker и explicit old-chat skip/reset. Live v2 parser/schema/DTO и current-v2 typed-ID helper нужны до switch 2C3; unused v2 read adapter удалён. Windows/controller/WebView validation остаётся открытой.
+Next step: отдельная Phase 2C3B — coordinated v3 switch/delete с повторной проверкой change budget. До prompt-version bump закрыть R27; не начинать switch в текущем изменении.
+Required context: [active wire owner](../protocols/CONVERSATION_RESPONSE_V3.md#active-wire-owner-phase-2c3a), [remaining cutover gates](../protocols/CONVERSATION_RESPONSE_V3.md#remaining-cutover-gates), [migration map](MIGRATION_MAP.md), R26/R27 в risk register; master plan Phase 2 и §§15.1–15.2. Evidence 2C3A — по необходимости, не вся история.
+Open gates / remaining legacy: R26 — complete-context enforcement и old-chat skip/reset; R27 — NormalizeAgentPrompts автоматически заменяет custom prompts при смене schema version. Live v2 parser/schema/DTO и typed-ID helper нужны до switch 2C3B. Native refusal, prompts, writer/version marker переключаются согласованно. Windows/controller/WebView validation открыта.
 
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
@@ -16,7 +16,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 |---|---|---|---|---|---|
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
 | 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: `40282c0` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
-| 2 | in progress | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: этот commit `refactor(protocol): adapt accepted-run validation context` | 2C2: 86 targeted harness pass; ValidateVersionFormat pass | not performed | Full-turn context adapted, unused v2 adapter removed; active wire/history v2; R26 enforcement gate, switch 2C3 |
+| 2 | in progress | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: `c9f8b07`; 2C3A: этот commit `refactor(protocol): unify runtime and probe wire contract` | 2C3A: 76 targeted harness pass; ValidateVersionFormat pass | not performed | Shared wire owner; duplicate builders removed; active v2, R26/R27 cutover gates |
 | 3 | pending | — | — | — | AgentKernel |
 | 4 | pending | — | — | — | ToolRuntime |
 | 5 | pending | — | — | — | Bound DocumentSession |
@@ -192,6 +192,14 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Параллельные правки шести governance files включены с явного разрешения пользователя. Исходные docs-only проверки от 2026-08-28: cleanup policy — diff и 5 links/anchors OK; refactoring policy — diff и 7 links/anchors OK, без builds/runtime tests. Правила теперь canonical в master plan §§7.1, 15.1–15.2.
 - Повторная чистка по §15.1: consumers/includes проверены, устаревшая рекомендация добавить v2 read adapter убрана из master plan §21, вводная PROGRESS сокращена; исторические evidence/ADR сохранены. Дополнительных мёртвых production paths в текущем контуре не найдено; live v2 callers нужны до 2C3. Ранее проверенный код и version/tag не менялись. Команды и границы: [PHASE_2C2_PROTOCOL_CONTEXT.md](PHASE_2C2_PROTOCOL_CONTEXT.md).
 
+## Phase 2C3A — shared active wire owner
+
+- Baseline `c9f8b07`, clean. По §§14.3/15.2 выделена подготовка coordinated switch: 7 production files; новый ModelProtocolWire — постоянный владелец schema/validation/JSON writing, без второго runtime/version selector.
+- Runtime и compatibility probes используют общий contract; Office добавляет только reasoning/cache/trace options и native/history metadata. Дубли AgentOptions, ручного probe-call history и JSON call writer удалены. Prompt-authoring skill отсылает к действующим defaults вместо копии v2 status rules.
+- Probes остаются fixed sentinel checks по одной raw попытке, без repair/fallback. Оба formats и все три tool-result roles проверены; матрица wrong status/casing/sentinel не даёт ложной qualification. V2 runtime, native refusal и response/prompt versions сохранены.
+- Проверки: compatibility 2/2, model protocol 13/13, agent 41/41, protocol context 6/6, conversation 4/4, completion guard 5/5, plan 2/2, Chat read-only 1/1, project includes 1/1, existing prompt-reset characterization 1/1 — 76 разных targeted cases. Linked C# 7.3 build; ValidateVersionFormat pass. Full harness/UI/VSTO/live provider не запускались; Windows/controller/WebView не проверены.
+- R27 подтверждён существующим тестом, но не исправлен: prompt schema mismatch автоматически заменяет custom prompts. Не повышать prompt version до explicit review/reset handling и его tests в 2C3B. Product остаётся 16.1.0-dev; tag/push/release script не выполнялись. Подробности: [PHASE_2C3A_WIRE_OWNER.md](PHASE_2C3A_WIRE_OWNER.md).
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
@@ -200,7 +208,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | Optional RunExecutionSummary / отсутствующая legacy evidence | Application / Persistence / UI | Messages, LastRun, clones, bridge, static UI | Phases 3/9: удалить каждый obsolete path при switch последних consumers |
 | Nonserialized ModelProtocolFailure.Cause rethrow | Runtime / Application | ConversationRunService → controller cancellation/failure path | Phase 3 AgentKernel switch |
 | Accepted completion / current context-usage metadata | ModelProtocol / Application | Loop → transcript / turn result | Пересмотреть при v3/kernel Phases 2/3; заменить current transcript consumer при switch |
-| Current-v2 typed call IDs → ConversationProtocolContext | Runtime / ModelProtocol | Confirmation seed пока current protocol=2 | Phase 2C3 writer/version switch; удалить helper, не поддерживать old chats |
+| Current-v2 typed call IDs → ConversationProtocolContext | Runtime / ModelProtocol | Confirmation seed пока current protocol=2 | Phase 2C3B writer/version switch; удалить helper, не поддерживать old chats |
 | Legacy safety + positive local-read registry → batch-safe snapshot | Runtime / ToolRuntime | Context constructor → ModelProtocol request | Phase 4 typed external/nested metadata + safety tests; неизвестные/pipelines singleton |
 | Office transient accepted-ID bookkeeping → ModelProtocolCallContext | Runtime | ConversationRunService start/confirmation | Phase 3 kernel switch; один owner, без второго loop/store |
 
@@ -214,5 +222,6 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.
 - R22: compact catalog harness failure воспроизведён до изменений 1B; owner ToolPack/Tests, Phase 8.
-- R26: context wiring проверен в 2C2; complete-context guard, live v3 parser enforcement, writer/confirmation и explicit old-chat skip/reset остаются gates 2C3.
+- R26: context wiring проверен в 2C2; complete-context guard, live v3 parser enforcement, writer/confirmation и explicit old-chat skip/reset остаются gates 2C3B.
+- R27: автоматическая замена custom prompts при schema mismatch; закрыть до prompt-version bump в 2C3B.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).

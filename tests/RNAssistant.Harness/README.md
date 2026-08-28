@@ -34,6 +34,7 @@ Filtering limits executed tests. The harness source-links Core and Office-neutra
 | --- | --- | --- |
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
+| Active wire / compatibility probes | `Program.AgentSafetyTests.cs` | `model compatibility:`, `agent: supports selectable`, `model protocol:` |
 | Conversation v3 contract/context | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v3:`, `protocol context:` |
 | Resources and attachments | `Program.ResourceFabricTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.AttachmentTests.cs` | `resources:`, `attachments:` |
 | Session storage and CAS | `Program.SessionEventStoreTests.cs`, `Program.CasMaintenanceTests.cs` | `storage:` |
@@ -114,7 +115,13 @@ and confirmation, incomplete history and conservative batch safety. Two cases
 exercise the real host-neutral loop/ModelProtocol/executor with fake LLM/Office;
 the controller's identity transition is simulated, not production controller execution.
 This is **not a runtime v3 cutover**: `agent:` and `model protocol:` still exercise
-the active v2 path. See [current evidence](../../docs/stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
+the active v2 path. Context evidence: [2C2](../../docs/stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
+
+Phase 2C3A extends the two `model compatibility:` cases across both formats and all
+three tool-result roles, strict sentinels/status/casing and one raw attempt per
+probe. Runtime/probes share ModelProtocolWire; v3 is still not active. The existing
+`settings: hard cutover legacy Agent prompts` case characterizes R27's automatic
+custom-prompt reset; it is not proof of safe v3 migration. See [2C3A evidence](../../docs/stabilization/PHASE_2C3A_WIRE_OWNER.md).
 
 ## Full suite
 

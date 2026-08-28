@@ -13,7 +13,8 @@ Phase 2C2 adapts full-turn ID/safety snapshots to the boundary and prepares a
 v3-only history reader, **without switching this runtime**. The unused v2 read
 adapter is removed. Active prompts, retry, schema selection and accepted history
 remain v2; coordinated switch/delete and explicit old-chat skip/reset are Phase
-2C3 gates. No new v3 events, historical migration or dual-write exist yet.
+2C3B gates. Phase 2C3A gives runtime and probes one active ModelProtocolWire owner;
+no new v3 events, historical migration or dual-write exist yet.
 
 ## Conversation context
 
@@ -151,6 +152,15 @@ request-local transport options. It returns an accepted `AgentResponse` and only
 that completion's metadata, or a typed `ModelProtocolFailure`. Provider failures,
 cancellation, prompt-budget rejection and protocol exhaustion are distinct. The
 separate bounded provider retry policy is defined below.
+
+`ModelProtocolWire` owns active response schema options, envelope writing and local
+JSON validation. The loop adds only its reasoning/cache/trace fields to fresh
+options; AgentJsonProtocol retains native-role mapping and local history metadata.
+Compatibility probes reuse that same contract and transcript writer, but retain
+one raw attempt per check: no format repair, provider retry or fallback may turn a
+failed qualification probe into a pass. Fixed sentinel values remain independent
+of saved prompts. Prompt-authoring guidance refers to current defaults rather than
+copying another protocol version's field/status rules.
 
 The loop now also supplies an immutable `ModelProtocolCallContext`: all accepted
 IDs in the logical turn (not just the compacted prompt) and a conservative local

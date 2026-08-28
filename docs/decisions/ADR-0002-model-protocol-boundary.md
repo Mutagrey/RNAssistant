@@ -1,7 +1,7 @@
 # ADR-0002: ModelProtocol owns raw model attempts
 
 Date: 2026-08-28
-Status: Accepted (2A boundary, 2B retry policy, 2C1 v3 contract, 2C2 context adaptation; runtime cutover remains)
+Status: Accepted (2A boundary, 2B retry policy, 2C1 v3 contract, 2C2 context, 2C3A shared wire owner; runtime cutover remains)
 
 ## Context
 
@@ -165,6 +165,30 @@ contract without rediscovering session boundaries; it must still switch client,
 prompts/schema/writes and remove live v2 consumers together. No Phase 3 extraction
 or Office tool changes are part of 2C2.
 
+### Shared active wire owner (Phase 2C3A)
+
+The remaining cutover still spans more than ten production files because probes
+and transcript/request builders repeat the protocol. Per §§14.3/15.2, first give
+active schema selection, JSON validation and envelope writing one permanent Core
+owner, `ModelProtocolWire`. Switch ModelProtocolClient, ConversationRunService,
+AgentJsonProtocol and ModelCompatibilityService to it and delete their replaced
+builders now. No Office/session state crosses this boundary; the Office caller
+adds reasoning/cache/trace options and retains native-role/history mapping.
+
+The seven-production-file preparation preserves v2. Probes derive fixed sentinels
+from the active writer, compare validated DTOs locally (not as a wire serialization),
+and keep their single raw attempt without retries/fallback. Their native-call
+history uses the actual transcript writer. Prompt-authoring guidance points to the
+active defaults instead of copying v2 status rules. The next 2C3B change can switch
+the shared owner and remove remaining v2 implementations without rediscovering
+probe internals. No second runtime, conditional protocol mode or historical adapter.
+
+Verification extends the two existing compatibility tests across both formats,
+all three result roles, wrong sentinels/status/casing and unchanged request counts.
+R27 records the existing prompt normalizer's automatic reset on version mismatch;
+the existing characterization test confirms it. Settings/prompt versions are not
+changed here; explicit custom-prompt handling must precede the v3 cutover.
+
 The old loop completion/parse/repair/fallback/trace methods and
 `AgentJsonProtocol.CreateFormatRepairMessage` are removed, without aliases or dual
 execution. Tool orchestration, completion guard and native refusal behavior stay
@@ -176,4 +200,5 @@ Windows/Office/controller/WebView qualification remains open.
 Evidence and exact commands: [Phase 2A](../stabilization/PHASE_2A_MODEL_PROTOCOL.md),
 [Phase 2B](../stabilization/PHASE_2B_RETRY_POLICY.md),
 [Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md),
-[Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
+[Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md),
+[Phase 2C3A](../stabilization/PHASE_2C3A_WIRE_OWNER.md).

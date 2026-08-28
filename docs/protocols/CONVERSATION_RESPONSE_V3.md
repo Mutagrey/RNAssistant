@@ -1,8 +1,8 @@
 # Conversation Response v3
 
-Status: **contract introduced; validation context adapted; live protocol still v2** (Phase 2C2).
+Status: **contract/context prepared; runtime and probes share one active wire owner; live protocol still v2** (Phase 2C3A).
 Canonical requirements: [master plan §7.1](../stabilization/STABILIZATION_MASTER_PLAN.md#71-conversation-response-v3).
-The active wire/history version remains v2 until the coordinated Phase 2C3
+The active wire/history version remains v2 until the coordinated Phase 2C3B
 cutover. Product version remains `16.1.0-dev`; protocol version is independent.
 
 ## Envelope
@@ -140,15 +140,33 @@ Owners/consumers/removal gates: [migration map](../stabilization/MIGRATION_MAP.m
 ID bookkeeping moves to AgentKernel in Phase 3; the positive safety registry is
 replaced by typed ToolPolicy in Phase 4, after equivalent nested/external tests.
 
+## Active wire owner (Phase 2C3A)
+
+`Core/ModelProtocol/ModelProtocolWire` owns active schema selection, JSON validation
+and envelope writing. ModelProtocolClient, ConversationRunService, AgentJsonProtocol
+and ModelCompatibilityService use it; duplicate Office schema/writer/parser paths
+are removed. It is a permanent contract owner, not another loop, version selector
+or historical fallback. It currently uses v2 and does not enforce v3 CallContext.
+
+Probes derive fixed sentinels from the active writer and compare validated responses;
+each still makes one raw attempt, without repair/fallback. Their native call history
+uses the actual transcript writer. Prompt-authoring guidance reads current defaults
+instead of repeating a separate version-specific envelope. Thus the next switch
+can update runtime and qualification coherently without editing probe internals.
+
 ## Remaining cutover gates
 
 Per [change budget §14.3](../stabilization/STABILIZATION_MASTER_PLAN.md#143-change-budget),
-2C1 introduced the contract and 2C2 adapted context; 2C3 must coordinate switch/delete:
+2C1 introduced the contract, 2C2 adapted context and 2C3A removed duplicate wire
+ownership. Phase 2C3B must coordinate switch/delete, rechecking the change budget:
 
 1. Switch ModelProtocol result/parser/repair, mode instructions and compatibility
-   probes together. Resolve saved custom v2 prompts explicitly; never silently
+   probes together through ModelProtocolWire. Resolve saved custom v2 prompts explicitly; never silently
    accept a v2 response on a v3 request. Preserve provider-native refusal metadata
-   separately from model-authored status.
+   separately from model-authored status. **R27:** current NormalizeAgentPrompts
+   replaces custom prompts on a schema-version mismatch. Before any prompt-version
+   bump, replace that behavior with explicit review/reset handling and tests;
+   do not erase saved custom prompts as a hidden part of the protocol switch.
 2. Require complete `CallContext` before v3 dispatch and pass it to the local
    parser on every attempt. Incomplete history is a runtime boundary failure,
    not something model repair can fix. Verify run-wide duplicates and singleton
@@ -166,6 +184,7 @@ Per [change budget §14.3](../stabilization/STABILIZATION_MASTER_PLAN.md#143-cha
    at the switch per master plan §15.1. Run integration tests for repair, history,
    confirmation, streaming, tools and completion guard. Phase 3 remains separate.
 
-Current evidence: [Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
+Current evidence: [Phase 2C3A](../stabilization/PHASE_2C3A_WIRE_OWNER.md).
+Context adaptation: [Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
 Historical contract introduction: [Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md).
 Decision: [ADR-0002](../decisions/ADR-0002-model-protocol-boundary.md).

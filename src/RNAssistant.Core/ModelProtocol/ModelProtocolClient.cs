@@ -7,7 +7,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.ModelProtocol
 {
@@ -15,7 +14,6 @@ namespace RNAssistant.Core.ModelProtocol
     {
         private readonly LlmCompletionDelegate _completeAsync;
         private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
-        private readonly AgentResponseParser _parser = new AgentResponseParser();
         private bool _useJsonObject;
 
         public ModelProtocolClient(LlmCompletionDelegate completeAsync)
@@ -129,7 +127,7 @@ namespace RNAssistant.Core.ModelProtocol
                     Status = AgentResponseStatuses.Refused,
                     Message = completion.RefusalContent
                 });
-            var parsed = _parser.Parse(completion.Content, request.CallableTools, request.RunnableCatalog);
+            var parsed = ModelProtocolWire.Parse(completion.Content, request.CallableTools, request.RunnableCatalog, request.CallContext);
             if (parsed.Success) parsed.Response.Message = parsed.Response.Message.Trim();
             return parsed;
         }

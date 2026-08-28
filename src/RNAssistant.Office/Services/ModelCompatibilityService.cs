@@ -4,9 +4,10 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
@@ -86,6 +87,7 @@ namespace RNAssistant.Office.Services
                 Description = "Compatibility probe.",
                 ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"description\":\"Compatibility probe value.\"}},\"required\":[\"value\"],\"additionalProperties\":false}"
             };
+            var sentinel = ModelProtocolWire.Write("TOOL_OK", new[] { ProbeCall() });
             return RunAsync(
                 settings,
                 "agent_json",
@@ -95,31 +97,12 @@ namespace RNAssistant.Office.Services
                     new ChatMessage
                     {
                         Role = "user",
-                        Content = "Return exactly one JSON object: {\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}"
+                        Content = "Return exactly one JSON object: " + sentinel
                     }
                 },
-                AgentOptions(responseMode, new[] { tool }),
-                completion =>
-                {
-                    var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new[] { tool });
-                    if (!parsed.Success) return parsed.Error ?? "Endpoint returned no tool call.";
-                    if (!string.Equals(parsed.Response.Status, AgentResponseStatuses.InProgress, StringComparison.Ordinal) ||
-                        !string.Equals(parsed.Response.Message, "TOOL_OK", StringComparison.Ordinal) ||
-                        parsed.Response.ToolCalls.Count != 1)
-                    {
-                        return "Endpoint did not return the exact Agent JSON sentinel.";
-                    }
-                    var call = parsed.Response.ToolCalls[0];
-                    object value;
-                    return string.Equals(call.Id, "call_1", StringComparison.Ordinal) &&
-                           string.Equals(call.Name, "compat.echo", StringComparison.Ordinal) &&
-                           call.Arguments != null && call.Arguments.Count == 1 &&
-                           string.Equals(call.Arguments.Keys.Single(), "value", StringComparison.Ordinal) &&
-                           call.Arguments.TryGetValue("value", out value) &&
-                           string.Equals(Convert.ToString(value), "A", StringComparison.Ordinal)
-                        ? null
-                        : "Endpoint changed the required tool id, name, or arguments.";
-                },
+                ModelProtocolWire.CreateRequestOptions(responseMode, new[] { tool }),
+                completion => ValidateSentinel(completion, sentinel, new[] { tool },
+                    new ModelProtocolCallContext(new string[0], new string[0])),
                 cancellationToken);
         }
 
@@ -129,52 +112,52 @@ namespace RNAssistant.Office.Services
             string toolResultRole,
             CancellationToken cancellationToken)
         {
-            var messages = ToolResultProbeMessages(toolResultRole);
+            var sentinel = ModelProtocolWire.Write("RESULT_OK", new AgentToolCall[0]);
+            var messages = ToolResultProbeMessages(toolResultRole, sentinel);
             return RunAsync(
                 settings,
                 "tool_result_json",
                 "Tool result · " + toolResultRole,
                 messages,
-                AgentOptions(responseMode, new ToolDefinition[0]),
-                completion =>
-                {
-                    var parsed = new AgentResponseParser().Parse(completion == null ? null : completion.Content, new ToolDefinition[0]);
-                    return parsed.Success &&
-                           string.Equals(parsed.Response.Status, AgentResponseStatuses.Completed, StringComparison.Ordinal) &&
-                           parsed.Response.ToolCalls.Count == 0 &&
-                           string.Equals(parsed.Response.Message, "RESULT_OK", StringComparison.Ordinal)
-                        ? null
-                        : parsed.Error ?? "Endpoint did not return the exact RESULT_OK sentinel after TOOL_RESULT.";
-                },
+                ModelProtocolWire.CreateRequestOptions(responseMode, new ToolDefinition[0]),
+                completion => ValidateSentinel(completion, sentinel, new ToolDefinition[0],
+                    new ModelProtocolCallContext(new[] { "call_1" }, new string[0])),
                 cancellationToken);
         }
 
-        private static IEnumerable<ChatMessage> ToolResultProbeMessages(string role)
+        private static AgentToolCall ProbeCall()
+        {
+            return new AgentToolCall
+            {
+                Id = "call_1", Name = "compat.echo", Arguments = new Dictionary<string, object> { ["value"] = "A" }
+            };
+        }
+
+        private static string ValidateSentinel(LlmCompletionResult completion, string sentinel,
+            IReadOnlyList<ToolDefinition> tools, ModelProtocolCallContext context)
+        {
+            var actual = ModelProtocolWire.Parse(completion == null ? null : completion.Content, tools, tools, context);
+            if (!actual.Success) return actual.Error;
+            var expected = ModelProtocolWire.Parse(sentinel, tools, tools, context);
+            if (!expected.Success) throw new InvalidOperationException("Invalid local compatibility sentinel: " + expected.Error);
+            // Compare validated responses, not DTO serialization as a wire contract.
+            // This preserves exact status/call/message checks for active v2 without
+            // embedding its fields in probes; the coordinated switch changes one owner.
+            return JToken.DeepEquals(JToken.FromObject(actual.Response), JToken.FromObject(expected.Response))
+                ? null : "Endpoint changed the required compatibility sentinel.";
+        }
+
+        private static IEnumerable<ChatMessage> ToolResultProbeMessages(string role, string finalSentinel)
         {
             role = ToolResultRoles.Normalize(role);
             const string resultJson = "{\"ok\":true,\"tool_call_id\":\"call_1\",\"name\":\"compat.echo\",\"status\":\"success\",\"message\":\"\",\"data\":{\"value\":\"A\"},\"error\":null}";
-            var messages = new List<ChatMessage>();
+            var messages = new List<ChatMessage>
+            {
+                AgentJsonProtocol.CreateToolCallMessage(ProbeCall(), "TOOL_OK", null, role)
+            };
             if (string.Equals(role, ToolResultRoles.Tool, StringComparison.Ordinal))
             {
                 var apiName = AgentJsonProtocol.ApiToolName("compat.echo");
-                messages.Add(new ChatMessage
-                {
-                    Role = "assistant",
-                    Content = "TOOL_OK",
-                    ProtocolMessage = true,
-                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
-                    ResponseStatus = AgentResponseStatuses.InProgress,
-                    ToolCalls = new List<LlmToolCall>
-                    {
-                        new LlmToolCall
-                        {
-                            Id = "call_1",
-                            Type = "function",
-                            Name = apiName,
-                            ArgumentsJson = "{\"value\":\"A\"}"
-                        }
-                    }
-                });
                 messages.Add(new ChatMessage
                 {
                     Role = ToolResultRoles.Tool,
@@ -188,14 +171,6 @@ namespace RNAssistant.Office.Services
             {
                 messages.Add(new ChatMessage
                 {
-                    Role = "assistant",
-                    Content = "{\"status\":\"in_progress\",\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}",
-                    ProtocolMessage = true,
-                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
-                    ResponseStatus = AgentResponseStatuses.InProgress
-                });
-                messages.Add(new ChatMessage
-                {
                     Role = role,
                     Content = "TOOL_RESULT:\n" + resultJson,
                     ProtocolMessage = true
@@ -204,23 +179,9 @@ namespace RNAssistant.Office.Services
             messages.Add(new ChatMessage
             {
                 Role = "user",
-                Content = "Reply with {\"status\":\"completed\",\"message\":\"RESULT_OK\",\"tool_calls\":[]}."
+                Content = "Reply with " + finalSentinel + "."
             });
             return messages;
-        }
-
-        private static LlmRequestOptions AgentOptions(string responseMode, IEnumerable<ToolDefinition> tools)
-        {
-            var jsonSchema = string.Equals(
-                AgentResponseModes.Normalize(responseMode),
-                AgentResponseModes.JsonSchema,
-                StringComparison.Ordinal);
-            return new LlmRequestOptions
-            {
-                ResponseFormat = jsonSchema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
-                ResponseSchemaName = jsonSchema ? AgentResponseSchemaBuilder.SchemaName : null,
-                ResponseSchemaJson = jsonSchema ? AgentResponseSchemaBuilder.Build(tools) : null
-            };
         }
 
         private async Task<ModelCompatibilityCheckDto> RunAsync(

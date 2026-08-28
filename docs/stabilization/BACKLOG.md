@@ -12,7 +12,8 @@
 | 2B | Общий лимит 1–20 attempts, provider/protocol retry policy | done; 74 targeted harness pass, 4 red→green cases; R20 закрыт host-neutral, fallback работает во время repair |
 | 2C1 | Introduce v3 parser/schema/writer, явный v2 read adapter и canonical doc | done; 68 targeted harness pass; active runtime/history всё ещё v2, no cutover |
 | 2C2 | Adapt full-turn ID/safety snapshots, current-v3 history reader; удалить unused v2 read adapter | done host-neutral; 86 targeted tests pass; live wire/history остаются v2 |
-| 2C3 | Switch/delete: client/prompts/schema/history/version, complete-context enforcement и explicit old-chat skip/reset | next, отдельное изменение по §14.3; все gates в CONVERSATION_RESPONSE_V3.md; новые accepted writes только v3 после switch |
+| 2C3A | Общий active wire owner для runtime/probes, удалить duplicated schema/JSON/validation paths | done host-neutral; 76 targeted tests pass; v2 сохранён |
+| 2C3B | Switch/delete: shared wire/client/prompts/history/version, complete-context enforcement и explicit old-chat skip/reset | next по §14.3; R26/R27 и gates в CONVERSATION_RESPONSE_V3.md; prompt-version bump только после explicit custom-prompt handling |
 | 3 | Минимальный AgentKernel и runtime-owned RunSummary | Вся Phase 2 завершена, не только boundary extraction |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests смены активной книги и lifetime |
@@ -45,11 +46,16 @@ qualification остаются в R21/R16 и не объявляются вып�
 Phase 2C2 передаёт immutable accepted-ID/safety snapshots на boundary, восстанавливает
 весь logical turn при confirmation и удаляет unused v2 read adapter вместе с tests/include.
 Live v2 parser/schema/DTO и typed-ID helper пока нужны действующим consumers; удалить
-в coordinated switch 2C3, без automatic v2 fallback. Owner/reason/gate — MIGRATION_MAP.
-R26 частично закрыт wiring/tests; 2C3 должна enforce complete context до dispatch и
+в coordinated switch 2C3B, без automatic v2 fallback. Owner/reason/gate — MIGRATION_MAP.
+2C3A удаляет раздельные schema/parser/writer paths: ModelProtocolWire теперь общий
+для runtime/probes, prompt-authoring guidance не дублирует version-specific contract.
+R26 частично закрыт wiring/tests; 2C3B должна enforce complete context до dispatch и
 в каждом v3 parse, проверить real v3 writer/confirmation и explicit skip/reset старого чата.
-Saved custom v2 prompts (включая instruction-authoring skill), compatibility probes,
-schema и writes/marker переключаются согласованно; старые streams не переписываются.
+Saved custom v2 prompts, shared wire и writes/marker переключаются согласованно;
+probes наследуют contract, но их точность нужно проверить после switch. Старые streams
+не переписываются. R27: NormalizeAgentPrompts сейчас заменяет custom instructions
+при schema mismatch; existing characterization это подтверждает. До version bump
+нужны explicit review/reset handling и тесты сохранности пользовательских prompts.
 Без нового ToolPolicy все external/unclassified/pipelines остаются singleton;
 positive local-read registry заменяется typed metadata в Phase 4.
 Controller/Windows qualification остаётся отдельной.
