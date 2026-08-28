@@ -12,7 +12,8 @@ concerns to Core and requires the loop to consume one typed outcome per step.
 
 ## Decision
 
-- Introduce `IModelProtocol` / `ModelProtocolClient` in `RNAssistant.Core/ModelProtocol`.
+- Introduce the materialized endpoint port (named `IModelProtocol` in 2A,
+  `IMaterializedModelProtocol` since 3B1) / `ModelProtocolClient` in `RNAssistant.Core/ModelProtocol`.
   One instance serves one run; only the endpoint-format fallback choice survives
   between steps. Confirmation continuation creates a fresh instance, as before.
 - Pass the accepted materialized prompt, current callable tools, runnable catalog
@@ -71,6 +72,14 @@ observed. Tools, resources, summaries and accepted-history appends stay outside
 the retry loops.
 
 ## Transitional contracts
+
+Phase 3B1 gives the kernel a generic `IModelProtocol.SendAsync` port without
+settings, prompt materialization, runnable catalog or provider metadata. The
+existing `GetResponseAsync` port and all its current typed callers are renamed
+to `IMaterializedModelProtocol`, without an old-signature alias or a second wire
+implementation. Only harness fakes implement the generic port so far. The 3B2
+Office adapter must use `ConversationModelSession` and this existing endpoint
+client. See [ADR-0001](ADR-0001-model-does-not-own-completion.md).
 
 Phase 2A preserved initial + configured retries; Phase 2B removes that extra
 attempt (R20). The existing `MaxAgentFormatRetries` settings/bridge key and stored

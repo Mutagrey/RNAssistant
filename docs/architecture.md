@@ -36,7 +36,17 @@ There are three persisted modes and one structured execution service.
 
 Editable general/tool/skill Agent, Plan, Chat, title, compaction, and attachment-analysis prompts are stored as Markdown. Their instruction role (`developer`/`system`/`user`) is independent from the shared response format (`json_object`/strict `json_schema`) and tool-result role (`user`/`developer`/matched `tool`). Protocol repair and compatibility-probe instructions remain fixed.
 
-`IModelProtocol` in `Core/ModelProtocol` owns conversation endpoint attempts, local validation/repair, native refusals, prompt-budget checks and format fallback. The loop receives one accepted response/metadata or typed failure per logical step; it neither counts raw attempts nor executes tools before acceptance. See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) for the v3 boundary and remaining controller adapters.
+`IMaterializedModelProtocol` in `Core/ModelProtocol` owns conversation endpoint attempts, local validation/repair, native refusals, prompt-budget checks and format fallback. The current loop receives one accepted response/metadata or typed failure per logical step; it neither counts raw attempts nor executes tools before acceptance. See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) for the v3 boundary and remaining controller adapters.
+
+Phase 3B1 introduces `Core/Agent/AgentKernel`, immutable runtime summaries and
+generic `IModelProtocol.SendAsync` / `IToolRuntime` / `IRunStore` ports. Only pure
+harness fakes use them so far; production still uses the Office loop above.
+The kernel owns current-turn IDs, bounded sequential execution, shared confirmation
+accounting and independent lifecycle/health. Materialization, resource lifecycle,
+provider metadata and visible projections stay outside it. Phase 3B2 must connect
+the current consumers and prove summary replay through existing events before
+Phase 3 is complete. See [ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md)
+and [ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md).
 
 Phase 2C3C activates the status-free `ConversationResponse` through the single
 `Core/ModelProtocol/ModelProtocolWire` owner: schema, local validation and canonical

@@ -152,7 +152,7 @@ The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections
 
 ## ModelProtocol boundary (Phase 2)
 
-One `IModelProtocol` instance serves a conversation run. `GetResponseAsync` receives
+One `IMaterializedModelProtocol` instance serves a conversation run. `GetResponseAsync` receives
 the accepted materialized messages, current callable schemas, runnable catalog and
 request-local transport options. It returns an accepted `ConversationResponse` and only
 that completion's metadata, a separate `ProviderRefusal`, or a typed `ModelProtocolFailure`. Provider failures,
@@ -259,6 +259,33 @@ accepted diagnostics also carry the exact tool-call ids. They never enter replay
 Phase 1B left the v2 response, retry limits and outcome behavior unchanged. See the
 [causal trace contract and validation limits](stabilization/PHASE_1B_CAUSAL_TRACE.md).
 
+## Kernel state model (Phase 3B1 introduction)
+
+`Core/Agent/AgentKernel` accepts generic messages through `IModelProtocol.SendAsync`.
+It does not own prompt composition, compaction, catalog/LRU, media or provider
+metadata. The materialized boundary above remains the current endpoint owner;
+its rename does not change the active v3 wire or retry behavior.
+
+`RunSummary` has independent lifecycle and execution health. Empty calls end the
+loop (`completed`), without certifying effects. Health comes only from immutable
+execution records: unknown write/external effect dominates errors, then clean.
+Narrative is preserved but cannot set either axis. Typed model failures end the
+invocation without fabricated tool errors; native provider refusal is locally
+classified as `failed / provider_refused`.
+
+Start/resume share accounting, limits and accepted-turn IDs. Pending approval
+consumes a tool-budget reservation, not an outcome; confirmation uses that
+reservation once and rechecks captured policy/revision. Mandatory run facts are
+appended before dispatch and after results; a failed append stops execution.
+Synthetic result messages retain typed evidence for the external serializer.
+No automatic tool replay/retry or new result-wire format is introduced.
+
+Only fake ports exercise this kernel in 3B1. Production adapters, current
+start/confirmation switch and RunSummary replay through existing events are the
+3B2 gate; R11 and Windows/controller qualification remain open. See
+[ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md) and
+[ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md).
+
 ## Transitional completion guard (Phase 1C)
 
 `RunSummaryBuilder` aggregates actual executor results using effective
@@ -266,7 +293,8 @@ Phase 1B left the v2 response, retry limits and outcome behavior unchanged. See 
 Model text, descriptions and model-supplied extra JSON fields are not evidence.
 Introduced with v2 in Phase 1C, this independent summary remains after the v3
 cutover. Runtime lifecycle labels are transitional; model JSON no longer owns
-them. AgentKernel and full lifecycle migration remain Phase 3 work.
+them. The introduced kernel above does not replace this active path until 3B2;
+full persistence/UI normalization remains Phase 9 work.
 
 `RunExecutionSummary` contains `ExecutionHealth` (`clean`, `errors`, `unknown`) and
 `ReadOk`, `ReadError`, `WriteOk`, `WriteError`, `WriteUnknown` invocation counts.

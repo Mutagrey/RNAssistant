@@ -1,0 +1,525 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
+using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Tools;
+
+namespace RNAssistant.Harness
+{
+    internal static partial class Program
+    {
+        private static AgentResponse KernelResponse(params ToolCall[] calls)
+        {
+            return new AgentResponse("Done; all changes applied.", calls);
+        }
+
+        private static ToolCall KernelCall(string id, string name = "write")
+        {
+            return new ToolCall(id, name, "{}");
+        }
+
+        private static ToolExecutionRecord KernelRecord(ToolExecutionContext context,
+            ToolExecutionOutcome outcome = ToolExecutionOutcome.Ok, bool awaitingUser = false)
+        {
+            var pending = outcome == ToolExecutionOutcome.AwaitingConfirmation;
+            return new ToolExecutionRecord(context, outcome, context.StartedUtc.AddMilliseconds(1),
+                "Runtime evidence.", "{\"source\":\"runtime\"}", mayHaveDispatched: !pending,
+                pendingId: pending ? "pending-" + context.Call.Id : null, awaitingUser: awaitingUser);
+        }
+
+        private static string KernelCounts(RunSummary summary)
+        {
+            var c = summary.ToolCounts;
+            return string.Join(",", c.ReadOk, c.ReadError, c.WriteOk, c.WriteError, c.WriteUnknown);
+        }
+
+        private static async Task KernelAggregatesOutcome(string tool, ToolExecutionOutcome outcome,
+            ExecutionHealth health, string counts)
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a", tool)), KernelResponse());
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, outcome));
+            var result = await f.RunAsync();
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "empty calls finish the loop");
+            AssertEqual(health, result.Summary.ExecutionHealth, "runtime evidence owns health");
+            AssertEqual(counts, KernelCounts(result.Summary), "actual tool counts");
+            AssertEqual("Done; all changes applied.", result.Summary.AssistantMessage, "narrative remains separate");
+            AssertEqual(1, f.Tools.Calls.Count, "no tool retry");
+            AssertEqual(AgentRunEventKind.SummaryChanged, f.Store.Events.Last().Kind, "terminal summary is last");
+            AssertEqual(counts, KernelCounts(f.Store.Events.Last().Summary), "append receives authoritative summary");
+        }
+
+        private static async Task KernelPreservesCumulativeHealth(ToolExecutionOutcome first, ToolExecutionOutcome second,
+            ExecutionHealth health, string counts)
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a")), KernelResponse(KernelCall("b")), KernelResponse());
+            var outcomes = new Queue<ToolExecutionOutcome>(new[] { first, second });
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, outcomes.Dequeue()));
+            var result = await f.RunAsync();
+            AssertEqual(health, result.Summary.ExecutionHealth, "later successes cannot clear earlier evidence");
+            AssertEqual(counts, KernelCounts(result.Summary), "both executions counted once");
+            AssertEqual(3, f.Model.Requests.Count, "ordinary next step without automatic retry");
+            var firstFact = f.Store.Events.First(e => e.Kind == AgentRunEventKind.ToolCompleted);
+            AssertEqual(1, firstFact.Summary.ToolStepsUsed, "earlier summary snapshot is unchanged");
+        }
+
+        private static async Task KernelNarrativeCannotClaimEffects()
+        {
+            foreach (var message in new[] { "completed", "blocked", "refused" })
+            {
+                var f = new KernelFixture(new AgentResponse(message, new ToolCall[0]));
+                var result = await f.RunAsync();
+                AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "wording is not runtime lifecycle");
+                AssertEqual(ExecutionHealth.Clean, result.Summary.ExecutionHealth, "no effects is not an error");
+                AssertEqual("0,0,0,0,0", KernelCounts(result.Summary), "no invented writes");
+                AssertEqual(message, result.Summary.AssistantMessage, "narrative preserved");
+            }
+        }
+
+        private static async Task KernelReadsAreSequentialAndBounded()
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a", "read"), KernelCall("b", "read")), KernelResponse());
+            var result = await f.RunAsync();
+            AssertEqual("a,b", string.Join(",", f.Tools.Calls.Select(c => c.Call.Id)), "batch order");
+            AssertEqual("2,0,0,0,0", KernelCounts(result.Summary), "read-only batch accounting");
+            AssertEqual("a,b", string.Join(",", f.Model.Requests[1].AcceptedMessages
+                .Where(m => m.Kind == AgentMessageKind.ToolResult).Select(m => m.ToolCallId)), "closed exchange before next request");
+            AssertEqual("a,b", string.Join(",", f.Model.Requests[1].AcceptedCallIds), "accepted ids available to protocol");
+        }
+
+        private static async Task KernelRejectsUnsafeBatches()
+        {
+            foreach (var tool in new[] { "write", "external", "confirm", "unclassified" })
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("a", "read"), KernelCall("b", tool)));
+                var result = await f.RunAsync();
+                AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "unsafe accepted response fails closed");
+                AssertEqual(0, f.Tools.Calls.Count, "whole response rejected before any dispatch");
+                AssertEqual(1, result.AcceptedMessages.Count, "rejected response absent from history");
+                AssertTrue(!f.Store.Events.Any(e => e.Kind == AgentRunEventKind.ResponseAccepted), "no rejected durable response");
+            }
+        }
+
+        private static async Task KernelRejectsDuplicateIds(bool acrossSteps)
+        {
+            var f = acrossSteps
+                ? new KernelFixture(KernelResponse(KernelCall("a", "read")),
+                    KernelResponse(KernelCall("fresh", "read"), KernelCall("A", "read")))
+                : new KernelFixture(KernelResponse(KernelCall("a", "read"), KernelCall("A", "read")));
+            var result = await f.RunAsync();
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "duplicate id fails closed");
+            AssertEqual(acrossSteps ? 1 : 0, f.Tools.Calls.Count, "rejected batch has no effects");
+            AssertEqual(acrossSteps ? 1 : 0, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted),
+                "only accepted responses persist");
+            AssertTrue(!result.AcceptedMessages.SelectMany(m => m.ToolCalls).Any(c => c.Id == "fresh"),
+                "partially validated response is not accepted");
+        }
+
+        private static async Task KernelRequestsAreDetachedSnapshots()
+        {
+            var oldCall = KernelCall("a", "read");
+            var history = new List<AgentMessage> { AgentMessage.User("old turn"),
+                AgentMessage.Assistant(KernelResponse(oldCall)), AgentMessage.AcceptedToolResult("a", "old result", "{}") };
+            var f = new KernelFixture(KernelResponse(KernelCall("a", "read")), KernelResponse());
+            var request = new AgentRunRequest("run", "turn", "new turn", new AgentRunLimits(5, 5), history);
+            history.Clear();
+            var result = await f.Kernel.RunAsync(request, CancellationToken.None);
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "prior user turn ids do not collide");
+            AssertEqual(4, f.Model.Requests[0].AcceptedMessages.Count, "first request is not mutated by later steps");
+            AssertEqual(0, f.Model.Requests[0].AcceptedCallIds.Count, "first request keeps original id snapshot");
+            AssertEqual(1, f.Model.Requests[1].AcceptedCallIds.Count, "ids belong only to current turn");
+            AssertEqual(0, f.Store.Events[0].Summary.IterationsUsed, "initial summary remains unchanged");
+        }
+
+        private static async Task KernelClassifiesModelFailures()
+        {
+            foreach (ModelProtocolFailureKind kind in Enum.GetValues(typeof(ModelProtocolFailureKind)))
+            {
+                var f = new KernelFixture();
+                f.Model.OnSend = (request, token) => Task.FromResult(AgentModelResult.Failed(kind, "boundary failure"));
+                var result = await f.RunAsync();
+                AssertEqual(kind == ModelProtocolFailureKind.Cancelled ? RunLifecycle.Cancelled : RunLifecycle.Failed,
+                    result.Summary.Lifecycle, "typed failure classification");
+                AssertEqual(ExecutionHealth.Clean, result.Summary.ExecutionHealth, "model failure does not invent tool errors");
+                AssertEqual(1, f.Model.Requests.Count, "kernel has no protocol retries");
+                AssertEqual(1, result.AcceptedMessages.Count, "failure is not accepted model history");
+            }
+            var refusal = new KernelFixture();
+            refusal.Model.OnSend = (request, token) => Task.FromResult(AgentModelResult.Refused("Provider refusal."));
+            var refused = await refusal.RunAsync();
+            AssertEqual("provider_refused", refused.Summary.Reason, "native refusal locally classified");
+            AssertEqual(RunLifecycle.Failed, refused.Summary.Lifecycle, "refusal is not model-owned status");
+            AssertEqual(1, refused.AcceptedMessages.Count, "native refusal stays out of conversation JSON");
+        }
+
+        private static async Task KernelCancellationBeforeDispatch(AgentRunEventKind boundary, bool duringPolicyLookup = false)
+        {
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("a")));
+                f.Store.OnAppended = fact =>
+                {
+                    if (fact.Kind != boundary) return;
+                    if (duringPolicyLookup) f.Tools.BeforeDescribe = () => cancellation.Cancel();
+                    else cancellation.Cancel();
+                };
+                var result = await f.RunAsync(cancellation.Token);
+                AssertEqual(RunLifecycle.Cancelled, result.Summary.Lifecycle, "cancelled at mandatory append boundary");
+                var beforeModel = boundary == AgentRunEventKind.Started || boundary == AgentRunEventKind.ModelStepStarted;
+                AssertEqual(beforeModel ? 0 : 1, f.Model.Requests.Count, "no cancelled model dispatch");
+                AssertEqual(0, f.Tools.Calls.Count, "no cancelled tool dispatch");
+                AssertEqual("0,0,0,0,0", KernelCounts(result.Summary), "non-dispatch never invents effects");
+                if (!beforeModel)
+                    AssertEqual(1, result.AcceptedMessages.Count(m => m.Kind == AgentMessageKind.ToolResult), "accepted call closed");
+            }
+        }
+
+        private static async Task KernelIgnoresLateCancelledResponse()
+        {
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var f = new KernelFixture();
+                f.Model.OnSend = (request, token) =>
+                {
+                    cancellation.Cancel();
+                    return Task.FromResult(AgentModelResult.Accepted(KernelResponse(KernelCall("late"))));
+                };
+                var result = await f.RunAsync(cancellation.Token);
+                AssertEqual(RunLifecycle.Cancelled, result.Summary.Lifecycle, "late response cannot revive cancelled run");
+                AssertEqual(0, f.Tools.Calls.Count, "no late dispatch");
+                AssertEqual(1, result.AcceptedMessages.Count, "late response not accepted");
+            }
+        }
+
+        private static async Task KernelCancellationAfterPossibleDispatch(bool write)
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a", write ? "write" : "read")));
+            f.Tools.OnExecute = (context, token) => { throw new OperationCanceledException("Executor interrupted."); };
+            var result = await f.RunAsync();
+            AssertEqual(RunLifecycle.Cancelled, result.Summary.Lifecycle, "executor cancellation");
+            AssertEqual(write ? ExecutionHealth.Unknown : ExecutionHealth.Errors, result.Summary.ExecutionHealth,
+                "possible effects never become clean");
+            AssertEqual(write ? "0,0,0,0,1" : "0,1,0,0,0", KernelCounts(result.Summary), "conservative missing terminal evidence");
+            AssertEqual(1, f.Tools.Calls.Count, "no retry after ambiguous execution");
+            AssertTrue(f.Store.Events.Single(e => e.Execution != null).Execution.MayHaveDispatched, "runtime entry is only possible dispatch");
+            AssertEqual(write ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error,
+                result.AcceptedMessages.Last().Execution.Outcome, "model adapter receives typed synthetic evidence, not message heuristics");
+        }
+
+        private static async Task KernelCancellationPreservesTerminalEvidence()
+        {
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("a")));
+                f.Tools.OnExecute = (context, token) =>
+                {
+                    cancellation.Cancel();
+                    return Task.FromResult(KernelRecord(context));
+                };
+                var result = await f.RunAsync(cancellation.Token);
+                AssertEqual(RunLifecycle.Cancelled, result.Summary.Lifecycle, "cancel stops next model step");
+                AssertEqual("0,0,1,0,0", KernelCounts(result.Summary), "known terminal success is not overwritten by cancellation");
+                AssertEqual(1, f.Model.Requests.Count, "no model step after cancellation");
+            }
+        }
+
+        private static async Task KernelCancelledBatchClosesAllCalls()
+        {
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("a", "read"), KernelCall("b", "read")));
+                f.Tools.OnExecute = (context, token) =>
+                {
+                    cancellation.Cancel();
+                    return Task.FromResult(KernelRecord(context));
+                };
+                var result = await f.RunAsync(cancellation.Token);
+                AssertEqual(1, f.Tools.Calls.Count, "rest of batch never dispatched");
+                AssertEqual("1,0,0,0,0", KernelCounts(result.Summary), "only actual result counted");
+                AssertEqual("a,b", string.Join(",", result.AcceptedMessages.Where(m => m.Kind == AgentMessageKind.ToolResult)
+                    .Select(m => m.ToolCallId)), "all accepted calls closed in returned history");
+                AssertEqual(AgentRunEventKind.SummaryChanged, f.Store.Events.Last().Kind, "summary follows closure");
+                AssertEqual(ToolExecutionOutcome.NotDispatched, f.Store.Events.Last(e => e.Execution != null).Execution.Outcome,
+                    "unexecuted batch tail is explicit");
+                AssertEqual(ToolExecutionOutcome.NotDispatched, result.AcceptedMessages.Last().Execution.Outcome,
+                    "synthetic non-dispatch remains typed for the model adapter");
+            }
+        }
+
+        private static async Task KernelHonorsLimits(bool iterations)
+        {
+            var f = iterations
+                ? new KernelFixture(KernelResponse(KernelCall("a", "read")))
+                : new KernelFixture(KernelResponse(KernelCall("a", "read"), KernelCall("b", "read")));
+            var result = await f.RunAsync(limits: new AgentRunLimits(iterations ? 1 : 5, iterations ? 5 : 1));
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "limit is runtime failure");
+            AssertEqual(iterations ? "iteration_limit" : "tool_step_limit", result.Summary.Reason, "specific limit");
+            AssertEqual(1, f.Tools.Calls.Count, "no execution over budget");
+            AssertEqual(1, result.Summary.ToolStepsUsed, "bounded tool accounting");
+            AssertEqual("1,0,0,0,0", KernelCounts(result.Summary), "limit cannot erase successful read");
+        }
+
+        private static async Task KernelConfirmationSharesAccounting(ToolExecutionOutcome before, ToolExecutionOutcome after,
+            ExecutionHealth health, string counts)
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a")), KernelResponse(KernelCall("b", "confirm")), KernelResponse());
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, context.Call.Id == "a"
+                ? before : context.IsConfirmed ? after : ToolExecutionOutcome.AwaitingConfirmation));
+            var paused = await f.RunAsync(limits: new AgentRunLimits(3, 2));
+            AssertEqual(RunLifecycle.AwaitingConfirmation, paused.Summary.Lifecycle, "runtime owns pause");
+            AssertEqual(2, paused.Summary.ToolStepsUsed, "pending step precharged once");
+            AssertEqual(0, paused.AcceptedMessages.Count(m => m.Kind == AgentMessageKind.ToolResult && m.ToolCallId == "b"),
+                "pending is not a fabricated execution result");
+            var resumed = await f.Kernel.ResumeAsync("resume", "pending-b", paused.Continuation, CancellationToken.None);
+            AssertEqual(RunLifecycle.Completed, resumed.Summary.Lifecycle, "same loop resumes");
+            AssertEqual(health, resumed.Summary.ExecutionHealth, "cumulative health preserved across confirmation");
+            AssertEqual(counts, KernelCounts(resumed.Summary), "confirmed call counted exactly once");
+            AssertEqual(2, resumed.Summary.ToolStepsUsed, "resume does not double-charge tool budget");
+            AssertEqual(3, resumed.Summary.IterationsUsed, "resume shares model budget");
+            AssertEqual("resume", f.Tools.Calls.Last().RunId, "new execution run");
+            AssertEqual("turn", f.Tools.Calls.Last().TurnId, "same user turn");
+            AssertEqual(f.Tools.Calls[1].StepId, f.Tools.Calls[2].StepId, "original model step retained");
+            AssertEqual(1, f.Tools.Calls.Last().RemainingToolSteps, "pending reservation reusable only for the confirmed call");
+            AssertEqual("a,b", string.Join(",", f.Model.Requests.Last().AcceptedCallIds), "resume keeps full accepted id scope");
+            AssertEqual(RunLifecycle.AwaitingConfirmation, paused.Summary.Lifecycle, "pause snapshot immutable");
+        }
+
+        private static async Task KernelConfirmationCannotReuseAcceptedId()
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a", "confirm")), KernelResponse(KernelCall("A", "read")));
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context,
+                context.IsConfirmed ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.AwaitingConfirmation));
+            var paused = await f.RunAsync();
+            var resumed = await f.Kernel.ResumeAsync("resume", "pending-a", paused.Continuation, CancellationToken.None);
+            AssertEqual(RunLifecycle.Failed, resumed.Summary.Lifecycle, "accepted ids survive confirmation");
+            AssertEqual(2, f.Tools.Calls.Count, "duplicate call never enters runtime");
+            AssertEqual("0,0,1,0,0", KernelCounts(resumed.Summary), "confirmed effect preserved despite protocol failure");
+        }
+
+        private static async Task KernelRejectsStaleConfirmation()
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a", "confirm")), KernelResponse());
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context,
+                context.IsConfirmed ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.AwaitingConfirmation));
+            var paused = await f.RunAsync();
+            await KernelThrowsAsync<InvalidOperationException>(() =>
+                f.Kernel.ResumeAsync("wrong", "different", paused.Continuation, CancellationToken.None));
+            AssertEqual(1, f.Tools.Calls.Count, "wrong pending id cannot execute");
+            await f.Kernel.ResumeAsync("resume", "pending-a", paused.Continuation, CancellationToken.None);
+            await KernelThrowsAsync<RunStoreException>(() =>
+                f.Kernel.ResumeAsync("again", "pending-a", paused.Continuation, CancellationToken.None));
+            AssertEqual(2, f.Tools.Calls.Count, "stale cursor rejected before a second confirmed dispatch");
+        }
+
+        private static async Task KernelCancelsPendingWithoutDanglingCall()
+        {
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("a", "confirm")));
+                f.Tools.OnExecute = (context, token) =>
+                {
+                    cancellation.Cancel();
+                    return Task.FromResult(KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation));
+                };
+                var result = await f.RunAsync(cancellation.Token);
+                AssertEqual(RunLifecycle.Cancelled, result.Summary.Lifecycle, "cancellation beats unexecuted pending");
+                AssertTrue(result.Continuation == null && result.Summary.PendingConfirmation == null, "no resumable cancelled confirmation");
+                AssertEqual("0,0,0,0,0", KernelCounts(result.Summary), "pending never counted as effect");
+                AssertEqual(1, result.AcceptedMessages.Count(m => m.Kind == AgentMessageKind.ToolResult), "cancelled call closed");
+            }
+        }
+
+        private static async Task KernelPolicyChangeStopsDispatch(bool confirmation)
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a", confirmation ? "confirm" : "write")), KernelResponse());
+            if (confirmation)
+            {
+                f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation));
+                var paused = await f.RunAsync();
+                f.Tools.Policies["confirm"] = new ToolPolicySnapshot("confirm", "changed", true, true);
+                var result = await f.Kernel.ResumeAsync("resume", "pending-a", paused.Continuation, CancellationToken.None);
+                AssertEqual(1, f.Tools.Calls.Count, "changed confirmed policy never executes");
+                AssertEqual("0,0,0,1,0", KernelCounts(result.Summary), "known rejection is error, not unknown effect");
+            }
+            else
+            {
+                f.Store.OnAppended = fact =>
+                {
+                    if (fact.Kind == AgentRunEventKind.ToolStarted)
+                        f.Tools.Policies["write"] = new ToolPolicySnapshot("write", "changed", true);
+                };
+                var result = await f.RunAsync();
+                AssertEqual(0, f.Tools.Calls.Count, "changed accepted policy never executes");
+                AssertEqual("0,0,0,1,0", KernelCounts(result.Summary), "known pre-dispatch rejection");
+            }
+            AssertTrue(!f.Store.Events.Single(e => e.Execution != null && e.Execution.Outcome == ToolExecutionOutcome.Error)
+                .Execution.MayHaveDispatched, "policy rejection has no ambiguous dispatch");
+        }
+
+        private static async Task KernelStoreFailureStopsBeforeDispatch()
+        {
+            foreach (var boundary in new[] { AgentRunEventKind.Started, AgentRunEventKind.ModelStepStarted,
+                AgentRunEventKind.ResponseAccepted, AgentRunEventKind.ToolStarted })
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("a")));
+                f.Store.FailOn = fact => fact.Kind == boundary;
+                var failure = await KernelThrowsAsync<RunStoreException>(() => f.RunAsync());
+                AssertEqual(0, f.Tools.Calls.Count, "mandatory evidence failure prevents tool dispatch");
+                AssertEqual("0,0,0,0,0", KernelCounts(failure.UnpersistedSummary), "no invented persisted effects");
+                AssertEqual(1, f.Store.FailedAppends, "mandatory append is never retried automatically");
+                AssertTrue(!f.Store.Events.Any(e => e.Kind == AgentRunEventKind.SummaryChanged), "no false durable terminal");
+                if (boundary == AgentRunEventKind.Started || boundary == AgentRunEventKind.ModelStepStarted)
+                    AssertEqual(0, f.Model.Requests.Count, "mandatory model boundary precedes network");
+            }
+        }
+
+        private static async Task KernelStoreFailurePreservesUnpersistedEvidence()
+        {
+            foreach (var boundary in new[] { AgentRunEventKind.ToolCompleted, AgentRunEventKind.SummaryChanged })
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("a")), KernelResponse());
+                f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.Unknown));
+                f.Store.FailOn = fact => fact.Kind == boundary;
+                var failure = await KernelThrowsAsync<RunStoreException>(() => f.RunAsync());
+                AssertEqual(RunLifecycle.Failed, failure.UnpersistedSummary.Lifecycle, "store failure stops execution");
+                AssertEqual(ExecutionHealth.Unknown, failure.UnpersistedSummary.ExecutionHealth, "possible effect survives append failure in memory");
+                AssertEqual("0,0,0,0,1", KernelCounts(failure.UnpersistedSummary), "unpersisted evidence explicitly labelled");
+                AssertEqual(1, f.Tools.Calls.Count, "no effect replay after failed append");
+                AssertEqual(1, f.Store.FailedAppends, "no automatic append retry");
+                AssertTrue(!f.Store.Events.Any(e => e.Kind == AgentRunEventKind.SummaryChanged), "failed terminal was not persisted");
+            }
+            var noCursor = new KernelFixture(KernelResponse());
+            noCursor.Store.ReturnUnchangedCursor = true;
+            await KernelThrowsAsync<RunStoreException>(() => noCursor.RunAsync());
+            AssertEqual(0, noCursor.Model.Requests.Count, "unchanged cursor cannot authorize dispatch");
+        }
+
+        private static async Task KernelRejectsMissingExecutionEvidence()
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a")));
+            f.Tools.OnExecute = (context, token) => Task.FromResult<ToolExecutionRecord>(null);
+            var result = await f.RunAsync();
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "missing runtime record is technical failure");
+            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth, "missing terminal cannot certify write effect");
+            AssertEqual(1, f.Tools.Calls.Count, "no retry for missing evidence");
+        }
+
+        private static async Task KernelLocalInteractionEndsWithoutExtraModelStep()
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("a", "unclassified")));
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, awaitingUser: true));
+            var result = await f.RunAsync();
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "bounded local interaction ends this invocation");
+            AssertEqual("awaiting_user", result.Summary.Reason, "reason is separate from lifecycle");
+            AssertEqual(1, f.Model.Requests.Count, "no unsolicited next step");
+        }
+
+        private static async Task<TException> KernelThrowsAsync<TException>(Func<Task> action) where TException : Exception
+        {
+            try { await action(); }
+            catch (TException ex) { return ex; }
+            throw new InvalidOperationException("Expected " + typeof(TException).Name);
+        }
+
+        private sealed class KernelFixture
+        {
+            internal readonly KernelModelFake Model;
+            internal readonly KernelToolFake Tools;
+            internal readonly KernelStoreFake Store = new KernelStoreFake();
+            internal readonly AgentKernel Kernel;
+
+            internal KernelFixture(params AgentResponse[] responses)
+            {
+                Model = new KernelModelFake(Store, responses);
+                Tools = new KernelToolFake(Store);
+                Kernel = new AgentKernel(Model, Tools, Store, () => new DateTime(2026, 8, 28, 0, 0, 0, DateTimeKind.Utc));
+            }
+
+            internal Task<AgentRunResult> RunAsync(CancellationToken token = default(CancellationToken), AgentRunLimits limits = null)
+            {
+                return Kernel.RunAsync(new AgentRunRequest("run", "turn", "Change requested.", limits ?? new AgentRunLimits(10, 10)), token);
+            }
+        }
+
+        private sealed class KernelModelFake : IModelProtocol
+        {
+            internal readonly List<AgentModelRequest> Requests = new List<AgentModelRequest>();
+            internal Func<AgentModelRequest, CancellationToken, Task<AgentModelResult>> OnSend;
+            private readonly KernelStoreFake _store;
+            private readonly Queue<AgentResponse> _responses;
+
+            internal KernelModelFake(KernelStoreFake store, IEnumerable<AgentResponse> responses)
+            {
+                _store = store;
+                _responses = new Queue<AgentResponse>(responses);
+            }
+
+            public Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken token)
+            {
+                Requests.Add(request);
+                AssertEqual(AgentRunEventKind.ModelStepStarted, _store.Events.Last().Kind, "model boundary persisted before dispatch");
+                return OnSend != null ? OnSend(request, token) : Task.FromResult(AgentModelResult.Accepted(_responses.Dequeue()));
+            }
+        }
+
+        private sealed class KernelToolFake : IToolRuntime
+        {
+            internal readonly List<ToolExecutionContext> Calls = new List<ToolExecutionContext>();
+            internal readonly Dictionary<string, ToolPolicySnapshot> Policies = new Dictionary<string, ToolPolicySnapshot>
+            {
+                ["read"] = new ToolPolicySnapshot("read", "r1", false, independentLocalRead: true),
+                ["write"] = new ToolPolicySnapshot("write", "r1", true),
+                ["external"] = new ToolPolicySnapshot("external", "r1", true),
+                ["confirm"] = new ToolPolicySnapshot("confirm", "r1", true, true),
+                ["unclassified"] = new ToolPolicySnapshot("unclassified", "r1", false)
+            };
+            internal Func<ToolExecutionContext, CancellationToken, Task<ToolExecutionRecord>> OnExecute;
+            internal Action BeforeDescribe;
+            private readonly KernelStoreFake _store;
+            internal KernelToolFake(KernelStoreFake store) { _store = store; }
+
+            public ToolPolicySnapshot Describe(ToolCall call)
+            {
+                if (BeforeDescribe != null) BeforeDescribe();
+                return Policies[call.Name];
+            }
+
+            public Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken token)
+            {
+                Calls.Add(context);
+                AssertEqual(AgentRunEventKind.ToolStarted, _store.Events.Last().Kind, "tool boundary persisted before dispatch");
+                return OnExecute != null ? OnExecute(context, token) : Task.FromResult(KernelRecord(context));
+            }
+        }
+
+        // Only a port fake. This is not existing ChatStore replay or crash recovery coverage.
+        private sealed class KernelStoreFake : IRunStore
+        {
+            internal readonly List<AgentRunEvent> Events = new List<AgentRunEvent>();
+            internal Action<AgentRunEvent> OnAppended;
+            internal Func<AgentRunEvent, bool> FailOn;
+            internal bool ReturnUnchangedCursor;
+            internal int FailedAppends;
+            private long _revision;
+
+            public Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken token)
+            {
+                AssertTrue(!token.CanBeCanceled, "mandatory terminal evidence cannot be dropped by cancellation");
+                if (expectedRevision != _revision) throw new InvalidOperationException("Stale continuation cursor.");
+                if (FailOn != null && FailOn(fact))
+                {
+                    FailedAppends++;
+                    throw new IOException("Injected append failure.");
+                }
+                Events.Add(fact);
+                _revision++;
+                if (OnAppended != null) OnAppended(fact);
+                return Task.FromResult(ReturnUnchangedCursor ? expectedRevision : _revision);
+            }
+        }
+    }
+}

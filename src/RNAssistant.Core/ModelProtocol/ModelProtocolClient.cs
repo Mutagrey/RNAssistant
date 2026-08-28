@@ -10,7 +10,7 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.ModelProtocol
 {
-    public sealed class ModelProtocolClient : IModelProtocol
+    public sealed class ModelProtocolClient : IMaterializedModelProtocol
     {
         private readonly LlmCompletionDelegate _completeAsync;
         private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;

@@ -11,7 +11,7 @@ namespace RNAssistant.Core.ModelProtocol
 {
     // One instance per conversation run. Only endpoint-format compatibility is
     // retained between steps; rejected responses and repair prompts are never retained.
-    public interface IModelProtocol
+    public interface IMaterializedModelProtocol
     {
         Task<ModelProtocolResult> GetResponseAsync(
             ModelProtocolRequest request,

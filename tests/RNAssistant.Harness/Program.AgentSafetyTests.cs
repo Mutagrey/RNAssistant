@@ -399,7 +399,7 @@ namespace RNAssistant.Harness
                 "new run/confirmation rebuilds safety from the current catalog");
         }
 
-        private sealed class RecordingModelProtocol : IModelProtocol
+        private sealed class RecordingModelProtocol : IMaterializedModelProtocol
         {
             private readonly ModelProtocolClient _inner;
             private readonly List<ModelProtocolRequest> _requests;
@@ -600,7 +600,7 @@ namespace RNAssistant.Harness
             var calls = 0;
             var started = 0;
             var completed = 0;
-            IModelProtocol protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+            IMaterializedModelProtocol protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
             {
                 calls++;
                 var prompt = messages.ToList();

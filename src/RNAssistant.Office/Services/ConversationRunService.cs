@@ -35,7 +35,7 @@ namespace RNAssistant.Office.Services
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
-        private readonly Func<IModelProtocol> _modelProtocolFactory;
+        private readonly Func<IMaterializedModelProtocol> _modelProtocolFactory;
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
 
@@ -52,7 +52,7 @@ namespace RNAssistant.Office.Services
             OfficeToolExecutor toolExecutor,
             LlmCompletionDelegate completeAsync,
             ContextCompactionService contextCompactionService,
-            Func<IModelProtocol> modelProtocolFactory = null)
+            Func<IMaterializedModelProtocol> modelProtocolFactory = null)
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor;

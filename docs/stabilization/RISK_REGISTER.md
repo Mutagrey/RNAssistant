@@ -31,7 +31,7 @@ safety, refusal и review/reset на prompt schema 12. Windows/live-provider gat
 | R08 | P0 | Journal расходится с live state | VBA | Read-only recovery, Phase 6 | open |
 | R09 | P0 | Cancellation после COM dispatch | Host/Domain | Unknown/reconciliation, Phases 5–7 | open |
 | R10 | P1 | UI показывает устаревший статус | UI/Persistence | Revisioned projection, Phase 9 | open |
-| R11 | P0 | Replay меняет outcome | Runtime / Persistence | Phase 3: минимальный RunSummary save/replay через существующие events; Phase 9: полная persistence/UI матрица | open; новые проверки ещё не выполнены |
+| R11 | P0 | Replay меняет outcome | Runtime / Persistence | Phase 3B2: минимальный RunSummary save/replay через существующие events; Phase 9: полная persistence/UI матрица | open; 3B1 fake append/CAS tests не являются existing-store replay |
 | R12 | P2 | Локальное исправление затрагивает десятки файлов | Architecture | Freeze, boundaries, change budget; все фазы | monitored |
 | R13 | P2 | Версия/tag на каждый commit | Release process | Правила заменены; repeat-build/commit и release gates tests, Phase 0 | mitigated |
 | R14 | P1 | Legacy/new paths сосуществуют бессрочно | Migration | Удаление при switch последних consumers; Phase 10 сверяет core scope, optional consumers имеют явные gates Phase 11 в MIGRATION_MAP | open |

@@ -35,6 +35,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Area | Main files | Useful filters |
 | --- | --- | --- |
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
+| Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
 | Office model-context owner | `Program.ToolDiscoveryTests.cs`; result/projection coverage in `Program.AgentSafetyTests.cs` | `agent: model session`, `agent: bounds oversized`, `context inspector:`, `protocol context:` |
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
 | Active wire / compatibility probes | `Program.AgentSafetyTests.cs` | `model compatibility:`, `agent: supports selectable`, `model protocol:` |
@@ -79,6 +80,21 @@ Phase 1C replaces false-success expectations with independent runtime-health
 assertions while preserving v2 model status. Before the fix, four evidence tests
 were red; after it, all seven pass. This is host-neutral safety coverage, not
 Windows qualification. See [Phase 1A evidence](../../docs/stabilization/PHASE_1A_CHARACTERIZATION.md).
+
+## Pure kernel introduction (Phase 3B1)
+
+`kernel:` uses only fake `IModelProtocol`, `IToolRuntime` and `IRunStore` ports.
+It covers read/write/external outcomes, cumulative health, narrative isolation,
+sequential reads, unsafe batches, full-turn IDs, immutable requests, limits,
+cancellation, shared confirmation accounting and cursor/append faults. Runtime
+result messages retain typed evidence, including synthetic non-dispatch/unknown.
+The fake append log is not a test of existing ChatStore replay or crash recovery.
+Production start/confirmation and actual event-stream adapters remain 3B2 work.
+
+The materialized endpoint port is now `IMaterializedModelProtocol`; `model protocol:`
+and `protocol context:` remain the existing production-path checks. The normal
+source-linked harness build and MockDemo build include the new Core contracts;
+neither is Office/VSTO validation. See [ADR-0001](../../docs/decisions/ADR-0001-model-does-not-own-completion.md).
 
 ## Stabilization completion guard
 

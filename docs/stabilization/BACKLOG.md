@@ -16,7 +16,8 @@
 | 2C3B | R27: сохранять custom prompts, явный review/reset, guard до model preparation/confirmation | done host-neutral/JS; 22 harness + 5 Node pass; active v2 и prompt schema 11 сохранены; Windows pending |
 | 2C3C | Switch/delete: shared wire/client/prompts/history/version, complete-context enforcement и explicit old-chat skip/reset | done host-neutral; actual v3, 100 targeted cases; explicit review/reset на schema 12; Windows/live-provider qualification открыта |
 | 3A | Отделить model context/materialization от извлекаемого loop по §15.2 | done host-neutral; ConversationModelSession и существующий AgentTranscript, прежние loop helpers удалены, semantics сохранены |
-| 3B | Минимальный AgentKernel, runtime-owned RunSummary и его save/replay через существующий event store | Следующий подэтап; model context/resource lifecycle уже вне loop; shared start/confirmation accounting и controller wiring требуют проверки |
+| 3B1 | Ввести pure AgentKernel, typed evidence и generic ports | done introduce-only; fake model/tool/store tests; production loop остаётся прежним |
+| 3B2 | Подключить kernel к start/confirmation, executor и existing event-store replay | Следующий подэтап; сохранить preflight/fingerprint/lease gates, минимальную projection и проверить replay normal/error/unknown/pending; удалить заменённые loop/accounting paths |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests смены активной книги и lifetime |
 | 6 | VBA vertical slice; отдельно оценить необходимость пользовательского package lifecycle для stable | Canonicalization, exact patch, journal, read-back/fault matrix; общий package journal нужен rename, сокращение scope пока не согласовано |
@@ -56,7 +57,7 @@ providers всё ещё требуют qualification. До Phase 4 external/uncl
 остаются singleton; positive local-read registry заменяется typed ToolPolicy.
 Точные проверки и границы: [Phase 2C3C](PHASE_2C3C_V3_CUTOVER.md).
 `Failure.Cause` временно сохраняет прежний controller exception path; удалить при
-переключении на AgentKernel в Phase 3, не вводить второй loop.
+переключении на AgentKernel в Phase 3B2, не вводить второй active loop.
 
 ## Отложенная проверка versioning
 
