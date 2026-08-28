@@ -16,6 +16,8 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ### Fixed
 
+- Confirmation and normal runs now share runtime accounting; recorded effects survive
+  chat replay, cancellation and failures while preparing the next model request.
 - The configured format-attempt limit now includes the first response: 20 stops
   after 20 invalid responses. Transient timeout/network/server failures have a
   separate budget of two retries per model step; schema fallback also works during

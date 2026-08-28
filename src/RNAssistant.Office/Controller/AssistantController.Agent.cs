@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -67,7 +68,7 @@ namespace RNAssistant.Office
                 var turnId = session.LastRun == null || string.IsNullOrWhiteSpace(session.LastRun.TurnId)
                     ? (session.LastRun == null ? runId : session.LastRun.RunId)
                     : session.LastRun.TurnId;
-                var previousSummary = RunSummaryBuilder.ContinuationSeed(session);
+                var previousState = session.LastRun.KernelState;
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = runId,
@@ -76,14 +77,15 @@ namespace RNAssistant.Office
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     Status = "running",
                     Phase = "executing",
-                    ExecutionSummary = previousSummary,
+                    KernelState = previousState,
                     CurrentAction = "Выполняю подтверждённое действие.",
                     DocumentRuntimeKey = documentRuntimeKey,
                     IterationsUsed = pending.IterationsUsed,
                     ToolStepsUsed = pending.ToolStepsUsed,
                     StartedUtc = DateTime.UtcNow
                 };
-                SaveSessionChanges(session);
+                // Kernel.Resume claims the durable pending state before execution.
+                // Do not persist a second, controller-owned running transition.
                 causalTrace = RunCausalTrace.Begin(_chatStore, session);
                 RunCausalTrace.Record(new CausalTraceRecord { Stage = "run.started", Status = "running" });
                 _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
@@ -114,114 +116,54 @@ namespace RNAssistant.Office
                 var continuationAttachments = pending.Attachments ?? LatestUserAttachments(session);
                 var tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
                 var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                var pendingResolved = false;
                 try
                 {
                     ReportProgress(runProgress, "executing", "Выполняю подтверждённое действие...");
-                    var runnableTools = ConversationRunService.PrepareToolsForRun(tools);
-                    var summaryBuilder = new RunSummaryBuilder(runnableTools, previousSummary);
                     var confirmedCommand = CloneCommand(pending.Command);
-                    var currentCatalogFingerprint = ConversationRunService.ToolExecutionFingerprint(
-                        runnableTools,
-                        pending.Command.ToolId);
-                    var catalogMatches = !string.IsNullOrWhiteSpace(pending.CatalogFingerprint) &&
-                        string.Equals(pending.CatalogFingerprint, currentCatalogFingerprint, StringComparison.OrdinalIgnoreCase);
-                    ToolResult result;
-                    if (!catalogMatches)
-                    {
-                        result = ToolResult.Fail(
-                            "Runnable tools changed, or this pending action predates catalog validation. Review the current tool and ask the agent to create a new call before confirming.",
-                            null,
-                            "pending_tool_catalog_changed",
-                            false);
-                    }
-                    else
-                    {
-                        try
+                    var completion = await _conversationRunService.ConfirmAsync(
+                        pendingId, confirmedCommand, session,
+                        new ConversationRunInput(settings, null, tools, skills, continuationAttachments),
+                        runProgress, RegisterPendingAgentTool, async token =>
                         {
-                            result = _toolExecutor.Execute(
-                                confirmedCommand,
-                                runnableTools,
+                            tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
+                            var context = LoadContext(session);
+                            skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
+                            SetToolCallReplay(session, pending.Command.ToolCallId, true);
+                            var attachmentRouting = AttachmentModelRoutingService.Select(
                                 settings,
-                                false,
-                                true,
                                 session,
-                                Math.Max(1, settings.MaxAgentToolSteps - pending.ToolStepsUsed + 1),
-                                skills,
-                                runCancellation.Token) ?? ToolResult.Fail(
-                                    "Confirmed tool returned no result.",
-                                    null,
-                                    "missing_result",
-                                    true);
-                        }
-                        catch
-                        {
-                            summaryBuilder.Observe(confirmedCommand, null);
-                            summaryBuilder.Publish(session);
-                            throw;
-                        }
-                    }
-                    summaryBuilder.Observe(confirmedCommand, result);
-                    summaryBuilder.Publish(session);
-                    UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
-                    summaryBuilder.Publish(session, (session.Messages ?? new List<ChatMessage>()).LastOrDefault(message =>
-                        message != null && message.Activity != null &&
-                        string.Equals(message.Activity.ToolCallId, confirmedCommand.ToolCallId, StringComparison.Ordinal)));
-                    pendingResolved = true;
-                    ReportProgress(runProgress, "tool_result", result == null ? string.Empty : result.Message,
-                        AgentTranscript.CreateToolActivity(CloneCommand(pending.Command), result, "tool"));
-                    tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
-                    var context = LoadContext(session);
-                    skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                    SetToolCallReplay(session, pending.Command.ToolCallId, true);
-                    var attachmentRouting = AttachmentModelRoutingService.Select(
-                        settings,
-                        session,
-                        continuationAttachments);
-                    settings = attachmentRouting.Settings;
-                    if (attachmentRouting.HasMedia)
-                    {
-                        ReportProgress(runProgress, "routing", attachmentRouting.ProgressMessage);
-                    }
-                    var latestUserMessage = (session.Messages ?? new List<ChatMessage>())
-                        .LastOrDefault(message => message != null && !message.ProtocolMessage &&
-                            string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
-                    await _attachmentAnalysisService.EnsureAsync(
-                        latestUserMessage == null ? string.Empty : latestUserMessage.Content,
-                        session,
-                        latestUserMessage,
-                        attachmentRouting,
-                        runProgress,
-                        runCancellation.Token).ConfigureAwait(false);
-                    continuationAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
-                    var completion = await _conversationRunService.ContinueAfterToolAsync(
-                        confirmedCommand,
-                        result,
-                        session,
-                        context,
-                        settings,
-                        tools,
-                        continuationAttachments,
-                        runProgress,
-                        RegisterPendingAgentTool,
-                        skills,
-                        runCancellation.Token,
-                        pending.IterationsUsed,
-                        pending.ToolStepsUsed,
-                        summaryBuilder).ConfigureAwait(false);
+                                continuationAttachments);
+                            settings = attachmentRouting.Settings;
+                            if (attachmentRouting.HasMedia)
+                            {
+                                ReportProgress(runProgress, "routing", attachmentRouting.ProgressMessage);
+                            }
+                            var latestUserMessage = (session.Messages ?? new List<ChatMessage>())
+                                .LastOrDefault(message => message != null && !message.ProtocolMessage &&
+                                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+                            await _attachmentAnalysisService.EnsureAsync(
+                                latestUserMessage == null ? string.Empty : latestUserMessage.Content,
+                                session,
+                                latestUserMessage,
+                                attachmentRouting,
+                                runProgress,
+                                token).ConfigureAwait(false);
+                            continuationAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
+                            return new ConversationRunInput(settings, context, tools, skills, continuationAttachments);
+                        }, runCancellation.Token).ConfigureAwait(false);
 
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
                     ChatResourceReferenceService.LinkMessageResources(session, 0);
                     if (completion == null || !completion.WaitingForConfirmation)
                     {
-                        ApplyTerminalRunResult(session, completion);
+                        ApplyTerminalRunResult(session);
                     }
                     SaveSessionChanges(session);
                     RunCausalTrace.Summary(session);
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!(ex is RunStoreException))
                 {
                     _toolCatalog.InvalidateDocumentVbaTools();
                     if (!ChatHistoryEditService.HasResultForLatestToolCall(
@@ -230,14 +172,12 @@ namespace RNAssistant.Office
                     {
                         SetToolCallReplay(session, pending.Command.ToolCallId, false);
                     }
-                    if (!pendingResolved)
-                    {
-                        var failedResult = ex is OperationCanceledException
-                            ? ToolResult.Cancelled("Confirmed tool execution was cancelled.")
-                            : ToolResult.Fail(ex.Message, null, "confirmed_tool_failed", false);
-                        UpdatePendingActivity(session, pending.PendingId, pending.Command, failedResult);
-                    }
+                    var pendingMessage = session.Messages.LastOrDefault(message => message.Activity != null &&
+                        message.Activity.ToolCallId == pending.Command.ToolCallId);
+                    if (pendingMessage != null) CloseRunningActivity(pendingMessage.Activity, ex is OperationCanceledException);
                     CloseRunningActivities(session, firstRunMessageIndex, ex is OperationCanceledException);
+                    if (session.LastRun.KernelState != null)
+                        session.LastRun.KernelState = session.LastRun.KernelState.Interrupt(ex is OperationCanceledException, ex.Message, runId);
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
                     {
@@ -306,6 +246,8 @@ namespace RNAssistant.Office
                 // Explicit user cancellation is terminal for this run: persist it, but do not invoke the model.
                 if (session.LastRun != null)
                 {
+                    if (session.LastRun.KernelState != null)
+                        session.LastRun.KernelState = session.LastRun.KernelState.Interrupt(true, result.Message);
                     session.LastRun.Status = "cancelled";
                     session.LastRun.Phase = "cancelled";
                     session.LastRun.CurrentAction = result.Message;

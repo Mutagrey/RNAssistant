@@ -1623,33 +1623,35 @@ ui.projected
 
 ### Выполнить
 
-- [ ] Создать `AgentKernel`.
-- [ ] По §15.2 отделить извлекаемый цикл `ConversationRunService` от подготовки prompts/compaction/media и материализации результатов; использовать существующие services, не менять ToolPack/Resource Fabric semantics Phase 8.
-- [ ] Оставить текущие working set/read-evidence/LRU операции за границей kernel; он не управляет resource capability lifecycle. Phase 8 заменяет внешнюю реализацию каталога, а не повторно извлекает её из цикла.
-- [ ] Обычный запуск и confirmation continuation в `AssistantController.Agent` подключить к общей kernel-логике учёта выполнения; сохранить confirmation/fingerprint gates и отдельную проверку controller wiring.
-- [ ] Создать `RunSummary`.
-- [ ] Создать `ExecutionHealth`.
-- [ ] Создать `ToolExecutionRecord`.
-- [ ] Подключить текущий executor через adapter.
-- [ ] Подключить минимальный `IRunStore` к существующим typed append-only events через adapter. Проверить сохранение/replay нового `RunSummary` (lifecycle, health, counts и pending confirmation) для нормального, error/unknown и confirmation сценариев; использовать/расширить существующее покрытие. Не вводить новый durable store, snapshot authority или полную переработку storage/UI Phase 9.
-- [ ] Перевести текущий цикл на accepted model response, tool execution, accepted tool result, next step и run summary.
-- [ ] Удалить direct mapping model `completed` → `RunStatus=completed`.
-- [ ] Не принимать model `blocked/refused` как runtime truth без локальной классификации; текст при этом сохраняется как narrative.
-- [ ] Confirmation оставить runtime-owned.
-- [ ] Добавить pure tests с fake model/fake tool:
-  - [ ] read ok;
-  - [ ] write ok;
-  - [ ] write error;
-  - [ ] write unknown;
-  - [ ] error then success;
-  - [ ] success then error;
-  - [ ] unknown then model says done;
-  - [ ] cancellation before tool;
-  - [ ] cancellation after possible dispatch;
-  - [ ] iteration limit;
-  - [ ] duplicate call id.
-- [ ] Обновить state model docs.
-- [ ] Добавить ADR-0001 и ADR-0008.
+- [x] Создать `AgentKernel`.
+- [x] По §15.2 отделить извлекаемый цикл `ConversationRunService` от подготовки prompts/compaction/media и материализации результатов; использовать существующие services, не менять ToolPack/Resource Fabric semantics Phase 8.
+- [x] Оставить текущие working set/read-evidence/LRU операции за границей kernel; он не управляет resource capability lifecycle. Phase 8 заменяет внешнюю реализацию каталога, а не повторно извлекает её из цикла.
+- [x] Обычный запуск и confirmation continuation в `AssistantController.Agent` подключить к общей kernel-логике учёта выполнения; сохранить confirmation/fingerprint gates и отдельную проверку controller wiring.
+- [x] Создать `RunSummary`.
+- [x] Создать `ExecutionHealth`.
+- [x] Создать `ToolExecutionRecord`.
+- [x] Подключить текущий executor через adapter.
+- [x] Подключить минимальный `IRunStore` к существующим typed append-only events через adapter. Проверить сохранение/replay нового `RunSummary` (lifecycle, health, counts и pending confirmation) для нормального, error/unknown и confirmation сценариев; использовать/расширить существующее покрытие. Не вводить новый durable store, snapshot authority или полную переработку storage/UI Phase 9.
+- [x] Перевести текущий цикл на accepted model response, tool execution, accepted tool result, next step и run summary.
+- [x] Удалить direct mapping model `completed` → `RunStatus=completed`.
+- [x] Не принимать model `blocked/refused` как runtime truth без локальной классификации; текст при этом сохраняется как narrative.
+- [x] Confirmation оставить runtime-owned.
+- [x] Добавить pure tests с fake model/fake tool:
+  - [x] read ok;
+  - [x] write ok;
+  - [x] write error;
+  - [x] write unknown;
+  - [x] error then success;
+  - [x] success then error;
+  - [x] unknown then model says done;
+  - [x] cancellation before tool;
+  - [x] cancellation after possible dispatch;
+  - [x] iteration limit;
+  - [x] duplicate call id.
+- [x] Обновить state model docs.
+- [x] Добавить ADR-0001 и ADR-0008.
+
+Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD закрыта; Windows/Office delivery и полная persistence/UI matrix остаются qualification gates. Phase 4 в этом изменении не начата.
 
 ### Definition of Done
 

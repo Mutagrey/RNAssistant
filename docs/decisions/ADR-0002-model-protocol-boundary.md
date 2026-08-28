@@ -77,9 +77,9 @@ Phase 3B1 gives the kernel a generic `IModelProtocol.SendAsync` port without
 settings, prompt materialization, runnable catalog or provider metadata. The
 existing `GetResponseAsync` port and all its current typed callers are renamed
 to `IMaterializedModelProtocol`, without an old-signature alias or a second wire
-implementation. Only harness fakes implement the generic port so far. The 3B2
-Office adapter must use `ConversationModelSession` and this existing endpoint
-client. See [ADR-0001](ADR-0001-model-does-not-own-completion.md).
+implementation. Phase 3B2 supplies the generic Office port through
+`ConversationKernelAdapter.Model`, using `ConversationModelSession` and this
+existing endpoint client. See [ADR-0001](ADR-0001-model-does-not-own-completion.md).
 
 Phase 2A preserved initial + configured retries; Phase 2B removes that extra
 attempt (R20). The existing `MaxAgentFormatRetries` settings/bridge key and stored
@@ -87,12 +87,10 @@ numeric values remain; the value now means total protocol responses. The caption
 and tooltip explain this change. There is no second key, alias or settings rewrite.
 V2 parsing/status/history were preserved by 2B; 2C3C replaces that live path below.
 
-`ModelProtocolFailure.Cause` is a nonserialized exception adapter. Owner: Runtime /
-Application. Consumer: the loop rethrows it with its original stack into the
-existing controller cancellation/failure handling. Removal: Phase 3 AgentKernel
-integration. Accepted `LlmCompletionResult` and the existing context-usage
-projection are metadata for current transcript consumers, not a second protocol
-or durable result store.
+`ModelProtocolFailure.Cause` and the rethrow adapter were removed at the Phase 3B2
+kernel switch. Typed failures now drive local kernel lifecycle. Accepted
+`LlmCompletionResult` and context usage remain metadata for Office transcript
+consumers, not a second protocol or durable result store.
 
 ## V3 introduction and explicit legacy read (Phase 2C1, historical)
 

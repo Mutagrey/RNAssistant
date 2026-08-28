@@ -215,7 +215,11 @@ namespace RNAssistant.Core.Agent
                 return state.Summary(stop ?? RunLifecycle.Cancelled, "execution_interrupted", record.Message);
             }
             if (state.Pending != null)
-                return state.Summary(RunLifecycle.AwaitingConfirmation, "confirmation_required", record.Message);
+            {
+                var narrative = state.Messages.LastOrDefault(message => message.Kind == AgentMessageKind.Assistant);
+                return state.Summary(RunLifecycle.AwaitingConfirmation, "confirmation_required",
+                    narrative == null || string.IsNullOrWhiteSpace(narrative.Text) ? record.Message : narrative.Text);
+            }
             if (record.AwaitingUser)
                 return state.Summary(RunLifecycle.Completed, "awaiting_user", record.Message);
             return null;

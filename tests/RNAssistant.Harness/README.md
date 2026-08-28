@@ -81,20 +81,23 @@ assertions while preserving v2 model status. Before the fix, four evidence tests
 were red; after it, all seven pass. This is host-neutral safety coverage, not
 Windows qualification. See [Phase 1A evidence](../../docs/stabilization/PHASE_1A_CHARACTERIZATION.md).
 
-## Pure kernel introduction (Phase 3B1)
+## Kernel and production adapters (Phase 3B2)
 
-`kernel:` uses only fake `IModelProtocol`, `IToolRuntime` and `IRunStore` ports.
-It covers read/write/external outcomes, cumulative health, narrative isolation,
-sequential reads, unsafe batches, full-turn IDs, immutable requests, limits,
-cancellation, shared confirmation accounting and cursor/append faults. Runtime
-result messages retain typed evidence, including synthetic non-dispatch/unknown.
-The fake append log is not a test of existing ChatStore replay or crash recovery.
-Production start/confirmation and actual event-stream adapters remain 3B2 work.
+`kernel:` uses fake generic model/tool/store ports and covers deterministic
+outcomes, IDs, limits, cancellation and append failures. `kernel replay:` uses
+actual ChatStore events, isolated AppData, the current executor and a fake Office
+adapter: summary/pending replay, cancelled/stale confirmation, and interrupted
+execution/materialization boundaries. Neither is COM/Office validation.
 
-The materialized endpoint port is now `IMaterializedModelProtocol`; `model protocol:`
-and `protocol context:` remain the existing production-path checks. The normal
-source-linked harness build and MockDemo build include the new Core contracts;
-neither is Office/VSTO validation. See [ADR-0001](../../docs/decisions/ADR-0001-model-does-not-own-completion.md).
+`agent:` / `protocol context:` cover the connected production service and its
+external model-session owner, including native read-batch call/result pairing
+through save/reload. Test construction requires a fixture-local ChatStore; it
+never falls back to real user AppData. `model protocol:` retains endpoint-boundary
+coverage under `IMaterializedModelProtocol`; no second parser/retry loop is added.
+
+MockDemo compilation includes the actual controller; the harness's controller
+remains a stub. [Phase 3B2 evidence](../../docs/stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
+separates that compile/source review from the unperformed Windows delivery gate.
 
 ## Stabilization completion guard
 
@@ -105,8 +108,8 @@ node tests/web/completion-guard.test.js
 ```
 
 The guard tests extend `Program.AgentSafetyTests.cs` / `Program.SimpleAgentTests.cs`:
-metadata, cumulative error/unknown precedence, confirmation, cancellation, legacy
-mapping and fresh-turn reset. The existing lifecycle test covers event replay,
+single-result legacy mapping, cumulative error/unknown precedence, kernel confirmation,
+cancelled-summary replay and fresh-turn reset. The existing lifecycle test covers event replay,
 independent clones, typed bridge serialization and exclusion from model transport.
 The Node test loads the real static JS projection/render functions with a minimal
 DOM and stubs only unrelated trace/media helpers. No npm dependencies are needed.

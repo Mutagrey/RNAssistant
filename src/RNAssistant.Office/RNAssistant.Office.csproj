@@ -111,6 +111,10 @@
     <Compile Include="Services\ToolResultResourceService.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\ConversationRunService.cs" />
+    <Compile Include="Services\ConversationKernelAdapter.cs" />
+    <Compile Include="Services\ConversationKernelAdapter.Model.cs" />
+    <Compile Include="Services\ConversationKernelAdapter.Tools.cs" />
+    <Compile Include="Services\ConversationKernelAdapter.Store.cs" />
     <Compile Include="Services\ConversationModelSession.cs" />
     <Compile Include="Services\ConversationProtocolContext.cs" />
     <Compile Include="Services\ConversationStreamProgressProjector.cs" />
@@ -134,7 +138,6 @@
     <Compile Include="Services\ChatRunRegistry.cs" />
     <Compile Include="Services\ModelTracePersistenceService.cs" />
     <Compile Include="Services\RunCausalTrace.cs" />
-    <Compile Include="Services\RunSummaryBuilder.cs" />
     <Compile Include="Services\SessionTraceWriteQueue.cs" />
     <Compile Include="Services\HtmlNetworkService.cs" />
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />

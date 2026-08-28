@@ -391,7 +391,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
 
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Создай HTML без обращения к Excel.",
                     session,
@@ -460,7 +460,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Do the test workflow.", NewSession(adapter), NewContext(adapter), new AppSettings(),
                     tools, null, null, null, new[] { skill }, CancellationToken.None, true).GetAwaiter().GetResult();
@@ -636,7 +636,7 @@ namespace RNAssistant.Harness
                     AssertEqual(LlmResponseFormats.JsonObject, options.ResponseFormat, "single response format");
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
-                var service = new ConversationRunService(adapter, executor, completion);
+                var service = CreateConversationRunService(adapter, executor, completion);
                 var session = NewSession(adapter);
                 var result = service.ExecuteAsync(
                     ChatModes.Agent,
@@ -685,7 +685,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Создай лист Report.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
@@ -738,7 +738,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Обнови модуль Module1.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
@@ -823,7 +823,7 @@ namespace RNAssistant.Harness
                 ChatTurnResult result;
                 using (RunCausalTrace.Begin(store, session))
                 {
-                    result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                         ChatModes.Agent, "Update Module1.", session, NewContext(adapter),
                         new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 20 },
                         adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null)
@@ -897,7 +897,7 @@ namespace RNAssistant.Harness
                     });
                 };
                 var session = NewSession(adapter);
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Создай лист Report.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
@@ -948,7 +948,7 @@ namespace RNAssistant.Harness
                     AgentToolsPrompt = "TOOLS_PROMPT_SENTINEL",
                     AgentSkillsPrompt = "SKILLS_PROMPT_SENTINEL"
                 };
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "List sheets.", session, NewContext(adapter), settings,
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
@@ -1003,7 +1003,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(responses.Dequeue());
                 };
                 var session = NewSession(adapter);
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Restricted request.", session, NewContext(adapter), new AppSettings(),
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
@@ -1043,7 +1043,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Проверь листы.", session, NewContext(adapter), new AppSettings(),
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
@@ -1066,7 +1066,7 @@ namespace RNAssistant.Harness
                 foreach (var terminalCase in terminalCases)
                 {
                     var terminalSession = NewSession(adapter);
-                    var terminalService = new ConversationRunService(
+                    var terminalService = CreateConversationRunService(
                         adapter,
                         executor,
                         (settings, messages, options, stream, cancellationToken) => Task.FromResult(
@@ -1098,13 +1098,14 @@ namespace RNAssistant.Harness
                 }
 
                 var limitedSession = NewSession(adapter);
-                var limitedService = new ConversationRunService(
+                var limitedService = CreateConversationRunService(
                     adapter,
                     executor,
                     (settings, messages, options, stream, cancellationToken) => Task.FromResult(
                         new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Проверяю ресурсы.\",\"tool_calls\":[{\"id\":\"limit_call\",\"name\":\"common.resources_list\",\"arguments\":{}}]}"
+                            Content = "{\"message\":\"Проверяю ресурсы.\",\"tool_calls\":[{\"id\":\"limit_call\",\"name\":\"common.resources_list\",\"arguments\":{}}]}",
+                            PromptTokens = 5
                         }));
                 var limitedResult = limitedService.ExecuteAsync(
                     ChatModes.Agent,
@@ -1120,6 +1121,8 @@ namespace RNAssistant.Harness
                     "runtime step limit has no synthetic model response status");
                 AssertEqual("step_limit_reached", limitedSession.Messages.Last().Activity.ExecutionStatus,
                     "runtime step limit is stored as a diagnostic outcome");
+                AssertEqual(5, limitedSession.Messages.Sum(message => message.PromptTokens ?? 0),
+                    "runtime diagnostic does not duplicate prior model usage");
             });
         }
 
@@ -1138,7 +1141,7 @@ namespace RNAssistant.Harness
                     });
                 };
                 var session = NewSession(adapter);
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Do something.", session, NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 20 },
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
@@ -1184,7 +1187,7 @@ namespace RNAssistant.Harness
                         });
                 };
                 var session = NewSession(adapter);
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Ответь на вопрос.", session, NewContext(adapter),
                     new AppSettings { MaxAgentFormatRetries = 20 },
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
@@ -1223,7 +1226,7 @@ namespace RNAssistant.Harness
                     calls += 1;
                     return Task.FromResult(new LlmCompletionResult { Content = "INVALID" });
                 };
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Do something.", NewSession(adapter), NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 99 },
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
@@ -1246,7 +1249,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Готово.\",\"tool_calls\":[]}" });
                 };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Inspect VBA.", NewSession(adapter), NewContext(adapter),
                     new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema }, tools, null, null,
@@ -1312,7 +1315,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Run Module1.MigrateApiKey with arguments.", NewSession(adapter), NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 }, tools, null)
@@ -1357,7 +1360,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Создай листы First и Second.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 },
@@ -1410,7 +1413,7 @@ namespace RNAssistant.Harness
                     "{\"message\":\"Все изменения применены.\",\"tool_calls\":[]}",
                     "{\"message\":\"Обычный новый ответ.\",\"tool_calls\":[]}"
                 });
-                var service = new ConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "initial", TurnId = "turn", Status = "running",
@@ -1422,23 +1425,10 @@ namespace RNAssistant.Harness
                 AssertTrue(first.WaitingForConfirmation, "real loop stops at confirmation");
                 AssertEqual(initialHealth, first.ExecutionSummary.ExecutionHealth, "pending cannot erase earlier execution evidence");
                 AssertEqual(0, first.ExecutionSummary.WriteOk, "pending mutation is not a successful write");
-                var iterations = session.LastRun.IterationsUsed;
-                var steps = session.LastRun.ToolStepsUsed;
-                var prior = RunSummaryBuilder.ContinuationSeed(session);
-                session.LastRun = new ChatRunRecord { RunId = "continuation", TurnId = "turn", ExecutionSummary = prior,
-                    ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
-                var confirmed = new ToolCommand { ToolId = "common.skills_upsert", ToolCallId = "skill" };
-                confirmed.Arguments["id"] = "common.test";
-                confirmed.Arguments["description"] = "Test";
-                confirmed.Arguments["bodyMarkdown"] = "# Test";
-                var actual = executor.Execute(confirmed, tools, settingsForRun, false, true, session);
-                AssertTrue(actual.Success, "confirmed local mutation actually succeeds");
-                var builder = new RunSummaryBuilder(tools, prior);
-                builder.Observe(confirmed, actual);
-                builder.Publish(session);
-                var final = service.ContinueAfterToolAsync(confirmed, actual, session, NewContext(adapter),
-                    settingsForRun, tools, null, null, initialIterationsUsed: iterations,
-                    initialToolStepsUsed: steps, summaryBuilder: builder).GetAwaiter().GetResult();
+                session.LastRun.RunId = "continuation";
+                var confirmed = PendingCommand(session);
+                var final = service.ConfirmAsync("pending", confirmed, session,
+                    new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
                 AssertRuntimeExecutionSummary(final, session, initialHealth, 1,
                     initialHealth == "errors" ? 1 : 0, initialHealth == "unknown" ? 1 : 0);
                 AssertEqual("completed", final.RunStatus, "completed lifecycle does not erase errors or unknown");
@@ -1467,7 +1457,7 @@ namespace RNAssistant.Harness
                     calls.Add(messages.ToList());
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
-                var service = new ConversationRunService(adapter, executor, completion);
+                var service = CreateConversationRunService(adapter, executor, completion);
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settings = new AppSettings { AutoConfirmToolActions = false, SystemPromptRole = "user" };
@@ -1505,27 +1495,9 @@ namespace RNAssistant.Harness
                     "tool fingerprint changes with a replaced executable definition");
                 AssertEqual(2, session.LastRun.IterationsUsed, "confirmation stores iteration cursor after discovery");
                 AssertEqual(2, session.LastRun.ToolStepsUsed, "schema read and pending action consume logical tool steps");
-                var initialIterationsUsed = session.LastRun.IterationsUsed;
-                var initialToolStepsUsed = session.LastRun.ToolStepsUsed;
-                foreach (var message in session.Messages)
-                {
-                    message.RunId = "initial_run";
-                }
-
-                var confirmedCommand = new ToolCommand { ToolId = "common.skills_upsert", ToolCallId = "call_skill" };
-                confirmedCommand.Arguments["id"] = "common.test";
-                var final = service.ContinueAfterToolAsync(
-                    confirmedCommand,
-                    ToolResult.Ok("Skill saved.", "{\"id\":\"common.test\"}"),
-                    session,
-                    NewContext(adapter),
-                    settings,
-                    tools,
-                    null,
-                    null,
-                    cancellationToken: CancellationToken.None,
-                    initialIterationsUsed: initialIterationsUsed,
-                    initialToolStepsUsed: initialToolStepsUsed).GetAwaiter().GetResult();
+                var confirmedCommand = PendingCommand(session);
+                var final = service.ConfirmAsync("pending_1", confirmedCommand, session,
+                    new ConversationRunInput(settings, NewContext(adapter), tools), null).GetAwaiter().GetResult();
 
                 AssertEqual("Skill сохранён.", final.AssistantText, "continued final response");
                 AssertRuntimeExecutionSummary(final, session, "clean", 1, 0, 0);
@@ -1560,7 +1532,7 @@ namespace RNAssistant.Harness
                     calls.Add(messages.ToList());
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
-                var service = new ConversationRunService(adapter, executor, completion);
+                var service = CreateConversationRunService(adapter, executor, completion);
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settings = new AppSettings { AutoConfirmToolActions = false };
@@ -1571,29 +1543,48 @@ namespace RNAssistant.Harness
                     (Action<string, string, ChatActivity>)null,
                     (pendingSession, pendingCommand, result) => "pending_failure").GetAwaiter().GetResult();
 
-                var command = new ToolCommand { ToolId = "common.skills_upsert", ToolCallId = "call_skill_failure" };
-                command.Arguments["id"] = "common.failure_test";
-                var failure = ToolResult.Fail(
-                    "Skill already exists: common.failure_test.",
-                    null,
-                    "skill_already_exists",
-                    false);
-                var final = service.ContinueAfterToolAsync(
-                    command,
-                    failure,
-                    session,
-                    NewContext(adapter),
-                    settings,
-                    tools,
-                    null,
-                    null).GetAwaiter().GetResult();
+                var command = PendingCommand(session);
+                var changed = tools.Select(tool => tool.Clone()).ToList();
+                changed.Single(tool => tool.Id == "common.skills_upsert").Description += " revised";
+                changed.Single(tool => tool.Id == "common.skills_upsert").RequiresConfirmation = false;
+                var final = service.ConfirmAsync("pending_failure", command, session,
+                    new ConversationRunInput(settings, NewContext(adapter), changed), null).GetAwaiter().GetResult();
 
                 AssertEqual("Skill уже существует; выберу другой id.", final.AssistantText, "agent continues after confirmed failure");
                 AssertEqual(3, calls.Count, "schema discovery and confirmed failure trigger the next model turn");
                 var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "\"ok\":false", "confirmed failure replayed");
-                AssertContains(replay, "skill_already_exists", "confirmed failure code replayed");
+                AssertContains(replay, "pending_tool_catalog_changed", "fingerprint failure is replayed without dispatch");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");
+            });
+        }
+
+        private static void NativeReadBatchKeepsPairedReplay()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var calls = 0;
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                {
+                    calls++;
+                    if (calls == 1) return Task.FromResult(new LlmCompletionResult { Content =
+                        "{\"message\":\"Read twice\",\"tool_calls\":[{\"id\":\"read_a\",\"name\":\"common.resources_list\",\"arguments\":{}},{\"id\":\"read_b\",\"name\":\"common.resources_list\",\"arguments\":{}}]}" });
+                    var exchange = messages.Where(message => message.ProtocolMessage &&
+                        (message.ToolCallId == "read_a" || message.ToolCallId == "read_b")).ToList();
+                    AssertEqual("assistant:read_a,tool:read_a,assistant:read_b,tool:read_b",
+                        string.Join(",", exchange.Select(message => message.Role + ":" + message.ToolCallId)),
+                        "native tool calls stay paired in both live and reloaded request history");
+                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Done\",\"tool_calls\":[]}" });
+                });
+                var session = NewSession(adapter);
+                var settingsForRun = new AppSettings { ToolResultRole = ToolResultRoles.Tool };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var first = service.ExecuteAsync(ChatModes.Agent, "Read twice", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
+                AssertEqual(2, first.ExecutionSummary.ReadOk, "both independent reads execute once");
+                session = AssertKernelReplay(session);
+                var next = service.ExecuteAsync(ChatModes.Agent, "Summarize", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
+                AssertEqual("completed", next.RunStatus, "next turn can replay the persisted batch");
+                AssertEqual(3, calls, "one next-turn model request");
             });
         }
 
@@ -1616,11 +1607,13 @@ namespace RNAssistant.Harness
                 };
 
                 var agentSession = NewSession(adapter);
-                var agent = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var agent = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Restricted request.", agentSession, NewContext(adapter), new AppSettings(),
                     new ToolDefinition[0], (Action<string, string, ChatActivity>)null).GetAwaiter().GetResult();
                 AssertEqual("Запрос отклонён провайдером.", agent.AssistantText, "agent refusal text");
+                AssertEqual("failed", agent.RunStatus, "native refusal is locally classified by kernel");
+                AssertKernelReplay(agentSession);
                 AssertEqual(AgentResponseStatuses.Refused, agent.ResponseStatus,
                     "provider refusal maps from explicit transport metadata");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, agentSession.Messages.Last().ResponseProtocolVersion,
@@ -1629,19 +1622,21 @@ namespace RNAssistant.Harness
 
                 var chatSession = NewSession(adapter);
                 chatSession.Mode = ChatModes.Chat;
-                var chat = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var chat = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Chat,
                     "Restricted request.", chatSession, NewContext(adapter), new AppSettings(),
                     executor.GetControllerTools().ToList(), (Action<string, string, ChatActivity>)null)
                     .GetAwaiter().GetResult();
                 AssertEqual("Запрос отклонён провайдером.", chat.AssistantText, "chat refusal text");
+                AssertEqual("failed", chat.RunStatus, "Chat uses the same runtime failure classification");
+                AssertKernelReplay(chatSession);
                 AssertEqual(AgentResponseStatuses.Refused, chat.ResponseStatus,
                     "Chat provider refusal uses the same explicit terminal status");
                 AssertEqual(2, calls, "chat refusal does not enter format repair");
                 AssertEqual(0, chat.ToolResults.Count, "native refusal prevents tools even if provider also sent JSON content");
 
                 var emptyCalls = 0;
-                var emptyService = new ConversationRunService(adapter, executor,
+                var emptyService = CreateConversationRunService(adapter, executor,
                     (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     emptyCalls += 1;
@@ -1688,7 +1683,7 @@ namespace RNAssistant.Harness
                     "chat rejects a non-built-in resource id spoof");
                 try
                 {
-                    new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                         ChatModes.Agent,
                         "mismatched mode", session, NewContext(adapter), new AppSettings(), allTools, null)
                         .GetAwaiter().GetResult();
@@ -1699,7 +1694,7 @@ namespace RNAssistant.Harness
                     if (ex.Message.IndexOf("unexpectedly", StringComparison.OrdinalIgnoreCase) >= 0) throw;
                     AssertContains(ex.Message, "does not match", "persisted Chat mode is the policy boundary");
                 }
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Chat,
                     "Какие ресурсы доступны?", session, NewContext(adapter), new AppSettings(),
                     allTools, null).GetAwaiter().GetResult();
@@ -1757,7 +1752,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var service = new ConversationRunService(adapter, executor, completion);
+                var service = CreateConversationRunService(adapter, executor, completion);
 
                 var first = service.ExecuteAsync(
                     ChatModes.Chat, "Что в заметке?", session, NewContext(adapter), new AppSettings(), tools, null)

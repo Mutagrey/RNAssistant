@@ -199,7 +199,7 @@ namespace RNAssistant.Harness
                 var edited = new ChatMessage { Role = "user", Content = "Измененный вопрос" };
                 session.Messages.Add(edited);
                 var captured = new List<ChatMessage>();
-                var service = new ConversationRunService(
+                var service = CreateConversationRunService(
                     adapter,
                     executor,
                     delegate(

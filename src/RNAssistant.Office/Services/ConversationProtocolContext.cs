@@ -1,15 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
-    // Transitional run bookkeeping for the v3 boundary. AgentKernel takes ownership
-    // in Phase 3; nothing here is a durable index, prompt window or tool authority.
-    internal sealed class ConversationProtocolContext
+    // Full-history preflight and legacy local-read classification. Accepted ids
+    // are owned by AgentKernel; this adapter only reconstructs a validated continuation.
+    internal static class ConversationProtocolContext
     {
         // Legacy ToolDefinition has no external-effect classification. Until typed
         // ToolPolicy (Phase 4), batch only these audited local reads AND safe metadata.
@@ -21,15 +23,11 @@ namespace RNAssistant.Office.Services
             "excel.inspect", "excel.read_range", "excel.find_cells"
         }, StringComparer.Ordinal);
 
-        private readonly HashSet<string> _acceptedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly string[] _batchSafeIds;
-        private string _error;
-
-        private ConversationProtocolContext(IEnumerable<ToolDefinition> catalog)
+        internal static string[] BatchSafeReadIds(IEnumerable<ToolDefinition> catalog)
         {
             var tools = (catalog ?? new ToolDefinition[0]).Where(tool => tool != null).ToArray();
             var safety = ToolSafetyPolicy.ResolveAll(tools);
-            _batchSafeIds = tools.Where(tool =>
+            return tools.Where(tool =>
             {
                 ToolSafetyProfile profile;
                 return tool.Enabled && tool.BuiltIn && tool.AgentCanRun &&
@@ -38,20 +36,6 @@ namespace RNAssistant.Office.Services
                     profile.Valid && profile.AgentCanRun && !profile.MutatesDocument &&
                     !profile.MutatesLocalState && !profile.RequiresConfirmation;
             }).Select(tool => tool.Id).Distinct(StringComparer.Ordinal).ToArray();
-        }
-
-        internal static ConversationProtocolContext Begin(ChatSession session, IEnumerable<ToolDefinition> catalog, ToolCommand continuedCommand)
-        {
-            var scope = new ConversationProtocolContext(catalog);
-            // A fresh user turn never inherits ids from an earlier turn.
-            if (continuedCommand == null) return scope;
-            scope.SeedContinuation(session, continuedCommand);
-            return scope;
-        }
-
-        internal ModelProtocolCallContext Snapshot()
-        {
-            return new ModelProtocolCallContext(_acceptedIds, _batchSafeIds, _error);
         }
 
         internal static void EnsureCurrentHistory(ChatSession session)
@@ -75,18 +59,43 @@ namespace RNAssistant.Office.Services
 
         internal static void EnsureCanContinue(ChatSession session, ToolCommand command)
         {
-            EnsureCurrentHistory(session);
-            if (command == null || session.LastRun == null ||
-                session.LastRun.ResponseProtocolVersion != AgentResponseProtocol.CurrentVersion)
-                throw HistoryFailure("Ожидающее действие не связано с текущим протоколом запуска.");
-            // The controller calls this BEFORE consuming pending state or executing the
-            // confirmed tool. Safety authority is rebuilt later from the current catalog.
-            Begin(session, new ToolDefinition[0], command).EnsureComplete();
+            RestoreContinuation(session, command);
         }
 
-        internal void EnsureComplete()
+        internal static AgentRunContinuation RestoreContinuation(ChatSession session, ToolCommand command)
         {
-            if (!string.IsNullOrEmpty(_error)) throw HistoryFailure(_error);
+            EnsureCurrentHistory(session);
+            var state = session.LastRun == null ? null : session.LastRun.KernelState;
+            var pending = state == null ? null : state.Summary.PendingConfirmation;
+            if (command == null || pending == null || session.LastRun.TurnId != state.Summary.TurnId || session.LastRun.ResponseProtocolVersion != AgentResponseProtocol.CurrentVersion ||
+                !string.Equals(command.ToolCallId, pending.Call.Id, StringComparison.Ordinal) || command.ToolId != pending.Call.Name ||
+                JsonConvert.SerializeObject(command.Arguments, Formatting.None) != pending.Call.ArgumentsJson)
+                throw HistoryFailure("Ожидающее действие не связано с полной kernel evidence текущего запуска.");
+            var activity = session.Messages.LastOrDefault(message => message.Activity != null &&
+                message.Activity.ToolCallId == pending.Call.Id);
+            if (activity == null || !string.Equals(activity.Activity.ConfirmationCatalogSha256, pending.Policy.Revision, StringComparison.Ordinal))
+                throw HistoryFailure("Ожидающее действие не связано с сохранённым fingerprint каталога.");
+            var userIndex = session.Messages.FindLastIndex(message => message.Activity == null && !message.ProtocolMessage &&
+                string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+            if (userIndex < 0 || !string.Equals(session.Messages[userIndex].RunId, state.Summary.TurnId, StringComparison.Ordinal))
+                throw HistoryFailure("Confirmation continuation does not match the latest user turn.");
+            var history = new List<AgentMessage> { AgentMessage.User(session.Messages[userIndex].Content) };
+            for (var index = userIndex + 1; index < session.Messages.Count; index++)
+            {
+                var message = session.Messages[index];
+                if (message.Activity != null) continue;
+                if (string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parsed = ConversationResponseHistoryReader.Read(message);
+                    if (!parsed.Success) throw HistoryFailure("Cannot reconstruct accepted calls: " + parsed.Error);
+                    history.Add(AgentMessage.Assistant(new AgentResponse(parsed.Response.Message,
+                        parsed.Response.ToolCalls.Select(ConversationKernelAdapter.ToCoreCall))));
+                }
+                else if (message.ProtocolMessage && !string.IsNullOrWhiteSpace(message.ToolCallId))
+                    history.Add(AgentMessage.AcceptedToolResult(message.ToolCallId, string.Empty, message.Content));
+            }
+            try { return AgentRunContinuation.Restore(state.Summary, state.Limits, session.Revision, history); }
+            catch (InvalidOperationException ex) { throw HistoryFailure(ex.Message); }
         }
 
         private static InvalidOperationException HistoryFailure(string reason)
@@ -95,64 +104,5 @@ namespace RNAssistant.Office.Services
                 " Откройте новый чат или явно сбросьте историю. Для ожидающего действия доступна отмена. " +
                 "Автоматическое преобразование или удаление истории не выполняется.");
         }
-
-        internal void ObserveAccepted(IEnumerable<AgentToolCall> calls)
-        {
-            // Observe the entire accepted response BEFORE any tool can pause/fail.
-            // Rejected raw attempts never reach this method; snapshot lists are copies.
-            foreach (var call in calls ?? new AgentToolCall[0])
-            {
-                if (call == null || string.IsNullOrWhiteSpace(call.Id))
-                {
-                    _error = "Accepted response contains an unidentified tool call.";
-                    continue;
-                }
-                if (!_acceptedIds.Add(call.Id))
-                    _error = "Accepted user-turn history contains a repeated tool-call id: " + call.Id + ".";
-            }
-        }
-
-        private void SeedContinuation(ChatSession session, ToolCommand command)
-        {
-            var messages = session == null ? null : session.Messages;
-            if (messages == null || string.IsNullOrWhiteSpace(command.ToolCallId))
-            {
-                _error = "Confirmation continuation has no complete accepted history or tool-call id.";
-                return;
-            }
-            var userIndex = messages.FindLastIndex(message => message != null && message.Activity == null &&
-                !message.ProtocolMessage && string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
-            if (userIndex < 0)
-            {
-                _error = "Confirmation continuation has no user-turn boundary in full history.";
-                return;
-            }
-            var turnId = session.LastRun == null ? null : session.LastRun.TurnId;
-            var userRunId = messages[userIndex].RunId;
-            if (!string.IsNullOrWhiteSpace(turnId) && !string.IsNullOrWhiteSpace(userRunId) &&
-                !string.Equals(turnId, userRunId, StringComparison.OrdinalIgnoreCase))
-            {
-                _error = "Confirmation continuation does not match the latest user turn.";
-                return;
-            }
-            // Read the full durable projection, including compacted-away records and
-            // suppressed pending call messages. Diagnostic activities/results are not responses.
-            for (var index = userIndex + 1; index < messages.Count; index++)
-            {
-                var message = messages[index];
-                if (message == null || message.Activity != null ||
-                    !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)) continue;
-                var parsed = ConversationResponseHistoryReader.Read(message);
-                if (!parsed.Success)
-                {
-                    _error = "Cannot reconstruct accepted call ids: " + parsed.Error;
-                    return;
-                }
-                ObserveAccepted(parsed.Response.ToolCalls);
-            }
-            if (!_acceptedIds.Contains(command.ToolCallId))
-                _error = "Confirmed call is missing from accepted user-turn history.";
-        }
-
     }
 }

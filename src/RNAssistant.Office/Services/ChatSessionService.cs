@@ -98,15 +98,23 @@ namespace RNAssistant.Office.Services
                         continue;
                     }
 
-                    var effectMayBeUnknown = _chatStore.HasOpenToolExecution(session, run.RunId);
+                    var effectMayBeUnknown = run.KernelState == null
+                        ? _chatStore.HasOpenToolExecution(session, run.RunId)
+                        : run.KernelState.InFlightTool != null;
                     _chatStore.CloseOpenSteps(
                         session,
                         run.RunId,
                         "interrupted",
                         "Runtime stopped before the model step reached a terminal event.");
                     MarkInterruptedActivities(session, run, effectMayBeUnknown);
-                    if (effectMayBeUnknown)
+                    var incompleteProjection = run.KernelState != null && session.Messages.Any(message =>
+                        message.ProtocolMessage && message.Role == "assistant" && BelongsToRun(message, run) &&
+                        !string.IsNullOrWhiteSpace(message.ToolCallId) &&
+                        !ChatHistoryEditService.HasResultForLatestToolCall(session.Messages, message.ToolCallId));
+                    if (effectMayBeUnknown || incompleteProjection)
                     {
+                        // A terminal effect can be saved before optional result/media
+                        // projection. Keep its counts, but never replay an open exchange.
                         ExcludeInterruptedProtocolMessages(session, run);
                     }
                     run.Status = "interrupted";
@@ -114,9 +122,12 @@ namespace RNAssistant.Office.Services
                     run.CurrentAction = effectMayBeUnknown
                         ? "Предыдущий процесс завершился во время выполнения действия."
                         : "Предыдущий процесс завершился после сохранённой границы.";
+                    if (run.KernelState != null)
+                        run.KernelState = run.KernelState.Interrupt(false, run.CurrentAction);
                     session.Messages.Add(new ChatMessage
                     {
                         Role = "assistant",
+                        ExecutionSummary = run.ExecutionSummary,
                         RunId = run.RunId,
                         Content = effectMayBeUnknown
                             ? "Предыдущий запуск был прерван. Результат выполнявшегося действия неизвестен; проверьте документ перед ручным повтором."

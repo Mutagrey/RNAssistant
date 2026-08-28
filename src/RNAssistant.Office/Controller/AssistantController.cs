@@ -158,7 +158,7 @@ namespace RNAssistant.Office
             _llmCompletion = completion;
             _attachmentAnalysisService = new AttachmentAnalysisService(completion);
             _contextCompactionService = new ContextCompactionService(completion);
-            _conversationRunService = new ConversationRunService(_adapter, _toolExecutor, completion, _contextCompactionService);
+            _conversationRunService = new ConversationRunService(_adapter, _toolExecutor, _chatStore, completion, _contextCompactionService, saved: _chatSessions.NotifySaved);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);

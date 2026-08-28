@@ -49,15 +49,28 @@ new replay decisions, second store or durable index is introduced. New observati
 are best effort; mandatory pre-dispatch request persistence is unchanged. See
 [correlation, stage semantics and limits](stabilization/PHASE_1B_CAUSAL_TRACE.md).
 
-Phase 1C adds optional `ExecutionSummary` to visible `ChatMessage` and `ChatRunRecord`
-state carried by the existing typed `session.commit` operations. Runtime writes
-health/count snapshots; replay and clones preserve them without recalculating
-effects from model text. No new envelope schema, durable index, dual-write,
-historical backfill or recovery algorithm is introduced. Old messages lack this
-field and the UI treats their effects as unverified. The legacy
-`run.summary.created.Status` trace marker still describes lifecycle; health is in
-the correlated canonical message/run operations, not inferred from that marker.
-See [completion guard contract and limits](stabilization/PHASE_1C_COMPLETION_GUARD.md).
+Phase 3B2 carries immutable `ChatRunRecord.KernelState` through the existing
+`run.updated` operation: `RunSummary`, captured limits and an optional in-flight
+`ToolExecutionContext`. No event envelope/schema bump, side store or durable ID
+index is added. The flat run `ExecutionSummary` is derived on read and omitted
+from new run writes; visible message snapshots and bridge DTOs stay projections.
+Old flat records are readable but cannot seed confirmation execution.
+
+`ConversationKernelAdapter.Store` saves accepted responses and execution boundaries
+before dispatch, and records actual counts before optional result/media/context
+materialization. Its invocation cursor guards kernel appends; `ChatStore.Save`
+uses the current session revision for global CAS. Own causal-trace appends may
+advance that revision without invalidating the kernel cursor. A stale reloaded
+confirmation fails its first save before execution. Mandatory save failure escapes
+as `RunStoreException` with explicitly unpersisted evidence; controller error
+handling must not retry saving that in-memory projection. Reload first.
+
+Recovery never replays a tool. An in-flight possible write becomes unknown; an
+in-flight read becomes an error. Already persisted terminal counts remain known,
+including a crash before result projection. An incomplete protocol exchange is
+excluded from replay. These are minimal summary/recovery adaptations; the complete
+persistence/UI matrix remains Phase 9. [Phase 3B2 evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
+covers actual event replay, pending/cancelled confirmation, stale CAS and faults.
 
 The default SHA-256 hash-chain detects accidental edits, truncation in the middle of the log, and reordered records. Optional HMAC-SHA256 prevents recomputing valid edited records without the selected secret. Neither mode prevents deletion of an unanchored final suffix.
 
@@ -118,10 +131,10 @@ Current history encryption does not cover transient attachment staging, settings
 
 ## Inspection
 
-Settings → Diagnostics → Trajectory queries the same stream through disposable `ITrajectoryQuery`. Raw results use exclusive sequence cursors, newest-first pages, tokenized text search and filters for sequence, event type, run/turn/step, tool call, artifact, status and reconstructed `current`/`shadowed`/`log-only` visibility. Model-declared `ResponseStatus` participates in the status filter; terminal `blocked` and `refused` outcomes appear in failure diagnostics, while `awaiting_user` remains a non-failure terminal turn. Snapshot-paged derived views correlate model replay, tools, artifact lineage, confirmation pauses, failures/retries and per-turn timing/usage; every row carries its complete source event sequences and ids. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. Selected chat rows can be exported as a bounded ZIP with metadata-only default, optional credential-field redaction, or explicit full decrypted data/CAS; protection keys never enter it. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets or authorization headers. See [trajectory-query.md](trajectory-query.md) and [trajectory-export.md](trajectory-export.md).
+Settings → Diagnostics → Trajectory queries the same stream through disposable `ITrajectoryQuery`. Raw results use exclusive sequence cursors, newest-first pages, tokenized text search and filters for sequence, event type, run/turn/step, tool call, artifact, status and reconstructed `current`/`shadowed`/`log-only` visibility. Projected `ResponseStatus` participates in the status filter; terminal `blocked` and `refused` outcomes appear in failure diagnostics, while `awaiting_user` remains a non-failure terminal turn. Snapshot-paged derived views correlate model replay, tools, artifact lineage, confirmation pauses, failures/retries and per-turn timing/usage; every row carries its complete source event sequences and ids. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. Selected chat rows can be exported as a bounded ZIP with metadata-only default, optional credential-field redaction, or explicit full decrypted data/CAS; protection keys never enter it. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets or authorization headers. See [trajectory-query.md](trajectory-query.md) and [trajectory-export.md](trajectory-export.md).
 
 The prioritized follow-up work for trajectory queries, HTML branches, CAS lifecycle, and document-scoped VBA recovery is tracked in [trajectory-roadmap.md](trajectory-roadmap.md).
 
 ## Format policy
 
-`ChatSession.CurrentFormatVersion` is 6 and `SessionEvent.CurrentSchemaVersion` is 3. Conversation-response v2 adds fields inside the existing typed message/run operations and turn data; it does not change the event envelope schema. Records without those fields replay as unversioned/unknown and are never backfilled from prose. A pending confirmation created before response protocol v2 cannot continue and must be cancelled and resubmitted. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. This Resource Fabric cutover is reset-only: use **Clear Chats/Data** once after upgrading.
+`ChatSession.CurrentFormatVersion` is 6 and `SessionEvent.CurrentSchemaVersion` is 3. Conversation-response v2 adds fields inside the existing typed message/run operations and turn data; it does not change the event envelope schema. Records without those fields replay as unversioned/unknown and are never backfilled from prose. A pending confirmation without current-v3 history and complete `KernelState` cannot continue and must be cancelled or resubmitted in a new chat. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. This Resource Fabric cutover is reset-only: use **Clear Chats/Data** once after upgrading.

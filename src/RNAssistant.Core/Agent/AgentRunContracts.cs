@@ -89,6 +89,31 @@ namespace RNAssistant.Core.Agent
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
             AcceptedCallIds = Array.AsReadOnly(ids.OrderBy(id => id, StringComparer.Ordinal).ToArray());
         }
+
+        public static AgentRunContinuation Restore(RunSummary summary, AgentRunLimits limits, long revision,
+            IEnumerable<AgentMessage> acceptedMessages)
+        {
+            if (summary == null || summary.Lifecycle != RunLifecycle.AwaitingConfirmation || summary.PendingConfirmation == null ||
+                limits == null || revision < 0 || summary.IterationsUsed > limits.MaxIterations || summary.ToolStepsUsed > limits.MaxToolSteps)
+                throw new InvalidOperationException("A validated pending run summary is required; open a new chat or cancel the pending action.");
+            var messages = (acceptedMessages ?? new AgentMessage[0]).ToArray();
+            if (messages.Length == 0 || messages.Any(message => message == null))
+                throw new InvalidOperationException("Complete accepted history is required.");
+            var calls = messages.SelectMany(message => message.ToolCalls).ToArray();
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var call in calls)
+                if (!ids.Add(call.Id)) throw new InvalidOperationException("Duplicate call in accepted continuation history.");
+            var completed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var message in messages.Where(message => message.Kind == AgentMessageKind.ToolResult))
+                if (!ids.Contains(message.ToolCallId) || !completed.Add(message.ToolCallId))
+                    throw new InvalidOperationException("Orphan or duplicate accepted tool result in continuation history.");
+            var pending = summary.PendingConfirmation.Call;
+            var original = calls.SingleOrDefault(call => string.Equals(call.Id, pending.Id, StringComparison.OrdinalIgnoreCase));
+            if (original == null || original.Name != pending.Name || original.ArgumentsJson != pending.ArgumentsJson ||
+                completed.Contains(pending.Id) || calls.Any(call => call.Id != pending.Id && !completed.Contains(call.Id)))
+                throw new InvalidOperationException("Pending call differs from accepted history or is already resolved.");
+            return new AgentRunContinuation(summary, limits, revision, messages, ids);
+        }
     }
 
     public sealed class AgentRunResult

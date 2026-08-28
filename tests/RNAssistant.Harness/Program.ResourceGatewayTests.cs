@@ -816,7 +816,7 @@ namespace RNAssistant.Harness
                     });
                 };
                 var tools = executor.GetControllerTools().ToList();
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Прочитай старое изображение.",
                     session,
@@ -920,7 +920,7 @@ namespace RNAssistant.Harness
                     });
                 };
 
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Какое число на старом скане?",
                     session,

@@ -55,7 +55,7 @@ namespace RNAssistant.Harness
                 session.Mode = ChatModes.Chat;
                 session.ReasoningEnabled = true;
 
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Chat,
                     "Ответь потоково.",
                     session,
@@ -107,7 +107,7 @@ namespace RNAssistant.Harness
                 session.Mode = ChatModes.Chat;
                 session.ReasoningEnabled = true;
 
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Chat,
                     "Ответь с reasoning.",
                     session,
@@ -162,7 +162,7 @@ namespace RNAssistant.Harness
                 session.Mode = ChatModes.Chat;
                 session.ReasoningEnabled = true;
 
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Chat,
                     "Исправь формат.",
                     session,

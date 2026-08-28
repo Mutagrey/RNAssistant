@@ -75,6 +75,18 @@ namespace RNAssistant.Core.Models
         public int WriteError { get; set; }
         public int WriteUnknown { get; set; }
 
+        public static RunExecutionSummary FromRuntime(RNAssistant.Core.Agent.RunSummary summary)
+        {
+            if (summary == null) return null;
+            var counts = summary.ToolCounts;
+            return new RunExecutionSummary
+            {
+                ExecutionHealth = summary.ExecutionHealth.ToString().ToLowerInvariant(),
+                ReadOk = counts.ReadOk, ReadError = counts.ReadError, WriteOk = counts.WriteOk,
+                WriteError = counts.WriteError, WriteUnknown = counts.WriteUnknown
+            };
+        }
+
         public RunExecutionSummary Clone()
         {
             return (RunExecutionSummary)MemberwiseClone();
@@ -301,7 +313,16 @@ namespace RNAssistant.Core.Models
         public int ResponseProtocolVersion { get; set; }
         public string Status { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public RunExecutionSummary ExecutionSummary { get; set; }
+        public RNAssistant.Core.Persistence.AgentRunState KernelState { get; set; }
+        private RunExecutionSummary _legacyExecutionSummary;
+        public RunExecutionSummary ExecutionSummary
+        {
+            get { return KernelState == null ? _legacyExecutionSummary : RunExecutionSummary.FromRuntime(KernelState.Summary); }
+            set { _legacyExecutionSummary = value; }
+        }
+        // Old records can be inspected/reset. New runs persist only typed kernel
+        // state; the flat bridge/message shape is a disposable projection.
+        public bool ShouldSerializeExecutionSummary() { return KernelState == null && _legacyExecutionSummary != null; }
         public string Phase { get; set; }
         public string CurrentAction { get; set; }
         public string DocumentRuntimeKey { get; set; }

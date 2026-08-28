@@ -99,6 +99,7 @@
     <Compile Include="Tools\ToolExecutionRecord.cs" />
     <Compile Include="Tools\IToolRuntime.cs" />
     <Compile Include="Persistence\IRunStore.cs" />
+    <Compile Include="Persistence\AgentRunState.cs" />
     <Compile Include="ModelProtocol\AgentModelProtocol.cs" />
     <Compile Include="ModelProtocol\ModelProtocolContracts.cs" />
     <Compile Include="ModelProtocol\ModelProtocolWire.cs" />

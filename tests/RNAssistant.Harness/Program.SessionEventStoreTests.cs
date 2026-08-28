@@ -8,7 +8,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Tools;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -21,6 +25,253 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void KernelSummaryReplaysOutcome(string outcome)
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var store = new ChatStore(FixturePaths.Value);
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "replay-run", TurnId = "replay-turn", RuntimeId = "runtime" };
+                store.Save(session);
+                if (outcome != "ok") adapter.QueueResult("excel.add_sheet", ToolResult.Fail("Write failed", null,
+                    outcome == "unknown" ? "tool_effect_uncertain" : "write_rejected", false));
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("excel.add_sheet", "schema"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"id\":\"write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Replay\"}}]}",
+                    "{\"message\":\"Everything done\",\"tool_calls\":[]}"
+                });
+                var modelCalls = 0;
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                {
+                    modelCalls++;
+                    var persisted = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
+                    AssertEqual(RunLifecycle.Running, persisted.LastRun.KernelState.Summary.Lifecycle, "summary saved before every model dispatch");
+                    AssertEqual(modelCalls, persisted.LastRun.KernelState.Summary.IterationsUsed, "model cursor saved before dispatch");
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                });
+                ChatTurnResult result;
+                using (RunCausalTrace.Begin(store, session))
+                    result = service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter),
+                        new AppSettings { AutoConfirmToolActions = true }, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                        (phase, text, activity) =>
+                        {
+                            if (phase != "tool_running") return;
+                            var loaded = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
+                            AssertEqual(activity.ToolCallId, loaded.LastRun.KernelState.InFlightTool.Call.Id, "tool boundary saved before executor entry");
+                        }).GetAwaiter().GetResult();
+                var replay = AssertKernelReplay(session);
+                AssertEqual(RunLifecycle.Completed, replay.LastRun.KernelState.Summary.Lifecycle, "model ending closes loop only");
+                AssertEqual(outcome == "ok" ? "clean" : outcome == "error" ? "errors" : "unknown", result.ExecutionSummary.ExecutionHealth, "health from actual result");
+                AssertEqual(1, result.ExecutionSummary.ReadOk, "schema read counted once");
+                AssertEqual(outcome == "ok" ? 1 : 0, result.ExecutionSummary.WriteOk, "successful effect count");
+                AssertEqual(outcome == "error" ? 1 : 0, result.ExecutionSummary.WriteError, "error effect count");
+                AssertEqual(outcome == "unknown" ? 1 : 0, result.ExecutionSummary.WriteUnknown, "unknown effect count");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "single execution, no retry");
+                AssertTrue(replay.LastRun.KernelState.InFlightTool == null, "terminal clears in-flight evidence");
+            });
+        }
+
+        private static ChatSession AssertKernelReplay(ChatSession session)
+        {
+            var loaded = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
+            AssertEqual(JsonConvert.SerializeObject(session.LastRun.KernelState), JsonConvert.SerializeObject(loaded.LastRun.KernelState),
+                "fresh event replay preserves lifecycle, health, counts, limits and pending policy/call");
+            var runJson = JObject.FromObject(loaded.LastRun);
+            AssertTrue(runJson["KernelState"] != null && runJson["ExecutionSummary"] == null, "run stores only typed authority, not a duplicate flat summary");
+            var summary = loaded.LastRun.ExecutionSummary;
+            var originalWriteOk = summary.WriteOk;
+            summary.WriteOk = 999;
+            AssertEqual(originalWriteOk, loaded.LastRun.ExecutionSummary.WriteOk, "bridge DTO cannot mutate immutable runtime evidence");
+            var clone = ChatCloneService.CloneSessionSnapshot(loaded);
+            AssertEqual(JsonConvert.SerializeObject(loaded.LastRun.KernelState), JsonConvert.SerializeObject(clone.LastRun.KernelState), "session clone retains authority");
+            AssertEqual(loaded.LastRun.Status, new ChatStore(FixturePaths.Value).ListHeaders().Single(header => header.Id == loaded.Id).RunStatus, "header projection uses same lifecycle");
+            return loaded;
+        }
+
+        private static void KernelSummaryReplaysConfirmation()
+        {
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var settingsForRun = new AppSettings { AutoConfirmToolActions = false, ToolResultRole = role };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var responses = KernelConfirmationResponses();
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
+                service.ExecuteAsync(ChatModes.Agent, "Create a skill", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
+                var pending = AssertKernelReplay(session);
+                AssertEqual(RunLifecycle.AwaitingConfirmation, pending.LastRun.KernelState.Summary.Lifecycle, "pending replay lifecycle");
+                AssertEqual(0, pending.LastRun.ExecutionSummary.WriteOk, "confirmation has not dispatched a mutation");
+                var stale = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
+                var pendingId = pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId;
+                var command = PendingCommand(pending);
+                pending.LastRun.RunId = "new-process-run";
+                var resumed = service.ConfirmAsync(pendingId, command, pending,
+                    new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
+                AssertEqual("completed", resumed.RunStatus, "resumed invocation ends through kernel");
+                AssertEqual(1, resumed.ExecutionSummary.WriteOk, "confirmed write counted once");
+                AssertEqual(2, pending.LastRun.ToolStepsUsed, "confirmation replaces reserved step");
+                AssertTrue(new SkillStore(FixturePaths.Value).Load().Any(skill => skill.Id == "common.replay_test"), "actual confirmed skill persisted");
+                AssertKernelReplay(pending);
+                var rejected = false;
+                try { service.ConfirmAsync(pendingId, PendingCommand(stale), stale,
+                    new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult(); }
+                catch (RunStoreException) { rejected = true; }
+                AssertTrue(rejected, "stale replay cannot claim the continuation cursor or dispatch again");
+                AssertEqual(0, responses.Count, "no extra model call on stale confirmation");
+                AssertEqual(1, new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id).LastRun.ExecutionSummary.WriteOk, "stale attempt cannot overwrite committed summary");
+            });
+        }
+
+        private static void KernelConfirmationCancellationReplays()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var responses = KernelConfirmationResponses();
+                var settingsForRun = new AppSettings { AutoConfirmToolActions = false };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
+                service.ExecuteAsync(ChatModes.Agent, "Create skill", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
+                var pending = AssertKernelReplay(session);
+                var result = service.ConfirmAsync(pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId,
+                    PendingCommand(pending), pending, new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null,
+                    cancellationToken: new CancellationToken(true)).GetAwaiter().GetResult();
+                AssertEqual("cancelled", result.RunStatus, "cancelled confirmation stops without another model request");
+                AssertEqual(1, responses.Count, "no model request after cancellation");
+                AssertEqual(0, result.ExecutionSummary.WriteOk + result.ExecutionSummary.WriteError + result.ExecutionSummary.WriteUnknown, "cancel before dispatch has no effect count");
+                AssertTrue(!new SkillStore(FixturePaths.Value).Load().Any(skill => skill.Id == "common.replay_test"), "cancelled confirmation never writes");
+                var replay = AssertKernelReplay(pending);
+                AssertTrue(replay.LastRun.KernelState.Summary.PendingConfirmation == null, "cancelled pending is closed durably");
+            });
+        }
+
+        private static Queue<string> KernelConfirmationResponses()
+        {
+            return new Queue<string>(new[]
+            {
+                LoadToolSchemaResponse("common.skills_upsert", "schema"),
+                "{\"message\":\"Create skill\",\"tool_calls\":[{\"id\":\"skill\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.replay_test\",\"description\":\"Replay test\",\"bodyMarkdown\":\"# Replay\"}}]}",
+                "{\"message\":\"Done\",\"tool_calls\":[]}"
+            });
+        }
+
+        private static void KernelSummaryRetainsEffectAfterPreparationFailure()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var responses = KernelConfirmationResponses();
+                var session = NewSession(adapter);
+                var settingsForRun = new AppSettings { AutoConfirmToolActions = false };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
+                service.ExecuteAsync(ChatModes.Agent, "Create skill", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
+                var loaded = AssertKernelReplay(session);
+                var result = service.ConfirmAsync(loaded.LastRun.KernelState.Summary.PendingConfirmation.PendingId, PendingCommand(loaded), loaded,
+                    new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null, refreshModelInput: token =>
+                    {
+                        var durable = new ChatStore(FixturePaths.Value).Load(loaded.Host, loaded.DocumentKey, loaded.Id);
+                        AssertEqual(1, durable.LastRun.ExecutionSummary.WriteOk, "known write saved before model context refresh");
+                        throw new InvalidOperationException("context preparation fault");
+                    }).GetAwaiter().GetResult();
+                AssertEqual("failed", result.RunStatus, "local preparation failure stops the kernel");
+                AssertEqual(1, result.ExecutionSummary.WriteOk, "preparation cannot reinterpret a successful mutation");
+                AssertEqual(0, result.ExecutionSummary.WriteUnknown, "known effect stays known");
+                AssertEqual(1, responses.Count, "failed preparation never reaches another model request");
+                AssertKernelReplay(loaded);
+            });
+        }
+
+        private static void KernelRecoveryPreservesKnownUnprojectedEffect()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var paths = FixturePaths.Value;
+                var session = NewSession(adapter);
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("excel.add_sheet", "schema"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"id\":\"write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}"
+                });
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                var service = new ConversationRunService(adapter, executor, new ChatStore(paths), completion, null, saved: saved =>
+                {
+                    if (saved.LastRun.ExecutionSummary.WriteOk == 1 && !saved.Messages.Any(message =>
+                        message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == "write"))
+                        throw new IOException("stopped after terminal evidence but before result projection");
+                });
+                var interrupted = false;
+                try { service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult(); }
+                catch (RunStoreException) { interrupted = true; }
+                AssertTrue(interrupted, "fault injected at actual completed-evidence append");
+                new ChatSessionService(adapter, new ChatStore(paths)).ReconcileInterruptedRuns("replacement");
+                var recovered = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(1, recovered.LastRun.ExecutionSummary.WriteOk, "known terminal survives crash before materialization");
+                AssertEqual(0, recovered.LastRun.ExecutionSummary.WriteUnknown, "projection gap cannot make a known effect unknown");
+                AssertEqual(RunLifecycle.Failed, recovered.LastRun.KernelState.Summary.Lifecycle, "interrupted lifecycle failed");
+                AssertTrue(recovered.Messages.Where(message => message.ProtocolMessage).All(message => message.ExcludeFromModelContext),
+                    "an incomplete result exchange is not replayed");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "recovery never replays known mutation");
+                AssertKernelReplay(recovered);
+            });
+        }
+
+        private static void KernelStoreFailureStopsAndRecovers(bool afterDispatch)
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var paths = FixturePaths.Value;
+                var store = new ChatStore(paths);
+                var session = NewSession(adapter);
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("excel.add_sheet", "schema"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"id\":\"write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}",
+                    "{\"message\":\"Done\",\"tool_calls\":[]}"
+                });
+                Action injectConcurrentCommit = () =>
+                {
+                    var other = store.Load(session.Host, session.DocumentKey, session.Id);
+                    other.Title = "concurrent commit";
+                    store.Save(other);
+                };
+                var calls = 0;
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                {
+                    calls++;
+                    if (!afterDispatch && calls == 2) injectConcurrentCommit();
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                });
+                RunStoreException failure = null;
+                try
+                {
+                    service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
+                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), (phase, message, activity) =>
+                        {
+                            if (afterDispatch && phase == "tool_running" && activity.ToolId == "excel.add_sheet") injectConcurrentCommit();
+                        }).GetAwaiter().GetResult();
+                }
+                catch (RunStoreException ex) { failure = ex; }
+                AssertTrue(failure != null, "mandatory store failure escapes without retry");
+                AssertEqual(afterDispatch ? 1 : 0, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no dispatch before accepted append / no retry after effect");
+                AssertEqual(afterDispatch ? 1 : 0, failure.UnpersistedSummary.ToolCounts.WriteOk, "unpersisted effect is not passed off as durable evidence");
+                var recovery = new ChatSessionService(adapter, new ChatStore(paths));
+                recovery.ReconcileInterruptedRuns("replacement-runtime");
+                var recovered = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(RunLifecycle.Failed, recovered.LastRun.KernelState.Summary.Lifecycle, "interrupted runtime is locally failed");
+                AssertEqual(afterDispatch ? 1 : 0, recovered.LastRun.ExecutionSummary.WriteUnknown, "open dispatched boundary remains unknown");
+                AssertTrue(recovered.LastRun.KernelState.InFlightTool == null, "recovery clears boundary once without replay");
+                recovery.ReconcileInterruptedRuns("replacement-runtime");
+                AssertKernelReplay(recovered);
+            });
+        }
+
         private static void JsonlByteOffsetsAreExact()
         {
             WithTempPaths(paths =>
@@ -417,7 +668,7 @@ namespace RNAssistant.Harness
                         Content = "{\"message\":\"Answer.\",\"tool_calls\":[]}"
                     });
                 };
-                var final = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var final = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Answer.", session, NewContext(adapter), new AppSettings(),
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
                 AssertEqual("Answer.", final.AssistantText, "optional accepted trace failure preserves response");

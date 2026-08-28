@@ -88,11 +88,12 @@ namespace RNAssistant.Office.Services
 
         internal void AppendToolCall(AgentToolCall call, string message, LlmCompletionResult completion)
         {
-            _workingSet.Touch(call.Name);
             var accepted = AgentJsonProtocol.CreateToolCallMessage(call, message, completion, _settings.ToolResultRole);
             _session.Messages.Add(accepted);
             _messages.Add(accepted);
         }
+
+        internal void TouchTool(string id) { _workingSet.Touch(id); }
 
         internal void AppendConfirmedResult(ToolCommand command, ToolResult result)
         {
@@ -130,8 +131,9 @@ namespace RNAssistant.Office.Services
         {
             var result = prepared.Result;
             var accepted = CreateBoundedToolResultMessage(command, result, _messages, _session, _settings);
-            _session.Messages.Add(accepted);
-            _messages.Add(accepted);
+            accepted.RunId = _session.LastRun == null ? null : _session.LastRun.RunId;
+            AppendPairedResult(_session.Messages, accepted);
+            AppendPairedResult(_messages, accepted);
             IReadOnlyList<string> evicted;
             if (_workingSet.ObserveReadResult(accepted, out evicted))
             {
@@ -143,6 +145,16 @@ namespace RNAssistant.Office.Services
                 _session.Messages.Add(prepared.Media);
                 _messages.Add(prepared.Media);
             }
+        }
+
+        internal static void AppendPairedResult(List<ChatMessage> messages, ChatMessage result)
+        {
+            // The whole accepted read batch is durable before execution. Materialized
+            // native-tool history must still pair each call/result, including replay.
+            var callIndex = messages.FindLastIndex(message => message.Role == "assistant" &&
+                message.ProtocolMessage && message.ToolCallId == result.ToolCallId);
+            if (callIndex < 0) messages.Add(result);
+            else messages.Insert(callIndex + 1, result);
         }
 
         internal void EndResponse()

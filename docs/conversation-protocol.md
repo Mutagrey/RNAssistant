@@ -1,6 +1,6 @@
 # Conversation JSON flow
 
-RNAssistant has three explicit modes and one `ConversationRunService` transport/transcript loop.
+RNAssistant has three explicit modes and one `Core/Agent/AgentKernel` loop, invoked by `ConversationRunService`.
 
 - `chat`: the editable `ChatSystemPrompt`, a dynamic `RUNTIME_CONTEXT`, and exactly the safe read-only `common.resources_list/resolve/search/read` catalog. Skills, Office tools, local mutations, and confirmation are unavailable by runtime policy.
 - `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, typed `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_*`, and optional `common.task_list_*`. Office/shared mutations and confirmation are unavailable by runtime policy.
@@ -18,8 +18,10 @@ media. It composes through `ConversationPromptComposer`, recreates the working s
 after automatic compaction, appends bounded accepted tool results and emits the
 updated callable state after a response. The loop supplies step IDs and complete
 accepted-call context; it does not own prompt, media or LRU state. Confirmation
-continues the existing replay/result ordering. This Phase 3A extraction preserves
-current behavior; runtime-summary/kernel migration remains a separate step.
+uses the same kernel accounting and preserves replay/result ordering. The whole
+accepted read batch is persisted before dispatch; bounded result projection then
+keeps each native call/result pair adjacent in both live and replayed requests.
+Working-set touches remain per execution, outside the kernel.
 
 Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Plan uses `PlanSystemPrompt` with the same progressive capability policy; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:
 
@@ -194,12 +196,11 @@ cancellation, before any following tool execution or model step. This may repeat
 media traffic during repair (R24); it does not reread resources, change revisions
 or load/evict tool schemas between attempts.
 
-The nonserialized `Failure.Cause` adapter rethrows provider/cancellation and
-infrastructure exceptions into the existing controller handling until the Phase 3
-AgentKernel switch. The v3 parser/history switch is complete in Phase 2C3C;
-existing runtime lifecycle projections remain until the separate Phase 3 switch.
-See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) and the
-[validation evidence](stabilization/PHASE_2A_MODEL_PROTOCOL.md).
+`ConversationKernelAdapter.Model` maps boundary failures to typed kernel failures;
+`Failure.Cause` and exception rethrow are removed. Provider metadata/context usage
+remain outside the kernel. A runtime diagnostic does not duplicate the usage of
+a prior accepted response. The v3 client/parser/repair policy is unchanged.
+See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md).
 
 ## Retry policy (Phase 2B)
 
@@ -259,7 +260,7 @@ accepted diagnostics also carry the exact tool-call ids. They never enter replay
 Phase 1B left the v2 response, retry limits and outcome behavior unchanged. See the
 [causal trace contract and validation limits](stabilization/PHASE_1B_CAUSAL_TRACE.md).
 
-## Kernel state model (Phase 3B1 introduction)
+## Kernel state model (Phase 3B2 production switch)
 
 `Core/Agent/AgentKernel` accepts generic messages through `IModelProtocol.SendAsync`.
 It does not own prompt composition, compaction, catalog/LRU, media or provider
@@ -280,21 +281,25 @@ appended before dispatch and after results; a failed append stops execution.
 Synthetic result messages retain typed evidence for the external serializer.
 No automatic tool replay/retry or new result-wire format is introduced.
 
-Only fake ports exercise this kernel in 3B1. Production adapters, current
-start/confirmation switch and RunSummary replay through existing events are the
-3B2 gate; R11 and Windows/controller qualification remain open. See
-[ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md) and
-[ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md).
+Production start and confirmation use `ConversationKernelAdapter`. The controller
+retains the per-chat lease, document guard and prompt/history preflight; it does
+not execute the confirmed tool before calling the kernel. Current exact policy
+and executable fingerprint are rechecked by the shared execution path. Pending
+arguments preserve the accepted input; defaults are recomputed by the executor
+under that fingerprint, not treated as a new model call.
 
-## Transitional completion guard (Phase 1C)
+The existing event stream stores `KernelState` (immutable summary/limits and an
+optional in-flight boundary) through `run.updated`. Continuation is reconstructed
+from that state and complete accepted turn history, including compacted records.
+Missing/duplicate results, altered pending arguments or missing evidence fail
+closed. A pending run without kernel evidence cannot resume: cancel it or start
+a new chat. No backfill or fallback loop exists.
 
-`RunSummaryBuilder` aggregates actual executor results using effective
-`ToolSafetyPolicy` metadata, including local-state mutations.
-Model text, descriptions and model-supplied extra JSON fields are not evidence.
-Introduced with v2 in Phase 1C, this independent summary remains after the v3
-cutover. Runtime lifecycle labels are transitional; model JSON no longer owns
-them. The introduced kernel above does not replace this active path until 3B2;
-full persistence/UI normalization remains Phase 9 work.
+## Legacy effect mapping and UI projections
+
+`LegacyToolOutcomeAdapter` classifies a single legacy result using effective
+safety flags. Only the kernel aggregates records. Full typed ToolRuntime/effect
+classification remains Phase 4; complete persistence/UI projection is Phase 9.
 
 `RunExecutionSummary` contains `ExecutionHealth` (`clean`, `errors`, `unknown`) and
 `ReadOk`, `ReadError`, `WriteOk`, `WriteError`, `WriteUnknown` invocation counts.
@@ -310,20 +315,22 @@ successful read or write. Counts describe top-level tool invocations, including
 local mutations and possible no-ops, not changed cells or verified document diffs.
 ToolRuntime must replace this adapter with typed evidence in Phase 4.
 
-A new user turn starts a fresh summary. Confirmation retains the logical turn's
-earlier summary and counts the confirmed call once, including when the controller
-observed it before attachment/model preparation. Continuation of an old pending
-run without summary evidence stays unknown; it does not invent historical calls.
+A new user turn starts fresh counts. Confirmation retains the logical turn's
+summary and counts its execution once. Known execution evidence is saved before
+optional result/media/context preparation. Preparation failure can stop the run,
+but cannot turn a known write into an unknown effect or repeat the write.
 
-Runtime snapshots accompany visible tool/final/diagnostic messages and `LastRun`
-through existing canonical event operations. Send/confirmation DTOs also expose
-typed `executionSummary`; history UI uses the message snapshots. Unknown/errors
-receive an independent visible warning before the unchanged model answer. A
-clean no-write answer says there are no confirmed changes. A terminal/recovered
-boundary without a summary is unverified, never inherited from an older clean
-message. This is a minimal projection, not the Phase 9 persistence/UI migration.
+For new runs, `ChatRunRecord.ExecutionSummary` is derived from `KernelState` and
+is not persisted alongside it. Visible tool/final/diagnostic message snapshots
+and the existing `executionSummary` bridge shape remain projections; UI does not
+compute effects from narrative. Old flat records remain readable for inspection,
+not for confirmation execution. Unknown/errors retain the existing independent
+warning, and a clean no-write answer does not certify applied changes.
 
-See [red→green evidence and remaining limits](stabilization/PHASE_1C_COMPLETION_GUARD.md).
+See [event durability/recovery](session-events.md),
+[ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md),
+[ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md) and
+[Phase 3B2 evidence and remaining gates](stabilization/PHASE_3B2_KERNEL_CUTOVER.md).
 
 ## Local invariants
 

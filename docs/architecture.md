@@ -30,7 +30,7 @@ There are three persisted modes and one structured execution service.
 - `Plan` uses the same loop with `PlanSystemPrompt`, read-only discovery, skills, typed user questions, a single revisioned Markdown plan document, and an optional temporary Task List. Runtime policy removes Office/shared mutations and confirmation. A ready plan is handed to Agent by its exact revision-pinned `rna://` URI.
 - `Agent` uses the same service and transcript loop with progressive tool discovery, enabled skill metadata, confirmation, and policy-approved mutations. The full mode/session-filtered catalog stays local as execution authority; it is not injected into every prompt.
 
-`ConversationModelSession` owns each invocation's model context outside the loop: prompt composition and compaction, working-set replay/updates, request options/cache, bounded tool-result materialization and temporary media. It uses the existing composer, compactor and resource services; it neither executes tools nor decides run outcomes. `AgentTranscript` owns visible tool-activity construction, resource/chart provenance and HTML checkpoints. `ConversationRunService` still owns execution ordering, accepted-call IDs, summary and confirmation decisions; this separation prepares the Core kernel without changing resource or persistence semantics.
+`ConversationModelSession` owns each invocation's model context outside the loop: prompt composition and compaction, working-set replay/updates, request options/cache, bounded tool-result materialization and temporary media. It uses the existing composer, compactor and resource services; it neither executes tools nor decides run outcomes. `AgentTranscript` owns visible tool-activity construction, resource/chart provenance and HTML checkpoints. `ConversationRunService` orchestrates `Core/Agent/AgentKernel` for all modes and confirmation. Invocation-scoped `ConversationKernelAdapter` partials implement model, executor and existing-event-store ports; the kernel alone owns ordering, accepted-call IDs, counts and lifecycle.
 
 `ConversationPromptComposer` selects the editable mode instruction, then appends one dynamic `RUNTIME_CONTEXT` JSON object containing mode, document identity, the current exact callable schemas, the complete compact schema-free `capabilities.items` index with exact ids and explicit `tool`/`skill` kinds, user context, and bounded resource references. Chat receives an empty capability catalog. Invalid, oversized, unavailable, dependency-incomplete, or mode-forbidden tools are omitted before the request. Agent bootstrap contains `common.resources_*` plus `common.capabilities_search/read`; search is an optional filter and never compensates for omitted catalog ids. A complete `common.capabilities_read` result loads either the exact revision-matched tool descriptor or the complete revision-matched skill Markdown according to the catalog kind. Tool descriptors enter an evidence-derived LRU working set of at most eight dynamic schemas, and strict response JSON Schema is built from that same current set. Tool calls update recency, replay reconstructs eviction, and compaction/revision drift requires another read. Tool/skill id collisions fail closed, and removed split discovery ids have no aliases. The composer does not classify request wording or capture Office content eagerly.
 
@@ -38,15 +38,18 @@ Editable general/tool/skill Agent, Plan, Chat, title, compaction, and attachment
 
 `IMaterializedModelProtocol` in `Core/ModelProtocol` owns conversation endpoint attempts, local validation/repair, native refusals, prompt-budget checks and format fallback. The current loop receives one accepted response/metadata or typed failure per logical step; it neither counts raw attempts nor executes tools before acceptance. See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) for the v3 boundary and remaining controller adapters.
 
-Phase 3B1 introduces `Core/Agent/AgentKernel`, immutable runtime summaries and
-generic `IModelProtocol.SendAsync` / `IToolRuntime` / `IRunStore` ports. Only pure
-harness fakes use them so far; production still uses the Office loop above.
-The kernel owns current-turn IDs, bounded sequential execution, shared confirmation
-accounting and independent lifecycle/health. Materialization, resource lifecycle,
-provider metadata and visible projections stay outside it. Phase 3B2 must connect
-the current consumers and prove summary replay through existing events before
-Phase 3 is complete. See [ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md)
-and [ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md).
+Phase 3B2 connects the pure kernel to production start/confirmation. Its generic
+`IModelProtocol.SendAsync`, `IToolRuntime` and `IRunStore` ports keep materialization,
+resource lifecycle, provider metadata and visible projections in Office. Immutable
+`RunSummary` separates lifecycle from effect health. `ChatRunRecord.KernelState`
+is carried by existing typed `run.updated` operations; legacy bridge summaries
+are projections, not another outcome accumulator or store. The old Office loop,
+`RunSummaryBuilder`, mutable accepted-ID bookkeeping and `Failure.Cause` are removed.
+Actual event replay and neutral adapters are tested; production controller is
+compiled in MockDemo, with Windows/Office delivery qualification still open.
+See [ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md),
+[ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md) and
+[cutover evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md).
 
 Phase 2C3C activates the status-free `ConversationResponse` through the single
 `Core/ModelProtocol/ModelProtocolWire` owner: schema, local validation and canonical

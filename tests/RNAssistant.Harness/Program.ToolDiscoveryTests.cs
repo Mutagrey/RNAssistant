@@ -199,7 +199,7 @@ namespace RNAssistant.Harness
                     AutoConfirmToolActions = true
                 };
                 var catalog = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Создай лист Progressive.",
                     NewSession(adapter),

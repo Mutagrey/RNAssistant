@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 
 namespace RNAssistant.Core.Tools
@@ -49,17 +50,21 @@ namespace RNAssistant.Core.Tools
         public bool IsConfirmed { get; private set; }
         public int RemainingToolSteps { get; private set; }
 
+        [JsonConstructor]
         internal ToolExecutionContext(ToolCall call, ToolPolicySnapshot policy, string runId, string turnId,
-            string stepId, DateTime startedUtc, bool confirmed, int remaining)
+            string stepId, DateTime startedUtc, bool isConfirmed, int remainingToolSteps)
         {
+            if (call == null || policy == null || !string.Equals(call.Name, policy.ToolId, StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId) || string.IsNullOrWhiteSpace(stepId) || remainingToolSteps < 0)
+                throw new ArgumentException("Incomplete tool execution context.");
             Call = call;
             Policy = policy;
             RunId = runId;
             TurnId = turnId;
             StepId = stepId;
             StartedUtc = startedUtc;
-            IsConfirmed = confirmed;
-            RemainingToolSteps = remaining;
+            IsConfirmed = isConfirmed;
+            RemainingToolSteps = remainingToolSteps;
         }
     }
 

@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -45,6 +47,13 @@ namespace RNAssistant.Harness
             pending.RunId = "resume_1";
             pending.ExcludeFromModelContext = true;
             session.Messages.Add(pending);
+            var call = new ToolCall("pending_id", "excel.inspect", "{\"kind\":\"sheets\"}");
+            var policy = new ToolPolicySnapshot("excel.inspect", "fixture-revision", false, true);
+            session.LastRun.KernelState = new AgentRunState(new RunSummary("resume_1", "current_turn",
+                RunLifecycle.AwaitingConfirmation, new ToolCounts(readOk: 1), 2, 2, "Confirm", "confirmation_required",
+                new PendingConfirmation("pending_fixture", call, policy, "step", 1)), new AgentRunLimits(8, 8));
+            session.Messages.Add(new ChatMessage { Role = "assistant", Activity = new ChatActivity
+                { ToolCallId = "pending_id", ConfirmationCatalogSha256 = policy.Revision, PendingId = "pending_fixture", Status = "waiting" } });
             return session;
         }
 
@@ -63,7 +72,7 @@ namespace RNAssistant.Harness
                         Content = "{\"message\":\"Done\",\"tool_calls\":[]}"
                     });
                 };
-                var service = new ConversationRunService(adapter, executor, completion, null,
+                var service = CreateConversationRunService(adapter, executor, completion, null,
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var settingsForRun = new AppSettings { AgentPromptSchemaVersion = 0 };
@@ -89,8 +98,8 @@ namespace RNAssistant.Harness
                 }
                 var continuation = ContextContinuationSession();
                 var continuationBefore = JsonConvert.SerializeObject(continuation);
-                expectReview(() => service.ContinueAfterToolAsync(new ToolCommand { ToolCallId = "pending_id" }, null,
-                    continuation, NewContext(adapter), settingsForRun, tools, null,
+                expectReview(() => service.ConfirmAsync("pending_fixture", new ToolCommand { ToolCallId = "pending_id" },
+                    continuation, new ConversationRunInput(settingsForRun, NewContext(adapter), tools),
                     (phase, message, activity) => progressCalls++).GetAwaiter().GetResult());
                 AssertEqual(continuationBefore, JsonConvert.SerializeObject(continuation), "blocked continuation does not rewrite accepted history");
                 AssertEqual(0, rawCalls, "no model or auxiliary request before review");
@@ -123,7 +132,7 @@ namespace RNAssistant.Harness
                     rawCalls++;
                     return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write("Done", null) });
                 };
-                var service = new ConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
+                var service = CreateConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
@@ -189,7 +198,7 @@ namespace RNAssistant.Harness
                     rawCalls++;
                     return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write("Done", null) });
                 };
-                var service = new ConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
+                var service = CreateConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 foreach (var invalidate in new Action<ChatSession>[]
@@ -208,7 +217,7 @@ namespace RNAssistant.Harness
                     var session = ContextContinuationSession();
                     invalidate(session);
                     var before = JsonConvert.SerializeObject(session);
-                    var command = new ToolCommand { ToolCallId = "pending_id", ToolId = "excel.inspect" };
+                    var command = ContextPendingCommand();
                     var dispatchReached = false;
                     ExpectProtocolPreflightBlock(() =>
                     {
@@ -216,8 +225,7 @@ namespace RNAssistant.Harness
                         dispatchReached = true;
                     });
                     AssertTrue(!dispatchReached, "controller preflight rejects before its following dispatch boundary");
-                    ExpectProtocolPreflightBlock(() => service.ContinueAfterToolAsync(command,
-                        ToolResult.Ok("Confirmed result"), session, NewContext(adapter), new AppSettings(), tools, null,
+                    ExpectProtocolPreflightBlock(() => service.ConfirmAsync("pending_fixture", command, session, new ConversationRunInput(new AppSettings(), NewContext(adapter), tools),
                         (phase, message, activity) => progressCalls++).GetAwaiter().GetResult());
                     AssertEqual(before, JsonConvert.SerializeObject(session), "blocked continuation does not append a result or overwrite run evidence");
                 }
@@ -227,7 +235,7 @@ namespace RNAssistant.Harness
                 var complete = ContextContinuationSession();
                 var completeBefore = JsonConvert.SerializeObject(complete);
                 ExpectProtocolPreflightBlock(() => ConversationProtocolContext.EnsureCanContinue(complete, null));
-                ConversationProtocolContext.EnsureCanContinue(complete, new ToolCommand { ToolCallId = "pending_id", ToolId = "excel.inspect" });
+                ConversationProtocolContext.EnsureCanContinue(complete, ContextPendingCommand());
                 AssertEqual(completeBefore, JsonConvert.SerializeObject(complete), "valid and rejected preflight do not consume pending history");
             });
         }
@@ -267,7 +275,7 @@ namespace RNAssistant.Harness
                 }, CancellationToken.None);
                 AssertTrue(result.Failure != null, "incomplete context is a boundary failure, not accepted completion");
                 AssertEqual(ModelProtocolFailureKind.Infrastructure, result.Failure.Kind, "runtime context is not model format exhaustion");
-                AssertTrue(result.Failure.Cause is InvalidOperationException, "existing typed infrastructure cause");
+                AssertTrue(!string.IsNullOrWhiteSpace(result.Failure.Message), "typed infrastructure diagnostic is retained");
                 AssertTrue(result.Response == null && result.Completion == null, "no partial accepted response");
                 AssertEqual(0, rawCalls, "no raw attempt or FORMAT_REPAIR for incomplete caller context");
                 AssertEqual(0, traces, "no fake model attempt diagnostics");
@@ -315,18 +323,16 @@ namespace RNAssistant.Harness
             var batch = new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 3,
                 Content = V3Envelope(V3Call("batch_1"), V3Call("batch_2")) };
             session.Messages.Add(batch);
+            foreach (var id in new[] { "batch_1", "batch_2" })
+                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = id, ToolId = "excel.inspect" }, ToolResult.Ok("read")));
             var before = JsonConvert.SerializeObject(session);
-            var scope = ConversationProtocolContext.Begin(session, new ToolDefinition[0], new ToolCommand { ToolCallId = "pending_id" });
-            var snapshot = scope.Snapshot();
+            var continuation = ConversationProtocolContext.RestoreContinuation(session, ContextPendingCommand());
+            var snapshot = new ModelProtocolCallContext(continuation.AcceptedCallIds, new string[0]);
             AssertTrue(snapshot.IsComplete, "full turn reconstructed across runtime RunId changes");
             AssertTrue(snapshot.AcceptedToolCallIds.SequenceEqual(new[] { "batch_1", "batch_2", "before_compaction", "pending_id" }),
                 "collect all envelope/native ids, not previous turn, quoted JSON, diagnostics or tool results");
             AssertEqual(before, JsonConvert.SerializeObject(session), "scope construction does not rewrite history or checkpoints");
-            scope.ObserveAccepted(new[] { new AgentToolCall { Id = "new_1" }, new AgentToolCall { Id = "new_2" } });
-            AssertEqual(4, snapshot.AcceptedToolCallIds.Count, "earlier step snapshot is stable");
-            AssertEqual(6, scope.Snapshot().AcceptedToolCallIds.Count, "entire accepted response observed before any tools execute");
-            var fresh = ConversationProtocolContext.Begin(session, new ToolDefinition[0], null).Snapshot();
-            AssertTrue(fresh.IsComplete && fresh.AcceptedToolCallIds.Count == 0, "fresh user run never inherits ids from older turns");
+            AssertEqual(4, continuation.AcceptedCallIds.Count, "detached continuation contains the whole accepted turn");
             var tool = V3ReadTool();
             AssertTrue(!new ConversationResponseParser().Parse(V3Envelope(V3Call("before_compaction")), new[] { tool }, new[] { tool }, snapshot).Success,
                 "v3 rejects a compacted-away id using the actual reconstructed context");
@@ -358,17 +364,21 @@ namespace RNAssistant.Harness
             var missing = ContextContinuationSession();
             missing.Messages.RemoveAt(missing.Messages.Count - 1);
             invalid.Add(missing);
+            var missingResult = ContextContinuationSession();
+            missingResult.Messages.RemoveAt(4);
+            invalid.Add(missingResult);
+            var duplicateResult = ContextContinuationSession();
+            duplicateResult.Messages.Add(duplicateResult.Messages[4]);
+            invalid.Add(duplicateResult);
             foreach (var session in invalid)
-            {
-                var scope = ConversationProtocolContext.Begin(session, new ToolDefinition[0], new ToolCommand { ToolCallId = "pending_id" });
-                var snapshot = scope.Snapshot();
-                AssertTrue(!snapshot.IsComplete && snapshot.AcceptedToolCallIds == null && !string.IsNullOrWhiteSpace(snapshot.Error),
-                    "incomplete continuation is explicit, not a partial id set");
-                scope.ObserveAccepted(new[] { new AgentToolCall { Id = "later" } });
-                AssertTrue(!scope.Snapshot().IsComplete, "later accepted data cannot erase an incomplete seed");
-            }
-            AssertTrue(!ConversationProtocolContext.Begin(ContextContinuationSession(), new ToolDefinition[0], new ToolCommand()).Snapshot().IsComplete,
-                "unidentified confirmation fails closed");
+                ExpectProtocolPreflightBlock(() => ConversationProtocolContext.RestoreContinuation(session, ContextPendingCommand()));
+            ExpectProtocolPreflightBlock(() => ConversationProtocolContext.RestoreContinuation(ContextContinuationSession(), new ToolCommand()));
+        }
+
+        private static ToolCommand ContextPendingCommand()
+        {
+            return new ToolCommand { ToolId = "excel.inspect", ToolCallId = "pending_id",
+                Arguments = new Dictionary<string, object> { ["kind"] = "sheets" } };
         }
 
         private static void ProtocolContextBatchSafetyUsesLocalAuthority()
@@ -377,8 +387,8 @@ namespace RNAssistant.Harness
             var write = OfficeBuiltInToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.add_sheet");
             var external = new ToolDefinition { Id = "external.lookup", BuiltIn = true };
             var pipeline = new ToolDefinition { Id = "pipeline.read", Executor = "pipeline" };
-            var scope = ConversationProtocolContext.Begin(null, new[] { read, write, external, pipeline }, null);
-            AssertTrue(scope.Snapshot().BatchSafeReadOnlyToolIds.SequenceEqual(new[] { "excel.inspect" }),
+            var scope = ConversationProtocolContext.BatchSafeReadIds(new[] { read, write, external, pipeline });
+            AssertTrue(scope.SequenceEqual(new[] { "excel.inspect" }),
                 "only audited local reads with safe metadata can batch; external/unclassified/pipelines stay singleton");
             foreach (var kind in new[] { "document", "local", "confirmation", "not_agent", "disabled", "custom", "vba", "pipeline" })
             {
@@ -390,12 +400,12 @@ namespace RNAssistant.Harness
                 changed.Enabled = kind != "disabled";
                 changed.BuiltIn = kind != "custom";
                 if (kind == "vba" || kind == "pipeline") changed.Executor = kind;
-                var context = ConversationProtocolContext.Begin(null, new[] { changed, write }, null).Snapshot();
-                AssertTrue(context.IsComplete && context.BatchSafeReadOnlyToolIds.Count == 0, "batch permission cannot override " + kind + " metadata/binding");
+                var context = ConversationProtocolContext.BatchSafeReadIds(new[] { changed, write });
+                AssertTrue(context.Length == 0, "batch permission cannot override " + kind + " metadata/binding");
             }
             read.RequiresConfirmation = true;
-            AssertTrue(scope.Snapshot().BatchSafeReadOnlyToolIds.Contains("excel.inspect"), "run projection is a snapshot of the original catalog");
-            AssertTrue(!ConversationProtocolContext.Begin(null, new[] { read }, null).Snapshot().BatchSafeReadOnlyToolIds.Contains("excel.inspect"),
+            AssertTrue(scope.Contains("excel.inspect"), "run projection is a snapshot of the original catalog");
+            AssertTrue(!ConversationProtocolContext.BatchSafeReadIds(new[] { read }).Contains("excel.inspect"),
                 "new run/confirmation rebuilds safety from the current catalog");
         }
 
@@ -438,7 +448,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var requests = new List<ModelProtocolRequest>();
-                var service = new ConversationRunService(adapter, executor, completion, null,
+                var service = CreateConversationRunService(adapter, executor, completion, null,
                     () => new RecordingModelProtocol(completion, requests));
                 var session = NewSession(adapter);
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 2 };
@@ -475,7 +485,7 @@ namespace RNAssistant.Harness
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 var requests = new List<ModelProtocolRequest>();
-                var service = new ConversationRunService(adapter, executor, completion, null,
+                var service = CreateConversationRunService(adapter, executor, completion, null,
                     () => new RecordingModelProtocol(completion, requests));
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "original_run", TurnId = "original_run", ResponseProtocolVersion = 3, Status = "running" };
@@ -488,18 +498,21 @@ namespace RNAssistant.Harness
                 foreach (var message in session.Messages) message.RunId = "original_run";
                 var through = session.Messages.First(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == "schema_id");
                 var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, SummaryMarkdown = "Schema discovery summarized." };
+                session.Artifacts.Add(new ChatArtifact { Id = checkpoint.Id, Kind = ChatArtifactKinds.Compaction,
+                    MimeType = "application/json", InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None) });
                 session.ContextCheckpoints.Add(checkpoint);
                 session.ActiveContextCheckpointId = checkpoint.Id;
                 session.LastRun.RunId = "confirmation_run";
                 session.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" && message.ToolCallId == "skill_id").RunId = "confirmation_run";
                 // Same controller-style identity transition, with real host-neutral tool
                 // execution against the fixture's disposable skill store (no Office COM).
+                AssertEqual(session.LastRun.KernelState.Summary.TurnId, session.LastRun.TurnId, "logical turn binding");
+                AssertEqual(session.LastRun.KernelState.Summary.PendingConfirmation.Call.ArgumentsJson,
+                    JsonConvert.SerializeObject(confirmed.Arguments, Formatting.None), "confirmed argument binding");
                 ConversationProtocolContext.EnsureCanContinue(session, confirmed);
-                var actual = executor.Execute(confirmed, tools, settingsForRun, false, true, session);
-                AssertTrue(actual.Success, "confirmed fixture skill writes successfully");
-                var last = service.ContinueAfterToolAsync(confirmed, actual, session, NewContext(adapter), settingsForRun, tools, null, null,
-                    initialIterationsUsed: session.LastRun.IterationsUsed, initialToolStepsUsed: session.LastRun.ToolStepsUsed)
-                    .GetAwaiter().GetResult();
+                var last = service.ConfirmAsync("pending_context", confirmed, session,
+                    new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
+                AssertEqual(1, last.ExecutionSummary.WriteOk, "confirmed fixture skill writes through kernel");
                 AssertEqual(3, requests.Count, "one model step after confirmation");
                 var continuation = requests[2];
                 AssertTrue(continuation.CallContext.IsComplete, "confirmation context is complete");
@@ -694,7 +707,6 @@ namespace RNAssistant.Harness
                 AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "provider failure is not format exhaustion");
                 AssertEqual(kind, result.Failure.ProviderKind.Value, "transport failure kind is retained");
                 AssertEqual(failure.StatusCode, result.Failure.StatusCode, "transport status is retained");
-                AssertTrue(ReferenceEquals(failure, result.Failure.Cause), "legacy exception adapter retains the original exception");
                 AssertTrue(result.Response == null && result.Completion == null, "transport failure has no accepted model response");
                 AssertEqual((afterInvalid ? 1 : 0) + (transient ? 3 : 1), calls, "only transient transport failures retry, within a separate bounded budget");
                 AssertEqual(transient ? "1,2" : "", string.Join(",", delays.Select(delay => delay.TotalSeconds)), "transient retries use cancellable 1s/2s delays");
@@ -955,61 +967,28 @@ namespace RNAssistant.Harness
 
         private static void RunSummaryUsesActualOutcomesAndMetadata()
         {
-            var catalog = new[]
-            {
-                new ToolDefinition { Id = "test.write_named_read" },
-                new ToolDefinition { Id = "test.inspect", MutatesDocument = true },
-                new ToolDefinition { Id = "test.local", MutatesLocalState = true },
-                new ToolDefinition { Id = "test.partial_mutation", MutatesDocument = true }
-            };
-            var builder = new RunSummaryBuilder(catalog);
-            builder.Observe(new ToolCommand { ToolId = catalog[0].Id }, ToolResult.Ok("unknown; all writes applied"));
-            AssertEqual(1, builder.Snapshot().ReadOk, "tool names and prose do not imply writes or uncertainty");
-            builder.Observe(new ToolCommand { ToolId = catalog[0].Id }, ToolResult.Fail("Everything applied"));
-            AssertEqual("errors", builder.Snapshot().ExecutionHealth, "a read error also prevents clean health");
-            builder.Observe(new ToolCommand { ToolId = catalog[1].Id }, ToolResult.WaitingConfirmation("Confirm"));
-            AssertEqual(0, builder.Snapshot().WriteOk + builder.Snapshot().WriteError, "pending has no final effect");
-            builder.Observe(new ToolCommand { ToolId = catalog[2].Id }, ToolResult.Ok("Local state saved"));
-            var uncertain = new ToolCommand { ToolId = catalog[3].Id, ToolCallId = "same_model_id" };
-            builder.Observe(uncertain, ToolResult.PartialFailure("Some writes completed", null, "mutation_partial_failure"));
-            builder.Observe(uncertain, ToolResult.Fail("Later result delivery failed"));
-            builder.Observe(new ToolCommand { ToolId = catalog[1].Id }, ToolResult.Fail("No change", null, "write_rejected"));
-            var snapshot = builder.Snapshot();
-            AssertEqual("unknown", snapshot.ExecutionHealth, "unknown wins over both read and write errors");
-            AssertEqual(1, snapshot.WriteUnknown, "partial mutation is unknown; re-observation is not a second call");
-            AssertEqual(1, snapshot.WriteError, "definite write error counted separately");
-            AssertEqual(1, snapshot.ReadError, "read error is not a write error");
-            builder.Observe(new ToolCommand { ToolId = catalog[1].Id, ToolCallId = "same_model_id" }, ToolResult.Ok("Saved"));
-            AssertEqual(2, builder.Snapshot().WriteOk, "local mutation and distinct invocation sharing a model id both count");
-            AssertEqual("unknown", builder.Snapshot().ExecutionHealth, "later success cannot hide unknown");
-            AssertEqual(1, snapshot.WriteOk, "published snapshots cannot change when execution continues");
+            var read = new ToolPolicySnapshot("test.write_named_read", "r1", false);
+            var write = new ToolPolicySnapshot("test.inspect", "r1", true);
+            AssertEqual(ToolExecutionOutcome.Ok, LegacyToolOutcomeAdapter.Map(read, ToolResult.Ok("unknown; all writes applied")),
+                "names and model prose do not classify effects");
+            AssertEqual(ToolExecutionOutcome.Error, LegacyToolOutcomeAdapter.Map(read, ToolResult.Fail("Everything applied")), "read error");
+            AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, LegacyToolOutcomeAdapter.Map(write, ToolResult.WaitingConfirmation("Confirm")),
+                "pending is not a final effect");
+            AssertEqual(ToolExecutionOutcome.Unknown, LegacyToolOutcomeAdapter.Map(write, ToolResult.PartialFailure("Some writes completed", null, "partial")),
+                "partial write is uncertain");
+            AssertEqual(ToolExecutionOutcome.Error, LegacyToolOutcomeAdapter.Map(write, ToolResult.Fail("No change", null, "write_rejected")), "definite write failure");
         }
 
         private static void RunSummaryMapsLegacyUncertaintyConservatively()
         {
-            var catalog = new[] { new ToolDefinition { Id = "test.effect", MutatesDocument = true } };
-            var outcomes = new[]
-            {
-                null,
-                new ToolResult { Status = "unknown" },
-                new ToolResult { Status = "interrupted_unknown" },
-                ToolResult.Fail("cancelled after dispatch", null, "tool_effect_uncertain"),
-                ToolResult.Fail("no evidence", null, "missing_result")
-            };
-            foreach (var result in outcomes)
-            {
-                var builder = new RunSummaryBuilder(catalog);
-                builder.Observe(new ToolCommand { ToolId = catalog[0].Id }, result);
-                AssertEqual("unknown", builder.Snapshot().ExecutionHealth, "structured uncertainty never becomes an ordinary error");
-                AssertEqual(1, builder.Snapshot().WriteUnknown, "one uncertain invocation");
-            }
-            var missingPolicy = new RunSummaryBuilder(catalog);
-            missingPolicy.Observe(new ToolCommand { ToolId = "missing" }, ToolResult.Ok("Success"));
-            AssertEqual("unknown", missingPolicy.Snapshot().ExecutionHealth, "unknown policy cannot certify success");
-            var legacy = new RunSummaryBuilder(catalog, RunSummaryBuilder.ContinuationSeed(new ChatSession()));
-            legacy.Observe(new ToolCommand { ToolId = catalog[0].Id }, ToolResult.Ok("Current call succeeded"));
-            AssertEqual("unknown", legacy.Snapshot().ExecutionHealth, "legacy continuation has no invented clean history");
-            AssertEqual(0, legacy.Snapshot().WriteUnknown, "missing historical evidence does not fabricate a dispatched write");
+            var policy = new ToolPolicySnapshot("test.effect", "r1", true);
+            foreach (var result in new[] { null, new ToolResult { Status = "unknown" }, new ToolResult { Status = "interrupted_unknown" },
+                ToolResult.Fail("cancelled after dispatch", null, "tool_effect_uncertain"), ToolResult.Fail("no evidence", null, "missing_result") })
+                AssertEqual(ToolExecutionOutcome.Unknown, LegacyToolOutcomeAdapter.Map(policy, result), "structured write uncertainty is retained");
+            AssertEqual(ToolExecutionOutcome.Unknown, LegacyToolOutcomeAdapter.Map(null, ToolResult.Ok("Success")), "missing policy cannot certify success");
+            var legacy = ContextContinuationSession();
+            legacy.LastRun.KernelState = null;
+            ExpectProtocolPreflightBlock(() => ConversationProtocolContext.EnsureCanContinue(legacy, ContextPendingCommand()));
         }
 
         private static void RunSummarySurvivesCancellationAfterUnknown()
@@ -1024,23 +1003,19 @@ namespace RNAssistant.Harness
                 });
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { Status = "running" };
-                var service = new ConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                 {
                     if (responses.Count == 0) throw new OperationCanceledException("cancel after unknown write result");
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 });
-                var cancelled = false;
-                try
-                {
-                    service.ExecuteAsync(ChatModes.Agent, "Создай лист.", session, NewContext(adapter),
-                        new AppSettings { AutoConfirmToolActions = true },
-                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
-                }
-                catch (OperationCanceledException) { cancelled = true; }
-                AssertTrue(cancelled, "cancellation propagates to lifecycle owner");
+                var cancelled = service.ExecuteAsync(ChatModes.Agent, "Создай лист.", session, NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                AssertEqual("cancelled", cancelled.RunStatus, "kernel owns cancellation lifecycle");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no automatic write retry");
                 AssertEqual("unknown", session.LastRun.ExecutionSummary.ExecutionHealth, "cancellation cannot erase unknown");
-                var activity = session.Messages.Last(message => message.Activity != null);
+                AssertKernelReplay(session);
+                var activity = session.Messages.Last(message => message.Activity != null && message.Activity.Kind == "tool");
                 AssertEqual("tool_effect_uncertain", activity.Activity.ErrorCode, "real executor classifies thrown mutation as uncertain");
                 AssertEqual(1, activity.ExecutionSummary.WriteUnknown, "visible activity retains uncertainty before controller handling");
             });
@@ -1339,7 +1314,7 @@ namespace RNAssistant.Harness
                     AgentResponseMode = AgentResponseModes.JsonSchema,
                     FallbackToJsonObject = true
                 };
-                var result = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Test.", NewSession(adapter), NewContext(adapter), settings, new ToolDefinition[0],
                     null, null, null, CancellationToken.None).GetAwaiter().GetResult();
@@ -1551,7 +1526,7 @@ namespace RNAssistant.Harness
                     .Concat(executor.GetControllerTools())
                     .ToList();
 
-                var turn = new ConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var turn = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "List sheets.", NewSession(adapter), NewContext(adapter), settings, tools,
                     null, null, null, null, CancellationToken.None, true).GetAwaiter().GetResult();

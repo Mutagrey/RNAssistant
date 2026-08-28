@@ -1,9 +1,13 @@
 using System;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Agent
 {
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum RunLifecycle { Running, Completed, AwaitingConfirmation, Cancelled, Failed }
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum ExecutionHealth { Clean, Errors, Unknown }
 
     public sealed class ToolCounts
@@ -52,12 +56,21 @@ namespace RNAssistant.Core.Agent
         public int ChargedToolSteps { get; private set; }
 
         internal PendingConfirmation(ToolExecutionRecord record)
+            : this(record.PendingId, record.Context.Call, record.Context.Policy, record.Context.StepId, record.ToolStepsConsumed)
         {
-            PendingId = record.PendingId;
-            Call = record.Context.Call;
-            Policy = record.Context.Policy;
-            StepId = record.Context.StepId;
-            ChargedToolSteps = record.ToolStepsConsumed;
+        }
+
+        [JsonConstructor]
+        internal PendingConfirmation(string pendingId, ToolCall call, ToolPolicySnapshot policy, string stepId, int chargedToolSteps)
+        {
+            if (string.IsNullOrWhiteSpace(pendingId) || string.IsNullOrWhiteSpace(stepId) || call == null || policy == null ||
+                !string.Equals(call.Name, policy.ToolId, StringComparison.Ordinal) || chargedToolSteps < 1)
+                throw new ArgumentException("Incomplete pending execution evidence.");
+            PendingId = pendingId;
+            Call = call;
+            Policy = policy;
+            StepId = stepId;
+            ChargedToolSteps = chargedToolSteps;
         }
     }
 
@@ -84,18 +97,23 @@ namespace RNAssistant.Core.Agent
         public string Reason { get; private set; }
         public PendingConfirmation PendingConfirmation { get; private set; }
 
-        internal RunSummary(string runId, string turnId, RunLifecycle lifecycle, ToolCounts counts,
-            int iterations, int toolSteps, string message, string reason, PendingConfirmation pending)
+        [JsonConstructor]
+        internal RunSummary(string runId, string turnId, RunLifecycle lifecycle, ToolCounts toolCounts,
+            int iterationsUsed, int toolStepsUsed, string assistantMessage, string reason, PendingConfirmation pendingConfirmation)
         {
+            if (string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId) || toolCounts == null ||
+                !Enum.IsDefined(typeof(RunLifecycle), lifecycle) || iterationsUsed < 0 || toolStepsUsed < 0 ||
+                (lifecycle == RunLifecycle.AwaitingConfirmation && pendingConfirmation == null))
+                throw new ArgumentException("Incomplete runtime summary.");
             RunId = runId;
             TurnId = turnId;
             Lifecycle = lifecycle;
-            ToolCounts = counts;
-            IterationsUsed = iterations;
-            ToolStepsUsed = toolSteps;
-            AssistantMessage = message ?? string.Empty;
+            ToolCounts = toolCounts;
+            IterationsUsed = iterationsUsed;
+            ToolStepsUsed = toolStepsUsed;
+            AssistantMessage = assistantMessage ?? string.Empty;
             Reason = reason;
-            PendingConfirmation = pending;
+            PendingConfirmation = pendingConfirmation;
         }
     }
 }

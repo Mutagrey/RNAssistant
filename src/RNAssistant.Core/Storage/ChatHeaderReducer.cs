@@ -490,6 +490,7 @@ namespace RNAssistant.Core.Storage
                 TurnId = value.TurnId,
                 RuntimeId = value.RuntimeId,
                 ResponseProtocolVersion = value.ResponseProtocolVersion,
+                KernelState = value.KernelState,
                 Status = value.Status,
                 Phase = value.Phase,
                 CurrentAction = value.CurrentAction,

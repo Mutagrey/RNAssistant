@@ -116,6 +116,7 @@ namespace RNAssistant.Office.Services
                 TurnId = run.TurnId,
                 RuntimeId = run.RuntimeId,
                 ResponseProtocolVersion = run.ResponseProtocolVersion,
+                KernelState = run.KernelState,
                 Status = run.Status,
                 ExecutionSummary = run.ExecutionSummary == null ? null : run.ExecutionSummary.Clone(),
                 Phase = run.Phase,

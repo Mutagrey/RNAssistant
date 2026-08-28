@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
@@ -96,7 +97,7 @@ namespace RNAssistant.Office
             {
                 return;
             }
-            SaveSessionChanges(session);
+            if (session.LastRun == null || session.LastRun.KernelState == null) SaveSessionChanges(session);
             _chatRuns.UpdateSessionSnapshot(session.Id, runId, session);
         }
 
@@ -543,7 +544,7 @@ namespace RNAssistant.Office
                         if (executionMode != ChatModes.Chat) _toolCatalog.InvalidateDocumentVbaTools();
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!(ex is RunStoreException))
                 {
                     PersistTokenEstimateCalibration(settings);
                     CloseRunningActivities(session, firstRunMessageIndex, ex is OperationCanceledException);
@@ -574,7 +575,7 @@ namespace RNAssistant.Office
                 ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
                 if (completion == null || !completion.WaitingForConfirmation)
                 {
-                    ApplyTerminalRunResult(session, completion);
+                    ApplyTerminalRunResult(session);
                 }
                 SaveSessionChanges(session);
                 RunCausalTrace.Summary(session);
@@ -651,23 +652,11 @@ namespace RNAssistant.Office
             });
         }
 
-        private static void ApplyTerminalRunResult(ChatSession session, ChatTurnResult completion)
+        private static void ApplyTerminalRunResult(ChatSession session)
         {
-            if (session == null || session.LastRun == null) return;
-            var status = completion == null || string.IsNullOrWhiteSpace(completion.RunStatus)
-                ? "failed"
-                : completion.RunStatus;
-            if (completion != null && completion.ResponseProtocolVersion > 0)
-            {
-                session.LastRun.ResponseProtocolVersion = completion.ResponseProtocolVersion;
-            }
-            session.LastRun.Status = status;
-            if (completion != null && completion.ExecutionSummary != null)
-                session.LastRun.ExecutionSummary = completion.ExecutionSummary.Clone();
-            session.LastRun.Phase = status;
-            session.LastRun.CurrentAction = completion == null
-                ? "Conversation run ended without a result."
-                : completion.AssistantText;
+            if (session == null || session.LastRun == null || session.LastRun.KernelState == null)
+                throw new InvalidOperationException("Conversation ended without kernel evidence. Reload the chat before continuing.");
+            ConversationRunProjection.Apply(session.LastRun);
         }
 
     }

@@ -43,7 +43,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 
 ### Conversation и resources
 
-- Поддерживаются `agent`, `plan` и `chat`; новый chat создаётся в `agent`. Все режимы используют один `ConversationRunService`.
+- Поддерживаются `agent`, `plan` и `chat`; новый chat создаётся в `agent`. Все режимы и confirmation используют `ConversationRunService` → `Core.Agent.AgentKernel`. Только kernel считает outcomes и выбирает lifecycle; controller не исполняет confirmed tool заранее. Model context/LRU/media остаются в Office.
 - Model-facing чтение документов/артефактов идёт только через `common.resources_list/resolve/search/read` и revision-pinned `rna://` URI. Durable ссылки — только `ResourceRef`; internal artifact ids не являются вторым transport.
 - Paste/drop/скрепка используют chat-scoped `stageChatResource`; `sendChat` принимает только `resourceDraftIds`. CAS/resource revision и связь с user turn сохраняются до network dispatch. Не возвращай ручные `artifactIds`, «В запрос», legacy readers, aliases или dual-write.
 - Pre-cutover chat/context streams не мигрируются: только reset/skip.

@@ -2,11 +2,13 @@
 
 Current target: 16.1.0
 Current phase: Phase 3
-Current task: Phase 3B1 завершена как introduce: pure AgentKernel, immutable RunSummary/ToolExecutionRecord и generic ports проверены fake model/tool/store. Production start/confirmation ещё используют прежний Office loop; Phase 3 не закрыта. Known baseline failure: R22.
+Current task: Phase 3B2 завершена host-neutral: production start/confirmation подключены к AgentKernel, summary replay проверен через existing events; заменённые loop/accounting paths удалены. Known baseline failure: R22.
 
-Next step: отдельная Phase 3B2 — подключить kernel к start/confirmation, текущему executor и existing typed event store; проверить RunSummary replay normal/error/unknown/pending и удалить заменённые loop/accounting paths. Сохранить preflight/fingerprint/lease gates и внешний ConversationModelSession. Полные ToolRuntime, resource и persistence/UI изменения не включать.
-Required context: master plan [Phase 3](STABILIZATION_MASTER_PLAN.md#phase-3--минимальный-agentkernel-и-runtime-truth), [ADR-0001](../decisions/ADR-0001-model-does-not-own-completion.md), [ADR-0008](../decisions/ADR-0008-unknown-effects-are-not-retried.md), [model context](../conversation-protocol.md#conversation-context), [session events](../session-events.md), [migration map](MIGRATION_MAP.md). Исторические evidence — только по необходимости.
-Open gates / remaining legacy: actual IRunStore adapter/RunSummary replay (R11), production start/confirmation wiring и Windows/Office/WebView/DPAPI/live providers не проверены. ConversationRunService/RunSummaryBuilder, Failure.Cause и lifecycle projections сохраняются до 3B2; legacy effect mapping / positive local-read registry — до Phase 4. V2 и pipelines не возвращаются.
+Next step: отдельная Phase 4 — Tool contracts и ToolRuntime: typed descriptor/policy/binding/result, migration текущего executor через adapter и первый read-only handler. Не менять resource lifecycle или полную persistence/UI projection заранее.
+Required context: [master plan Phase 4](STABILIZATION_MASTER_PLAN.md#phase-4--tool-contracts-и-toolruntime), [architecture](../architecture.md), [kernel state model](../conversation-protocol.md#kernel-state-model-phase-3b2-production-switch), [migration map](MIGRATION_MAP.md), [3B2 evidence](PHASE_3B2_KERNEL_CUTOVER.md).
+Open gates / remaining legacy: Windows x64 + Office + VS 2022, live controller/WebView/DPAPI/providers; полная Phase 9 replay/UI matrix (R11). R28 (streaming) и R29 (model-owned call IDs) остаются открытыми и не исправлены 3B2. Legacy effect mapping и positive local-read registry — Phase 4; flat bridge/message projections — Phase 9. V2/pipelines/fallback loop не возвращаются.
+
+Live report (2026-08-28, docs-only): фото показывает duplicate-ID rejection; после repair пользователь получил неполный HTML. По прямому запросу зафиксирован отдельный [R29/P1 — model-owned call IDs](RISK_REGISTER.md#r29--runtime-должен-владеть-идентификаторами-вызовов): целевое исправление — выдача ID кодом до execution, с сохранением correlation/confirmation/replay. Это отдельная правка контракта Phase 2 и consumers Phase 3, не автоматический результат 3B2; текущий v3 до согласованного switch не меняется. Полный incident trace не предоставлен, возможная ошибка scope остаётся R26; streaming — R28. Задача и критерии закрытия добавлены в [backlog](BACKLOG.md). Фаза/текущий подэтап прежние; проверены diff/локальные ссылки, build/tests и Windows/Office validation не запускались.
 
 Workflow update (2026-08-28, docs-only): §§14.3, 22–23 — обоснованный единый switch может затронуть более 10 файлов; проверки применяются по изменению, повторные прогоны без новой причины не нужны; отчёт краткий. Runtime и открытые gates не изменены. Docs diff/links — OK; pre-commit ValidateVersionFormat — pass; build/tests для этой правки не запускались.
 
@@ -29,7 +31,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
 | 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: `40282c0` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
 | 2 | done (host-neutral) | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: `c9f8b07`; 2C3A: `330aa79`; 2C3B: `4bbb039`; 2C3C: `dbb8ce1` | 2C3C: 100 targeted cases; ValidateVersionFormat pass; подробности в evidence | not performed | Active v3; old-chat skip/reset и prompt review/reset проверены локально; Windows/live-provider gates открыты |
-| 3 | in progress | 3A: `f01c3f2`; 3B1: этот commit `refactor(agent): introduce deterministic kernel contracts` | 3A: 64 cases; 3B1: 63 targeted cases, MockDemo build, ValidateVersionFormat pass | not performed | Pure kernel introduced; production switch и existing-store replay — 3B2 |
+| 3 | done host-neutral | 3A: `f01c3f2`; 3B1: `c1628ce`; 3B2: этот commit | 130 unique targeted cases; MockDemo compile; [evidence](PHASE_3B2_KERNEL_CUTOVER.md) | not performed | Production kernel switch + minimal real-store replay; Phase 4 отдельно |
 | 4 | pending | — | — | — | ToolRuntime |
 | 5 | pending | — | — | — | Bound DocumentSession |
 | 6 | pending | — | — | — | VBA vertical slice |
@@ -245,27 +247,31 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Проверка на изолированном составе этого изменения: `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "kernel:"` — 41/41, включая cancellation во время policy recheck. На предыдущей сборке того же изменения `dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "<filter>"`: `model protocol:` 15/15; `protocol context:` 6/6; `harness: production projects` 1/1. Эти 22 regression cases повторно использованы после локального исправления cancellation: active materialized sources/tests и project includes не менялись. Всего 63 разных cases pass. `dotnet build demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -c Release --no-restore --nologo -v:minimal` — pass, 0 errors, 3 прежних CA1416 warnings в PDF rendering. C# 7.3 source-linked compilation проверена; demo runtime/self-test, full harness и JS не запускались, R22 не перепроверялся. Pre-commit `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal` — pass.
 - Fake append/CAS log не доказывает existing-event replay, crash recovery или controller delivery. R11 остаётся открыт; actual IRunStore adapter и validated continuation restore — 3B2. Windows x64 + Office x64 + VS 2022 / VSTO, production controller, WebView/DPAPI/live providers не проверялись. Product `16.1.0-dev`, tags и release workflow не меняются.
 
+## Phase 3B2 — Kernel production cutover
+
+- `ConversationRunService` и controller confirmation используют единый Core kernel. Office model/tool/store ports сохраняют preflight, fingerprint, lease и model-context boundaries; старые loop, `ContinueAfterToolAsync`, `RunSummaryBuilder`, mutable ID bookkeeping и `Failure.Cause` удалены.
+- `KernelState` сохраняется через existing `run.updated`, включая pending/in-flight evidence; flat run summary — только getter/projection. Real-store replay, stale confirmation, cancellation и interrupted/materialization boundaries проверены. Контракты — в canonical docs, точная matrix/команды и reused results — в [PHASE_3B2_KERNEL_CUTOVER.md](PHASE_3B2_KERNEL_CUTOVER.md).
+- R11 contained только в минимальном контуре Phase 3; полный storage/UI и Windows/Office gates остаются. Domain tools, VBA, Resource Fabric, UI JS и version/release workflow не менялись. Development target `16.1.0-dev` не повышался, tag/push не выполнялись.
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Legacy ToolResult/safety → RunSummaryBuilder | Runtime / ToolRuntime | Loop, confirmation continuation | 3B2: общий kernel accounting и удаление старого builder; legacy typed-effect mapping до Phase 4 |
-| Optional RunExecutionSummary / отсутствующая legacy evidence | Application / Persistence / UI | Messages, LastRun, clones, bridge, static UI | 3B2: минимальный new-summary replay; Phase 9: полная projection; obsolete paths удалять при switch consumers |
-| Nonserialized ModelProtocolFailure.Cause rethrow | Runtime / Application | ConversationRunService → controller cancellation/failure path | Phase 3B2 AgentKernel switch |
-| Accepted completion / current context-usage metadata | ModelProtocol / Application | Loop → transcript / turn result | Phase 3B2: сохранить metadata в Office adapter/projection вне kernel |
-| Legacy safety + positive local-read registry → batch-safe snapshot | Runtime / ToolRuntime | Context constructor → ModelProtocol request | Phase 4 typed external/nested metadata + safety tests; неизвестные/external singleton, pipelines отключены |
-| Office transient accepted-ID bookkeeping → ModelProtocolCallContext | Runtime | ConversationRunService start/confirmation | Phase 3B2 kernel switch; один owner, без второго loop/store |
+| Legacy ToolResult → LegacyToolOutcomeAdapter / captured safety | ToolRuntime | ConversationKernelAdapter.Tools → kernel records | Phase 4: typed effects, no single-result legacy classification; R23 остаётся |
+| RunExecutionSummary projection / old flat read records | Application / Persistence / UI | Messages, ChatRunRecord getter, clones, bridge, static UI | Phase 9: полная projection; старые pending не исполняются и не backfill |
+| Legacy safety + positive local-read registry | ToolRuntime | Captured policy / materialized ModelProtocolCallContext | Phase 4 typed external metadata + safety tests; неизвестные/external singleton |
 
-Существующие runtime paths остаются текущей реализацией, а не введёнными adapters.
-Их владельцы и фазы замены указаны в [MIGRATION_MAP.md](MIGRATION_MAP.md).
+Permanent model-session/metadata owners не являются compatibility adapters.
+Остальные consumers/removal gates — в [MIGRATION_MAP.md](MIGRATION_MAP.md).
 
 ## Open P0/P1 risks
 
 - R01: false completion воспроизведён в 1A; guard 1C закрывает host-neutral safety assertions, production qualification ещё не выполнена.
-- R02–R11: остальные сценарии из master plan ожидают проверки/исправления в своих фазах.
+- R02–R10: domain/resource/UI/live-provider сценарии ожидают своих фаз; R11 minimal replay covered в 3B2, full Phase 9/Windows matrix остаётся.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.
 - R22: compact catalog harness failure воспроизведён до изменений 1B; owner ToolPack/Tests, Phase 8.
 - R26: preflight, actual v3 writer/confirmation, run-wide IDs и singleton enforcement проверены в 2C3C; production controller ordering/Office qualification и замена temporary safety registry в Phase 4 остаются открыты.
 - R27: explicit review/reset проверены на actual v3 defaults/schema 12, старый custom text schema 11 сохраняется; production controller/WebView/DPAPI validation открыта.
+- R29: model-owned call IDs требуют отдельного согласованного protocol switch; 3B2 переносит только accepted-ID bookkeeping в kernel, не генерацию ID. Полный incident trace отсутствует; риск и критерии закрытия сохранены в register/backlog.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).

@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -29,67 +30,51 @@ namespace RNAssistant.Office.Services
         public RunExecutionSummary ExecutionSummary { get; set; }
     }
 
+    // Model context remains outside the pure kernel. The same three adapters serve
+    // a fresh turn and a confirmed continuation; there is no second execution loop.
     public sealed class ConversationRunService
     {
         public delegate string PendingToolRegistrar(ChatSession session, ToolCommand command, ToolResult result);
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
+        private readonly ChatStore _chatStore;
         private readonly Func<IMaterializedModelProtocol> _modelProtocolFactory;
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
+        private readonly Action<ChatSession> _saved;
 
-        public ConversationRunService(
-            IOfficeApplicationAdapter adapter,
-            OfficeToolExecutor toolExecutor,
-            LlmCompletionDelegate completeAsync)
-            : this(adapter, toolExecutor, completeAsync, null)
-        {
-        }
+        public ConversationRunService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor,
+            ChatStore chatStore, LlmCompletionDelegate completeAsync)
+            : this(adapter, toolExecutor, chatStore, completeAsync, null) { }
 
-        internal ConversationRunService(
-            IOfficeApplicationAdapter adapter,
-            OfficeToolExecutor toolExecutor,
-            LlmCompletionDelegate completeAsync,
-            ContextCompactionService contextCompactionService,
-            Func<IMaterializedModelProtocol> modelProtocolFactory = null)
+        internal ConversationRunService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor,
+            ChatStore chatStore, LlmCompletionDelegate completeAsync, ContextCompactionService contextCompactionService,
+            Func<IMaterializedModelProtocol> modelProtocolFactory = null, Action<ChatSession> saved = null)
         {
             _adapter = adapter;
-            _toolExecutor = toolExecutor;
+            _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
+            _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
             _modelProtocolFactory = modelProtocolFactory ?? (() => new ModelProtocolClient(completeAsync));
             _contextCompactionService = contextCompactionService;
             _attachmentAnalysisService = new AttachmentAnalysisService(completeAsync);
+            _saved = saved;
         }
 
-        public Task<ChatTurnResult> ExecuteAsync(
-            string mode,
-            string text,
-            ChatSession session,
-            DocumentContext documentContext,
-            AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
-            Action<string, string, ChatActivity> progress,
-            PendingToolRegistrar pendingToolRegistrar = null,
-            IReadOnlyList<SkillDefinition> skills = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+        public Task<ChatTurnResult> ExecuteAsync(string mode, string text, ChatSession session,
+            DocumentContext documentContext, AppSettings settings, IReadOnlyList<ToolDefinition> tools,
+            Action<string, string, ChatActivity> progress, PendingToolRegistrar pendingToolRegistrar = null,
+            IReadOnlyList<SkillDefinition> skills = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             return ExecuteAsync(mode, text, session, documentContext, settings, tools, null, progress,
                 pendingToolRegistrar, skills, cancellationToken, true);
         }
 
-        public Task<ChatTurnResult> ExecuteAsync(
-            string mode,
-            string text,
-            ChatSession session,
-            DocumentContext documentContext,
-            AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
-            IReadOnlyList<ChatAttachment> attachments,
-            Action<string, string, ChatActivity> progress,
-            PendingToolRegistrar pendingToolRegistrar,
-            IReadOnlyList<SkillDefinition> skills,
-            CancellationToken cancellationToken,
-            bool appendUserMessage = true)
+        public async Task<ChatTurnResult> ExecuteAsync(string mode, string text, ChatSession session,
+            DocumentContext documentContext, AppSettings settings, IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ChatAttachment> attachments, Action<string, string, ChatActivity> progress,
+            PendingToolRegistrar pendingToolRegistrar, IReadOnlyList<SkillDefinition> skills,
+            CancellationToken cancellationToken, bool appendUserMessage = true)
         {
             settings = settings ?? new AppSettings();
             settings.EnsureAgentPromptsReviewed();
@@ -99,288 +84,57 @@ namespace RNAssistant.Office.Services
             {
                 session.Messages.Add(new ChatMessage
                 {
-                    Role = "user",
-                    Content = text ?? string.Empty,
+                    Role = "user", Content = text ?? string.Empty,
                     HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId),
-                    Attachments = attachments == null
-                        ? new List<ChatAttachment>()
-                        : new List<ChatAttachment>(attachments)
+                    Attachments = attachments == null ? new List<ChatAttachment>() : new List<ChatAttachment>(attachments)
                 });
             }
-            return RunLoopAsync(mode, text, session, documentContext, settings, tools, attachments, progress,
-                pendingToolRegistrar, skills, null, null, cancellationToken);
+            if (session.LastRun == null || session.LastRun.KernelState != null)
+                session.LastRun = new ChatRunRecord { RunId = Guid.NewGuid().ToString("N"), StartedUtc = DateTime.UtcNow };
+            if (string.IsNullOrWhiteSpace(session.LastRun.RunId)) session.LastRun.RunId = Guid.NewGuid().ToString("N");
+            if (string.IsNullOrWhiteSpace(session.LastRun.TurnId)) session.LastRun.TurnId = session.LastRun.RunId;
+            var user = session.Messages.LastOrDefault(message => !message.ProtocolMessage && message.Role == "user");
+            if (user != null) user.RunId = session.LastRun.TurnId;
+            var input = new ConversationRunInput(settings, documentContext, tools, skills, attachments);
+            using (var ports = CreatePorts(mode, text, session, input, progress, pendingToolRegistrar, cancellationToken))
+            {
+                var kernel = new AgentKernel(ports, ports, ports);
+                var result = await kernel.RunAsync(new AgentRunRequest(session.LastRun.RunId, session.LastRun.TurnId,
+                    text, new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps))),
+                    cancellationToken).ConfigureAwait(false);
+                return ports.Result(result.Summary);
+            }
         }
 
-        public Task<ChatTurnResult> ContinueAfterToolAsync(
-            ToolCommand confirmedCommand,
-            ToolResult confirmedResult,
-            ChatSession session,
-            DocumentContext documentContext,
-            AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
-            IReadOnlyList<ChatAttachment> attachments,
-            Action<string, string, ChatActivity> progress,
+        public async Task<ChatTurnResult> ConfirmAsync(string pendingId, ToolCommand command, ChatSession session,
+            ConversationRunInput input, Action<string, string, ChatActivity> progress,
             PendingToolRegistrar pendingToolRegistrar = null,
-            IReadOnlyList<SkillDefinition> skills = null,
-            CancellationToken cancellationToken = default(CancellationToken),
-            int initialIterationsUsed = 0,
-            int initialToolStepsUsed = 0,
-            RunSummaryBuilder summaryBuilder = null)
+            Func<CancellationToken, Task<ConversationRunInput>> refreshModelInput = null,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (!string.Equals(ChatModes.Normalize(session == null ? null : session.Mode), ChatModes.Agent, StringComparison.Ordinal))
-            {
+            if (session == null || ChatModes.Normalize(session.Mode) != ChatModes.Agent)
                 throw new InvalidOperationException("Only Agent mode can continue a confirmed tool call.");
+            input.Settings.EnsureAgentPromptsReviewed();
+            var continuation = ConversationProtocolContext.RestoreContinuation(session, command);
+            if (continuation.Summary.PendingConfirmation.PendingId != pendingId)
+                throw new InvalidOperationException("Pending tool was not found or was already resolved.");
+            using (var ports = CreatePorts(ChatModes.Agent, LatestUserRequest(session), session, input,
+                progress, pendingToolRegistrar, cancellationToken, command, refreshModelInput, continuation.Revision))
+            {
+                var result = await new AgentKernel(ports, ports, ports).ResumeAsync(session.LastRun.RunId,
+                    pendingId, continuation, cancellationToken).ConfigureAwait(false);
+                return ports.Result(result.Summary);
             }
-            settings = settings ?? new AppSettings();
-            settings.EnsureAgentPromptsReviewed();
-            ConversationProtocolContext.EnsureCanContinue(session, confirmedCommand);
-            return RunLoopAsync(ChatModes.Agent, LatestUserRequest(session), session, documentContext, settings, tools, attachments,
-                progress, pendingToolRegistrar, skills, confirmedCommand, confirmedResult, cancellationToken,
-                initialIterationsUsed, initialToolStepsUsed, summaryBuilder);
         }
 
-        private async Task<ChatTurnResult> RunLoopAsync(
-            string mode,
-            string text,
-            ChatSession session,
-            DocumentContext documentContext,
-            AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
-            IReadOnlyList<ChatAttachment> attachments,
-            Action<string, string, ChatActivity> progress,
-            PendingToolRegistrar pendingToolRegistrar,
-            IReadOnlyList<SkillDefinition> skills,
-            ToolCommand initialCommand,
-            ToolResult initialResult,
-            CancellationToken cancellationToken,
-            int initialIterationsUsed = 0,
-            int initialToolStepsUsed = 0,
-            RunSummaryBuilder summaryBuilder = null)
+        private ConversationKernelAdapter CreatePorts(string mode, string text, ChatSession session,
+            ConversationRunInput input, Action<string, string, ChatActivity> progress,
+            PendingToolRegistrar registrar, CancellationToken cancellationToken, ToolCommand confirmedCommand = null,
+            Func<CancellationToken, Task<ConversationRunInput>> refresh = null, long revision = 0)
         {
-            var policy = ConversationRunPolicy.For(mode);
-            ConversationModelSession.ReleasePreviousMedia(session);
-            var runnableCatalog = PrepareToolsForRun(tools);
-            var enabledSkills = policy.SelectSkills(skills);
-            CapabilityDiscoveryExecutor.ThrowOnCollision(runnableCatalog, enabledSkills);
-            runnableCatalog = _toolExecutor.AvailableConversationToolsForSession(runnableCatalog, session);
-            runnableCatalog = policy.SelectTools(runnableCatalog);
-            CapabilityDiscoveryExecutor.BindReadSchema(runnableCatalog, enabledSkills);
-            var protocolContext = ConversationProtocolContext.Begin(session, runnableCatalog, initialCommand);
-            protocolContext.EnsureComplete();
-            if (!policy.AllowsConfirmation) pendingToolRegistrar = null;
-            summaryBuilder = summaryBuilder ?? new RunSummaryBuilder(runnableCatalog,
-                initialCommand == null ? null : RunSummaryBuilder.ContinuationSeed(session));
-            if (initialCommand != null) summaryBuilder.Observe(initialCommand, initialResult);
-            summaryBuilder.UseCatalog(runnableCatalog);
-            summaryBuilder.Publish(session);
-            var modelSession = await ConversationModelSession.CreateAsync(
-                _adapter,
-                _contextCompactionService,
-                _attachmentAnalysisService,
-                policy.Mode,
-                text,
-                session,
-                documentContext,
-                settings,
-                runnableCatalog,
-                enabledSkills,
-                attachments,
-                initialCommand != null && initialResult != null,
-                progress,
-                cancellationToken).ConfigureAwait(false);
-            var results = new List<object>();
-            var toolSteps = Math.Max(0, initialToolStepsUsed);
-            var iterationsUsed = Math.Max(0, initialIterationsUsed);
-            object contextUsage = null;
-            var modelProtocol = _modelProtocolFactory();
-            var protocolProgress = ConversationStreamProgressProjector.ForProtocol(progress);
-
-            try
-            {
-            if (initialCommand != null && initialResult != null)
-            {
-                modelSession.AppendConfirmedResult(initialCommand, initialResult);
-                results.Add(AgentTranscript.DescribeResult(initialCommand, initialResult));
-                var confirmedCost = Math.Max(1, initialResult.ToolStepsConsumed);
-                toolSteps += initialToolStepsUsed > 0 ? Math.Max(0, confirmedCost - 1) : confirmedCost;
-                UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "executing");
-            }
-
-            for (; iterationsUsed < Math.Max(1, settings.MaxAgentIterations);)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                iterationsUsed += 1;
-                UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "thinking");
-                Report(progress, "thinking", "Модель выбирает следующий шаг...", null);
-                var stepId = Guid.NewGuid().ToString("N");
-                ModelProtocolResult protocolResult;
-                try
-                {
-                    protocolResult = await modelProtocol.GetResponseAsync(
-                        modelSession.CreateRequest(stepId, protocolContext.Snapshot()),
-                        protocolProgress, cancellationToken).ConfigureAwait(false);
-                }
-                finally
-                {
-                    // Every internal attempt sees the same materialized prompt. Release
-                    // ephemeral media only after the protocol step accepts or terminates.
-                    modelSession.ReleaseRequestMedia();
-                }
-                contextUsage = protocolResult.ContextUsage ?? contextUsage;
-                if (protocolResult.Failure != null)
-                {
-                    var failure = protocolResult.Failure;
-                    // Phase 2A adapter to the existing controller failure/cancellation path.
-                    if (failure.Cause != null) ExceptionDispatchInfo.Capture(failure.Cause).Throw();
-                    var budgetFailure = failure.Kind == ModelProtocolFailureKind.PromptBudgetExceeded;
-                    return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, failure.Message,
-                        budgetFailure ? "Контекст переполнен" : "Некорректный ответ модели",
-                        budgetFailure ? "prompt_budget_exceeded" : "invalid_model_response");
-                }
-                if (protocolResult.ProviderRefusal != null)
-                {
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(protocolResult.ProviderRefusal,
-                        protocolResult.Completion, null, AgentResponseStatuses.Refused));
-                    return Result(session, summaryBuilder, protocolResult.ProviderRefusal, results, contextUsage,
-                        false, AgentResponseStatuses.Refused, AgentResponseStatuses.Refused);
-                }
-                var response = protocolResult.Response;
-                protocolContext.ObserveAccepted(response.ToolCalls);
-                var completion = protocolResult.Completion;
-                if (response.ToolCalls.Count == 0)
-                {
-                    var finalText = response.Message;
-                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(
-                        finalText, completion, null, AgentResponseStatuses.Completed));
-                    // Empty calls end the model loop; the existing independent execution
-                    // summary remains the authority for effects, errors and unknowns.
-                    return Result(session, summaryBuilder, finalText, results, contextUsage, false,
-                        AgentResponseStatuses.Completed, AgentResponseStatuses.Completed);
-                }
-
-                var stepMessage = string.IsNullOrWhiteSpace(response.Message) ? string.Empty : response.Message.Trim();
-                if (!string.IsNullOrWhiteSpace(stepMessage))
-                {
-                    Report(progress, "acting", stepMessage, new ChatActivity
-                    {
-                        StepId = stepId,
-                        StepMessage = stepMessage,
-                        Kind = "step",
-                        Title = stepMessage,
-                        Status = "running"
-                    });
-                }
-                for (var callIndex = 0; callIndex < response.ToolCalls.Count; callIndex++)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var call = response.ToolCalls[callIndex];
-                    var command = AgentJsonProtocol.ToCommand(call);
-                    command.RuntimeStepId = stepId;
-                    modelSession.AppendToolCall(call,
-                        callIndex == 0 ? response.Message : string.Empty,
-                        callIndex == 0 ? completion : null);
-                    var activityMessage = AgentTranscript.CreateRunningToolMessage(session, command, stepId, stepMessage);
-                    session.Messages.Add(activityMessage);
-                    Report(progress, "tool_running",
-                        string.IsNullOrWhiteSpace(stepMessage) ? "Выполняю действие" : stepMessage,
-                        activityMessage.Activity);
-
-                    ToolResult toolResult;
-                    if (toolSteps >= Math.Max(1, settings.MaxAgentToolSteps))
-                    {
-                        toolResult = ToolResult.Fail("Conversation tool step limit reached.", null, "tool_step_limit_reached", false);
-                    }
-                    else
-                    {
-                        try
-                        {
-                            toolResult = _toolExecutor.Execute(
-                                command,
-                                runnableCatalog,
-                                settings,
-                                false,
-                                false,
-                                session,
-                                Math.Max(1, settings.MaxAgentToolSteps - toolSteps),
-                                enabledSkills,
-                                cancellationToken) ?? ToolResult.Fail("Tool returned no result.", null, "missing_result", true);
-                        }
-                        catch
-                        {
-                            // No result after entering the executor cannot certify a write's effect.
-                            summaryBuilder.Observe(command, null);
-                            summaryBuilder.Publish(session, activityMessage);
-                            throw;
-                        }
-                    }
-                    summaryBuilder.Observe(command, toolResult);
-                    summaryBuilder.Publish(session, activityMessage);
-                    if (!policy.AllowsConfirmation && AgentTranscript.IsWaitingResult(toolResult))
-                    {
-                        var consumedSteps = Math.Max(1, toolResult.ToolStepsConsumed);
-                        toolResult = ToolResult.Fail(
-                            "This conversation mode cannot execute a tool that requires confirmation.",
-                            null,
-                            "conversation_policy_denied",
-                            false);
-                        toolResult.ToolStepsConsumed = consumedSteps;
-                    }
-                    toolSteps += Math.Max(1, toolResult.ToolStepsConsumed);
-                    UpdateRunCursor(session, iterationsUsed, toolSteps, "running", "tool_result");
-                    if (AgentTranscript.IsWaitingResult(toolResult) && pendingToolRegistrar != null)
-                    {
-                        toolResult.ConfirmationCatalogSha256 = ToolExecutionFingerprint(
-                            runnableCatalog,
-                            command.ToolId);
-                        toolResult.PendingId = pendingToolRegistrar(session, command, toolResult);
-                    }
-
-                    if (!AgentTranscript.IsWaitingResult(toolResult) && !AgentTranscript.IsAwaitingUserResult(toolResult))
-                    {
-                        var prepared = await modelSession.PrepareToolResultAsync(toolResult, cancellationToken).ConfigureAwait(false);
-                        toolResult = prepared.Result;
-                        summaryBuilder.Observe(command, toolResult);
-                        summaryBuilder.Publish(session, activityMessage);
-                        modelSession.AppendToolResult(command, prepared);
-                    }
-                    AgentTranscript.CompleteToolActivityMessage(session, activityMessage, command, toolResult, stepId, stepMessage);
-                    summaryBuilder.Observe(command, toolResult);
-                    summaryBuilder.Publish(session, activityMessage);
-                    results.Add(AgentTranscript.DescribeResult(command, toolResult));
-
-                    if (AgentTranscript.IsWaitingResult(toolResult))
-                    {
-                        var waitingText = string.IsNullOrWhiteSpace(response.Message) ? toolResult.Message : response.Message.Trim();
-                        UpdateRunCursor(session, iterationsUsed, toolSteps,
-                            "waiting_confirmation", "waiting_confirmation");
-                        Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
-                        return Result(session, summaryBuilder, waitingText, results, contextUsage, true, null, "waiting_confirmation");
-                    }
-                    if (AgentTranscript.IsAwaitingUserResult(toolResult))
-                    {
-                        var waitingText = string.IsNullOrWhiteSpace(toolResult.Message) ? response.Message : toolResult.Message;
-                        UpdateRunCursor(session, iterationsUsed, toolSteps, "awaiting_user", "awaiting_user");
-                        Report(progress, "tool_result", waitingText, activityMessage.Activity);
-                        return Result(session, summaryBuilder, waitingText, results, contextUsage, false,
-                            AgentResponseStatuses.AwaitingUser, AgentResponseStatuses.AwaitingUser);
-                    }
-                    Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
-                    if (string.Equals(toolResult.ErrorCode, "tool_step_limit_reached", StringComparison.OrdinalIgnoreCase))
-                    {
-                        break;
-                    }
-                }
-                modelSession.EndResponse();
-            }
-
-            var limitText = "Выполнение остановлено: достигнут лимит шагов.";
-            return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, limitText,
-                "Лимит выполнения", "step_limit_reached");
-            }
-            finally
-            {
-                modelSession.Dispose();
-            }
+            return new ConversationKernelAdapter(_adapter, _toolExecutor, _chatStore, _modelProtocolFactory(),
+                _contextCompactionService, _attachmentAnalysisService, _saved, mode, text, session, input,
+                progress, registrar, cancellationToken, confirmedCommand, refresh, revision);
         }
 
         internal static List<ToolDefinition> PrepareToolsForRun(IEnumerable<ToolDefinition> tools)
@@ -482,69 +236,6 @@ namespace RNAssistant.Office.Services
             return !string.IsNullOrWhiteSpace(id) && !id.Any(char.IsWhiteSpace);
         }
 
-        private static ChatTurnResult FinishWithDiagnostic(
-            ChatSession session,
-            RunSummaryBuilder summaryBuilder,
-            IReadOnlyList<object> results,
-            object contextUsage,
-            string text,
-            string title = "Некорректный ответ модели",
-            string executionStatus = "invalid_model_response")
-        {
-            var activity = new ChatActivity
-            {
-                Kind = "diagnostic",
-                Title = title,
-                Status = "failed",
-                ExecutionStatus = executionStatus,
-                ResultMessage = text
-            };
-            session.Messages.Add(AgentTranscript.CreateAssistantMessage(text, null, activity));
-            return Result(session, summaryBuilder, text, results, contextUsage, false, null, "failed");
-        }
-
-        private static ChatTurnResult Result(
-            ChatSession session,
-            RunSummaryBuilder summaryBuilder,
-            string text,
-            IReadOnlyList<object> results,
-            object contextUsage,
-            bool waitingForConfirmation,
-            string responseStatus = null,
-            string runStatus = null)
-        {
-            return new ChatTurnResult
-            {
-                AssistantText = text ?? string.Empty,
-                ExecutionSummary = summaryBuilder.Publish(session, session.Messages.LastOrDefault(message =>
-                    message != null && !message.ProtocolMessage && string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))),
-                ToolResults = results ?? new object[0],
-                ContextUsage = contextUsage,
-                WaitingForConfirmation = waitingForConfirmation,
-                ResponseProtocolVersion = AgentResponseStatuses.IsKnown(responseStatus)
-                    ? AgentResponseProtocol.CurrentVersion
-                    : 0,
-                ResponseStatus = AgentResponseStatuses.IsKnown(responseStatus) ? responseStatus : null,
-                RunStatus = string.IsNullOrWhiteSpace(runStatus)
-                    ? (waitingForConfirmation ? "waiting_confirmation" : "failed")
-                    : runStatus
-            };
-        }
-
-        private static void UpdateRunCursor(
-            ChatSession session,
-            int iterationsUsed,
-            int toolStepsUsed,
-            string status,
-            string phase)
-        {
-            if (session == null || session.LastRun == null) return;
-            session.LastRun.IterationsUsed = Math.Max(0, iterationsUsed);
-            session.LastRun.ToolStepsUsed = Math.Max(0, toolStepsUsed);
-            if (!string.IsNullOrWhiteSpace(status)) session.LastRun.Status = status;
-            if (!string.IsNullOrWhiteSpace(phase)) session.LastRun.Phase = phase;
-        }
-
         private static string LatestUserRequest(ChatSession session)
         {
             var message = (session == null ? null : session.Messages ?? new List<ChatMessage>())
@@ -564,11 +255,6 @@ namespace RNAssistant.Office.Services
                     "Conversation mode does not match the active chat session.");
             }
             return requested;
-        }
-
-        private static void Report(Action<string, string, ChatActivity> progress, string phase, string message, ChatActivity activity)
-        {
-            if (progress != null) progress(phase, message ?? string.Empty, activity);
         }
 
     }

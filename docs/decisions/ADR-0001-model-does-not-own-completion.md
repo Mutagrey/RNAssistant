@@ -1,16 +1,16 @@
 # ADR-0001: Model does not own completion
 
 Date: 2026-08-28
-Status: Accepted; Phase 3B1 kernel introduced and tested with fake ports. Production switch and existing-event replay remain Phase 3B2.
+Status: Accepted; Phase 3B2 production wiring and existing-event replay verified host-neutral. Windows/Office delivery qualification remains open.
 
 ## Context
 
 Empty v3 tool calls end model generation; they cannot prove a document effect.
-Phase 3A isolated materialization in Office. A full switch still couples model
-context, normal/confirmation execution, durable events and visible projections.
+Phase 3A isolated materialization in Office. The switch coordinates model context, normal/confirmation execution, durable
+events and visible projections.
 Per [§14.3](../stabilization/STABILIZATION_MASTER_PLAN.md#143-change-budget),
-3B1 introduces the kernel contract; 3B2 connects those current consumers and
-removes their replaced loop/accounting paths.
+3B1 introduced the kernel contract; 3B2 connects those consumers and removes
+their replaced loop/accounting paths in one coordinated change.
 
 ## Decision
 
@@ -21,7 +21,7 @@ removes their replaced loop/accounting paths.
   ID set. Only accepted responses, typed boundary failures and separate native
   refusals cross it. The materialized endpoint boundary is explicitly named
   `IMaterializedModelProtocol.GetResponseAsync`; its existing client and v3 retry
-  behavior are unchanged. The future Office adapter uses `ConversationModelSession`
+  behavior are unchanged. The Office adapter uses `ConversationModelSession`
   to materialize requests/results; provider metadata stays outside the kernel.
 - New execution-result messages retain their typed `ToolExecutionRecord`, including
   synthetic errors/unknowns/non-dispatch. Result bodies are opaque here; the
@@ -48,16 +48,21 @@ removes their replaced loop/accounting paths.
 
 ## Scope and remaining gate
 
-The kernel currently has only harness consumers; it is not selected by production
-start/continue, feature flags or fallback. `ConversationRunService`,
-`RunSummaryBuilder`, `Failure.Cause` and current LastRun/bridge projections stay
-active until the 3B2 switch. 3B2 must connect the executor and existing typed event
-store, preserve controller guards, and prove normal/error/unknown/confirmation
-summary replay before Phase 3 can close. Full ToolRuntime, Tool Result v1, resource
-and persistence/UI redesigns remain in their own phases.
+`ConversationRunService` invokes the kernel for start and confirmation through
+`ConversationKernelAdapter` model/tool/store ports. The controller retains its
+lease, document and preflight gates; it no longer executes or aggregates the
+confirmed result. `RunSummaryBuilder`, the Office loop, transient ID accumulator
+and `Failure.Cause` are removed. No feature flag, alias or second loop remains.
 
-Fake model/tool/store tests cover outcome ordering, IDs, budgets, cancellation,
-confirmation and append faults. They do not prove existing-store replay, live
-providers or Windows/Office/controller delivery. See
-[PROGRESS](../stabilization/PROGRESS.md#phase-3b1--pure-kernel-introduction) and
+The existing typed event stream carries immutable `KernelState`; flat run DTOs
+are derived from it, while old records remain inspectable. Complete accepted
+history reconstructs a pending continuation without an ID index or historical
+backfill. Legacy result mapping/local-read classification remain until Phase 4;
+working-set/resource implementation remains outside Core until Phase 8; complete
+persistence/UI normalization remains Phase 9.
+
+Pure tests and real ChatStore replay cover outcomes, confirmation, cancellation,
+CAS and interruption. MockDemo compiles the actual controller, but this is not
+Windows/Office execution or delivery validation. See
+[cutover evidence](../stabilization/PHASE_3B2_KERNEL_CUTOVER.md) and
 [MIGRATION_MAP](../stabilization/MIGRATION_MAP.md).

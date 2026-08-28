@@ -79,16 +79,10 @@ namespace RNAssistant.Core.ModelProtocol
         public LlmFailureKind? ProviderKind { get; private set; }
         public int? StatusCode { get; private set; }
 
-        // Temporary adapter for the existing controller's exception/cancellation path.
-        // Not a durable payload; AgentKernel replaces this consumer in Phase 3.
-        [JsonIgnore]
-        public Exception Cause { get; private set; }
-
         internal ModelProtocolFailure(ModelProtocolFailureKind kind, string message, Exception cause = null)
         {
             Kind = kind;
             Message = message;
-            Cause = cause;
             var provider = cause as LlmRequestException;
             ProviderKind = provider == null ? (LlmFailureKind?)null : provider.Kind;
             StatusCode = provider == null ? null : provider.StatusCode;

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -44,15 +45,35 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static ToolCommand PendingCommand(ChatSession session)
+        {
+            var call = session.LastRun.KernelState.Summary.PendingConfirmation.Call;
+            return new ToolCommand { ToolId = call.Name, ToolCallId = call.Id,
+                Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(call.ArgumentsJson) };
+        }
+
+        private static readonly AsyncLocal<AppDataPaths> FixturePaths = new AsyncLocal<AppDataPaths>();
+
+        private static ConversationRunService CreateConversationRunService(IOfficeApplicationAdapter adapter,
+            OfficeToolExecutor executor, LlmCompletionDelegate completion, ContextCompactionService compaction = null,
+            Func<IMaterializedModelProtocol> modelProtocolFactory = null)
+        {
+            if (FixturePaths.Value == null) throw new InvalidOperationException("Conversation tests require WithTempPaths.");
+            return new ConversationRunService(adapter, executor, new ChatStore(FixturePaths.Value), completion, compaction, modelProtocolFactory);
+        }
+
         private static void WithTempPaths(Action<AppDataPaths> action)
         {
             var root = Path.Combine(Path.GetTempPath(), "RNAssistant.Harness." + Guid.NewGuid().ToString("N"));
+            var previousPaths = FixturePaths.Value;
             try
             {
-                action(AppDataPaths.CreateForRoot(root));
+                FixturePaths.Value = AppDataPaths.CreateForRoot(root);
+                action(FixturePaths.Value);
             }
             finally
             {
+                FixturePaths.Value = previousPaths;
                 if (Directory.Exists(root))
                 {
                     Directory.Delete(root, true);
