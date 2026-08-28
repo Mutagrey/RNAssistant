@@ -1705,6 +1705,7 @@ namespace RNAssistant.Harness
                     Content = "Нужны дополнительные данные.",
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     ResponseStatus = AgentResponseStatuses.AwaitingUser,
+                    ExecutionSummary = new RunExecutionSummary { ExecutionHealth = "unknown", WriteUnknown = 1, WriteError = 1 },
                     RunId = "run-2"
                 });
                 session.Messages.Add(new ChatMessage
@@ -1715,6 +1716,7 @@ namespace RNAssistant.Harness
                 });
                 session.LastRun.Status = AgentResponseStatuses.AwaitingUser;
                 session.LastRun.Phase = AgentResponseStatuses.AwaitingUser;
+                session.LastRun.ExecutionSummary = session.Messages.Single(message => message.RunId == "run-2").ExecutionSummary.Clone();
                 store.Save(session);
                 events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(SessionEventTypes.TurnEnded, events.Last().Type, "terminal run closes turn");
@@ -1741,6 +1743,24 @@ namespace RNAssistant.Harness
                     "run response protocol version replays");
                 AssertEqual(AgentResponseStatuses.AwaitingUser, loaded.LastRun.Status,
                     "declared terminal run status replays");
+                AssertEqual("unknown", current.ExecutionSummary.ExecutionHealth, "runtime health survives canonical event replay");
+                AssertEqual(1, loaded.LastRun.ExecutionSummary.WriteError, "run summary counts survive replay");
+                AssertTrue(legacy.ExecutionSummary == null, "legacy history has no fabricated runtime evidence");
+                var clone = ChatCloneService.CloneSessionSnapshot(loaded);
+                var clonedMessage = clone.Messages.Single(item => item.RunId == "run-2");
+                clonedMessage.ExecutionSummary.WriteUnknown = 7;
+                clone.LastRun.ExecutionSummary.WriteError = 8;
+                AssertEqual(1, current.ExecutionSummary.WriteUnknown, "message summary is independently cloned for projection");
+                AssertEqual(1, loaded.LastRun.ExecutionSummary.WriteError, "run summary is independently cloned");
+                var bridge = JObject.FromObject(new ChatStateResponse
+                {
+                    ExecutionSummary = loaded.LastRun.ExecutionSummary,
+                    Messages = loaded.Messages
+                });
+                AssertEqual("unknown", (string)bridge["executionSummary"]["ExecutionHealth"], "typed bridge exposes runtime health");
+                var modelMessages = new LlmMessageBuilder().Build(new[] { current }, new AppSettings());
+                AssertTrue(!JArray.FromObject(modelMessages.Messages).ToString().Contains("ExecutionSummary"),
+                    "UI runtime evidence is not a new model protocol field");
 
                 loaded.LastRun = new ChatRunRecord
                 {

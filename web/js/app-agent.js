@@ -282,9 +282,15 @@ function appendCollapsedAgentStep(parent, step, isCurrent, finished) {
   parent.appendChild(details);
 }
 
-function agentRunSummaryTitle(status, elapsed) {
+function agentRunSummaryTitle(status, elapsed, executionSummary) {
   var title;
-  if (status === "failed") {
+  if (executionSummary && executionSummary.executionHealth === "unknown") {
+    title = "Результат изменений не определён";
+  } else if (executionSummary && executionSummary.executionHealth === "errors") {
+    title = "Выполнение содержит ошибки";
+  } else if (status === "completed" && executionSummary && !executionSummary.writeOk) {
+    title = "Ответ получен";
+  } else if (status === "failed") {
     title = "Прервано";
   } else if (status === "cancelled") {
     title = "Отменено";
@@ -299,7 +305,7 @@ function agentRunSummaryTitle(status, elapsed) {
   } else if (status === "planned") {
     title = "План готов";
   } else if (status === "unknown") {
-    title = "Завершено (старый формат)";
+    title = "Результат не подтверждён runtime";
   } else {
     title = "Готово";
   }
@@ -334,7 +340,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   var actionCount = agentToolCallCount(timeline);
   var title = document.createElement("span");
   title.className = "agent-run-history-title";
-  title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed);
+  title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed, stats.executionSummary);
   summary.appendChild(title);
   appendAgentRunSummaryState(summary, stats.status);
   var caret = document.createElement("span");
@@ -411,6 +417,30 @@ function appendAgentRunOutcome(parent, activity, overview) {
   parent.appendChild(outcome);
 }
 
+function appendAgentExecutionSummary(parent, summary) {
+  var health = summary ? summary.executionHealth : "unknown";
+  var note = document.createElement("div");
+  note.className = "message-outcome " + (health === "clean" ? "status-unknown" : "status-blocked");
+  note.setAttribute("data-runtime-health", health);
+  note.setAttribute("role", health === "clean" ? "status" : "alert");
+  if (!summary) {
+    note.textContent = "Для этого run нет runtime summary. Результат изменений не подтверждён.";
+  } else if (health === "unknown") {
+    note.textContent = "Результат изменений не определён. Требуется проверка фактического состояния.";
+  } else if (health === "errors") {
+    note.textContent = "Выполнение содержит ошибки. Нельзя считать все изменения применёнными.";
+  } else if (!summary.writeOk) {
+    note.textContent = "Ответ модели. Подтверждённых изменений нет.";
+  } else {
+    note.textContent = "Runtime: ошибки выполнения не зарегистрированы.";
+  }
+  if (summary && (summary.writeOk || summary.writeError || summary.writeUnknown)) {
+    note.textContent += " Действия с изменениями: успешно — " + summary.writeOk +
+      ", ошибка — " + summary.writeError + ", результат неизвестен — " + summary.writeUnknown + ".";
+  }
+  parent.appendChild(note);
+}
+
 function renderAgentRunArticle(run) {
   var items = run.items || [];
   var finalMessage = run.finalMessage || null;
@@ -418,7 +448,8 @@ function renderAgentRunArticle(run) {
   var timingItems = timeline.slice();
   if (finalMessage) timingItems.push(finalMessage);
   var terminalStatus = finalMessage ? messageResponseStatus(finalMessage.message) : "";
-  var stats = agentRunStats(timingItems, !!finalMessage && !run.live, terminalStatus);
+  var executionSummary = agentRunExecutionSummary(items, finalMessage);
+  var stats = agentRunStats(timingItems, !!finalMessage && !run.live, terminalStatus, executionSummary);
   var steps = groupAgentRunSteps(timeline);
   var node = document.createElement("article");
   node.className = "message assistant agent-run status-" + stats.status + (run.live ? " live" : "");
@@ -440,6 +471,8 @@ function renderAgentRunArticle(run) {
       appendAgentRunOutcome(body, stats.current, overview);
     }
   }
+  // This warning is outside collapsed trace and never derived from the model's prose.
+  if (!run.live) appendAgentExecutionSummary(body, executionSummary);
   if (finalMessage) {
     var finalSection = document.createElement("section");
     finalSection.className = "agent-final-step";
@@ -452,7 +485,11 @@ function renderAgentRunArticle(run) {
   node.appendChild(body);
 
   if (!run.live) {
-    appendAgentRunFooter(node, items, finalMessage);
+    if (!items.length && finalMessage && typeof appendMessageFooter === "function") {
+      appendMessageFooter(node, finalMessage.message, finalMessage.index, null);
+    } else {
+      appendAgentRunFooter(node, items, finalMessage);
+    }
   }
   enhanceActivity(body);
   return node;

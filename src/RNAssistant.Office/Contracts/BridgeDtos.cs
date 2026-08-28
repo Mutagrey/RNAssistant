@@ -571,6 +571,9 @@ namespace RNAssistant.Office.Contracts
 
     public class ChatStateResponse
     {
+        [JsonProperty("executionSummary", NullValueHandling = NullValueHandling.Ignore)]
+        public RunExecutionSummary ExecutionSummary { get; set; }
+
         [JsonProperty("activeChatId")]
         public string ActiveChatId { get; set; }
 

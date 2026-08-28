@@ -132,6 +132,7 @@
     <Compile Include="Services\ChatRunRegistry.cs" />
     <Compile Include="Services\ModelTracePersistenceService.cs" />
     <Compile Include="Services\RunCausalTrace.cs" />
+    <Compile Include="Services\RunSummaryBuilder.cs" />
     <Compile Include="Services\SessionTraceWriteQueue.cs" />
     <Compile Include="Services\HtmlNetworkService.cs" />
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />

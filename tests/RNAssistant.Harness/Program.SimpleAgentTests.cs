@@ -487,6 +487,7 @@ namespace RNAssistant.Harness
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "successful write keeps the accepted model status");
                 AssertEqual("completed", result.RunStatus, "successful write completes the current run");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "final status enters accepted history");
+                AssertRuntimeExecutionSummary(result, session, "clean", 1, 0, 0);
                 AssertTrue(adapter.HasSheet("Report"), "tool executed");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "one write dispatch");
                 AssertEqual(3, calls.Count, "schema read, execution, and final model turns");
@@ -502,8 +503,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        // Phase 1A records current false completion, not the desired safety contract.
-        // Phase 1C must replace these completion expectations with runtime health assertions.
+        // Phase 1C: loop completion and the model's text cannot certify an external effect.
         private static void SimpleAgentCharacterizesCompletedAfterWriteError()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
@@ -514,7 +514,7 @@ namespace RNAssistant.Harness
                 {
                     LoadToolSchemaResponse("excel.add_sheet", "schema_failed_write"),
                     "{\"status\":\"in_progress\",\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"failed_write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    "{\"status\":\"completed\",\"message\":\"Лист Report создан.\",\"tool_calls\":[]}"
+                    "{\"status\":\"completed\",\"message\":\"Лист Report создан.\",\"tool_calls\":[],\"executionSummary\":{\"ExecutionHealth\":\"clean\",\"WriteOk\":1000}}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -535,7 +535,8 @@ namespace RNAssistant.Harness
                 AssertTrue(!adapter.HasSheet("Report"), "the claimed sheet was not created");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "failed write is not retried");
                 AssertContains(FlattenSimple(requests.Last()), "\"ok\":false", "the final model request saw the error");
-                AssertEqual("completed", result.RunStatus, "KNOWN FALSE COMPLETION: write error does not change run status");
+                AssertEqual("completed", result.RunStatus, "loop completion is independent of execution health");
+                AssertRuntimeExecutionSummary(result, session, "errors", 0, 1, 0);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after write error");
                 AssertEqual("Лист Report создан.", result.AssistantText, "false mutation claim is not filtered");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "false completion enters accepted history");
@@ -592,7 +593,8 @@ namespace RNAssistant.Harness
                 AssertContains(adapter.VbaModuleCode, "\"diverged\"", "fake host state matches neither before nor intended");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.vba_replace_module"), "unknown write is dispatched once");
                 AssertContains(FlattenSimple(requests.Last()), "vba_mutation_unknown", "model receives unknown effect evidence");
-                AssertEqual("completed", result.RunStatus, "KNOWN FALSE COMPLETION: unknown effect does not change run status");
+                AssertEqual("completed", result.RunStatus, "loop completion is independent of execution health");
+                AssertRuntimeExecutionSummary(result, session, "unknown", 0, 0, 1);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after unknown write");
                 AssertEqual("Модуль Module1 обновлён.", result.AssistantText, "unverified mutation claim survives");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "unknown and completed coexist in history");
@@ -742,10 +744,24 @@ namespace RNAssistant.Harness
                 AssertEqual(0, result.ToolResults.Count, "there is no tool effect evidence");
                 AssertEqual(0, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no requested write was dispatched");
                 AssertTrue(!adapter.HasSheet("Report"), "model text did not create a sheet");
-                AssertEqual("completed", result.RunStatus, "CURRENT BEHAVIOR: no-write response has the same completed run status");
+                AssertEqual("completed", result.RunStatus, "a no-write response may finish the loop");
+                AssertRuntimeExecutionSummary(result, session, "clean", 0, 0, 0);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "no-write response carries model completed");
                 AssertEqual("Лист Report создан.", session.Messages.Last().Content, "unsupported mutation claim reaches visible history");
             });
+        }
+
+        private static void AssertRuntimeExecutionSummary(
+            ChatTurnResult result, ChatSession session, string health, int writeOk, int writeError, int writeUnknown)
+        {
+            var summary = JObject.FromObject(result)["ExecutionSummary"] as JObject;
+            AssertTrue(summary != null, "runtime execution summary is required independently of model completed");
+            AssertEqual(health, (string)summary["ExecutionHealth"], "runtime owns execution health");
+            AssertEqual(writeOk, (int)summary["WriteOk"], "confirmed write count");
+            AssertEqual(writeError, (int)summary["WriteError"], "definite write error count");
+            AssertEqual(writeUnknown, (int)summary["WriteUnknown"], "uncertain write count");
+            AssertTrue(JToken.DeepEquals(summary, JObject.FromObject(session.Messages.Last())["ExecutionSummary"]),
+                "visible final message retains runtime summary independently of its text/status");
         }
 
         private static void SimpleAgentPromptIsRequestLocal()
@@ -1016,6 +1032,7 @@ namespace RNAssistant.Harness
                 AssertEqual(20, requests.Count, "twenty total responses with initial request plus nineteen repairs");
                 AssertContains(result.AssistantText, "после 19 попыток", "current diagnostic counts repairs, not total requests");
                 AssertEqual("failed", result.RunStatus, "all invalid responses fail the run");
+                AssertRuntimeExecutionSummary(result, session, "clean", 0, 0, 0);
                 AssertTrue(string.IsNullOrWhiteSpace(result.ResponseStatus), "no accepted model status after exhausted repair");
                 AssertEqual(0, result.ToolResults.Count, "invalid responses never execute tools");
                 AssertTrue(session.Messages.Last().Activity != null, "diagnostic activity recorded");
@@ -1060,6 +1077,7 @@ namespace RNAssistant.Harness
 
                 AssertEqual(20, requests.Count, "nineteen protection responses followed by one valid response");
                 AssertEqual("completed", result.RunStatus, "twentieth request can complete the run");
+                AssertRuntimeExecutionSummary(result, session, "clean", 0, 0, 0);
                 AssertEqual(0, result.ToolResults.Count, "repair attempts do not dispatch tools");
                 var accepted = session.Messages.Where(message => message.Role == "assistant" && !message.ExcludeFromModelContext).ToList();
                 AssertEqual(1, accepted.Count, "only one assistant response enters accepted history");
@@ -1254,6 +1272,59 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SimpleAgentConfirmationPreservesExecutionHealth(string initialHealth)
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                adapter.QueueResult("excel.add_sheet", ToolResult.Fail("Write did not report success", null,
+                    initialHealth == "unknown" ? "tool_effect_uncertain" : "write_rejected", false));
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("excel.add_sheet", "schema_initial_write"),
+                    "{\"status\":\"in_progress\",\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"id\":\"write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
+                    LoadToolSchemaResponse("common.skills_upsert", "schema_pending"),
+                    "{\"status\":\"in_progress\",\"message\":\"Сохраняю skill.\",\"tool_calls\":[{\"id\":\"skill\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Все изменения применены.\",\"tool_calls\":[]}",
+                    "{\"status\":\"completed\",\"message\":\"Обычный новый ответ.\",\"tool_calls\":[]}"
+                });
+                var service = new ConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "initial", TurnId = "turn", Status = "running" };
+                var settingsForRun = new AppSettings { AutoConfirmToolActions = false };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var first = service.ExecuteAsync(ChatModes.Agent, "Создай лист и skill.", session, NewContext(adapter),
+                    settingsForRun, tools, null, (pendingSession, command, result) => "pending").GetAwaiter().GetResult();
+                AssertTrue(first.WaitingForConfirmation, "real loop stops at confirmation");
+                AssertEqual(initialHealth, first.ExecutionSummary.ExecutionHealth, "pending cannot erase earlier execution evidence");
+                AssertEqual(0, first.ExecutionSummary.WriteOk, "pending mutation is not a successful write");
+                var iterations = session.LastRun.IterationsUsed;
+                var steps = session.LastRun.ToolStepsUsed;
+                var prior = RunSummaryBuilder.ContinuationSeed(session);
+                session.LastRun = new ChatRunRecord { RunId = "continuation", TurnId = "turn", ExecutionSummary = prior };
+                var confirmed = new ToolCommand { ToolId = "common.skills_upsert", ToolCallId = "skill" };
+                confirmed.Arguments["id"] = "common.test";
+                confirmed.Arguments["description"] = "Test";
+                confirmed.Arguments["bodyMarkdown"] = "# Test";
+                var actual = executor.Execute(confirmed, tools, settingsForRun, false, true, session);
+                AssertTrue(actual.Success, "confirmed local mutation actually succeeds");
+                var builder = new RunSummaryBuilder(tools, prior);
+                builder.Observe(confirmed, actual);
+                builder.Publish(session);
+                var final = service.ContinueAfterToolAsync(confirmed, actual, session, NewContext(adapter),
+                    settingsForRun, tools, null, null, initialIterationsUsed: iterations,
+                    initialToolStepsUsed: steps, summaryBuilder: builder).GetAwaiter().GetResult();
+                AssertRuntimeExecutionSummary(final, session, initialHealth, 1,
+                    initialHealth == "errors" ? 1 : 0, initialHealth == "unknown" ? 1 : 0);
+                AssertEqual("completed", final.RunStatus, "completed lifecycle does not erase errors or unknown");
+                var previousFinal = session.Messages.Last();
+                var next = service.ExecuteAsync(ChatModes.Agent, "Ответь без действий.", session, NewContext(adapter),
+                    settingsForRun, tools, null).GetAwaiter().GetResult();
+                AssertRuntimeExecutionSummary(next, session, "clean", 0, 0, 0);
+                AssertEqual(initialHealth, previousFinal.ExecutionSummary.ExecutionHealth, "new turn resets counts without rewriting earlier evidence");
+            });
+        }
+
         private static void SimpleAgentConfirmationReplaysOnlyFinalResult()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -1283,6 +1354,8 @@ namespace RNAssistant.Harness
                     (pendingSession, pendingCommand, result) => "pending_1").GetAwaiter().GetResult();
 
                 AssertContains(first.AssistantText, "Создаю", "waiting response returned");
+                AssertEqual("clean", first.ExecutionSummary.ExecutionHealth, "confirmation itself is not a tool error");
+                AssertEqual(0, first.ExecutionSummary.WriteOk, "waiting is not an applied mutation");
                 AssertTrue(!session.Messages.Any(message => message.ProtocolMessage &&
                     (message.Content ?? string.Empty).IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) >= 0),
                     "waiting result not replayed");
@@ -1330,6 +1403,7 @@ namespace RNAssistant.Harness
                     initialToolStepsUsed: initialToolStepsUsed).GetAwaiter().GetResult();
 
                 AssertEqual("Skill сохранён.", final.AssistantText, "continued final response");
+                AssertRuntimeExecutionSummary(final, session, "clean", 1, 0, 0);
                 AssertEqual(3, session.LastRun.IterationsUsed, "confirmation continuation keeps cumulative iteration budget");
                 AssertEqual(2, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
                 var replay = FlattenSimple(calls[2]);

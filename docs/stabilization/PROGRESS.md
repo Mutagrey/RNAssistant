@@ -2,7 +2,7 @@
 
 Current target: 16.1.0
 Current phase: Phase 1
-Current task: Phase 1B завершена; следующая — Phase 1C, ещё не начата. Known baseline test failure: R22
+Current task: Phase 1C завершена (host-neutral containment); следующая — Phase 2, ещё не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
 
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
@@ -11,7 +11,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | Phase | Status | Commit/PR | Tests | Windows validation | Notes |
 |---|---|---|---|---|---|
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
-| 1 | in progress | 1A: `a24feb1`; 1B: этот commit `obs(runtime): add run step tool and mutation correlation trace` | causal trace 6/6; full 320/321 (R22 baseline); ValidateVersionFormat pass | not performed | 1A/1B done; 1C pending; общий DoD Phase 1 не выполнен |
+| 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: этот commit `fix(runtime): derive execution health from actual tool results` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
 | 2 | pending | — | — | — | ModelProtocol |
 | 3 | pending | — | — | — | AgentKernel |
 | 4 | pending | — | — | — | ToolRuntime |
@@ -93,18 +93,42 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed.
 - Подробности и границы: [PHASE_1B_CAUSAL_TRACE.md](PHASE_1B_CAUSAL_TRACE.md).
 
+## Phase 1C substeps
+
+- Baseline — `5df587b`, clean working tree. Одна тема: completion guard и минимальная UI/bridge-проекция; 10 production files включая csproj.
+- До production fix новые runtime-summary assertions дали 4 красных characterization cases; после fix — 7/7 green.
+- RunSummaryBuilder считает actual ToolResults по effective safety metadata, включая local mutations и nested pipeline policy. Model text/status и forged summary не определяют health.
+- `unknown > errors > clean`; pending не считается успешной записью; rejected attempts не создают tool errors; v2 lifecycle/status и retry limits не менялись.
+- Confirmation сохраняет summary логического turn и считает подтверждённый вызов один раз. Следующий user turn сбрасывает counts, не переписывая предыдущие snapshots.
+- Runtime evidence сохраняется в существующих typed run/message operations; clone/DTO/replay сохраняют её. Нового durable store/index/schema или history migration нет.
+- UI показывает отдельное предупреждение перед текстом модели вне свёрнутого trace. No-write — обычный ответ без подтверждённых изменений; boundary без summary не наследует старый clean.
+- Legacy mapping и ограничение уровня evidence описаны в MIGRATION_MAP/R23. Domain tools, COM/VBA, Resource Fabric и persistence algorithms не менялись.
+- Phase 2 не начата. Product остаётся `16.1.0-dev`; bump/tag/push/release script не выполняются.
+
+## Phase 1C verification
+
+- `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- characterization` — red 3/7 → green 7/7.
+- Filter `completion guard:` — 5/5; `agent:` — 41/41 (включая characterization); `causal trace:` — 6/6; `conversation:` — 4/4.
+- `storage: turn lifecycle` — 1/1 (replay/clone/typed DTO/model isolation); `chat: uses only read-only resource loop` — 1/1; `plan mode:` — 2/2; `harness: production projects` — 1/1.
+- `node tests/web/completion-guard.test.js` — 8/8; реальные JS projection/render functions, минимальный DOM, без browser/layout/Office validation.
+- Всего 61 различных targeted harness cases + 8 Node cases. Полный harness повторно не запускался; known baseline R22 остаётся открытым, последний full результат — 320/321 в 1B.
+- `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal` — pass.
+- Production controller исключён из harness: его wiring проверено только чтением. Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed.
+- Подробные команды, red→green evidence и границы: [PHASE_1C_COMPLETION_GUARD.md](PHASE_1C_COMPLETION_GUARD.md).
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Нет новых adapters в Phases 0/1A/1B | — | — | — |
+| Legacy ToolResult/safety → RunSummaryBuilder | Runtime / ToolRuntime | Loop, confirmation continuation | Перенос builder Phase 3; typed result mapping Phase 4 |
+| Optional RunExecutionSummary / отсутствующая legacy evidence | Application / Persistence / UI | Messages, LastRun, clones, bridge, static UI | Полный RunSummary/projection switch Phases 3/9; obsolete paths cleanup Phase 10 |
 
 Существующие runtime paths остаются текущей реализацией, а не введёнными adapters.
 Их владельцы и фазы замены указаны в [MIGRATION_MAP.md](MIGRATION_MAP.md).
 
 ## Open P0/P1 risks
 
-- R01: false completion воспроизведён в 1A; централизованный guard ожидает Phase 1C.
+- R01: false completion воспроизведён в 1A; guard 1C закрывает host-neutral safety assertions, production qualification ещё не выполнена.
 - R02–R11: остальные сценарии из master plan ожидают проверки/исправления в своих фазах.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.

@@ -273,7 +273,30 @@ function agentRunElapsedText(items) {
   return formatElapsedTime(Math.max.apply(Math, dates) - Math.min.apply(Math, dates));
 }
 
-function agentRunStats(items, finished, terminalStatus) {
+function messageExecutionSummary(message) {
+  var summary = activityValue(message, "ExecutionSummary", "executionSummary", null);
+  if (!summary) return null;
+  var health = activityValue(summary, "ExecutionHealth", "executionHealth", "");
+  if (health !== "clean" && health !== "errors" && health !== "unknown") return null;
+  var result = { executionHealth: health };
+  var fields = ["ReadOk", "ReadError", "WriteOk", "WriteError", "WriteUnknown"];
+  for (var i = 0; i < fields.length; i += 1) {
+    var field = fields[i];
+    var key = field.charAt(0).toLowerCase() + field.slice(1);
+    var count = activityValue(summary, field, key, 0);
+    if (!Number.isSafeInteger(count) || count < 0) return null;
+    result[key] = count;
+  }
+  return result;
+}
+
+function agentRunExecutionSummary(items, finalMessage) {
+  if (finalMessage) return messageExecutionSummary(finalMessage.message);
+  // An interrupted/recovered boundary without evidence must not inherit an older clean snapshot.
+  return items && items.length ? messageExecutionSummary(items[items.length - 1].message) : null;
+}
+
+function agentRunStats(items, finished, terminalStatus, executionSummary) {
   var counts = { total: 0 };
   var activities = collectRunActivities(items || []);
   activities.forEach(function (activity) {
@@ -283,13 +306,18 @@ function agentRunStats(items, finished, terminalStatus) {
   var elapsed = agentRunElapsedText(items || []);
 
   var declaredStatus = conversationResponseStatus(terminalStatus);
+  var lifecycleStatus = finished ? (declaredStatus || "unknown") : (current ? activityStatus(current) : "completed");
+  var status = lifecycleStatus;
+  if (executionSummary && executionSummary.executionHealth === "unknown") status = "unknown";
+  else if (executionSummary && executionSummary.executionHealth === "errors") status = "failed";
+  else if (arguments.length > 3 && !executionSummary && finished) status = "unknown";
   return {
     current: current,
     counts: counts,
     elapsed: elapsed,
-    status: finished
-      ? (declaredStatus || "unknown")
-      : (current ? activityStatus(current) : "completed")
+    lifecycleStatus: lifecycleStatus,
+    executionSummary: executionSummary,
+    status: status
   };
 }
 
@@ -301,9 +329,12 @@ function isAgentRunContinuation(message) {
 
 function canCollectAgentRunAt(index) {
   var message = state.messages[index];
-  if (!message || messageProtocolMessage(message) || messageRole(message) !== "assistant" || !messageActivity(message)) {
+  if (!message || messageProtocolMessage(message) || messageRole(message) !== "assistant") {
     return false;
   }
+  // A final-only answer still needs the runtime evidence note, even without tools.
+  if (isAgentRunFinalMessage(message)) return !!messageExecutionSummary(message) || !!messageResponseStatus(message);
+  if (!messageActivity(message)) return false;
   var runId = messageRunId(message);
   if (!runId) {
     return false;
@@ -326,6 +357,9 @@ function messageRunId(message) {
 }
 
 function collectAgentRun(startIndex) {
+  if (isAgentRunFinalMessage(state.messages[startIndex])) {
+    return { items: [], finalMessage: { message: state.messages[startIndex], index: startIndex }, nextIndex: startIndex + 1 };
+  }
   var items = [{ message: state.messages[startIndex], index: startIndex, activity: messageActivity(state.messages[startIndex]) }];
   var index = startIndex + 1;
   while (index < state.messages.length) {

@@ -65,6 +65,7 @@ namespace RNAssistant.Office
                 var turnId = session.LastRun == null || string.IsNullOrWhiteSpace(session.LastRun.TurnId)
                     ? (session.LastRun == null ? runId : session.LastRun.RunId)
                     : session.LastRun.TurnId;
+                var previousSummary = RunSummaryBuilder.ContinuationSeed(session);
                 session.LastRun = new ChatRunRecord
                 {
                     RunId = runId,
@@ -73,6 +74,7 @@ namespace RNAssistant.Office
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     Status = "running",
                     Phase = "executing",
+                    ExecutionSummary = previousSummary,
                     CurrentAction = "Выполняю подтверждённое действие.",
                     DocumentRuntimeKey = documentRuntimeKey,
                     IterationsUsed = pending.IterationsUsed,
@@ -116,19 +118,28 @@ namespace RNAssistant.Office
                 {
                     ReportProgress(runProgress, "executing", "Выполняю подтверждённое действие...");
                     var runnableTools = ConversationRunService.PrepareToolsForRun(tools);
+                    var summaryBuilder = new RunSummaryBuilder(runnableTools, previousSummary);
+                    var confirmedCommand = CloneCommand(pending.Command);
                     var currentCatalogFingerprint = ConversationRunService.ToolExecutionFingerprint(
                         runnableTools,
                         pending.Command.ToolId);
                     var catalogMatches = !string.IsNullOrWhiteSpace(pending.CatalogFingerprint) &&
                         string.Equals(pending.CatalogFingerprint, currentCatalogFingerprint, StringComparison.OrdinalIgnoreCase);
-                    var result = !catalogMatches
-                            ? ToolResult.Fail(
-                                "Runnable tools changed, or this pending action predates catalog validation. Review the current tool and ask the agent to create a new call before confirming.",
-                                null,
-                                "pending_tool_catalog_changed",
-                                false)
-                            : _toolExecutor.Execute(
-                                CloneCommand(pending.Command),
+                    ToolResult result;
+                    if (!catalogMatches)
+                    {
+                        result = ToolResult.Fail(
+                            "Runnable tools changed, or this pending action predates catalog validation. Review the current tool and ask the agent to create a new call before confirming.",
+                            null,
+                            "pending_tool_catalog_changed",
+                            false);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            result = _toolExecutor.Execute(
+                                confirmedCommand,
                                 runnableTools,
                                 settings,
                                 false,
@@ -141,7 +152,20 @@ namespace RNAssistant.Office
                                     null,
                                     "missing_result",
                                     true);
+                        }
+                        catch
+                        {
+                            summaryBuilder.Observe(confirmedCommand, null);
+                            summaryBuilder.Publish(session);
+                            throw;
+                        }
+                    }
+                    summaryBuilder.Observe(confirmedCommand, result);
+                    summaryBuilder.Publish(session);
                     UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
+                    summaryBuilder.Publish(session, (session.Messages ?? new List<ChatMessage>()).LastOrDefault(message =>
+                        message != null && message.Activity != null &&
+                        string.Equals(message.Activity.ToolCallId, confirmedCommand.ToolCallId, StringComparison.Ordinal)));
                     pendingResolved = true;
                     ReportProgress(runProgress, "tool_result", result == null ? string.Empty : result.Message,
                         AgentTranscript.CreateToolActivity(CloneCommand(pending.Command), result, "tool"));
@@ -170,7 +194,7 @@ namespace RNAssistant.Office
                         runCancellation.Token).ConfigureAwait(false);
                     continuationAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
                     var completion = await _conversationRunService.ContinueAfterToolAsync(
-                        CloneCommand(pending.Command),
+                        confirmedCommand,
                         result,
                         session,
                         context,
@@ -182,7 +206,8 @@ namespace RNAssistant.Office
                         skills,
                         runCancellation.Token,
                         pending.IterationsUsed,
-                        pending.ToolStepsUsed).ConfigureAwait(false);
+                        pending.ToolStepsUsed,
+                        summaryBuilder).ConfigureAwait(false);
 
                     AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
@@ -230,6 +255,8 @@ namespace RNAssistant.Office
 
                 runLease.Dispose();
                 var response = ChatState(session);
+                response.ExecutionSummary = session.LastRun == null || session.LastRun.ExecutionSummary == null
+                    ? null : session.LastRun.ExecutionSummary.Clone();
                 RunCausalTrace.Projected("ChatStateResponse");
                 return response;
             }

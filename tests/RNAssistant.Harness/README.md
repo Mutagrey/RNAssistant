@@ -66,9 +66,27 @@ dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- cha
 Phase 1A extends `Program.SimpleAgentTests.cs`: write ok/error/unknown/no-write,
 twentieth-response recovery, rejected history isolation and the current 20-retry
 (21-request) cap. These tests use fake LLM/Office and the real local VBA journal.
-Some assertions intentionally capture known false completion; passing this slice
-does **not** mean that release safety is fixed. Phase 1C must introduce red→green
-runtime-health assertions. See [Phase 1A evidence](../../docs/stabilization/PHASE_1A_CHARACTERIZATION.md).
+Phase 1C replaces false-success expectations with independent runtime-health
+assertions while preserving v2 model status. Before the fix, four evidence tests
+were red; after it, all seven pass. This is host-neutral safety coverage, not
+Windows qualification. See [Phase 1A evidence](../../docs/stabilization/PHASE_1A_CHARACTERIZATION.md).
+
+## Stabilization completion guard
+
+```bash
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "completion guard:"
+dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "storage: turn lifecycle"
+node tests/web/completion-guard.test.js
+```
+
+The guard tests extend `Program.AgentSafetyTests.cs` / `Program.SimpleAgentTests.cs`:
+metadata, cumulative error/unknown precedence, confirmation, cancellation, legacy
+mapping and fresh-turn reset. The existing lifecycle test covers event replay,
+independent clones, typed bridge serialization and exclusion from model transport.
+The Node test loads the real static JS projection/render functions with a minimal
+DOM and stubs only unrelated trace/media helpers. No npm dependencies are needed.
+It verifies warning visibility outside collapsed trace, not browser layout or
+production controller delivery. See [Phase 1C evidence](../../docs/stabilization/PHASE_1C_COMPLETION_GUARD.md).
 
 ## Stabilization causal trace
 

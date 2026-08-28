@@ -49,6 +49,16 @@ new replay decisions, second store or durable index is introduced. New observati
 are best effort; mandatory pre-dispatch request persistence is unchanged. See
 [correlation, stage semantics and limits](stabilization/PHASE_1B_CAUSAL_TRACE.md).
 
+Phase 1C adds optional `ExecutionSummary` to visible `ChatMessage` and `ChatRunRecord`
+state carried by the existing typed `session.commit` operations. Runtime writes
+health/count snapshots; replay and clones preserve them without recalculating
+effects from model text. No new envelope schema, durable index, dual-write,
+historical backfill or recovery algorithm is introduced. Old messages lack this
+field and the UI treats their effects as unverified. The legacy
+`run.summary.created.Status` trace marker still describes lifecycle; health is in
+the correlated canonical message/run operations, not inferred from that marker.
+See [completion guard contract and limits](stabilization/PHASE_1C_COMPLETION_GUARD.md).
+
 The default SHA-256 hash-chain detects accidental edits, truncation in the middle of the log, and reordered records. Optional HMAC-SHA256 prevents recomputing valid edited records without the selected secret. Neither mode prevents deletion of an unanchored final suffix.
 
 ## Blobs and artifacts

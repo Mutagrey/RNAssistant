@@ -65,6 +65,22 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    // Runtime evidence, independent of conversation-response status and model text.
+    public sealed class RunExecutionSummary
+    {
+        public string ExecutionHealth { get; set; } = "clean";
+        public int ReadOk { get; set; }
+        public int ReadError { get; set; }
+        public int WriteOk { get; set; }
+        public int WriteError { get; set; }
+        public int WriteUnknown { get; set; }
+
+        public RunExecutionSummary Clone()
+        {
+            return (RunExecutionSummary)MemberwiseClone();
+        }
+    }
+
     public sealed class ChatMessage
     {
         public string Id { get; set; }
@@ -78,6 +94,8 @@ namespace RNAssistant.Core.Models
         public int ResponseProtocolVersion { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public string ResponseStatus { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RunExecutionSummary ExecutionSummary { get; set; }
         public string ToolCallId { get; set; }
         public string ToolName { get; set; }
         public string ToolResultRole { get; set; }
@@ -282,6 +300,8 @@ namespace RNAssistant.Core.Models
         public string RuntimeId { get; set; }
         public int ResponseProtocolVersion { get; set; }
         public string Status { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RunExecutionSummary ExecutionSummary { get; set; }
         public string Phase { get; set; }
         public string CurrentAction { get; set; }
         public string DocumentRuntimeKey { get; set; }

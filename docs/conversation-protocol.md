@@ -112,7 +112,7 @@ Conversation-response v2 requires a root `status`. The strict response schema en
 | `status` | Meaning | `tool_calls` | UI/run projection |
 | --- | --- | --- | --- |
 | `in_progress` | The model is requesting executable work now. | At least one call. | Run continues. |
-| `completed` | The requested outcome is complete. | Empty. | Successful final answer. |
+| `completed` | The model declares its answer complete. | Empty. | Loop ended; runtime execution health independently describes tool outcomes. |
 | `awaiting_user` | A user decision or missing information is required. | Empty. | Current run ends and visibly waits for the user. |
 | `blocked` | Work cannot proceed because of a concrete dependency or inability. | Empty. | Final blocked outcome. |
 | `refused` | The request is explicitly refused. | Empty. | Final refusal. |
@@ -125,7 +125,7 @@ The runtime enforces these rules:
 - `awaiting_user` is the structured form of a model question. Plan mode normally uses `common.questions_ask` for typed questions and publishes its ready artifact before returning `completed`.
 - Provider-native refusal metadata maps directly to `refused`; ordinary response text is never classified as a refusal.
 - `failed`, `cancelled`, `interrupted`, and `interrupted_unknown` remain runtime-owned states and are not model-selectable.
-- Intermediate `ok:false` tool results remain visible in the expanded action trace but do not relabel a later accepted terminal response as failed.
+- Tool failures do not rewrite the accepted model status, but do prevent `clean` execution health. The UI shows the runtime warning outside the collapsed trace even if the model later says `completed`.
 - Accepted status and response protocol version `2` are persisted in the append-only session stream; replay never reconstructs them from message wording.
 
 The parser accepts at most 32 calls, requires a non-empty user-facing `message` for every tool turn, unique call ids, and each call to contain exactly `id`, `name`, and an object `arguments`. Duplicate JSON properties and argument names that differ only by case are rejected. Structured arguments remain native JSON objects/arrays through parsing; escaped JSON strings are not coerced. The executor checks each exact tool name and validates arguments against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
@@ -150,7 +150,7 @@ TOOL_RESULT:
 {"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{"values":[[1,2]]},"error":null,"resources":[{"uri":"rna://chat/s1/artifact/a1/revision/1","revision":"1","relation":"result"}]}
 ```
 
-The `tool` form uses the same JSON as its message content without the text prefix. `resources` is optional and contains exact references produced by the tool or used to externalize its full result; the latter is marked `relation:"result"` so it is not confused with another produced/cited resource. On failure, `ok` is `false`, `data` may still contain partial details, and `error` contains `code`, `message`, and `retryable`. The model chooses the next step from this JSON; the runtime does not infer one. A completed run's collapsed UI status reflects its terminal final answer; recovered intermediate failures remain visible only in the expanded action trace and do not relabel that run as failed.
+The `tool` form uses the same JSON as its message content without the text prefix. `resources` is optional and contains exact references produced by the tool or used to externalize its full result; the latter is marked `relation:"result"` so it is not confused with another produced/cited resource. On failure, `ok` is `false`, `data` may still contain partial details, and `error` contains `code`, `message`, and `retryable`. The model chooses the next step from this JSON; the runtime does not infer one. A later successful action cannot erase an earlier error or unknown effect from the runtime summary.
 
 `message` and `data` are bounded before they enter model context. Eligible oversized generic `data` up to 2,000,000 characters is stored as a CAS-backed `tool_result` artifact before the next model dispatch; the envelope contains its exact reference and replaces inline data with `{truncated, original_chars, original_estimated_tokens, preview, hint}`. The model can page the full value through `common.resources_read` or request a smaller scope. Resource/tool/skill discovery evidence is not copied into an untrusted artifact. A specialized chart payload is materialized once at the result boundary, exposes its exact URI to the next model step, and is reused by storage/UI projection. Before every model request, including format repair and continuation after confirmation, the runtime verifies the estimated prompt against the current input budget and stops with a visible diagnostic instead of sending an oversized request.
 
@@ -163,8 +163,45 @@ request, and each completion call a model attempt id. Repair/schema fallback ret
 the step and receive a new attempt; tool commands retain that same logical step.
 Accepted/rejected parser diagnostics link the transport request, attempt and step;
 accepted diagnostics also carry the exact tool-call ids. They never enter replay.
-The v2 response, retry limits and outcome behavior are unchanged. See the
+Phase 1B left the v2 response, retry limits and outcome behavior unchanged. See the
 [causal trace contract and validation limits](stabilization/PHASE_1B_CAUSAL_TRACE.md).
+
+## Transitional completion guard (Phase 1C)
+
+`RunSummaryBuilder` aggregates actual executor results using effective
+`ToolSafetyPolicy` metadata, including nested pipelines and local-state mutations.
+Model text, descriptions and model-supplied extra JSON fields are not evidence.
+Existing v2 statuses and lifecycle names remain unchanged; no AgentKernel or v3
+contract is introduced in this phase.
+
+`RunExecutionSummary` contains `ExecutionHealth` (`clean`, `errors`, `unknown`) and
+`ReadOk`, `ReadError`, `WriteOk`, `WriteError`, `WriteUnknown` invocation counts.
+Any uncertain write wins over errors; otherwise any read/write error wins over
+clean. Pending confirmation is not an outcome. Rejected model attempts do not add
+tool errors; protocol exhaustion still fails the lifecycle.
+
+The legacy adapter conservatively maps mutation `partial_failure`, `unknown`,
+`interrupted_unknown`, `tool_effect_uncertain` and missing results to unknown.
+An exception escaping a possible mutation dispatch cannot certify its effect.
+Other unsuccessful results are errors. Missing/invalid policy cannot certify a
+successful read or write. Counts describe top-level tool invocations, including
+local mutations and possible no-ops, not changed cells or verified document diffs.
+ToolRuntime must replace this adapter with typed evidence in Phase 4.
+
+A new user turn starts a fresh summary. Confirmation retains the logical turn's
+earlier summary and counts the confirmed call once, including when the controller
+observed it before attachment/model preparation. Continuation of an old pending
+run without summary evidence stays unknown; it does not invent historical calls.
+
+Runtime snapshots accompany visible tool/final/diagnostic messages and `LastRun`
+through existing canonical event operations. Send/confirmation DTOs also expose
+typed `executionSummary`; history UI uses the message snapshots. Unknown/errors
+receive an independent visible warning before the unchanged model answer. A
+clean no-write answer says there are no confirmed changes. A terminal/recovered
+boundary without a summary is unverified, never inherited from an older clean
+message. This is a minimal projection, not the Phase 9 persistence/UI migration.
+
+See [red→green evidence and remaining limits](stabilization/PHASE_1C_COMPLETION_GUARD.md).
 
 ## Local invariants
 

@@ -19,6 +19,100 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void RunSummaryUsesActualOutcomesAndMetadata()
+        {
+            var catalog = new[]
+            {
+                new ToolDefinition { Id = "test.write_named_read" },
+                new ToolDefinition { Id = "test.inspect", MutatesDocument = true },
+                new ToolDefinition { Id = "test.local", MutatesLocalState = true },
+                new ToolDefinition { Id = "test.pipeline", Executor = "pipeline",
+                    PipelineJson = "{\"steps\":[{\"id\":\"nested\",\"toolId\":\"test.inspect\",\"arguments\":{}}]}" }
+            };
+            var builder = new RunSummaryBuilder(catalog);
+            builder.Observe(new ToolCommand { ToolId = catalog[0].Id }, ToolResult.Ok("unknown; all writes applied"));
+            AssertEqual(1, builder.Snapshot().ReadOk, "tool names and prose do not imply writes or uncertainty");
+            builder.Observe(new ToolCommand { ToolId = catalog[0].Id }, ToolResult.Fail("Everything applied"));
+            AssertEqual("errors", builder.Snapshot().ExecutionHealth, "a read error also prevents clean health");
+            builder.Observe(new ToolCommand { ToolId = catalog[1].Id }, ToolResult.WaitingConfirmation("Confirm"));
+            AssertEqual(0, builder.Snapshot().WriteOk + builder.Snapshot().WriteError, "pending has no final effect");
+            builder.Observe(new ToolCommand { ToolId = catalog[2].Id }, ToolResult.Ok("Local state saved"));
+            var uncertain = new ToolCommand { ToolId = catalog[3].Id, ToolCallId = "same_model_id" };
+            builder.Observe(uncertain, ToolResult.PartialFailure("Some nested writes completed", null, "pipeline_partial_failure"));
+            builder.Observe(uncertain, ToolResult.Fail("Later result delivery failed"));
+            builder.Observe(new ToolCommand { ToolId = catalog[1].Id }, ToolResult.Fail("No change", null, "write_rejected"));
+            var snapshot = builder.Snapshot();
+            AssertEqual("unknown", snapshot.ExecutionHealth, "unknown wins over both read and write errors");
+            AssertEqual(1, snapshot.WriteUnknown, "nested policy marks pipeline write; re-observation is not a second call");
+            AssertEqual(1, snapshot.WriteError, "definite write error counted separately");
+            AssertEqual(1, snapshot.ReadError, "read error is not a write error");
+            builder.Observe(new ToolCommand { ToolId = catalog[1].Id, ToolCallId = "same_model_id" }, ToolResult.Ok("Saved"));
+            AssertEqual(2, builder.Snapshot().WriteOk, "local mutation and distinct invocation sharing a model id both count");
+            AssertEqual("unknown", builder.Snapshot().ExecutionHealth, "later success cannot hide unknown");
+            AssertEqual(1, snapshot.WriteOk, "published snapshots cannot change when execution continues");
+        }
+
+        private static void RunSummaryMapsLegacyUncertaintyConservatively()
+        {
+            var catalog = new[] { new ToolDefinition { Id = "test.effect", MutatesDocument = true } };
+            var outcomes = new[]
+            {
+                null,
+                new ToolResult { Status = "unknown" },
+                new ToolResult { Status = "interrupted_unknown" },
+                ToolResult.Fail("cancelled after dispatch", null, "tool_effect_uncertain"),
+                ToolResult.Fail("no evidence", null, "missing_result")
+            };
+            foreach (var result in outcomes)
+            {
+                var builder = new RunSummaryBuilder(catalog);
+                builder.Observe(new ToolCommand { ToolId = catalog[0].Id }, result);
+                AssertEqual("unknown", builder.Snapshot().ExecutionHealth, "structured uncertainty never becomes an ordinary error");
+                AssertEqual(1, builder.Snapshot().WriteUnknown, "one uncertain invocation");
+            }
+            var missingPolicy = new RunSummaryBuilder(catalog);
+            missingPolicy.Observe(new ToolCommand { ToolId = "missing" }, ToolResult.Ok("Success"));
+            AssertEqual("unknown", missingPolicy.Snapshot().ExecutionHealth, "unknown policy cannot certify success");
+            var legacy = new RunSummaryBuilder(catalog, RunSummaryBuilder.ContinuationSeed(new ChatSession()));
+            legacy.Observe(new ToolCommand { ToolId = catalog[0].Id }, ToolResult.Ok("Current call succeeded"));
+            AssertEqual("unknown", legacy.Snapshot().ExecutionHealth, "legacy continuation has no invented clean history");
+            AssertEqual(0, legacy.Snapshot().WriteUnknown, "missing historical evidence does not fabricate a dispatched write");
+        }
+
+        private static void RunSummarySurvivesCancellationAfterUnknown()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                adapter.ThrowOnToolId = "excel.add_sheet";
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("excel.add_sheet", "schema_cancelled_write"),
+                    "{\"status\":\"in_progress\",\"message\":\"Создаю лист.\",\"tool_calls\":[{\"id\":\"write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}"
+                });
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { Status = "running" };
+                var service = new ConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                {
+                    if (responses.Count == 0) throw new OperationCanceledException("cancel after unknown write result");
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                });
+                var cancelled = false;
+                try
+                {
+                    service.ExecuteAsync(ChatModes.Agent, "Создай лист.", session, NewContext(adapter),
+                        new AppSettings { AutoConfirmToolActions = true },
+                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException) { cancelled = true; }
+                AssertTrue(cancelled, "cancellation propagates to lifecycle owner");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no automatic write retry");
+                AssertEqual("unknown", session.LastRun.ExecutionSummary.ExecutionHealth, "cancellation cannot erase unknown");
+                var activity = session.Messages.Last(message => message.Activity != null);
+                AssertEqual("tool_effect_uncertain", activity.Activity.ErrorCode, "real executor classifies thrown mutation as uncertain");
+                AssertEqual(1, activity.ExecutionSummary.WriteUnknown, "visible activity retains uncertainty before controller handling");
+            });
+        }
+
         private static void DefaultPromptsAreStructuredMarkdown()
         {
             var settings = new AppSettings();

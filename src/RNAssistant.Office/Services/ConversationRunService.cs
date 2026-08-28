@@ -24,6 +24,7 @@ namespace RNAssistant.Office.Services
         public int ResponseProtocolVersion { get; set; }
         public string ResponseStatus { get; set; }
         public string RunStatus { get; set; }
+        public RunExecutionSummary ExecutionSummary { get; set; }
     }
 
     public sealed class ConversationRunService
@@ -123,7 +124,8 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills = null,
             CancellationToken cancellationToken = default(CancellationToken),
             int initialIterationsUsed = 0,
-            int initialToolStepsUsed = 0)
+            int initialToolStepsUsed = 0,
+            RunSummaryBuilder summaryBuilder = null)
         {
             if (!string.Equals(ChatModes.Normalize(session == null ? null : session.Mode), ChatModes.Agent, StringComparison.Ordinal))
             {
@@ -131,7 +133,7 @@ namespace RNAssistant.Office.Services
             }
             return RunLoopAsync(ChatModes.Agent, LatestUserRequest(session), session, documentContext, settings, tools, attachments,
                 progress, pendingToolRegistrar, skills, confirmedCommand, confirmedResult, cancellationToken,
-                initialIterationsUsed, initialToolStepsUsed);
+                initialIterationsUsed, initialToolStepsUsed, summaryBuilder);
         }
 
         private async Task<ChatTurnResult> RunLoopAsync(
@@ -149,7 +151,8 @@ namespace RNAssistant.Office.Services
             ToolResult initialResult,
             CancellationToken cancellationToken,
             int initialIterationsUsed = 0,
-            int initialToolStepsUsed = 0)
+            int initialToolStepsUsed = 0,
+            RunSummaryBuilder summaryBuilder = null)
         {
             settings = settings ?? new AppSettings();
             var policy = ConversationRunPolicy.For(mode);
@@ -161,6 +164,11 @@ namespace RNAssistant.Office.Services
             runnableCatalog = policy.SelectTools(runnableCatalog);
             CapabilityDiscoveryExecutor.BindReadSchema(runnableCatalog, enabledSkills);
             if (!policy.AllowsConfirmation) pendingToolRegistrar = null;
+            summaryBuilder = summaryBuilder ?? new RunSummaryBuilder(runnableCatalog,
+                initialCommand == null ? null : RunSummaryBuilder.ContinuationSeed(session));
+            if (initialCommand != null) summaryBuilder.Observe(initialCommand, initialResult);
+            summaryBuilder.UseCatalog(runnableCatalog);
+            summaryBuilder.Publish(session);
             var materialization = await BuildMessagesAsync(
                 policy.Mode,
                 text,
@@ -208,7 +216,7 @@ namespace RNAssistant.Office.Services
                 string budgetError;
                 if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                 {
-                    return FinishWithDiagnostic(session, results, contextUsage, budgetError,
+                    return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, budgetError,
                         "Контекст переполнен", "prompt_budget_exceeded");
                 }
                 LlmCompletionResult completion;
@@ -230,7 +238,7 @@ namespace RNAssistant.Office.Services
                         Report(progress, "thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
                         if (!TryValidatePromptBudget(messages, settings, options, out budgetError))
                         {
-                            return FinishWithDiagnostic(session, results, contextUsage, budgetError,
+                            return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, budgetError,
                                 "Контекст переполнен", "prompt_budget_exceeded");
                         }
                         completion = await CompleteAsync(settings, messages, options, progress, cancellationToken).ConfigureAwait(false);
@@ -248,7 +256,7 @@ namespace RNAssistant.Office.Services
                     TraceAcceptedResponse(options, AgentResponseStatuses.Refused, new string[0]);
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(
                         refusal, completion, null, AgentResponseStatuses.Refused));
-                    return Result(refusal, results, contextUsage, false,
+                    return Result(session, summaryBuilder, refusal, results, contextUsage, false,
                         AgentResponseStatuses.Refused, AgentResponseStatuses.Refused);
                 }
                 var parsed = _responseParser.Parse(
@@ -271,7 +279,7 @@ namespace RNAssistant.Office.Services
                     };
                     if (!TryValidatePromptBudget(repairMessages, settings, options, out budgetError))
                     {
-                        return FinishWithDiagnostic(session, results, contextUsage, budgetError,
+                        return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, budgetError,
                             "Контекст переполнен", "prompt_budget_exceeded");
                     }
                     completion = await CompleteAsync(settings, repairMessages, options, progress, cancellationToken).ConfigureAwait(false);
@@ -282,7 +290,7 @@ namespace RNAssistant.Office.Services
                         TraceAcceptedResponse(options, AgentResponseStatuses.Refused, new string[0]);
                         session.Messages.Add(AgentTranscript.CreateAssistantMessage(
                             refusal, completion, null, AgentResponseStatuses.Refused));
-                        return Result(refusal, results, contextUsage, false,
+                        return Result(session, summaryBuilder, refusal, results, contextUsage, false,
                             AgentResponseStatuses.Refused, AgentResponseStatuses.Refused);
                     }
                     parsed = _responseParser.Parse(
@@ -293,7 +301,7 @@ namespace RNAssistant.Office.Services
                 }
                 if (!parsed.Success)
                 {
-                    return FinishWithDiagnostic(session, results, contextUsage,
+                    return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage,
                         "Ответ модели не выполнен после " + maxFormatRetries + " попыток исправить формат: " + parsed.Error);
                 }
 
@@ -305,7 +313,7 @@ namespace RNAssistant.Office.Services
                     var finalText = response.Message.Trim();
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(
                         finalText, completion, null, response.Status));
-                    return Result(finalText, results, contextUsage, false, response.Status, response.Status);
+                    return Result(session, summaryBuilder, finalText, results, contextUsage, false, response.Status, response.Status);
                 }
 
                 var stepMessage = string.IsNullOrWhiteSpace(response.Message) ? string.Empty : response.Message.Trim();
@@ -357,17 +365,29 @@ namespace RNAssistant.Office.Services
                     }
                     else
                     {
-                        toolResult = _toolExecutor.Execute(
-                            command,
-                            runnableCatalog,
-                            settings,
-                            false,
-                            false,
-                            session,
-                            Math.Max(1, settings.MaxAgentToolSteps - toolSteps),
-                            enabledSkills,
-                            cancellationToken) ?? ToolResult.Fail("Tool returned no result.", null, "missing_result", true);
+                        try
+                        {
+                            toolResult = _toolExecutor.Execute(
+                                command,
+                                runnableCatalog,
+                                settings,
+                                false,
+                                false,
+                                session,
+                                Math.Max(1, settings.MaxAgentToolSteps - toolSteps),
+                                enabledSkills,
+                                cancellationToken) ?? ToolResult.Fail("Tool returned no result.", null, "missing_result", true);
+                        }
+                        catch
+                        {
+                            // No result after entering the executor cannot certify a write's effect.
+                            summaryBuilder.Observe(command, null);
+                            summaryBuilder.Publish(session, activityMessage);
+                            throw;
+                        }
                     }
+                    summaryBuilder.Observe(command, toolResult);
+                    summaryBuilder.Publish(session, activityMessage);
                     if (!policy.AllowsConfirmation && AgentTranscript.IsWaitingResult(toolResult))
                     {
                         var consumedSteps = Math.Max(1, toolResult.ToolStepsConsumed);
@@ -416,6 +436,8 @@ namespace RNAssistant.Office.Services
                                     true);
                             }
                         }
+                        summaryBuilder.Observe(command, toolResult);
+                        summaryBuilder.Publish(session, activityMessage);
                         var resultMessage = CreateBoundedToolResultMessage(command, toolResult, messages, session, settings);
                         session.Messages.Add(resultMessage);
                         messages.Add(resultMessage);
@@ -437,6 +459,8 @@ namespace RNAssistant.Office.Services
                     activityMessage.ResourceRefs = CloneResourceRefs(toolResult.ModelResourceRefs);
                     LinkChartArtifactsToActivity(session, activityMessage);
                     activityMessage.HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId);
+                    summaryBuilder.Observe(command, toolResult);
+                    summaryBuilder.Publish(session, activityMessage);
                     results.Add(AgentTranscript.DescribeResult(command, toolResult));
 
                     if (AgentTranscript.IsWaitingResult(toolResult))
@@ -445,14 +469,14 @@ namespace RNAssistant.Office.Services
                         UpdateRunCursor(session, iterationsUsed, toolSteps,
                             "waiting_confirmation", "waiting_confirmation");
                         Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
-                        return Result(waitingText, results, contextUsage, true, null, "waiting_confirmation");
+                        return Result(session, summaryBuilder, waitingText, results, contextUsage, true, null, "waiting_confirmation");
                     }
                     if (AgentTranscript.IsAwaitingUserResult(toolResult))
                     {
                         var waitingText = string.IsNullOrWhiteSpace(toolResult.Message) ? response.Message : toolResult.Message;
                         UpdateRunCursor(session, iterationsUsed, toolSteps, "awaiting_user", "awaiting_user");
                         Report(progress, "tool_result", waitingText, activityMessage.Activity);
-                        return Result(waitingText, results, contextUsage, false,
+                        return Result(session, summaryBuilder, waitingText, results, contextUsage, false,
                             AgentResponseStatuses.AwaitingUser, AgentResponseStatuses.AwaitingUser);
                     }
                     Report(progress, "tool_result", toolResult.Message, activityMessage.Activity);
@@ -468,7 +492,7 @@ namespace RNAssistant.Office.Services
             }
 
             var limitText = "Выполнение остановлено: достигнут лимит шагов.";
-            return FinishWithDiagnostic(session, results, contextUsage, limitText,
+            return FinishWithDiagnostic(session, summaryBuilder, results, contextUsage, limitText,
                 "Лимит выполнения", "step_limit_reached");
             }
             finally
@@ -734,6 +758,7 @@ namespace RNAssistant.Office.Services
 
         private static ChatTurnResult FinishWithDiagnostic(
             ChatSession session,
+            RunSummaryBuilder summaryBuilder,
             IReadOnlyList<object> results,
             object contextUsage,
             string text,
@@ -749,10 +774,12 @@ namespace RNAssistant.Office.Services
                 ResultMessage = text
             };
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(text, null, activity));
-            return Result(text, results, contextUsage, false, null, "failed");
+            return Result(session, summaryBuilder, text, results, contextUsage, false, null, "failed");
         }
 
         private static ChatTurnResult Result(
+            ChatSession session,
+            RunSummaryBuilder summaryBuilder,
             string text,
             IReadOnlyList<object> results,
             object contextUsage,
@@ -763,6 +790,8 @@ namespace RNAssistant.Office.Services
             return new ChatTurnResult
             {
                 AssistantText = text ?? string.Empty,
+                ExecutionSummary = summaryBuilder.Publish(session, session.Messages.LastOrDefault(message =>
+                    message != null && !message.ProtocolMessage && string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))),
                 ToolResults = results ?? new object[0],
                 ContextUsage = contextUsage,
                 WaitingForConfirmation = waitingForConfirmation,

@@ -16,6 +16,10 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ### Fixed
 
+- Runtime warnings now remain visible after failed or uncertain tool mutations,
+  even when the model reports completion. Answers without writes do not certify
+  applied changes.
+
 ### Removed
 
 ### Security

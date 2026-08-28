@@ -256,6 +256,8 @@ namespace RNAssistant.Office
             {
                 Role = "assistant",
                 Content = cancelled ? "Запрос отменён." : "Запрос завершился технической ошибкой.",
+                ExecutionSummary = session.LastRun == null || session.LastRun.ExecutionSummary == null
+                    ? null : session.LastRun.ExecutionSummary.Clone(),
                 Activity = new ChatActivity
                 {
                     Kind = "diagnostic",
@@ -364,6 +366,7 @@ namespace RNAssistant.Office
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     Status = "running",
                     Phase = "starting",
+                    ExecutionSummary = new RunExecutionSummary(),
                     CurrentAction = "Preparing request.",
                     DocumentRuntimeKey = executionMode != ChatModes.Chat ? documentRuntimeKey : null,
                     IterationsUsed = 0,
@@ -606,6 +609,8 @@ namespace RNAssistant.Office
             {
                 Message = completion == null ? string.Empty : completion.AssistantText,
                 ResponseStatus = completion == null ? null : completion.ResponseStatus,
+                ExecutionSummary = session == null || session.LastRun == null || session.LastRun.ExecutionSummary == null
+                    ? null : session.LastRun.ExecutionSummary.Clone(),
                 ToolResults = completion == null
                     ? (IReadOnlyList<object>)new object[0]
                     : completion.ToolResults ?? new object[0],
@@ -655,6 +660,8 @@ namespace RNAssistant.Office
                 session.LastRun.ResponseProtocolVersion = completion.ResponseProtocolVersion;
             }
             session.LastRun.Status = status;
+            if (completion != null && completion.ExecutionSummary != null)
+                session.LastRun.ExecutionSummary = completion.ExecutionSummary.Clone();
             session.LastRun.Phase = status;
             session.LastRun.CurrentAction = completion == null
                 ? "Conversation run ended without a result."

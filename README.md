@@ -376,6 +376,12 @@ In chat, ask for the desired Office action in normal language. For example:
 
 The model returns one JSON response per turn. Independent tools such as separate reads may be returned together and execute sequentially after schema, safety, and confirmation checks. Result-dependent operations remain separate model turns. Every result is returned to the model as JSON so it can choose the next action.
 
+Model `completed` ends the loop; it does not certify applied changes. The runtime
+separately projects `clean/errors/unknown` from actual tool results. Errors and
+uncertain effects remain visible above the model answer even with a collapsed
+trace; a no-write answer does not claim confirmed changes. See the
+[completion guard](docs/conversation-protocol.md#transitional-completion-guard-phase-1c).
+
 Use the Tools tab to create or edit reusable tools:
 
 - `New Tool` creates an editable custom tool.
