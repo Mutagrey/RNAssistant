@@ -204,7 +204,7 @@ namespace RNAssistant.Office.Tools
             var expected = new JObject();
             foreach (var component in package.Components)
             {
-                expected[component.Name] = VbaToolManifestParser.PackageComparableCodeSha256(component.Code);
+                expected[component.Name] = VbaTextCanonicalizer.PackageComparableCodeSha256(component.Code);
             }
             var remove = new ToolCommand { ToolId = BackendToolId("vba_remove_package_internal") };
             remove.Arguments["expectedComponentsJson"] = expected.ToString(Formatting.None);
@@ -309,7 +309,7 @@ namespace RNAssistant.Office.Tools
                     Type = type,
                     FileName = component == null ? declared.FileName : component.FileName,
                     Code = code,
-                    CodeSha256 = VbaToolManifestParser.CodeSha256(code)
+                    CodeSha256 = VbaTextCanonicalizer.PackageCodeSha256(code)
                 });
             }
             package.Components = resolved;
@@ -344,10 +344,10 @@ namespace RNAssistant.Office.Tools
                     continue;
                 }
                 present++;
-                var expected = VbaToolManifestParser.CodeSha256(component.Code);
-                var actual = VbaToolManifestParser.CodeSha256(current.Code);
-                var expectedComparable = VbaToolManifestParser.PackageComparableCodeSha256(component.Code);
-                var actualComparable = VbaToolManifestParser.PackageComparableCodeSha256(current.Code);
+                var expected = VbaTextCanonicalizer.PackageCodeSha256(component.Code);
+                var actual = VbaTextCanonicalizer.PackageCodeSha256(current.Code);
+                var expectedComparable = VbaTextCanonicalizer.PackageComparableCodeSha256(component.Code);
+                var actualComparable = VbaTextCanonicalizer.PackageComparableCodeSha256(current.Code);
                 var equals = string.Equals(expectedComparable, actualComparable, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(component.Type, current.ComponentType, StringComparison.OrdinalIgnoreCase) &&
                     (!string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase) || current.CodeOnlyUserForm == true);
@@ -387,7 +387,7 @@ namespace RNAssistant.Office.Tools
 
         private static string PackageHash(ToolDefinition package)
         {
-            return CodeSha256(string.Join("\n", package.Components.OrderBy(component => component.Name).Select(component => component.Name + ":" + VbaToolManifestParser.CodeSha256(component.Code)).ToArray()));
+            return CodeSha256(string.Join("\n", package.Components.OrderBy(component => component.Name).Select(component => component.Name + ":" + VbaTextCanonicalizer.PackageCodeSha256(component.Code)).ToArray()));
         }
 
         private static string PackageData(ToolDefinition package)

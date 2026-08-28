@@ -407,6 +407,7 @@ namespace RNAssistant.Harness
                 Test("vba: patch rejects addressing modes", VbaPatchRejectsAddressingModes),
                 Test("vba: patch rejects stale exact source", VbaPatchRejectsStaleExactSource),
                 Test("vba: live hash preserves line structure", VbaLiveHashPreservesLineStructure),
+                Test("vba: pure patch text contract", VbaPurePatchTextContract),
                 Test("vba: VBE normalization is accepted", VbaReadBackAcceptsVbeNormalization),
                 Test("vba: COM write accepts VBE line metadata", VbaProjectWriteAcceptsVbeNormalization),
                 Test("vba: COM rename preserves component identity", VbaProjectRenamePreservesComponentIdentity),

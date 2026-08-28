@@ -101,7 +101,7 @@ namespace RNAssistant.Office
                 codeOnlyUserForm = componentType == MsFormType ? (bool?)IsCodeOnlyUserForm(component) : null,
                 lineCount = (int)component.CodeModule.CountOfLines,
                 code = code,
-                codeSha256 = VbaToolManifestParser.LiveCodeSha256(fullCode),
+                codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(fullCode),
                 truncated = !string.Equals(code, fullCode, StringComparison.Ordinal)
             }));
         }
@@ -154,7 +154,7 @@ namespace RNAssistant.Office
                 returnedLineCount = returnedLineCount,
                 totalLineCount = totalLineCount,
                 code = code,
-                codeSha256 = VbaToolManifestParser.LiveCodeSha256(fullCode),
+                codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(fullCode),
                 rangeLimitedByChars = rangeLimitedByChars,
                 hasMoreBefore = totalLineCount > 0 && startLine > 1,
                 hasMoreAfter = totalLineCount > 0 && startLine + returnedLineCount - 1 < totalLineCount
@@ -204,7 +204,7 @@ namespace RNAssistant.Office
                 originalCode = created ? string.Empty : ReadComponentCode(component);
                 if (!created && !string.IsNullOrWhiteSpace(expectedCodeSha256))
                 {
-                    var actualHash = VbaToolManifestParser.LiveCodeSha256(originalCode);
+                    var actualHash = VbaTextCanonicalizer.LiveCodeSha256(originalCode);
                     if (!string.Equals(expectedCodeSha256, actualHash, StringComparison.OrdinalIgnoreCase))
                     {
                         return StaleLiveModule(moduleName, expectedCodeSha256, true, actualHash, "write");
@@ -257,7 +257,7 @@ namespace RNAssistant.Office
             {
                 moduleName = (string)component.Name,
                 lineCount = (int)component.CodeModule.CountOfLines,
-                codeSha256 = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(component))
+                codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(component))
             }));
         }
 
@@ -287,7 +287,7 @@ namespace RNAssistant.Office
                     moduleName = (string)component.Name,
                     componentType = ComponentTypeName((int)component.Type),
                     lineCount = (int)component.CodeModule.CountOfLines,
-                    codeSha256 = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(component))
+                    codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(component))
                 }));
             }
             catch (Exception ex)
@@ -372,7 +372,7 @@ namespace RNAssistant.Office
 
             var originalName = (string)component.Name;
             var originalCode = ReadComponentCode(component);
-            var originalHash = VbaToolManifestParser.LiveCodeSha256(originalCode);
+            var originalHash = VbaTextCanonicalizer.LiveCodeSha256(originalCode);
             if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
                 !string.Equals(expectedCodeSha256, originalHash, StringComparison.OrdinalIgnoreCase))
             {
@@ -388,8 +388,8 @@ namespace RNAssistant.Office
                 if (renamed == null || FindComponent(vbProject, originalName) != null ||
                     (int)renamed.Type != type ||
                     !string.Equals(
-                        VbaToolManifestParser.VbeComparableCodeSha256(ReadComponentCode(renamed)),
-                        VbaToolManifestParser.VbeComparableCodeSha256(originalCode),
+                        VbaTextCanonicalizer.VbeComparableCodeSha256(ReadComponentCode(renamed)),
+                        VbaTextCanonicalizer.VbeComparableCodeSha256(originalCode),
                         StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException("VBA rename read-back did not preserve the component identity, type, and source.");
@@ -403,7 +403,7 @@ namespace RNAssistant.Office
                         moduleName = (string)renamed.Name,
                         componentType = ComponentTypeName(type),
                         lineCount = (int)renamed.CodeModule.CountOfLines,
-                        codeSha256 = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(renamed))
+                        codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(renamed))
                     }));
             }
             catch (Exception ex)
@@ -418,8 +418,8 @@ namespace RNAssistant.Office
                         if (restored == null || FindComponent(vbProject, newModuleName) != null ||
                             (int)restored.Type != type ||
                             !string.Equals(
-                                VbaToolManifestParser.VbeComparableCodeSha256(ReadComponentCode(restored)),
-                                VbaToolManifestParser.VbeComparableCodeSha256(originalCode),
+                                VbaTextCanonicalizer.VbeComparableCodeSha256(ReadComponentCode(restored)),
+                                VbaTextCanonicalizer.VbeComparableCodeSha256(originalCode),
                                 StringComparison.OrdinalIgnoreCase))
                         {
                             throw new InvalidOperationException("The original VBA component could not be verified after rename rollback.");
@@ -458,7 +458,7 @@ namespace RNAssistant.Office
                 return ToolResult.Fail("Document modules and UserForms cannot be deleted through RNAssistant.", null, "vba_component_type_read_only", false);
             if (!string.IsNullOrWhiteSpace(expectedCodeSha256))
             {
-                var actualHash = VbaToolManifestParser.LiveCodeSha256(ReadComponentCode(component));
+                var actualHash = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(component));
                 if (!string.Equals(expectedCodeSha256, actualHash, StringComparison.OrdinalIgnoreCase))
                 {
                     return StaleLiveModule(moduleName, expectedCodeSha256, true, actualHash, "delete");
@@ -653,7 +653,7 @@ namespace RNAssistant.Office
                     {
                         name = component.Name,
                         type = component.Type,
-                        codeSha256 = VbaToolManifestParser.CodeSha256(component.Code)
+                        codeSha256 = VbaTextCanonicalizer.PackageCodeSha256(component.Code)
                     }).ToArray()
                 }));
             }
@@ -716,7 +716,7 @@ namespace RNAssistant.Office
                 {
                     return ToolResult.Fail("VBA component is not owned by this RNAssistant package and was not removed: " + property.Name, null, "vba_component_not_owned", false);
                 }
-                var actual = VbaToolManifestParser.PackageComparableCodeSha256(code);
+                var actual = VbaTextCanonicalizer.PackageComparableCodeSha256(code);
                 if (!string.Equals(actual, (string)property.Value, StringComparison.OrdinalIgnoreCase))
                 {
                     return ToolResult.Fail("VBA component changed after installation and was not removed: " + property.Name, JsonConvert.SerializeObject(new { component = property.Name, expected = (string)property.Value, actual = actual }), "vba_component_modified", false);
@@ -792,7 +792,7 @@ namespace RNAssistant.Office
 
         private static string PrepareImportSource(VbaToolComponent component, string marker)
         {
-            var code = VbaToolManifestParser.NormalizeCode(component.Code);
+            var code = VbaTextCanonicalizer.NormalizePackageCode(component.Code);
             var markerLine = string.IsNullOrWhiteSpace(marker) ? string.Empty : "' " + marker.Trim() + Environment.NewLine;
             if (string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase))
             {
@@ -808,7 +808,7 @@ namespace RNAssistant.Office
 
         private static string PrepareCodeOnlyFormSource(VbaToolComponent component, string marker)
         {
-            var code = VbaToolManifestParser.NormalizeCode(component == null ? null : component.Code);
+            var code = VbaTextCanonicalizer.NormalizePackageCode(component == null ? null : component.Code);
             var markerLine = string.IsNullOrWhiteSpace(marker) ? string.Empty : "' " + marker.Trim() + "\r\n";
             return markerLine + code;
         }
@@ -827,11 +827,11 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException((operation ?? "VBA write") + " verification found no component.");
             }
-            var expectedHash = VbaToolManifestParser.LiveCodeSha256(expectedCode);
+            var expectedHash = VbaTextCanonicalizer.LiveCodeSha256(expectedCode);
             var actualCode = ReadComponentCode(componentObject);
-            var actualHash = VbaToolManifestParser.LiveCodeSha256(actualCode);
-            var expectedComparableHash = VbaToolManifestParser.VbeComparableCodeSha256(expectedCode);
-            var actualComparableHash = VbaToolManifestParser.VbeComparableCodeSha256(actualCode);
+            var actualHash = VbaTextCanonicalizer.LiveCodeSha256(actualCode);
+            var expectedComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(expectedCode);
+            var actualComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(actualCode);
             if (!string.Equals(expectedComparableHash, actualComparableHash, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
@@ -846,11 +846,11 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException((operation ?? "VBA package write") + " verification found no component.");
             }
-            var expectedHash = VbaToolManifestParser.CodeSha256(expectedCode);
+            var expectedHash = VbaTextCanonicalizer.PackageCodeSha256(expectedCode);
             var actualCode = ReadComponentCode(componentObject);
-            var actualHash = VbaToolManifestParser.CodeSha256(actualCode);
-            var expectedComparableHash = VbaToolManifestParser.PackageComparableCodeSha256(expectedCode);
-            var actualComparableHash = VbaToolManifestParser.PackageComparableCodeSha256(actualCode);
+            var actualHash = VbaTextCanonicalizer.PackageCodeSha256(actualCode);
+            var expectedComparableHash = VbaTextCanonicalizer.PackageComparableCodeSha256(expectedCode);
+            var actualComparableHash = VbaTextCanonicalizer.PackageComparableCodeSha256(actualCode);
             if (!string.Equals(expectedComparableHash, actualComparableHash, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
@@ -941,7 +941,7 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException(validationError);
             }
-            var normalized = VbaToolManifestParser.NormalizeLiveCode(code ?? string.Empty);
+            var normalized = VbaTextCanonicalizer.NormalizeLiveCode(code ?? string.Empty);
             if (normalized.Length == 0) return string.Empty;
             return normalized.Replace("\n", "\r\n");
         }

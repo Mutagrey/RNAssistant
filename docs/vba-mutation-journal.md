@@ -12,12 +12,32 @@ The Office document remains authoritative for current live VBA. RNAssistant keep
 
 History protection applies to the VBA journal and its CAS bodies exactly as it does to chat history. HMAC and authenticated encryption are independent and disabled by default. The key comes from the DPAPI-protected API key or a separate DPAPI-protected custom secret; no secret is written to settings, events, or blobs.
 
+## Text representations
+
+Pure rules live in `Core.Tools.VbaTextCanonicalizer`; `VbaPatchEngine` performs one
+text replacement and returns typed status/text/match information. JSON validation,
+resource guidance, guards, ordered operations and journal orchestration remain in
+Office. Phase 6A changes ownership only, not stored hashes or source bytes.
+
+| Representation | Purpose / existing transformation |
+|---|---|
+| Transport / raw CAS bytes | Exact stored source bytes; CAS SHA-256 is not a normalized text hash |
+| Live canonical text | `NormalizeLiveCode` / `LiveCodeSha256`: normalize real CRLF/CR to LF, remove one terminal newline; preserve other whitespace, blank lines and ownership comments |
+| Package canonical text | `NormalizePackageCode` / `PackageCodeSha256`: additionally strip recognized export headers and RNAssistant ownership markers, trim outer whitespace |
+| VBE-comparable fingerprint | `NormalizeVbeComparableCode` / `VbeComparableCodeSha256`: existing token-based comparison; quoted strings/bracketed names and apostrophe comment text remain significant; not replacement source |
+| Package-comparable fingerprint | `PackageComparableCodeSha256`: package normalization followed by VBE-comparable normalization |
+
+Patch inputs match actual newline characters to the current source style. Literal
+backslash sequences are never decoded again. Comparison representations are never
+written over the original CAS body. Existing non-overlapping match counting is
+tracked separately as R33; extraction does not close the full ambiguity gate.
+
 ## Transaction protocol
 
 After guard validation and confirmation, but before COM dispatch, every public `write`, `patch`, `delete`, and `restore` persists `mutation.prepared` with:
 
 - stable and runtime document identity, module/type, and existence;
-- raw and VBE-comparable before/intended hashes plus CAS references;
+- live-text and VBE-comparable before/intended hashes plus exact-byte CAS references;
 - rollback backup id when a before state exists;
 - chat/session, run, turn, step, and tool-call correlation.
 

@@ -103,6 +103,7 @@ See [conversation-protocol.md](conversation-protocol.md).
 
 - `src/RNAssistant.Core/Llm`: HTTP transport, message construction, response/reasoning parsing, budgets.
 - `src/RNAssistant.Core/Tools/AgentResponseParser.cs`: minimal Agent JSON parser.
+- `src/RNAssistant.Core/Tools/VbaPatchEngine.cs` and `VbaTextCanonicalizer.cs`: pure VBA text operations/representations, shared by parser/storage and Office consumers. JSON/tool mapping, COM, guards and journal orchestration stay outside; Phase 6A preserves algorithms and does not qualify production binding.
 - `src/RNAssistant.Core/Storage`: settings, chats, tools, skills, attachments.
 - `src/RNAssistant.Core/Models/SessionEventModels.cs`: canonical event envelope and typed state-operation vocabulary.
 - `src/RNAssistant.Core/Storage/ChatBlobStore.cs`: shared content-addressed immutable payload store for chat payloads, artifacts, committed attachments, and VBA source snapshots.

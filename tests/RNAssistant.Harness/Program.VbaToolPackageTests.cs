@@ -349,7 +349,7 @@ namespace RNAssistant.Harness
 
             var expected = new JObject
             {
-                ["RNA_FormToolForm"] = VbaToolManifestParser.PackageComparableCodeSha256(updatedCode)
+                ["RNA_FormToolForm"] = VbaTextCanonicalizer.PackageComparableCodeSha256(updatedCode)
             }.ToString();
             var removed = VbaProjectSupport.RemovePackage(document, expected, "RNAssistantPackage: id=excel.form_tool;");
             AssertTrue(removed.Success, "owned blank MSForm can be removed internally by package lifecycle");
@@ -376,8 +376,8 @@ namespace RNAssistant.Harness
                 AssertEqual("installed", executor.GetVbaInstallationStatus(tool), "VBE-formatted package probe matches source");
                 AssertTrue(
                     !string.Equals(
-                        VbaToolManifestParser.CodeSha256(tool.Components[1].Code),
-                        VbaToolManifestParser.CodeSha256(adapter.GetVbaModuleCode("RNA_EchoService")),
+                        VbaTextCanonicalizer.PackageCodeSha256(tool.Components[1].Code),
+                        VbaTextCanonicalizer.PackageCodeSha256(adapter.GetVbaModuleCode("RNA_EchoService")),
                         StringComparison.OrdinalIgnoreCase),
                     "regression setup changes the strict package hash");
                 AssertEqual(
@@ -420,7 +420,7 @@ namespace RNAssistant.Harness
             AssertContains(form.CodeModule.Code, "option    explicit", "COM regression setup reformats source");
             var expected = new JObject
             {
-                ["RNA_FormatForm"] = VbaToolManifestParser.PackageComparableCodeSha256(source)
+                ["RNA_FormatForm"] = VbaTextCanonicalizer.PackageComparableCodeSha256(source)
             }.ToString();
             AssertTrue(
                 VbaProjectSupport.RemovePackage(document, expected, "RNAssistantPackage: id=excel.format_form;").Success,
@@ -503,10 +503,10 @@ namespace RNAssistant.Harness
                 "Attribute VB_PredeclaredId = False\n" +
                 "Attribute VB_Exposed = False\n" +
                 "' RNAssistantSession: id=excel.echo_vba; version=1.0.0\n" + source;
-            AssertEqual(VbaToolManifestParser.CodeSha256(source), VbaToolManifestParser.CodeSha256(exported), "normalized export hash");
+            AssertEqual(VbaTextCanonicalizer.PackageCodeSha256(source), VbaTextCanonicalizer.PackageCodeSha256(exported), "normalized export hash");
 
             var versionedWithoutAttributes = "VERSION 1.0 CLASS\n" + source;
-            AssertContains(VbaToolManifestParser.NormalizeCode(versionedWithoutAttributes), "VERSION 1.0 CLASS", "non-export VERSION source is preserved");
+            AssertContains(VbaTextCanonicalizer.NormalizePackageCode(versionedWithoutAttributes), "VERSION 1.0 CLASS", "non-export VERSION source is preserved");
         }
 
         private static ToolDefinition BuildVbaPackageToolForTest()

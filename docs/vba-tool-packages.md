@@ -83,6 +83,8 @@ End Function
 
 При ошибке VBA должна поднять обычную ошибку (`Err.Raise`) с понятным сообщением. Не нужно встраивать JSON parser, сетевой клиент или собственный transport protocol.
 
+Normalization/hash rules теперь принадлежат `Core.Tools.VbaTextCanonicalizer`, а не manifest parser. `NormalizePackageCode`/`PackageCodeSha256` сохраняют прежнее исключение export headers/ownership markers; `PackageComparableCodeSha256` дополнительно использует прежние VBE-comparable правила. Source/transport и raw CAS bytes не переписываются; [представления текста](vba-mutation-journal.md#text-representations) разделены. 6A не меняет install/run/remove или journal protocol.
+
 ## Жизненный цикл
 
 - Run существующего document-local tool вызывает его напрямую.

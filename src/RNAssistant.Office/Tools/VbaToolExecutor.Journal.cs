@@ -89,12 +89,12 @@ namespace RNAssistant.Office.Tools
                     BeforeExists = beforeExists,
                     BeforeCodeSha256 = beforeExists ? CodeSha256(before.Code) : null,
                     BeforeComparableCodeSha256 = beforeExists
-                        ? VbaToolManifestParser.VbeComparableCodeSha256(before.Code)
+                        ? VbaTextCanonicalizer.VbeComparableCodeSha256(before.Code)
                         : null,
                     IntendedAfterExists = intendedAfterExists,
                     IntendedAfterCodeSha256 = intendedAfterExists ? CodeSha256(intendedAfterCode) : null,
                     IntendedAfterComparableCodeSha256 = intendedAfterExists
-                        ? VbaToolManifestParser.VbeComparableCodeSha256(intendedAfterCode)
+                        ? VbaTextCanonicalizer.VbeComparableCodeSha256(intendedAfterCode)
                         : null,
                     SessionId = guard == null
                         ? (session == null ? string.Empty : session.Id ?? string.Empty)
@@ -296,7 +296,7 @@ namespace RNAssistant.Office.Tools
             if (readSucceeded)
             {
                 var rawHash = CodeSha256(actual.Code);
-                var comparableHash = VbaToolManifestParser.VbeComparableCodeSha256(actual.Code);
+                var comparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(actual.Code);
                 if (prepared.IntendedAfterExists && MatchesRecordedState(
                     rawHash,
                     comparableHash,
@@ -643,10 +643,10 @@ namespace RNAssistant.Office.Tools
             {
                 if (TryReadVbaModule(expected.ModuleName, 1000000, out actual, out readError))
                 {
-                    var hash = VbaToolManifestParser.CodeSha256(actual.Code);
+                    var hash = VbaTextCanonicalizer.PackageCodeSha256(actual.Code);
                     var comparableHash = packageOperation
-                        ? VbaToolManifestParser.PackageComparableCodeSha256(actual.Code)
-                        : VbaToolManifestParser.VbeComparableCodeSha256(actual.Code);
+                        ? VbaTextCanonicalizer.PackageComparableCodeSha256(actual.Code)
+                        : VbaTextCanonicalizer.VbeComparableCodeSha256(actual.Code);
                     var matchesBefore = expected.BeforeExists &&
                         MatchesRecordedState(
                             hash,

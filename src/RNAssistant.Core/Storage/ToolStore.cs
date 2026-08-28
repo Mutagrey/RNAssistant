@@ -206,7 +206,7 @@ namespace RNAssistant.Core.Storage
                     Name = component.Name,
                     Type = component.Type,
                     FileName = SourceFileName(component),
-                    CodeSha256 = string.IsNullOrWhiteSpace(component.CodeSha256) ? VbaToolManifestParser.CodeSha256(component.Code) : component.CodeSha256
+                    CodeSha256 = string.IsNullOrWhiteSpace(component.CodeSha256) ? VbaTextCanonicalizer.PackageCodeSha256(component.Code) : component.CodeSha256
                 }).ToList(),
                 Scope = "global"
             };
@@ -303,7 +303,7 @@ namespace RNAssistant.Core.Storage
                     if (component.Code.Length > 1000000) return false;
                     totalCharacters += component.Code.Length;
                     if (totalCharacters > 2000000) return false;
-                    component.CodeSha256 = VbaToolManifestParser.CodeSha256(component.Code);
+                    component.CodeSha256 = VbaTextCanonicalizer.PackageCodeSha256(component.Code);
                 }
                 var manifestEntries = tool.Components.Where(component => component != null &&
                     string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&

@@ -532,7 +532,7 @@ namespace RNAssistant.Office.Tools
 
         internal static string CodeSha256(string code)
         {
-            return VbaToolManifestParser.LiveCodeSha256(code);
+            return VbaTextCanonicalizer.LiveCodeSha256(code);
         }
 
         private static bool IsModuleNotFound(ToolResult result)

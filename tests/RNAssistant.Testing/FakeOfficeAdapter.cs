@@ -346,7 +346,7 @@ namespace RNAssistant.Harness
                         returnedLineCount = returned,
                         totalLineCount = totalLineCount,
                         code = code,
-                        codeSha256 = VbaToolManifestParser.LiveCodeSha256(module.Code),
+                        codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(module.Code),
                         hasMoreBefore = totalLineCount > 0 && startLine > 1,
                         hasMoreAfter = totalLineCount > 0 && startLine + returned - 1 < totalLineCount
                     }));
@@ -361,7 +361,7 @@ namespace RNAssistant.Harness
                     type = module.Type,
                     codeOnlyUserForm = string.Equals(module.Type, "MSForm", StringComparison.OrdinalIgnoreCase) ? (bool?)true : null,
                     lineCount = LineCount(module.Code) + VbaReportedLineCountOffset,
-                    codeSha256 = VbaToolManifestParser.LiveCodeSha256(module.Code),
+                    codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(module.Code),
                     truncated = !string.Equals(returnedCode, module.Code, StringComparison.Ordinal)
                 }));
             }
@@ -373,7 +373,7 @@ namespace RNAssistant.Harness
                 FakeVbaModule existing;
                 var exists = _vbaModules.TryGetValue(moduleName, out existing);
                 var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
-                var actualCodeSha256 = exists ? VbaToolManifestParser.LiveCodeSha256(existing.Code) : null;
+                var actualCodeSha256 = exists ? VbaTextCanonicalizer.LiveCodeSha256(existing.Code) : null;
                 if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
                     (!exists || !string.Equals(expectedCodeSha256, actualCodeSha256, StringComparison.OrdinalIgnoreCase)))
                 {
@@ -419,7 +419,7 @@ namespace RNAssistant.Harness
                     {
                         return ToolResult.Fail("not owned", null, "vba_component_not_owned", false);
                     }
-                    if (_vbaModules.TryGetValue(property.Name, out module) && !string.Equals(VbaToolManifestParser.PackageComparableCodeSha256(module.Code), (string)property.Value, StringComparison.OrdinalIgnoreCase))
+                    if (_vbaModules.TryGetValue(property.Name, out module) && !string.Equals(VbaTextCanonicalizer.PackageComparableCodeSha256(module.Code), (string)property.Value, StringComparison.OrdinalIgnoreCase))
                     {
                         return ToolResult.Fail("modified", null, "vba_component_modified", false);
                     }
@@ -455,7 +455,7 @@ namespace RNAssistant.Harness
                     return ToolResult.Fail("VBA rename destination already exists: " + newModuleName, null, "vba_module_exists", true);
                 }
                 var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
-                var actualCodeSha256 = VbaToolManifestParser.LiveCodeSha256(existing.Code);
+                var actualCodeSha256 = VbaTextCanonicalizer.LiveCodeSha256(existing.Code);
                 if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
                     !string.Equals(expectedCodeSha256, actualCodeSha256, StringComparison.OrdinalIgnoreCase))
                 {
@@ -484,7 +484,7 @@ namespace RNAssistant.Harness
                 FakeVbaModule existing;
                 var exists = _vbaModules.TryGetValue(moduleName, out existing);
                 var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
-                var actualCodeSha256 = exists ? VbaToolManifestParser.LiveCodeSha256(existing.Code) : null;
+                var actualCodeSha256 = exists ? VbaTextCanonicalizer.LiveCodeSha256(existing.Code) : null;
                 if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
                     (!exists || !string.Equals(expectedCodeSha256, actualCodeSha256, StringComparison.OrdinalIgnoreCase)))
                 {
@@ -1329,7 +1329,7 @@ namespace RNAssistant.Harness
 
         private static int LineCount(string value)
         {
-            return VbaToolManifestParser.LiveCodeLineCount(value);
+            return VbaTextCanonicalizer.LiveCodeLineCount(value);
         }
 
         private sealed class FakeVbaModule

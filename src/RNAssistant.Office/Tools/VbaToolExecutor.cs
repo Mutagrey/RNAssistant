@@ -812,7 +812,7 @@ namespace RNAssistant.Office.Tools
                     ComponentType = (string)data["type"] ?? string.Empty,
                     CodeOnlyUserForm = (bool?)data["codeOnlyUserForm"],
                     Truncated = (bool?)data["truncated"] ?? false,
-                    LineCount = (int?)data["lineCount"] ?? VbaToolManifestParser.LiveCodeLineCount((string)data["code"] ?? string.Empty)
+                    LineCount = (int?)data["lineCount"] ?? VbaTextCanonicalizer.LiveCodeLineCount((string)data["code"] ?? string.Empty)
                 };
             }
             catch (JsonException ex)
@@ -902,8 +902,8 @@ namespace RNAssistant.Office.Tools
             ChatSession session = null)
         {
             var expectedHash = CodeSha256(expectedCode);
-            var expectedComparableHash = VbaToolManifestParser.VbeComparableCodeSha256(expectedCode);
-            var expectedLineCount = VbaToolManifestParser.LiveCodeLineCount(expectedCode);
+            var expectedComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(expectedCode);
+            var expectedLineCount = VbaTextCanonicalizer.LiveCodeLineCount(expectedCode);
             VbaModuleState actual;
             ToolResult readError;
             if (!TryReadVbaModule(moduleName, 1000000, out actual, out readError))
@@ -916,7 +916,7 @@ namespace RNAssistant.Office.Tools
             }
 
             var actualHash = CodeSha256(actual.Code);
-            var actualComparableHash = VbaToolManifestParser.VbeComparableCodeSha256(actual.Code);
+            var actualComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(actual.Code);
             var codeMatches = string.Equals(expectedComparableHash, actualComparableHash, StringComparison.OrdinalIgnoreCase);
             var componentTypeMatches = string.IsNullOrWhiteSpace(expectedComponentType) ||
                 string.Equals(expectedComponentType, actual.ComponentType, StringComparison.OrdinalIgnoreCase);

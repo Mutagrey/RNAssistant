@@ -226,10 +226,10 @@ namespace RNAssistant.Core.Storage
                 if (component.BeforeExists)
                 {
                     component.BeforeCodeReference = _blobs.StoreText(component.BeforeCode ?? string.Empty, "text/x-vba; charset=utf-8");
-                    component.BeforeCodeSha256 = VbaToolManifestParser.CodeSha256(component.BeforeCode);
+                    component.BeforeCodeSha256 = VbaTextCanonicalizer.PackageCodeSha256(component.BeforeCode);
                     component.BeforeComparableCodeSha256 = packageOperation
-                        ? VbaToolManifestParser.PackageComparableCodeSha256(component.BeforeCode)
-                        : VbaToolManifestParser.VbeComparableCodeSha256(component.BeforeCode);
+                        ? VbaTextCanonicalizer.PackageComparableCodeSha256(component.BeforeCode)
+                        : VbaTextCanonicalizer.VbeComparableCodeSha256(component.BeforeCode);
                     component.BackupId = preparation.RetainBackups
                         ? string.IsNullOrWhiteSpace(component.BackupId) ? NewId("backup") : component.BackupId
                         : null;
@@ -245,10 +245,10 @@ namespace RNAssistant.Core.Storage
                 if (component.IntendedAfterExists)
                 {
                     component.IntendedAfterCodeReference = _blobs.StoreText(component.IntendedAfterCode ?? string.Empty, "text/x-vba; charset=utf-8");
-                    component.IntendedAfterCodeSha256 = VbaToolManifestParser.CodeSha256(component.IntendedAfterCode);
+                    component.IntendedAfterCodeSha256 = VbaTextCanonicalizer.PackageCodeSha256(component.IntendedAfterCode);
                     component.IntendedAfterComparableCodeSha256 = packageOperation
-                        ? VbaToolManifestParser.PackageComparableCodeSha256(component.IntendedAfterCode)
-                        : VbaToolManifestParser.VbeComparableCodeSha256(component.IntendedAfterCode);
+                        ? VbaTextCanonicalizer.PackageComparableCodeSha256(component.IntendedAfterCode)
+                        : VbaTextCanonicalizer.VbeComparableCodeSha256(component.IntendedAfterCode);
                 }
                 else
                 {

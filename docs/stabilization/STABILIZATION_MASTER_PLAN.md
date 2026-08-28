@@ -17,7 +17,7 @@
 ### Обязательные правила для агента
 
 1. Выполнять только текущую фазу и текущий подэтап.
-2. Не начинать следующую фазу, пока не выполнен Definition of Done текущей.
+2. Не начинать следующую фазу, пока не выполнен Definition of Done текущей, кроме явно согласованного исключения Phase 6A ниже; оно не закрывает отложенные gates.
 3. Не добавлять новые продуктовые функции во время стабилизации.
 4. Не повышать продуктовую версию и не создавать Git tag, если это прямо не указано в разделе релиза.
 5. Не менять одновременно runtime, UI, persistence, resources и Office/VBA ради одного локального исправления.
@@ -1767,6 +1767,12 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 
 ## Phase 6 — VBA vertical slice
 
+### Согласованное исключение 6A (2026-08-28)
+
+Пользователь разрешил продолжать локальную работу, пока Windows/Office машина недоступна, с последующей совместной qualification. Текущий допуск ограничен **6A: чистые VbaPatchEngine и VbaTextCanonicalizer**, их текущие consumers, targeted tests и локальная чистка. Выделение сохраняет существующую text/hash semantics; разрешены только механические замены вызовов в guard/verification/package/storage consumers. Не менять COM binding/dispatch, journal/CAS protocol, outcome classification, UI или продуктовые возможности.
+
+Phase 5B2/R04 остаются открытыми; production ExcelDocumentSession/factories ещё не реализованы. Наличие локальных tests не заменяет identity qualification и не разрешает factory switch. Следующие подэтапы Phase 6 и Phases 7–12 не включены в это исключение. После 6A остановиться на его границе; дальнейший локальный scope согласовывать отдельно, не объявляя Phase 5/6 завершёнными. Поздний Windows прогон должен включить накопленные gate/identity/controller сценарии 5B2 и VBE/read-back/package regression для 6A; identity проверяется до factory switch.
+
 ### Цель
 
 Стабилизировать наиболее опасный write contour до переноса остальных mutations.
@@ -1784,10 +1790,10 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 
 ### Выполнить
 
-- [ ] Извлечь `VbaPatchEngine` из `VbaToolExecutor.Patching`: текстовая логика отдельно от `ToolResult`, resource-подсказок, COM и journal orchestration.
-- [ ] Извлечь `VbaTextCanonicalizer`, включая используемые правила из `VbaToolManifestParser`; переключить patch/verification/package consumers без второй реализации нормализации и без изменения journal/CAS protocol.
-- [ ] Определить Transport/Canonical/VBE-comparable representations.
-- [ ] Raw CAS hash остаётся hash точных bytes; comparable hash отдельно. Проверить CRLF/LF, literal backslash sequences и строки/комментарии: source не декодируется повторно и не теряет семантику.
+- [x] 6A: `Core.Tools.VbaPatchEngine` выделен из `VbaToolExecutor.Patching`; типизированный text result без ToolResult/resources/COM/journal. Office сохраняет JSON/result mapping и ordered orchestration.
+- [x] 6A: `Core.Tools.VbaTextCanonicalizer` — один владелец live/package/VBE-comparable text/hash правил; parser, patch, guard/verification/package/storage consumers переключены, прежние normalization methods удалены. Core-размещение сохраняет допустимые зависимости storage/parser; journal/CAS protocol не менялся.
+- [x] 6A: существующие Transport/live/package/VBE-comparable representations разделены и описаны в [VBA journal](../vba-mutation-journal.md#text-representations); comparison не переписывает source.
+- [x] 6A host-neutral: raw CAS hash не менялся и отделён от text/comparable hashes; targeted tests покрывают CRLF/LF/CR, literal backslash sequences, строки/апострофные комментарии. Это не Windows/VBE qualification.
 - [ ] Извлечь `VbaReader`.
 - [ ] Извлечь `VbaMutationService`.
 - [ ] Извлечь `VbaVerifier`.
@@ -1797,7 +1803,7 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 - [ ] Не выносить internal journal states в общий ToolResult.
 - [ ] Compile validation хранить отдельно.
 - [ ] Unknown mutation не retry.
-- [ ] Exact patch остаётся strict и unambiguous.
+- [ ] Exact patch остаётся strict и unambiguous; отдельно закрыть унаследованный R33 (перекрывающиеся вхождения) до полного VBA gate, без смешения с 6A extraction.
 - [ ] Добавить fault injection:
   - [ ] before journal prepare;
   - [ ] after prepare/before COM;

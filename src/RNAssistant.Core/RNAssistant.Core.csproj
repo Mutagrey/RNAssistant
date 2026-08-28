@@ -132,6 +132,8 @@
     <Compile Include="Tools\TextPatternEngine.cs" />
     <Compile Include="Tools\StructuredTextPatchEngine.cs" />
     <Compile Include="Tools\VbaToolManifestParser.cs" />
+    <Compile Include="Tools\VbaPatchEngine.cs" />
+    <Compile Include="Tools\VbaTextCanonicalizer.cs" />
     <Compile Include="Tools\ConversationMessageStreamExtractor.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ResourceUri.cs" />

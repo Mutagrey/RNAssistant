@@ -256,7 +256,7 @@ namespace RNAssistant.Office.Services
                         ? ".cls"
                         : string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase) ? ".form.vba" : ".bas"),
                     Code = code,
-                    CodeSha256 = string.IsNullOrWhiteSpace(code) ? string.Empty : VbaToolManifestParser.CodeSha256(code)
+                    CodeSha256 = string.IsNullOrWhiteSpace(code) ? string.Empty : VbaTextCanonicalizer.PackageCodeSha256(code)
                 });
             }
             return result;
@@ -312,7 +312,7 @@ namespace RNAssistant.Office.Services
                 VbaToolComponent current;
                 if (!documentComponents.TryGetValue(component.Name, out current) ||
                     !string.Equals(component.Type, current.Type, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(VbaToolManifestParser.CodeSha256(component.Code), VbaToolManifestParser.CodeSha256(current.Code), StringComparison.OrdinalIgnoreCase)) return false;
+                    !string.Equals(VbaTextCanonicalizer.PackageCodeSha256(component.Code), VbaTextCanonicalizer.PackageCodeSha256(current.Code), StringComparison.OrdinalIgnoreCase)) return false;
             }
             return (global.Components ?? new List<VbaToolComponent>()).Count == documentComponents.Count;
         }

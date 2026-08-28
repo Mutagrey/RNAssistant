@@ -50,7 +50,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Session storage and CAS | `Program.SessionEventStoreTests.cs`, `Program.CasMaintenanceTests.cs` | `storage:` |
 | Chats, context and bridge | `Program.ChatSessionTests.cs`, `Program.ChatEditTests.cs`, `Program.ContextBridgeTests.cs`, `Program.PromptContextInspectorTests.cs` | `chat:`, `chat sessions:`, `context:`, `bridge:` |
 | Tools and disabled pipelines | `Program.ToolStoreTests.cs`, `Program.PipelineToolTests.cs`, `Program.SearchToolTests.cs` | `tools:`, `pipeline:`, `search:` |
-| VBA | `Program.VbaPromptTests.cs`, `Program.VbaToolPackageTests.cs` | `vba:` |
+| VBA / pure patch and text canonicalization | `Program.VbaPromptTests.cs`, `Program.VbaToolPackageTests.cs` | `vba:`, `vba: pure patch text contract`, `vba: live hash preserves line structure`, `vba: code hash normalizes export` |
 | HTML, plans and charts | `Program.HtmlArtifactStorageTests.cs`, `Program.PlanToolTests.cs`, `Program.ChartArtifactTests.cs` | `artifacts:`, `plans:`, `chart:` |
 | Desktop/WebView-neutral | `Program.ParserDesktopTests.cs`, `Program.WebViewSecurityTests.cs` | `desktop target:`, `webview:` |
 

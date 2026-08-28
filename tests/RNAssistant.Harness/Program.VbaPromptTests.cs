@@ -708,37 +708,73 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaPurePatchTextContract()
+        {
+            foreach (var newline in new[] { "\n", "\r\n", "\r" })
+            {
+                var source = "' Контекст" + newline + "Debug.Print \"C:\\temp\\n\"" + newline + "End Sub";
+                var result = VbaPatchEngine.Replace(source, "Debug.Print \"C:\\temp\\n\"\nEnd Sub",
+                    "Debug.Print \"C:\\temp\\r\\n\"\nEnd Sub");
+                AssertEqual(VbaPatchStatus.Changed, result.Status, "plain text engine changes exact match");
+                AssertEqual(source.Replace("C:\\temp\\n", "C:\\temp\\r\\n"), result.Text,
+                    "literal backslashes and surrounding source preserved for each newline style");
+                AssertEqual(VbaPatchStatus.Unchanged,
+                    VbaPatchEngine.Replace(source, source, source).Status, "no-op is distinct from change");
+            }
+            var ambiguous = VbaPatchEngine.Replace("A\nA", "A", "B");
+            AssertEqual(VbaPatchStatus.Ambiguous, ambiguous.Status, "multiple matches rejected");
+            AssertEqual(2, ambiguous.MatchCount, "match count retained for tool guidance");
+            AssertEqual("A\nA", ambiguous.Text, "ambiguity preserves original text");
+            AssertEqual(VbaPatchStatus.NotFound, VbaPatchEngine.Replace("A", "B", "C").Status, "stale source rejected");
+            AssertEqual(VbaPatchStatus.EmptyFind, VbaPatchEngine.Replace("A", null, "B").Status, "empty find rejected");
+            AssertEqual(string.Empty, VbaPatchEngine.Replace("A", "A", null).Text, "null replacement is deletion");
+        }
+
         private static void VbaLiveHashPreservesLineStructure()
         {
             AssertEqual(
-                VbaToolManifestParser.LiveCodeSha256("Option Explicit\r\nSub Main()\r\nEnd Sub"),
-                VbaToolManifestParser.LiveCodeSha256("Option Explicit\nSub Main()\nEnd Sub\n"),
+                VbaTextCanonicalizer.LiveCodeSha256("Option Explicit\r\nSub Main()\r\nEnd Sub"),
+                VbaTextCanonicalizer.LiveCodeSha256("Option Explicit\nSub Main()\nEnd Sub\n"),
                 "line ending transport is normalized");
             AssertTrue(
-                !string.Equals(VbaToolManifestParser.LiveCodeSha256("\nOption Explicit"), VbaToolManifestParser.LiveCodeSha256("Option Explicit"), StringComparison.Ordinal),
+                !string.Equals(VbaTextCanonicalizer.LiveCodeSha256("\nOption Explicit"), VbaTextCanonicalizer.LiveCodeSha256("Option Explicit"), StringComparison.Ordinal),
                 "leading blank line changes live hash");
             AssertTrue(
-                !string.Equals(VbaToolManifestParser.LiveCodeSha256("Option Explicit\n\n"), VbaToolManifestParser.LiveCodeSha256("Option Explicit\n"), StringComparison.Ordinal),
+                !string.Equals(VbaTextCanonicalizer.LiveCodeSha256("Option Explicit\n\n"), VbaTextCanonicalizer.LiveCodeSha256("Option Explicit\n"), StringComparison.Ordinal),
                 "trailing blank line changes live hash");
             AssertTrue(
-                !string.Equals(VbaToolManifestParser.LiveCodeSha256("' RNAssistantSession: id=x\nOption Explicit"), VbaToolManifestParser.LiveCodeSha256("Option Explicit"), StringComparison.Ordinal),
+                !string.Equals(VbaTextCanonicalizer.LiveCodeSha256("' RNAssistantSession: id=x\nOption Explicit"), VbaTextCanonicalizer.LiveCodeSha256("Option Explicit"), StringComparison.Ordinal),
                 "runtime marker changes live hash");
             AssertEqual(
-                VbaToolManifestParser.VbeComparableCodeSha256("Sub Main()\n    Debug.Print \"Value\"\nEnd Sub"),
-                VbaToolManifestParser.VbeComparableCodeSha256("sub Main ( )\r\nDebug.Print \"Value\"\r\nend sub\r\n\r\n"),
+                VbaTextCanonicalizer.VbeComparableCodeSha256("Sub Main()\n    Debug.Print \"Value\"\nEnd Sub"),
+                VbaTextCanonicalizer.VbeComparableCodeSha256("sub Main ( )\r\nDebug.Print \"Value\"\r\nend sub\r\n\r\n"),
                 "VBE-only formatting is comparable");
             AssertTrue(
                 !string.Equals(
-                    VbaToolManifestParser.VbeComparableCodeSha256("Debug.Print \"Value\""),
-                    VbaToolManifestParser.VbeComparableCodeSha256("Debug.Print \"Changed\""),
+                    VbaTextCanonicalizer.VbeComparableCodeSha256("Debug.Print \"Value\""),
+                    VbaTextCanonicalizer.VbeComparableCodeSha256("Debug.Print \"Changed\""),
                     StringComparison.Ordinal),
                 "string literal changes remain significant");
             AssertTrue(
                 !string.Equals(
-                    VbaToolManifestParser.VbeComparableCodeSha256("End Sub"),
-                    VbaToolManifestParser.VbeComparableCodeSha256("EndSub"),
+                    VbaTextCanonicalizer.VbeComparableCodeSha256("End Sub"),
+                    VbaTextCanonicalizer.VbeComparableCodeSha256("EndSub"),
                     StringComparison.Ordinal),
                 "token boundaries remain significant");
+            var literal = "Debug.Print \"C:\\temp\\n \"\"Value\"\"\" ' Сохранить Регистр\\r\\n";
+            AssertEqual(literal, VbaTextCanonicalizer.NormalizeLiveCode(literal),
+                "live normalization does not decode literal escapes");
+            AssertEqual(literal, VbaTextCanonicalizer.NormalizePackageCode(literal),
+                "package normalization preserves strings and comments");
+            AssertTrue(VbaTextCanonicalizer.VbeComparableCodeSha256(literal) !=
+                VbaTextCanonicalizer.VbeComparableCodeSha256(literal.Replace("Value", "value")),
+                "quoted literal case remains significant");
+            AssertTrue(VbaTextCanonicalizer.VbeComparableCodeSha256(literal) !=
+                VbaTextCanonicalizer.VbeComparableCodeSha256(literal.Replace("Регистр", "регистр")),
+                "apostrophe comment text remains significant");
+            AssertTrue(TextPatternEngine.Sha256("Option Explicit\r\n") !=
+                VbaTextCanonicalizer.LiveCodeSha256("Option Explicit\r\n"),
+                "raw transport bytes and normalized live identity are not interchangeable");
         }
 
         private static void VbaReadBackAcceptsVbeNormalization()
@@ -776,7 +812,7 @@ namespace RNAssistant.Harness
                 AssertContains(adapter.VbaModuleCode, "\"new\"", "patch was applied");
                 var data = JObject.Parse(result.DataJson);
                 AssertEqual(true, (bool)data["vbeNormalized"], "VBE normalization reported");
-                AssertEqual(VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode), (string)data["codeSha256"], "actual read-back hash returned");
+                AssertEqual(VbaTextCanonicalizer.LiveCodeSha256(adapter.VbaModuleCode), (string)data["codeSha256"], "actual read-back hash returned");
             });
         }
 
@@ -793,8 +829,8 @@ namespace RNAssistant.Harness
             AssertTrue(result.Success, "COM write accepts VBE normalization and phantom line count");
             AssertContains(component.CodeModule.Code, "Changed", "changed code remains in module");
             AssertEqual(
-                VbaToolManifestParser.VbeComparableCodeSha256("Sub Changed()\nEnd Sub"),
-                VbaToolManifestParser.VbeComparableCodeSha256(component.CodeModule.Code),
+                VbaTextCanonicalizer.VbeComparableCodeSha256("Sub Changed()\nEnd Sub"),
+                VbaTextCanonicalizer.VbeComparableCodeSha256(component.CodeModule.Code),
                 "read-back code is VBE-equivalent");
         }
 
@@ -804,7 +840,7 @@ namespace RNAssistant.Harness
             var document = new FakeVbaDocumentObject();
             var component = document.VBProject.VBComponents.Seed("OldModule", source, 2);
             var designer = component.Designer;
-            var hash = VbaToolManifestParser.LiveCodeSha256(source);
+            var hash = VbaTextCanonicalizer.LiveCodeSha256(source);
 
             var result = VbaProjectSupport.RenameModule(document, "OldModule", "NewModule", hash);
 
@@ -827,7 +863,7 @@ namespace RNAssistant.Harness
                 document,
                 "NewModule",
                 "AnotherName",
-                VbaToolManifestParser.LiveCodeSha256("Sub Stale()\nEnd Sub"));
+                VbaTextCanonicalizer.LiveCodeSha256("Sub Stale()\nEnd Sub"));
             AssertEqual("stale_vba_module", stale.ErrorCode, "COM rename compare-and-swap rejects source drift");
             AssertEqual("NewModule", renamed.Name, "stale rename leaves source identity unchanged");
 
@@ -841,7 +877,7 @@ namespace RNAssistant.Harness
         {
             var document = new FakeVbaDocumentObject();
             var component = document.VBProject.VBComponents.Seed("Module1", "Sub ExternalChange()\nEnd Sub");
-            var staleHash = VbaToolManifestParser.LiveCodeSha256("Sub EarlierSnapshot()\nEnd Sub");
+            var staleHash = VbaTextCanonicalizer.LiveCodeSha256("Sub EarlierSnapshot()\nEnd Sub");
 
             var write = VbaProjectSupport.ReplaceModule(
                 document,
@@ -967,7 +1003,7 @@ namespace RNAssistant.Harness
                 AssertEqual(128, first.ReturnedCharacters, "VBA resource read obeys maxChars");
                 AssertTrue(first.Truncated && !string.IsNullOrWhiteSpace(first.NextCursor),
                     "VBA resource read exposes a continuation cursor");
-                AssertEqual(VbaToolManifestParser.LiveCodeSha256(adapter.VbaModuleCode), first.ContentSha256,
+                AssertEqual(VbaTextCanonicalizer.LiveCodeSha256(adapter.VbaModuleCode), first.ContentSha256,
                     "VBA resource read carries the full live source hash");
 
                 var second = ReadResource(
@@ -1192,8 +1228,8 @@ namespace RNAssistant.Harness
             }
 
             AssertEqual(
-                VbaToolManifestParser.NormalizeLiveCode("Sub Original()\nEnd Sub"),
-                VbaToolManifestParser.NormalizeLiveCode(component.CodeModule.Code),
+                VbaTextCanonicalizer.NormalizeLiveCode("Sub Original()\nEnd Sub"),
+                VbaTextCanonicalizer.NormalizeLiveCode(component.CodeModule.Code),
                 "original code restored");
 
             var newDocument = new FakeVbaDocumentObject();
