@@ -80,7 +80,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 ## Размещение кода
 
 - `AssistantController` — orchestration only. Chat/session bridge methods — `AssistantController.Chats.cs`, context — `AssistantController.Context.cs`, reusable behavior — `Services`.
-- Dispatch — `OfficeToolExecutor`; VBA execution/guards/journal/packages — `VbaToolExecutor*`.
+- Dispatch — `OfficeToolExecutor`; document expectations и текущая serialization — `Runtime/HostRuntime`. Bound session/Excel switch остаётся Phase 5B. VBA execution/guards/journal/packages — `VbaToolExecutor*`.
 - Новые bridge payload/response формы — typed DTO в `Contracts`, без anonymous response shapes и ad-hoc `JObject` parsing.
 - Host-neutral код не добавляй в VSTO/add-ins. Не меняй `*.Designer.cs` и VSTO metadata без необходимости.
 - Не раздувай существующие крупные файлы: новый самостоятельный behavior выноси в тематический файл/service. Partial split допустим как безопасный первый шаг, но не как оправдание нового монолита.

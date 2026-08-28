@@ -12,6 +12,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
@@ -181,6 +182,141 @@ namespace RNAssistant.Harness
                     }
                 }
             }
+        }
+
+        private static void HostRuntimeCancelsQueuedMutationAndReleasesAccess()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var target = new OfficeDocumentExecutionExpectation
+                {
+                    Host = adapter.HostName,
+                    DocumentKey = adapter.DocumentKey,
+                    RuntimeDocumentKey = adapter.RuntimeDocumentKey
+                };
+                var owner = new HostRuntime(adapter, paths);
+                var waiter = new HostRuntime(adapter, paths);
+                var actionCalls = 0;
+                using (var started = new ManualResetEventSlim(false))
+                using (var cancellation = new CancellationTokenSource())
+                {
+                    var lease = owner.BeginDocumentAccess(target);
+                    Task<bool> pending = null;
+                    try
+                    {
+                        pending = Task.Run(() =>
+                        {
+                            started.Set();
+                            try
+                            {
+                                waiter.ExecuteMutation(target, false, true, cancellation.Token, () =>
+                                {
+                                    Interlocked.Increment(ref actionCalls);
+                                    return ToolResult.Ok("unexpected dispatch");
+                                });
+                                return false;
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                return true;
+                            }
+                        });
+                        AssertTrue(started.Wait(5000), "competing runtime starts access");
+                        AssertTrue(!pending.Wait(150), "another runtime cannot bypass the held document gate");
+                        cancellation.Cancel();
+                        AssertTrue(pending.Wait(5000), "queued mutation observes cancellation before owner releases access");
+                        AssertTrue(pending.GetAwaiter().GetResult(), "pre-dispatch cancellation remains cancellation");
+                        AssertEqual(0, actionCalls, "cancelled waiter never enters its mutation action");
+                    }
+                    finally
+                    {
+                        cancellation.Cancel();
+                        lease.Dispose();
+                        if (pending != null)
+                            AssertTrue(pending.Wait(5000), "queued mutation completes after access cleanup");
+                    }
+                }
+
+                var uncertain = waiter.ExecuteMutation(target, false, true, CancellationToken.None, () =>
+                {
+                    throw new OperationCanceledException("test cancellation after mutation action entry");
+                });
+                AssertEqual("tool_effect_uncertain", uncertain.ErrorCode,
+                    "cancellation after action entry preserves possible document effect");
+                AssertEqual(false, uncertain.Retryable, "uncertain mutation is not automatically retryable");
+
+                var next = new HostRuntime(adapter, paths);
+                var result = next.ExecuteMutation(target, false, true, CancellationToken.None,
+                    () => ToolResult.Ok("next mutation"));
+                AssertTrue(result.Success, "a later runtime acquires access after pre- and post-action cancellation");
+            });
+        }
+
+        private static void HostRuntimeReusesNestedReadAccessAndReleasesOnFailure()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var target = new OfficeDocumentExecutionExpectation
+                {
+                    Host = adapter.HostName,
+                    DocumentKey = adapter.DocumentKey,
+                    RuntimeDocumentKey = adapter.RuntimeDocumentKey
+                };
+                var runtime = new HostRuntime(adapter, paths);
+                var reader = new HostRuntime(adapter, paths);
+                Task read = null;
+                using (var readStarted = new ManualResetEventSlim(false))
+                {
+                    try
+                    {
+                        var result = runtime.ExecuteMutation(target, false, true, CancellationToken.None, () =>
+                        {
+                            using (runtime.BeginDocumentAccess(target))
+                            using (runtime.BeginDocumentAccess(target))
+                            {
+                                read = Task.Run(() =>
+                                {
+                                    readStarted.Set();
+                                    using (reader.BeginDocumentAccess(target)) { }
+                                });
+                                AssertTrue(readStarted.Wait(5000), "another runtime starts its document read");
+                                AssertTrue(!read.Wait(150), "nested access does not let another runtime bypass the gate");
+                                return ToolResult.Ok("nested read");
+                            }
+                        });
+                        AssertTrue(result.Success, "nested reads reuse the owning mutation access");
+                    }
+                    finally
+                    {
+                        if (read != null)
+                            AssertTrue(read.Wait(5000), "another runtime reads after mutation access is released");
+                    }
+                }
+
+                var failure = new InvalidOperationException("test read failure");
+                try
+                {
+                    runtime.ExecuteMutation(target, false, true, CancellationToken.None, () =>
+                    {
+                        using (runtime.BeginDocumentAccess(target))
+                        {
+                            throw failure;
+                        }
+                    });
+                    throw new InvalidOperationException("mutation swallowed the read failure");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    AssertTrue(ReferenceEquals(failure, ex), "nested action failure propagates unchanged");
+                }
+
+                var next = new HostRuntime(adapter, paths);
+                var recovered = next.ExecuteMutation(target, false, true, CancellationToken.None,
+                    () => ToolResult.Ok("mutation after failed read"));
+                AssertTrue(recovered.Success, "failed mutation releases document access for another runtime");
+            });
         }
 
         private static void DocumentCatalogActivatesSelectedDocument()

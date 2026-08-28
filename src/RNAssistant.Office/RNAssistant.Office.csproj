@@ -87,6 +87,7 @@
     <Compile Include="Runtime\NativeToolRuntimeAdapter.cs" />
     <Compile Include="Runtime\ToolHandlerRegistry.cs" />
     <Compile Include="Runtime\ToolRuntime.cs" />
+    <Compile Include="Runtime\HostRuntime.cs" />
     <Compile Include="Tools\ResourceListToolHandler.cs" />
     <Compile Include="Runtime\DispatchedOfficeApplicationAdapter.cs" />
     <Compile Include="Agent\AgentTranscript.cs" />

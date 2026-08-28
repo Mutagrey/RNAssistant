@@ -110,6 +110,7 @@ See [conversation-protocol.md](conversation-protocol.md).
 - `src/RNAssistant.Core/Storage/VbaJournalStore.cs`: document-scoped append-only VBA mutation/backup source of truth and its replayable projections.
 - `src/RNAssistant.Core/Services/ChatSessionNormalizer.cs`: format-preserving chat normalization shared by storage operations.
 - `src/RNAssistant.Office/Services/ConversationRunService.cs`: shared structured Chat/Agent loop.
+- `src/RNAssistant.Office/Runtime/HostRuntime.cs`: current document expectations and synchronous mutation/live-read access; extracted from tool routing in Phase 5A. Stable-key locks and existing guard semantics remain until the bound-session switch in Phase 5B; see [ADR-0005](decisions/ADR-0005-bound-document-session.md).
 - `src/RNAssistant.Office/Services/ConversationModelSession.cs`: Office-owned model-context lifecycle and result/media materialization, outside the loop.
 - `src/RNAssistant.Office/Agent/AgentTranscript.cs`: visible messages, tool activity and resource/chart provenance.
 - `src/RNAssistant.Core/ModelProtocol`: typed conversation response/failure boundary and raw attempts; no Office dependency or tool execution.

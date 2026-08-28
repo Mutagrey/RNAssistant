@@ -1,12 +1,12 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 4B — Tool Result v1 atomic cutover (done host-neutral)
-Current task: writer/readers/prompts/history gate переключены одним изменением; R31 исправлен. [Evidence / 127 distinct targeted tests](PHASE_4B_TOOL_RESULT_V1.md#verification), MockDemo 0 errors / 3 existing CA1416.
+Current phase: Phase 5A — HostRuntime access boundary (done host-neutral)
+Current task: expected-document scope, locks и live-read nesting вынесены из OfficeToolExecutor; callers переключены, старые helpers удалены. Существующие target/locking semantics сохранены. [Evidence / 16 targeted checks](#phase-5a--hostruntime-access-boundary).
 
-Next step: отдельный Phase 5 — bound DocumentSession / HostRuntime. Phase 5 не начата; Phase 9/R32 requirements оформлены отдельным docs-only изменением, UI не реализован.
-Required context: [master Phase 5](STABILIZATION_MASTER_PLAN.md#phase-5--bound-documentsession-и-hostruntime), [Document Session contract](STABILIZATION_MASTER_PLAN.md#79-document-session-v1), [architecture](../architecture.md), [active result contract](../conversation-protocol.md#tool-result), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Windows x64 + Office + VS 2022, controller cancellation/WebView delivery; R28 streaming и R29 live-provider qualification. R30 wire/resource gate закрыт host-neutral, Phase 8 lifecycle открыт. Legacy domain preparation/document binding и domain→typed/UI-only adapters — по MIGRATION_MAP. Старые result writer/readers и ProjectLegacy удалены. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 5B — IOfficeDocumentSession / ExcelDocumentSession, bound object и единый runtime gate. Phase 6 и Phase 9 не начаты; R32 остаётся requirements-only.
+Required context: [master Phase 5](STABILIZATION_MASTER_PLAN.md#phase-5--bound-documentsession-и-hostruntime), [Document Session contract](STABILIZATION_MASTER_PLAN.md#79-document-session-v1), [ADR-0005](../decisions/ADR-0005-bound-document-session.md), [architecture](../architecture.md), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: R04 открыт — stable-key locks, OR identity, preparation до gate, ActiveWorkbook/descriptor lookup и lifetime не переключены. Требуются Windows x64 + Office + VS 2022; R28 streaming / R29 live-provider и R30 Phase 8 lifecycle gates остаются. Domain→typed/UI-only adapters — по MIGRATION_MAP. Product 16.1.0-dev, no release/tag.
 
 R32 requirements (2026-08-28, docs-only поверх `b754443`): по замечанию пользователя зафиксированы [сквозной журнал запуска и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md), inventory read-only consumers и acceptance Phase 9A–9C. Vendor-first оценка компактных готовых компонентов добавлена; конкретный vendor не выбран/не подключён. Runtime/UI не менялись; итоги 4B и следующий Phase 5 сохранены. Docs diff/9 новых локальных ссылок и anchors — pass; build/tests не запускались. Реализация, targeted UI/query tests и Windows/WebView qualification открыты; R28/R29 live gates этим требованием не закрываются.
 
@@ -39,8 +39,8 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 2 | done (host-neutral) | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: `c9f8b07`; 2C3A: `330aa79`; 2C3B: `4bbb039`; 2C3C: `dbb8ce1` | 2C3C: 100 targeted cases; ValidateVersionFormat pass; подробности в evidence | not performed | 2C3C был v3; current v4 — отдельный R29 correction ниже; old-chat skip/reset и prompt review/reset проверены локально; Windows/live-provider gates открыты |
 | 3 | done host-neutral | 3A: `f01c3f2`; 3B1: `c1628ce`; 3B2: `15dea46` | 130 unique targeted cases; MockDemo compile; [evidence](PHASE_3B2_KERNEL_CUTOVER.md) | not performed | Production kernel switch + minimal real-store replay; Phase 4 отдельно |
 | 2/3 R29 | done host-neutral | этот commit | 141 unique targeted cases; MockDemo compile; [evidence](R29_RUNTIME_CALL_IDS.md) | not performed | Runtime IDs + v4; no v3 fallback, product version unchanged |
-| 4 | done host-neutral: 4A + 4B | 85cc3f4 (4A); current 4B commit | 4B: 127 distinct targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime](PHASE_4A_TOOL_RUNTIME.md), [v1 wire/cleanup](PHASE_4B_TOOL_RESULT_V1.md); domain/Windows gates remain |
-| 5 | pending | — | — | — | Bound DocumentSession |
+| 4 | done host-neutral: 4A + 4B | 85cc3f4 (4A); b754443 (4B) | 4B: 127 distinct targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime](PHASE_4A_TOOL_RUNTIME.md), [v1 wire/cleanup](PHASE_4B_TOOL_RESULT_V1.md); domain/Windows gates remain |
+| 5 | 5A done host-neutral; 5B pending | current 5A commit | 16 targeted checks pass | not performed | [Access boundary](#phase-5a--hostruntime-access-boundary); bound object/runtime gate not switched |
 | 6 | pending | — | — | — | VBA vertical slice |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
@@ -259,6 +259,35 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - `ConversationRunService` и controller confirmation используют единый Core kernel. Office model/tool/store ports сохраняют preflight, fingerprint, lease и model-context boundaries; старые loop, `ContinueAfterToolAsync`, `RunSummaryBuilder`, mutable ID bookkeeping и `Failure.Cause` удалены.
 - `KernelState` сохраняется через existing `run.updated`, включая pending/in-flight evidence; flat run summary — только getter/projection. Real-store replay, stale confirmation, cancellation и interrupted/materialization boundaries проверены. Контракты — в canonical docs, точная matrix/команды и reused results — в [PHASE_3B2_KERNEL_CUTOVER.md](PHASE_3B2_KERNEL_CUTOVER.md).
 - R11 contained только в минимальном контуре Phase 3; полный storage/UI и Windows/Office gates остаются. Domain tools, VBA, Resource Fabric, UI JS и version/release workflow не менялись. Development target `16.1.0-dev` не повышался, tag/push не выполнялись.
+
+## Phase 5A — HostRuntime access boundary
+
+- `Runtime/HostRuntime` стал владельцем текущих expected-document scope, file locks/monitor fallback, live-read depth и leases. Executor передаёт только Host/DocumentKey/RuntimeDocumentKey, access flags и синхронную operation; catalog, safety, tool/resource error mapping и domain preparation остаются у callers. Нет нового partial или второго executor.
+- Consumers: обычный/ручной dispatch, VBA install/remove/run/editor, live Office/VBA resources и HTML data access. Старые executor-owned helpers/fields и `System.IO` dependency удалены; Office, Harness и MockDemo source includes обновлены. [ADR-0005](../decisions/ADR-0005-bound-document-session.md) фиксирует текущую границу и следующий switch.
+- Не исправляются попутно: stable-key gate, global fallback, nesting без проверки target, stable-key OR runtime-key matching, preparation до gate и Excel ActiveWorkbook/descriptor lookup. R04/Windows остаются открыты; owners/consumers/removal gates — в MIGRATION_MAP. Kernel, v4/v1 wire, storage, UI, Excel/VBA domain algorithms не менялись.
+
+Verification (2026-08-28): один build через `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "host runtime:"`, затем тот же command с `--no-build` для остальных filters. **16 distinct tests pass**, C# 7.3 / host-neutral .NET 8:
+
+| Filter | Passed |
+|---|---|
+| `host runtime:` | 2 |
+| `desktop com: adapter dispatches calls` | 1 |
+| `resources: live Office and VBA are bounded and guarded` | 1 |
+| `vba: reconciliation waits for active mutation` | 1 |
+| `vba: confirmed mutation rejects stale snapshot` | 1 |
+| `vba: guard resolves stable and changed identities` | 1 |
+| `vba: read-back` | 2 |
+| `tools: manual read-only run skips chat lease` | 1 |
+| `tools: safety metadata gates mutations` | 1 |
+| `agent: closed document keeps local tools` | 1 |
+| `tools: html workspace updates session` | 1 |
+| `tool runtime: native resource list manual and model paths` | 1 |
+| `vba: package journal is atomic` | 1 |
+| `harness: production projects include all source files` | 1 |
+
+Diff/16 добавленных или изменённых локальных ссылок и anchors — pass. Pre-commit `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal` — pass.
+
+Новые boundary tests проверяют cancellation до/после action, отсутствие bypass у другого runtime, nested read и release после exception. Existing integration checks используют fake Office; они не доказывают реальную COM identity или новый bound contract. Production controller/real WebView, Windows x64 + Office + VS 2022 не проверялись; full harness и MockDemo build не запускались. Next — 5B, без Phase 6/9 switch; product version/tag workflow не менялся.
 
 ## Active compatibility adapters
 

@@ -68,6 +68,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\NativeToolRuntimeAdapter.cs" Link="Office\Runtime\NativeToolRuntimeAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolHandlerRegistry.cs" Link="Office\Runtime\ToolHandlerRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolRuntime.cs" Link="Office\Runtime\ToolRuntime.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\HostRuntime.cs" Link="Office\Runtime\HostRuntime.cs" />
     <Compile
       Include="..\..\src\RNAssistant.Office\Services\*.cs"
       Exclude="..\..\src\RNAssistant.Office\Services\AttachmentImageService.cs"

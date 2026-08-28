@@ -248,6 +248,8 @@ namespace RNAssistant.Harness
                 Test("desktop target: registry auto mode", TargetRegistryAutoModeCanSwitchSelection),
                 Test("desktop com: dispatcher runs STA", OfficeStaDispatcherRunsSta),
                 Test("desktop com: adapter dispatches calls", DispatchedAdapterDelegatesCalls),
+                Test("host runtime: queued mutation cancellation releases access", HostRuntimeCancelsQueuedMutationAndReleasesAccess),
+                Test("host runtime: nested reads reuse access and failures release", HostRuntimeReusesNestedReadAccessAndReleasesOnFailure),
                 Test("documents: catalog activates selected document", DocumentCatalogActivatesSelectedDocument),
                 Test("documents: recognizes web paths", DocumentOpenServiceRecognizesWebPaths),
                 Test("documents: unsaved identity uses runtime key", UnsavedDocumentIdentityUsesRuntimeKey),

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
@@ -15,8 +14,6 @@ namespace RNAssistant.Office.Tools
 {
     public sealed class OfficeToolExecutor
     {
-        private static readonly TimeSpan MutationLockTimeout = TimeSpan.FromSeconds(10);
-
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly IReadOnlyList<ToolDefinition> _adapterTools;
         private readonly VbaToolExecutor _vbaExecutor;
@@ -32,9 +29,7 @@ namespace RNAssistant.Office.Tools
         private readonly UserQuestionToolExecutor _userQuestionToolExecutor;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
-        private readonly string _mutationLockDirectory;
-        private readonly AsyncLocal<int> _documentAccessDepth = new AsyncLocal<int>();
-        private static readonly object FallbackMutationGate = new object();
+        private readonly HostRuntime _hostRuntime;
 
         public OfficeToolExecutor(
             IOfficeApplicationAdapter adapter,
@@ -54,7 +49,7 @@ namespace RNAssistant.Office.Tools
             _capabilityDiscoveryExecutor = new CapabilityDiscoveryExecutor(_skillExecutor);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
-            _mutationLockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
+            _hostRuntime = new HostRuntime(adapter, paths);
             _resourceGateway = new ResourceGatewayService(
                 adapter,
                 _vbaExecutor,
@@ -160,8 +155,8 @@ namespace RNAssistant.Office.Tools
             TraceExecution(command, "tool.execution.started", null, null);
             try
             {
-                var result = ExecuteForExpectedDocument(
-                    session,
+                var result = _hostRuntime.ExecuteForExpectedDocument(
+                    DocumentTarget(session),
                     RequiresOfficeDocument(command, context.Tools),
                     () => ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken));
                 if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
@@ -191,41 +186,14 @@ namespace RNAssistant.Office.Tools
             });
         }
 
-        private ToolResult ExecuteForExpectedDocument(
-            ChatSession session,
-            bool requiresOfficeDocument,
-            Func<ToolResult> action)
+        private static OfficeDocumentExecutionExpectation DocumentTarget(ChatSession session)
         {
-            if (!requiresOfficeDocument) return action();
-            var runtimeDocumentKey = session == null || session.LastRun == null
-                ? string.Empty
-                : session.LastRun.DocumentRuntimeKey;
-            var expectation = session == null ||
-                string.IsNullOrWhiteSpace(session.Host) ||
-                (string.IsNullOrWhiteSpace(session.DocumentKey) && string.IsNullOrWhiteSpace(runtimeDocumentKey))
-                ? null
-                : new OfficeDocumentExecutionExpectation
-                {
-                    Host = session.Host,
-                    DocumentKey = session.DocumentKey,
-                    RuntimeDocumentKey = runtimeDocumentKey
-                };
-            var documentGuard = _adapter as IOfficeDocumentExecutionGuard;
-            if (expectation != null && documentGuard == null)
+            return session == null ? null : new OfficeDocumentExecutionExpectation
             {
-                var mismatch = OfficeDocumentExecutionGuardState.Validate(_adapter, expectation);
-                if (mismatch != null) return mismatch;
-            }
-
-            using (documentGuard == null || expectation == null
-                ? null
-                : documentGuard.BeginExpectedDocument(
-                    expectation.Host,
-                    expectation.DocumentKey,
-                    expectation.RuntimeDocumentKey))
-            {
-                return action();
-            }
+                Host = session.Host,
+                DocumentKey = session.DocumentKey,
+                RuntimeDocumentKey = session.LastRun == null ? string.Empty : session.LastRun.DocumentRuntimeKey
+            };
         }
 
         internal string VbaToolId(string suffix)
@@ -266,7 +234,7 @@ namespace RNAssistant.Office.Tools
             {
                 using (BeginLiveOfficeRead(session))
                 {
-                    return ExecuteForExpectedDocument(session, true, action);
+                    return _hostRuntime.ExecuteForExpectedDocument(DocumentTarget(session), true, action);
                 }
             }
             catch (ResourceRequestException ex)
@@ -328,7 +296,7 @@ namespace RNAssistant.Office.Tools
         {
             if (dryRun)
             {
-                return ExecuteForExpectedDocument(session, true, () => _vbaExecutor.InstallCustomTool(tool, false, true, session));
+                return _hostRuntime.ExecuteForExpectedDocument(DocumentTarget(session), true, () => _vbaExecutor.InstallCustomTool(tool, false, true, session));
             }
             return ExecuteDirectMutation(
                 session,
@@ -366,7 +334,7 @@ namespace RNAssistant.Office.Tools
             {
                 throw;
             }
-            catch (MutationLockException ex)
+            catch (HostRuntime.MutationLockException ex)
             {
                 return MutationLockFailure(ex);
             }
@@ -492,8 +460,8 @@ namespace RNAssistant.Office.Tools
                 (safety.MutatesDocument || safety.MutatesLocalState || isVbaController);
             if (needsMutationScope)
             {
-                return ExecuteMutation(
-                    context.Session,
+                return _hostRuntime.ExecuteMutation(
+                    DocumentTarget(context.Session),
                     safety.MutatesLocalState && !string.Equals(tool.Scope, "session", StringComparison.OrdinalIgnoreCase),
                     safety.MutatesDocument || isVbaController,
                     cancellationToken,
@@ -582,70 +550,6 @@ namespace RNAssistant.Office.Tools
             return _adapter.ExecuteTool(command);
         }
 
-        private static void EnterMutationGate(object gate, CancellationToken cancellationToken)
-        {
-            var deadline = DateTime.UtcNow.Add(MutationLockTimeout);
-            while (!Monitor.TryEnter(gate, 100))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (DateTime.UtcNow >= deadline)
-                {
-                    throw new MutationLockException(
-                        "Another RNAssistant action is still changing the same state. Retry after it finishes.",
-                        true);
-                }
-            }
-        }
-
-        private string DocumentMutationKey(ChatSession session)
-        {
-            return session == null
-                ? (_adapter.HostName + "|" + _adapter.DocumentKey)
-                : ((session.Host ?? _adapter.HostName) + "|" + (session.DocumentKey ?? _adapter.DocumentKey));
-        }
-
-        private IDisposable AcquireMutationFileLock(string lockName, CancellationToken cancellationToken)
-        {
-            if (string.IsNullOrWhiteSpace(_mutationLockDirectory) || string.IsNullOrWhiteSpace(lockName)) return null;
-            try
-            {
-                Directory.CreateDirectory(_mutationLockDirectory);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                throw new MutationLockException("RNAssistant cannot access its mutation lock directory.", false, ex);
-            }
-            catch (IOException ex)
-            {
-                throw new MutationLockException("RNAssistant cannot access its mutation lock directory.", false, ex);
-            }
-            var path = Path.Combine(_mutationLockDirectory, lockName + ".lck");
-            var deadline = DateTime.UtcNow.Add(MutationLockTimeout);
-            while (true)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                }
-                catch (IOException ex)
-                {
-                    if (DateTime.UtcNow >= deadline)
-                    {
-                        throw new MutationLockException(
-                            "Another RNAssistant action is still changing the same state. Retry after it finishes.",
-                            true,
-                            ex);
-                    }
-                    if (cancellationToken.WaitHandle.WaitOne(100)) cancellationToken.ThrowIfCancellationRequested();
-                }
-                catch (UnauthorizedAccessException ex)
-                {
-                    throw new MutationLockException("RNAssistant cannot acquire its mutation lock.", false, ex);
-                }
-            }
-        }
-
         private ToolResult ExecuteDirectMutation(
             ChatSession session,
             bool mutatesSharedLocalState,
@@ -655,12 +559,12 @@ namespace RNAssistant.Office.Tools
         {
             try
             {
-                return ExecuteForExpectedDocument(
-                    session,
+                return _hostRuntime.ExecuteForExpectedDocument(
+                    DocumentTarget(session),
                     true,
-                    () => ExecuteMutation(session, mutatesSharedLocalState, mutatesDocument, cancellationToken, action));
+                    () => _hostRuntime.ExecuteMutation(DocumentTarget(session), mutatesSharedLocalState, mutatesDocument, cancellationToken, action));
             }
-            catch (MutationLockException ex)
+            catch (HostRuntime.MutationLockException ex)
             {
                 return MutationLockFailure(ex);
             }
@@ -679,82 +583,13 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private ToolResult ExecuteMutation(
-            ChatSession session,
-            bool mutatesSharedLocalState,
-            bool mutatesDocument,
-            CancellationToken cancellationToken,
-            Func<ToolResult> action)
-        {
-            var actionStarted = false;
-            try
-            {
-                if (!mutatesSharedLocalState && !mutatesDocument)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    actionStarted = true;
-                    return action();
-                }
-                if (string.IsNullOrWhiteSpace(_mutationLockDirectory))
-                {
-                    EnterMutationGate(FallbackMutationGate, cancellationToken);
-                    try
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        actionStarted = true;
-                        return InDocumentAccessScope(mutatesDocument, action);
-                    }
-                    finally
-                    {
-                        Monitor.Exit(FallbackMutationGate);
-                    }
-                }
-
-                using (AcquireMutationFileLock(mutatesSharedLocalState ? "local_state" : null, cancellationToken))
-                using (AcquireMutationFileLock(
-                    mutatesDocument ? "document_" + AppDataPaths.SafeFileName(DocumentMutationKey(session)) : null,
-                    cancellationToken))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    actionStarted = true;
-                    return InDocumentAccessScope(mutatesDocument, action);
-                }
-            }
-            catch (OperationCanceledException) when (actionStarted)
-            {
-                return ToolResult.Fail(
-                    "Cancellation was observed after mutation execution started. The external effect may have been applied; inspect state before retrying.",
-                    null,
-                    "tool_effect_uncertain",
-                    false);
-            }
-        }
-
         private IDisposable BeginLiveOfficeRead(ChatSession session)
         {
-            if (_documentAccessDepth.Value > 0) return new ActionLease(null);
             try
             {
-                IDisposable lockLease;
-                if (string.IsNullOrWhiteSpace(_mutationLockDirectory))
-                {
-                    EnterMutationGate(FallbackMutationGate, CancellationToken.None);
-                    lockLease = new ActionLease(delegate { Monitor.Exit(FallbackMutationGate); });
-                }
-                else
-                {
-                    lockLease = AcquireMutationFileLock(
-                        "document_" + AppDataPaths.SafeFileName(DocumentMutationKey(session)),
-                        CancellationToken.None);
-                }
-                _documentAccessDepth.Value += 1;
-                return new ActionLease(delegate
-                {
-                    _documentAccessDepth.Value = Math.Max(0, _documentAccessDepth.Value - 1);
-                    if (lockLease != null) lockLease.Dispose();
-                });
+                return _hostRuntime.BeginDocumentAccess(DocumentTarget(session));
             }
-            catch (MutationLockException ex)
+            catch (HostRuntime.MutationLockException ex)
             {
                 throw new ResourceRequestException(
                     ex.Message,
@@ -763,54 +598,13 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private ToolResult InDocumentAccessScope(bool enabled, Func<ToolResult> action)
-        {
-            if (!enabled) return action();
-            _documentAccessDepth.Value += 1;
-            try
-            {
-                return action();
-            }
-            finally
-            {
-                _documentAccessDepth.Value = Math.Max(0, _documentAccessDepth.Value - 1);
-            }
-        }
-
-        private static ToolResult MutationLockFailure(MutationLockException exception)
+        private static ToolResult MutationLockFailure(HostRuntime.MutationLockException exception)
         {
             return ToolResult.Fail(
                 exception.Message,
                 null,
                 exception.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable",
                 exception.Retryable);
-        }
-
-        private sealed class MutationLockException : InvalidOperationException
-        {
-            public MutationLockException(string message, bool retryable, Exception innerException = null)
-                : base(message, innerException)
-            {
-                Retryable = retryable;
-            }
-
-            public bool Retryable { get; private set; }
-        }
-
-        private sealed class ActionLease : IDisposable
-        {
-            private Action _dispose;
-
-            public ActionLease(Action dispose)
-            {
-                _dispose = dispose;
-            }
-
-            public void Dispose()
-            {
-                var dispose = Interlocked.Exchange(ref _dispose, null);
-                if (dispose != null) dispose();
-            }
         }
 
         private static string DeepestMessage(Exception exception)

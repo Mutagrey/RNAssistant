@@ -1723,11 +1723,17 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 
 Исключить неверный workbook/document target и гонки активного окна.
 
+### Подэтапы
+
+- 5A: выделить текущую document-access boundary из executor без смены binding/locking semantics; [ADR-0005](../decisions/ADR-0005-bound-document-session.md). Завершено host-neutral, 16 targeted checks.
+- 5B: bound sessions/Excel factories, runtime gate и полный identity/lifetime/Windows switch. 5A не закрывает R04 и не вводит bound object.
+
 ### Выполнить
 
 - [ ] Ввести `IOfficeDocumentSession`.
 - [ ] Ввести `ExcelDocumentSession`.
-- [ ] Выделить выбор/удержание workbook из `ExcelAdapter` и границу document access/serialization из `OfficeToolExecutor`; read-back должен получать тот же bound object. Charts/formatting и прочие host adapters не рефакторить попутно.
+- [x] 5A: выделить текущую document access/serialization из `OfficeToolExecutor` в `HostRuntime`; старые helpers удалить.
+- [ ] 5B: выделить выбор/удержание workbook из `ExcelAdapter`; write/read-back должны получать тот же bound object. Charts/formatting и прочие host adapters не рефакторить попутно.
 - [ ] Bind конкретного document object до execution.
 - [ ] Сериализовать writes по `RuntimeDocumentId`.
 - [ ] Gate охватывает guard/live read, dispatch и read-back; resource/manual paths используют тот же reentrant gate. Не держать его при model request или confirmation; проверить lock order и повторную проверку guard после ожидания.
@@ -1745,7 +1751,7 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
   - [ ] two chats write same workbook;
   - [ ] two workbooks with same visible name;
   - [ ] queued write после изменения guard, live read во время mutation, разные COM proxies одного документа и отсутствие deadlock при confirmation/cancel.
-- [ ] Добавить ADR-0005.
+- [x] Добавить ADR-0005; delivered 5A отделён от target 5B.
 - [ ] Обновить concurrency docs.
 
 ### Definition of Done
