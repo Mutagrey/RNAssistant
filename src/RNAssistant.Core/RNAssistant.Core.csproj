@@ -95,6 +95,11 @@
     <Compile Include="ModelProtocol\ModelProtocolContracts.cs" />
     <Compile Include="ModelProtocol\ModelProtocolClient.cs" />
     <Compile Include="ModelProtocol\ModelProtocolRetryBudget.cs" />
+    <Compile Include="ModelProtocol\ConversationResponse.cs" />
+    <Compile Include="ModelProtocol\ConversationResponseJson.cs" />
+    <Compile Include="ModelProtocol\ConversationResponseParser.cs" />
+    <Compile Include="ModelProtocol\ConversationResponseSchemaBuilder.cs" />
+    <Compile Include="ModelProtocol\ConversationResponseV2Adapter.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />

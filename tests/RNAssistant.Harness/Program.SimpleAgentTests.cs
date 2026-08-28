@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -16,6 +17,283 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static ToolDefinition V3ReadTool(string id = "test.read")
+        {
+            return new ToolDefinition
+            {
+                Id = id,
+                ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{" +
+                    "\"query\":{\"type\":\"string\",\"description\":\"Query.\",\"minLength\":1}," +
+                    "\"limit\":{\"type\":\"integer\",\"description\":\"Optional limit.\",\"minimum\":1,\"maximum\":50,\"default\":10}," +
+                    "\"at\":{\"type\":\"string\",\"description\":\"Optional timestamp.\"}" +
+                    "},\"required\":[\"query\"],\"additionalProperties\":false}"
+            };
+        }
+
+        private static JObject V3Call(string id = "call_1", string name = "test.read", JObject arguments = null)
+        {
+            return new JObject { ["id"] = id, ["name"] = name,
+                ["arguments"] = arguments ?? new JObject { ["query"] = "A" } };
+        }
+
+        private static string V3Envelope(params JObject[] calls)
+        {
+            return new JObject { ["message"] = "Читаю.", ["tool_calls"] = new JArray(calls) }.ToString(Formatting.None);
+        }
+
+        private static ConversationResponseParseResult ParseV3(string json, params ToolDefinition[] tools)
+        {
+            return new ConversationResponseParser().Parse(json, tools, tools,
+                new string[0], tools.Select(tool => tool.Id));
+        }
+
+        private static void ConversationV3RoundTripsWithoutStatus()
+        {
+            foreach (var message in new[] { "Готово.", "", "  ", "Не удалось выполнить.\nНужен доступ.", "He said \"done\" \\ / \t" })
+            {
+                var json = new JObject { ["message"] = message, ["tool_calls"] = new JArray() }.ToString(Formatting.None);
+                var parsed = ParseV3(json);
+                AssertTrue(parsed.Success, "v3 accepts a string message without interpreting its wording");
+                AssertEqual(message, parsed.Response.Message, "message remains exact");
+                AssertTrue(JToken.DeepEquals(JObject.Parse(json), JObject.Parse(parsed.Response.ToJson())), "status-free final round trip");
+            }
+            var tool = V3ReadTool();
+            var callJson = V3Envelope(V3Call(arguments: new JObject
+            {
+                ["query"] = "\\u0061", ["at"] = "2026-08-28T12:34:56Z"
+            }));
+            var call = ParseV3(callJson, tool);
+            AssertTrue(call.Success, "v3 tool parses");
+            AssertTrue(call.Response.ToolCalls[0].Arguments["at"] is string, "ISO text is not silently converted to DateTime");
+            AssertTrue(JToken.DeepEquals(JObject.Parse(callJson), JObject.Parse(call.Response.ToJson())), "call round trip preserves ids and arguments");
+            AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v3 DTO has no model or universal status");
+        }
+
+        private static void ConversationV3RejectsUnknownRootFields()
+        {
+            foreach (var field in new[] { "status", "phase", "completed", "retry", "verified", "Message", "extra" })
+            {
+                var root = JObject.Parse(V3Envelope());
+                root[field] = "completed";
+                var parsed = ParseV3(root.ToString(Formatting.None));
+                AssertTrue(!parsed.Success && parsed.Response == null, "unknown root field rejected: " + field);
+                AssertContains(parsed.Error, field, "unknown field diagnostic");
+            }
+            foreach (var json in new[] { "{}", "{\"message\":\"x\"}", "{\"tool_calls\":[]}",
+                "{\"message\":null,\"tool_calls\":[]}", "{\"message\":1,\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"tool_calls\":null}", "{\"message\":\"x\",\"tool_calls\":{}}" })
+                AssertTrue(!ParseV3(json).Success, "missing/wrong root type rejected: " + json);
+        }
+
+        private static void ConversationV3RejectsMalformedJson()
+        {
+            foreach (var json in new[]
+            {
+                "", "<html>Blocked</html>", "content rejected by protection", "[]", "null",
+                "```json\n{\"message\":\"x\",\"tool_calls\":[]}\n```",
+                "text {\"message\":\"x\",\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"tool_calls\":[]} {}",
+                "{\"message\":\"x\",\"message\":\"y\",\"tool_calls\":[]}",
+                "{\"message\":\"x\",/*comment*/\"tool_calls\":[]}",
+                "{'message':'x','tool_calls':[]}",
+                "{message:\"x\",\"tool_calls\":[]}",
+                "{true:\"x\",\"message\":\"x\",\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"tool_calls\":[],}",
+                "{\"message\":\"line\nbreak\",\"tool_calls\":[]}",
+                "{\"message\":\"bad\\'escape\",\"tool_calls\":[]}",
+                "{\"message\":\"bad\\u12xx\",\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"tool_calls\":[}",
+                "{\"message\":\"x\",\"tool_calls\":[{\"id\":\"a\",\"name\":\"test.read\",\"arguments\":{\"query\":\"A\",\"limit\":NaN}}]}"
+            }) AssertTrue(!ParseV3(json, V3ReadTool()).Success, "non-JSON or incomplete envelope rejected: " + json);
+
+            foreach (var number in new[] { "01", "+1", ".5", "0x10", "undefined", "Infinity", "1e999", "999999999999999999999999999999999" })
+            {
+                var json = V3Envelope(V3Call(arguments: new JObject { ["query"] = "A", ["limit"] = "NUMBER" }))
+                    .Replace("\"NUMBER\"", number);
+                AssertTrue(!ParseV3(json, V3ReadTool()).Success, "non-JSON/non-finite number rejected: " + number);
+            }
+            var escaped = ParseV3("{\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\",\"tool_calls\":[]}");
+            AssertTrue(escaped.Success, "standard Unicode and control escapes are accepted");
+            var nested = V3Envelope(V3Call(arguments: new JObject { ["query"] = "A", ["deep"] = "NESTED" }))
+                .Replace("\"NESTED\"", new string('[', 70) + "0" + new string(']', 70));
+            AssertTrue(!ParseV3(nested, V3ReadTool()).Success, "excessive nesting is a typed parse failure");
+        }
+
+        private static void ConversationV3RequiresExactCallShape()
+        {
+            foreach (var field in new[] { "id", "name", "arguments" })
+            {
+                var call = V3Call();
+                call.Remove(field);
+                AssertTrue(!ParseV3(V3Envelope(call), V3ReadTool()).Success, "missing call field rejected: " + field);
+            }
+            foreach (var arguments in new JToken[] { JValue.CreateNull(), new JValue("{}"), new JArray(), new JValue(3) })
+            {
+                var call = V3Call();
+                call["arguments"] = arguments;
+                AssertTrue(!ParseV3(V3Envelope(call), V3ReadTool()).Success, "arguments must be an object");
+            }
+            var extra = V3Call();
+            extra["retry"] = true;
+            AssertTrue(!ParseV3(V3Envelope(extra), V3ReadTool()).Success, "extra call fields rejected");
+            AssertTrue(!ParseV3(V3Envelope(V3Call(id: "  ")), V3ReadTool()).Success, "blank id rejected");
+            AssertTrue(!ParseV3(V3Envelope(V3Call(name: "")), V3ReadTool()).Success, "blank name rejected");
+            AssertTrue(!ParseV3(V3Envelope(V3Call(arguments: new JObject { ["query"] = "A", ["Query"] = "B" })), V3ReadTool()).Success,
+                "ambiguous argument names rejected before normalization");
+            AssertTrue(!ParseV3(V3Envelope(V3Call()).Replace("\"query\":\"A\"", "\"query\":\"A\",\"query\":\"B\""), V3ReadTool()).Success,
+                "duplicate nested JSON property rejected");
+        }
+
+        private static void ConversationV3RequiresCallableAuthority()
+        {
+            var loaded = V3ReadTool();
+            var unloaded = V3ReadTool("test.other");
+            var parser = new ConversationResponseParser();
+            var result = parser.Parse(V3Envelope(V3Call(name: unloaded.Id)), new[] { loaded }, new[] { loaded, unloaded }, new string[0], new[] { loaded.Id });
+            AssertTrue(!result.Success, "known but unloaded tool cannot execute");
+            AssertContains(result.Error, "Tool schema is not loaded", "unloaded tool diagnosis");
+            AssertContains(result.Error, "common.capabilities_read", "explicit read recovery");
+            AssertContains(result.Error, "\"id\":\"test.other\"", "recovery names exact capability");
+            foreach (var name in new[] { "test.unknown", "TEST.READ", "test.read " })
+            {
+                result = ParseV3(V3Envelope(V3Call(name: name)), loaded);
+                AssertTrue(!result.Success, "unknown/case-mismatched tool rejected");
+                AssertContains(result.Error, "Unknown tool", "unknown name diagnosis");
+            }
+            loaded.ArgumentSchemaJson = "{}";
+            AssertTrue(!ParseV3(V3Envelope(V3Call()), loaded).Success, "malformed callable schema cannot grant authority");
+            AssertTrue(!parser.Parse(V3Envelope(), new ToolDefinition[0], new ToolDefinition[0], null, new string[0]).Success,
+                "accepted run context must be explicit, even if empty");
+            AssertTrue(!parser.Parse(V3Envelope(), new ToolDefinition[0], new ToolDefinition[0], new string[0], null).Success,
+                "batch safety authority must be explicit");
+        }
+
+        private static void ConversationV3RejectsAcceptedRunIdReuse()
+        {
+            var tool = V3ReadTool();
+            var parser = new ConversationResponseParser();
+            var accepted = new HashSet<string>(new[] { "call_old" });
+            var contextBefore = accepted.ToArray();
+            var duplicate = parser.Parse(V3Envelope(V3Call("CALL_OLD")), new[] { tool }, new[] { tool }, accepted, new[] { tool.Id });
+            AssertTrue(!duplicate.Success, "accepted run ids cannot recur with different casing");
+            AssertContains(duplicate.Error, "accepted run", "run duplicate diagnosis");
+            AssertTrue(!ParseV3(V3Envelope(V3Call(), V3Call("CALL_1")), tool).Success, "response-local ids are unique too");
+            var rejected = parser.Parse(V3Envelope(V3Call("call_new"), V3Call("call_bad", "unknown")), new[] { tool }, new[] { tool }, accepted, new[] { tool.Id });
+            AssertTrue(!rejected.Success && rejected.Response == null, "reject whole response, never partial calls");
+            var corrected = parser.Parse(V3Envelope(V3Call("call_new")), new[] { tool }, new[] { tool }, accepted, new[] { tool.Id });
+            AssertTrue(corrected.Success, "rejected attempts do not reserve ids");
+            AssertTrue(accepted.SequenceEqual(contextBefore), "parsing never mutates the accepted-run id source");
+            accepted.Add("call_new");
+            AssertTrue(!parser.Parse(corrected.Response.ToJson(), new[] { tool }, new[] { tool }, accepted, new[] { tool.Id }).Success,
+                "caller-accepted id is rejected in the next step");
+            AssertTrue(ParseV3(corrected.Response.ToJson(), tool).Success, "fresh run has its own id scope");
+        }
+
+        private static void ConversationV3BatchesOnlyExplicitReadOnlyCalls()
+        {
+            var read = V3ReadTool();
+            var parser = new ConversationResponseParser();
+            var calls = V3Envelope(V3Call("first"), V3Call("second"));
+            var accepted = ParseV3(calls, read);
+            AssertTrue(accepted.Success, "independent read-only calls may be batched");
+            AssertTrue(accepted.Response.ToolCalls.Select(call => call.Id).SequenceEqual(new[] { "first", "second" }), "call order is preserved");
+            AssertTrue(!parser.Parse(calls, new[] { read }, new[] { read }, new string[0], new string[0]).Success,
+                "absence of flags alone does not establish batch safety");
+
+            foreach (var kind in new[] { "document", "local", "confirmation", "external", "unclassified" })
+            {
+                var tool = V3ReadTool("test.action");
+                tool.MutatesDocument = kind == "document";
+                tool.MutatesLocalState = kind == "local";
+                tool.RequiresConfirmation = kind == "confirmation";
+                // External/effect classification belongs to trusted execution authority,
+                // not the name or legacy booleans. Missing classification fails closed.
+                var batchSafe = kind == "external" || kind == "unclassified" ? new[] { read.Id } : new[] { read.Id, tool.Id };
+                foreach (var batch in new[]
+                {
+                    V3Envelope(V3Call("a", tool.Id), V3Call("b", read.Id)),
+                    V3Envelope(V3Call("a", read.Id), V3Call("b", tool.Id))
+                })
+                {
+                    var result = parser.Parse(batch, new[] { read, tool }, new[] { read, tool }, new string[0], batchSafe);
+                    AssertTrue(!result.Success, kind + " cannot be batched, regardless of position");
+                    AssertContains(result.Error, "one at a time", "singleton diagnosis");
+                }
+                AssertTrue(parser.Parse(V3Envelope(V3Call(name: tool.Id)), new[] { tool }, new[] { tool }, new string[0], batchSafe).Success,
+                    kind + " singleton is valid protocol, not execution permission");
+            }
+        }
+
+        private static void ConversationV3ValidatesArgumentsBeforeAcceptance()
+        {
+            foreach (var arguments in new[]
+            {
+                new JObject(), new JObject { ["query"] = 5 }, new JObject { ["query"] = "" },
+                new JObject { ["query"] = JValue.CreateNull() }, new JObject { ["query"] = "A", ["limit"] = 51 },
+                new JObject { ["query"] = "A", ["limit"] = "10" }, new JObject { ["query"] = "A", ["extra"] = true }
+            })
+            {
+                var parsed = ParseV3(V3Envelope(V3Call(arguments: arguments)), V3ReadTool());
+                AssertTrue(!parsed.Success && parsed.Response == null, "argument contract violation cannot be accepted");
+                AssertContains(parsed.Error, "Invalid arguments", "schema violation diagnosis");
+            }
+            var strictNulls = ParseV3(V3Envelope(V3Call(arguments: new JObject
+            {
+                ["query"] = "A", ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
+            })), V3ReadTool());
+            AssertTrue(strictNulls.Success, "structured-output optional nulls are accepted");
+            AssertEqual(1, strictNulls.Response.ToolCalls[0].Arguments.Count, "optional nulls removed, no execution defaults applied by protocol");
+        }
+
+        private static void ConversationV3BoundsCallCount()
+        {
+            var tool = V3ReadTool();
+            var calls = Enumerable.Range(0, 32).Select(i => V3Call("call_" + i)).ToArray();
+            AssertTrue(ParseV3(V3Envelope(calls), tool).Success, "32 read-only calls accepted");
+            var oversized = V3Envelope(calls.Concat(new[] { V3Call("last") }).ToArray());
+            AssertTrue(!ParseV3(oversized, tool).Success, "33 calls rejected");
+            var legacy = JObject.Parse(oversized);
+            legacy["status"] = "in_progress";
+            AssertTrue(!ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None)).Success, "read adapter keeps the same envelope bound");
+        }
+
+        private static void ConversationV2AdapterDiscardsStatus()
+        {
+            foreach (var status in new[] { "completed", "in_progress", "awaiting_user", "blocked", "refused", "planned" })
+            {
+                foreach (var v3 in new[] { V3Envelope(), V3Envelope(V3Call()) })
+                {
+                    var legacy = JObject.Parse(v3);
+                    legacy["status"] = status;
+                    var adapted = ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None));
+                    AssertTrue(adapted.Success, "v2 status is only a discriminator, not lifecycle truth: " + status);
+                    AssertTrue(JToken.DeepEquals(JObject.Parse(v3), JObject.Parse(adapted.Response.ToJson())),
+                        "v2 adapter derives continuation only from calls and writes status-free v3");
+                    AssertTrue(!ParseV3(legacy.ToString(Formatting.None), V3ReadTool()).Success, "new parser never silently falls back to v2");
+                }
+            }
+        }
+
+        private static void ConversationV2AdapterDoesNotGrantToolAuthority()
+        {
+            var legacy = JObject.Parse(V3Envelope(V3Call(name: "removed.old_tool", arguments: new JObject { ["old_arg"] = 42 })));
+            legacy["status"] = "completed";
+            var adapted = ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None));
+            AssertTrue(adapted.Success, "historical read does not require a current catalog/schema");
+            AssertEqual("removed.old_tool", adapted.Response.ToolCalls[0].Name, "historical exact name preserved without alias");
+            AssertTrue(!ParseV3(adapted.Response.ToJson(), V3ReadTool()).Success,
+                "read conversion does not make a removed historical tool executable");
+            foreach (var status in new JToken[] { new JValue("unknown"), JValue.CreateNull(), new JValue(2) })
+            {
+                legacy["status"] = status;
+                AssertTrue(!ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None)).Success, "only identified v2 envelopes accepted");
+            }
+            legacy["status"] = "completed";
+            legacy["verified"] = true;
+            AssertTrue(!ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None)).Success, "read adapter rejects unknown root fields");
+            AssertTrue(!ConversationResponseV2Adapter.Read(V3Envelope()).Success, "v3 is not autodetected as legacy");
+        }
+
         private static void SimpleAgentParsesFinalJson()
         {
             var parsed = new AgentResponseParser().Parse(

@@ -1,7 +1,7 @@
 # ADR-0002: ModelProtocol owns raw model attempts
 
 Date: 2026-08-28
-Status: Accepted (Phase 2A boundary + Phase 2B retry policy; v3 work remains)
+Status: Accepted (Phase 2A boundary, 2B retry policy, 2C1 v3 contract; runtime cutover remains)
 
 ## Context
 
@@ -83,8 +83,34 @@ integration. Accepted `LlmCompletionResult` and the existing context-usage
 projection are metadata for current transcript consumers, not a second protocol
 or durable result store.
 
-The v3 parser/schema, explicit v2 adapter and v3 canonical document remain in Phase 2.
-This ADR does not declare that phase complete or authorize Phase 3 in this commit.
+## V3 introduction and explicit legacy read (Phase 2C1)
+
+Introduce `ConversationResponse`, parser/schema builder and a canonical v3 writer
+in Core/ModelProtocol. V3 contains only `message` and `tool_calls`; no Status member
+or universal runtime status is added. Validate exact callable names, original
+argument schemas, accepted-run ID uniqueness and singleton safety before acceptance.
+The caller supplies accepted IDs and an explicit batch-safe read-only set; missing
+classification forces singleton. Parsing does not reserve IDs or execute tools.
+
+`ConversationResponseV2Adapter.Read` is a separate historical-envelope entrypoint,
+not an automatic live-parser fallback. A known v2 status identifies the old format
+and is discarded; continuation follows the call list, never a success assertion.
+Historical names/arguments need not match a current catalog and grant no execution
+authority. Owner: ModelProtocol; current consumers: focused harness; intended
+consumer: history projection at cutover; removal: Phase 10.
+
+The complete switch exceeds the ten-production-file budget: it includes current
+DTO/parser/schema, ModelProtocol contracts/client, AppSettings prompts, transcript,
+AgentJsonProtocol, loop, compatibility probes and project includes. Apply §14.3:
+2C1 introduces the tested contract; 2C2 coordinates adapt/switch/delete. There is
+no feature flag, dual execution or dual-write. Active requests/history still use
+v2; the current `AgentResponseProtocol.CurrentVersion` remains 2. Native refusals,
+retry counts, runtime health and Office dispatch are unchanged.
+
+[The v3 canonical contract](../protocols/CONVERSATION_RESPONSE_V3.md) defines the
+remaining gates: saved prompts, complete run-ID/effective-safety context (R26),
+all legacy history forms, v3-only new accepted writes and removal of superseded
+live v2 paths. Phase 2 is not complete and Phase 3 is not authorized by this commit.
 
 ## Consequences and verification
 
@@ -97,4 +123,5 @@ lost response (R25); they cannot replay Office tool execution. Real provider,
 Windows/Office/controller/WebView qualification remains open.
 
 Evidence and exact commands: [Phase 2A](../stabilization/PHASE_2A_MODEL_PROTOCOL.md),
-[Phase 2B](../stabilization/PHASE_2B_RETRY_POLICY.md).
+[Phase 2B](../stabilization/PHASE_2B_RETRY_POLICY.md),
+[Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md).

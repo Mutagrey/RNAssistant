@@ -6,6 +6,8 @@ governance/versioning; Phase 1A добавила characterization tests и ка�
 добавляет runtime completion guard и минимальную health-проекцию. Phase 2A выделяет
 Core/ModelProtocol, сохраняя v2 и прежние retry limits. Phase 2B заменяет initial +
 retries общим лимитом protocol responses и отдельным provider budget; v2 остаётся.
+Phase 2C1 вводит v3 contract/parser/schema/writer и explicit v2 read adapter;
+единственный active runtime/history path всё ещё v2, switch/delete — Phase 2C2.
 Текущие domain docs остаются canonical до своей фазы.
 
 | Current path / policy | Target | Owner | Consumers сейчас | Switch / removal gate | Статус |
@@ -20,7 +22,9 @@ retries общим лимитом protocol responses и отдельным provi
 | `ModelProtocolFailure.Cause` → ExceptionDispatchInfo rethrow | Typed AgentKernel failure/lifecycle handling | Runtime / Application | ConversationRunService → существующий controller catch/cancel path | Phase 3: удалить rethrow adapter после switch на kernel | introduced adapter 2A; nonserialized |
 | `Services/RunSummaryBuilder.cs`: legacy ToolResult + effective safety mapping | Core/Agent RunSummaryBuilder + typed ToolExecutionRecord evidence | Runtime / ToolRuntime | ConversationRunService, controller confirmation | Перенести builder Phase 3; заменить legacy mapping Phase 4; не дублировать rules в UI | introduced adapter 1C |
 | `RunExecutionSummary` на ChatMessage/ChatRunRecord; отсутствующая summary у old pending/history | Canonical RunSummary / revisioned runtime projection | Application / Persistence / UI | Clone service, send/confirmation DTO, history UI | Полный RunSummary/projection switch Phases 3/9; obsolete adapter paths удалить Phase 10; historical records не backfill | introduced adapter 1C |
-| conversation-response v2 / model-owned status | v3 + runtime RunSummary | ModelProtocol | ModelProtocolClient → Core/Tools/AgentResponseParser; schema builder, prompt, accepted history | Оставшаяся Phase 2: v3 + explicit adapter; Phase 3 lifecycle; cleanup adapter Phase 10 | current; v2 adapter ещё не введён |
+| conversation-response v2 / AgentResponse DTO, Core/Tools/AgentResponseParser и AgentResponseSchemaBuilder | Core/ModelProtocol/ConversationResponse + parser/schema; runtime RunSummary отдельно | ModelProtocol | ModelProtocolClient, compatibility probes, prompt/schema, accepted transcript/history | Phase 2C2: coordinated switch, удалить superseded live v2 parser/schema/DTO consumers; Phase 3 lifecycle | current live v2; v3 введён 2C1, пока harness-only |
+| Historical v2 JSON envelope / model-owned status | ConversationResponseV2Adapter.Read → status-free v3 projection | ModelProtocol | Сейчас focused harness; intended history projection Phase 2C2 | Phase 10 после удаления legacy history consumers по explicit compatibility decision | introduced 2C1; read-only, not wired, no live fallback |
+| Response-local call ID uniqueness / confirmation-only batching | V3 accepted-run ID validation + explicit batch-safe read-only set | ModelProtocol / Runtime | V3 parser — harness; live v2 checks неизменны | Phase 2C2: wire полный run scope/confirmation и effective safety projection, R26; удалить live v2 checks при switch | introduced contract, runtime switch pending |
 | Accepted `LlmCompletionResult` / существующий context-usage object в ModelProtocolResult | Accepted protocol metadata для kernel/transcript | ModelProtocol / Application | ConversationRunService → AgentTranscript и current turn result | Phase 2 v3/Phase 3 kernel: пересмотреть transport metadata boundary; старый transcript path удалить при switch | current metadata bridge; no rejected completion |
 | `Services/RunCausalTrace.cs`, ModelTracePersistenceService и trace hooks текущих loop/executor/journal/controller | Наблюдение границ выделенных ModelProtocol / AgentKernel / ToolRuntime / domains / Application | Diagnostics / Application | Текущий loop, top-level executor, VBA journal wrappers, send/confirmation projection | Перенос hooks вместе с consumers в Phases 2–6/9; удаление заменённых hooks Phase 10, historical events сохраняются | introduced 1B; только logging scope, не compatibility runtime |
 | `src/RNAssistant.Office/Tools/OfficeToolExecutor.cs`: validation, safety, confirmation, domain dispatch | Office/Runtime/ToolRuntime + domain tools | Tools | Loop, pipeline, manual execution | Phase 4, vertical slices 6–7; cleanup Phase 10 | current |
@@ -36,6 +40,8 @@ retries общим лимитом protocol responses и отдельным provi
 
 В Phases 0/1A/1B новые compatibility adapters не вводились. Adapter paths 1C/2A
 указаны выше и в [PROGRESS.md](PROGRESS.md) с owner/consumers/removal phase.
+V2 read adapter 2C1 пока имеет только harness consumers; это introduce stage,
+не второй active parser, не historical rewrite и не dual-write.
 Массовые переносы файлов, aliases, новые runtime loops и dual-write запрещены.
 
 Путь model status через ChatTurnResult, LastRun, controller/bridge, persistence и UI:

@@ -551,6 +551,76 @@ namespace RNAssistant.Harness
             AssertEqual("http://127.0.0.1:8000/v1/models", LlmClient.BuildModelsConfigUrl(settings), "relative models endpoint");
         }
 
+        private static void ConversationV3SchemaMatchesParserAndWire()
+        {
+            var tool = V3ReadTool();
+            var originalSchema = tool.ArgumentSchemaJson;
+            var schemaJson = ConversationResponseSchemaBuilder.Build(new[] { tool });
+            var schema = JObject.Parse(schemaJson);
+            var valid = JObject.Parse(V3Envelope(V3Call(arguments: new JObject
+            {
+                ["query"] = "A", ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
+            })));
+            string error;
+            AssertTrue(ToolSchemaSupport.ValidateArguments((JObject)valid.DeepClone(), schema, false, out error),
+                "strict v3 envelope matches generated schema: " + error);
+            AssertTrue(ParseV3(valid.ToString(Formatting.None), tool).Success, "local parser accepts strict optional null representation");
+            AssertEqual(originalSchema, tool.ArgumentSchemaJson, "response schema construction never rewrites native tool schemas");
+
+            foreach (var field in new[] { "status", "verified", "phase" })
+            {
+                var invalid = (JObject)valid.DeepClone();
+                invalid[field] = "completed";
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(invalid, schema, false, out error) &&
+                    !ParseV3(invalid.ToString(Formatting.None), tool).Success, "schema/parser agree on unknown root field: " + field);
+            }
+            var unknown = (JObject)valid.DeepClone();
+            unknown["tool_calls"][0]["name"] = "test.unloaded";
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(unknown, schema, false, out error) &&
+                !ParseV3(unknown.ToString(Formatting.None), tool).Success, "schema/parser reject names outside callable set");
+            var missing = (JObject)valid.DeepClone();
+            ((JObject)missing["tool_calls"][0]["arguments"]).Remove("query");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(missing, schema, false, out error) &&
+                !ParseV3(missing.ToString(Formatting.None), tool).Success, "schema/parser reject missing required arguments");
+
+            var body = LlmClient.BuildRequestBody(new AppSettings { StreamResponses = false },
+                new List<object> { new { role = "user", content = "test" } }, 10, new LlmRequestOptions
+                {
+                    ResponseFormat = LlmResponseFormats.JsonSchema,
+                    ResponseSchemaName = ConversationResponseSchemaBuilder.SchemaName,
+                    ResponseSchemaJson = schemaJson
+                });
+            AssertEqual("rnassistant_conversation_response_v3", (string)body.SelectToken("response_format.json_schema.name"), "explicit v3 wire schema identity");
+            AssertTrue(JToken.DeepEquals(schema, body.SelectToken("response_format.json_schema.schema")), "LLM transport sends the exact v3 schema");
+            AssertTrue(body.SelectToken("response_format.json_schema.strict").Value<bool>(), "v3 schema uses strict transport");
+        }
+
+        private static void ConversationV3SchemaAllowsOnlyCallableTools()
+        {
+            var invalid = V3ReadTool("test.invalid");
+            invalid.ArgumentSchemaJson = "{}";
+            foreach (var tools in new[] { new ToolDefinition[0], new[] { invalid, null, new ToolDefinition() } })
+            {
+                var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(tools));
+                string error;
+                AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse(V3Envelope()), schema, false, out error), "empty callable set allows final message");
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse(V3Envelope(V3Call())), schema, false, out error),
+                    "empty/invalid callable set never offers phantom calls");
+            }
+            var tool = V3ReadTool();
+            var bounded = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool, tool, invalid }));
+            AssertEqual(1, ((JArray)bounded.SelectToken("properties.tool_calls.items.anyOf")).Count,
+                "schema uses only unique valid callable contracts");
+            var calls = Enumerable.Range(0, 32).Select(i => V3Call("call_" + i, arguments: new JObject
+            {
+                ["query"] = "A", ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
+            })).ToArray();
+            string limitError;
+            AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse(V3Envelope(calls)), bounded, false, out limitError), "schema accepts 32 calls");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse(V3Envelope(calls.Concat(new[] { calls[0] }).ToArray())), bounded, false, out limitError),
+                "schema bounds calls at 32; run uniqueness is enforced locally");
+        }
+
         private static void AgentSupportsSelectableResponseFormats()
         {
             AssertEqual(2, AgentResponseProtocol.CurrentVersion,

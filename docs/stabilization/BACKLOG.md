@@ -10,7 +10,8 @@
 | 1C | Transitional completion guard / runtime execution health | done (host-neutral); red 4 cases → green; 61 targeted harness + 8 UI pass; Windows/controller/WebView не проверены |
 | 2A | Выделить IModelProtocol, raw attempts/repair/fallback и typed failure | done; 68 targeted harness pass; v2 и legacy retry semantics сохранены |
 | 2B | Общий лимит 1–20 attempts, provider/protocol retry policy | done; 74 targeted harness pass, 4 red→green cases; R20 закрыт host-neutral, fallback работает во время repair |
-| 2C | v3 parser/schema, явный v2 adapter, canonical v3 doc и cutover | next, отдельное изменение; Phase 2 DoD пока не выполнен полностью |
+| 2C1 | Introduce v3 parser/schema/writer, явный v2 read adapter и canonical doc | done; 68 targeted harness pass; active runtime/history всё ещё v2, no cutover |
+| 2C2 | Adapt/switch/delete: ModelProtocol/prompts/schema/history, run IDs и effective singleton safety | next, отдельное изменение по §14.3; gates в CONVERSATION_RESPONSE_V3.md, R26; новые accepted writes только v3 после switch |
 | 3 | Минимальный AgentKernel и runtime-owned RunSummary | Вся Phase 2 завершена, не только boundary extraction |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests смены активной книги и lifetime |
@@ -40,7 +41,14 @@ R25: перед release проверить реальную latency, timeout и 
 Phase 1 host-neutral containment выполнена; production controller, Office и WebView
 qualification остаются в R21/R16 и не объявляются выполненными.
 
-Phase 2B добавляет bounded provider retry/backoff, но не новый parser или lifecycle.
+Phase 2B добавила bounded provider retry/backoff. Phase 2C1 вводит v3 contract и
+read adapter без runtime switch: старые v2 parser/schema/DTO пока нужны живым
+consumers. Phase 2C2 должна удалить заменяемые live paths, а не оставить два
+production parsers или automatic v2 fallback. Owner/consumers/removal — MIGRATION_MAP.
+R26: accepted IDs нужно восстанавливать из всего logical run, включая confirmation
+и не попавшие в prompt сообщения; batch-safe set — из effective local authority,
+не только false legacy flags. Saved custom v2 prompts и все history forms должны
+быть рассмотрены при coordinated cutover; controller/Windows qualification отдельно.
 `Failure.Cause` временно сохраняет прежний controller exception path; удалить при
 переключении на AgentKernel в Phase 3, не вводить второй loop.
 

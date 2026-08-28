@@ -34,6 +34,7 @@ Filtering limits executed tests. The harness source-links Core and Office-neutra
 | --- | --- | --- |
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
+| Conversation v3 introduction | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v3:` |
 | Resources and attachments | `Program.ResourceFabricTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.AttachmentTests.cs` | `resources:`, `attachments:` |
 | Session storage and CAS | `Program.SessionEventStoreTests.cs`, `Program.CasMaintenanceTests.cs` | `storage:` |
 | Chats, context and bridge | `Program.ChatSessionTests.cs`, `Program.ChatEditTests.cs`, `Program.ContextBridgeTests.cs`, `Program.PromptContextInspectorTests.cs` | `chat:`, `chat sessions:`, `context:`, `bridge:` |
@@ -102,6 +103,15 @@ runtime/store/journal run with fake LLM/Office. Controller wiring is not execute
 this harness uses `AssistantControllerBridgeStub`. Scope/projection marker tests
 do not prove production bridge delivery or WebView rendering. See
 [trace evidence and boundaries](../../docs/stabilization/PHASE_1B_CAUSAL_TRACE.md).
+
+## Stabilization v3 contract
+
+Phase 2C1 uses `conversation v3:` for the new status-free parser/schema and explicit
+v2 read adapter: envelope/JSON strictness, argument validation, accepted-run IDs,
+read-only batching, adapter isolation and generated schema transport. These are
+Core contract tests, **not a runtime cutover**. The existing `agent:` and
+`model protocol:` slices still exercise the active v2 path.
+See [Phase 2C1 evidence](../../docs/stabilization/PHASE_2C1_V3_CONTRACT.md).
 
 ## Full suite
 

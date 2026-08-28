@@ -8,6 +8,11 @@ RNAssistant has three explicit modes and one `ConversationRunService` transport/
 
 All modes return the same conversation-response v2 JSON envelope: `status + message + tool_calls[]`. They use the same bounded request-local format repair. Explicit structure and the tool catalog, never model wording, are the authority: a Chat response naming any other tool is rejected before execution.
 
+Phase 2C1 introduces the [status-free v3 contract](protocols/CONVERSATION_RESPONSE_V3.md),
+parser/schema and explicit v2 read adapter in Core, **without switching this runtime**.
+Active prompts, retry, schema selection and accepted history remain v2. The
+coordinated switch/delete is Phase 2C2; no new v3 events or dual-write exist yet.
+
 ## Conversation context
 
 Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Plan uses `PlanSystemPrompt` with the same progressive capability policy; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:

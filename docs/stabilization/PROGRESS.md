@@ -2,7 +2,7 @@
 
 Current target: 16.1.0
 Current phase: Phase 2
-Current task: Phase 2B завершена (total protocol attempts + provider retry/fallback policy); следующая — Phase 2C, v3/parser/schema/adapter/cutover. Phase 3 не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
+Current task: Phase 2C1 завершена (introduce v3 parser/schema/writer + explicit v2 read adapter, без runtime switch). Следующая — Phase 2C2, adapt/switch/delete по cutover gates; active protocol/history остаются v2. Phase 3 не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
 
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
@@ -12,7 +12,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 |---|---|---|---|---|---|
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
 | 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: `40282c0` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
-| 2 | in progress | 2A: `d911826`; 2B: этот commit `fix(model): bound protocol attempts and provider retries` | 74 targeted harness pass; 4 red→green cases; ValidateVersionFormat pass | not performed | Boundary/retry policy done, R20 закрыт; v3 parser/schema/adapter/cutover ещё не выполнены |
+| 2 | in progress | 2A: `d911826`; 2B: `a51bdda`; 2C1: этот commit `feat(protocol): introduce v3 contract and explicit v2 read adapter` | 2C1: 68 targeted harness pass; one numeric failure red→green; ValidateVersionFormat pass | not performed | V3 contract/read adapter введены, но runtime cutover не выполнен; R20 закрыт, R26 — cutover gate |
 | 3 | pending | — | — | — | AgentKernel |
 | 4 | pending | — | — | — | ToolRuntime |
 | 5 | pending | — | — | — | Bound DocumentSession |
@@ -158,6 +158,25 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed; production controller остаётся stub в harness. Live provider/timeout/media costs — R25/R24, qualification pending.
 - Точные команды и ограничения: [PHASE_2B_RETRY_POLICY.md](PHASE_2B_RETRY_POLICY.md).
 
+## Phase 2C1 substeps
+
+- Baseline — `a51bdda`, clean working tree. Полный v3 switch требует более 10 production files; по §14.3 выделен introduce/read-adapt, без частичного переключения. Изменены только 5 новых Core files + old-style Core project include, tests и docs.
+- ConversationResponse содержит только message и ordered calls, без Status. Canonical ToJson пишет только v3 root; parser не принимает v2 автоматически. CurrentVersion активного AgentResponseProtocol остаётся 2.
+- Strict envelope/JSON, call shape, 32-call bound, exact callable names и original argument schemas проверяются до acceptance. Optional nulls удаляются, execution defaults не применяются. Date-shaped strings остаются strings; unsupported numeric normalization возвращает typed failure.
+- Accepted-run IDs и batch-safe read-only IDs задаёт caller. Parser не резервирует IDs; rejected response не возвращает partial calls. Mutation/local/confirmation и external/unclassified calls — singleton; безопасные read-only batches сохраняют порядок. Runtime wiring этих inputs — Phase 2C2 (R26).
+- Explicit ConversationResponseV2Adapter читает только identified historical v2 envelope, отбрасывает model status и не выдаёт execution authority. Owner/consumers/removal указаны ниже; current consumer — harness, не history runtime.
+- Canonical v3 doc и ADR-0002 содержат cutover gates: saved prompts, complete accepted-run IDs/confirmation, effective safety, все формы history, v3-only accepted writes, removal live v2 parser/schema/DTO consumers. Phase 3 не начата.
+- Active model/retry/prompt/schema/history, Office tools, resources, VBA, persistence и UI не изменены. Product остаётся `16.1.0-dev`; bump/tag/push/release script не выполняются.
+
+## Phase 2C1 verification
+
+- Baseline: `model protocol:` — 13/13; `agent:` — 41/41.
+- Новый `conversation v3:` — 13/13. Дополнительный oversized integer выявил InvalidCastException; focused malformed-JSON case был red, после typed-failure fix — green. Envelope, adapter, schema/wire, run-ID и singleton matrices входят в эти 13 cases.
+- Regression: `model protocol:` — 13/13; `agent:` — 41/41; `harness: production projects` — 1/1. Всего 68 разных targeted harness cases, C# 7.3 linked build. ValidateVersionFormat — pass.
+- Full harness, Node/UI, Office builds и live endpoint не запускались: active runtime не менялся. Последний full — 320/321 в 1B, known baseline R22 остаётся открытым.
+- Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed. Harness использует controller stub и не доказывает runtime cutover или Windows qualification.
+- Точные команды, changed files, legacy paths и ограничения: [PHASE_2C1_V3_CONTRACT.md](PHASE_2C1_V3_CONTRACT.md).
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
@@ -166,6 +185,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | Optional RunExecutionSummary / отсутствующая legacy evidence | Application / Persistence / UI | Messages, LastRun, clones, bridge, static UI | Полный RunSummary/projection switch Phases 3/9; obsolete paths cleanup Phase 10 |
 | Nonserialized ModelProtocolFailure.Cause rethrow | Runtime / Application | ConversationRunService → controller cancellation/failure path | Phase 3 AgentKernel switch |
 | Accepted completion / current context-usage metadata | ModelProtocol / Application | Loop → transcript / turn result | Пересмотреть при v3/kernel Phases 2/3; заменить current transcript consumer при switch |
+| ConversationResponseV2Adapter.Read (introduced, not wired) | ModelProtocol | Сейчас только focused harness; intended accepted-history projection Phase 2C2 | Phase 10 после удаления legacy consumers; не live parser fallback |
 
 Существующие runtime paths остаются текущей реализацией, а не введёнными adapters.
 Их владельцы и фазы замены указаны в [MIGRATION_MAP.md](MIGRATION_MAP.md).
@@ -177,4 +197,5 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.
 - R22: compact catalog harness failure воспроизведён до изменений 1B; owner ToolPack/Tests, Phase 8.
+- R26: v3 runtime switch требует полного accepted-run ID scope и effective batch-safe projection; текущие Core tests не доказывают их wiring, gate Phase 2C2.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).

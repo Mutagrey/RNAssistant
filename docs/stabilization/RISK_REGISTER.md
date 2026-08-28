@@ -9,6 +9,7 @@ Phase 1C проверяет runtime guard, replay/DTO и JS-проекцию б�
 Phase 2A проверяет ModelProtocol с fake endpoint; live tLLM не проверен.
 Phase 2B закрывает R20 на host-neutral tests; provider retries проверены с fake
 transport и injected delay, без реального network/backoff qualification.
+Phase 2C1 проверяет только новый Core v3 contract; live parser/history остаются v2.
 
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |
 |---|---|---|---|---|---|
@@ -37,6 +38,7 @@ transport и injected delay, без реального network/backoff qualifica
 | R23 | P2 | Legacy ToolResult не всегда различает частичный/неизвестный effect; успешный mutating call может быть no-op или иметь слабую domain verification | ToolRuntime / Domains | 1C консервативно маркирует partial/missing/uncertain как unknown; counts — top-level вызовы, не document diff; заменить adapter typed evidence Phase 4, domain qualification Phases 6/7 | documented 1C; open |
 | R24 | P2 | Media сохраняются и могут отправляться повторно на protocol repair: больше traffic и дольше lifetime | ModelProtocol / Resources | Один materialized accepted prompt, bounded retry/budget и release в finally; fake image integration pass; проверить реальные media/endpoint budgets до qualification Phase 12 | documented 2A; open |
 | R25 | P2 | Provider retry после timeout/потери ответа может повторить оплачиваемую генерацию и увеличить latency | ModelProtocol / Release | Не более двух transient retries на весь step, delays 1s/2s с cancellation; raw ceiling N+3; no Office tool replay, no auth/429 retry; проверить реальные timeout/media/endpoint budgets до Phase 12 | documented 2B; open |
+| R26 | P1 | Неполный accepted-run ID scope или неверная batch-safe projection при v3 cutover допустят повтор IDs / unsafe batch | ModelProtocol / Runtime | 2C1 требует explicit non-null ID/safety inputs, parsing не резервирует IDs; mutation flags всегда singleton, отсутствие trusted read-only classification тоже singleton. Phase 2C2: seed всего logical run, confirmation/compaction tests, effective nested/external safety; не брать IDs только из prompt и не считать false flags proof of read-only | documented 2C1; cutover gate, no runtime switch yet |
 
 Новые дефекты вне текущей фазы фиксировать здесь или в [BACKLOG.md](BACKLOG.md),
 не исправлять попутно. Исключение P0 требует отдельного явно ограниченного изменения.
