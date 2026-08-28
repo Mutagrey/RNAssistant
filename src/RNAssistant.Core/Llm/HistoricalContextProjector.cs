@@ -21,6 +21,7 @@ namespace RNAssistant.Core.Llm
                 ExcludeFromModelContext = source.ExcludeFromModelContext,
                 ProtocolMessage = source.ProtocolMessage,
                 ToolCallId = source.ToolCallId,
+                AcceptedCallOrigin = source.AcceptedCallOrigin,
                 ToolName = source.ToolName,
                 ToolResultRole = source.ToolResultRole,
                 ToolCalls = (source.ToolCalls ?? new List<LlmToolCall>())

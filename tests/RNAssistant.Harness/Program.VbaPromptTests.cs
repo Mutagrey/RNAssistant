@@ -1077,12 +1077,13 @@ namespace RNAssistant.Harness
             {
                 adapter.VbaModuleCode = "P\r\nA\r\nB\r\nS";
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var parsed = ParseV3(
-                    "{\"message\":\"patch\",\"tool_calls\":[{\"id\":\"call_vba\",\"name\":\"common.vba_apply_patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"A\\nB\",\"text\":\"\\nA\\n\\nB\\n\"}]}}]}",
+                var parsed = ParseV4(
+                    "{\"message\":\"patch\",\"tool_calls\":[{\"name\":\"common.vba_apply_patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"A\\nB\",\"text\":\"\\nA\\n\\nB\\n\"}]}}]}",
                     tools.ToArray());
                 AssertTrue(parsed.Success, "raw model JSON with escaped newlines parses");
                 var result = executor.Execute(
-                    AgentJsonProtocol.ToCommand(parsed.Response.ToolCalls[0]),
+                    new ToolCommand { ToolCallId = "fixture_vba", ToolId = parsed.Response.ToolCalls[0].Name,
+                        Arguments = parsed.Response.ToolCalls[0].Arguments },
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,

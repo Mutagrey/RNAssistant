@@ -26,7 +26,7 @@ static WebView UI
 
 There are three persisted modes and one structured execution service.
 
-- `Chat` uses `ConversationRunService` with `ChatSystemPrompt`, the shared conversation-response v3 `message + tool_calls[]` JSON contract, and only the four read-only `common.resources_list/resolve/search/read` tools. Runtime policy removes skills, Office tools, local mutations, and confirmation regardless of prompt wording.
+- `Chat` uses `ConversationRunService` with `ChatSystemPrompt`, the shared conversation-response v4 `message + tool_calls[]` JSON contract, and only the four read-only `common.resources_list/resolve/search/read` tools. Runtime policy removes skills, Office tools, local mutations, and confirmation regardless of prompt wording.
 - `Plan` uses the same loop with `PlanSystemPrompt`, read-only discovery, skills, typed user questions, a single revisioned Markdown plan document, and an optional temporary Task List. Runtime policy removes Office/shared mutations and confirmation. A ready plan is handed to Agent by its exact revision-pinned `rna://` URI.
 - `Agent` uses the same service and transcript loop with progressive tool discovery, enabled skill metadata, confirmation, and policy-approved mutations. The full mode/session-filtered catalog stays local as execution authority; it is not injected into every prompt.
 
@@ -51,21 +51,25 @@ See [ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md),
 [ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md) and
 [cutover evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md).
 
-Phase 2C3C activates the status-free `ConversationResponse` through the single
+R29 activates the ID-less v4 `ConversationResponse` through the single
 `Core/ModelProtocol/ModelProtocolWire` owner: schema, local validation and canonical
 JSON writing are shared by the client, loop, transcript and compatibility probes.
-The old v2 parser/schema/DTO and temporary typed-ID helper are removed. Native
-provider refusal is a separate result; it cannot schedule tool calls.
+The old model-ID wire/context path is removed. The kernel converts validated
+drafts to accepted calls with unique runtime IDs before persistence or dispatch;
+allocation failures never trigger model regeneration. Native provider refusal is
+a separate result; it cannot schedule tool calls.
 
-Immutable accepted-ID/safety snapshots cover the full logical user turn, including
-confirmation after compaction. Full-history and confirmation preflight precede
+Accepted runtime IDs and raw `StepId/ModelAttemptId/CallIndex` origins are durable
+in the same accepted-message commit. Raw payloads are unchanged; results and
+confirmation/replay retain IDs. ModelProtocol receives only the conservative
+batch-safety context, not a model-ID registry. Full-history and confirmation preflight precede
 controller preparation, manual compaction and pending consumption; incomplete
 CallContext cannot trigger a raw request or format repair. Saved prompts retain
-their text, while schema marker 12 requires explicit review of prior instructions.
-No old chat is converted/truncated automatically. See the [v3 contract and
-qualification gates](protocols/CONVERSATION_RESPONSE_V3.md#remaining-cutover-gates).
+their text, while schema marker 13 requires explicit review of prior instructions.
+No old chat is converted/truncated automatically. See the [v4 contract and
+qualification gates](protocols/CONVERSATION_RESPONSE_V4.md#remaining-cutover-gates).
 
-Both `json_schema` and `json_object` enforce the same v3 contract against the current callable tools. Model-owned lifecycle fields are absent; empty calls only end the model loop. The existing runtime execution summary still owns effects/errors/unknowns. Protocol/provider retries remain bounded and separate, with clean accepted history on every attempt. `OfficeToolExecutor` remains the authority for formal argument schemas, tool safety metadata, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error, resources?}` and emits the selected replay role. Generic oversized data becomes an exact CAS-backed `tool_result` resource while the envelope retains only a bounded preview; trusted resource/tool/skill reads are not duplicated through that path. Specialized chart payloads are materialized once before the next model step and reused by the storage/UI projection.
+Both `json_schema` and `json_object` enforce the same v4 contract against the current callable tools. Model-owned lifecycle fields are absent; empty calls only end the model loop. The existing runtime execution summary still owns effects/errors/unknowns. Protocol/provider retries remain bounded and separate, with clean accepted history on every attempt. `OfficeToolExecutor` remains the authority for formal argument schemas, tool safety metadata, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error, resources?}` and emits the selected replay role. Generic oversized data becomes an exact CAS-backed `tool_result` resource while the envelope retains only a bounded preview; trusted resource/tool/skill reads are not duplicated through that path. Specialized chart payloads are materialized once before the next model step and reused by the storage/UI projection.
 
 Before a turn mutates a chat, the controller acquires a per-chat lease backed by an in-process registry and a cross-process lock file, reloads a newer persisted revision, and appends the user request, committed attachment references, and run state before calling the model. Attachment drafts stay in staging until their content-addressed references and the message are durable. Tool-start and tool-result boundaries are appended as typed operations. First-class turn events keep one logical `TurnId` across confirmation continuations, while every model request has `step.started`/`step.ended` boundaries correlated by request id. The event tail sequence is the monotonic compare-and-swap revision, so a stale window fails instead of overwriting newer history. A confirmation pause persists its pending id and cumulative iteration/tool counters; a new request is rejected until the action is confirmed or cancelled. Confirmation acquires a new lease and resumes the same logical budget. On startup, recovery checks the canonical event stream for a tool start without its matching finish; only that case becomes `interrupted_unknown`, while already persisted results remain replayable. Open model steps receive a synthetic interrupted terminal event.
 

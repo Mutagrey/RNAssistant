@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Services
             {
                 _lastModel = await _protocol.GetResponseAsync(
                     _modelSession.CreateRequest(request.StepId,
-                        new ModelProtocolCallContext(request.AcceptedCallIds, ConversationProtocolContext.BatchSafeReadIds(_catalog))),
+                        new ModelProtocolCallContext(ConversationProtocolContext.BatchSafeReadIds(_catalog))),
                     ConversationStreamProgressProjector.ForProtocol(_progress), cancellationToken).ConfigureAwait(false);
             }
             finally
@@ -35,7 +35,8 @@ namespace RNAssistant.Office.Services
                 return AgentModelResult.Failed(_lastModel.Failure.Kind, _lastModel.Failure.Message);
             if (_lastModel.ProviderRefusal != null) return AgentModelResult.Refused(_lastModel.ProviderRefusal);
             var response = _lastModel.Response;
-            return AgentModelResult.Accepted(new AgentResponse(response.Message, response.ToolCalls.Select(ToCoreCall)));
+            return AgentModelResult.Accepted(new AgentResponseDraft(response.Message, response.ToolCalls.Select(call =>
+                new ToolCallDraft(call.Name, JsonConvert.SerializeObject(call.Arguments, Formatting.None)))));
         }
 
         private async Task EnsureModelSessionAsync(CancellationToken cancellationToken)
@@ -50,9 +51,5 @@ namespace RNAssistant.Office.Services
                 _input.Attachments, _confirmedCommand != null, _progress, cancellationToken).ConfigureAwait(false);
         }
 
-        internal static ToolCall ToCoreCall(AgentToolCall call)
-        {
-            return new ToolCall(call.Id, call.Name, JsonConvert.SerializeObject(call.Arguments, Formatting.None));
-        }
     }
 }

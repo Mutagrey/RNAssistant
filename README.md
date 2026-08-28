@@ -226,7 +226,6 @@ In Agent mode the prompt contains bootstrap and currently loaded native-like too
   "message": "Read the table before editing.",
   "tool_calls": [
     {
-      "id": "call_1",
       "name": "excel.read_range",
       "arguments": { "address": "A1:D20" }
     }
@@ -234,11 +233,11 @@ In Agent mode the prompt contains bootstrap and currently loaded native-like too
 }
 ```
 
-Independent local read-only calls may share an array and execute sequentially. Write, external, confirmation-required and unclassified calls must be singleton. Call IDs remain unique across the accepted user run, including confirmation continuations. Rejected attempts reserve no IDs and execute no calls.
+Independent local read-only calls may share an array and execute sequentially. Write, external, confirmation-required and unclassified calls must be singleton. The model supplies only `name` and `arguments`; runtime assigns unique call IDs before acceptance and preserves them through confirmation, results and replay. Rejected attempts execute no calls. ID allocation never triggers model repair or semantic deduplication.
 
-All modes use conversation-response v3 with only `message` and `tool_calls`, for example `{"message":"...","tool_calls":[]}`. Empty calls end the model loop; execution health still comes from actual tool results. Provider-native refusal is separate from the model envelope. Unknown root fields (including v2 `status`) are rejected in both `json_object` and `json_schema`. Existing chats with incompatible/unmarked responses require an explicit new chat or reset; history is never silently converted, truncated or deleted.
+All modes use conversation-response v4 with only `message` and `tool_calls`, for example `{"message":"...","tool_calls":[]}`. Empty calls end the model loop; execution health still comes from actual tool results. Provider-native refusal is separate from the model envelope. Unknown root fields (including `status`) and call fields (including model-owned `id`) are rejected in both `json_object` and `json_schema`. V3/unmarked chats require an explicit new chat or reset; history is never silently converted, truncated or deleted. Saved prompt text is preserved, but schema marker 13 requires explicit review/reset.
 
-The configured transport remains `json_object` (default) or a strict schema generated from the current callable tools. Explicit schema rejection permits one enabled, request-local fallback. Native tool-result history projection is unchanged. ModelProtocol permits 1–20 total protocol responses per step, two separate transient provider retries and at most one schema fallback; rejected output/repair instructions never enter accepted history. No planner/router, automatic tool retry or separate verification phase is introduced. See the [v3 contract](docs/protocols/CONVERSATION_RESPONSE_V3.md) and [retry policy](docs/conversation-protocol.md#retry-policy-phase-2b).
+The configured transport remains `json_object` (default) or a strict schema generated from the current callable tools. Explicit schema rejection permits one enabled, request-local fallback. Native tool-result history uses the same runtime IDs as accepted metadata; raw responses remain unchanged. ModelProtocol permits 1–20 total protocol responses per step, two separate transient provider retries and at most one schema fallback; rejected output/repair instructions never enter accepted history. No planner/router, automatic tool retry or separate verification phase is introduced. See the [v4 contract](docs/protocols/CONVERSATION_RESPONSE_V4.md) and [retry policy](docs/conversation-protocol.md#retry-policy-phase-2b).
 
 Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{...},"error":null}`. The model decides what to do next. Tool-result data is bounded and oversized data is replaced by a structured preview; the prompt budget is checked before every model request. Excel value/formula/profile reads reject ranges above 100000 cells before loading COM `Value2`. The runtime also enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
 
@@ -366,7 +365,7 @@ Model `completed` ends the loop; it does not certify applied changes. The runtim
 separately projects `clean/errors/unknown` from actual tool results. Errors and
 uncertain effects remain visible above the model answer even with a collapsed
 trace; a no-write answer does not claim confirmed changes. See the
-[completion guard](docs/conversation-protocol.md#transitional-completion-guard-phase-1c).
+[runtime completion and effect projections](docs/conversation-protocol.md#legacy-effect-mapping-and-ui-projections).
 
 Use the Tools tab to create or edit reusable tools:
 

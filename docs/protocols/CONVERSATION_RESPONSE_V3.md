@@ -1,16 +1,20 @@
 # Conversation Response v3
 
-Status: **active wire/history v3; coordinated switch/delete completed host-neutral** (Phase 2C3C).
-Canonical requirements: [master plan §7.1](../stabilization/STABILIZATION_MASTER_PLAN.md#71-conversation-response-v3).
-Prompt schema is 12; saved instructions require explicit review. Product version
-remains `16.1.0-dev`; protocol version is independent. Windows qualification is open.
+> **Superseded by [Conversation Response v4](CONVERSATION_RESPONSE_V4.md).** This
+> document is retained only as the historical v3 specification. It defines no
+> runtime compatibility parser, fallback or migration path; v3 history requires
+> the explicit new-chat/reset boundary described in v4.
 
-**Open design bug R29:** v3 currently asks the model to generate unique call IDs.
-The planned correction assigns them in runtime before accepted persistence and
-execution, retaining the same IDs through results/confirmation/replay. This needs
-an explicit protocol switch; it is not implemented by Phase 3B2 and must not be
-approximated by silently rewriting duplicate IDs. This document specifies the
-active v3 until that switch; see [the correction contract](../stabilization/STABILIZATION_MASTER_PLAN.md#обязательное-исправление-r29).
+Historical status: Phase 2C3C wire/history v3 and prompt schema 12, before the R29
+correction. The sections and evidence below describe that implementation at its
+recorded phase; they are not current v4 validation claims. Product and protocol
+versions remain independent.
+
+**Superseded R29 design:** v3 required the model to generate unique call IDs.
+[ADR-0009](../decisions/ADR-0009-runtime-owned-tool-call-ids.md) replaces that
+responsibility with runtime allocation before accepted persistence and execution,
+preserving correlation through results, confirmation and replay. The switch is
+explicit; silently rewriting duplicate model IDs is not an alternative.
 
 ## Envelope
 

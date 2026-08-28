@@ -93,6 +93,26 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    // Correlates one accepted runtime call with its position in an immutable raw
+    // model attempt. A kernel step alone is insufficient when protocol repair ran.
+    public sealed class AcceptedToolCallOrigin
+    {
+        public string StepId { get; private set; }
+        public string ModelAttemptId { get; private set; }
+        public int CallIndex { get; private set; }
+
+        [JsonConstructor]
+        public AcceptedToolCallOrigin(string stepId, string modelAttemptId, int? callIndex)
+        {
+            if (string.IsNullOrWhiteSpace(stepId) || string.IsNullOrWhiteSpace(modelAttemptId) ||
+                !callIndex.HasValue || callIndex.Value < 0)
+                throw new ArgumentException("Complete accepted call origin is required.");
+            StepId = stepId;
+            ModelAttemptId = modelAttemptId;
+            CallIndex = callIndex.Value;
+        }
+    }
+
     public sealed class ChatMessage
     {
         public string Id { get; set; }
@@ -109,6 +129,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public RunExecutionSummary ExecutionSummary { get; set; }
         public string ToolCallId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public AcceptedToolCallOrigin AcceptedCallOrigin { get; set; }
         public string ToolName { get; set; }
         public string ToolResultRole { get; set; }
         public List<RNAssistant.Core.Llm.LlmToolCall> ToolCalls { get; set; }

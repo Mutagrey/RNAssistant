@@ -179,9 +179,9 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Добавляю сразу.\",\"tool_calls\":[{\"id\":\"unloaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
-                    LoadToolSchemaResponse("excel.add_sheet", "schema_progressive"),
-                    "{\"message\":\"Добавляю после загрузки схемы.\",\"tool_calls\":[{\"id\":\"loaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
+                    "{\"message\":\"Добавляю сразу.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
+                    LoadToolSchemaResponse("excel.add_sheet"),
+                    "{\"message\":\"Добавляю после загрузки схемы.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
                     "{\"message\":\"Лист создан.\",\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
@@ -277,7 +277,8 @@ namespace RNAssistant.Harness
                     },
                     "Using loaded schema.",
                     null,
-                    ToolResultRoles.User);
+                    ToolResultRoles.User,
+                    FixtureCallOrigin("touch-dynamic-step"));
                 evidence.Add(touch);
                 workingSet.Touch("excel.dynamic_1");
 
@@ -332,7 +333,7 @@ namespace RNAssistant.Harness
                     Id = "read_before_compaction",
                     Name = CapabilityDiscoveryExecutor.ReadToolId,
                     Arguments = new Dictionary<string, object> { { "id", "excel.add_sheet" } }
-                }, string.Empty, null, ToolResultRoles.User));
+                }, string.Empty, null, ToolResultRoles.User, FixtureCallOrigin("before-compaction-step")));
                 var evidence = ReadSchemaEvidence(executor, catalog, "excel.add_sheet", "read_before_compaction");
                 session.Messages.Add(evidence);
                 var loaded = ProgressiveToolWorkingSet.Create(ChatModes.Agent, catalog, settings, session.Messages);
@@ -362,7 +363,7 @@ namespace RNAssistant.Harness
                     settings, catalog, null, null, true, null, CancellationToken.None).GetAwaiter().GetResult())
                 {
                     var request = modelSession.CreateRequest("after_compaction",
-                        new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new[] { "read_before_compaction" }, new string[0]));
+                        new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]));
                     AssertEqual(1, compactions, "over-budget preparation compacts once and recomposes");
                     AssertTrue(request.RunnableCatalog.Any(tool => tool.Id == "excel.add_sheet"), "local execution catalog is preserved");
                     AssertTrue(!request.CallableTools.Any(tool => tool.Id == "excel.add_sheet"), "compacted schema requires a fresh exact read");

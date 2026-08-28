@@ -37,8 +37,8 @@ namespace RNAssistant.Harness
                     outcome == "unknown" ? "tool_effect_uncertain" : "write_rejected", false));
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.add_sheet", "schema"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"id\":\"write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Replay\"}}]}",
+                    LoadToolSchemaResponse("excel.add_sheet"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Replay\"}}]}",
                     "{\"message\":\"Everything done\",\"tool_calls\":[]}"
                 });
                 var modelCalls = 0;
@@ -59,6 +59,11 @@ namespace RNAssistant.Harness
                             if (phase != "tool_running") return;
                             var loaded = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
                             AssertEqual(activity.ToolCallId, loaded.LastRun.KernelState.InFlightTool.Call.Id, "tool boundary saved before executor entry");
+                            var accepted = loaded.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" &&
+                                message.ToolCallId == activity.ToolCallId);
+                            AssertTrue(accepted.AcceptedCallOrigin != null, "accepted call origin is durable before executor entry");
+                            AssertEqual(loaded.LastRun.KernelState.InFlightTool.StepId, accepted.AcceptedCallOrigin.StepId,
+                                "durable call origin matches the dispatch step");
                         }).GetAwaiter().GetResult();
                 var replay = AssertKernelReplay(session);
                 AssertEqual(RunLifecycle.Completed, replay.LastRun.KernelState.Summary.Lifecycle, "model ending closes loop only");
@@ -77,6 +82,8 @@ namespace RNAssistant.Harness
             var loaded = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
             AssertEqual(JsonConvert.SerializeObject(session.LastRun.KernelState), JsonConvert.SerializeObject(loaded.LastRun.KernelState),
                 "fresh event replay preserves lifecycle, health, counts, limits and pending policy/call");
+            var acceptedCalls = AcceptedCallIdentitiesJson(session);
+            AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(loaded), "event replay preserves accepted call IDs and model attempt origins without allocation");
             var runJson = JObject.FromObject(loaded.LastRun);
             AssertTrue(runJson["KernelState"] != null && runJson["ExecutionSummary"] == null, "run stores only typed authority, not a duplicate flat summary");
             var summary = loaded.LastRun.ExecutionSummary;
@@ -85,8 +92,23 @@ namespace RNAssistant.Harness
             AssertEqual(originalWriteOk, loaded.LastRun.ExecutionSummary.WriteOk, "bridge DTO cannot mutate immutable runtime evidence");
             var clone = ChatCloneService.CloneSessionSnapshot(loaded);
             AssertEqual(JsonConvert.SerializeObject(loaded.LastRun.KernelState), JsonConvert.SerializeObject(clone.LastRun.KernelState), "session clone retains authority");
+            AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(clone), "session clone retains accepted call IDs and origins");
             AssertEqual(loaded.LastRun.Status, new ChatStore(FixturePaths.Value).ListHeaders().Single(header => header.Id == loaded.Id).RunStatus, "header projection uses same lifecycle");
             return loaded;
+        }
+
+        private static string AcceptedCallIdentitiesJson(ChatSession session)
+        {
+            var calls = session.Messages.Where(message => message.ProtocolMessage && message.Role == "assistant" &&
+                !string.IsNullOrWhiteSpace(message.ToolName)).ToArray();
+            AssertTrue(calls.All(message => !string.IsNullOrWhiteSpace(message.ToolCallId) && message.AcceptedCallOrigin != null),
+                "every accepted call has a runtime ID and complete model attempt origin");
+            return JsonConvert.SerializeObject(calls.Select(message => new
+            {
+                message.Id,
+                message.ToolCallId,
+                message.AcceptedCallOrigin
+            }));
         }
 
         private static void KernelSummaryReplaysConfirmation()
@@ -107,12 +129,23 @@ namespace RNAssistant.Harness
                 var stale = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
                 var pendingId = pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId;
                 var command = PendingCommand(pending);
+                var acceptedCalls = AcceptedCallIdentitiesJson(pending);
+                var accepted = pending.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" &&
+                    message.ToolName == "common.skills_upsert");
+                AssertEqual(command.ToolCallId, accepted.ToolCallId, "pending command retains the accepted runtime ID");
+                AssertEqual(pending.LastRun.KernelState.Summary.PendingConfirmation.StepId, accepted.AcceptedCallOrigin.StepId,
+                    "pending command retains its originating model step");
                 pending.LastRun.RunId = "new-process-run";
                 var resumed = service.ConfirmAsync(pendingId, command, pending,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
                 AssertEqual("completed", resumed.RunStatus, "resumed invocation ends through kernel");
                 AssertEqual(1, resumed.ExecutionSummary.WriteOk, "confirmed write counted once");
                 AssertEqual(2, pending.LastRun.ToolStepsUsed, "confirmation replaces reserved step");
+                AssertEqual("new-process-run", pending.LastRun.KernelState.Summary.RunId, "confirmation resumes under the new runtime run");
+                AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(pending), "confirmation preserves the original accepted IDs and origins without allocating again");
+                AssertTrue(pending.Messages.Any(message => message.Activity == null && message.ProtocolMessage && message.Role != "assistant" &&
+                    message.ToolCallId == accepted.ToolCallId && message.RunId == "new-process-run"),
+                    "confirmed result uses the original accepted ID in the resumed run");
                 AssertTrue(new SkillStore(FixturePaths.Value).Load().Any(skill => skill.Id == "common.replay_test"), "actual confirmed skill persisted");
                 AssertKernelReplay(pending);
                 var rejected = false;
@@ -137,6 +170,7 @@ namespace RNAssistant.Harness
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
                 service.ExecuteAsync(ChatModes.Agent, "Create skill", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
                 var pending = AssertKernelReplay(session);
+                var acceptedCalls = AcceptedCallIdentitiesJson(pending);
                 var result = service.ConfirmAsync(pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId,
                     PendingCommand(pending), pending, new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null,
                     cancellationToken: new CancellationToken(true)).GetAwaiter().GetResult();
@@ -145,6 +179,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, result.ExecutionSummary.WriteOk + result.ExecutionSummary.WriteError + result.ExecutionSummary.WriteUnknown, "cancel before dispatch has no effect count");
                 AssertTrue(!new SkillStore(FixturePaths.Value).Load().Any(skill => skill.Id == "common.replay_test"), "cancelled confirmation never writes");
                 var replay = AssertKernelReplay(pending);
+                AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(replay), "cancelled confirmation keeps accepted IDs and origins");
                 AssertTrue(replay.LastRun.KernelState.Summary.PendingConfirmation == null, "cancelled pending is closed durably");
             });
         }
@@ -153,8 +188,8 @@ namespace RNAssistant.Harness
         {
             return new Queue<string>(new[]
             {
-                LoadToolSchemaResponse("common.skills_upsert", "schema"),
-                "{\"message\":\"Create skill\",\"tool_calls\":[{\"id\":\"skill\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.replay_test\",\"description\":\"Replay test\",\"bodyMarkdown\":\"# Replay\"}}]}",
+                LoadToolSchemaResponse("common.skills_upsert"),
+                "{\"message\":\"Create skill\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.replay_test\",\"description\":\"Replay test\",\"bodyMarkdown\":\"# Replay\"}}]}",
                 "{\"message\":\"Done\",\"tool_calls\":[]}"
             });
         }
@@ -171,6 +206,7 @@ namespace RNAssistant.Harness
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
                 service.ExecuteAsync(ChatModes.Agent, "Create skill", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
                 var loaded = AssertKernelReplay(session);
+                var acceptedCalls = AcceptedCallIdentitiesJson(loaded);
                 var result = service.ConfirmAsync(loaded.LastRun.KernelState.Summary.PendingConfirmation.PendingId, PendingCommand(loaded), loaded,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null, refreshModelInput: token =>
                     {
@@ -182,6 +218,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, result.ExecutionSummary.WriteOk, "preparation cannot reinterpret a successful mutation");
                 AssertEqual(0, result.ExecutionSummary.WriteUnknown, "known effect stays known");
                 AssertEqual(1, responses.Count, "failed preparation never reaches another model request");
+                AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(loaded), "preparation failure does not replace confirmed call identity or origin");
                 AssertKernelReplay(loaded);
             });
         }
@@ -194,15 +231,18 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.add_sheet", "schema"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"id\":\"write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}"
+                    LoadToolSchemaResponse("excel.add_sheet"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}"
                 });
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 var service = new ConversationRunService(adapter, executor, new ChatStore(paths), completion, null, saved: saved =>
                 {
-                    if (saved.LastRun.ExecutionSummary.WriteOk == 1 && !saved.Messages.Any(message =>
-                        message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == "write"))
+                    if (saved.LastRun.ExecutionSummary.WriteOk != 1) return;
+                    var accepted = saved.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" &&
+                        message.ToolName == "excel.add_sheet");
+                    if (!saved.Messages.Any(message =>
+                        message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == accepted.ToolCallId))
                         throw new IOException("stopped after terminal evidence but before result projection");
                 });
                 var interrupted = false;
@@ -231,8 +271,8 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.add_sheet", "schema"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"id\":\"write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}",
+                    LoadToolSchemaResponse("excel.add_sheet"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}",
                     "{\"message\":\"Done\",\"tool_calls\":[]}"
                 });
                 Action injectConcurrentCommit = () =>

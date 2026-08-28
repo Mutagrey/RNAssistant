@@ -30,9 +30,12 @@ namespace RNAssistant.Office.Services
                     // Persist the entire accepted batch before any dispatch. LRU touch
                     // still happens per execution, not eagerly for the rest of the batch.
                     for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
-                        _modelSession.AppendToolCall(_lastModel.Response.ToolCalls[index],
+                        _modelSession.AppendToolCall(new AgentToolCall
+                            { Id = fact.Response.ToolCalls[index].Id, Name = fact.Response.ToolCalls[index].Name,
+                                Arguments = ReadArguments(fact.Response.ToolCalls[index]) },
                             index == 0 ? fact.Response.Message : string.Empty,
-                            index == 0 ? _lastModel.Completion : null);
+                            index == 0 ? _lastModel.Completion : null,
+                            new AcceptedToolCallOrigin(fact.StepId, _lastModel.SourceModelAttemptId, index));
                     break;
                 case AgentRunEventKind.ToolStarted:
                     run.Phase = "executing";

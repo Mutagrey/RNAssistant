@@ -39,7 +39,7 @@ namespace RNAssistant.Office.Services
                 // Executor validation may insert defaults/remove optional nulls.
                 // Persist the exact accepted arguments; confirmation validates them
                 // again under the same fingerprint. Keep the live runtime guard.
-                command.Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(context.Call.ArgumentsJson);
+                command.Arguments = ReadArguments(context.Call);
                 result.ConfirmationCatalogSha256 = context.Policy.Revision;
                 result.PendingId = _registrar == null ? Guid.NewGuid().ToString("N") : _registrar(_session, command, result);
             }
@@ -59,11 +59,19 @@ namespace RNAssistant.Office.Services
             command = confirmed && _confirmedCommand != null ? _confirmedCommand : new ToolCommand
             {
                 ToolId = call.Name, ToolCallId = call.Id,
-                Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(call.ArgumentsJson)
+                Arguments = ReadArguments(call)
             };
             command.RuntimeStepId = stepId;
             _commands.Add(call.Id, command);
             return command;
+        }
+
+        private static Dictionary<string, object> ReadArguments(ToolCall call)
+        {
+            // This boundary must preserve decoded model strings, including ISO
+            // text and literal backslashes; it does not normalize domain data.
+            return JsonConvert.DeserializeObject<Dictionary<string, object>>(call.ArgumentsJson,
+                new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
         }
     }
 

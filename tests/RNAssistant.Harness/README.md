@@ -40,7 +40,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
 | Active wire / compatibility probes | `Program.AgentSafetyTests.cs` | `model compatibility:`, `agent: supports selectable`, `model protocol:` |
 | Prompt schema review / settings | `Program.ChatSettingsTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ContextBridgeTests.cs` | `settings:`, `bridge: typed settings`, `chat: prompt save` |
-| Conversation v3 contract/context | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v3:`, `protocol context:` |
+| Conversation v4 contract/context | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v4:`, `protocol context:` |
 | History/context preflight | `Program.AgentSafetyTests.cs` | `preflight`, `protocol context:`, `model protocol:` |
 | Resources and attachments | `Program.ResourceFabricTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.AttachmentTests.cs` | `resources:`, `attachments:` |
 | Session storage and CAS | `Program.SessionEventStoreTests.cs`, `Program.CasMaintenanceTests.cs` | `storage:` |
@@ -130,30 +130,33 @@ this harness uses `AssistantControllerBridgeStub`. Scope/projection marker tests
 do not prove production bridge delivery or WebView rendering. See
 [trace evidence and boundaries](../../docs/stabilization/PHASE_1B_CAUSAL_TRACE.md).
 
-## Stabilization v3 contract
+## Stabilization v4 contract / runtime IDs
 
-`conversation v3:` covers the status-free parser/schema, strict JSON/arguments,
-run IDs, singleton safety, schema transport and current v3 history forms. The
-unused historical v2 adapter and its obsolete tests were removed in Phase 2C2.
-`protocol context:` covers detached snapshots, full-turn IDs across compaction
-and confirmation, incomplete history and conservative batch safety. Two cases
-exercise the real host-neutral loop/ModelProtocol/executor with fake LLM/Office;
-the controller's identity transition is simulated, not production controller execution.
-Since Phase 2C3C, `agent:` and `model protocol:` exercise the **active v3 path**.
-Real integration covers run-wide duplicates, a batch of two local reads, unsafe
-write-batch rejection/repair to singletons, native refusal and all three result
-roles. Fixtures use production v3 writers; the old conversion helper and nine
-obsolete v2 parser tests are deleted. Context introduction evidence remains
-[2C2](../../docs/stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
+`conversation v4:` covers strict ID-less parser/schema/arguments, singleton
+safety, schema transport and the separate accepted-history reader. Model-owned
+IDs are rejected; identical calls remain distinct ordered positions. `kernel:`
+checks runtime allocation, collisions/invalid allocator output before acceptance,
+and reuse of pending IDs without allocation. No tool retry or deduplication is added.
 
-Phase 2C3C's `preflight` filter covers incompatible full history in all three modes
+`protocol context:` checks full-turn IDs/origins across compaction and confirmation,
+incomplete history, batch safety and all three result roles. `agent:` includes
+complete HTML preservation in user/native history and native read-batch pairing.
+`causal trace:` links each accepted runtime ID to the exact raw model attempt and
+call position, including repair. `kernel replay:` uses the real event store.
+`context: clone preserves values` checks fork URI rebasing without changing ISO
+argument strings. Production controller reconstruction is source-reviewed and
+compiled in MockDemo, not executed by the stubbed harness. See
+[R29 evidence](../../docs/stabilization/R29_RUNTIME_CALL_IDS.md).
+
+The `preflight` filter covers incompatible full history in all three modes
 and accepted-history forms, including suppressed/compacted-away records; incomplete
 confirmation, current/new chat success, and zero raw attempts/repair/progress for
 missing CallContext. Snapshots prove no history/checkpoint/run mutation on rejection.
 The real shared confirmation guard is exercised, but production controller ordering
 and manual-compaction wiring are reviewed in source only; controllers are stubbed
 in this harness. Existing confirmation fixtures now carry the current LastRun
-marker that production writes. See [2C3C evidence](../../docs/stabilization/PHASE_2C3C_V3_CUTOVER.md).
+marker and mandatory origin that production writes. Historical cutover evidence remains
+[2C3C](../../docs/stabilization/PHASE_2C3C_V3_CUTOVER.md); current gates are in R29 evidence.
 
 Phase 2C3A extends the two `model compatibility:` cases across both formats and all
 three tool-result roles, strict sentinels/status/casing and one raw attempt per
@@ -171,8 +174,8 @@ The existing typed-settings bridge test uses the controller stub, not production
 controller execution. `node tests/web/prompt-review.test.js` verifies actual form
 serialization and action handlers with minimal DOM/transport substitutes, including
 cancel/failure/reset and Plan preservation; it does not verify WebView layout.
-Phase 2C3C reruns preservation/review/reset against actual v3 defaults/schema 12,
-including saved schema 11. JS review behavior is unchanged by the v3 cutover.
+R29 checks preservation/review/reset against actual v4 defaults/schema 13,
+including saved schema 12. JS review behavior is unchanged by the v4 cutover.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
 ## Full suite

@@ -15,13 +15,16 @@ namespace RNAssistant.Core.Agent
         private readonly IToolRuntime _tools;
         private readonly IRunStore _store;
         private readonly Func<DateTime> _utcNow;
+        private readonly Func<string> _newCallId;
 
-        public AgentKernel(IModelProtocol model, IToolRuntime tools, IRunStore store, Func<DateTime> utcNow = null)
+        public AgentKernel(IModelProtocol model, IToolRuntime tools, IRunStore store, Func<DateTime> utcNow = null,
+            Func<string> newCallId = null)
         {
             _model = model ?? throw new ArgumentNullException(nameof(model));
             _tools = tools ?? throw new ArgumentNullException(nameof(tools));
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
+            _newCallId = newCallId ?? (() => "call_" + Guid.NewGuid().ToString("N"));
         }
 
         public async Task<AgentRunResult> RunAsync(AgentRunRequest request, CancellationToken cancellationToken)
@@ -68,7 +71,7 @@ namespace RNAssistant.Core.Agent
                 try
                 {
                     model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
-                        state.Messages, state.AcceptedIds), cancellationToken).ConfigureAwait(false);
+                        state.Messages), cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -89,11 +92,23 @@ namespace RNAssistant.Core.Agent
                 if (model.ProviderRefusal)
                     return await FinishAsync(state, RunLifecycle.Failed, "provider_refused", model.Message).ConfigureAwait(false);
 
-                var response = model.Response;
+                if (model.Response == null)
+                    return await FinishAsync(state, RunLifecycle.Failed, "invalid_accepted_response", "Accepted response is missing.").ConfigureAwait(false);
+                AgentResponse response;
+                try
+                {
+                    response = AssignCallIds(state, model.Response);
+                }
+                catch (Exception ex)
+                {
+                    // Allocation is local infrastructure, never a reason to ask
+                    // the model to regenerate its useful payload.
+                    return await FinishAsync(state, RunLifecycle.Failed, "call_id_allocation_failed", ex.Message).ConfigureAwait(false);
+                }
                 ToolPolicySnapshot[] policies;
                 try
                 {
-                    policies = ValidateResponse(state, response);
+                    policies = ValidateResponse(response);
                 }
                 catch (Exception ex)
                 {
@@ -124,14 +139,27 @@ namespace RNAssistant.Core.Agent
             return await FinishAsync(state, RunLifecycle.Failed, "iteration_limit", "Model iteration limit reached.").ConfigureAwait(false);
         }
 
-        private ToolPolicySnapshot[] ValidateResponse(State state, AgentResponse response)
+        private AgentResponse AssignCallIds(State state, AgentResponseDraft response)
         {
-            if (response == null) throw new InvalidOperationException("Accepted response is missing.");
             var ids = new HashSet<string>(state.AcceptedIds, StringComparer.OrdinalIgnoreCase);
+            var calls = new List<ToolCall>();
+            foreach (var draft in response.ToolCalls)
+            {
+                var id = _newCallId();
+                if (string.IsNullOrWhiteSpace(id) || id.Length > 64 || id.Any(character =>
+                    !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
+                      character >= '0' && character <= '9' || character == '_' || character == '-')) || !ids.Add(id))
+                    throw new InvalidOperationException("Runtime call id allocation returned an invalid or duplicate identity.");
+                calls.Add(new ToolCall(id, draft.Name, draft.ArgumentsJson));
+            }
+            return new AgentResponse(response.Message, calls);
+        }
+
+        private ToolPolicySnapshot[] ValidateResponse(AgentResponse response)
+        {
             var policies = new List<ToolPolicySnapshot>();
             foreach (var call in response.ToolCalls)
             {
-                if (!ids.Add(call.Id)) throw new InvalidOperationException("Duplicate accepted call id: " + call.Id);
                 var policy = _tools.Describe(call);
                 if (policy == null || !string.Equals(policy.ToolId, call.Name, StringComparison.Ordinal))
                     throw new InvalidOperationException("Exact execution policy is unavailable: " + call.Name);

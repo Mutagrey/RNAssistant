@@ -7,6 +7,37 @@ namespace RNAssistant.Core.Agent
 {
     // Arguments and result bodies are opaque to the kernel. Their validation and
     // materialization belong to the model/tool ports, not to the loop.
+    public sealed class ToolCallDraft
+    {
+        public string Name { get; private set; }
+        public string ArgumentsJson { get; private set; }
+
+        public ToolCallDraft(string name, string argumentsJson)
+        {
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Tool name is required.", nameof(name));
+            Name = name;
+            ArgumentsJson = argumentsJson ?? throw new ArgumentNullException(nameof(argumentsJson));
+        }
+    }
+
+    // Validated model content has no execution identity. Only the kernel can
+    // turn this draft into an accepted response before persistence/dispatch.
+    public sealed class AgentResponseDraft
+    {
+        public string Message { get; private set; }
+        public IReadOnlyList<ToolCallDraft> ToolCalls { get; private set; }
+
+        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls)
+        {
+            var snapshot = (calls ?? throw new ArgumentNullException(nameof(calls))).ToArray();
+            if (snapshot.Any(call => call == null)) throw new ArgumentException("Calls cannot contain null.", nameof(calls));
+            Message = message ?? string.Empty;
+            ToolCalls = Array.AsReadOnly(snapshot);
+        }
+    }
+
+    // Accepted execution identity; restored from durable history, never from a
+    // model-generated identifier or by generating a new id during replay.
     public sealed class ToolCall
     {
         public string Id { get; private set; }

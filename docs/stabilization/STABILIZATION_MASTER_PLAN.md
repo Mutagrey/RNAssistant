@@ -12,7 +12,7 @@
 
 Этот документ предназначен для агента, который будет менять репозиторий. Его нельзя исполнять как одну большую задачу или один огромный patch.
 
-Аудит 2026-08-28 уточняет целевые контракты §§5–10 и gates Phases 4–9. Это docs-only изменение поверх Phase 3B2, не начало этих фаз и не подтверждение runtime/Windows validation. Текущий v3 действует до отдельного исправления R29 (§7.1); текущий LRU — до Phase 8. Найденные противоречия и оставшиеся проверки записаны в [risk register](RISK_REGISTER.md#архитектурный-аудит-2026-08-28).
+Аудит 2026-08-28 уточняет целевые контракты §§5–10 и gates Phases 4–9. Это docs-only изменение поверх Phase 3B2, не начало этих фаз и не подтверждение runtime/Windows validation. Отдельное исправление R29 (§7.1) переключает protocol/runtime на v4; текущий LRU остаётся до Phase 8. Найденные противоречия и оставшиеся проверки записаны в [risk register](RISK_REGISTER.md#архитектурный-аудит-2026-08-28).
 
 ### Обязательные правила для агента
 
@@ -402,11 +402,9 @@ web
 
 Общие протоколы намеренно остаются небольшими.
 
-## 7.1. Conversation Response v3
+## 7.1. Conversation Response v4
 
-Model-owned `status` в действующем v3 отсутствует.
-
-Ниже зафиксирован **действующий v3**, а не окончательное решение о владельце call IDs. R29 — открытый баг: требование генерировать уникальный ID моделью подлежит отдельному protocol switch; Phase 3B2 его не исправляет.
+Модель не владеет `status` или call ID. V4 — отдельное исправление R29 в контуре Phase 2 + consumers Phase 3; оно не начинает Phase 4. [Canonical contract](../protocols/CONVERSATION_RESPONSE_V4.md) задаёт wire, accepted history и qualification gates.
 
 ### Вызов tool
 
@@ -415,7 +413,6 @@ Model-owned `status` в действующем v3 отсутствует.
   "message": "Прочитаю текущий модуль и внесу точечное изменение.",
   "tool_calls": [
     {
-      "id": "call_17",
       "name": "common.vba_apply_patch",
       "arguments": {
         "component": "Module1",
@@ -441,32 +438,22 @@ Model-owned `status` в действующем v3 отсутствует.
 - root содержит только `message` и `tool_calls`;
 - `message` — string;
 - `tool_calls` — всегда array;
-- каждый call имеет `id`, `name`, `arguments`;
-- неизвестные root fields отклоняются;
+- каждый model call имеет только `name`, `arguments`; поле `id` запрещено;
+- неизвестные root/call fields отклоняются;
 - модель не возвращает `status`, `phase`, `completed`, `retry`, `verified`;
-- один и тот же `tool_call_id` не повторяется в accepted run;
+- runtime назначает уникальный `tool_call_id` до accepted persistence, confirmation и dispatch;
 - write/external/confirmation-required/unclassified call должен быть единственным call в ответе;
 - несколько независимых local read-only calls допускаются и выполняются последовательно.
 
 ### Обязательное исправление R29
 
-Целевой model-facing call содержит только `name` и `arguments`; модель не генерирует call ID. Код назначает ID каждому принятому вызову после валидации ответа, до accepted persistence, confirmation и execution. Соответствие позиции call в исходном ответе и runtime ID сохраняется в том же accepted event; raw response не переписывается. Results, native tool-role history и continuation используют тот же ID, replay его восстанавливает, а не создаёт заново.
+ModelProtocol возвращает проверенный draft без ID; AgentKernel назначает ID каждому call до принятия всего batch. Вместе с `ToolCallId` в том же `session.commit` сохраняется неизменяемый `AcceptedCallOrigin { StepId, ModelAttemptId, CallIndex }`. Номер позиции без exact attempt недостаточен после repair. Raw response не переписывается; source attempt фиксируется до необязательной trace-проекции. Results, native tool-role history и continuation используют тот же ID; replay его восстанавливает, а не создаёт заново.
 
-Это явное изменение protocol version/schema/prompts/history readers и consumers, не тихое удаление поля или переименование дубликатов в v3. До switch прежняя проверка сохраняется; после switch коллизия runtime ID — infrastructure fault до dispatch, не причина model repair. Проверки: валидный длинный payload проходит без новой генерации из-за ID, разные calls получают разные IDs, confirmation/replay сохраняют их. Идентификатор связывает записи, но не является семантической дедупликацией действий и не разрешает auto retry. Детальные критерии — [R29](RISK_REGISTER.md#r29--runtime-должен-владеть-идентификаторами-вызовов).
+Wire/schema/prompts/history readers и consumers переключаются атомарно, без переименования дубликатов в v3. Ошибка выдачи/коллизия runtime ID — infrastructure fault до accepted append/dispatch, не причина model repair. Проверки: валидный длинный payload проходит без новой генерации из-за ID, разные calls получают разные IDs, confirmation/replay сохраняют их. Идентификатор связывает записи, но не является семантической дедупликацией действий и не разрешает auto retry. Детальные критерии — [R29](RISK_REGISTER.md#r29--runtime-должен-владеть-идентификаторами-вызовов).
 
 ### Совместимость
 
-Совместимость с историческими v2-чатами не является требованием. После cutover несовместимый чат явно пропускается либо сбрасывается отдельным действием пользователя; его stream не переписывается и не удаляется автоматически. Новый run не должен молча продолжаться с урезанной историей старого чата.
-
-Временный v2 adapter допустим только при доказанной необходимости для действующего consumer до его переключения по §15.1, а не ради сохранения старого формата. Если такой adapter ещё нужен:
-
-```text
-v2 status игнорируется как источник runtime truth;
-v2 completed → только «модель завершила свой loop»;
-v2 in_progress → определяется по непустому tool_calls.
-```
-
-Новые accepted события записываются только в v3 после cutover. Dual-write запрещён.
+Unversioned/v2/v3 history несовместима: full-history preflight требует явный новый чат/reset до preparation или confirmation, включая записи вне compacted prompt. V4 call без runtime ID/origin или с неоднозначной связью также отклоняется. Stream не переписывается, не обрезается и не удаляется автоматически; pending action можно отменить. Новые accepted записи используют только v4; adapters, ID repair и dual-write отсутствуют. Saved prompts сохраняют текст, но schema marker 13 требует явного review/reset.
 
 ## 7.2. Tool Descriptor v1
 
@@ -760,7 +747,7 @@ Document gate не удерживается при ожидании модели
 - malformed JSON;
 - schema violation;
 - неизвестный tool id в strict contract;
-- duplicate model call id — только действующий v3 до исправления R29 (§7.1).
+- запрещённое model-owned поле `id` в v4; runtime ID failures не относятся к protocol repair.
 
 Сохраняется configurable limit `1–20`. Не уменьшать лимит без отдельного решения.
 
@@ -783,7 +770,7 @@ ModelProtocolFailure
 
 Это не `ToolResult.error` и не `unknown`.
 
-Валидный JSON доказывает только корректность envelope/arguments, а не работоспособность HTML/VBA или выполнение запроса пользователя. После R29 ошибка локальной выдачи/восстановления ID не расходует model protocol attempts.
+Валидный JSON доказывает только корректность envelope/arguments, а не работоспособность HTML/VBA или выполнение запроса пользователя. Ошибка локальной выдачи/восстановления ID не расходует model protocol attempts.
 
 ## 8.3. Tool retry
 
@@ -1125,7 +1112,7 @@ docs/
 
     decisions/
         ADR-0001-model-does-not-own-completion.md
-        ADR-0002-conversation-response-v3.md
+        ADR-0002-model-protocol-boundary.md
         ADR-0003-tool-result-three-states.md
         ADR-0004-resource-data-plane.md
         ADR-0005-bound-document-session.md
@@ -1612,7 +1599,7 @@ ui.projected
 - [ ] Каждая retry-попытка использует clean accepted prompt.
 - [ ] Rejected attempts записываются только в diagnostics.
 - [ ] Ввести typed `ModelProtocolFailure`.
-- [ ] Ввести parser/schema builder для Conversation Response v3.
+- [ ] Ввести parser/schema builder для Conversation Response (v3 в Phase 2C3C, v4 в R29 correction).
 - [ ] Проверить необходимость введённого v2 adapter по §15.1; не подключать ради старых чатов, удалить после switch последних действующих consumers.
 - [ ] Добавить tests для:
   - [ ] tLLM protection response;
@@ -1623,7 +1610,7 @@ ui.projected
   - [ ] valid attempt после серии invalid;
   - [ ] cancellation;
   - [ ] endpoint timeout.
-- [ ] Обновить `docs/protocols/CONVERSATION_RESPONSE_V3.md`.
+- [ ] Обновить canonical protocol doc; текущий — `docs/protocols/CONVERSATION_RESPONSE_V4.md`.
 - [ ] Добавить ADR-0002.
 
 ### Запрещено
@@ -1672,7 +1659,7 @@ ui.projected
   - [x] cancellation before tool;
   - [x] cancellation after possible dispatch;
   - [x] iteration limit;
-  - [x] duplicate call id.
+  - [x] runtime allocator collision/invalid output before acceptance (R29); no model ID repair.
 - [x] Обновить state model docs.
 - [x] Добавить ADR-0001 и ADR-0008.
 

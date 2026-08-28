@@ -42,7 +42,7 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (request.CallContext == null || !request.CallContext.IsComplete)
-                    throw new InvalidOperationException("Model protocol requires a complete accepted-run call context: " +
+                    throw new InvalidOperationException("Model protocol requires a complete local batch-safety context: " +
                         (request.CallContext == null ? "missing context" : request.CallContext.Error));
                 var budget = new ModelProtocolRetryBudget(settings);
                 var fallbackUsed = false;
@@ -92,17 +92,18 @@ namespace RNAssistant.Core.ModelProtocol
                         }
                     }
 
+                    var sourceModelAttemptId = options.TraceModelAttemptId;
                     contextUsage = ContextUsageEstimator.FromPrompt(attemptMessages, settings, completion.PromptTokens, options);
                     if (!string.IsNullOrWhiteSpace(completion.RefusalContent))
                     {
-                        TraceAccepted(options, null, true, progress);
+                        TraceAccepted(options, true, progress);
                         return ModelProtocolResult.Refused(completion, contextUsage);
                     }
                     var parsed = ModelProtocolWire.Parse(completion.Content, request.CallableTools, request.RunnableCatalog, request.CallContext);
                     if (parsed.Success)
                     {
-                        TraceAccepted(options, parsed.Response, false, progress);
-                        return ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage);
+                        TraceAccepted(options, false, progress);
+                        return ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage, sourceModelAttemptId);
                     }
                     lastError = parsed.Error;
                     // Preserve the existing zero-based diagnostic index; the limit and
@@ -176,10 +177,10 @@ namespace RNAssistant.Core.ModelProtocol
                 ["attempt"] = attempt,
                 ["max_attempts"] = maxAttempts,
                 ["instruction"] =
-                    "Return a new response to the current user request as exactly one conversation-response-v3 JSON object " +
+                    "Return a new response to the current user request as exactly one conversation-response-v4 JSON object " +
                     "containing only message (string) and tool_calls (array). Never return status or any other root field. " +
                     "Do not use Markdown, fences, or surrounding prose. Empty tool_calls ends the model loop; wording proves no effect. " +
-                    "Every call requires an id not used anywhere in this accepted run, an exact name, and object arguments. " +
+                    "Every call contains only an exact name and object arguments. Do not include id; runtime assigns call IDs. " +
                     "Write, external, confirmation-required and unclassified calls must be singleton; batch only independent local reads. " +
                     "Follow the error action exactly. " +
                     "If a known tool schema is not loaded, replace the rejected call with common.capabilities_read for that exact id, " +
@@ -200,7 +201,7 @@ namespace RNAssistant.Core.ModelProtocol
             });
         }
 
-        private static void TraceAccepted(LlmRequestOptions options, ConversationResponse response, bool providerRefusal, ModelProtocolProgress progress)
+        private static void TraceAccepted(LlmRequestOptions options, bool providerRefusal, ModelProtocolProgress progress)
         {
             if (options.TraceSink == null) return;
             try
@@ -210,7 +211,8 @@ namespace RNAssistant.Core.ModelProtocol
                     Type = "accepted", RequestId = options.TraceRequestId, Purpose = options.TracePurpose,
                     Model = options.TraceSession == null ? null : options.TraceSession.Model,
                     ResponseFormat = options.ResponseFormat, ResponseStatus = providerRefusal ? AgentResponseStatuses.Refused : null,
-                    ToolCallIds = response == null ? new string[0] : response.ToolCalls.Select(call => call.Id).ToArray()
+                    // This marker precedes runtime acceptance and ID allocation.
+                    ToolCallIds = new string[0]
                 });
             }
             catch (Exception)

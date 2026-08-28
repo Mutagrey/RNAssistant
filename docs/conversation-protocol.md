@@ -6,9 +6,9 @@ RNAssistant has three explicit modes and one `Core/Agent/AgentKernel` loop, invo
 - `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, typed `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_*`, and optional `common.task_list_*`. Office/shared mutations and confirmation are unavailable by runtime policy.
 - `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
-All modes return conversation-response v3: only `message` (string) and `tool_calls` (array). The shared ModelProtocol boundary owns strict parsing/schema, bounded repair and provider compatibility; the loop receives one accepted typed response, separate provider-native refusal, or typed failure. Model wording is never execution evidence.
+All modes return conversation-response v4: only `message` (string) and `tool_calls` (array); calls contain `name` and `arguments`, never a model-owned ID. The shared ModelProtocol boundary owns strict parsing/schema, bounded repair and provider compatibility; the kernel receives one validated draft, separate provider-native refusal, or typed failure. Model wording is never execution evidence.
 
-Phase 2C3C switches client, prompts, schema, probes and accepted history together. The live v2 DTO/parser/schema and temporary typed-ID helper are removed. Full-history/context preflight rejects incompatible chats before preparation or confirmation; no historical migration or dual-write is performed. See the [canonical v3 contract](protocols/CONVERSATION_RESPONSE_V3.md).
+R29 switches client, prompts, schema, probes and accepted history together from v3 to v4. The model-ID parser/context path is removed; only the kernel creates accepted IDs. Full-history/context preflight rejects incompatible chats before preparation or confirmation; no historical migration or dual-write is performed. See the [canonical v4 contract](protocols/CONVERSATION_RESPONSE_V4.md).
 
 ## Conversation context
 
@@ -52,7 +52,7 @@ analysis/compaction, and before confirmation consumes pending state. The neutral
 loop also guards direct entry/continuation before materialization. A mismatch is
 an actionable configuration error, not a model response to repair. Fixed endpoint
 probes remain available. This does not validate the user's instruction semantics;
-the active strict response parser remains authoritative. See [prompt review](protocols/CONVERSATION_RESPONSE_V3.md#saved-prompt-review-phase-2c3b).
+the active strict response parser remains authoritative. See [prompt review](protocols/CONVERSATION_RESPONSE_V4.md#saved-prompt-review).
 
 Agent bootstrap schemas are `common.resources_list/resolve/search/read` and `common.capabilities_search/read`. `RUNTIME_CONTEXT.capabilities.items` immediately exposes the complete compact schema-free index of exact runnable tool and enabled skill ids for the run; it is never paged or silently truncated. `common.capabilities_search` is only an optional metadata filter over that same index. `common.capabilities_read` accepts one exact catalog id. For `kind:"tool"` it returns `kind:"tool-schema"`, the descriptor revision, complete native-like descriptor, and explicit `loaded:true`, `complete:true`, `truncated:false`; for `kind:"skill"` it returns the complete Markdown skill evidence described below. The local parser and strict response schema admit a non-bootstrap tool only after matching tool-schema evidence. Tool and skill ids share one namespace, and a collision aborts request construction instead of choosing one implicitly. Catalog sources are rebuilt at every user-run and confirmation-continuation boundary (including fresh document-local VBA discovery), then revision-pinned for that run so schemas and execution authority cannot drift mid-run.
 
@@ -121,7 +121,6 @@ Tool call:
   "message": "Читаю диапазон.",
   "tool_calls": [
     {
-      "id": "call_1",
       "name": "excel.read_range",
       "arguments": { "sheet": "Data", "address": "A1:D20" }
     }
@@ -138,13 +137,17 @@ Final answer:
 }
 ```
 
-The v3 parser rejects every extra root field in both response modes. Each of at most 32 calls contains only a nonblank `id`, an exact callable `name`, and object `arguments`. IDs cannot repeat within a response or the accepted user run, including confirmation after compaction/RunId changes. Rejected attempts execute nothing and reserve no IDs. Duplicate JSON/argument names and unsupported JSON extensions are rejected. The string `message` may be empty; text and punctuation never classify lifecycle or effects.
+The v4 parser rejects every extra root/call field in both response modes. Each of at most 32 calls contains only an exact callable `name` and object `arguments`; `id` is forbidden. Duplicate JSON/argument names and unsupported JSON extensions are rejected. Rejected attempts execute nothing. The string `message` may be empty; text and punctuation never classify lifecycle or effects.
+
+After whole-response validation, `AgentKernel` converts ID-less `ToolCallDraft` records to accepted `ToolCall` records. It allocates IDs once, before accepted persistence, confirmation and dispatch; IDs remain unique across the accepted user run. An allocator exception, invalid ID or collision fails before acceptance without asking the model to regenerate content. Identical calls still represent separate accepted positions; IDs do not authorize automatic retries or deduplicate effects.
+
+Each accepted message persists `ToolCallId` and immutable `AcceptedCallOrigin { StepId, ModelAttemptId, CallIndex }` in the same `session.commit` before tool entry. The entire batch is saved before its first call. The raw model response is never rewritten to inject IDs; `SourceModelAttemptId` identifies the actual accepted attempt after any repair. Optional protocol verdicts do not allocate IDs or replace this durable mapping. Results, native history and continuation reuse these IDs; replay does not generate them. Argument strings, including HTML, literal backslashes and date-shaped values, remain intact through the ID boundary.
 
 Write, external, confirmation-required and unclassified calls are singleton. Independent local reads may be batched and execute sequentially. Effective safety comes from local authority, not tool-name guesses or model claims. The executor still validates policy/arguments and applies execution defaults.
 
 Empty calls mean only that the model ended its loop. Since Phase 3B2 the kernel's `RunSummary` owns lifecycle and execution health; `RunExecutionSummary` is a compatibility projection, not a second accumulator. The kernel ends an empty-call response as `completed`, independently of errors/unknown effects. Provider-native refusal is a separate ModelProtocol result classified as `failed / provider_refused`; the compatibility response projects `refused`, including when the provider also supplied content. Model-authored refusal or question text remains ordinary `message` text. `common.questions_ask`, confirmation and technical failures retain typed runtime control signals; text never sets those outcomes. Full projection normalization remains Phase 9.
 
-Accepted history is marked protocol `3`: v3 JSON tool-call envelopes, native history with canonical call metadata, or plain final text. Both service entries and controller preparation check full history, not a truncated prompt window. Unmarked/incompatible or ambiguous responses block dispatch and require an explicit new chat/reset. Confirmation validates the complete accepted-turn seed before consuming pending state or executing the tool; old pending actions can still be cancelled. No stream is converted, truncated, relabeled or deleted automatically.
+Accepted history is marked protocol `4`: ID-less v4 JSON call envelopes plus mandatory runtime metadata, native history with matching runtime IDs/canonical names, or plain final text. A dedicated history reader reconstructs accepted calls from metadata; the wire reader never reads IDs. Both service entries and controller preparation check full history, not a truncated prompt window. Unmarked/v2/v3, incomplete v4 or ambiguous mappings block dispatch and require an explicit new chat/reset. Confirmation validates the complete accepted-turn seed before consuming pending state or executing the tool; old pending actions can still be cancelled. No stream is converted, truncated, relabeled or deleted automatically.
 
 A confirmation pause persists its pending id, cumulative iteration/tool-step counters and execution fingerprint. After the singleton call is confirmed, its result returns to the same logical user run. A new request stays blocked until confirmation or cancellation; replaced definitions cannot execute. There is no persistent batch state.
 
@@ -170,16 +173,16 @@ failed qualification probe into a pass. Fixed sentinel values remain independent
 of saved prompts. Prompt-authoring guidance refers to current defaults rather than
 copying another protocol version's field/status rules.
 
-The loop now also supplies an immutable `ModelProtocolCallContext`: all accepted
-IDs in the logical turn (not just the compacted prompt) and a conservative local
-batch-safe projection. Confirmation restores IDs across `RunId` changes from full
-accepted history. Since Phase 2C3C, a missing/incomplete snapshot fails with typed
+The loop supplies an immutable `ModelProtocolCallContext` containing the conservative
+local batch-safe projection. Runtime IDs stay in kernel continuation, not the parser
+context. Confirmation restores them across `RunId` changes from full accepted
+history. A missing/incomplete snapshot fails with typed
 `Infrastructure` before any raw request or format repair. Full-session version
 checks run before send/edit/retry preparation and manual compaction; confirmation
 also validates the accepted-turn seed before consuming pending state or executing
 the tool. Incompatible/unmarked history requires an explicit new chat or reset,
-without automatic truncation, conversion or deletion. The live v3 parser enforces run-ID/singleton rules on every attempt. See the canonical
-[preflight and remaining gates](protocols/CONVERSATION_RESPONSE_V3.md#history-and-context-preflight-phase-2c3c).
+without automatic truncation, conversion or deletion. The v4 parser enforces ID-less shape and singleton rules on every attempt; the kernel owns ID allocation. See the canonical
+[preflight and remaining gates](protocols/CONVERSATION_RESPONSE_V4.md#history-and-context-preflight).
 
 The loop owns step ids, tool execution, summaries and presentation timing.
 `ConversationModelSession` appends accepted model messages; `AgentTranscript`
@@ -199,14 +202,15 @@ or load/evict tool schemas between attempts.
 `ConversationKernelAdapter.Model` maps boundary failures to typed kernel failures;
 `Failure.Cause` and exception rethrow are removed. Provider metadata/context usage
 remain outside the kernel. A runtime diagnostic does not duplicate the usage of
-a prior accepted response. The v3 client/parser/repair policy is unchanged.
+a prior accepted response. R29 changes the wire shape; retry budgets remain unchanged.
 See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md).
 
 ## Retry policy (Phase 2B)
 
 | Outcome | Action | Budget |
 |---|---|---|
-| Received completion fails the v3 contract | Retry from accepted prompt + one fresh repair instruction | Total 1–20 responses, including first |
+| Received completion fails the v4 contract | Retry from accepted prompt + one fresh repair instruction | Total 1–20 responses, including first |
+| Runtime ID allocation/restore failure | Fail before acceptance/dispatch; never regenerate model payload for an ID | No model repair |
 | Typed timeout, network failure or HTTP 5xx/server failure | Retry the exact current prompt after a cancellable delay | Two extra requests for the whole step, delays 1s then 2s |
 | Explicit `json_schema` rejection with fallback enabled | Switch to `json_object`, including during repair | One extra request, independent of other budgets |
 | Authorization/other HTTP errors, 429, size limits, invalid provider envelope | Typed provider failure | No automatic retry |
@@ -265,7 +269,7 @@ Phase 1B left the v2 response, retry limits and outcome behavior unchanged. See 
 `Core/Agent/AgentKernel` accepts generic messages through `IModelProtocol.SendAsync`.
 It does not own prompt composition, compaction, catalog/LRU, media or provider
 metadata. The materialized boundary above remains the current endpoint owner;
-its rename does not change the active v3 wire or retry behavior.
+its rename does not change the active v4 wire or retry behavior.
 
 `RunSummary` has independent lifecycle and execution health. Empty calls end the
 loop (`completed`), without certifying effects. Health comes only from immutable

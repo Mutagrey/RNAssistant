@@ -49,7 +49,14 @@ namespace RNAssistant.Harness
         {
             var call = session.LastRun.KernelState.Summary.PendingConfirmation.Call;
             return new ToolCommand { ToolId = call.Name, ToolCallId = call.Id,
-                Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(call.ArgumentsJson) };
+                Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(call.ArgumentsJson,
+                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) };
+        }
+
+        private static AcceptedToolCallOrigin FixtureCallOrigin(string stepId = "fixture-step",
+            string modelAttemptId = null, int callIndex = 0)
+        {
+            return new AcceptedToolCallOrigin(stepId, modelAttemptId ?? Guid.NewGuid().ToString("N"), callIndex);
         }
 
         private static readonly AsyncLocal<AppDataPaths> FixturePaths = new AsyncLocal<AppDataPaths>();

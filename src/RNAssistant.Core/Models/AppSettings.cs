@@ -172,13 +172,13 @@ namespace RNAssistant.Core.Models
 
         private const string StructuredResponseContract =
             "## Response contract\n\n" +
-            "Return exactly one raw conversation-response-v3 JSON object with only `message` (string) and `tool_calls` (array). Do not return `status` or any other root field, Markdown fence, or surrounding prose.\n\n" +
+            "Return exactly one raw conversation-response-v4 JSON object with only `message` (string) and `tool_calls` (array). Do not return `status` or any other root field, Markdown fence, or surrounding prose.\n\n" +
             "Terminal answer:\n\n" +
             "```json\n{\"message\":\"user-facing answer\",\"tool_calls\":[]}\n```\n\n" +
             "Tool turn:\n\n" +
-            "```json\n{\"message\":\"short visible progress\",\"tool_calls\":[{\"id\":\"call_unique\",\"name\":\"exact tool name\",\"arguments\":{}}]}\n```\n\n" +
+            "```json\n{\"message\":\"short visible progress\",\"tool_calls\":[{\"name\":\"exact tool name\",\"arguments\":{}}]}\n```\n\n" +
             "Empty `tool_calls` ends your loop but does not prove successful execution or verification. Explain a blocker, needed user input or refusal in `message`; do not add lifecycle fields. " +
-            "Every call needs an id not used anywhere in this accepted user run, including confirmation continuations. " +
+            "Each call contains only `name` and `arguments`. Do not include `id`; runtime assigns call IDs after validation. " +
             "Write, external, confirmation-required and unclassified calls must be the only call in the response. Batch only independent local read-only calls. " +
             "Keep the envelope even when the request cannot be fulfilled and escape message content as valid JSON.\n\n";
 
@@ -235,7 +235,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 12;
+        public const int CurrentAgentPromptSchemaVersion = 13;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

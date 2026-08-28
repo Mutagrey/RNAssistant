@@ -22,12 +22,13 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static ChatMessage ContextAcceptedCall(string id, string role = ToolResultRoles.User)
+        private static ChatMessage ContextAcceptedCall(string id, string role = ToolResultRoles.User,
+            AcceptedToolCallOrigin origin = null)
         {
             return AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
             {
                 Id = id, Name = "excel.inspect", Arguments = new Dictionary<string, object> { ["kind"] = "sheets" }
-            }, "Read.", null, role);
+            }, "Read.", null, role, origin ?? FixtureCallOrigin());
         }
 
         private static ChatSession ContextContinuationSession()
@@ -43,7 +44,7 @@ namespace RNAssistant.Harness
             session.Messages.Add(ContextAcceptedCall("before_compaction"));
             session.Messages[3].RunId = "current_turn";
             session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "before_compaction", ToolId = "excel.inspect" }, ToolResult.Ok("ok")));
-            var pending = ContextAcceptedCall("pending_id", ToolResultRoles.Tool);
+            var pending = ContextAcceptedCall("pending_id", ToolResultRoles.Tool, FixtureCallOrigin("step"));
             pending.RunId = "resume_1";
             pending.ExcludeFromModelContext = true;
             session.Messages.Add(pending);
@@ -114,7 +115,7 @@ namespace RNAssistant.Harness
                     var result = service.ExecuteAsync(mode, "Request", session, NewContext(adapter), settingsForRun, tools, null)
                         .GetAwaiter().GetResult();
                     AssertEqual("Done", result.AssistantText, "reviewed settings retain the current conversation behavior");
-                    AssertEqual(3, result.ResponseProtocolVersion, "reviewed prompts use the active v3 protocol");
+                    AssertEqual(4, result.ResponseProtocolVersion, "reviewed prompts use the active v4 protocol");
                 }
                 AssertEqual(3, rawCalls, "each reviewed mode makes one normal request");
             });
@@ -136,7 +137,7 @@ namespace RNAssistant.Harness
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
-                foreach (var version in new[] { 0, 1, 2, AgentResponseProtocol.CurrentVersion + 1 })
+                foreach (var version in new[] { 0, 1, 2, 3, AgentResponseProtocol.CurrentVersion + 1 })
                 foreach (var form in new[] { "plain", ToolResultRoles.User, ToolResultRoles.Tool })
                 {
                     var session = NewSession(adapter);
@@ -206,6 +207,8 @@ namespace RNAssistant.Harness
                     session => session.Messages[3].ToolCallId = null,
                     session => session.Messages.RemoveAt(5),
                     session => session.Messages[5].ToolCalls[0].Id = "wrong_id",
+                    session => session.Messages[3].AcceptedCallOrigin = null,
+                    session => session.Messages[5].AcceptedCallOrigin = session.Messages[3].AcceptedCallOrigin,
                     session => session.LastRun.TurnId = "wrong_turn",
                     session => session.LastRun.ResponseProtocolVersion = 0,
                     session => session.LastRun = null,
@@ -253,9 +256,8 @@ namespace RNAssistant.Harness
 
         private static async Task ModelProtocolPreflightRejectsIncompleteContext()
         {
-            foreach (var context in new[] { null, new ModelProtocolCallContext(null, new string[0]),
-                new ModelProtocolCallContext(new string[0], null),
-                new ModelProtocolCallContext(new string[0], new string[0], "incomplete history") })
+            foreach (var context in new[] { null, new ModelProtocolCallContext(null),
+                new ModelProtocolCallContext(new string[0], "incomplete local safety projection") })
             {
                 var request = NewProtocolRequest(20, true);
                 request.CallContext = context;
@@ -286,26 +288,23 @@ namespace RNAssistant.Harness
 
         private static void ProtocolContextSnapshotsAreIndependent()
         {
-            var ids = new List<string> { "accepted" };
             var safe = new List<string> { "test.read" };
-            var context = new ModelProtocolCallContext(ids, safe);
-            ids.Add("later");
+            var context = new ModelProtocolCallContext(safe);
             safe.Clear();
             AssertTrue(context.IsComplete, "explicit complete context");
-            AssertTrue(context.AcceptedToolCallIds.SequenceEqual(new[] { "accepted" }), "accepted ids copied per step");
             AssertTrue(context.BatchSafeReadOnlyToolIds.SequenceEqual(new[] { "test.read" }), "safety projection copied per step");
-            AssertTrue(((IList<string>)context.AcceptedToolCallIds).IsReadOnly, "snapshot does not expose a mutable accepted-id array");
-            AssertTrue(new ConversationResponseParser().Parse(V3Envelope(), new ToolDefinition[0], new ToolDefinition[0], context).Success,
-                "v3 overload accepts a final response with complete context");
+            AssertTrue(((IList<string>)context.BatchSafeReadOnlyToolIds).IsReadOnly, "snapshot does not expose a mutable safety array");
+            AssertTrue(new ConversationResponseParser().Parse(V4Envelope(), new ToolDefinition[0], new ToolDefinition[0], context).Success,
+                "v4 accepts a final response with complete local safety context");
             foreach (var incomplete in new[]
             {
-                new ModelProtocolCallContext(null, safe), new ModelProtocolCallContext(ids, null),
-                new ModelProtocolCallContext(ids, safe, "history is incomplete")
+                new ModelProtocolCallContext(null),
+                new ModelProtocolCallContext(safe, "local safety projection is incomplete")
             })
             {
-                AssertTrue(!incomplete.IsComplete && incomplete.AcceptedToolCallIds == null, "incomplete context is not a valid empty run");
-                AssertTrue(!new ConversationResponseParser().Parse(V3Envelope(), new ToolDefinition[0], new ToolDefinition[0], incomplete).Success,
-                    "v3 overload rejects incomplete context even for a final response");
+                AssertTrue(!incomplete.IsComplete, "incomplete context is not a valid empty safety projection");
+                AssertTrue(!new ConversationResponseParser().Parse(V4Envelope(), new ToolDefinition[0], new ToolDefinition[0], incomplete).Success,
+                    "v4 rejects incomplete context even for a final response");
             }
         }
 
@@ -317,25 +316,25 @@ namespace RNAssistant.Harness
             session.ActiveContextCheckpointId = checkpoint.Id;
             AssertTrue(!ContextCompactionService.BuildActiveWindow(session).Any(message => message.Id == session.Messages[3].Id),
                 "compaction really excludes the earlier accepted call from the prompt window");
-            session.Messages.Add(AgentTranscript.CreateAssistantMessage(V3Envelope(V3Call("quoted_id")), null, null, AgentResponseStatuses.Completed));
+            session.Messages.Add(AgentTranscript.CreateAssistantMessage(V4Envelope(V4Call(arguments:
+                new JObject { ["query"] = "quoted_id" })), null, null, AgentResponseStatuses.Completed));
             session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 2,
                 ToolCallId = "diagnostic_id", Activity = new ChatActivity { Kind = "model_response" } });
-            var batch = new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 3,
-                Content = V3Envelope(V3Call("batch_1"), V3Call("batch_2")) };
-            session.Messages.Add(batch);
-            foreach (var id in new[] { "batch_1", "batch_2" })
+            var batchAttempt = Guid.NewGuid().ToString("N");
+            var batchIds = new[] { "batch_1", "batch_2" };
+            for (var index = 0; index < batchIds.Length; index++)
+                session.Messages.Add(ContextAcceptedCall(batchIds[index], origin: FixtureCallOrigin("batch-step", batchAttempt, index)));
+            foreach (var id in batchIds)
                 session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = id, ToolId = "excel.inspect" }, ToolResult.Ok("read")));
             var before = JsonConvert.SerializeObject(session);
             var continuation = ConversationProtocolContext.RestoreContinuation(session, ContextPendingCommand());
-            var snapshot = new ModelProtocolCallContext(continuation.AcceptedCallIds, new string[0]);
-            AssertTrue(snapshot.IsComplete, "full turn reconstructed across runtime RunId changes");
-            AssertTrue(snapshot.AcceptedToolCallIds.SequenceEqual(new[] { "batch_1", "batch_2", "before_compaction", "pending_id" }),
+            AssertTrue(continuation.AcceptedCallIds.SequenceEqual(new[] { "batch_1", "batch_2", "before_compaction", "pending_id" }),
                 "collect all envelope/native ids, not previous turn, quoted JSON, diagnostics or tool results");
+            AssertTrue(((IList<string>)continuation.AcceptedCallIds).IsReadOnly, "restored runtime ids are an immutable snapshot");
             AssertEqual(before, JsonConvert.SerializeObject(session), "scope construction does not rewrite history or checkpoints");
             AssertEqual(4, continuation.AcceptedCallIds.Count, "detached continuation contains the whole accepted turn");
-            var tool = V3ReadTool();
-            AssertTrue(!new ConversationResponseParser().Parse(V3Envelope(V3Call("before_compaction")), new[] { tool }, new[] { tool }, snapshot).Success,
-                "v3 rejects a compacted-away id using the actual reconstructed context");
+            AssertEqual("before_compaction", ConversationResponseHistoryReader.Read(session.Messages[3]).Response.ToolCalls.Single().Id,
+                "compacted-away call restores its persisted runtime id without regeneration");
         }
 
         private static void ProtocolContextRejectsIncompleteContinuation()
@@ -345,7 +344,7 @@ namespace RNAssistant.Harness
             wrongTurn.LastRun.TurnId = "another_turn";
             invalid.Add(wrongTurn);
             var unknown = ContextContinuationSession();
-            unknown.Messages[3].ResponseProtocolVersion = 4;
+            unknown.Messages[3].ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion + 1;
             invalid.Add(unknown);
             var mismatch = ContextContinuationSession();
 
@@ -358,6 +357,12 @@ namespace RNAssistant.Harness
             var missingMetadata = ContextContinuationSession();
             missingMetadata.Messages[3].ToolCallId = null;
             invalid.Add(missingMetadata);
+            var missingOrigin = ContextContinuationSession();
+            missingOrigin.Messages[3].AcceptedCallOrigin = null;
+            invalid.Add(missingOrigin);
+            var duplicateOrigin = ContextContinuationSession();
+            duplicateOrigin.Messages[5].AcceptedCallOrigin = duplicateOrigin.Messages[3].AcceptedCallOrigin;
+            invalid.Add(duplicateOrigin);
             var nativeMismatch = ContextContinuationSession();
             nativeMismatch.Messages[5].ToolCalls[0].Id = "wrong_native_id";
             invalid.Add(nativeMismatch);
@@ -433,18 +438,20 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Bad attempt\",\"tool_calls\":[{\"id\":\"rejected_id\",\"name\":\"unknown.tool\",\"arguments\":{}}]}",
-                    LoadToolSchemaResponse("excel.inspect", "schema_id"),
-                    "{\"message\":\"Read\",\"tool_calls\":[{\"id\":\"read_id\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}," +
-                    "{\"id\":\"read_2\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Duplicate read\",\"tool_calls\":[{\"id\":\"READ_ID\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"message\":\"Bad attempt\",\"tool_calls\":[{\"name\":\"unknown.tool\",\"arguments\":{}}]}",
+                    LoadToolSchemaResponse("excel.inspect"),
+                    "{\"message\":\"Read\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}," +
+                    "{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"message\":\"Invalid model id\",\"tool_calls\":[{\"id\":\"rejected_id\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                     "{\"message\":\"Done\",\"tool_calls\":[]}",
                     "{\"message\":\"Fresh answer\",\"tool_calls\":[]}"
                 });
                 var rawCalls = 0;
+                var attemptIds = new List<string>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     rawCalls++;
+                    attemptIds.Add(options.TraceModelAttemptId);
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var requests = new List<ModelProtocolRequest>();
@@ -455,19 +462,33 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var result = service.ExecuteAsync(ChatModes.Agent, "Inspect sheets", session, NewContext(adapter), settingsForRun, tools, null)
                     .GetAwaiter().GetResult();
-                AssertEqual(5, rawCalls, "unknown tool and reused run id are repaired inside their logical steps");
+                AssertEqual(5, rawCalls, "unknown tool and forbidden model id are repaired inside their logical steps");
                 AssertEqual(3, requests.Count, "boundary captures logical steps, not raw attempts");
                 AssertTrue(requests.All(request => request.CallContext != null && request.CallContext.IsComplete), "real loop supplies complete call context");
-                AssertEqual(0, requests[0].CallContext.AcceptedToolCallIds.Count, "fresh scope begins empty");
-                AssertTrue(requests[1].CallContext.AcceptedToolCallIds.SequenceEqual(new[] { "schema_id" }), "accepted schema call enters next step");
-                AssertTrue(requests[2].CallContext.AcceptedToolCallIds.SequenceEqual(new[] { "read_2", "read_id", "schema_id" }), "entire accepted batch enters next step, rejected id never does");
-                AssertEqual(2, adapter.Executed.Count(command => command.ToolId == "excel.inspect"), "independent local reads execute once each; reused id is never dispatched");
+                var acceptedCalls = session.Messages.Where(message => message.Activity == null && message.Role == "assistant" &&
+                    !string.IsNullOrWhiteSpace(message.ToolCallId)).ToArray();
+                AssertEqual(3, acceptedCalls.Length, "only accepted schema and read calls enter durable history");
+                var runtimeIds = acceptedCalls.Select(message => message.ToolCallId).ToArray();
+                AssertEqual(runtimeIds.Length, runtimeIds.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    "runtime assigns distinct IDs to sequential calls and each batch member");
+                AssertTrue(!runtimeIds.Contains("rejected_id"), "model-supplied id never becomes runtime identity");
+                AssertEqual(attemptIds[1], acceptedCalls[0].AcceptedCallOrigin.ModelAttemptId, "schema call points to its successful raw attempt");
+                AssertTrue(acceptedCalls.Skip(1).All(message => message.AcceptedCallOrigin.ModelAttemptId == attemptIds[2]) &&
+                    acceptedCalls.Skip(1).Select(message => message.AcceptedCallOrigin.CallIndex).SequenceEqual(new[] { 0, 1 }),
+                    "batch members preserve their raw attempt and positions");
+                AssertTrue(adapter.Executed.Where(command => command.ToolId == "excel.inspect")
+                    .Select(command => command.ToolCallId).SequenceEqual(runtimeIds.Skip(1)),
+                    "independent reads dispatch once each with their persisted runtime IDs");
                 AssertTrue(requests[0].CallContext.BatchSafeReadOnlyToolIds.Contains("common.resources_read") &&
                     requests[0].CallContext.BatchSafeReadOnlyToolIds.Contains("excel.inspect"), "runtime metadata feeds the batch-safe projection");
-                AssertEqual(3, result.ResponseProtocolVersion, "accepted writes use v3");
+                AssertEqual(4, result.ResponseProtocolVersion, "accepted writes use v4");
+                var acceptedBeforeNextRun = JsonConvert.SerializeObject(acceptedCalls);
+                var safetyBeforeNextRun = requests[0].CallContext.BatchSafeReadOnlyToolIds.ToArray();
                 service.ExecuteAsync(ChatModes.Agent, "New request", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
-                AssertEqual(0, requests[3].CallContext.AcceptedToolCallIds.Count, "next user run gets an independent scope");
-                AssertEqual(0, requests[0].CallContext.AcceptedToolCallIds.Count, "older snapshot was not mutated by later accepted calls");
+                AssertEqual(4, requests.Count, "next user run obtains a fresh model boundary request");
+                AssertEqual(acceptedBeforeNextRun, JsonConvert.SerializeObject(acceptedCalls), "later run does not rewrite accepted IDs or origins");
+                AssertTrue(requests[0].CallContext.BatchSafeReadOnlyToolIds.SequenceEqual(safetyBeforeNextRun),
+                    "older safety snapshot was not mutated by later accepted calls");
             });
         }
 
@@ -478,8 +499,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("common.skills_upsert", "schema_id"),
-                    "{\"message\":\"Create skill\",\"tool_calls\":[{\"id\":\"skill_id\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.context_probe\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    LoadToolSchemaResponse("common.skills_upsert"),
+                    "{\"message\":\"Create skill\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.context_probe\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
                     "{\"message\":\"Done\",\"tool_calls\":[]}"
                 });
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -488,40 +509,54 @@ namespace RNAssistant.Harness
                 var service = CreateConversationRunService(adapter, executor, completion, null,
                     () => new RecordingModelProtocol(completion, requests));
                 var session = NewSession(adapter);
-                session.LastRun = new ChatRunRecord { RunId = "original_run", TurnId = "original_run", ResponseProtocolVersion = 3, Status = "running" };
+                session.LastRun = new ChatRunRecord { RunId = "original_run", TurnId = "original_run", ResponseProtocolVersion = 4, Status = "running" };
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = false, ToolResultRole = role };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 ToolCommand confirmed = null;
                 var first = service.ExecuteAsync(ChatModes.Agent, "Create test skill", session, NewContext(adapter), settingsForRun, tools, null,
                     (pendingSession, command, result) => { confirmed = command; return "pending_context"; }).GetAwaiter().GetResult();
                 AssertTrue(first.WaitingForConfirmation && confirmed != null, "real runtime pauses after the accepted confirmation-required call");
+                var schemaCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
+                    message.ToolName == CapabilityDiscoveryExecutor.ReadToolId);
+                var skillCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
+                    message.ToolName == "common.skills_upsert");
+                var schemaId = schemaCall.ToolCallId;
+                var skillId = skillCall.ToolCallId;
+                AssertEqual(skillId, confirmed.ToolCallId, "pending confirmation retains the accepted runtime ID");
+                var originalOrigins = JsonConvert.SerializeObject(new[] { schemaCall.AcceptedCallOrigin, skillCall.AcceptedCallOrigin });
                 foreach (var message in session.Messages) message.RunId = "original_run";
-                var through = session.Messages.First(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == "schema_id");
+                var through = session.Messages.First(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == schemaId);
                 var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, SummaryMarkdown = "Schema discovery summarized." };
                 session.Artifacts.Add(new ChatArtifact { Id = checkpoint.Id, Kind = ChatArtifactKinds.Compaction,
                     MimeType = "application/json", InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None) });
                 session.ContextCheckpoints.Add(checkpoint);
                 session.ActiveContextCheckpointId = checkpoint.Id;
                 session.LastRun.RunId = "confirmation_run";
-                session.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" && message.ToolCallId == "skill_id").RunId = "confirmation_run";
+                skillCall.RunId = "confirmation_run";
                 // Same controller-style identity transition, with real host-neutral tool
                 // execution against the fixture's disposable skill store (no Office COM).
                 AssertEqual(session.LastRun.KernelState.Summary.TurnId, session.LastRun.TurnId, "logical turn binding");
                 AssertEqual(session.LastRun.KernelState.Summary.PendingConfirmation.Call.ArgumentsJson,
                     JsonConvert.SerializeObject(confirmed.Arguments, Formatting.None), "confirmed argument binding");
                 ConversationProtocolContext.EnsureCanContinue(session, confirmed);
+                var restored = ConversationProtocolContext.RestoreContinuation(session, confirmed);
+                AssertTrue(restored.AcceptedCallIds.SequenceEqual(new[] { schemaId, skillId }.OrderBy(id => id, StringComparer.Ordinal)),
+                    "new runtime RunId restores logical-turn IDs, including compacted-away schema discovery");
                 var last = service.ConfirmAsync("pending_context", confirmed, session,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
                 AssertEqual(1, last.ExecutionSummary.WriteOk, "confirmed fixture skill writes through kernel");
                 AssertEqual(3, requests.Count, "one model step after confirmation");
                 var continuation = requests[2];
                 AssertTrue(continuation.CallContext.IsComplete, "confirmation context is complete");
-                AssertTrue(continuation.CallContext.AcceptedToolCallIds.SequenceEqual(new[] { "schema_id", "skill_id" }),
-                    "new runtime RunId retains logical-turn ids, including compacted-away schema discovery");
-                AssertTrue(!continuation.AcceptedMessages.Any(message => message.ProtocolMessage && message.Role == "assistant" && message.ToolCallId == "schema_id"),
+                AssertTrue(!continuation.AcceptedMessages.Any(message => message.ProtocolMessage && message.Role == "assistant" && message.ToolCallId == schemaId),
                     "id scope is wider than the actual materialized prompt");
+                AssertEqual(skillId, skillCall.ToolCallId, "confirmation does not regenerate the call ID");
+                AssertEqual(originalOrigins, JsonConvert.SerializeObject(new[] { schemaCall.AcceptedCallOrigin, skillCall.AcceptedCallOrigin }),
+                    "confirmation preserves accepted raw-attempt provenance");
+                AssertEqual(1, session.Messages.Count(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == skillId),
+                    "confirmed result references the same runtime call exactly once");
                 AssertTrue(!continuation.CallContext.BatchSafeReadOnlyToolIds.Contains("common.skills_upsert"), "confirmation tool is never batch-safe");
-                AssertEqual(3, last.ResponseProtocolVersion, "confirmation writes the active v3 protocol: " + role);
+                AssertEqual(4, last.ResponseProtocolVersion, "confirmation writes the active v4 protocol: " + role);
             });
         }
 
@@ -538,57 +573,62 @@ namespace RNAssistant.Harness
                 },
                 CallableTools = new ToolDefinition[0],
                 RunnableCatalog = new ToolDefinition[0],
-                CallContext = new ModelProtocolCallContext(new string[0], new string[0]),
+                CallContext = new ModelProtocolCallContext(new string[0]),
                 Options = new LlmRequestOptions
                 {
                     ResponseFormat = strict ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
-                    ResponseSchemaName = strict ? "conversation_response" : null,
+                    ResponseSchemaName = strict ? ConversationResponseSchemaBuilder.SchemaName : null,
                     ResponseSchemaJson = strict ? ConversationResponseSchemaBuilder.Build(new ToolDefinition[0]) : null,
                     TraceStepId = Guid.NewGuid().ToString("N")
                 }
             };
         }
 
-        private static async Task ModelProtocolValidatesV3Context()
+        private static async Task ModelProtocolValidatesV4Context()
         {
             foreach (var strict in new[] { false, true })
             {
-                var read = V3ReadTool();
-                var write = V3ReadTool("test.write");
+                var read = V4ReadTool();
+                var write = V4ReadTool("test.write");
                 write.MutatesDocument = true;
-                var external = V3ReadTool("test.external");
+                var external = V4ReadTool("test.external");
+                var modelId = V4Call();
+                modelId["id"] = "MODEL_ID";
                 var values = new[]
                 {
                     "{\"status\":\"completed\",\"message\":\"Old response\",\"tool_calls\":[]}",
-                    V3Envelope(V3Call("ACCEPTED_BEFORE")),
-                    V3Envelope(V3Call("read_1"), V3Call("write_1", write.Id)),
-                    V3Envelope(V3Call("read_1"), V3Call("external_1", external.Id)),
-                    V3Envelope(V3Call("read_1"), V3Call("read_2"))
+                    V4Envelope(modelId),
+                    V4Envelope(V4Call(), V4Call(write.Id)),
+                    V4Envelope(V4Call(), V4Call(external.Id)),
+                    V4Envelope(V4Call(arguments: new JObject { ["query"] = "first" }),
+                        V4Call(arguments: new JObject { ["query"] = "second" }))
                 };
                 var request = NewProtocolRequest(values.Length, strict);
                 request.CallableTools = request.RunnableCatalog = new[] { read, write, external };
                 // Even an erroneous caller classification cannot override a mutation flag.
-                request.CallContext = new ModelProtocolCallContext(new[] { "accepted_before" }, new[] { read.Id, write.Id });
+                request.CallContext = new ModelProtocolCallContext(new[] { read.Id, write.Id });
                 request.Options = ModelProtocolWire.CreateRequestOptions(request.Settings.AgentResponseMode, request.CallableTools);
                 var trace = new List<LlmTraceRecord>();
                 request.Options.TraceSink = trace.Add;
                 var calls = 0;
                 var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
                 {
-                    if (calls > 0) AssertContains(messages.Last().Content, "conversation-response-v3", "all repairs use the active contract");
+                    if (calls > 0) AssertContains(messages.Last().Content, "conversation-response-v4", "all repairs use the active contract");
                     return Task.FromResult(new LlmCompletionResult { Content = values[calls++] });
                 });
                 var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
                 AssertTrue(result.Failure == null && result.Response != null, "valid independent reads are accepted after unsafe attempts");
                 AssertEqual(5, calls, "both response formats enforce context on every attempt");
-                AssertTrue(result.Response.ToolCalls.Select(call => call.Id).SequenceEqual(new[] { "read_1", "read_2" }),
-                    "read order is retained and rejected attempts do not reserve their ids");
-                AssertTrue(request.CallContext.AcceptedToolCallIds.SequenceEqual(new[] { "accepted_before" }), "parser does not mutate accepted-run authority");
+                AssertTrue(result.Response.ToolCalls.Select(call => (string)call.Arguments["query"]).SequenceEqual(new[] { "first", "second" }),
+                    "validated call order and arguments are retained without model IDs");
+                AssertTrue(request.CallContext.BatchSafeReadOnlyToolIds.SequenceEqual(new[] { read.Id, write.Id }), "parser does not mutate local safety authority");
                 AssertEqual(4, trace.Count(record => record.Type == "rejected"), "rejected attempts remain diagnostic only");
                 AssertContains(trace[0].Error, "unsupported root field: status", "no v2 fallback");
-                AssertContains(trace[1].Error, "already exists", "run-wide id reuse fails");
+                AssertContains(trace[1].Error, "only name and arguments", "model-owned id is rejected rather than stripped");
                 AssertContains(trace[2].Error, "one at a time", "mutation batch fails");
                 AssertContains(trace[3].Error, "one at a time", "external/unclassified batch fails");
+                AssertEqual(0, trace.Single(record => record.Type == "accepted").ToolCallIds.Length,
+                    "optional protocol trace cannot invent runtime IDs before kernel acceptance");
             }
         }
 
@@ -608,8 +648,13 @@ namespace RNAssistant.Harness
             var originalPrompt = JsonConvert.SerializeObject(request.AcceptedMessages);
             var trace = new List<LlmTraceRecord>();
             var attemptIds = new HashSet<string>();
+            string successfulAttemptId = null;
             var stepId = request.Options.TraceStepId;
-            request.Options.TraceSink = trace.Add;
+            request.Options.TraceSink = record =>
+            {
+                trace.Add(record);
+                if (record.Type == "accepted") request.Options.TraceModelAttemptId = "changed-by-optional-trace";
+            };
             var calls = 0;
             var started = 0;
             var completed = 0;
@@ -628,12 +673,15 @@ namespace RNAssistant.Harness
                     var repair = JObject.Parse(prompt.Last().Content.Substring(prefix.Length));
                     AssertEqual(calls, (int)repair["attempt"], "repair names the total protocol attempt, including the initial response");
                     AssertEqual(invalid.Length + 1, (int)repair["max_attempts"], "repair reports the configured total limit");
+                    AssertContains((string)repair["instruction"], "conversation-response-v4", "repair uses the active ID-free contract");
+                    AssertContains((string)repair["instruction"], "Do not include id", "repair never asks the model to allocate IDs");
                 }
                 AssertTrue(prompt.All(message => string.IsNullOrEmpty(message.ReasoningContent)), "rejected reasoning never enters prompt");
                 AssertEqual(stepId, options.TraceStepId, "one logical step across repairs");
                 AssertTrue(attemptIds.Add(options.TraceModelAttemptId), "distinct raw attempt identity");
                 AssertTrue(options.TraceRequestId == null, "previous request identity is cleared");
                 options.TraceRequestId = "protocol-request-" + calls;
+                if (calls > invalid.Length) successfulAttemptId = options.TraceModelAttemptId;
                 return Task.FromResult(new LlmCompletionResult
                 {
                     Content = calls <= invalid.Length ? invalid[calls - 1] :
@@ -647,7 +695,10 @@ namespace RNAssistant.Harness
                 AttemptStarted = streaming => started++, AttemptCompleted = () => completed++
             }, CancellationToken.None);
             AssertTrue(result.Failure == null, result.Failure == null ? "accepted typed result" : result.Failure.Message);
-            AssertEqual("  Accepted.  ", result.Response.Message, "v3 preserves the exact message string");
+            AssertEqual("  Accepted.  ", result.Response.Message, "v4 preserves the exact message string");
+            AssertTrue(!string.IsNullOrWhiteSpace(successfulAttemptId), "accepted response has a generated raw attempt identity");
+            AssertEqual(successfulAttemptId, result.SourceModelAttemptId,
+                "accepted source identity is a snapshot unaffected by optional trace changes to reused options");
             AssertEqual("accepted reasoning", result.Completion.ReasoningContent, "only accepted completion metadata leaves protocol");
             AssertEqual(invalid.Length + 1, calls, "valid response ends the protocol operation");
             AssertEqual(calls, started, "each raw attempt resets presentation");
@@ -942,7 +993,7 @@ namespace RNAssistant.Harness
                 OptionalTraceFailed = () => { optionalFailures++; throw new IOException("optional logger unavailable"); }
             }, CancellationToken.None);
             AssertTrue(accepted.Failure == null, "optional accepted marker and logger failure do not change acceptance");
-            AssertTrue(accepted.Response == null, "provider refusal is not fabricated as a v3 model envelope");
+            AssertTrue(accepted.Response == null, "provider refusal is not fabricated as a v4 model envelope");
             AssertEqual(refusal.RefusalContent, accepted.ProviderRefusal, "native refusal text is preserved verbatim");
             AssertTrue(ReferenceEquals(refusal, accepted.Completion), "accepted provider metadata is retained");
             AssertEqual(1, optionalFailures, "optional trace failure is reported once");
@@ -998,8 +1049,8 @@ namespace RNAssistant.Harness
                 adapter.ThrowOnToolId = "excel.add_sheet";
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.add_sheet", "schema_cancelled_write"),
-                    "{\"message\":\"Создаю лист.\",\"tool_calls\":[{\"id\":\"write\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}"
+                    LoadToolSchemaResponse("excel.add_sheet"),
+                    "{\"message\":\"Создаю лист.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}"
                 });
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { Status = "running" };
@@ -1026,9 +1077,10 @@ namespace RNAssistant.Harness
             var settings = new AppSettings();
             AssertTrue(settings.SystemPrompt.StartsWith("# RNAssistant Agent", StringComparison.Ordinal), "agent prompt Markdown heading");
             AssertContains(settings.SystemPrompt, "## Response contract", "agent prompt structured section");
-            AssertContains(settings.SystemPrompt, "conversation-response-v3", "agent prompt requires the active envelope");
+            AssertContains(settings.SystemPrompt, "conversation-response-v4", "agent prompt requires the active envelope");
             AssertContains(settings.SystemPrompt, "Do not return `status`", "model cannot own runtime status");
-            AssertContains(settings.SystemPrompt, "accepted user run", "prompt requires run-wide call ids");
+            foreach (var prompt in new[] { settings.SystemPrompt, settings.ChatSystemPrompt, settings.PlanSystemPrompt })
+                AssertContains(prompt, "Do not include `id`; runtime assigns call IDs", "all modes reserve call identity for runtime");
             AssertTrue(settings.AgentToolsPrompt.StartsWith("# Agent tool policy", StringComparison.Ordinal), "tool prompt is separate Markdown");
             AssertContains(settings.AgentToolsPrompt, "unclassified calls are singleton", "tool prompt describes conservative batching");
             AssertContains(settings.AgentToolsPrompt, "optional exact `resources`", "tool prompt explains externalized results");
@@ -1062,20 +1114,20 @@ namespace RNAssistant.Harness
             AssertEqual("http://127.0.0.1:8000/v1/models", LlmClient.BuildModelsConfigUrl(settings), "relative models endpoint");
         }
 
-        private static void ConversationV3SchemaMatchesParserAndWire()
+        private static void ConversationV4SchemaMatchesParserAndWire()
         {
-            var tool = V3ReadTool();
+            var tool = V4ReadTool();
             var originalSchema = tool.ArgumentSchemaJson;
             var schemaJson = ConversationResponseSchemaBuilder.Build(new[] { tool });
             var schema = JObject.Parse(schemaJson);
-            var valid = JObject.Parse(V3Envelope(V3Call(arguments: new JObject
+            var valid = JObject.Parse(V4Envelope(V4Call(arguments: new JObject
             {
                 ["query"] = "A", ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
             })));
             string error;
             AssertTrue(ToolSchemaSupport.ValidateArguments((JObject)valid.DeepClone(), schema, false, out error),
-                "strict v3 envelope matches generated schema: " + error);
-            AssertTrue(ParseV3(valid.ToString(Formatting.None), tool).Success, "local parser accepts strict optional null representation");
+                "strict v4 envelope matches generated schema: " + error);
+            AssertTrue(ParseV4(valid.ToString(Formatting.None), tool).Success, "local parser accepts strict optional null representation");
             AssertEqual(originalSchema, tool.ArgumentSchemaJson, "response schema construction never rewrites native tool schemas");
 
             foreach (var field in new[] { "status", "verified", "phase" })
@@ -1083,16 +1135,20 @@ namespace RNAssistant.Harness
                 var invalid = (JObject)valid.DeepClone();
                 invalid[field] = "completed";
                 AssertTrue(!ToolSchemaSupport.ValidateArguments(invalid, schema, false, out error) &&
-                    !ParseV3(invalid.ToString(Formatting.None), tool).Success, "schema/parser agree on unknown root field: " + field);
+                    !ParseV4(invalid.ToString(Formatting.None), tool).Success, "schema/parser agree on unknown root field: " + field);
             }
+            var modelId = (JObject)valid.DeepClone();
+            modelId["tool_calls"][0]["id"] = "model_owned";
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(modelId, schema, false, out error) &&
+                !ParseV4(modelId.ToString(Formatting.None), tool).Success, "schema/parser reject model IDs without stripping them");
             var unknown = (JObject)valid.DeepClone();
             unknown["tool_calls"][0]["name"] = "test.unloaded";
             AssertTrue(!ToolSchemaSupport.ValidateArguments(unknown, schema, false, out error) &&
-                !ParseV3(unknown.ToString(Formatting.None), tool).Success, "schema/parser reject names outside callable set");
+                !ParseV4(unknown.ToString(Formatting.None), tool).Success, "schema/parser reject names outside callable set");
             var missing = (JObject)valid.DeepClone();
             ((JObject)missing["tool_calls"][0]["arguments"]).Remove("query");
             AssertTrue(!ToolSchemaSupport.ValidateArguments(missing, schema, false, out error) &&
-                !ParseV3(missing.ToString(Formatting.None), tool).Success, "schema/parser reject missing required arguments");
+                !ParseV4(missing.ToString(Formatting.None), tool).Success, "schema/parser reject missing required arguments");
 
             var body = LlmClient.BuildRequestBody(new AppSettings { StreamResponses = false },
                 new List<object> { new { role = "user", content = "test" } }, 10, new LlmRequestOptions
@@ -1101,40 +1157,40 @@ namespace RNAssistant.Harness
                     ResponseSchemaName = ConversationResponseSchemaBuilder.SchemaName,
                     ResponseSchemaJson = schemaJson
                 });
-            AssertEqual("rnassistant_conversation_response_v3", (string)body.SelectToken("response_format.json_schema.name"), "explicit v3 wire schema identity");
-            AssertTrue(JToken.DeepEquals(schema, body.SelectToken("response_format.json_schema.schema")), "LLM transport sends the exact v3 schema");
-            AssertTrue(body.SelectToken("response_format.json_schema.strict").Value<bool>(), "v3 schema uses strict transport");
+            AssertEqual("rnassistant_conversation_response_v4", (string)body.SelectToken("response_format.json_schema.name"), "explicit v4 wire schema identity");
+            AssertTrue(JToken.DeepEquals(schema, body.SelectToken("response_format.json_schema.schema")), "LLM transport sends the exact v4 schema");
+            AssertTrue(body.SelectToken("response_format.json_schema.strict").Value<bool>(), "v4 schema uses strict transport");
         }
 
-        private static void ConversationV3SchemaAllowsOnlyCallableTools()
+        private static void ConversationV4SchemaAllowsOnlyCallableTools()
         {
-            var invalid = V3ReadTool("test.invalid");
+            var invalid = V4ReadTool("test.invalid");
             invalid.ArgumentSchemaJson = "{}";
             foreach (var tools in new[] { new ToolDefinition[0], new[] { invalid, null, new ToolDefinition() } })
             {
                 var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(tools));
                 string error;
-                AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse(V3Envelope()), schema, false, out error), "empty callable set allows final message");
-                AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse(V3Envelope(V3Call())), schema, false, out error),
+                AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse(V4Envelope()), schema, false, out error), "empty callable set allows final message");
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse(V4Envelope(V4Call())), schema, false, out error),
                     "empty/invalid callable set never offers phantom calls");
             }
-            var tool = V3ReadTool();
+            var tool = V4ReadTool();
             var bounded = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool, tool, invalid }));
             AssertEqual(1, ((JArray)bounded.SelectToken("properties.tool_calls.items.anyOf")).Count,
                 "schema uses only unique valid callable contracts");
-            var calls = Enumerable.Range(0, 32).Select(i => V3Call("call_" + i, arguments: new JObject
+            var calls = Enumerable.Range(0, 32).Select(i => V4Call(arguments: new JObject
             {
-                ["query"] = "A", ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
+                ["query"] = "A" + i, ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
             })).ToArray();
             string limitError;
-            AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse(V3Envelope(calls)), bounded, false, out limitError), "schema accepts 32 calls");
-            AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse(V3Envelope(calls.Concat(new[] { calls[0] }).ToArray())), bounded, false, out limitError),
-                "schema bounds calls at 32; run uniqueness is enforced locally");
+            AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse(V4Envelope(calls)), bounded, false, out limitError), "schema accepts 32 calls");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse(V4Envelope(calls.Concat(new[] { calls[0] }).ToArray())), bounded, false, out limitError),
+                "schema bounds calls at 32 independently of runtime identity allocation");
         }
 
         private static void AgentSupportsSelectableResponseFormats()
         {
-            AssertEqual(3, AgentResponseProtocol.CurrentVersion,
+            AssertEqual(4, AgentResponseProtocol.CurrentVersion,
                 "conversation response protocol cutover version");
             var settings = new AppSettings { StreamResponses = false };
             var messages = new List<object> { new { role = "user", content = "test" } };
@@ -1172,11 +1228,14 @@ namespace RNAssistant.Harness
             var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }));
             var rootRequired = schema["required"] as JArray;
             AssertTrue(rootRequired != null && rootRequired.Values<string>().SequenceEqual(new[] { "message", "tool_calls" }),
-                "strict response schema requires only the v3 envelope fields");
+                "strict response schema requires only the v4 envelope fields");
             AssertTrue(((JObject)schema["properties"]).Properties().Select(property => property.Name).SequenceEqual(
                 new[] { "message", "tool_calls" }),
                 "strict response schema has no model lifecycle field");
             var call = schema.SelectToken("properties.tool_calls.items.anyOf[0]");
+            AssertTrue(((JObject)call["properties"]).Properties().Select(property => property.Name).SequenceEqual(new[] { "name", "arguments" }) &&
+                ((JArray)call["required"]).Values<string>().SequenceEqual(new[] { "name", "arguments" }),
+                "call schema exposes only name and arguments; IDs are runtime metadata");
             AssertEqual("excel.read_range", (string)call.SelectToken("properties.name.const"), "exact tool name in schema");
             AssertEqual("string", (string)call.SelectToken("properties.arguments.properties.range.type"), "tool argument schema copied");
             var optionalSheetType = call.SelectToken("properties.arguments.properties.sheet.type") as JArray;
@@ -1264,10 +1323,14 @@ namespace RNAssistant.Harness
 
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer })
             {
-                var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, role);
+                var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, role, FixtureCallOrigin());
                 var resultMessage = AgentJsonProtocol.CreateToolResultMessage(command, result, role);
                 AssertTrue(callMessage.ToolCalls.Count == 0, role + " uses JSON envelope history");
-                AssertTrue(JObject.Parse(callMessage.Content)["status"] == null, role + " replays only the v3 envelope");
+                var envelope = JObject.Parse(callMessage.Content);
+                AssertTrue(envelope["status"] == null && envelope["tool_calls"][0]["id"] == null,
+                    role + " replays only the v4 envelope, without runtime metadata fields");
+                AssertEqual(call.Id, ConversationResponseHistoryReader.Read(callMessage).Response.ToolCalls.Single().Id,
+                    role + " restores runtime identity from accepted metadata");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, callMessage.ResponseProtocolVersion,
                     role + " stores response protocol version");
                 AssertEqual(AgentResponseStatuses.InProgress, callMessage.ResponseStatus,
@@ -1276,7 +1339,7 @@ namespace RNAssistant.Harness
                 AssertContains(resultMessage.Content, "TOOL_RESULT:", role + " result prefix");
             }
 
-            var nativeCall = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, ToolResultRoles.Tool);
+            var nativeCall = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, ToolResultRoles.Tool, FixtureCallOrigin());
             var nativeResult = AgentJsonProtocol.CreateToolResultMessage(command, result, ToolResultRoles.Tool);
             var api = new LlmMessageBuilder().Build(new[] { nativeCall, nativeResult }, new AppSettings());
             var assistant = (JObject)api.Messages[0];
@@ -1507,8 +1570,8 @@ namespace RNAssistant.Harness
                     JsonConvert.SerializeObject(new { value = new string('x', 150000) })));
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.inspect", "schema_large_inspect"),
-                    "{\"message\":\"Читаю.\",\"tool_calls\":[{\"id\":\"call_large\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    LoadToolSchemaResponse("excel.inspect"),
+                    "{\"message\":\"Читаю.\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                     "{\"message\":\"Диапазон результата нужно сузить.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -1543,7 +1606,7 @@ namespace RNAssistant.Harness
 
         private static void ModelCompatibilityAcceptsExactSentinels()
         {
-            const string toolJson = "{\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}";
+            const string toolJson = "{\"message\":\"TOOL_OK\",\"tool_calls\":[{\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}";
             const string finalJson = "{\"message\":\"RESULT_OK\",\"tool_calls\":[]}";
             foreach (var mode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
@@ -1571,19 +1634,24 @@ namespace RNAssistant.Harness
                 AssertEqual(mode == AgentResponseModes.JsonSchema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
                     requests[1].Item2.ResponseFormat, "shared options preserve selected format");
                 AssertEqual("Return exactly one JSON object: " + toolJson, requests[1].Item1.Single().Content,
-                    "shared writer supplies the fixed active-v3 probe instruction");
+                    "shared writer supplies the fixed active-v4 probe instruction");
                 AssertEqual("Reply with " + finalJson + ".", requests[2].Item1.Last().Content, "final probe stays in the active contract");
                 AssertTrue(!ReferenceEquals(requests[1].Item2, requests[2].Item2), "shared builder never shares mutable options between probes");
                 var accepted = requests[2].Item1[0];
-                AssertEqual(3, accepted.ResponseProtocolVersion, "probes and history switch together");
-                AssertEqual("call_1", accepted.ToolCallId, "probe history uses actual accepted-call metadata");
+                AssertEqual(4, accepted.ResponseProtocolVersion, "probes and history switch together");
+                AssertTrue(!string.IsNullOrWhiteSpace(accepted.ToolCallId) && accepted.AcceptedCallOrigin != null,
+                    "probe history has runtime identity and accepted-call origin");
                 AssertEqual("compat.echo", accepted.ToolName, "canonical tool id retained for current-run history");
                 var resultMessage = requests[2].Item1[1];
                 AssertEqual(role, resultMessage.Role, "selected result role reaches transport");
+                var resultJson = resultMessage.Content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal)
+                    ? resultMessage.Content.Substring("TOOL_RESULT:\n".Length) : resultMessage.Content;
+                AssertEqual(accepted.ToolCallId, (string)JObject.Parse(resultJson)["tool_call_id"],
+                    "every probe result role correlates to the stored runtime ID");
                 if (role == ToolResultRoles.Tool)
                 {
-                    AssertEqual("call_1", accepted.ToolCalls.Single().Id, "native call id");
-                    AssertEqual("call_1", resultMessage.ToolCallId, "matched native result id");
+                    AssertEqual(accepted.ToolCallId, accepted.ToolCalls.Single().Id, "native call id");
+                    AssertEqual(accepted.ToolCallId, resultMessage.ToolCallId, "matched native result id");
                     AssertEqual(AgentJsonProtocol.ApiToolName("compat.echo"), accepted.ToolCalls[0].Name, "native wire name stays provider-safe");
                 }
                 else AssertEqual(toolJson, accepted.Content, "shared transcript writer preserves JSON envelope");
@@ -1592,7 +1660,7 @@ namespace RNAssistant.Harness
 
         private static void ModelCompatibilityRejectsLooseResponses()
         {
-            const string toolJson = "{\"message\":\"TOOL_OK\",\"tool_calls\":[{\"id\":\"call_1\",\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}";
+            const string toolJson = "{\"message\":\"TOOL_OK\",\"tool_calls\":[{\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}";
             const string finalJson = "{\"message\":\"RESULT_OK\",\"tool_calls\":[]}";
             var cases = new List<string[]>
             {
@@ -1605,7 +1673,7 @@ namespace RNAssistant.Harness
             }) cases.Add(new[] { "ROLE_OK", toolJson, final });
             foreach (var tool in new[]
             {
-                toolJson.Replace("call_1", "CALL_1"), toolJson.Replace("compat.echo", "compat.other"),
+                toolJson.Replace("\"name\":", "\"id\":\"model_id\",\"name\":"), toolJson.Replace("compat.echo", "compat.other"),
                 toolJson.Replace("\"value\"", "\"VALUE\""), toolJson.Replace("TOOL_OK", "tool_ok")
             }) cases.Add(new[] { "ROLE_OK", tool, finalJson });
             foreach (var values in cases)

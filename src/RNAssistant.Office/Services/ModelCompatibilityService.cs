@@ -102,7 +102,7 @@ namespace RNAssistant.Office.Services
                 },
                 ModelProtocolWire.CreateRequestOptions(responseMode, new[] { tool }),
                 completion => ValidateSentinel(completion, sentinel, new[] { tool },
-                    new ModelProtocolCallContext(new string[0], new string[0])),
+                    new ModelProtocolCallContext(new string[0])),
                 cancellationToken);
         }
 
@@ -112,7 +112,7 @@ namespace RNAssistant.Office.Services
             string toolResultRole,
             CancellationToken cancellationToken)
         {
-            var sentinel = ModelProtocolWire.Write("RESULT_OK", new AgentToolCall[0]);
+            var sentinel = ModelProtocolWire.Write("RESULT_OK", new ConversationToolCall[0]);
             var messages = ToolResultProbeMessages(toolResultRole, sentinel);
             return RunAsync(
                 settings,
@@ -121,15 +121,15 @@ namespace RNAssistant.Office.Services
                 messages,
                 ModelProtocolWire.CreateRequestOptions(responseMode, new ToolDefinition[0]),
                 completion => ValidateSentinel(completion, sentinel, new ToolDefinition[0],
-                    new ModelProtocolCallContext(new[] { "call_1" }, new string[0])),
+                    new ModelProtocolCallContext(new string[0])),
                 cancellationToken);
         }
 
-        private static AgentToolCall ProbeCall()
+        private static ConversationToolCall ProbeCall()
         {
-            return new AgentToolCall
+            return new ConversationToolCall
             {
-                Id = "call_1", Name = "compat.echo", Arguments = new Dictionary<string, object> { ["value"] = "A" }
+                Name = "compat.echo", Arguments = new Dictionary<string, object> { ["value"] = "A" }
             };
         }
 
@@ -141,7 +141,7 @@ namespace RNAssistant.Office.Services
             var expected = ModelProtocolWire.Parse(sentinel, tools, tools, context);
             if (!expected.Success) throw new InvalidOperationException("Invalid local compatibility sentinel: " + expected.Error);
             // Compare validated responses, not DTO serialization as a wire contract.
-            // Exact message/calls must match; the v3 parser rejects additional fields.
+            // Exact message/calls must match; the v4 parser rejects additional fields.
             return JToken.DeepEquals(JToken.FromObject(actual.Response), JToken.FromObject(expected.Response))
                 ? null : "Endpoint changed the required compatibility sentinel.";
         }
@@ -152,7 +152,11 @@ namespace RNAssistant.Office.Services
             const string resultJson = "{\"ok\":true,\"tool_call_id\":\"call_1\",\"name\":\"compat.echo\",\"status\":\"success\",\"message\":\"\",\"data\":{\"value\":\"A\"},\"error\":null}";
             var messages = new List<ChatMessage>
             {
-                AgentJsonProtocol.CreateToolCallMessage(ProbeCall(), "TOOL_OK", null, role)
+                // Synthetic probe history has a local ID; it never authorizes a
+                // real tool execution or asks the provider to allocate identity.
+                AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
+                    { Id = "call_1", Name = ProbeCall().Name, Arguments = ProbeCall().Arguments },
+                    "TOOL_OK", null, role, new AcceptedToolCallOrigin("compatibility-probe", "synthetic-attempt", 0))
             };
             if (string.Equals(role, ToolResultRoles.Tool, StringComparison.Ordinal))
             {

@@ -96,7 +96,7 @@ namespace RNAssistant.Harness
             return command;
         }
 
-        private static string LoadToolSchemaResponse(string toolId, string callId = null)
+        private static string LoadToolSchemaResponse(string toolId)
         {
             return JsonConvert.SerializeObject(new
             {
@@ -105,7 +105,6 @@ namespace RNAssistant.Harness
                 {
                     new
                     {
-                        id = callId ?? "schema_" + (toolId ?? string.Empty).Replace('.', '_'),
                         name = CapabilityDiscoveryExecutor.ReadToolId,
                         arguments = new { id = toolId }
                     }

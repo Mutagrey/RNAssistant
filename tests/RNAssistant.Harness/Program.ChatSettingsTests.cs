@@ -112,7 +112,7 @@ namespace RNAssistant.Harness
 
         private static void SettingsPromptReviewPreservesStoredText()
         {
-            foreach (var oldVersion in new[] { 0, 11 })
+            foreach (var oldVersion in new[] { 0, 11, 12 })
             WithTempPaths(paths =>
             {
                 var service = new SettingsService(paths);
@@ -140,35 +140,41 @@ namespace RNAssistant.Harness
                 AssertEqual("after", loaded.Model, "unrelated settings can still be saved before review");
                 AssertTrue(prompts(legacy).SequenceEqual(prompts(loaded)), "ordinary save preserves custom prompts");
 
-                var rejected = loaded.Clone();
-                rejected.HistoryIntegrityMode = HistoryIntegrityModes.HmacSha256;
-                rejected.HistoryKeySource = HistoryKeySources.CustomSecret;
-                var rejectedFile = File.ReadAllText(paths.SettingsFile);
-                var failed = false;
-                try { service.Save(rejected, null, null, true); }
-                catch (InvalidOperationException) { failed = true; }
-                AssertTrue(failed, "invalid protection settings reject the whole save");
-                AssertEqual(oldVersion, rejected.AgentPromptSchemaVersion, "failed review does not mutate the caller's marker");
-                AssertEqual(rejectedFile, File.ReadAllText(paths.SettingsFile), "failed review does not alter durable settings");
+                foreach (var requestReview in new[] { false, true })
+                {
+                    var rejected = loaded.Clone();
+                    rejected.HistoryIntegrityMode = HistoryIntegrityModes.HmacSha256;
+                    rejected.HistoryKeySource = HistoryKeySources.CustomSecret;
+                    var rejectedFile = File.ReadAllText(paths.SettingsFile);
+                    var failed = false;
+                    try { service.Save(rejected, null, null, requestReview); }
+                    catch (InvalidOperationException) { failed = true; }
+                    AssertTrue(failed, "invalid protection settings reject the whole save, review=" + requestReview);
+                    AssertEqual(oldVersion, rejected.AgentPromptSchemaVersion, "failed save does not mutate the caller's marker");
+                    AssertTrue(prompts(legacy).SequenceEqual(prompts(rejected)), "failed save preserves the caller's custom prompts");
+                    AssertEqual(rejectedFile, File.ReadAllText(paths.SettingsFile), "failed save does not alter durable settings");
+                }
 
                 service.Save(loaded, null, null, true);
                 var reviewed = service.Load();
                 reviewed.EnsureAgentPromptsReviewed();
                 AssertEqual(oldVersion, loaded.AgentPromptSchemaVersion, "save stages review on a copy, not the caller's draft");
                 AssertTrue(prompts(legacy).SequenceEqual(prompts(reviewed)), "explicit review preserves custom text");
-                AssertEqual(AppSettings.CurrentAgentPromptSchemaVersion, reviewed.AgentPromptSchemaVersion, "review persists current schema");
+                AssertEqual(13, reviewed.AgentPromptSchemaVersion, "explicit review persists schema 13 for conversation v4");
                 AssertTrue(File.ReadAllText(paths.SettingsFile).IndexOf("reviewAgentPrompts", StringComparison.OrdinalIgnoreCase) < 0,
                     "review command is transient, not a sticky settings flag");
 
-                legacy.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion + 1;
+                // Keep future-marker reset coverage once, and reset the actual legacy schemas too.
+                legacy.AgentPromptSchemaVersion = oldVersion == 0 ? AppSettings.CurrentAgentPromptSchemaVersion + 1 : oldVersion;
                 new JsonFileStore().Save(paths.SettingsFile, legacy);
                 var reset = service.Load();
                 reset.SystemPrompt = reset.AgentToolsPrompt = reset.AgentSkillsPrompt = reset.ChatSystemPrompt = reset.PlanSystemPrompt = string.Empty;
                 service.Save(reset, null, null, true);
                 var defaults = service.Load();
                 defaults.EnsureAgentPromptsReviewed();
+                AssertEqual(13, defaults.AgentPromptSchemaVersion, "explicit reset persists schema 13");
                 foreach (var instruction in new[] { defaults.SystemPrompt, defaults.ChatSystemPrompt, defaults.PlanSystemPrompt })
-                    AssertContains(instruction, "conversation-response-v3", "explicit reset installs actual v3 defaults");
+                    AssertContains(instruction, "conversation-response-v4", "explicit reset installs actual v4 defaults");
                 AssertTrue(prompts(new AppSettings()).SequenceEqual(prompts(defaults)), "explicit cleared prompts and review select current defaults");
                 AssertEqual("custom compaction", defaults.ContextCompactionPrompt, "conversation review leaves helper instructions alone");
                 AssertEqual("custom title", defaults.ChatTitlePrompt, "title prompt is not implicitly reset");

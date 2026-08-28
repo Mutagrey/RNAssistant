@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.ModelProtocol
@@ -59,28 +58,23 @@ namespace RNAssistant.Core.ModelProtocol
                 return ConversationResponseParseResult.Fail("tool_calls exceeds the maximum of " +
                     ConversationResponseSchemaBuilder.MaximumToolCalls + " calls per response.");
 
-            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var parsedCalls = new List<AgentToolCall>();
+            var parsedCalls = new List<ConversationToolCall>();
             foreach (var token in calls)
             {
                 var call = token as JObject;
-                if (call == null || call.Properties().Any(property => property.Name != "id" &&
-                    property.Name != "name" && property.Name != "arguments"))
-                    return ConversationResponseParseResult.Fail("Each tool call must contain only id, name and arguments.");
-                var id = call["id"] != null && call["id"].Type == JTokenType.String ? (string)call["id"] : null;
+                if (call == null || call.Properties().Any(property => property.Name != "name" && property.Name != "arguments"))
+                    return ConversationResponseParseResult.Fail("Each tool call must contain only name and arguments; runtime assigns call IDs.");
                 var name = call["name"] != null && call["name"].Type == JTokenType.String ? (string)call["name"] : null;
                 var arguments = call["arguments"] as JObject;
-                if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name) || arguments == null)
-                    return ConversationResponseParseResult.Fail("Each tool call requires non-empty string id/name and object arguments.");
-                if (!ids.Add(id))
-                    return ConversationResponseParseResult.Fail("Tool call ids must be unique within one response: " + id + ".");
+                if (string.IsNullOrWhiteSpace(name) || arguments == null)
+                    return ConversationResponseParseResult.Fail("Each tool call requires a non-empty string name and object arguments.");
                 if (arguments.Properties().GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
                     return ConversationResponseParseResult.Fail("Tool arguments must not contain duplicate names that differ only by case.");
                 try
                 {
                     var parsedArguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                     ToolArgumentNormalizer.AddProperties(arguments, parsedArguments);
-                    parsedCalls.Add(new AgentToolCall { Id = id, Name = name, Arguments = parsedArguments });
+                    parsedCalls.Add(new ConversationToolCall { Name = name, Arguments = parsedArguments });
                 }
                 catch (Exception ex) when (ex is FormatException || ex is OverflowException || ex is ArgumentException || ex is InvalidCastException)
                 {

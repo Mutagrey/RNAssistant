@@ -20,29 +20,27 @@ namespace RNAssistant.Core.ModelProtocol
         public string TurnId { get; private set; }
         public string StepId { get; private set; }
         public IReadOnlyList<AgentMessage> AcceptedMessages { get; private set; }
-        public IReadOnlyList<string> AcceptedCallIds { get; private set; }
 
         internal AgentModelRequest(string runId, string turnId, string stepId,
-            IEnumerable<AgentMessage> messages, IEnumerable<string> callIds)
+            IEnumerable<AgentMessage> messages)
         {
             RunId = runId;
             TurnId = turnId;
             StepId = stepId;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
-            AcceptedCallIds = Array.AsReadOnly(callIds.OrderBy(value => value, StringComparer.Ordinal).ToArray());
         }
     }
 
     public sealed class AgentModelResult
     {
-        public AgentResponse Response { get; private set; }
+        public AgentResponseDraft Response { get; private set; }
         public ModelProtocolFailureKind? FailureKind { get; private set; }
         public string Message { get; private set; }
         public bool ProviderRefusal { get; private set; }
 
         private AgentModelResult() { }
 
-        public static AgentModelResult Accepted(AgentResponse response)
+        public static AgentModelResult Accepted(AgentResponseDraft response)
         {
             return new AgentModelResult { Response = response ?? throw new ArgumentNullException(nameof(response)) };
         }

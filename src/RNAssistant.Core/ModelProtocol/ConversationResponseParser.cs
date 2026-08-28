@@ -14,23 +14,10 @@ namespace RNAssistant.Core.ModelProtocol
             IEnumerable<ToolDefinition> runnableCatalog, ModelProtocolCallContext context)
         {
             if (context == null || !context.IsComplete)
-                return ConversationResponseParseResult.Fail("V3 requires a complete accepted-run call context: " +
+                return ConversationResponseParseResult.Fail("V4 requires a complete local batch-safety context: " +
                     (context == null ? "missing context" : context.Error));
-            return Parse(content, callableTools, runnableCatalog, context.AcceptedToolCallIds, context.BatchSafeReadOnlyToolIds);
-        }
-
-        // Both sets come from the caller's accepted run / local execution authority.
-        // Parsing never reserves ids. Only accepting the complete response may do so.
-        // Batching is opt-in: external or unresolved effects must NOT be in the read-only set.
-        public ConversationResponseParseResult Parse(
-            string content,
-            IEnumerable<ToolDefinition> callableTools,
-            IEnumerable<ToolDefinition> runnableCatalog,
-            IEnumerable<string> acceptedToolCallIds,
-            IEnumerable<string> batchSafeReadOnlyToolIds)
-        {
-            if (callableTools == null || runnableCatalog == null || acceptedToolCallIds == null || batchSafeReadOnlyToolIds == null)
-                return ConversationResponseParseResult.Fail("V3 parsing requires explicit callable/catalog, accepted-run ids and batch-safe read-only context.");
+            if (callableTools == null || runnableCatalog == null)
+                return ConversationResponseParseResult.Fail("V4 parsing requires explicit callable/catalog and batch-safe read-only context.");
             var parsed = ConversationResponseJson.Read(content);
             if (!parsed.Success) return parsed;
 
@@ -38,12 +25,11 @@ namespace RNAssistant.Core.ModelProtocol
                 .GroupBy(tool => tool.Id, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
             var catalogIds = new HashSet<string>(runnableCatalog.Where(tool => tool != null).Select(tool => tool.Id), StringComparer.Ordinal);
-            var acceptedIds = new HashSet<string>(acceptedToolCallIds, StringComparer.OrdinalIgnoreCase);
-            var batchSafeIds = new HashSet<string>(batchSafeReadOnlyToolIds, StringComparer.Ordinal);
+            // Batching is opt-in from local authority. External or unresolved
+            // effects must not be in this set; call identity belongs to runtime.
+            var batchSafeIds = new HashSet<string>(context.BatchSafeReadOnlyToolIds, StringComparer.Ordinal);
             foreach (var call in parsed.Response.ToolCalls)
             {
-                if (acceptedIds.Contains(call.Id))
-                    return ConversationResponseParseResult.Fail("Tool call id already exists in the accepted run: " + call.Id + ". Use a new id.");
                 ToolDefinition tool;
                 if (!knownTools.TryGetValue(call.Name, out tool))
                 {

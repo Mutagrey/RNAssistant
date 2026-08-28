@@ -15,7 +15,7 @@
 | 2C3A | Общий active wire owner для runtime/probes, удалить duplicated schema/JSON/validation paths | done host-neutral; 76 targeted tests pass; v2 сохранён |
 | 2C3B | R27: сохранять custom prompts, явный review/reset, guard до model preparation/confirmation | done host-neutral/JS; 22 harness + 5 Node pass; active v2 и prompt schema 11 сохранены; Windows pending |
 | 2C3C | Switch/delete: shared wire/client/prompts/history/version, complete-context enforcement и explicit old-chat skip/reset | done host-neutral; actual v3, 100 targeted cases; explicit review/reset на schema 12; Windows/live-provider qualification открыта |
-| 2 follow-up / 3 consumers | R29/P1: убрать model-owned ID из wire contract, назначать уникальный call ID кодом до execution | Отдельный согласованный protocol switch с history/confirmation/kernel consumers; критерии в [R29](RISK_REGISTER.md#r29--runtime-должен-владеть-идентификаторами-вызовов). Не считать исправленным Phase 3B2 и не ограничиваться усилением prompt |
+| 2 follow-up / 3 consumers | R29/P1: runtime-owned IDs, atomic wire/history v4 | done host-neutral; [evidence](R29_RUNTIME_CALL_IDS.md). Назначение до accepted append, immutable origin/raw mapping, payload/confirmation/replay tests. Windows/live-provider gates открыты; Phase 4 не начата |
 | 3A | Отделить model context/materialization от извлекаемого loop по §15.2 | done host-neutral; ConversationModelSession и существующий AgentTranscript, прежние loop helpers удалены, semantics сохранены |
 | 3B1 | Ввести pure AgentKernel, typed evidence и generic ports | done introduce-only; fake model/tool/store tests; production loop остаётся прежним |
 | 3B2 | Kernel production switch и existing event-store replay | done host-neutral; guards сохранены, старые loop/accounting удалены; Windows/controller delivery и полная Phase 9 matrix открыты |
@@ -29,7 +29,7 @@
 | 12 | Release qualification и packaging | Gates основного маршрута; Windows x64 + Office x64 + VS 2022; Phase 11 не блокирует |
 | 11 | Optional contours | После stable core либо отдельно согласованный post-beta milestone; не расширять release-critical scope автоматически |
 
-До каждого switch сверять его scope и acceptance с [архитектурным аудитом](RISK_REGISTER.md#архитектурный-аудит-2026-08-28) и соответствующим разделом master plan. Уточнение target contracts не запускает будущую фазу и не закрывает runtime gates; R29 исправляется отдельным protocol change, а не случайным ослаблением v3 при Phase 4.
+До каждого switch сверять его scope и acceptance с [архитектурным аудитом](RISK_REGISTER.md#архитектурный-аудит-2026-08-28) и соответствующим разделом master plan. Уточнение target contracts не запускает будущую фазу и не закрывает runtime gates; R29 исправлен отдельным v4 protocol change; его qualification нельзя подменять реализацией Phase 4.
 
 R20 закрыт в 2B: `MaxAgentFormatRetries=20` допускает ровно двадцать protocol responses,
 включая первую. Provider failures и один schema fallback имеют отдельные бюджеты.

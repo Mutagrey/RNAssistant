@@ -16,6 +16,10 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ### Fixed
 
+- Runtime now assigns tool-call IDs before acceptance and preserves them through
+  confirmation and replay. The v4 model contract contains only tool names and
+  arguments, removing ID-collision repairs that could regenerate useful HTML.
+  Existing v3 chats require an explicit new chat/reset; saved prompts need review.
 - Confirmation and normal runs now share runtime accounting; recorded effects survive
   chat replay, cancellation and failures while preparing the next model request.
 - The configured format-attempt limit now includes the first response: 20 stops

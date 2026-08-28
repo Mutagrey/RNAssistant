@@ -82,6 +82,13 @@ namespace RNAssistant.Harness
             AssertEqual("original html", restoredWorkspace.Files[0].Content, "restored workspace is independent from snapshot");
 
             var sourcePlanUri = ResourceUri.Create("chat", "source", "artifact", "plan-1", "revision", "1");
+            const string isoTimestamp = "2026-08-28T12:34:56.000Z";
+            var sourceArgumentsJson = JsonConvert.SerializeObject(new
+            {
+                uri = sourcePlanUri,
+                timestamp = isoTimestamp,
+                values = new[] { isoTimestamp }
+            });
             var sourceMessage = new ChatMessage
             {
                 Id = "message-1",
@@ -92,11 +99,12 @@ namespace RNAssistant.Harness
                 ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                 ResponseStatus = AgentResponseStatuses.Completed,
                 ToolCallId = "call-1",
+                AcceptedCallOrigin = FixtureCallOrigin("accepted-step", "accepted-attempt", 2),
                 ToolName = "rna_excel_read_range",
                 ToolResultRole = ToolResultRoles.Tool,
                 ToolCalls = new List<LlmToolCall>
                 {
-                    new LlmToolCall { Id = "call-1", Type = "function", Name = "rna_excel_read_range", ArgumentsJson = "{\"uri\":\"" + sourcePlanUri + "\"}" }
+                    new LlmToolCall { Id = "call-1", Type = "function", Name = "rna_excel_read_range", ArgumentsJson = sourceArgumentsJson }
                 },
                 ResourceRefs = new List<ResourceRef> { new ResourceRef(sourcePlanUri, "1") },
                 HtmlWorkspaceCheckpoint = new ResourceRef(ResourceUri.Create("chat", "source", "artifact", "html-2", "revision", "2"), "2"),
@@ -117,6 +125,8 @@ namespace RNAssistant.Harness
                     ErrorCode = "pipeline_partial_failure",
                     Retryable = false,
                     ToolId = "excel.write_range",
+                    ArgumentsJson = sourceArgumentsJson,
+                    DataJson = sourceArgumentsJson,
                     RuntimeGuardJson = "{\"version\":1}",
                     Children = new List<ChatActivity>
                     {
@@ -137,6 +147,9 @@ namespace RNAssistant.Harness
             AssertEqual(AgentResponseStatuses.Completed, clonedMessages[0].ResponseStatus,
                 "response status cloned");
             AssertEqual("call-1", clonedMessages[0].ToolCallId, "tool call id cloned");
+            AssertEqual("accepted-step", clonedMessages[0].AcceptedCallOrigin.StepId, "accepted call step cloned");
+            AssertEqual("accepted-attempt", clonedMessages[0].AcceptedCallOrigin.ModelAttemptId, "accepted raw attempt cloned");
+            AssertEqual(2, clonedMessages[0].AcceptedCallOrigin.CallIndex, "accepted raw call position cloned");
             AssertEqual(ToolResultRoles.Tool, clonedMessages[0].ToolResultRole, "tool result role cloned");
             AssertTrue(!object.ReferenceEquals(sourceMessage.ToolCalls[0], clonedMessages[0].ToolCalls[0]), "tool call cloned");
             AssertEqual(sourceMessage.ResourceRefs[0].Uri, clonedMessages[0].ResourceRefs[0].Uri, "resource reference cloned");
@@ -154,8 +167,10 @@ namespace RNAssistant.Harness
             AssertEqual("run-1", clonedMessages[0].Activity.RunId, "activity run id");
             AssertEqual(5, clonedMessages[0].Activity.Sequence, "activity sequence");
             sourceMessage.Content = "Changed";
+            sourceMessage.AcceptedCallOrigin = FixtureCallOrigin("changed-step", "changed-attempt");
             sourceMessage.Activity.Title = "Changed activity";
             AssertEqual("Done", clonedMessages[0].Content, "message clone independent");
+            AssertEqual("accepted-attempt", clonedMessages[0].AcceptedCallOrigin.ModelAttemptId, "clone retains its immutable accepted origin");
             AssertEqual("Write table", clonedMessages[0].Activity.Title, "activity clone independent");
 
             var artifacts = new[]
@@ -175,8 +190,13 @@ namespace RNAssistant.Harness
             ChatResourceReferenceService.LinkMessageResources(forkSession, 0);
             var forkPlanUri = ArtifactUri(forkSession, clonedArtifacts.Single(artifact => artifact.Id == "plan-1"));
             AssertEqual(forkPlanUri, clonedMessages[0].ResourceRefs[0].Uri, "fork rebases durable resource reference");
-            AssertContains(clonedMessages[0].ToolCalls[0].ArgumentsJson, forkPlanUri,
-                "fork rebases structured historical tool arguments");
+            var forkArgumentsJson = sourceArgumentsJson.Replace(sourcePlanUri, forkPlanUri);
+            AssertEqual(forkArgumentsJson, clonedMessages[0].ToolCalls[0].ArgumentsJson,
+                "fork rebases native call URI without normalizing ISO argument strings");
+            AssertEqual(forkArgumentsJson, clonedMessages[0].Activity.ArgumentsJson,
+                "fork rebases activity URI without normalizing pending argument strings");
+            AssertEqual(forkArgumentsJson, clonedMessages[0].Activity.DataJson,
+                "fork rebases result URI without normalizing nested ISO strings");
             var dto = ChatArtifactDto.From(artifacts);
             AssertTrue(string.IsNullOrEmpty(dto.First(item => item.Id == "html-2").InlineText), "bridge omits heavyweight html snapshot body");
             AssertEqual("{}", dto.First(item => item.Id == "plan-1").InlineText, "bridge includes bounded plan payload");
@@ -599,22 +619,30 @@ namespace RNAssistant.Harness
             AssertEqual("portable secret", controller.LastHistorySecret, "history secret");
             AssertTrue(!controller.LastReviewAgentPrompts, "ordinary settings save never opts into prompt review");
 
+            var reviewSettings = new AppSettings
+            {
+                AgentPromptSchemaVersion = 12,
+                SystemPrompt = " custom schema 12 instructions ",
+                PlanSystemPrompt = "reviewed Plan text"
+            };
             var reviewPayload = new JObject
             {
                 ["id"] = "review-prompts", ["type"] = "saveSettings", ["bridgeToken"] = token,
                 ["payload"] = new JObject
                 {
-                    ["settings"] = JObject.FromObject(new AppSettings { AgentPromptSchemaVersion = 0, PlanSystemPrompt = "reviewed Plan text" }),
+                    ["settings"] = JObject.FromObject(reviewSettings),
                     ["reviewAgentPrompts"] = true
                 }
             };
             var reviewResponse = JObject.Parse(bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult());
             AssertTrue(reviewResponse["ok"].Value<bool>() && controller.LastReviewAgentPrompts, "typed bridge forwards explicit review");
-            AssertEqual(0, controller.LastSettings.AgentPromptSchemaVersion, "bridge does not silently relabel the prompt draft");
+            AssertEqual(12, controller.LastSettings.AgentPromptSchemaVersion, "bridge leaves schema approval to the settings service");
+            AssertEqual(reviewSettings.SystemPrompt, controller.LastSettings.SystemPrompt, "bridge preserves custom schema 12 instructions");
             AssertEqual("reviewed Plan text", controller.LastSettings.PlanSystemPrompt, "Plan instructions reach the save boundary");
             ((JObject)reviewPayload["payload"]).Remove("reviewAgentPrompts");
             bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult();
             AssertTrue(!controller.LastReviewAgentPrompts, "review is request-local, not remembered by later saves");
+            AssertEqual(12, controller.LastSettings.AgentPromptSchemaVersion, "ordinary bridge save does not approve schema 12 prompts");
 
             var runtimeLog = JObject.Parse(bridge.HandleMessageAsync(
                 "{\"id\":\"log1\",\"type\":\"getRuntimeLog\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")

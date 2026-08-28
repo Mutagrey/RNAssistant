@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -386,9 +387,13 @@ namespace RNAssistant.Office.Services
             if (!(json.StartsWith("{", StringComparison.Ordinal) || json.StartsWith("[", StringComparison.Ordinal))) return value;
             try
             {
-                var token = JToken.Parse(json);
-                if (!RebaseJsonResourceUris(session, token)) return value;
-                return (prefixLength == 0 ? string.Empty : requiredPrefix + "\n") + token.ToString(Formatting.None);
+                using (var reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None })
+                {
+                    var token = JToken.Load(reader);
+                    while (reader.Read()) { }
+                    if (!RebaseJsonResourceUris(session, token)) return value;
+                    return (prefixLength == 0 ? string.Empty : requiredPrefix + "\n") + token.ToString(Formatting.None);
+                }
             }
             catch (JsonException)
             {

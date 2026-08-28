@@ -6,7 +6,7 @@ using RNAssistant.Core.Models;
 namespace RNAssistant.Core.ModelProtocol
 {
     // One active wire contract for model attempts, transcript envelopes and probes.
-    // No version selection or historical fallback: all active responses use v3.
+    // No version selection or historical fallback: all active responses use v4.
     public static class ModelProtocolWire
     {
         public static LlmRequestOptions CreateRequestOptions(string responseMode, IEnumerable<ToolDefinition> tools)
@@ -27,9 +27,9 @@ namespace RNAssistant.Core.ModelProtocol
             return new ConversationResponseParser().Parse(content, callableTools, runnableCatalog, context);
         }
 
-        public static string Write(string message, IEnumerable<AgentToolCall> calls)
+        public static string Write(string message, IEnumerable<ConversationToolCall> calls)
         {
-            return new ConversationResponse(message ?? string.Empty, calls ?? new AgentToolCall[0]).ToJson();
+            return new ConversationResponse(message ?? string.Empty, calls ?? new ConversationToolCall[0]).ToJson();
         }
     }
 }

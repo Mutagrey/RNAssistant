@@ -1309,7 +1309,7 @@ namespace RNAssistant.Harness
 
         private static ToolCommand Clone(ToolCommand command)
         {
-            var clone = new ToolCommand { ToolId = command.ToolId, Description = command.Description };
+            var clone = new ToolCommand { ToolId = command.ToolId, Description = command.Description, ToolCallId = command.ToolCallId };
             foreach (var pair in command.Arguments)
             {
                 clone.Arguments[pair.Key] = pair.Value;

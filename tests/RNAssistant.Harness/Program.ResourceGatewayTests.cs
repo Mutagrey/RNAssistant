@@ -787,7 +787,7 @@ namespace RNAssistant.Harness
                         AssertEqual(0, mediaMessages.Count, "historical media is absent before explicit read");
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"id\":\"call_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
+                            Content = "{\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     if (calls == 2)
@@ -900,7 +900,7 @@ namespace RNAssistant.Harness
                     {
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю скан.\",\"tool_calls\":[{\"id\":\"call_helper_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
+                            Content = "{\"message\":\"Читаю скан.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     var evidenceMessage = messages.First(message => message != null && message.ProtocolMessage &&

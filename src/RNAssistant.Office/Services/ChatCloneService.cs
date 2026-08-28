@@ -217,6 +217,7 @@ namespace RNAssistant.Office.Services
                 ResponseStatus = message.ResponseStatus,
                 ExecutionSummary = message.ExecutionSummary == null ? null : message.ExecutionSummary.Clone(),
                 ToolCallId = message.ToolCallId,
+                AcceptedCallOrigin = message.AcceptedCallOrigin,
                 ToolName = message.ToolName,
                 ToolResultRole = message.ToolResultRole,
                 ToolCalls = message.ToolCalls == null

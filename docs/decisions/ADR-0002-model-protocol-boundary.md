@@ -1,7 +1,12 @@
 # ADR-0002: ModelProtocol owns raw model attempts
 
 Date: 2026-08-28
-Status: Accepted (2A boundary, 2B retry policy, 2C1–2C3B preparation, 2C3C active v3 switch/delete; Windows qualification open)
+Status: Accepted (raw-attempt boundary and retry policy; R29 switches the active wire/history contract to v4; qualification recorded separately)
+
+Current contract: [Conversation Response v4](../protocols/CONVERSATION_RESPONSE_V4.md)
+and [ADR-0009: runtime-owned call IDs](ADR-0009-runtime-owned-tool-call-ids.md).
+The Phase 2C sections below retain the history of the v2→v3 transition; their
+implementation/evidence claims do not qualify the later R29 switch.
 
 ## Context
 
@@ -17,20 +22,22 @@ concerns to Core and requires the loop to consume one typed outcome per step.
   One instance serves one run; only the endpoint-format fallback choice survives
   between steps. Confirmation continuation creates a fresh instance, as before.
 - Pass the accepted materialized prompt, current callable tools, runnable catalog
-  and request-local options, including complete run-ID/safety context. Return
-  either an accepted `ConversationResponse` with completion/usage metadata,
+  and request-local options, including explicit local batch-safety context. Return
+  either an ID-free `ConversationResponse` with completion/usage metadata and an
+  immutable `SourceModelAttemptId` from its successful raw dispatch,
   separate native `ProviderRefusal` with its completion, or a typed
   `ModelProtocolFailure`. No rejected
-  completion is returned. Core neither executes tools nor changes chat history,
+  completion is returned. ModelProtocol neither executes tools nor changes chat history,
   resource revisions or the working set.
 - Each repair copies the accepted message sequence and appends one current fixed
   instruction. Rejected bodies and earlier repair instructions are not replayed.
   Hydrated media remains available throughout that logical protocol step; the
   loop releases it in `finally` after acceptance/failure, before tool execution.
 - Keep request/response persistence on the existing configured trace sink. Core
-  creates distinct raw attempt ids and accepted/rejected markers; the loop owns
-  the logical step id. Rejected diagnostic failure stops execution. Failure of
-  the optional accepted marker cannot change an accepted outcome.
+  creates distinct raw attempt IDs even without optional diagnostics; AgentKernel
+  owns the logical step ID and runtime call-ID allocation. Rejected diagnostic
+  failure stops execution. Optional accepted markers carry no allocated call IDs
+  and cannot change an accepted outcome or supply execution authority.
 - Keep provisional content/reasoning presentation in the Office stream projector,
   reset per attempt through callbacks. It is not accepted history. No UI code or
   storage format changes are part of this extraction.
@@ -43,7 +50,7 @@ concerns to Core and requires the loop to consume one typed outcome per step.
 
 `ModelProtocolRetryBudget` is created once per `GetResponseAsync`, not for each
 repair or raw request. A protocol attempt counts a received completion submitted
-to the active parser (now v3) or accepted native refusal, including the first response.
+to the active parser (now v4) or accepted native refusal, including the first response.
 
 | Budget | Limit | On exhaustion |
 |---|---|---|
@@ -118,8 +125,8 @@ no feature flag, dual execution or dual-write. Active requests/history still use
 v2; the current `AgentResponseProtocol.CurrentVersion` remains 2. Native refusals,
 retry counts, runtime health and Office dispatch are unchanged.
 
-[The v3 canonical contract](../protocols/CONVERSATION_RESPONSE_V3.md) defines the
-remaining gates: saved prompts, complete run-ID/effective-safety context (R26),
+[The historical v3 contract](../protocols/CONVERSATION_RESPONSE_V3.md) recorded the
+remaining gates at this phase: saved prompts, complete run-ID/effective-safety context (R26),
 all current-run history forms, v3-only new accepted writes and removal of superseded
 live v2 paths. Phase 2 is not complete and Phase 3 is not authorized by this commit.
 
@@ -262,7 +269,24 @@ as R24. Provider retries may repeat billable generation or extend latency after 
 lost response (R25); they cannot replay Office tool execution. Real provider,
 Windows/Office/controller/WebView qualification remains open.
 
-Evidence and exact commands: [Phase 2A](../stabilization/PHASE_2A_MODEL_PROTOCOL.md),
+### Runtime-owned IDs (R29)
+
+The coordinated v4 switch replaces model-owned IDs with ID-free wire/kernel
+drafts and kernel-allocated accepted calls. `ModelProtocolCallContext` now contains
+only local batch-safety authority. `SourceModelAttemptId` binds acceptance to the
+exact successful raw attempt after any repair; raw content is never rewritten.
+Accepted history stores each runtime ID and immutable step/attempt/position origin
+together in the existing `session.commit`, before confirmation or dispatch.
+Runtime collisions are infrastructure faults, not format repair. Full-history v4
+preflight and prompt schema 13 explicit review/reset switch with the consumers;
+there is no historical compatibility path or automatic data conversion.
+
+The detailed decision is [ADR-0009](ADR-0009-runtime-owned-tool-call-ids.md).
+Current [contract and open gates](../protocols/CONVERSATION_RESPONSE_V4.md#remaining-cutover-gates)
+and [R29 evidence](../stabilization/R29_RUNTIME_CALL_IDS.md) supersede the historical
+v3 cutover status without changing the retry budgets above.
+
+Historical evidence and exact commands: [Phase 2A](../stabilization/PHASE_2A_MODEL_PROTOCOL.md),
 [Phase 2B](../stabilization/PHASE_2B_RETRY_POLICY.md),
 [Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md),
 [Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md),

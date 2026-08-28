@@ -9,7 +9,7 @@ namespace RNAssistant.Core.ModelProtocol
 {
     public static class ConversationResponseSchemaBuilder
     {
-        public const string SchemaName = "rnassistant_conversation_response_v3";
+        public const string SchemaName = "rnassistant_conversation_response_v4";
         public const int MaximumToolCalls = 32;
 
         public static string Build(IEnumerable<ToolDefinition> callableTools)
@@ -27,20 +27,19 @@ namespace RNAssistant.Core.ModelProtocol
                     ["type"] = "object",
                     ["properties"] = new JObject
                     {
-                        ["id"] = new JObject { ["type"] = "string", ["minLength"] = 1,
-                            ["description"] = "Unique tool call id across the accepted run, not just this response." },
                         ["name"] = new JObject { ["type"] = "string", ["const"] = tool.Id },
                         ["arguments"] = ToolSchemaSupport.ForStructuredOutput(parameters)
                     },
-                    ["required"] = new JArray("id", "name", "arguments"),
+                    ["required"] = new JArray("name", "arguments"),
                     ["additionalProperties"] = false
                 });
             }
             return new JObject
             {
                 ["type"] = "object",
-                ["description"] = "Conversation response v3. Return only message and tool_calls. Runtime owns lifecycle and execution health. " +
-                    "Write, external and confirmation-required calls must be singleton; only independent read-only calls may be batched, in sequence.",
+                ["description"] = "Conversation response v4. Return only message and tool_calls; each call contains only name and arguments. " +
+                    "Runtime assigns call IDs and owns lifecycle and execution health. Write, external, confirmation-required and unclassified calls " +
+                    "must be singleton; only independent local read-only calls may be batched, in sequence.",
                 ["properties"] = new JObject
                 {
                     ["message"] = new JObject { ["type"] = "string", ["description"] = "User-facing message; its wording does not determine execution success." },

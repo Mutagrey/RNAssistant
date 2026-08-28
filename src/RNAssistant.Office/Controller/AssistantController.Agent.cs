@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -571,8 +572,12 @@ namespace RNAssistant.Office
 
             try
             {
-                var args = JObject.Parse(activity.ArgumentsJson);
-                ToolArgumentNormalizer.AddProperties(args, command.Arguments);
+                using (var reader = new JsonTextReader(new StringReader(activity.ArgumentsJson)) { DateParseHandling = DateParseHandling.None })
+                {
+                    var args = JObject.Load(reader);
+                    while (reader.Read()) { }
+                    ToolArgumentNormalizer.AddProperties(args, command.Arguments);
+                }
             }
             catch (JsonException)
             {

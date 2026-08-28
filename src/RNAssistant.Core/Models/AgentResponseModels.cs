@@ -1,14 +1,15 @@
 using System;
 using System.Collections.Generic;
+using RNAssistant.Core.ModelProtocol;
 
 namespace RNAssistant.Core.Models
 {
     public static class AgentResponseProtocol
     {
-        public const int CurrentVersion = 3;
+        public const int CurrentVersion = ConversationResponse.ProtocolVersion;
     }
 
-    // Existing runtime/history projection labels, never model-owned v3 fields.
+    // Existing runtime/history projection labels, never model-owned wire fields.
     // Their lifecycle replacement belongs to Phase 3.
     public static class AgentResponseStatuses
     {

@@ -47,6 +47,7 @@ namespace RNAssistant.Office.Services
                 throw HistoryFailure("Версия протокола последнего запуска несовместима.");
             // Check the full projection, never the compacted prompt window. Suppressed
             // accepted responses still belong to this chat; activities/results do not.
+            var origins = new HashSet<Tuple<string, string, int>>();
             foreach (var message in session.Messages)
             {
                 if (message.Activity != null || !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)) continue;
@@ -54,6 +55,9 @@ namespace RNAssistant.Office.Services
                     throw HistoryFailure("История содержит ответ другой или неизвестной версии протокола.");
                 var parsed = ConversationResponseHistoryReader.Read(message);
                 if (!parsed.Success) throw HistoryFailure("Неполная запись принятого ответа: " + parsed.Error);
+                var origin = message.AcceptedCallOrigin;
+                if (origin != null && !origins.Add(Tuple.Create(origin.StepId, origin.ModelAttemptId, origin.CallIndex)))
+                    throw HistoryFailure("Один вызов model attempt связан с несколькими accepted records.");
             }
         }
 
@@ -88,8 +92,7 @@ namespace RNAssistant.Office.Services
                 {
                     var parsed = ConversationResponseHistoryReader.Read(message);
                     if (!parsed.Success) throw HistoryFailure("Cannot reconstruct accepted calls: " + parsed.Error);
-                    history.Add(AgentMessage.Assistant(new AgentResponse(parsed.Response.Message,
-                        parsed.Response.ToolCalls.Select(ConversationKernelAdapter.ToCoreCall))));
+                    history.Add(AgentMessage.Assistant(parsed.Response));
                 }
                 else if (message.ProtocolMessage && !string.IsNullOrWhiteSpace(message.ToolCallId))
                     history.Add(AgentMessage.AcceptedToolResult(message.ToolCallId, string.Empty, message.Content));

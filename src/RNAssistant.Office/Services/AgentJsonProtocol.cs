@@ -15,18 +15,6 @@ namespace RNAssistant.Office.Services
         internal const int DefaultMaxToolResultDataTokens = 8192;
         private const int MaxToolResultMessageTokens = 512;
 
-        public static ToolCommand ToCommand(AgentToolCall call)
-        {
-            return new ToolCommand
-            {
-                ToolId = call == null ? string.Empty : call.Name,
-                ToolCallId = call == null ? string.Empty : call.Id,
-                Arguments = call == null
-                    ? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
-                    : call.Arguments ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
-            };
-        }
-
         public static string BuildToolResult(ToolCommand command, ToolResult result)
         {
             return BuildToolResult(command, result, DefaultMaxToolResultDataTokens, null);
@@ -196,8 +184,11 @@ namespace RNAssistant.Office.Services
             AgentToolCall call,
             string message,
             RNAssistant.Core.Llm.LlmCompletionResult completion,
-            string toolResultRole)
+            string toolResultRole,
+            AcceptedToolCallOrigin origin)
         {
+            if (call == null || string.IsNullOrWhiteSpace(call.Id) || string.IsNullOrWhiteSpace(call.Name) || origin == null)
+                throw new ArgumentException("Accepted runtime call identity and origin are required.");
             var normalizedRole = ToolResultRoles.Normalize(toolResultRole);
             if (string.Equals(normalizedRole, ToolResultRoles.Tool, StringComparison.Ordinal))
             {
@@ -205,18 +196,19 @@ namespace RNAssistant.Office.Services
                 nativeMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
                 nativeMessage.ResponseStatus = AgentResponseStatuses.InProgress;
                 nativeMessage.ToolResultRole = normalizedRole;
-                nativeMessage.ToolCallId = call == null ? string.Empty : call.Id ?? string.Empty;
+                nativeMessage.ToolCallId = call.Id;
+                nativeMessage.AcceptedCallOrigin = origin;
                 // ToolCalls keeps the provider-safe name; ToolName is local replay metadata and preserves the canonical id.
-                nativeMessage.ToolName = call == null ? string.Empty : call.Name ?? string.Empty;
+                nativeMessage.ToolName = call.Name;
                 nativeMessage.ToolCalls = new List<LlmToolCall>
                 {
                     new LlmToolCall
                     {
-                        Id = call == null ? string.Empty : call.Id ?? string.Empty,
+                        Id = call.Id,
                         Type = "function",
-                        Name = ApiToolName(call == null ? null : call.Name),
+                        Name = ApiToolName(call.Name),
                         ArgumentsJson = JsonConvert.SerializeObject(
-                            call == null || call.Arguments == null
+                            call.Arguments == null
                                 ? new Dictionary<string, object>()
                                 : call.Arguments)
                     }
@@ -224,14 +216,16 @@ namespace RNAssistant.Office.Services
                 nativeMessage.ProtocolMessage = true;
                 return nativeMessage;
             }
-            var content = ModelProtocolWire.Write(message, new[] { call });
+            var content = ModelProtocolWire.Write(message, new[] { new ConversationToolCall
+                { Name = call.Name, Arguments = call.Arguments } });
             var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
             protocolMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             protocolMessage.ResponseStatus = AgentResponseStatuses.InProgress;
             protocolMessage.ProtocolMessage = true;
             protocolMessage.ToolResultRole = normalizedRole;
-            protocolMessage.ToolCallId = call == null ? string.Empty : call.Id ?? string.Empty;
-            protocolMessage.ToolName = call == null ? string.Empty : call.Name ?? string.Empty;
+            protocolMessage.ToolCallId = call.Id;
+            protocolMessage.AcceptedCallOrigin = origin;
+            protocolMessage.ToolName = call.Name;
             return protocolMessage;
         }
 
