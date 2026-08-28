@@ -48,6 +48,7 @@
   <ItemGroup>
     <Compile Include="..\..\src\RNAssistant.Core\Models\*.cs" Link="Core\Models\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\*.cs" Link="Core\Llm\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Core\ModelProtocol\*.cs" Link="Core\ModelProtocol\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\Tools\*.cs" Link="Core\Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\Services\*.cs" Link="Core\Services\%(Filename)%(Extension)" />
     <Compile

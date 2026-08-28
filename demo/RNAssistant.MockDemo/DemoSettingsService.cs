@@ -40,14 +40,24 @@ namespace RNAssistant.Core.Storage
 
         public void Save(AppSettings settings)
         {
-            _json.Save(_paths.SettingsFile, Normalize(settings ?? new AppSettings()));
+            Save(settings, null, null);
         }
 
-        public void Save(AppSettings settings, string apiKey, string historySecret)
+        public void Save(AppSettings settings, string apiKey, string historySecret, bool reviewAgentPrompts = false)
         {
+            var normalized = Normalize((settings ?? new AppSettings()).Clone());
+            var current = Load();
+            if (reviewAgentPrompts)
+            {
+                normalized.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion;
+            }
+            else if (current.AgentPromptSchemaVersion != AppSettings.CurrentAgentPromptSchemaVersion)
+            {
+                normalized.AgentPromptSchemaVersion = current.AgentPromptSchemaVersion;
+            }
             if (apiKey != null) _apiKey = apiKey;
             if (historySecret != null) _historySecret = historySecret;
-            Save(settings);
+            _json.Save(_paths.SettingsFile, normalized);
         }
 
         public string LoadApiKey()
