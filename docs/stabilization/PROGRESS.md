@@ -10,6 +10,8 @@ Open gates / remaining legacy: R26/R27 закрыты host-neutral для actual
 
 Workflow update (2026-08-28, docs-only): §§14.3, 22–23 — обоснованный единый switch может затронуть более 10 файлов; проверки применяются по изменению, повторные прогоны без новой причины не нужны; отчёт краткий. Runtime и открытые gates не изменены. Docs diff/links — OK; pre-commit ValidateVersionFormat — pass; build/tests для этой правки не запускались.
 
+Migration sequencing update (2026-08-28, docs-only): Phase 3 изолирует kernel от resource lifecycle и проверяет минимальный RunSummary replay через существующие events; Phases 8/9 меняют внешние реализации, не повторяют извлечение. Проверки новых границ — при switch, Phase 10 — общая сверка. Основной маршрут 0–10 → 12 → stable; Phase 11 отдельно. Scope VBA package lifecycle пока не сокращён: общий journal нужен rename. Это уточнение плана, не начало Phase 3 и не закрытие R11/Windows gates; текущий следующий шаг указан в заголовке. Docs diff/затронутые ссылки и pre-commit ValidateVersionFormat — OK; build/tests для этой правки не запускались.
+
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 Обязательный источник требований: [master plan](STABILIZATION_MASTER_PLAN.md).
@@ -27,7 +29,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
 | 9 | pending | — | — | — | Persistence / UI projection |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
-| 11 | pending | — | — | — | Optional contours |
+| 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
 ## Phase 0 substeps

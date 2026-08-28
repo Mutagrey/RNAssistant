@@ -1,7 +1,7 @@
 # Stabilization backlog
 
 Новые product features заморожены. Следующая фаза начинается отдельным изменением
-после Definition of Done предыдущей, согласно [master plan](STABILIZATION_MASTER_PLAN.md).
+после Definition of Done предыдущей на основном маршруте 0–10 → 12, согласно [master plan](STABILIZATION_MASTER_PLAN.md). Phase 11 — отдельная ветка после stable core, не prerequisite release qualification.
 
 | Phase | Работа | Условие начала / проверки |
 |---|---|---|
@@ -15,16 +15,16 @@
 | 2C3A | Общий active wire owner для runtime/probes, удалить duplicated schema/JSON/validation paths | done host-neutral; 76 targeted tests pass; v2 сохранён |
 | 2C3B | R27: сохранять custom prompts, явный review/reset, guard до model preparation/confirmation | done host-neutral/JS; 22 harness + 5 Node pass; active v2 и prompt schema 11 сохранены; Windows pending |
 | 2C3C | Switch/delete: shared wire/client/prompts/history/version, complete-context enforcement и explicit old-chat skip/reset | done host-neutral; actual v3, 100 targeted cases; explicit review/reset на schema 12; Windows/live-provider qualification открыта |
-| 3 | Минимальный AgentKernel и runtime-owned RunSummary | Вся Phase 2 завершена, не только boundary extraction |
+| 3 | Минимальный AgentKernel, runtime-owned RunSummary и его save/replay через существующий event store | Вся Phase 2 завершена; working set/resource lifecycle остаётся вне kernel, граница проверяется при switch |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests смены активной книги и lifetime |
-| 6 | VBA vertical slice | Canonicalization, exact patch, journal, read-back/fault matrix |
+| 6 | VBA vertical slice; отдельно оценить необходимость пользовательского package lifecycle для stable | Canonicalization, exact patch, journal, read-back/fault matrix; общий package journal нужен rename, сокращение scope пока не согласовано |
 | 7 | Excel read/write vertical slice | Bound target, write-effect evidence |
-| 8 | Resource read plane / immutable ToolPack | Нет LRU eviction во время run |
-| 9 | Persistence / UI projection | Replay не принимает execution decisions |
-| 10 | Финальная структурная сверка и architecture tests | Локальная чистка уже выполняется при каждом switch; закрыть MIGRATION_MAP |
-| 11 | Optional contours | Только после отдельной миграции; не расширять release-critical scope |
-| 12 | Release qualification и packaging | Все gates master plan; Windows x64 + Office x64 + VS 2022 |
+| 8 | Resource read plane / immutable ToolPack | Заменить внешний lifecycle без переделки kernel; нет LRU eviction во время run |
+| 9 | Persistence / UI projection | Расширить минимальный replay Phase 3; replay не принимает execution decisions |
+| 10 | Финальная структурная сверка и architecture tests | Чистка и проверки границ уже выполняются при switch; дополнить coverage, закрыть core-миграции; optional consumers оставить с gates Phase 11 |
+| 12 | Release qualification и packaging | Gates основного маршрута; Windows x64 + Office x64 + VS 2022; Phase 11 не блокирует |
+| 11 | Optional contours | После stable core либо отдельно согласованный post-beta milestone; не расширять release-critical scope автоматически |
 
 R20 закрыт в 2B: `MaxAgentFormatRetries=20` допускает ровно двадцать protocol responses,
 включая первую. Provider failures и один schema fallback имеют отдельные бюджеты.

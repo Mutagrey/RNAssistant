@@ -390,7 +390,7 @@ web
     → typed bridge DTO only
 ```
 
-После стабилизации эти правила должны контролироваться architecture tests.
+Каждую новую границу проверять уже при её switch: использовать существующие compile/contract checks, а при пробеле добавить минимальную targeted architecture check. Не вводить отдельный framework и не дублировать покрытие. Phase 10 сводит проверки в общую матрицу, а не впервые обнаруживает смешение контуров.
 
 ---
 
@@ -1623,11 +1623,13 @@ ui.projected
 
 - [ ] Создать `AgentKernel`.
 - [ ] По §15.2 отделить извлекаемый цикл `ConversationRunService` от подготовки prompts/compaction/media и материализации результатов; использовать существующие services, не менять ToolPack/Resource Fabric semantics Phase 8.
+- [ ] Оставить текущие working set/read-evidence/LRU операции за границей kernel; он не управляет resource capability lifecycle. Phase 8 заменяет внешнюю реализацию каталога, а не повторно извлекает её из цикла.
 - [ ] Обычный запуск и confirmation continuation в `AssistantController.Agent` подключить к общей kernel-логике учёта выполнения; сохранить confirmation/fingerprint gates и отдельную проверку controller wiring.
 - [ ] Создать `RunSummary`.
 - [ ] Создать `ExecutionHealth`.
 - [ ] Создать `ToolExecutionRecord`.
 - [ ] Подключить текущий executor через adapter.
+- [ ] Подключить минимальный `IRunStore` к существующим typed append-only events через adapter. Проверить сохранение/replay нового `RunSummary` (lifecycle, health, counts и pending confirmation) для нормального, error/unknown и confirmation сценариев; использовать/расширить существующее покрытие. Не вводить новый durable store, snapshot authority или полную переработку storage/UI Phase 9.
 - [ ] Перевести текущий цикл на accepted model response, tool execution, accepted tool result, next step и run summary.
 - [ ] Удалить direct mapping model `completed` → `RunStatus=completed`.
 - [ ] Не принимать model `blocked/refused` как runtime truth без локальной классификации; текст при этом сохраняется как narrative.
@@ -1649,7 +1651,7 @@ ui.projected
 
 ### Definition of Done
 
-`AgentKernel` тестируется без Excel, WebView2, HTTP и real LLM. Model wording не влияет на execution health.
+`AgentKernel` тестируется без Excel, WebView2, HTTP и real LLM; его граница с Office/domain executors и resource lifecycle проверена. Model wording не влияет на execution health. Минимальный replay через существующий event store сохраняет новый authoritative итог; полная нормализация persistence/UI остаётся Phase 9.
 
 ---
 
@@ -1742,6 +1744,8 @@ ui.projected
 5. restore.
 6. package operations.
 
+До переноса package operations отдельно проверить, нужен ли весь пользовательский install/run/remove lifecycle первому stable core. Это вопрос scope, а не разрешение пропустить пункт: перенос в Phase 11 возможен только после проверки consumers и явного согласования. Общий package journal/recovery сохраняется для основных mutations: текущий rename использует `ExecuteJournaledPackageMutation`; отсутствие пользовательских packages не делает этот путь мёртвым.
+
 ### Выполнить
 
 - [ ] Извлечь `VbaPatchEngine` из `VbaToolExecutor.Patching`: текстовая логика отдельно от `ToolResult`, resource-подсказок, COM и journal orchestration.
@@ -1821,7 +1825,7 @@ Excel read/write добавлены через ToolRuntime и DocumentSession, A
 
 - [ ] Зафиксировать `Resource = data`.
 - [ ] Сохранить `rna://`, revisions, CAS, cursors.
-- [ ] Удалить зависимость AgentKernel от resource capability lifecycle.
+- [ ] Заменить оставленную вне AgentKernel реализацию resource capability lifecycle; сохранить проверенную в Phase 3 границу, не менять kernel loop ради ToolPack.
 - [ ] Ввести `ToolPackSnapshot`.
 - [ ] Core Excel/VBA pack передавать полностью.
 - [ ] Отключить LRU eviction в stabilized runtime.
@@ -1852,7 +1856,7 @@ Resource provider можно добавить без изменения AgentKer
 ### Выполнить
 
 - [ ] Ввести или нормализовать:
-  - [ ] `IRunStore`;
+  - [ ] `IRunStore` (минимальный port/adapter уже подключён в Phase 3; сохранить его контракт и replay coverage);
   - [ ] `IConversationStore`;
   - [ ] `IEventStore`.
 - [ ] Разделить:
@@ -1860,7 +1864,7 @@ Resource provider можно добавить без изменения AgentKer
   - [ ] Domain Diagnostic Events.
 - [ ] Accepted model/tool events остаются canonical.
 - [ ] Rejected model attempts остаются diagnostics.
-- [ ] Replay должен восстанавливать тот же `RunSummary`.
+- [ ] Расширить минимальное replay coverage Phase 3 до полной persistence/UI матрицы; replay должен восстанавливать тот же `RunSummary`.
 - [ ] UI получает typed `RunViewState`.
 - [ ] Отдельно отображать:
   - [ ] model message;
@@ -1897,7 +1901,7 @@ Resource provider можно добавить без изменения AgentKer
 - [ ] Обновить old-style `.csproj`.
 - [ ] Проверить отсутствие забытых legacy branches; удалить оставшиеся после переключения последних consumers, не повторять уже выполненную локальную чистку.
 - [ ] Проверить отсутствие superseded canonical docs; исторические evidence/ADR не считать действующими инструкциями.
-- [ ] Добавить architecture tests:
+- [ ] Свести и дополнить architecture checks, введённые при switch контуров, без дублирования существующего покрытия:
   - [ ] Core.Agent не зависит от Office;
   - [ ] ModelProtocol не зависит от Tools execution;
   - [ ] VBA не зависит от UI;
@@ -1906,7 +1910,7 @@ Resource provider можно добавить без изменения AgentKer
   - [ ] UI не зависит от domain executors.
 - [ ] Обновить `ARCHITECTURE.md`.
 - [ ] Обновить `AGENTS.md` под фактическую архитектуру.
-- [ ] Закрыть `MIGRATION_MAP.md`.
+- [ ] Закрыть миграции обязательного core scope в `MIGRATION_MAP.md`; оставшихся optional consumers явно закрепить за Phase 11 с removal gates. Это не разрешает включать неквалифицированные контуры в release Phase 12.
 
 ### Definition of Done
 
@@ -1916,7 +1920,7 @@ Resource provider можно добавить без изменения AgentKer
 
 ## Phase 11 — Optional contours
 
-Каждый контур переносится отдельной minor feature после stable core либо как отдельный post-beta milestone.
+Phase 11 — отдельная ветка после stable core, не prerequisite Phase 12. Каждый контур переносится отдельной minor feature. Более ранний post-beta milestone допустим только по отдельному явному решению, со своими gates и без автоматического расширения scope первого stable.
 
 Порядок:
 
@@ -1987,6 +1991,8 @@ Resource provider можно добавить без изменения AgentKer
 - autonomous self-repair.
 
 ### Qualification
+
+Проверки document binding/lifetime и VBA/Excel effects, назначенные в Phases 5–7, выполняются в своих фазах на Windows x64 + Office + VS 2022. Phase 12 — итоговая qualification, не основание откладывать эти gates или считать fake host tests заменой COM validation.
 
 - [ ] Полный host-neutral harness.
 - [ ] Architecture tests.
@@ -2298,12 +2304,14 @@ Persistence / UI
     ↓
 Physical cleanup
     ↓
-Optional contours
-    ↓
 Release qualification
     ↓
 16.1.0
+    ↓
+Optional contours — отдельные последующие milestones
 ```
+
+Основной маршрут: Phases 0–10 → Phase 12 → stable core. Phase 11 не блокирует этот маршрут; исключение для отдельно согласованного post-beta milestone описано в Phase 11.
 
 Основная проверка каждого архитектурного решения:
 
