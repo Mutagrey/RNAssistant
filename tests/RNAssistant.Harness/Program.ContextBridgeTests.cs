@@ -18,6 +18,7 @@ using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
 using RNAssistant.Desktop;
 using RNAssistant.OfficeHosts;
+using RuntimeToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
 {
@@ -173,6 +174,29 @@ namespace RNAssistant.Harness
             AssertEqual("accepted-attempt", clonedMessages[0].AcceptedCallOrigin.ModelAttemptId, "clone retains its immutable accepted origin");
             AssertEqual("Write table", clonedMessages[0].Activity.Title, "activity clone independent");
 
+            var sourceResults = new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool }
+                .Select(role =>
+                {
+                    var terminal = RuntimeToolResult.Ok("Read", sourceArgumentsJson,
+                        new[] { new ResourceRef(sourcePlanUri, "1") });
+                    var message = AgentJsonProtocol.CreateToolResultMessage(
+                        new ToolCommand { ToolCallId = "result-" + role, ToolId = "excel.read_range" }, terminal, role);
+                    message.ResourceRefs = terminal.Resources.ToList();
+                    return message;
+                }).ToArray();
+            var clonedResults = ChatCloneService.CloneMessages(sourceResults);
+            for (var index = 0; index < sourceResults.Length; index++)
+            {
+                var sourceResult = sourceResults[index];
+                var clonedResult = clonedResults[index];
+                AssertEqual(1, clonedResult.ToolResultProtocolVersion, "Tool Result v1 marker survives cloning");
+                AssertEqual(sourceResult.Content, clonedResult.Content, "typed result envelope is preserved exactly");
+                AssertEqual(sourceResult.ToolCallId, clonedResult.ToolCallId, "result clone retains runtime correlation");
+                sourceResult.ToolResultProtocolVersion = 0;
+                AssertEqual(1, clonedResult.ToolResultProtocolVersion, "clone retains its own result version marker");
+            }
+            clonedMessages.AddRange(clonedResults);
+
             var artifacts = new[]
             {
                 new ChatArtifact { Id = "plan-1", Kind = ChatArtifactKinds.Markdown, Title = "Note", InlineText = "{}", RelatedArtifactIds = new List<string> { "related" } },
@@ -197,6 +221,27 @@ namespace RNAssistant.Harness
                 "fork rebases activity URI without normalizing pending argument strings");
             AssertEqual(forkArgumentsJson, clonedMessages[0].Activity.DataJson,
                 "fork rebases result URI without normalizing nested ISO strings");
+            foreach (var resultMessage in clonedResults)
+            {
+                var json = resultMessage.Role == ToolResultRoles.Tool ? resultMessage.Content
+                    : resultMessage.Content.Substring("TOOL_RESULT:\n".Length);
+                var body = JsonConvert.DeserializeObject<JObject>(json,
+                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
+                var reference = resultMessage.ResourceRefs.Single();
+                AssertEqual(forkPlanUri, reference.Uri, resultMessage.Role + " result metadata uses the fork URI");
+                AssertEqual(reference.Uri, (string)body["resources"][0]["uri"],
+                    resultMessage.Role + " result resources agree with rebased metadata");
+                AssertEqual(reference.Uri, (string)body["data"]["uri"],
+                    resultMessage.Role + " result data agrees with rebased metadata");
+                AssertEqual("1", reference.Revision, "fork preserves the metadata revision");
+                AssertEqual(reference.Revision, (string)body["resources"][0]["revision"], "fork preserves the wire revision");
+                AssertEqual(forkArgumentsJson, body["data"].ToString(Formatting.None),
+                    resultMessage.Role + " result keeps literal ISO strings in object and array data");
+                AssertEqual(1, resultMessage.ToolResultProtocolVersion, "fork preserves the current result marker");
+                AssertEqual("ok", (string)body["status"], "fork preserves terminal status");
+                AssertEqual("result-" + resultMessage.Role, resultMessage.ToolCallId, "fork preserves runtime call identity");
+                AssertEqual(resultMessage.ToolCallId, (string)body["tool_call_id"], "fork preserves wire call correlation");
+            }
             var dto = ChatArtifactDto.From(artifacts);
             AssertTrue(string.IsNullOrEmpty(dto.First(item => item.Id == "html-2").InlineText), "bridge omits heavyweight html snapshot body");
             AssertEqual("{}", dto.First(item => item.Id == "plan-1").InlineText, "bridge includes bounded plan payload");
@@ -621,8 +666,8 @@ namespace RNAssistant.Harness
 
             var reviewSettings = new AppSettings
             {
-                AgentPromptSchemaVersion = 12,
-                SystemPrompt = " custom schema 12 instructions ",
+                AgentPromptSchemaVersion = 13,
+                SystemPrompt = " custom schema 13 instructions ",
                 PlanSystemPrompt = "reviewed Plan text"
             };
             var reviewPayload = new JObject
@@ -636,13 +681,13 @@ namespace RNAssistant.Harness
             };
             var reviewResponse = JObject.Parse(bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult());
             AssertTrue(reviewResponse["ok"].Value<bool>() && controller.LastReviewAgentPrompts, "typed bridge forwards explicit review");
-            AssertEqual(12, controller.LastSettings.AgentPromptSchemaVersion, "bridge leaves schema approval to the settings service");
-            AssertEqual(reviewSettings.SystemPrompt, controller.LastSettings.SystemPrompt, "bridge preserves custom schema 12 instructions");
+            AssertEqual(13, controller.LastSettings.AgentPromptSchemaVersion, "bridge leaves schema approval to the settings service");
+            AssertEqual(reviewSettings.SystemPrompt, controller.LastSettings.SystemPrompt, "bridge preserves custom schema 13 instructions");
             AssertEqual("reviewed Plan text", controller.LastSettings.PlanSystemPrompt, "Plan instructions reach the save boundary");
             ((JObject)reviewPayload["payload"]).Remove("reviewAgentPrompts");
             bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult();
             AssertTrue(!controller.LastReviewAgentPrompts, "review is request-local, not remembered by later saves");
-            AssertEqual(12, controller.LastSettings.AgentPromptSchemaVersion, "ordinary bridge save does not approve schema 12 prompts");
+            AssertEqual(13, controller.LastSettings.AgentPromptSchemaVersion, "ordinary bridge save does not approve schema 13 prompts");
 
             var runtimeLog = JObject.Parse(bridge.HandleMessageAsync(
                 "{\"id\":\"log1\",\"type\":\"getRuntimeLog\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")

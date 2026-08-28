@@ -7,8 +7,8 @@ namespace RNAssistant.Core.Tools.Contracts
 {
     public enum ToolResultStatus { Ok, Error, Unknown }
 
-    // Typed terminal result only. The coordinated model-facing serializer switch
-    // is Phase 4B; default DTO serialization is not the Tool Result wire contract.
+    // Typed terminal result only. ModelProtocol.ToolResultWire owns the v1 JSON;
+    // default DTO serialization is not the model-facing wire contract.
     public sealed class ToolResult
     {
         private readonly ResourceRef[] _resources;

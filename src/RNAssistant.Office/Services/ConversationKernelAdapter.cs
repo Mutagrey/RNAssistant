@@ -55,7 +55,9 @@ namespace RNAssistant.Office.Services
         private readonly ToolCommand _confirmedCommand;
         private readonly Func<CancellationToken, Task<ConversationRunInput>> _refresh;
         private readonly Dictionary<string, ToolCommand> _commands = new Dictionary<string, ToolCommand>(StringComparer.Ordinal);
-        private readonly Dictionary<string, ToolResult> _results = new Dictionary<string, ToolResult>(StringComparer.Ordinal);
+        private readonly Dictionary<string, ToolResultMaterialization> _results = new Dictionary<string, ToolResultMaterialization>(StringComparer.Ordinal);
+        // UI/domain compatibility only; never a model writer input.
+        private readonly Dictionary<string, ToolResult> _uiResults = new Dictionary<string, ToolResult>(StringComparer.Ordinal);
         private readonly List<object> _projectedResults = new List<object>();
         private ConversationRunInput _input;
         private List<ToolDefinition> _catalog;

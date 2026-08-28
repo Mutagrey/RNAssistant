@@ -18,6 +18,7 @@ using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
 using RNAssistant.Desktop;
 using RNAssistant.OfficeHosts;
+using RuntimeToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
 {
@@ -640,25 +641,19 @@ namespace RNAssistant.Harness
                     Phase = "tool_result",
                     StartedUtc = DateTime.UtcNow
                 };
-                session.Messages.Add(new ChatMessage
+                var call = new AgentToolCall
                 {
-                    Role = "assistant",
-                    RunId = "safe-run",
-                    ProtocolMessage = true,
-                    ToolCallId = "safe-call",
-                    ToolCalls = new List<LlmToolCall>
-                    {
-                        new LlmToolCall { Id = "safe-call", Name = "excel.inspect" }
-                    }
-                });
-                session.Messages.Add(new ChatMessage
-                {
-                    Role = "user",
-                    RunId = "safe-run",
-                    ProtocolMessage = true,
-                    ToolCallId = "safe-call",
-                    Content = "TOOL_RESULT: {\"ok\":true}"
-                });
+                    Id = "safe-call", Name = "excel.inspect"
+                };
+                var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, string.Empty, null,
+                    ToolResultRoles.User, FixtureCallOrigin("safe-step"));
+                callMessage.RunId = "safe-run";
+                session.Messages.Add(callMessage);
+                var resultMessage = AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolCommand { ToolCallId = call.Id, ToolId = call.Name },
+                    RuntimeToolResult.Ok("Read"), ToolResultRoles.User);
+                resultMessage.RunId = "safe-run";
+                session.Messages.Add(resultMessage);
                 store.Save(session);
 
                 var registry = new ChatRunRegistry(paths);
@@ -673,6 +668,10 @@ namespace RNAssistant.Harness
                 AssertTrue(recovered.Messages.Where(message => message.ProtocolMessage)
                     .All(message => !message.ExcludeFromModelContext),
                     "completed tool exchange remains replayable");
+                var savedResult = recovered.Messages.Single(message => message.ToolCallId == call.Id &&
+                    message.Role == ToolResultRoles.User);
+                AssertEqual(1, savedResult.ToolResultProtocolVersion, "saved boundary retains the Tool Result v1 marker");
+                AssertEqual(resultMessage.Content, savedResult.Content, "recovery preserves the completed result envelope");
                 AssertTrue(recovered.Messages.Any(message =>
                     message.Activity != null && message.Activity.Kind == "diagnostic" &&
                     message.Activity.ExecutionStatus == "interrupted"),

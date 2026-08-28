@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -31,7 +33,7 @@ namespace RNAssistant.Office.Services
             if (NativeToolRuntimeAdapter.Owns(context.Call.Name))
             {
                 var record = await _nativeTools.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
-                _results[context.Call.Id] = NativeToolRuntimeAdapter.ProjectLegacy(record);
+                if (record.Result != null) _results[context.Call.Id] = new ToolResultMaterialization(record.Result);
                 return record;
             }
             var command = Command(context.Call, context.StepId, context.IsConfirmed);
@@ -50,13 +52,32 @@ namespace RNAssistant.Office.Services
                 result.ConfirmationCatalogSha256 = context.Policy.Revision;
                 result.PendingId = _registrar == null ? Guid.NewGuid().ToString("N") : _registrar(_session, command, result);
             }
-            _results[context.Call.Id] = result;
+            _uiResults[context.Call.Id] = result;
             var outcome = LegacyToolOutcomeAdapter.Map(context.Policy, result);
+            var awaitingUser = AgentTranscript.IsAwaitingUserResult(result);
+            ToolResultMaterialization materialized = null;
+            if (outcome != ToolExecutionOutcome.AwaitingConfirmation && !awaitingUser)
+            {
+                try { materialized = LegacyToolResultAdapter.Materialize(result, outcome); }
+                catch (Exception ex)
+                {
+                    // Domain execution already established this outcome. Invalid
+                    // projection data cannot turn a known write into an unknown one.
+                    _preparationFailure = AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, ex.Message);
+                    materialized = new ToolResultMaterialization(new RNAssistant.Core.Tools.Contracts.ToolResult(
+                        outcome == ToolExecutionOutcome.Ok ? RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok :
+                            outcome == ToolExecutionOutcome.Unknown ? RNAssistant.Core.Tools.Contracts.ToolResultStatus.Unknown :
+                                RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,
+                        result.Message, new JObject { ["code"] = "result_materialization_failed", ["loaded"] = false,
+                            ["complete"] = false }.ToString(Formatting.None)));
+                }
+                _results[context.Call.Id] = materialized;
+            }
             return new ToolExecutionRecord(context, outcome, DateTime.UtcNow, result.Message,
                 mayHaveDispatched: outcome != ToolExecutionOutcome.AwaitingConfirmation,
                 pendingId: outcome == ToolExecutionOutcome.AwaitingConfirmation ? result.PendingId : null,
-                awaitingUser: AgentTranscript.IsAwaitingUserResult(result), toolStepsConsumed: Math.Max(1, result.ToolStepsConsumed),
-                documentRuntimeId: _session.LastRun.DocumentRuntimeKey);
+                awaitingUser: awaitingUser, toolStepsConsumed: Math.Max(1, result.ToolStepsConsumed),
+                documentRuntimeId: _session.LastRun.DocumentRuntimeKey, result: materialized == null ? null : materialized.Result);
         }
 
         private ToolCommand Command(ToolCall call, string stepId, bool confirmed)

@@ -9,6 +9,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
+using RuntimeToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
 {
@@ -444,12 +445,9 @@ namespace RNAssistant.Harness
                 ToolCallId = "call_1",
                 ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.inspect" } }
             };
-            var firstResult = new ChatMessage
-            {
-                Role = "developer",
-                ProtocolMessage = true,
-                Content = "TOOL_RESULT:\n{\"tool_call_id\":\"call_1\"}"
-            };
+            var firstResult = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolCommand { ToolCallId = firstCall.ToolCallId, ToolId = "excel.inspect" },
+                RuntimeToolResult.Ok("Read"), ToolResultRoles.Developer);
             var secondCall = new ChatMessage
             {
                 Role = "assistant",
@@ -462,12 +460,9 @@ namespace RNAssistant.Harness
                 Role = "assistant",
                 Activity = new ChatActivity { ToolCallId = "call_1", Kind = "tool" }
             };
-            var secondResult = new ChatMessage
-            {
-                Role = "developer",
-                ProtocolMessage = true,
-                Content = "TOOL_RESULT:\n{\"tool_call_id\":\"call_1\"}"
-            };
+            var secondResult = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolCommand { ToolCallId = secondCall.ToolCallId, ToolId = "excel.inspect" },
+                RuntimeToolResult.Ok("Read"), ToolResultRoles.Developer);
             var messages = new List<ChatMessage>
             {
                 new ChatMessage { Role = "user", Content = "First" },
@@ -485,6 +480,19 @@ namespace RNAssistant.Harness
                 "selected exchange is complete");
             AssertTrue(!selected.Contains(firstCall) && !selected.Contains(firstResult),
                 "reused call id in the same run is preserved");
+
+            var mismatchedResult = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolCommand { ToolCallId = "unrelated-call", ToolId = "excel.inspect" },
+                RuntimeToolResult.Ok("Read"), ToolResultRoles.Developer);
+            // A body claiming call_1 cannot add this different metadata call to its exchange.
+            mismatchedResult.Content = secondResult.Content;
+            AssertTrue(ToolProtocolMessages.Ids(mismatchedResult).SetEquals(new[] { "unrelated-call" }),
+                "result body cannot introduce IDs beside the canonical metadata ID");
+            messages.Insert(5, mismatchedResult);
+            var selectedWithMismatchedBody = ChatHistoryEditService.SelectMessagesForDeletion(messages, 4);
+            AssertTrue(selectedWithMismatchedBody.SequenceEqual(selected),
+                "a mismatched result body cannot expand contiguous exchange selection");
+            messages.Remove(mismatchedResult);
 
             var danglingCall = new ChatMessage
             {
@@ -512,13 +520,9 @@ namespace RNAssistant.Harness
                     new LlmToolCall { Id = "multi_2", Name = "excel.inspect" }
                 }
             };
-            var multiResult1 = new ChatMessage
-            {
-                Role = "tool",
-                ProtocolMessage = true,
-                ToolCallId = "multi_1",
-                Content = "{}"
-            };
+            var multiResult1 = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolCommand { ToolCallId = "multi_1", ToolId = "excel.inspect" },
+                RuntimeToolResult.Ok("Read"), ToolResultRoles.Tool);
             var incompleteMulti = new List<ChatMessage> { multiCall, multiResult1 };
             ChatHistoryEditService.ExcludeUnmatchedToolCalls(incompleteMulti);
             AssertTrue(multiCall.ExcludeFromModelContext && multiResult1.ExcludeFromModelContext,
@@ -536,8 +540,12 @@ namespace RNAssistant.Harness
                     new LlmToolCall { Id = "complete_2", Name = "excel.inspect" }
                 }
             };
-            var completeResult1 = new ChatMessage { Role = "tool", ProtocolMessage = true, ToolCallId = "complete_1" };
-            var completeResult2 = new ChatMessage { Role = "tool", ProtocolMessage = true, ToolCallId = "complete_2" };
+            var completeResult1 = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolCommand { ToolCallId = "complete_1", ToolId = "excel.inspect" },
+                RuntimeToolResult.Ok("Read"), ToolResultRoles.Tool);
+            var completeResult2 = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolCommand { ToolCallId = "complete_2", ToolId = "excel.inspect" },
+                RuntimeToolResult.Ok("Read"), ToolResultRoles.Tool);
             var completeMulti = new List<ChatMessage> { completeCall, completeResult1, completeResult2 };
             var completeSelection = ChatHistoryEditService.SelectMessagesForDeletion(completeMulti, 1);
             AssertEqual(3, completeSelection.Count, "deleting one multi-call result selects the full envelope");

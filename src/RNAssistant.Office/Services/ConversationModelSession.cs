@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -96,7 +98,7 @@ namespace RNAssistant.Office.Services
 
         internal void TouchTool(string id) { _workingSet.Touch(id); }
 
-        internal void AppendConfirmedResult(ToolCommand command, ToolResult result)
+        internal void AppendConfirmedResult(ToolCommand command, ToolResultMaterialization result)
         {
             // Keep the existing confirmation replay behavior: materialization has
             // already reconstructed the working set from the full accepted window.
@@ -105,7 +107,7 @@ namespace RNAssistant.Office.Services
             _messages.Add(accepted);
         }
 
-        internal async Task<PreparedToolResult> PrepareToolResultAsync(ToolResult result, CancellationToken cancellationToken)
+        internal async Task<PreparedToolResult> PrepareToolResultAsync(ToolResultMaterialization result, CancellationToken cancellationToken)
         {
             ChatMessage media = null;
             if ((result.ModelAttachments ?? new ChatAttachment[0]).Count > 0)
@@ -121,11 +123,29 @@ namespace RNAssistant.Office.Services
                 }
                 catch (Exception ex)
                 {
-                    result = ToolResult.Fail("Artifact media could not be prepared for the model: " + ex.Message,
-                        result.DataJson, "artifact_media_unavailable", true);
+                    result = ProjectionFailure(result, "Artifact media could not be prepared for the model: " + ex.Message,
+                        result.Result.DataJson, "artifact_media_unavailable");
                 }
             }
             return new PreparedToolResult(result, media);
+        }
+
+        private static ToolResultMaterialization ProjectionFailure(ToolResultMaterialization source,
+            string message, string dataJson, string code)
+        {
+            // A media projection failure cannot turn a known invocation into an
+            // unknown/failed effect. Tell the model what is missing explicitly.
+            return new ToolResultMaterialization(new RNAssistant.Core.Tools.Contracts.ToolResult(
+                source.Result.Status, message, new JObject
+                {
+                    ["code"] = code,
+                    ["loaded"] = false,
+                    ["complete"] = false,
+                    ["tool_data"] = string.IsNullOrWhiteSpace(dataJson) ? JValue.CreateNull() :
+                        JsonConvert.DeserializeObject<JToken>(dataJson,
+                            new JsonSerializerSettings { DateParseHandling = DateParseHandling.None })
+                }.ToString(Formatting.None), source.Result.Resources),
+                resultResource: source.ResultResource, resultResourceKind: source.ResultResourceKind);
         }
 
         internal void AppendToolResult(ToolCommand command, PreparedToolResult prepared)
@@ -141,7 +161,7 @@ namespace RNAssistant.Office.Services
                 _workingSetChanged = true;
                 _evictedSchemas.AddRange(evicted ?? new string[0]);
             }
-            if (prepared.Media != null && result.Success)
+            if (prepared.Media != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
             {
                 _session.Messages.Add(prepared.Media);
                 _messages.Add(prepared.Media);
@@ -180,15 +200,14 @@ namespace RNAssistant.Office.Services
             ReleaseRequestMedia();
         }
 
-        // Media is private to context materialization. The caller can observe the
-        // possibly changed legacy result before bounded serialization mutates it,
-        // preserving the existing summary/checkpoint ordering.
+        // Media/bounded data belong to the request projection. Execution evidence
+        // and its terminal result have already been persisted before this step.
         internal sealed class PreparedToolResult
         {
-            internal ToolResult Result { get; private set; }
+            internal ToolResultMaterialization Result { get; private set; }
             internal ChatMessage Media { get; private set; }
 
-            internal PreparedToolResult(ToolResult result, ChatMessage media)
+            internal PreparedToolResult(ToolResultMaterialization result, ChatMessage media)
             {
                 Result = result;
                 Media = media;
@@ -275,7 +294,7 @@ namespace RNAssistant.Office.Services
 
         private static ChatMessage CreateBoundedToolResultMessage(
             ToolCommand command,
-            ToolResult result,
+            ToolResultMaterialization result,
             IReadOnlyList<ChatMessage> messages,
             ChatSession session,
             AppSettings settings)
@@ -297,7 +316,7 @@ namespace RNAssistant.Office.Services
                 settings);
             var message = AgentJsonProtocol.CreateToolResultMessage(
                 command, result, maxDataTokens, settings.ToolResultRole, settings);
-            message.ResourceRefs = AgentTranscript.CloneResourceRefs(result == null ? null : result.ModelResourceRefs);
+            message.ResourceRefs = AgentTranscript.CloneResourceRefs(result == null ? null : result.Result.Resources);
             if (artifact != null && !string.Equals(
                 artifact.Kind,
                 ChatArtifactKinds.Chart,
@@ -309,7 +328,7 @@ namespace RNAssistant.Office.Services
             string userText,
             ChatSession session,
             AppSettings settings,
-            ToolResult result,
+            ToolResultMaterialization result,
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
@@ -321,7 +340,7 @@ namespace RNAssistant.Office.Services
             if (attachments.Count == 0) return null;
             var routing = AttachmentModelRoutingService.Select(settings, session, attachments);
             if (routing.HasMedia && progress != null) progress("routing", routing.ProgressMessage ?? string.Empty, null);
-            var resourceRefs = (result.ModelResourceRefs ?? new ResourceRef[0])
+            var resourceRefs = (result.Result.Resources ?? new ResourceRef[0])
                 .Where(reference => reference != null && !string.IsNullOrWhiteSpace(reference.Uri))
                 .GroupBy(reference => reference.Uri + "\n" + (reference.Revision ?? string.Empty), StringComparer.Ordinal)
                 .Select(group => new ResourceRef(group.First().Uri, group.First().Revision))

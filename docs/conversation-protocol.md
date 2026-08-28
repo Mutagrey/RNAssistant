@@ -68,7 +68,7 @@ Paste, drop, and paperclip use one chat-scoped staging action. `sendChat` accept
 
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
-The skill entries in the unified capability catalog are metadata only: a listed name/summary does not load or replace the skill Markdown. When the user names a skill or a catalog summary clearly matches the task, the model calls `common.capabilities_read` with that exact id before skill-governed work. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, explicit `loaded:true`, `complete:true`, `truncated:false`, and adjacent `capabilityUse` evidence stating that tool schemas named by the Markdown were not loaded by the skill read. Each such tool still requires its own exact schema read unless already callable. A revision is loaded only while that exact top-level evidence remains in active model context. If complete tool-schema or skill-core evidence does not fit the remaining context, transport changes the result to `ok:false` with `capability_evidence_context_too_large`, `loaded:false`, and `truncated:true`; it never reports a successful load whose evidence was removed. Compaction or a revision mismatch requires another core read; an unchanged oversized read is not retried.
+The skill entries in the unified capability catalog are metadata only: a listed name/summary does not load or replace the skill Markdown. When the user names a skill or a catalog summary clearly matches the task, the model calls `common.capabilities_read` with that exact id before skill-governed work. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, explicit `loaded:true`, `complete:true`, `truncated:false`, and adjacent `capabilityUse` evidence stating that tool schemas named by the Markdown were not loaded by the skill read. Each such tool still requires its own exact schema read unless already callable. A revision is loaded only while that exact top-level evidence remains in active model context. If complete tool-schema or skill-core evidence does not fit the remaining context, transport changes the result to `status:error` with `data.code:capability_evidence_context_too_large`, `loaded:false`, and `truncated:true`; it never reports a successful load whose evidence was removed. Compaction or a revision mismatch requires another core read; an unchanged oversized read is not retried.
 
 A custom skill package may contain up to 64 direct UTF-8 `references/*.md` files. Their paths, byte sizes, and content revisions are listed by the core read without bodies and are included in the package revision. The model reads only a needed reference through the same tool using exact `referencePath`; optional zero-based `offset` and `maxChars` produce bounded chunks with `nextOffset`. A reference chunk is ordinary context evidence but never loads the core skill. `common.skills_upsert` writes one reference when both `referencePath` and `referenceMarkdown` are supplied; `common.skills_delete` removes one when `referencePath` is supplied. Core and reference mutations are separate confirmed calls, and each reference mutation changes the package revision. Several clearly relevant skills may be read independently. There is no router or activation state.
 
@@ -236,26 +236,58 @@ See [Phase 2B evidence](stabilization/PHASE_2B_RETRY_POLICY.md).
 
 ## Tool result
 
-Phase 4A adds a typed internal `Core.Tools.Contracts.ToolResult` with one terminal
-status and separate dispatch/effect evidence. Only `common.resources_list` is a
-native handler so far; its temporary result projection feeds the current writer
-below. Tool Result v1 **wire is not active**: the writer, schema-evidence readers,
-prompts/probes and full-history result gate switch together in 4B. See
-[ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate).
+Tool Result v1 is the only active model-result envelope. Core owns the immutable
+terminal value and `ModelProtocol.ToolResultWire`; Office owns budgeting, media and
+resource materialization. The only statuses are `ok`, `error`, and `unknown`.
+There is no root `ok`/`Success`, duplicated `error`, `retryable`, journal state or
+model-facing pause status. Error details use `data.code`; other domain details
+remain opaque data. `ok` certifies the invocation outcome, not a verified change.
+Dispatch/effect evidence and the cumulative runtime summary remain independent.
+See [ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate).
 
-Office tools execute locally. `ToolResultRole` is independent from the instruction role and controls only replay transport:
+`ToolResultRole` is independent from the instruction role and controls transport:
 
-- `user` (default) or `developer`: the next turn receives a protocol message with that role and the `TOOL_RESULT:` prefix;
-- `tool`: runtime stores a matching `assistant.tool_calls` entry followed by a `role=tool` message with the same call id. This is transport history only; the model still chooses tools through the JSON envelope above.
-
-For `user` and `developer`, the result looks like:
+- `user` (default) / `developer`: result JSON follows the `TOOL_RESULT:` prefix;
+- `tool`: the same raw JSON follows a matching `assistant.tool_calls` entry;
+  provider-safe names and `tool_call_id` retain the persisted runtime identity.
 
 ```text
 TOOL_RESULT:
-{"ok":true,"tool_call_id":"call_1","name":"excel.read_range","status":"completed","message":"Range read.","data":{"values":[[1,2]]},"error":null,"resources":[{"uri":"rna://chat/s1/artifact/a1/revision/1","revision":"1","relation":"result"}]}
+{"tool_call_id":"call_1","name":"excel.read_range","status":"ok","message":"Range read.","data":{"values":[[1,2]]},"resources":[{"uri":"rna://chat/s1/artifact/a1/revision/1","revision":"1","relation":"result"}]}
 ```
 
-The `tool` form uses the same JSON as its message content without the text prefix. `resources` is optional and contains exact references produced by the tool or used to externalize its full result; the latter is marked `relation:"result"` so it is not confused with another produced/cited resource. On failure, `ok` is `false`, `data` may still contain partial details, and `error` contains `code`, `message`, and `retryable`. The model chooses the next step from this JSON; the runtime does not infer one. A later successful action cannot erase an earlier error or unknown effect from the runtime summary.
+All five root fields shown before `resources` are required. `data` may be any JSON
+value, including null. The optional `resources` array contains exact `rna://`
+URI/revision references; at most one has `relation:"result"` for full externalized
+data. Neither a resource `kind` nor CAS hash/internal artifact ID is a second
+transport. The strict reader rejects aliases, extra fields, duplicate keys,
+comments, trailing content and unsupported statuses; ISO and literal strings are
+not date-converted. Writer, probes and all replay roles use the same contract.
+
+Accepted call and result records carry local `ToolResultProtocolVersion=1`
+metadata; it is not an extra JSON root field. Full-history preflight validates
+markers, roles, runtime ID/name pairing and one present result per accepted call
+within its user run, including suppressed/compacted history. Old result envelopes
+and old pending calls require an explicit new chat/reset before preparation or
+confirmation; no conversion, repair, fallback or automatic deletion is performed.
+Plain current-v4 history without tools can continue. Fork rebasing covers all three
+roles without changing runtime IDs or resource revision; it rewrites the resource
+URI into the new chat scope. Missing terminal results
+alone do not invent a failure: in-flight calls and typed confirmation/user-input
+pauses remain controlled by the kernel. Cancelling old pending work remains possible.
+
+Native `resources_list` passes its typed result directly to materialization.
+`LegacyToolResultAdapter` converts active domain results once using the recorded
+runtime outcome; it never reads old history. `ToolResultUiProjection` serves only
+existing activity/manual-command consumers and is never fed back to the model
+writer. Pending/awaiting-user and proven non-dispatch are runtime controls/evidence,
+not inferred from prose or `data.code`. Known outcome/evidence is saved before
+optional projection; projection failure cannot erase a known effect or authorize retry.
+
+Current prompt schema is 14. Existing custom text and older markers are preserved
+until explicit review/reset. Built-in prompt authoring requires only model call
+name/arguments and assigns IDs to runtime (R31); matching `status=ok` alone does not
+prove that a document changed.
 
 `message` and `data` are bounded before they enter model context. Eligible oversized generic `data` up to 2,000,000 characters is stored as a CAS-backed `tool_result` artifact before the next model dispatch; the envelope contains its exact reference and replaces inline data with `{truncated, original_chars, original_estimated_tokens, preview, hint}`. The model can page the full value through `common.resources_read` or request a smaller scope. Resource/tool/skill discovery evidence is not copied into an untrusted artifact. A specialized chart payload is materialized once at the result boundary, exposes its exact URI to the next model step, and is reused by storage/UI projection. Before every conversation model request, including format repair and continuation after confirmation, ModelProtocol verifies the estimated prompt against the current input budget and stops with a visible diagnostic instead of sending an oversized request.
 

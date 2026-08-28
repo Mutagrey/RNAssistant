@@ -91,7 +91,7 @@ namespace RNAssistant.Harness
             var diagnostic = jsonMessage();
             diagnostic.Activity = new ChatActivity { Kind = "model_response" };
             AssertTrue(!ConversationResponseHistoryReader.Read(diagnostic).Success, "diagnostics are not accepted responses");
-            var result = AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "call_1", ToolId = "test.read" }, ToolResult.Ok("ok"));
+            var result = AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "call_1", ToolId = "test.read" }, RNAssistant.Core.Tools.Contracts.ToolResult.Ok("ok"));
             result.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             AssertTrue(!ConversationResponseHistoryReader.Read(result).Success, "tool results are not assistant responses");
             var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
@@ -674,7 +674,7 @@ namespace RNAssistant.Harness
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "schema evidence reaches model");
                 var finalRequest = FlattenSimple(calls[2]);
                 AssertContains(finalRequest, "TOOL_RESULT", "tool result label");
-                AssertContains(finalRequest, "\"ok\":true", "tool result ok");
+                AssertContains(finalRequest, "\"status\":\"ok\"", "tool result status ok");
                 AssertContains(finalRequest, "\"name\":\"excel.add_sheet\"", "tool result name");
                 AssertContains(finalRequest, "\"message\":", "tool result message");
             });
@@ -712,7 +712,7 @@ namespace RNAssistant.Harness
                 AssertEqual("write_rejected", (string)write["errorCode"], "actual failure code is preserved");
                 AssertTrue(!adapter.HasSheet("Report"), "the claimed sheet was not created");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "failed write is not retried");
-                AssertContains(FlattenSimple(requests.Last()), "\"ok\":false", "the final model request saw the error");
+                AssertContains(FlattenSimple(requests.Last()), "\"status\":\"error\"", "the final model request saw the error");
                 AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v4");
                 AssertEqual("completed", result.RunStatus, "loop completion is independent of execution health");
                 AssertRuntimeExecutionSummary(result, session, "errors", 0, 1, 0);
@@ -1552,7 +1552,7 @@ namespace RNAssistant.Harness
                 AssertContains(replay, "RUNTIME_CONTEXT", "user-role continuation keeps runtime context");
                 AssertEqual(2, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1,
                     "schema evidence and confirmed result replayed");
-                AssertContains(replay, "\"ok\":true", "confirmed result replayed");
+                AssertContains(replay, "\"status\":\"ok\"", "confirmed result replayed");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "no stale waiting result");
                 var replayMessages = calls[2].ToList();
                 var userIndex = replayMessages.FindIndex(message => message.Role == "user" && !message.ProtocolMessage &&
@@ -1601,7 +1601,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Skill уже существует; выберу другой id.", final.AssistantText, "agent continues after confirmed failure");
                 AssertEqual(3, calls.Count, "schema discovery and confirmed failure trigger the next model turn");
                 var replay = FlattenSimple(calls[2]);
-                AssertContains(replay, "\"ok\":false", "confirmed failure replayed");
+                AssertContains(replay, "\"status\":\"error\"", "confirmed failure replayed");
                 AssertContains(replay, "pending_tool_catalog_changed", "fingerprint failure is replayed without dispatch");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");
             });
@@ -1861,9 +1861,9 @@ namespace RNAssistant.Harness
                 var uri = ArtifactUri(session, artifact);
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю заметку.\",\"tool_calls\":[{\"id\":\"read_first\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
+                    "{\"message\":\"Читаю заметку.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
                     "{\"message\":\"Первый ответ.\",\"tool_calls\":[]}",
-                    "{\"message\":\"Перечитываю заметку.\",\"tool_calls\":[{\"id\":\"read_second\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
+                    "{\"message\":\"Перечитываю заметку.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
                     "{\"message\":\"Второй ответ.\",\"tool_calls\":[]}"
                 });
                 var captured = new List<IReadOnlyList<ChatMessage>>();
@@ -1964,22 +1964,14 @@ namespace RNAssistant.Harness
                     }
                 }
             });
-            session.Messages.Add(new ChatMessage
+            foreach (var callId in new[] { "call_1", "call_2" })
             {
-                Role = "tool",
-                ToolCallId = "call_1",
-                Content = "{\"ok\":true,\"tool_call_id\":\"call_1\",\"name\":\"excel.read_range\"}",
-                ProtocolMessage = true,
-                RunId = "run_tool"
-            });
-            session.Messages.Add(new ChatMessage
-            {
-                Role = "tool",
-                ToolCallId = "call_2",
-                Content = "{\"ok\":true,\"tool_call_id\":\"call_2\",\"name\":\"excel.read_range\"}",
-                ProtocolMessage = true,
-                RunId = "run_tool"
-            });
+                var toolResult = AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolCommand { ToolCallId = callId, ToolId = "excel.read_range" },
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read"), ToolResultRoles.Tool);
+                toolResult.RunId = "run_tool";
+                session.Messages.Add(toolResult);
+            }
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "I will inspect the data." });
             session.Messages.Add(new ChatMessage { Role = "user", Content = "Keep the original formatting." });
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Understood." });
@@ -2045,13 +2037,10 @@ namespace RNAssistant.Harness
                 }
             };
             session.Messages.Add(call);
-            var result = new ChatMessage
-            {
-                Role = "developer",
-                Content = "TOOL_RESULT:\n{\"ok\":true,\"tool_call_id\":\"call_pair\",\"name\":\"excel.read_range\"}",
-                ProtocolMessage = true,
-                RunId = "run_pair"
-            };
+            var result = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolCommand { ToolCallId = "call_pair", ToolId = "excel.read_range" },
+                RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read"), ToolResultRoles.Developer);
+            result.RunId = "run_pair";
             session.Messages.Add(result);
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Done." });
             session.Messages.Add(new ChatMessage { Role = "user", Content = "Recent request." });

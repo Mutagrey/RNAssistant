@@ -9,6 +9,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
+using RuntimeToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Services
 {
@@ -148,43 +149,23 @@ namespace RNAssistant.Office.Services
 
         private static IEnumerable<ChatMessage> ToolResultProbeMessages(string role, string finalSentinel)
         {
-            role = ToolResultRoles.Normalize(role);
-            const string resultJson = "{\"ok\":true,\"tool_call_id\":\"call_1\",\"name\":\"compat.echo\",\"status\":\"success\",\"message\":\"\",\"data\":{\"value\":\"A\"},\"error\":null}";
-            var messages = new List<ChatMessage>
+            var draft = ProbeCall();
+            // Synthetic probe history has a local ID; it never authorizes a
+            // real tool execution or asks the provider to allocate identity.
+            var call = new AgentToolCall { Id = "call_1", Name = draft.Name, Arguments = draft.Arguments };
+            return new[]
             {
-                // Synthetic probe history has a local ID; it never authorizes a
-                // real tool execution or asks the provider to allocate identity.
-                AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
-                    { Id = "call_1", Name = ProbeCall().Name, Arguments = ProbeCall().Arguments },
-                    "TOOL_OK", null, role, new AcceptedToolCallOrigin("compatibility-probe", "synthetic-attempt", 0))
+                AgentJsonProtocol.CreateToolCallMessage(call, "TOOL_OK", null, role,
+                    new AcceptedToolCallOrigin("compatibility-probe", "synthetic-attempt", 0)),
+                AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolCommand { ToolCallId = call.Id, ToolId = call.Name },
+                    RuntimeToolResult.Ok(string.Empty, "{\"value\":\"A\"}"), role),
+                new ChatMessage
+                {
+                    Role = "user",
+                    Content = "Reply with " + finalSentinel + "."
+                }
             };
-            if (string.Equals(role, ToolResultRoles.Tool, StringComparison.Ordinal))
-            {
-                var apiName = AgentJsonProtocol.ApiToolName("compat.echo");
-                messages.Add(new ChatMessage
-                {
-                    Role = ToolResultRoles.Tool,
-                    ToolCallId = "call_1",
-                    ToolName = apiName,
-                    Content = resultJson,
-                    ProtocolMessage = true
-                });
-            }
-            else
-            {
-                messages.Add(new ChatMessage
-                {
-                    Role = role,
-                    Content = "TOOL_RESULT:\n" + resultJson,
-                    ProtocolMessage = true
-                });
-            }
-            messages.Add(new ChatMessage
-            {
-                Role = "user",
-                Content = "Reply with " + finalSentinel + "."
-            });
-            return messages;
         }
 
         private async Task<ModelCompatibilityCheckDto> RunAsync(

@@ -2,11 +2,16 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Tools.Contracts;
+using LegacyResult = RNAssistant.Core.Models.ToolResult;
+using TerminalResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Services
 {
@@ -84,17 +89,15 @@ namespace RNAssistant.Office.Services
         {
             var record = fact.Execution;
             var command = Command(record.Context.Call, record.Context.StepId, record.Context.IsConfirmed);
-            ToolResult result;
-            if (!_results.TryGetValue(record.Context.Call.Id, out result) ||
+            var materialized = TerminalMaterialization(record);
+            LegacyResult result;
+            if (!_uiResults.TryGetValue(record.Context.Call.Id, out result) ||
                 LegacyToolOutcomeAdapter.Map(record.Context.Policy, result) != record.Outcome)
             {
-                result = ToolResult.Fail(record.Message, null,
-                    record.Context.IsConfirmed && !record.MayHaveDispatched && record.Outcome == ToolExecutionOutcome.Error
-                        ? "pending_tool_catalog_changed" : "execution_interrupted", false);
-                if (record.Outcome == ToolExecutionOutcome.Unknown) result.Status = "unknown";
-                if (record.Outcome == ToolExecutionOutcome.NotDispatched) result.Status = "cancelled";
-                _results[record.Context.Call.Id] = result;
+                result = ToolResultUiProjection.Create(record);
+                _uiResults[record.Context.Call.Id] = result;
             }
+            ToolResultUiProjection.IncludeResources(result, materialized);
             var activity = FindActivity(record.Context.Call.Id) ?? AgentTranscript.CreateRunningToolMessage(
                 _session, command, record.Context.StepId, _stepMessage);
             if (!_session.Messages.Contains(activity)) _session.Messages.Add(activity);
@@ -109,8 +112,8 @@ namespace RNAssistant.Office.Services
         private async Task MaterializeResultAsync(ToolExecutionRecord record)
         {
             var command = Command(record.Context.Call, record.Context.StepId, record.Context.IsConfirmed);
-            var result = _results[record.Context.Call.Id];
-            if (record.Outcome != ToolExecutionOutcome.AwaitingConfirmation && !record.AwaitingUser)
+            var result = TerminalMaterialization(record);
+            if (result != null)
             {
                 try
                 {
@@ -133,19 +136,44 @@ namespace RNAssistant.Office.Services
                     if (!_session.Messages.Any(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == command.ToolCallId))
                     {
                         var fallback = AgentJsonProtocol.CreateToolResultMessage(command,
-                            ToolResult.Fail("Result materialization failed: " + ex.Message, null, "result_materialization_failed", false),
-                            _input.Settings.ToolResultRole);
+                            new TerminalResult(result.Result.Status, "Result materialization failed: " + ex.Message,
+                                new JObject { ["code"] = "result_materialization_failed", ["loaded"] = false,
+                                    ["complete"] = false }.ToString(Formatting.None)), _input.Settings.ToolResultRole);
                         fallback.RunId = _session.LastRun.RunId;
                         ConversationModelSession.AppendPairedResult(_session.Messages, fallback);
                     }
                 }
             }
+            var uiResult = _uiResults[record.Context.Call.Id];
+            ToolResultUiProjection.IncludeResources(uiResult, result);
             var activity = FindActivity(record.Context.Call.Id);
-            AgentTranscript.CompleteToolActivityMessage(_session, activity, command, result, record.Context.StepId, _stepMessage);
+            AgentTranscript.CompleteToolActivityMessage(_session, activity, command, uiResult, record.Context.StepId, _stepMessage);
             activity.Activity.ExecutionEvidence = record.Evidence;
             activity.Activity.RunId = _session.LastRun.RunId;
             activity.ExecutionSummary = _session.LastRun.ExecutionSummary;
-            _projectedResults.Add(AgentTranscript.DescribeResult(command, result));
+            _projectedResults.Add(AgentTranscript.DescribeResult(command, uiResult));
+        }
+
+        private ToolResultMaterialization TerminalMaterialization(ToolExecutionRecord record)
+        {
+            // Confirmation/user-input pauses have no terminal wire result. Proven
+            // non-dispatch is kept in the record, independently of the error payload.
+            if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation || record.AwaitingUser) return null;
+            ToolResultMaterialization result;
+            if (_results.TryGetValue(record.Context.Call.Id, out result)) return result;
+            var terminal = record.Result;
+            if (terminal == null)
+            {
+                var code = record.Context.IsConfirmed && !record.MayHaveDispatched && record.Outcome == ToolExecutionOutcome.Error
+                    ? "pending_tool_catalog_changed" : record.Outcome == ToolExecutionOutcome.NotDispatched
+                        ? "tool_not_dispatched" : "execution_interrupted";
+                terminal = new TerminalResult(record.Outcome == ToolExecutionOutcome.Ok ? ToolResultStatus.Ok :
+                    record.Outcome == ToolExecutionOutcome.Unknown ? ToolResultStatus.Unknown : ToolResultStatus.Error,
+                    record.Message, new JObject { ["code"] = code }.ToString(Formatting.None));
+            }
+            result = new ToolResultMaterialization(terminal);
+            _results[record.Context.Call.Id] = result;
+            return result;
         }
 
         private ChatMessage FindActivity(string callId)

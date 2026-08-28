@@ -6,10 +6,14 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Services;
+using LegacyResult = RNAssistant.Core.Models.ToolResult;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
@@ -399,6 +403,196 @@ namespace RNAssistant.Harness
             foreach (var malformed in new[] { "{}", "{\"Effect\":\"VerifiedNoChange\"}", "{\"Dispatch\":\"NotDispatched\"}" })
                 RuntimeThrows<JsonSerializationException>(() => JsonConvert.DeserializeObject<ToolExecutionEvidence>(malformed));
             RuntimeThrows<ArgumentException>(() => new ToolExecutionEvidence(ToolDispatchEvidence.NotDispatched, ToolEffectEvidence.VerifiedChange));
+        }
+
+        private static void ToolRuntimeLegacyTerminalWire()
+        {
+            var policy = new ToolPolicySnapshot("fixture.write", "revision", true);
+            var cases = new[]
+            {
+                new { Source = LegacyResult.Ok("unknown is only prose"), Status = ToolResultStatus.Ok },
+                new { Source = LegacyResult.Fail("optimistic prose", errorCode: "write_rejected"), Status = ToolResultStatus.Error },
+                new { Source = LegacyResult.PartialFailure("some writes completed"), Status = ToolResultStatus.Unknown },
+                new { Source = new LegacyResult { Status = "unknown", Message = "unverified" }, Status = ToolResultStatus.Unknown }
+            };
+            foreach (var item in cases)
+            {
+                var before = JsonConvert.SerializeObject(item.Source);
+                var outcome = LegacyToolOutcomeAdapter.Map(policy, item.Source);
+                var materialized = LegacyToolResultAdapter.Materialize(item.Source, outcome);
+                var command = new ToolCommand { ToolCallId = "call_legacy", ToolId = policy.ToolId };
+                AssertTrue(ToolResultResourceService.ExternalizeIfNeeded(new ChatSession(), command,
+                    materialized, 1024, new AppSettings()) == null,
+                    "small terminal data, including JSON null, remains inline");
+                var wire = ToolResultWire.Read(AgentJsonProtocol.BuildToolResult(command, materialized));
+                AssertTrue(wire.Success, "legacy terminal execution enters the v1 writer");
+                AssertEqual(item.Status, wire.Result.Status, "partial failure is unknown rather than a fourth wire state");
+                AssertEqual(item.Source.Message, wire.Result.Message, "message does not classify the terminal outcome");
+                AssertEqual(before, JsonConvert.SerializeObject(item.Source), "conversion does not rewrite the legacy result");
+                if (item.Status != ToolResultStatus.Ok)
+                    AssertEqual(item.Source.ErrorCode ?? "tool_effect_uncertain", (string)RuntimeData(wire.Result.DataJson)["code"],
+                        "domain error code is retained or receives the unknown fallback");
+            }
+            var authoritative = LegacyToolResultAdapter.Materialize(LegacyResult.Ok("optimistic"), ToolExecutionOutcome.Unknown);
+            AssertEqual(ToolResultStatus.Unknown, authoritative.Result.Status, "runtime outcome overrides a legacy success flag");
+        }
+
+        private static void ToolRuntimeLegacyPausesStayRuntimeOnly()
+        {
+            foreach (var pause in new[] { LegacyResult.WaitingConfirmation("Confirm"), LegacyResult.AwaitingUser("Answer", "{}") })
+                RuntimeThrows<InvalidOperationException>(() => LegacyToolResultAdapter.Materialize(pause, ToolExecutionOutcome.Ok));
+            RuntimeThrows<InvalidOperationException>(() =>
+                LegacyToolResultAdapter.Materialize(LegacyResult.Ok("done"), ToolExecutionOutcome.AwaitingConfirmation));
+            var context = new ToolRuntimeFixture().Context();
+            var pending = new ToolExecutionRecord(context, ToolExecutionOutcome.AwaitingConfirmation, context.StartedUtc,
+                "Confirm", mayHaveDispatched: false, pendingId: "pending");
+            var pendingUi = ToolResultUiProjection.Create(pending);
+            AssertEqual("waiting_confirmation", pendingUi.Status, "UI retains the confirmation control");
+            AssertEqual("pending", pendingUi.PendingId, "pending identity stays in runtime/UI");
+            AssertTrue(pending.Result == null, "confirmation does not fabricate a terminal result");
+            var awaiting = new ToolExecutionRecord(context, ToolExecutionOutcome.Ok, context.StartedUtc,
+                "Answer", awaitingUser: true, result: RuntimeResult.Ok("Question", "{}"));
+            var awaitingUi = ToolResultUiProjection.Create(awaiting);
+            AssertEqual("awaiting_user", awaitingUi.Status, "user-input control remains separate from terminal status");
+            RuntimeThrows<InvalidOperationException>(() => LegacyToolResultAdapter.Materialize(awaitingUi, awaiting.Outcome));
+        }
+
+        private static void ToolRuntimeLegacyErrorDataRemainsLiteral()
+        {
+            var source = new JObject { ["stamp"] = RuntimeIsoText, ["literal"] = "\\n\t\"quoted\"" };
+            var unchanged = source.ToString(Formatting.None);
+            var plain = LegacyToolResultAdapter.Materialize(
+                LegacyResult.Fail("Failed", unchanged, "runtime_code"), ToolExecutionOutcome.Error);
+            var body = RuntimeData(plain.Result.DataJson);
+            AssertEqual("runtime_code", (string)body["code"], "runtime code is merged into object data");
+            AssertEqual(RuntimeIsoText, (string)body["stamp"], "ISO data stays exact text");
+            AssertEqual(JTokenType.String, body["stamp"].Type, "ISO data is not a Date token");
+            AssertEqual((string)source["literal"], (string)body["literal"], "literal backslashes and escapes survive merging");
+            foreach (var code in new JToken[] { new JValue("domain_code"), new JValue(7), JValue.CreateNull() })
+            {
+                source["code"] = code;
+                source["details"] = new JObject { ["stamp"] = RuntimeIsoText };
+                var collision = LegacyToolResultAdapter.Materialize(
+                    LegacyResult.Fail("Failed", source.ToString(Formatting.None), "runtime_code"), ToolExecutionOutcome.Error);
+                var merged = RuntimeData(collision.Result.DataJson);
+                AssertEqual("runtime_code", (string)merged["code"], "runtime code remains authoritative");
+                AssertTrue(JToken.DeepEquals(source, merged["details"]), "conflicting code and existing details are retained together");
+            }
+            source["code"] = "runtime_code";
+            var matching = LegacyToolResultAdapter.Materialize(
+                LegacyResult.Fail("Failed", source.ToString(Formatting.None), "runtime_code"), ToolExecutionOutcome.Error);
+            AssertTrue(JToken.DeepEquals(source, RuntimeData(matching.Result.DataJson)), "matching code does not add a details wrapper");
+            foreach (var scalar in new JToken[]
+            {
+                JValue.CreateNull(), new JValue(RuntimeIsoText), new JValue(42), new JValue(false),
+                new JArray(RuntimeIsoText, "\\n")
+            })
+            {
+                var materialized = LegacyToolResultAdapter.Materialize(
+                    LegacyResult.Fail("Failed", scalar.ToString(Formatting.None)), ToolExecutionOutcome.Error);
+                var merged = RuntimeData(materialized.Result.DataJson);
+                AssertEqual("tool_failed", (string)merged["code"], "missing error code has one fallback");
+                AssertTrue(JToken.DeepEquals(scalar, merged["details"]), "scalar and array payloads are preserved under details");
+            }
+            var literaltext = RuntimeIsoText + " literalnotjson \\n";
+            var literalResult = LegacyToolResultAdapter.Materialize(
+                LegacyResult.Fail("Failed", literaltext), ToolExecutionOutcome.Error);
+            AssertEqual(literaltext, (string)RuntimeData(literalResult.Result.DataJson)["details"], "legacy plain text remains literal data");
+        }
+
+        private static void ToolRuntimeProjectionCannotChangeExecution()
+        {
+            var cases = new[]
+            {
+                new { Outcome = ToolExecutionOutcome.Ok, Status = ToolResultStatus.Ok, Effect = ToolEffectEvidence.VerifiedNoChange },
+                new { Outcome = ToolExecutionOutcome.Error, Status = ToolResultStatus.Error, Effect = ToolEffectEvidence.VerifiedChange },
+                new { Outcome = ToolExecutionOutcome.Unknown, Status = ToolResultStatus.Unknown, Effect = ToolEffectEvidence.Unknown }
+            };
+            foreach (var item in cases)
+            {
+                var context = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write))).Context();
+                var original = new RuntimeResult(item.Status, "Executed", "{\"stamp\":\"" + RuntimeIsoText + "\"}");
+                var evidence = new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, item.Effect);
+                var record = new ToolExecutionRecord(context, item.Outcome, context.StartedUtc, "Executed", evidence: evidence, result: original);
+                var before = JsonConvert.SerializeObject(record);
+                var materialized = new ToolResultMaterialization(record.Result);
+                var reference = new ResourceRef("rna://chat/session/artifact/full/revision/1", "1");
+                materialized.IncludeResultResource(reference, ChatArtifactKinds.ToolResult);
+                materialized.ReplaceResult(new RuntimeResult(item.Status, "Projection message", "{\"loaded\":false}", materialized.Result.Resources));
+                var ui = ToolResultUiProjection.Create(record);
+                ToolResultUiProjection.IncludeResources(ui, materialized);
+                ui.Success = !ui.Success;
+                ui.Status = "prepared";
+                ui.Message = "UI only";
+                ui.DataJson = "UI_ONLY";
+                ui.ModelResourceRefs[0].Uri = "rna://chat/ui-only";
+                ui.ModelResultResourceRef.Revision = "UI_ONLY";
+                var wire = ToolResultWire.Read(AgentJsonProtocol.BuildToolResult(
+                    new ToolCommand { ToolCallId = context.Call.Id, ToolId = context.Call.Name }, materialized));
+                AssertTrue(wire.Success, "UI mutation cannot invalidate the model resource relation");
+                AssertEqual(item.Status, wire.Result.Status, "projection keeps the terminal status");
+                AssertEqual("Projection message", wire.Result.Message, "UI prose is not model data");
+                AssertEqual(reference.Uri, wire.ResultResource.Uri, "UI references do not alias model references");
+                AssertEqual("1", wire.ResultResource.Revision, "UI cannot change the model result revision");
+                AssertEqual(before, JsonConvert.SerializeObject(record), "projection does not rewrite counts or execution evidence");
+                AssertTrue(ReferenceEquals(original, record.Result) && ReferenceEquals(evidence, record.Evidence),
+                    "the immutable executed result and evidence remain the originals");
+            }
+        }
+
+        private static void ToolRuntimeConversionFailurePreservesKnownOutcome()
+        {
+            var cases = new[]
+            {
+                new { Source = LegacyResult.Ok("Write completed"), Status = ToolResultStatus.Ok },
+                new { Source = LegacyResult.Fail("Write rejected", errorCode: "rejected"), Status = ToolResultStatus.Error },
+                new { Source = LegacyResult.PartialFailure("Write may have changed state"), Status = ToolResultStatus.Unknown }
+            };
+            foreach (var item in cases)
+                WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+                {
+                    item.Source.ModelResourceRefs = new ResourceRef[] { null };
+                    var outcome = LegacyToolOutcomeAdapter.Map(new ToolPolicySnapshot("excel.add_sheet", "revision", true), item.Source);
+                    RuntimeThrows<ArgumentException>(() => LegacyToolResultAdapter.Materialize(item.Source, outcome));
+                    adapter.QueueResult("excel.add_sheet", item.Source);
+                    var responses = new Queue<string>(new[]
+                    {
+                        LoadToolSchemaResponse("excel.add_sheet"),
+                        "{\"message\":\"Add sheet\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Added\"}}]}"
+                    });
+                    var modelCalls = 0;
+                    LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                    {
+                        modelCalls++;
+                        return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    };
+                    var session = NewSession(adapter);
+                    var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                    var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                        ChatModes.Agent, "Add sheet", session, NewContext(adapter),
+                        new AppSettings { AutoConfirmToolActions = true }, tools, null).GetAwaiter().GetResult();
+                    AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "conversion failure never retries execution");
+                    AssertEqual(2, modelCalls, "conversion failure never triggers model repair");
+                    var summary = JObject.FromObject(result)["ExecutionSummary"];
+                    AssertEqual(item.Status == ToolResultStatus.Ok ? 1 : 0, (int)summary["WriteOk"], "known success count survives conversion failure");
+                    AssertEqual(item.Status == ToolResultStatus.Error ? 1 : 0, (int)summary["WriteError"], "known error count survives conversion failure");
+                    AssertEqual(item.Status == ToolResultStatus.Unknown ? 1 : 0, (int)summary["WriteUnknown"], "conversion failure creates no extra unknown effect");
+                    var message = session.Messages.Single(entry => entry.ProtocolMessage && entry.Role != "assistant" &&
+                        entry.ToolName == "excel.add_sheet");
+                    ToolResultWireReadResult wire;
+                    string error;
+                    AssertTrue(ToolResultHistoryReader.TryRead(message, out wire, out error), "failed projection still closes the accepted exchange");
+                    AssertEqual(item.Status, wire.Result.Status, "fallback wire retains the established execution outcome");
+                    AssertEqual("result_materialization_failed", (string)RuntimeData(wire.Result.DataJson)["code"], "fallback identifies projection failure");
+                    var activity = session.Messages.Single(entry => entry.Activity != null && entry.Activity.ToolCallId == wire.ToolCallId).Activity;
+                    AssertEqual(ToolDispatchEvidence.MayHaveDispatched, activity.ExecutionEvidence.Dispatch, "conversion cannot claim non-dispatch");
+                    AssertEqual(ToolEffectEvidence.Unreported, activity.ExecutionEvidence.Effect, "legacy conversion never fabricates verified evidence");
+                });
+        }
+
+        private static JToken RuntimeData(string json)
+        {
+            return JsonConvert.DeserializeObject<JToken>(json, new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
         }
 
         private static TException RuntimeThrows<TException>(Action action) where TException : Exception

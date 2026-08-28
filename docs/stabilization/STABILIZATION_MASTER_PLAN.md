@@ -453,7 +453,7 @@ Wire/schema/prompts/history readers и consumers переключаются ат
 
 ### Совместимость
 
-Unversioned/v2/v3 history несовместима: full-history preflight требует явный новый чат/reset до preparation или confirmation, включая записи вне compacted prompt. V4 call без runtime ID/origin или с неоднозначной связью также отклоняется. Stream не переписывается, не обрезается и не удаляется автоматически; pending action можно отменить. Новые accepted записи используют только v4; adapters, ID repair и dual-write отсутствуют. Saved prompts сохраняют текст, но schema marker 13 требует явного review/reset.
+Unversioned/v2/v3 history несовместима: full-history preflight требует явный новый чат/reset до preparation или confirmation, включая записи вне compacted prompt. V4 call без runtime ID/origin или с неоднозначной связью также отклоняется. Stream не переписывается, не обрезается и не удаляется автоматически; pending action можно отменить. Новые accepted записи используют только v4; adapters, ID repair и dual-write отсутствуют. Saved prompts сохраняют текст; текущий schema marker 14 (Tool Result v1) требует явного review/reset старых instructions.
 
 ## 7.2. Tool Descriptor v1
 
@@ -1680,15 +1680,15 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 ### Выполнить
 
 4A закрыт host-neutral: [contracts/runtime/evidence](PHASE_4A_TOOL_RUNTIME.md).
-4B — отдельный атомарный switch model result writer/readers/prompts/history gate;
-internal typed result не закрывает wire gate и всю Phase 4.
+4B закрыт host-neutral отдельным атомарным switch writer/readers/prompts/history gate:
+[127 targeted checks / cleanup](PHASE_4B_TOOL_RESULT_V1.md). Windows/Office и domain qualification остаются открытыми; Phase 5 не начата.
 
-- [ ] Ввести:
+- [x] Ввести:
   - [x] `ToolDescriptor`;
   - [x] `ToolPolicy`;
   - [x] `ToolBinding`;
   - [x] `ToolPackageMetadata`;
-  - [ ] `ToolResult v1` — internal typed result введён в 4A; model-facing wire ожидает 4B;
+  - [x] `ToolResult v1` — internal contract 4A, единственный model wire 4B; old result history требует explicit reset/new chat;
   - [x] `IToolHandler`;
   - [x] `ToolRuntime`;
   - [x] `ToolHandlerRegistry`.
@@ -1705,8 +1705,8 @@ internal typed result не закрывает wire gate и всю Phase 4.
   - [x] только independent local reads могут быть последовательным списком;
   - [x] никакого generic auto retry.
 - [x] Убрать дублирующий `Success + Status` в новом contract.
-- [ ] Добавить model-facing serializer Tool Result v1.
-- [ ] Сохранить runtime-only pending/awaiting-user/non-dispatch signals и `ResourceRef` transport; 4A typed evidence покрыта, serializer/resource transport проверяется при wire switch 4B. Serializer не читает narrative для восстановления execution state.
+- [x] Добавить model-facing serializer Tool Result v1, strict reader и local marker1 для accepted call/result; переключить все replay roles и prompts/probes атомарно.
+- [x] Сохранить runtime-only pending/awaiting-user/non-dispatch signals и `ResourceRef` transport; 4B покрывает bounded materialization, three-role history/fork/clone и known outcome при projection failure. Serializer не читает narrative для восстановления execution state; actual controller/Windows qualification открыт.
 - [x] Отделить policy verification от actual effect evidence; покрыть read ok/error, write no-op/verified/unknown, confirmation и exception до/после возможного dispatch fake handler tests. Kernel считает каждый record один раз; запись run events остаётся через один `IRunStore`.
 - [x] Обновить protocol docs.
 - [x] Добавить ADR-0003.

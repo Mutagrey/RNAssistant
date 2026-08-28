@@ -5,9 +5,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using TerminalToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
 {
@@ -314,6 +318,62 @@ namespace RNAssistant.Harness
                     new[] { ninth });
                 AssertTrue(!revisionMismatch.Tools.Any(tool => tool.Id == ninthId),
                     "stale schema evidence cannot load a changed revision");
+
+                ToolResultWireReadResult exact;
+                string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(ninth, out exact, out error), "seed evidence has a strict current result: " + error);
+                var readCommand = new ToolCommand { ToolCallId = "read_evidence", ToolId = CapabilityDiscoveryExecutor.ReadToolId };
+                Action<ChatMessage, string> assertUnavailable = (message, reason) =>
+                {
+                    var restored = ProgressiveToolWorkingSet.Create(ChatModes.Agent, catalog, new AppSettings(), new[] { message });
+                    AssertTrue(!restored.Tools.Any(tool => tool.Id == ninthId), reason + " cannot replay a schema");
+                    IReadOnlyList<string> evicted;
+                    AssertTrue(!restored.ObserveReadResult(message, out evicted), reason + " cannot load a live schema");
+                    AssertEqual(0, evicted.Count, reason + " does not disturb authority");
+                };
+                foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+                {
+                    var current = AgentJsonProtocol.CreateToolResultMessage(readCommand, exact.Result, role);
+                    AssertTrue(ProgressiveToolWorkingSet.Create(ChatModes.Agent, catalog, new AppSettings(), new[] { current })
+                        .Tools.Any(tool => tool.Id == ninthId), role + " restores complete current schema evidence");
+                    assertUnavailable(AgentJsonProtocol.CreateToolResultMessage(readCommand,
+                        TerminalToolResult.Error("Read failed", exact.Result.DataJson), role), role + " error result");
+                    assertUnavailable(AgentJsonProtocol.CreateToolResultMessage(readCommand,
+                        TerminalToolResult.Unknown("Read uncertain", exact.Result.DataJson), role), role + " unknown result");
+                    foreach (var invalidate in new Action<ChatMessage>[]
+                    {
+                        message => message.ToolResultProtocolVersion = 0,
+                        message => message.ToolCallId = "wrong_id",
+                        message => message.ToolName = "wrong_name",
+                        message => message.ToolResultRole = "system",
+                        message => message.Content = message.Content.Replace("\"status\":\"ok\"", "\"ok\":true"),
+                        message => message.Content = message.Content.Replace("\"status\":\"ok\"", "\"status\":\"ok\",\"retryable\":false"),
+                        message => message.Content = "not a tool result"
+                    })
+                    {
+                        var malformed = AgentJsonProtocol.CreateToolResultMessage(readCommand, exact.Result, role);
+                        invalidate(malformed);
+                        assertUnavailable(malformed, role + " malformed result history");
+                    }
+                }
+                foreach (var invalidate in new Action<JObject>[]
+                {
+                    data => data["loaded"] = "true",
+                    data => data["loaded"] = false,
+                    data => data["complete"] = false,
+                    data => data["truncated"] = true,
+                    data => data.Remove("complete"),
+                    data => data["id"] = ninthId.ToUpperInvariant(),
+                    data => data["revision"] = "other_revision",
+                    data => data["descriptor"] = new JObject()
+                })
+                {
+                    var data = JObject.Parse(exact.Result.DataJson);
+                    invalidate(data);
+                    assertUnavailable(AgentJsonProtocol.CreateToolResultMessage(readCommand,
+                        TerminalToolResult.Ok("Tool schema loaded", data.ToString(Newtonsoft.Json.Formatting.None))),
+                        "incomplete or mismatched evidence payload");
+                }
             });
         }
 
@@ -386,7 +446,8 @@ namespace RNAssistant.Harness
             command.ToolCallId = callId;
             var result = executor.Execute(command, catalog, new AppSettings(), false, false);
             AssertTrue(result.Success, "schema read succeeds for " + toolId);
-            return AgentJsonProtocol.CreateToolResultMessage(command, result, ToolResultRoles.User);
+            return AgentJsonProtocol.CreateToolResultMessage(command,
+                LegacyToolResultAdapter.Materialize(result, ToolExecutionOutcome.Ok), ToolResultRoles.User);
         }
     }
 }

@@ -1,12 +1,12 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 4A — Tool contracts / first read-only runtime slice
-Current task: Phase 4A закрыт host-neutral: typed descriptor/policy/binding, single-call ToolRuntime, native common.resources_list и compact dispatch/effect evidence в existing events. [Evidence / 135 targeted tests](PHASE_4A_TOOL_RUNTIME.md#verification).
+Current phase: Phase 4B — Tool Result v1 atomic cutover (done host-neutral)
+Current task: writer/readers/prompts/history gate переключены одним изменением; R31 исправлен. [Evidence / 127 distinct targeted tests](PHASE_4B_TOOL_RESULT_V1.md#verification), MockDemo 0 errors / 3 existing CA1416.
 
-Next step: отдельный Phase 4B — Tool Result v1 writer + schema/skill-evidence readers + prompts/probes (включая R31) + result-history gate. Удалить старый wire и ProjectLegacy одновременно; Phase 5 не начинать до закрытия Phase 4.
-Required context: [master plan Phase 4](STABILIZATION_MASTER_PLAN.md#phase-4--tool-contracts-и-toolruntime), [ADR-0003 / 4B gate](../decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate), [4A boundary](PHASE_4A_TOOL_RUNTIME.md#phase-4b-boundary), [conversation protocol](../conversation-protocol.md#tool-result), [migration map](MIGRATION_MAP.md).
-Open gates / remaining legacy: Windows x64 + Office + VS 2022; R28 streaming и R29 live-provider qualification открыты. Legacy tool handlers сохраняют текущие domain preparation/document binding до своих switches. Tool Result legacy writer/evidence reader — removal gate 4B; persistence/UI redesign — Phase 9. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 5 — bound DocumentSession / HostRuntime. Phase 5 не начата; Phase 9/R32 docs готовятся отдельно и не включены в этот switch.
+Required context: [master Phase 5](STABILIZATION_MASTER_PLAN.md#phase-5--bound-documentsession-и-hostruntime), [Document Session contract](STABILIZATION_MASTER_PLAN.md#79-document-session-v1), [architecture](../architecture.md), [active result contract](../conversation-protocol.md#tool-result), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: Windows x64 + Office + VS 2022, controller cancellation/WebView delivery; R28 streaming и R29 live-provider qualification. R30 wire/resource gate закрыт host-neutral, Phase 8 lifecycle открыт. Legacy domain preparation/document binding и domain→typed/UI-only adapters — по MIGRATION_MAP. Старые result writer/readers и ProjectLegacy удалены. Product 16.1.0-dev, no release/tag.
 
 R29 (предыдущий commit `6a256f0`): model wire содержит только name/arguments, kernel выдаёт ID до accepted append/confirmation/dispatch; ToolCallId + immutable attempt/position origin сохраняются в том же stream без переписывания raw response. Tests покрывают long HTML, allocator failure, native pairing, repair correlation, confirmation/replay и ISO-preserving clone. [Evidence/ограничения/чистка](R29_RUNTIME_CALL_IDS.md); этот protocol switch завершён до Phase 4, product version остаётся 16.1.0-dev.
 
@@ -37,7 +37,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 2 | done (host-neutral) | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: `c9f8b07`; 2C3A: `330aa79`; 2C3B: `4bbb039`; 2C3C: `dbb8ce1` | 2C3C: 100 targeted cases; ValidateVersionFormat pass; подробности в evidence | not performed | 2C3C был v3; current v4 — отдельный R29 correction ниже; old-chat skip/reset и prompt review/reset проверены локально; Windows/live-provider gates открыты |
 | 3 | done host-neutral | 3A: `f01c3f2`; 3B1: `c1628ce`; 3B2: `15dea46` | 130 unique targeted cases; MockDemo compile; [evidence](PHASE_3B2_KERNEL_CUTOVER.md) | not performed | Production kernel switch + minimal real-store replay; Phase 4 отдельно |
 | 2/3 R29 | done host-neutral | этот commit | 141 unique targeted cases; MockDemo compile; [evidence](R29_RUNTIME_CALL_IDS.md) | not performed | Runtime IDs + v4; no v3 fallback, product version unchanged |
-| 4 | in progress: 4A done | this commit | 135 targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime/evidence](PHASE_4A_TOOL_RUNTIME.md); 4B wire still open |
+| 4 | done host-neutral: 4A + 4B | 85cc3f4 (4A); current 4B commit | 4B: 127 distinct targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime](PHASE_4A_TOOL_RUNTIME.md), [v1 wire/cleanup](PHASE_4B_TOOL_RESULT_V1.md); domain/Windows gates remain |
 | 5 | pending | — | — | — | Bound DocumentSession |
 | 6 | pending | — | — | — | VBA vertical slice |
 | 7 | pending | — | — | — | Excel vertical slice |
@@ -262,10 +262,11 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | 4B wire switch; corresponding handler migrations 6–7 / optional 11 remove mapping; R23 remains |
+| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | 4B wire switched; handler migrations 6–7 / optional 11 remove mapping; R23 remains |
 | RunExecutionSummary projection / old flat read records | Application / Persistence / UI | Messages, ChatRunRecord getter, clones, bridge, static UI | Phase 9: полная projection; старые pending не исполняются и не backfill |
 | LegacyToolDefinitionAdapter | ToolRuntime | Current catalog/schema/authoring, legacy execution, source policy projection | Phase 8 typed catalog/ToolPack; domain switches 6–7 / optional authoring 11; central name list removed in 4A |
-| NativeToolRuntimeAdapter.ProjectLegacy | ToolRuntime / ModelProtocol | Native result → AgentJsonProtocol/materialization/schema-evidence readers | 4B: atomic writer/readers/prompts/history gate, no dual wire |
+| LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Handler switches 6–7 / optional 11; no old-history reader |
+| ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 typed UI projection; manual/domain consumers 6–7 / optional 11 |
 
 Permanent model-session/metadata owners не являются compatibility adapters.
 Остальные consumers/removal gates — в [MIGRATION_MAP.md](MIGRATION_MAP.md).

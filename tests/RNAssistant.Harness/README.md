@@ -35,6 +35,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Area | Main files | Useful filters |
 | --- | --- | --- |
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
+| Tool Result v1 / strict JSON | `Program.ToolResultWireTests.cs`; projection checks in `Program.ToolRuntimeTests.cs` | `tool result wire:`, `tool result materialization:` |
 | Native ToolRuntime / typed contracts and effect evidence | `Program.ToolRuntimeTests.cs`; native read in `Program.ResourceGatewayTests.cs` | `tool runtime:` |
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
 | Office model-context owner | `Program.ToolDiscoveryTests.cs`; result/projection coverage in `Program.AgentSafetyTests.cs` | `agent: model session`, `agent: bounds oversized`, `context inspector:`, `protocol context:` |
@@ -175,8 +176,8 @@ The existing typed-settings bridge test uses the controller stub, not production
 controller execution. `node tests/web/prompt-review.test.js` verifies actual form
 serialization and action handlers with minimal DOM/transport substitutes, including
 cancel/failure/reset and Plan preservation; it does not verify WebView layout.
-R29 checks preservation/review/reset against actual v4 defaults/schema 13,
-including saved schema 12. JS review behavior is unchanged by the v4 cutover.
+R29 introduced v4/schema 13; Phase 4B tests current Tool Result v1/schema 14,
+including preservation/review/reset of saved schema 13. JS review behavior is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
 ## Full suite

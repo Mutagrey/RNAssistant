@@ -1,7 +1,7 @@
 # ADR-0003: Tool contracts and three-state results
 
 Date: 2026-08-28
-Status: Accepted; Phase 4A implemented and checked host-neutral. Phase 4B wire gate remains open.
+Status: Accepted; Phase 4A contracts and Phase 4B atomic wire cutover. Qualification is recorded in stabilization progress.
 
 ## Context
 
@@ -9,12 +9,11 @@ Status: Accepted; Phase 4A implemented and checked host-neutral. Phase 4B wire g
 separates description, local policy, execution binding and package metadata, while
 moving tools incrementally to a generic runtime. Its
 [Tool Result v1](../stabilization/STABILIZATION_MASTER_PLAN.md#74-tool-result-v1)
-has only three terminal states. Existing model-result writers and schema-evidence
-readers still use the legacy envelope; changing only the writer would break
-progressive discovery, materialization and replay.
+has only three terminal states. The former result writer and schema-evidence readers used a legacy envelope;
+changing only the writer would break progressive discovery, materialization and replay.
 
-Phase 4A therefore introduces the typed internal contract and one native handler.
-The model-facing result switch is a separate, coordinated Phase 4B. Conversation
+Phase 4A introduced the typed internal contract and one native handler.
+Phase 4B switches the model-facing result together with its consumers. Conversation
 Response v4, runtime call-ID ownership and the R29 history contract are unchanged.
 
 ## Decision
@@ -90,19 +89,40 @@ verified effect.
 
 ## Phase 4B wire gate
 
-The current legacy model-result writer remains authoritative in 4A, including its
-existing `ok`/status/error/resource representation. `NativeToolRuntimeAdapter`
-temporarily projects native results into that path. This is not simultaneous
-legacy/v1 model output. Do not serialize the new internal result directly.
+The single active writer is Core `ModelProtocol.ToolResultWire`. Its strict v1
+reader accepts only `tool_call_id`, `name`, `status`, `message`, `data`, and optional
+`resources`. Status is exactly `ok/error/unknown`; errors use `data.code` rather
+than a second error object. Resource URI/revision identity is preserved, with at
+most one `relation=result`; `kind`, internal IDs and CAS paths are not wire fields.
+Default DTO serialization, legacy status aliases and a second result writer are
+not supported. Bounded materialization is Office-owned and uses that same writer.
 
-Phase 4B must switch the Tool Result v1 writer together with AppSettings prompts
-and their review policy, ModelCompatibilityService probes,
-ProgressiveToolWorkingSet schema/skill-evidence readers, result materialization
-and resource handling, native/user/developer history writers and a full-history
-result-compatibility gate. It then removes the replaced writer/reader projection.
-Until that atomic switch, the target wire states `ok/error/unknown` in master §7.4
-are not the active model-result envelope. Existing VBA and other domain handlers
-are not migrated merely by changing a result serializer.
+`AgentJsonProtocol`, all three result roles, compatibility probes, schema evidence,
+prompts and full-history gate switch together. Prompt schema 14 preserves existing
+custom text/marker until explicit review/reset and corrects R31's model-owned-ID
+instruction. Runtime IDs and Conversation Response v4 do not change.
+
+Both accepted call and result records carry local `ToolResultProtocolVersion=1`.
+`ToolResultHistoryReader` validates current role shape, identity and body; the full
+history gate pairs results within the accepted user run, even outside compacted
+context. Old results and old pending calls require explicit reset/new chat, without
+rewriting or deleting streams. In-flight/typed pause records are not fabricated
+terminal failures; cancelling old pending work remains available. Historical prompt
+projection preserves complete envelopes and markers, rather than appending reference
+prose after JSON. History edit selection uses runtime metadata IDs, not an alternate
+permissive ID parser in a result body.
+
+`NativeToolRuntimeAdapter.ProjectLegacy` and the old writer/readers are removed.
+Native results flow directly through `ToolResultMaterialization`. The one-way
+`LegacyToolResultAdapter` converts only active domain results using their runtime
+outcome. `ToolResultUiProjection` serves manual commands and Activity consumers,
+never the model writer. Those consumers retain their domain preparation and richer
+internal states until their own migration gates; the wire switch does not migrate
+VBA/Excel document binding or declare their verification complete.
+
+Projection/budget/media failure cannot rewrite a saved outcome or effect evidence.
+Incomplete capability evidence is explicitly not loaded; its request projection is
+an error while the execution record remains immutable. No generic retry is added.
 
 ## Consequences and verification
 
@@ -115,7 +135,8 @@ slice. Fake verification evidence exercises aggregation only and does not qualif
 Office effects.
 
 Actual checks and cleanup are recorded in
-[Phase 4A evidence](../stabilization/PHASE_4A_TOOL_RUNTIME.md#verification).
-The 4A checks qualify the host-neutral runtime boundary only. R28, Windows
+[Phase 4A evidence](../stabilization/PHASE_4A_TOOL_RUNTIME.md#verification) and
+[current progress](../stabilization/PROGRESS.md).
+These checks qualify the host-neutral runtime/wire boundaries only. R28, Windows
 x64 + Office + VS 2022 and the separate Phase 5–9 host/domain/resource/persistence/UI
 gates remain open. R29 and product version are not changed by this decision.

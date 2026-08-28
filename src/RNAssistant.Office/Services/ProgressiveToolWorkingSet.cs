@@ -261,40 +261,35 @@ namespace RNAssistant.Office.Services
         private bool TryReadEvidence(ChatMessage message, out string id)
         {
             id = null;
-            if (message == null || !message.ProtocolMessage || string.IsNullOrWhiteSpace(message.Content)) return false;
-            var json = message.Content.Trim();
-            if (json.StartsWith("TOOL_RESULT:", StringComparison.Ordinal))
-            {
-                json = json.Substring("TOOL_RESULT:".Length).Trim();
-            }
-            JObject root;
+            RNAssistant.Core.ModelProtocol.ToolResultWireReadResult result;
+            string error;
+            if (!ToolResultHistoryReader.TryRead(message, out result, out error) ||
+                result.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
+                result.Name != CapabilityDiscoveryExecutor.ReadToolId || string.IsNullOrWhiteSpace(result.Result.DataJson)) return false;
+            JObject data;
             try
             {
-                root = JObject.Parse(json);
+                data = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JToken>(result.Result.DataJson,
+                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) as JObject;
             }
             catch (JsonException)
             {
                 return false;
             }
-            if ((bool?)root["ok"] != true ||
-                !string.Equals((string)root["name"], CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-            var data = root["data"] as JObject;
             if (data == null ||
-                !string.Equals((string)data["kind"], "tool-schema", StringComparison.Ordinal) ||
-                (bool?)data["loaded"] != true ||
-                (bool?)data["complete"] != true ||
-                (bool?)data["truncated"] != false)
+                data["kind"]?.Type != JTokenType.String || (string)data["kind"] != "tool-schema" ||
+                data["loaded"]?.Type != JTokenType.Boolean || !(bool)data["loaded"] ||
+                data["complete"]?.Type != JTokenType.Boolean || !(bool)data["complete"] ||
+                data["truncated"]?.Type != JTokenType.Boolean || (bool)data["truncated"] ||
+                data["id"]?.Type != JTokenType.String || data["revision"]?.Type != JTokenType.String)
             {
                 return false;
             }
-            id = ((string)data["id"] ?? string.Empty).Trim();
+            id = (string)data["id"];
             ToolDefinition tool;
-            if (string.IsNullOrWhiteSpace(id) || !_catalogById.TryGetValue(id, out tool)) return false;
+            if (string.IsNullOrWhiteSpace(id) || !_catalogById.TryGetValue(id, out tool) || id != tool.Id) return false;
             var revision = (string)data["revision"] ?? string.Empty;
-            if (!string.Equals(revision, CapabilityDiscoveryExecutor.Revision(tool), StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(revision, CapabilityDiscoveryExecutor.Revision(tool), StringComparison.Ordinal)) return false;
             var descriptor = data["descriptor"] as JObject;
             return descriptor != null && JToken.DeepEquals(descriptor, CapabilityDiscoveryExecutor.Descriptor(tool));
         }

@@ -146,6 +146,10 @@ writer and retain one raw attempt per probe, without retry or fallback.
 
 Accepted assistant records are explicitly marked protocol `4`. History is a
 projection of accepted runtime calls, not a second model-facing response format.
+Since Phase 4B, accepted calls and their results also carry local
+`ToolResultProtocolVersion=1`; the [Tool Result v1 contract](../conversation-protocol.md#tool-result)
+has one shared strict writer/reader. Old call/result markers require reset/new
+chat, including pending calls; no hidden result conversion is permitted.
 
 | Tool-result role | Accepted call and matching result |
 |---|---|

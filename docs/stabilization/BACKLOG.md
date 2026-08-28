@@ -20,7 +20,7 @@
 | 3B1 | Ввести pure AgentKernel, typed evidence и generic ports | done introduce-only; fake model/tool/store tests; production loop остаётся прежним |
 | 3B2 | Kernel production switch и existing event-store replay | done host-neutral; guards сохранены, старые loop/accounting удалены; Windows/controller delivery и полная Phase 9 matrix открыты |
 | 4A | Typed ToolRuntime / first native resources_list | done host-neutral; [135 targeted checks / evidence](PHASE_4A_TOOL_RUNTIME.md#verification). Source policy, exact registry, dispatch/effect separation, same-stream replay; legacy domain preparation retained |
-| 4B | Tool Result v1 wire и removal старых result readers | Atomic writer + schema/skill evidence + prompts/probes (включая R31) + resource materialization + full-history result gate; удалить ProjectLegacy/old writer, сохранить typed pending/awaiting-user/ResourceRef; Phase 5 не начинать |
+| 4B | Tool Result v1 wire и removal старых result readers | done host-neutral; [127 targeted checks / evidence](PHASE_4B_TOOL_RESULT_V1.md#verification). Writer/readers/prompts/probes/resource materialization/history gate switched; ProjectLegacy/old wire removed, typed controls preserved. Phase 5 separate |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests identity/lifetime и guard-read/dispatch/read-back под одним gate; manual/resource concurrency, confirmation без удержания document lock |
 | 6 | VBA vertical slice; отдельно оценить необходимость пользовательского package lifecycle для stable | Raw CAS bytes отдельно от comparable normalization; exact patch, journal/read-back/fault matrix, no fabricated terminal при persistence failure; общий package journal нужен rename, scope пока не сокращён |
 | 7 | Excel read/write vertical slice | Bound target, write-effect evidence |
@@ -39,8 +39,8 @@ R21: на Windows проверить production controller trace wiring, COM bou
 R22: тест `tools: compact catalog rejects removed aliases` ожидает 16 Excel tools,
 получает 15; одинаково падает на baseline `a24feb1` и после 1B. Проверить catalog и
 ожидание в Phase 8, не менять tool catalog в ModelProtocol commit.
-R23: заменить консервативный legacy result mapping на typed effect evidence в
-Phase 4; counts mutating invocations не означают число изменённых объектов или
+R23: typed runtime/result введены в Phase 4; legacy domain mapping снимается при
+handler switches Phases 6–7/11; counts mutating invocations не означают число изменённых объектов или
 независимую проверку read-back. Полная lifecycle/projection миграция — Phases 3/9.
 R24: проверить traffic/memory budget повторной передачи media через реальные
 endpoint retries; одна materialization сохраняется до окончания protocol step,
@@ -74,7 +74,7 @@ providers всё ещё требуют qualification. До Phase 4 external/uncl
 
 ## Вне текущего изменения
 
-- R31/P2: в `BuiltInSkillProvider` / `common.prompt_authoring` осталось требование unique call id. Оно противоречит v4 runtime ownership и может вернуть старую инструкцию при редактировании prompts. Удалить в 4B вместе с атомарным обновлением prompt consumers, добавить targeted skill-content regression; wire/parser/kernel R29 не менять. Source review подтвердил текст; live incident с этим skill не воспроизведён.
+- R31/P2 закрыт host-neutral в 4B: built-in prompt authoring больше не просит model-owned ID; schema14 и regression требуют runtime ownership и отличают status=ok от effect evidence. Wire/parser/kernel R29 не менялись; live skill incident не воспроизведён. [Evidence](PHASE_4B_TOOL_RESULT_V1.md#verification).
 
 Незакоммиченные до начала Phase 0 изменения protocol, runtime, OfficeHosts, tests
 и web сохраняются отдельно и не считаются выполнением Phase 1.

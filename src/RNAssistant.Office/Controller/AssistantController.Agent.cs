@@ -239,10 +239,18 @@ namespace RNAssistant.Office
                 var protocolStart = session.Messages.Count;
                 var settings = _settingsService.Load();
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
-                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(
-                    CloneCommand(pending.Command),
-                    result,
-                    settings.ToolResultRole));
+                // Cancellation also remains available for incompatible old pending
+                // records. Do not invent an ID or upgrade their result history.
+                var acceptedCall = session.Messages.LastOrDefault(message => message.ProtocolMessage &&
+                    message.Role == "assistant" && message.ToolCallId == pending.Command.ToolCallId &&
+                    message.ToolName == pending.Command.ToolId &&
+                    message.ToolResultProtocolVersion == RNAssistant.Core.ModelProtocol.ToolResultWire.CurrentVersion);
+                if (acceptedCall != null && RNAssistant.Core.ModelProtocol.ConversationResponseHistoryReader.Read(acceptedCall).Success)
+                    session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(
+                        CloneCommand(pending.Command),
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Error(result.Message,
+                            "{\"code\":\"tool_cancelled\"}"),
+                        settings.ToolResultRole));
                 AnnotateRunMessages(session, protocolStart, "cancel_" + Guid.NewGuid().ToString("N"));
                 // Explicit user cancellation is terminal for this run: persist it, but do not invoke the model.
                 if (session.LastRun != null)

@@ -107,6 +107,7 @@
     <Compile Include="ModelProtocol\AgentModelProtocol.cs" />
     <Compile Include="ModelProtocol\ModelProtocolContracts.cs" />
     <Compile Include="ModelProtocol\ModelProtocolWire.cs" />
+    <Compile Include="ModelProtocol\ToolResultWire.cs" />
     <Compile Include="ModelProtocol\ModelProtocolClient.cs" />
     <Compile Include="ModelProtocol\ModelProtocolRetryBudget.cs" />
     <Compile Include="ModelProtocol\ConversationResponse.cs" />

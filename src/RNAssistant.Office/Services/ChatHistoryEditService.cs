@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 
@@ -328,17 +326,6 @@ namespace RNAssistant.Office.Services
                 if (call != null && !string.IsNullOrWhiteSpace(call.Id)) target.Add(call.Id);
             }
             AddIds(message.Activity, target);
-
-            var content = message.Content ?? string.Empty;
-            if (!message.ProtocolMessage || !content.StartsWith("TOOL_RESULT:", StringComparison.Ordinal)) return;
-            try
-            {
-                var id = (string)JObject.Parse(content.Substring("TOOL_RESULT:".Length).Trim())["tool_call_id"];
-                if (!string.IsNullOrWhiteSpace(id)) target.Add(id);
-            }
-            catch (JsonException)
-            {
-            }
         }
 
         private static void AddIds(ChatActivity activity, ISet<string> target)

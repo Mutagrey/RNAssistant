@@ -29,15 +29,56 @@ namespace RNAssistant.Office.Services
                 session.LastRun.ResponseProtocolVersion != AgentResponseProtocol.CurrentVersion)
                 throw HistoryFailure("Версия протокола последнего запуска несовместима.");
             // Check the full projection, never the compacted prompt window. Suppressed
-            // accepted responses still belong to this chat; activities/results do not.
+            // accepted responses/results still belong to this chat. Missing results
+            // may be typed pauses or in-flight calls; the kernel owns that lifecycle.
             var origins = new HashSet<Tuple<string, string, int>>();
+            var calls = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+            var results = new HashSet<string>(StringComparer.Ordinal);
             foreach (var message in session.Messages)
             {
-                if (message.Activity != null || !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)) continue;
+                if (message.Activity != null) continue;
+                if (!string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!message.ProtocolMessage && string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Confirmation resumes this scope; a new user turn starts a new id namespace.
+                        calls.Clear();
+                        results.Clear();
+                    }
+                    var isResult = message.Role == ToolResultRoles.Tool || message.ToolResultProtocolVersion != 0 ||
+                        !string.IsNullOrWhiteSpace(message.ToolCallId) || !string.IsNullOrWhiteSpace(message.ToolName) ||
+                        !string.IsNullOrWhiteSpace(message.ToolResultRole) ||
+                        message.ProtocolMessage && (message.Content ?? string.Empty).StartsWith("TOOL_RESULT:", StringComparison.Ordinal);
+                    if (!isResult) continue;
+                    ToolResultWireReadResult result;
+                    string error;
+                    if (!ToolResultHistoryReader.TryRead(message, out result, out error))
+                        throw HistoryFailure("Неполная запись результата инструмента: " + error);
+                    ChatMessage accepted;
+                    if (!calls.TryGetValue(result.ToolCallId, out accepted) || accepted.ToolName != result.Name ||
+                        accepted.ToolResultRole != message.Role || !results.Add(result.ToolCallId))
+                        throw HistoryFailure("Результат не связан с единственным принятым вызовом и его ролью.");
+                    continue;
+                }
                 if (message.ResponseProtocolVersion != AgentResponseProtocol.CurrentVersion)
                     throw HistoryFailure("История содержит ответ другой или неизвестной версии протокола.");
                 var parsed = ConversationResponseHistoryReader.Read(message);
                 if (!parsed.Success) throw HistoryFailure("Неполная запись принятого ответа: " + parsed.Error);
+                if (parsed.Response.ToolCalls.Count > 0)
+                {
+                    if (!message.ProtocolMessage || message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
+                        message.ToolResultRole != ToolResultRoles.User && message.ToolResultRole != ToolResultRoles.Developer &&
+                        message.ToolResultRole != ToolResultRoles.Tool || calls.ContainsKey(message.ToolCallId))
+                        throw HistoryFailure("Принятый вызов относится к другой версии результатов или имеет повторный id.");
+                    var native = message.ToolResultRole == ToolResultRoles.Tool;
+                    if (native != (message.ToolCalls != null && message.ToolCalls.Count == 1) ||
+                        native && (message.ToolCalls[0].Name != AgentJsonProtocol.ApiToolName(message.ToolName) ||
+                            message.ToolCalls[0].Type != "function"))
+                        throw HistoryFailure("Форма принятого вызова не соответствует сохранённой роли результатов.");
+                    calls.Add(message.ToolCallId, message);
+                }
+                else if (message.ToolResultProtocolVersion != 0 || !string.IsNullOrWhiteSpace(message.ToolResultRole))
+                    throw HistoryFailure("Ответ без вызова содержит метаданные результата инструмента.");
                 var origin = message.AcceptedCallOrigin;
                 if (origin != null && !origins.Add(Tuple.Create(origin.StepId, origin.ModelAttemptId, origin.CallIndex)))
                     throw HistoryFailure("Один вызов model attempt связан с несколькими accepted records.");

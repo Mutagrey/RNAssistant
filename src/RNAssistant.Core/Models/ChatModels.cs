@@ -125,6 +125,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public int ResponseProtocolVersion { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int ToolResultProtocolVersion { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public string ResponseStatus { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public RunExecutionSummary ExecutionSummary { get; set; }

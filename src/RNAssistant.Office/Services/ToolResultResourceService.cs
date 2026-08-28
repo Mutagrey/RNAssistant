@@ -14,11 +14,11 @@ namespace RNAssistant.Office.Services
         public static ChatArtifact ExternalizeIfNeeded(
             ChatSession session,
             ToolCommand command,
-            ToolResult result,
+            ToolResultMaterialization result,
             int inlineTokenBudget,
             AppSettings settings)
         {
-            var data = result == null ? null : result.DataJson;
+            var data = result == null ? null : result.Result.DataJson;
             if (session == null || string.IsNullOrWhiteSpace(data) ||
                 data.Length > ChatArtifactLimits.MaximumTextCharacters)
             {
@@ -58,7 +58,7 @@ namespace RNAssistant.Office.Services
         private static ChatArtifact AddArtifact(
             ChatSession session,
             ToolCommand command,
-            ToolResult result,
+            ToolResultMaterialization result,
             string kind,
             string title,
             string mimeType,
@@ -68,8 +68,7 @@ namespace RNAssistant.Office.Services
             var existing = ReferencedArtifact(session, result, kind, content);
             if (existing != null)
             {
-                result.ModelResultResourceRef = ChatResourceUri.CreateArtifactRevision(session, existing);
-                result.ModelResultResourceKind = existing.Kind;
+                result.IncludeResultResource(ChatResourceUri.CreateArtifactRevision(session, existing), existing.Kind);
                 return existing;
             }
 
@@ -88,34 +87,26 @@ namespace RNAssistant.Office.Services
                         : "rnassistant.toolResult",
                     toolId = toolId,
                     toolCallId = command == null ? null : command.ToolCallId,
-                    status = result == null ? null : result.Status,
-                    success = result != null && result.Success,
+                    status = result.Result.Status.ToString().ToLowerInvariant(),
                     originalCharacters = (content ?? string.Empty).Length
                 })
             };
             session.Artifacts.Add(artifact);
 
             var reference = ChatResourceUri.CreateArtifactRevision(session, artifact);
-            result.ModelResultResourceRef = new ResourceRef(reference.Uri, reference.Revision);
-            result.ModelResultResourceKind = artifact.Kind;
-            var references = (result.ModelResourceRefs ?? new ResourceRef[0])
-                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Uri))
-                .Select(item => new ResourceRef(item.Uri, item.Revision))
-                .ToList();
-            references.Add(reference);
-            result.ModelResourceRefs = references;
+            result.IncludeResultResource(reference, artifact.Kind);
             return artifact;
         }
 
         private static ChatArtifact ReferencedArtifact(
             ChatSession session,
-            ToolResult result,
+            ToolResultMaterialization result,
             string kind,
             string content)
         {
             foreach (var reference in result == null
                 ? new ResourceRef[0]
-                : result.ModelResourceRefs ?? new ResourceRef[0])
+                : result.Result.Resources)
             {
                 string artifactId;
                 if (!ChatResourceUri.TryGetCurrentArtifactId(session, reference, out artifactId)) continue;
@@ -143,7 +134,8 @@ namespace RNAssistant.Office.Services
             JToken parsed;
             try
             {
-                parsed = JToken.Parse(data);
+                parsed = JsonConvert.DeserializeObject<JToken>(data,
+                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) ?? JValue.CreateNull();
             }
             catch (JsonException)
             {
@@ -156,7 +148,8 @@ namespace RNAssistant.Office.Services
         {
             try
             {
-                JToken.Parse(data);
+                JsonConvert.DeserializeObject<JToken>(data,
+                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
                 return true;
             }
             catch (JsonException)
@@ -170,7 +163,9 @@ namespace RNAssistant.Office.Services
             chart = null;
             try
             {
-                chart = JObject.Parse(data ?? string.Empty);
+                chart = JsonConvert.DeserializeObject<JObject>(data ?? string.Empty,
+                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
+                if (chart == null) return false;
                 var type = (string)chart["type"] ?? (string)chart["Type"];
                 if (string.Equals(type, "rnassistant.chart", StringComparison.OrdinalIgnoreCase)) return true;
                 chart = null;

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 
@@ -348,7 +349,9 @@ namespace RNAssistant.Office.Services
                 .Select(group => group.First())
                 .ToList();
 
-            message.Content = RebaseJsonText(session, message.Content, "TOOL_RESULT:");
+            var resultPrefix = string.Equals(message.Role, ToolResultRoles.Tool, StringComparison.OrdinalIgnoreCase) &&
+                message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion ? null : "TOOL_RESULT:";
+            message.Content = RebaseJsonText(session, message.Content, resultPrefix);
             foreach (var call in message.ToolCalls ?? new List<RNAssistant.Core.Llm.LlmToolCall>())
             {
                 if (call != null) call.ArgumentsJson = RebaseJsonText(session, call.ArgumentsJson, null);

@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
@@ -112,7 +113,7 @@ namespace RNAssistant.Harness
 
         private static void SettingsPromptReviewPreservesStoredText()
         {
-            foreach (var oldVersion in new[] { 0, 11, 12 })
+            foreach (var oldVersion in new[] { 0, 11, 12, 13 })
             WithTempPaths(paths =>
             {
                 var service = new SettingsService(paths);
@@ -160,7 +161,7 @@ namespace RNAssistant.Harness
                 reviewed.EnsureAgentPromptsReviewed();
                 AssertEqual(oldVersion, loaded.AgentPromptSchemaVersion, "save stages review on a copy, not the caller's draft");
                 AssertTrue(prompts(legacy).SequenceEqual(prompts(reviewed)), "explicit review preserves custom text");
-                AssertEqual(13, reviewed.AgentPromptSchemaVersion, "explicit review persists schema 13 for conversation v4");
+                AssertEqual(14, reviewed.AgentPromptSchemaVersion, "explicit review persists schema 14 for Tool Result v1");
                 AssertTrue(File.ReadAllText(paths.SettingsFile).IndexOf("reviewAgentPrompts", StringComparison.OrdinalIgnoreCase) < 0,
                     "review command is transient, not a sticky settings flag");
 
@@ -172,14 +173,47 @@ namespace RNAssistant.Harness
                 service.Save(reset, null, null, true);
                 var defaults = service.Load();
                 defaults.EnsureAgentPromptsReviewed();
-                AssertEqual(13, defaults.AgentPromptSchemaVersion, "explicit reset persists schema 13");
+                AssertEqual(14, defaults.AgentPromptSchemaVersion, "explicit reset persists schema 14");
                 foreach (var instruction in new[] { defaults.SystemPrompt, defaults.ChatSystemPrompt, defaults.PlanSystemPrompt })
+                {
                     AssertContains(instruction, "conversation-response-v4", "explicit reset installs actual v4 defaults");
+                    AssertContains(instruction, "`TOOL_RESULT` v1", "explicit reset installs Tool Result v1 in every mode");
+                }
                 AssertTrue(prompts(new AppSettings()).SequenceEqual(prompts(defaults)), "explicit cleared prompts and review select current defaults");
                 AssertEqual("custom compaction", defaults.ContextCompactionPrompt, "conversation review leaves helper instructions alone");
                 AssertEqual("custom title", defaults.ChatTitlePrompt, "title prompt is not implicitly reset");
                 AssertEqual("custom media", defaults.AttachmentAnalysisPrompt, "media prompt is not implicitly reset");
             });
+        }
+
+        private static void BuiltInPromptGuidanceUsesRuntimeIdsAndToolResultV1()
+        {
+            var skills = BuiltInSkillProvider.GetSkills(FakeOfficeAdapter.ForHost("Excel"));
+            var authoring = skills.Single(skill => skill.Id == "common.prompt_authoring").BodyMarkdown;
+            AssertContains(authoring, "Each model call contains only an exact name and object arguments; never include id",
+                "prompt authoring keeps the model call wire free of runtime IDs");
+            AssertContains(authoring, "Runtime assigns call IDs after validation, before accepted history is persisted",
+                "prompt authoring assigns identity to runtime before durable acceptance");
+            AssertTrue(authoring.IndexOf("Each call needs a unique id", StringComparison.OrdinalIgnoreCase) < 0,
+                "R31 model-owned identity guidance cannot return");
+            foreach (var skill in skills)
+                AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
+                    skill.Id + " does not teach the removed result success flag");
+            foreach (var id in new[] { "common.prompt_authoring", "common.task_tracking" })
+            {
+                var body = skills.Single(skill => skill.Id == id).BodyMarkdown;
+                AssertContains(body, "TOOL_RESULT status=ok", id + " uses the active terminal success state");
+                AssertContains(body, "does not by itself prove an applied effect", id + " distinguishes success from effect evidence");
+            }
+            var defaults = new AppSettings();
+            foreach (var prompt in new[] { defaults.SystemPrompt, defaults.ChatSystemPrompt, defaults.PlanSystemPrompt })
+            {
+                AssertContains(prompt, "contains only `tool_call_id`, `name`, `status`, `message`, `data`, and optional `resources`",
+                    "every mode teaches the same bounded result envelope");
+                AssertContains(prompt, "`status` is exactly `ok`, `error`, or `unknown`", "no extra model-facing result states");
+                AssertContains(prompt, "does not by itself prove an applied effect", "defaults require actual effect evidence");
+                AssertTrue(prompt.IndexOf("ok=true", StringComparison.OrdinalIgnoreCase) < 0, "defaults do not teach the legacy success flag");
+            }
         }
 
         private static void SettingsNormalizeInvalidNumericValues()

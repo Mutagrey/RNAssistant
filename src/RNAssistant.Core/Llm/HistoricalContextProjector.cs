@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Llm
@@ -17,9 +18,14 @@ namespace RNAssistant.Core.Llm
             {
                 Id = source.Id,
                 Role = source.Role,
-                Content = AppendReferences(source),
+                // Accepted call/result JSON already carries its exact references.
+                // Appending prose would break the one-envelope wire after replay.
+                Content = source.ProtocolMessage && source.ToolResultProtocolVersion == ToolResultWire.CurrentVersion
+                    ? source.Content : AppendReferences(source),
                 ExcludeFromModelContext = source.ExcludeFromModelContext,
                 ProtocolMessage = source.ProtocolMessage,
+                ResponseProtocolVersion = source.ResponseProtocolVersion,
+                ToolResultProtocolVersion = source.ToolResultProtocolVersion,
                 ToolCallId = source.ToolCallId,
                 AcceptedCallOrigin = source.AcceptedCallOrigin,
                 ToolName = source.ToolName,

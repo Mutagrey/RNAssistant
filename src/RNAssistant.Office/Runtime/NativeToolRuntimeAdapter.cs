@@ -4,11 +4,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
-using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using LegacyResult = RNAssistant.Core.Models.ToolResult;
@@ -78,37 +76,7 @@ namespace RNAssistant.Office.Runtime
             var context = new ToolExecutionContext(call, policy, identity, identity,
                 string.IsNullOrWhiteSpace(command.RuntimeStepId) ? identity : command.RuntimeStepId,
                 DateTime.UtcNow, confirmed, remainingSteps);
-            return ProjectLegacy(ExecuteAsync(context, token).GetAwaiter().GetResult());
-        }
-
-        // Removed with the coordinated Tool Result v1 writer/readers switch (4B).
-        // This is the only projection of native results into the CURRENT wire path.
-        internal static LegacyResult ProjectLegacy(ToolExecutionRecord record)
-        {
-            var typed = record.Result;
-            LegacyResult result;
-            if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation)
-            {
-                result = LegacyResult.WaitingConfirmation(record.Message);
-                result.PendingId = record.PendingId;
-            }
-            else if (typed != null && typed.Status == ToolResultStatus.Ok)
-                result = record.AwaitingUser ? LegacyResult.AwaitingUser(typed.Message, typed.DataJson) : LegacyResult.Ok(typed.Message, typed.DataJson);
-            else
-            {
-                var error = typed == null || string.IsNullOrWhiteSpace(typed.DataJson) ? null :
-                    JsonConvert.DeserializeObject<JToken>(typed.DataJson,
-                        new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) as JObject;
-                var code = error == null ? null : error["code"];
-                var retryable = error == null ? null : error["retryable"];
-                result = LegacyResult.Fail(record.Message, typed == null ? null : typed.DataJson,
-                    code != null && code.Type == JTokenType.String ? (string)code : null,
-                    retryable != null && retryable.Type == JTokenType.Boolean ? (bool?)retryable : null);
-                if (record.Outcome == ToolExecutionOutcome.Unknown) result.Status = "unknown";
-            }
-            if (typed != null) result.ModelResourceRefs = typed.Resources.ToList();
-            result.ToolStepsConsumed = record.ToolStepsConsumed;
-            return result;
+            return ToolResultUiProjection.Create(ExecuteAsync(context, token).GetAwaiter().GetResult());
         }
 
         private void Trace(ToolExecutionContext context, string stage, string status)

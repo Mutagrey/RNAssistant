@@ -83,6 +83,7 @@
     <Compile Include="Diagnostics\RuntimeLog.cs" />
     <Compile Include="Runtime\AssistantRuntime.cs" />
     <Compile Include="Runtime\LegacyToolDefinitionAdapter.cs" />
+    <Compile Include="Runtime\LegacyToolResultAdapter.cs" />
     <Compile Include="Runtime\NativeToolRuntimeAdapter.cs" />
     <Compile Include="Runtime\ToolHandlerRegistry.cs" />
     <Compile Include="Runtime\ToolRuntime.cs" />
@@ -114,6 +115,9 @@
     <Compile Include="Services\ResourceProviderRegistry.cs" />
     <Compile Include="Services\ResourceReadCursor.cs" />
     <Compile Include="Services\ToolResultResourceService.cs" />
+    <Compile Include="Services\ToolResultMaterialization.cs" />
+    <Compile Include="Services\ToolResultUiProjection.cs" />
+    <Compile Include="Services\ToolResultHistoryReader.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\ConversationRunService.cs" />
     <Compile Include="Services\ConversationKernelAdapter.cs" />

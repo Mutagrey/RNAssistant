@@ -214,6 +214,7 @@ namespace RNAssistant.Office.Services
                 ExcludeFromModelContext = message.ExcludeFromModelContext,
                 ProtocolMessage = message.ProtocolMessage,
                 ResponseProtocolVersion = message.ResponseProtocolVersion,
+                ToolResultProtocolVersion = message.ToolResultProtocolVersion,
                 ResponseStatus = message.ResponseStatus,
                 ExecutionSummary = message.ExecutionSummary == null ? null : message.ExecutionSummary.Clone(),
                 ToolCallId = message.ToolCallId,

@@ -7,6 +7,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
+using RuntimeToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
 {
@@ -18,32 +19,26 @@ namespace RNAssistant.Harness
             var session = NewSession(adapter);
             session.Mode = ChatModes.Agent;
             session.Messages.Add(new ChatMessage { Role = "user", Content = "Проверь таблицу." });
+            var call = new AgentToolCall
+            {
+                Id = "call_1",
+                Name = "excel.read_range",
+                Arguments = new Dictionary<string, object> { ["address"] = "A1:B4" }
+            };
+            var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, string.Empty, null,
+                ToolResultRoles.User, FixtureCallOrigin("inspector-step"));
+            callMessage.RunId = "run-1";
+            session.Messages.Add(callMessage);
+            var resultMessage = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolCommand { ToolCallId = call.Id, ToolId = call.Name },
+                RuntimeToolResult.Ok("Read"), ToolResultRoles.User);
+            resultMessage.RunId = "run-1";
+            session.Messages.Add(resultMessage);
             session.Messages.Add(new ChatMessage
             {
-                Role = "assistant",
-                ProtocolMessage = true,
-                RunId = "run-1",
-                ToolCalls = new List<LlmToolCall>
-                {
-                    new LlmToolCall
-                    {
-                        Id = "call_1",
-                        Type = "function",
-                        Name = "excel.read_range",
-                        ArgumentsJson = "{\"address\":\"A1:B4\"}"
-                    }
-                }
+                Role = "assistant", Content = "Диапазон прочитан.",
+                ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion
             });
-            session.Messages.Add(new ChatMessage
-            {
-                Role = "user",
-                ProtocolMessage = true,
-                RunId = "run-1",
-                ToolCallId = "call_1",
-                ToolName = "excel.read_range",
-                Content = "TOOL_RESULT: {\"ok\":true,\"tool_call_id\":\"call_1\",\"name\":\"excel.read_range\",\"status\":\"completed\",\"message\":\"Read\"}"
-            });
-            session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Диапазон прочитан." });
             session.Artifacts.Add(new ChatArtifact
             {
                 Id = "plan_r1",

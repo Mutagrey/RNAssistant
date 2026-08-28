@@ -15,8 +15,11 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using TerminalToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
+using ToolResultStatus = RNAssistant.Core.Tools.Contracts.ToolResultStatus;
 
 namespace RNAssistant.Harness
 {
@@ -43,7 +46,7 @@ namespace RNAssistant.Harness
             session.Messages.Add(new ChatMessage { Role = "user", Content = "Current request", RunId = "current_turn" });
             session.Messages.Add(ContextAcceptedCall("before_compaction"));
             session.Messages[3].RunId = "current_turn";
-            session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "before_compaction", ToolId = "excel.inspect" }, ToolResult.Ok("ok")));
+            session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "before_compaction", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok")));
             var pending = ContextAcceptedCall("pending_id", ToolResultRoles.Tool, FixtureCallOrigin("step"));
             pending.RunId = "resume_1";
             pending.ExcludeFromModelContext = true;
@@ -165,16 +168,72 @@ namespace RNAssistant.Harness
                 ExpectProtocolPreflightBlock(() => service.ExecuteAsync(ChatModes.Agent, "Request", incompatibleRun, NewContext(adapter),
                     new AppSettings(), tools, null).GetAwaiter().GetResult());
                 AssertEqual(incompatibleRunBefore, JsonConvert.SerializeObject(incompatibleRun), "unknown run marker is not overwritten by a fresh run");
+
+                foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+                foreach (var invalidate in new Action<ChatSession>[]
+                {
+                    session => session.Messages[1].ToolResultProtocolVersion = 0,
+                    session => session.Messages[2].ToolResultProtocolVersion = 0,
+                    session => session.Messages[1].ToolResultProtocolVersion = ToolResultWire.CurrentVersion + 1,
+                    session => session.Messages[2].ToolResultProtocolVersion = ToolResultWire.CurrentVersion + 1,
+                    session => session.Messages[2].Content = session.Messages[2].Content.Replace("\"status\":\"ok\"", "\"ok\":true"),
+                    session => session.Messages[2].Content = session.Messages[2].Content.Replace("\"status\":\"ok\"", "\"status\":\"ok\",\"retryable\":false"),
+                    session => session.Messages[2].Content = session.Messages[2].Content.Replace("tool_call_id", "toolCallId"),
+                    session => session.Messages[2].ToolCallId = "different_id",
+                    session => session.Messages[2].ToolName = "wrong_name",
+                    session => session.Messages[2].Content = session.Messages[2].Content.Replace("result_id", "different_id"),
+                    session =>
+                    {
+                        session.Messages[2].Content = session.Messages[2].Content.Replace("excel.inspect", "excel.other");
+                        session.Messages[2].ToolName = role == ToolResultRoles.Tool ? AgentJsonProtocol.ApiToolName("excel.other") : "excel.other";
+                    },
+                    session => session.Messages[2].ToolResultRole = "system",
+                    session => session.Messages[2].Role = "system",
+                    session => session.Messages[2].ProtocolMessage = false,
+                    session => session.Messages[2].ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                    session => session.Messages[2].Content = role == ToolResultRoles.Tool
+                        ? "TOOL_RESULT:\n" + session.Messages[2].Content
+                        : session.Messages[2].Content.Substring("TOOL_RESULT:\n".Length),
+                    session => session.Messages.RemoveAt(1),
+                    session => session.Messages.Insert(3, ChatCloneService.CloneMessages(new[] { session.Messages[2] }).Single()),
+                    session =>
+                    {
+                        var misplacedResult = session.Messages[2];
+                        session.Messages.RemoveAt(2);
+                        session.Messages.Insert(1, misplacedResult);
+                    }
+                })
+                {
+                    var session = NewSession(adapter);
+                    session.Messages.Add(new ChatMessage { Role = "user", Content = "Earlier tool request" });
+                    session.Messages.Add(ContextAcceptedCall("result_id", role));
+                    var oldResult = AgentJsonProtocol.CreateToolResultMessage(
+                        new ToolCommand { ToolCallId = "result_id", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok"), role);
+                    oldResult.ExcludeFromModelContext = true;
+                    session.Messages.Add(oldResult);
+                    var checkpoint = new ContextCheckpoint { ThroughMessageId = oldResult.Id, SummaryMarkdown = "Earlier tool summarized" };
+                    session.ContextCheckpoints.Add(checkpoint);
+                    session.ActiveContextCheckpointId = checkpoint.Id;
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage("Current final", null, null, "completed"));
+                    invalidate(session);
+                    var before = JsonConvert.SerializeObject(session);
+                    ExpectProtocolPreflightBlock(() => service.ExecuteAsync(ChatModes.Agent, "New request", session,
+                        NewContext(adapter), new AppSettings(), tools,
+                        (phase, message, activity) => progressCalls++).GetAwaiter().GetResult());
+                    AssertEqual(before, JsonConvert.SerializeObject(session), "incompatible result history remains unchanged: " + role);
+                }
                 AssertEqual(0, rawCalls, "no model or compaction dispatch from incompatible full history");
                 AssertEqual(0, boundaryCalls, "blocked before model boundary construction");
                 AssertEqual(0, progressCalls, "blocked before execution progress");
+                AssertEqual(0, adapter.Executed.Count, "incompatible full history never dispatches an Office tool");
 
                 var current = NewSession(adapter);
                 current.LastRun = new ChatRunRecord(); // No accepted response in the last failed/unfinished run.
                 current.Messages.Add(new ChatMessage { Role = "user", Content = "Earlier request" });
                 current.Messages.Add(AgentTranscript.CreateAssistantMessage("{\"quoted\":\"text\"}", null, null, "completed"));
                 current.Messages.Add(new ChatMessage { Role = "assistant", Activity = new ChatActivity { Kind = "diagnostic" } });
-                current.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "result", ToolId = "excel.inspect" }, ToolResult.Ok("ok")));
+                current.Messages.Add(ContextAcceptedCall("result"));
+                current.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "result", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok")));
                 var result = service.ExecuteAsync(ChatModes.Agent, "Next request", current, NewContext(adapter), new AppSettings(), tools, null)
                     .GetAwaiter().GetResult();
                 AssertEqual("Done", result.AssistantText, "current history, diagnostic and tool-result forms remain usable");
@@ -207,6 +266,8 @@ namespace RNAssistant.Harness
                     session => session.Messages[3].ToolCallId = null,
                     session => session.Messages.RemoveAt(5),
                     session => session.Messages[5].ToolCalls[0].Id = "wrong_id",
+                    session => session.Messages[5].ToolResultProtocolVersion = 0,
+                    session => session.Messages[4].ToolResultProtocolVersion = 0,
                     session => session.Messages[3].AcceptedCallOrigin = null,
                     session => session.Messages[5].AcceptedCallOrigin = session.Messages[3].AcceptedCallOrigin,
                     session => session.LastRun.TurnId = "wrong_turn",
@@ -325,7 +386,7 @@ namespace RNAssistant.Harness
             for (var index = 0; index < batchIds.Length; index++)
                 session.Messages.Add(ContextAcceptedCall(batchIds[index], origin: FixtureCallOrigin("batch-step", batchAttempt, index)));
             foreach (var id in batchIds)
-                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = id, ToolId = "excel.inspect" }, ToolResult.Ok("read")));
+                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = id, ToolId = "excel.inspect" }, TerminalToolResult.Ok("read")));
             var before = JsonConvert.SerializeObject(session);
             var continuation = ConversationProtocolContext.RestoreContinuation(session, ContextPendingCommand());
             AssertTrue(continuation.AcceptedCallIds.SequenceEqual(new[] { "batch_1", "batch_2", "before_compaction", "pending_id" }),
@@ -1101,7 +1162,7 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "Do not include `id`; runtime assigns call IDs", "all modes reserve call identity for runtime");
             AssertTrue(settings.AgentToolsPrompt.StartsWith("# Agent tool policy", StringComparison.Ordinal), "tool prompt is separate Markdown");
             AssertContains(settings.AgentToolsPrompt, "unclassified calls are singleton", "tool prompt describes conservative batching");
-            AssertContains(settings.AgentToolsPrompt, "optional exact `resources`", "tool prompt explains externalized results");
+            AssertContains(settings.AgentToolsPrompt, "exact `resources` URI with `relation=result`", "tool prompt explains externalized results");
             AssertTrue(settings.AgentSkillsPrompt.StartsWith("# Agent skill policy", StringComparison.Ordinal), "skill prompt is separate Markdown");
             AssertContains(settings.AgentSkillsPrompt, "metadata only", "skill catalog is explicitly not loaded guidance");
             AssertContains(settings.AgentSkillsPrompt, "package `revision`", "skill prompt describes revisions");
@@ -1337,7 +1398,7 @@ namespace RNAssistant.Harness
                 Arguments = new Dictionary<string, object> { ["range"] = "A1" }
             };
             var command = new ToolCommand { ToolId = call.Name, ToolCallId = call.Id };
-            var result = ToolResult.Ok("read", "{\"value\":1}");
+            var result = TerminalToolResult.Ok("read", "{\"value\":1}");
 
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer })
             {
@@ -1371,6 +1432,68 @@ namespace RNAssistant.Harness
             AssertEqual("tool", (string)toolMessage["role"], "native result role");
             AssertEqual("call_1", (string)toolMessage["tool_call_id"], "native result matches call");
             AssertTrue(string.IsNullOrWhiteSpace((string)toolMessage["name"]) == false, "native tool name is API-safe");
+
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            {
+                var session = new ChatSession();
+                var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "Read evidence", InlineText = "Exact resource body" };
+                session.Artifacts.Add(artifact);
+                var reference = ArtifactReference(session, artifact);
+                var accepted = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, role, FixtureCallOrigin());
+                var completed = AgentJsonProtocol.CreateToolResultMessage(command,
+                    TerminalToolResult.Ok(result.Message, result.DataJson, new[] { reference }), role);
+                accepted.RunId = completed.RunId = "projection_" + role;
+                accepted.ResourceRefs.Add(reference);
+                accepted.HtmlWorkspaceCheckpoint = reference;
+                completed.ResourceRefs.Add(reference);
+                session.Messages.Add(accepted);
+                session.Messages.Add(completed);
+                ToolResultWireReadResult read;
+                string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(completed, out read, out error), "strict result reader accepts " + role + ": " + error);
+                AssertEqual(ToolResultStatus.Ok, read.Result.Status, "typed result survives history reading");
+                AssertEqual(call.Id, read.ToolCallId, "reader retains accepted identity");
+                AssertEqual(call.Name, read.Name, "reader retains canonical name for " + role);
+                ConversationProtocolContext.EnsureCurrentHistory(session);
+                var projected = session.Messages.Select(HistoricalContextProjector.Project).ToList();
+                var prompt = new List<ChatMessage>();
+                new PromptBudgetComposer().AddConversationHistory(prompt, 0, session, new AppSettings(), 4096, true, false);
+                foreach (var projection in new[] { projected, prompt })
+                {
+                    AssertEqual(2, projection.Count, role + " projection retains the call/result pair");
+                    for (var index = 0; index < session.Messages.Count; index++)
+                    {
+                        AssertEqual(session.Messages[index].Content, projection[index].Content, role + " projection preserves exact protocol content");
+                        AssertEqual(session.Messages[index].ResponseProtocolVersion, projection[index].ResponseProtocolVersion,
+                            role + " projection preserves the response marker");
+                        AssertEqual(session.Messages[index].ToolResultProtocolVersion, projection[index].ToolResultProtocolVersion,
+                            role + " projection preserves the result marker");
+                        AssertTrue(projection[index].Content.IndexOf("HISTORICAL_RESOURCE_REFS", StringComparison.Ordinal) < 0,
+                            role + " projection does not append reference prose to protocol content");
+                    }
+                    AssertTrue(ToolResultHistoryReader.TryRead(projection[1], out read, out error), role + " projected result remains strict: " + error);
+                    AssertEqual(reference.Uri, read.Result.Resources.Single().Uri, role + " projected result retains the exact resource URI");
+                    AssertEqual(reference.Revision, read.Result.Resources.Single().Revision, role + " projected result retains its revision");
+                    ConversationProtocolContext.EnsureCurrentHistory(new ChatSession { Messages = projection });
+                }
+                var clone = ChatCloneService.CloneSessionSnapshot(session);
+                AssertTrue(clone.Messages.All(message => message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion),
+                    "clone retains the v1 marker on both sides of the pair");
+                ConversationProtocolContext.EnsureCurrentHistory(clone);
+                var replay = JsonConvert.DeserializeObject<ChatSession>(JsonConvert.SerializeObject(session));
+                ConversationProtocolContext.EnsureCurrentHistory(replay);
+                AssertTrue(replay.Messages.All(message => message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion),
+                    "serialized current history retains its result protocol marker");
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Another request" });
+                session.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(call, "Reading again.", null, role, FixtureCallOrigin()));
+                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(command, result, role));
+                ConversationProtocolContext.EnsureCurrentHistory(session);
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "A request without an accepted call" });
+                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(command, result, role));
+                ExpectProtocolPreflightBlock(() => ConversationProtocolContext.EnsureCurrentHistory(session));
+            }
+            AssertTrue(JObject.FromObject(new ChatMessage())["ToolResultProtocolVersion"] == null,
+                "unmarked history remains absent on storage serialization");
         }
 
         private static void AgentJsonSchemaFallbackIsRequestLocal()
@@ -1412,7 +1535,7 @@ namespace RNAssistant.Harness
         {
             var command = new ToolCommand { ToolId = "excel.read_range", ToolCallId = "call_large" };
             var data = JsonConvert.SerializeObject(new { value = new string('x', 50000) + "TOOL_RESULT_END" });
-            var toolResult = ToolResult.Ok("read", data);
+            var toolResult = new ToolResultMaterialization(TerminalToolResult.Ok("read", data));
             var result = JObject.Parse(AgentJsonProtocol.BuildToolResult(command, toolResult, 256));
 
             AssertTrue(result.SelectToken("data.truncated").Value<bool>(), "oversized data is marked truncated");
@@ -1475,11 +1598,11 @@ namespace RNAssistant.Harness
                 InlineText = "produced"
             };
             resourceSession.Artifacts.Add(producedArtifact);
-            var resultWithProducedResource = ToolResult.Ok("read", data);
-            resultWithProducedResource.ModelResourceRefs = new[] { ArtifactReference(resourceSession, producedArtifact) };
+            var resultWithProducedResource = new ToolResultMaterialization(TerminalToolResult.Ok("read", data,
+                new[] { ArtifactReference(resourceSession, producedArtifact) }));
             var externalizedAlongsideProduced = ToolResultResourceService.ExternalizeIfNeeded(
                 resourceSession, command, resultWithProducedResource, 256, new AppSettings());
-            AssertTrue(externalizedAlongsideProduced != null && resultWithProducedResource.ModelResourceRefs.Count == 2,
+            AssertTrue(externalizedAlongsideProduced != null && resultWithProducedResource.Result.Resources.Count == 2,
                 "a produced-resource reference does not suppress externalization of an independent oversized result");
 
             var chartSession = new ChatSession
@@ -1494,7 +1617,8 @@ namespace RNAssistant.Harness
                 title = "Sales",
                 rows = new[] { new { month = "Jan", value = 10 } }
             });
-            var chartResult = ToolResult.Ok("chart", chartData);
+            var chartUiResult = ToolResult.Ok("chart", chartData);
+            var chartResult = LegacyToolResultAdapter.Materialize(chartUiResult, ToolExecutionOutcome.Ok);
             var chartArtifact = ToolResultResourceService.ExternalizeIfNeeded(
                 chartSession, command, chartResult, 10000, new AppSettings());
             AssertEqual(ChatArtifactKinds.Chart, chartArtifact == null ? null : chartArtifact.Kind,
@@ -1504,8 +1628,10 @@ namespace RNAssistant.Harness
                 "chart URI is available to the next model step");
             AssertEqual("result", (string)chartEnvelope.SelectToken("resources[0].relation"),
                 "chart result resource has an explicit relation");
-            AssertEqual(ChatArtifactKinds.Chart, (string)chartEnvelope.SelectToken("resources[0].kind"),
-                "chart result resource exposes its specialized kind");
+            AssertTrue(chartEnvelope.SelectToken("resources[0].kind") == null,
+                "model resource references contain no internal kind field");
+            AssertEqual(ChatArtifactKinds.Chart, chartResult.ResultResourceKind,
+                "materialization retains the specialized kind for local projection");
             AssertEqual(true, (bool?)chartEnvelope.SelectToken("data.externalized"),
                 "chart result body is reference-only in model history");
             AssertTrue(chartEnvelope.ToString(Formatting.None).IndexOf("\"month\":\"Jan\"", StringComparison.Ordinal) < 0,
@@ -1515,7 +1641,8 @@ namespace RNAssistant.Harness
                 "chart result externalization is idempotent for an existing exact reference");
             var chartMessage = AgentTranscript.CreateRunningToolMessage(chartSession, command, "chart_step", "Read chart");
             chartMessage.RunId = "chart_run";
-            AgentTranscript.CompleteToolActivityMessage(chartSession, chartMessage, command, chartResult, "chart_step", "Read chart");
+            ToolResultUiProjection.IncludeResources(chartUiResult, chartResult);
+            AgentTranscript.CompleteToolActivityMessage(chartSession, chartMessage, command, chartUiResult, "chart_step", "Read chart");
             var chartActivity = chartMessage.Activity;
             AssertEqual(chartMessage.Id, chartArtifact.SourceMessageId, "chart provenance points at the visible tool activity");
             AssertEqual(chartMessage.RunId, chartArtifact.RunId, "chart provenance retains the activity run");
@@ -1543,19 +1670,19 @@ namespace RNAssistant.Harness
 
             var skillCommand = new ToolCommand { ToolId = CapabilityDiscoveryExecutor.ReadToolId, ToolCallId = "call_skill_large" };
             var skillData = JsonConvert.SerializeObject(new { kind = "skill", id = "common.large", revision = "r1", loaded = true, complete = true, truncated = false, bodyMarkdown = new string('x', 50000) });
-            var oversizedSkillResult = ToolResult.Ok("Skill loaded", skillData);
+            var oversizedSkillResult = new ToolResultMaterialization(TerminalToolResult.Ok("Skill loaded", skillData));
             AgentJsonProtocol.FailClosedOversizedCapabilityEvidence(skillCommand, oversizedSkillResult, 256, new AppSettings());
             var boundedSkill = JObject.Parse(AgentJsonProtocol.BuildToolResult(skillCommand, oversizedSkillResult, 256));
-            AssertEqual(false, (bool)boundedSkill["ok"], "oversized capability evidence fails closed");
-            AssertEqual("capability_evidence_context_too_large", (string)boundedSkill.SelectToken("error.code"),
+            AssertEqual("error", (string)boundedSkill["status"], "oversized capability evidence fails closed");
+            AssertEqual("capability_evidence_context_too_large", (string)boundedSkill.SelectToken("data.code"),
                 "oversized capability evidence has an actionable error");
             AssertEqual(false, (bool)boundedSkill.SelectToken("data.loaded"), "oversized skill never claims loaded evidence");
             AssertEqual(true, (bool)boundedSkill.SelectToken("data.truncated"), "oversized skill reports incomplete transport");
             AssertTrue(ToolResultResourceService.ExternalizeIfNeeded(
-                    new ChatSession(), skillCommand, ToolResult.Ok("read", skillData), 256, new AppSettings()) == null,
+                    new ChatSession(), skillCommand, new ToolResultMaterialization(TerminalToolResult.Ok("read", skillData)), 256, new AppSettings()) == null,
                 "trusted skill evidence is not duplicated into an untrusted artifact");
 
-            var fittingSchemaResult = ToolResult.Ok("Tool schema loaded", JsonConvert.SerializeObject(new
+            var fittingSchemaResult = new ToolResultMaterialization(TerminalToolResult.Ok("Tool schema loaded", JsonConvert.SerializeObject(new
             {
                 kind = "tool-schema",
                 id = "common.small",
@@ -1564,9 +1691,9 @@ namespace RNAssistant.Harness
                 complete = true,
                 truncated = false,
                 descriptor = new { type = "function" }
-            }));
+            })));
             AgentJsonProtocol.FailClosedOversizedCapabilityEvidence(skillCommand, fittingSchemaResult, 256, new AppSettings());
-            AssertTrue(fittingSchemaResult.Success, "complete capability evidence that fits remains successful");
+            AssertEqual(ToolResultStatus.Ok, fittingSchemaResult.Result.Status, "complete capability evidence that fits remains successful");
 
             var nestedData = JsonConvert.SerializeObject(new { value = new string('x', 200000) });
             var pipeline = AgentTranscript.CreateToolActivity(command, ToolResult.Ok("pipeline", JsonConvert.SerializeObject(new
@@ -1664,8 +1791,18 @@ namespace RNAssistant.Harness
                 AssertEqual(role, resultMessage.Role, "selected result role reaches transport");
                 var resultJson = resultMessage.Content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal)
                     ? resultMessage.Content.Substring("TOOL_RESULT:\n".Length) : resultMessage.Content;
-                AssertEqual(accepted.ToolCallId, (string)JObject.Parse(resultJson)["tool_call_id"],
+                var resultWire = JObject.Parse(resultJson);
+                AssertEqual(accepted.ToolCallId, (string)resultWire["tool_call_id"],
                     "every probe result role correlates to the stored runtime ID");
+                AssertEqual(ToolResultWire.CurrentVersion, accepted.ToolResultProtocolVersion, "probe call carries the active result marker");
+                AssertEqual(ToolResultWire.CurrentVersion, resultMessage.ToolResultProtocolVersion, "probe result carries the active result marker");
+                AssertEqual("ok", (string)resultWire["status"], "probe result uses the v1 terminal status");
+                AssertTrue(resultWire["ok"] == null && resultWire["error"] == null && resultWire["retryable"] == null && resultWire["version"] == null,
+                    "probe result has no legacy or embedded-version fields");
+                ToolResultWireReadResult read;
+                string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(resultMessage, out read, out error), "probe result is strict history: " + error);
+                ConversationProtocolContext.EnsureCurrentHistory(new ChatSession { Messages = new List<ChatMessage> { accepted, resultMessage } });
                 if (role == ToolResultRoles.Tool)
                 {
                     AssertEqual(accepted.ToolCallId, accepted.ToolCalls.Single().Id, "native call id");
