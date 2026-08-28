@@ -13,6 +13,8 @@
           DependsOnTargets="ValidateReleaseTagMatchesProductVersion;ValidateReleaseTreeClean;ValidateReleaseChangelog" />
 
   <Target Name="ValidateReleaseTagMatchesProductVersion" DependsOnTargets="ValidateVersionFormat">
+    <Error Condition="'$(RNAssistantCommitSha)' == 'unknown' or '$(RNAssistantBranch)' == 'unknown' or '$(RNAssistantWorkingTreeState)' == 'unknown'"
+           Text="Release requires explicit Git provenance; source archives with unknown build identity cannot qualify." />
     <Error Condition="'$(RNAssistantReleaseTag)' != 'v$(Version)'"
            Text="RNAssistantReleaseTag must exactly match v$(Version)." />
     <Error Condition="'$(RNAssistantVersionSuffix)' != '' and !$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionSuffix)', '^(alpha|beta|rc)\.[1-9][0-9]*$'))"
@@ -20,6 +22,7 @@
   </Target>
 
   <Target Name="ValidateReleaseTreeClean">
+    <Error Condition="!Exists('$(_RNAssistantRepositoryRoot).git')" Text="Release requires a Git checkout to verify the working tree." />
     <Exec Command="git status --porcelain=v1 --untracked-files=all" WorkingDirectory="$(_RNAssistantRepositoryRoot)"
           ConsoleToMSBuild="true" StandardOutputImportance="Low">
       <Output TaskParameter="ConsoleOutput" ItemName="_RNAssistantReleaseChanges" />

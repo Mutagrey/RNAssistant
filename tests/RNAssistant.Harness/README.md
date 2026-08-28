@@ -61,7 +61,8 @@ dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "ha
 The `versioning` substring selects only versioning cases. These need Git and dotnet;
 they invoke MSBuild against disposable small projects, commits and local bare remotes.
 Fixture refs never affect the working repository or its origin. Coverage includes
-unchanged product versions across ordinary builds/commits, invalid metadata,
+unchanged product versions across ordinary builds/commits, source archives without Git
+(Debug/Release, explicit/unknown metadata and release rejection), invalid metadata,
 release-only gates, tag uniqueness and SDK/old-style assembly attributes. No Office
 projects or PowerShell release workflow are executed by this slice.
 

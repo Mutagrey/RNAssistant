@@ -15,8 +15,10 @@ supersedes the former contributor policy.
 - Set `16.1.0-dev` once. Ordinary commits keep that product version and create no tags.
 - Separate `ValidateVersionFormat` from explicit release/tag checks. Remove the old
   validation target and per-commit HEAD comparison policy; retain no alias.
-- Identify builds through product version, full Git SHA, UTC, branch/channel and
-  clean/dirty metadata in SDK and old-style assemblies.
+- Identify checkout builds through product version, full Git SHA, UTC, branch/channel
+  and clean/dirty metadata in SDK and old-style assemblies. Ordinary source archives
+  may record missing provenance as `unknown`, with a warning and `source-archive`
+  informational version when the SHA is unknown; they are not release evidence.
 - Separate numeric file/application build number from product version.
 - Preserve baseline AssemblyVersion `16.0.4.0` until Windows/VSTO/ClickOnce qualification.
   Do not downgrade it to the suggested `16.0.0.0` without that evidence.
@@ -28,8 +30,10 @@ supersedes the former contributor policy.
 
 Ordinary development works without a version bump or remote access. Release preparation
 adds clean-tree, exact tag/product, changelog and uniqueness gates; unavailable remote
-state blocks release. Archives must supply explicit provenance instead of silently
-producing unidentified builds. Dirty local builds are marked and are not release evidence.
+state blocks release. Ordinary archives no longer require manually supplied provenance
+to build; missing provenance is explicit, never a fabricated SHA or clean-tree claim.
+Release validation remains strict and requires a Git checkout for live tree checks.
+Dirty local builds are marked and are not release evidence.
 
 Runtime, model/tool protocols, Resource Fabric, VBA, UI and persistence are unchanged.
 PowerShell release execution and Windows/Office packaging remain separately qualified.

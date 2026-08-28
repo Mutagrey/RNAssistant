@@ -1225,6 +1225,8 @@ Build number создаётся CI/release script и не требует commit.
 
 Diagnostics должна показывать ProductVersion, CommitSha, BuildUtc, branch/channel и protocol versions.
 
+Обычная сборка архива без `.git` допускается с предупреждением: отсутствующие Git-метаданные — `unknown`, без SHA — `+source-archive`, неизвестное состояние дерева добавляет `.unknown`. Это относится и к конфигурации Visual Studio Release; явный release milestone по-прежнему требует известного происхождения и Git checkout для проверки чистоты дерева.
+
 Идентификация конкретного build больше не требует нового tag.
 
 ### Protocol versions

@@ -98,6 +98,46 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void VersioningSourceArchivesBuildWithoutGit()
+        {
+            using (var fixture = new VersioningFixture())
+            {
+                var head = fixture.Git("rev-parse", "HEAD").Trim();
+                Directory.Move(Path.Combine(fixture.Repository, ".git"), Path.Combine(fixture.TemporaryRoot, "saved-git"));
+                foreach (var configuration in new[] { "Debug", "Release" })
+                {
+                    var output = fixture.Build("PrintBuildIdentity", true, "-p:Configuration=" + configuration);
+                    AssertContains(output, "Identity=" + fixture.ProductVersion + "+source-archive.unknown", "ordinary archive build is visibly unidentified");
+                    AssertContains(output, "Git provenance is unknown", "archive provenance warning is explicit");
+                }
+                fixture.Build("GenerateRNAssistantVersionInfo", true);
+                var generated = File.ReadAllText(Path.Combine(fixture.Repository, "obj", "RNAssistant.Version.g.cs"));
+                foreach (var field in new[] { "CommitSha", "Branch", "WorkingTreeState" })
+                    AssertContains(generated, "AssemblyMetadataAttribute(\"" + field + "\", \"unknown\")", "archive metadata does not invent provenance");
+
+                AssertContains(fixture.Build("PrintBuildIdentity", true, "-p:RNAssistantCommitSha=" + head),
+                    fixture.ProductVersion + "+g" + head.Substring(0, 12) + ".unknown", "partial archive metadata does not imply a clean tree");
+                File.WriteAllText(Path.Combine(fixture.Repository, "Directory.Build.local.props"),
+                    "<Project><PropertyGroup><RNAssistantCommitSha>" + head + "</RNAssistantCommitSha>" +
+                    "<RNAssistantBranch>stabilization/16.1</RNAssistantBranch>" +
+                    "<RNAssistantWorkingTreeState>dirty</RNAssistantWorkingTreeState></PropertyGroup></Project>");
+                var identified = fixture.Build("PrintBuildIdentity", true);
+                AssertContains(identified, fixture.ProductVersion + "+g" + head.Substring(0, 12) + ".dirty", "explicit archive provenance is preserved");
+                AssertTrue(!identified.Contains("Git provenance is unknown"), "identified archive needs no warning");
+                AssertContains(fixture.Build("ValidateVersionFormat", false, "-p:RNAssistantCommitSha=invalid"),
+                    "full Git commit SHA", "malformed archive SHA still fails");
+                AssertContains(fixture.ReleaseBuild("ValidateRNAssistantRelease", false),
+                    "Release requires a Git checkout", "explicit metadata does not bypass live release checks");
+                File.Delete(Path.Combine(fixture.Repository, "Directory.Build.local.props"));
+                AssertContains(fixture.ReleaseBuild("PrintBuildIdentity", false),
+                    "Release requires explicit Git provenance", "release tag cannot qualify an unknown archive");
+                AssertContains(fixture.Build("PrintBuildIdentity", false, "-p:RNAssistantReleaseBuild=true"),
+                    "Release requires explicit Git provenance", "explicit release flag cannot qualify an unknown archive");
+                AssertContains(fixture.Build("ValidateRNAssistantRelease", false),
+                    "Release requires explicit Git provenance", "direct release validation cannot qualify an unknown archive");
+            }
+        }
+
         private static void VersioningRejectsMalformedMetadata()
         {
             using (var fixture = new VersioningFixture())
@@ -111,7 +151,8 @@ namespace RNAssistant.Harness
                     new[] { "-p:Version=99.0.0", "Version must be derived" },
                     new[] { "-p:AssemblyVersion=99.0.0.0", "AssemblyVersion must match" },
                     new[] { "-p:InformationalVersion=unidentified", "InformationalVersion must include" },
-                    new[] { "-p:RNAssistantCommitSha=unknown", "full Git commit SHA" }
+                    new[] { "-p:RNAssistantCommitSha=unknown", "full Git commit SHA" },
+                    new[] { "-p:RNAssistantWorkingTreeState=unknown", "RNAssistantWorkingTreeState must be clean or dirty" }
                 };
                 foreach (var item in cases)
                     AssertContains(fixture.Build("ValidateVersionFormat", false, item[0]), item[1], "invalid build metadata fails");
@@ -172,8 +213,10 @@ namespace RNAssistant.Harness
             var metadata = assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
                 .ToDictionary(attribute => attribute.Key, attribute => attribute.Value);
             var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion;
-            AssertContains(informational, metadata["ProductVersion"] + "+g" + metadata["CommitSha"].Substring(0, 12),
-                "SDK assembly carries product and commit identity");
+            var identity = metadata["CommitSha"] == "unknown"
+                ? "+source-archive" : "+g" + metadata["CommitSha"].Substring(0, 12);
+            AssertContains(informational, metadata["ProductVersion"] + identity,
+                "SDK assembly carries product and commit identity or explicit archive provenance");
             AssertTrue(metadata["BuildUtc"].EndsWith("Z", StringComparison.Ordinal), "SDK assembly records UTC");
             AssertTrue(!string.IsNullOrWhiteSpace(metadata["Branch"]) && !string.IsNullOrWhiteSpace(metadata["Channel"]), "SDK assembly records branch/channel");
             using (var fixture = new VersioningFixture())

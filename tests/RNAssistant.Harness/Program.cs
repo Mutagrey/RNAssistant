@@ -39,6 +39,7 @@ namespace RNAssistant.Harness
                 Test("harness: native async execution", HarnessRunsNativeAsync),
                 Test("harness: production projects include all source files", ProductionProjectsIncludeAllSourceFiles),
                 Test("harness: versioning ordinary builds and commits need no bump", VersioningOrdinaryBuildsNeedNoBump),
+                Test("harness: versioning source archives build without Git", VersioningSourceArchivesBuildWithoutGit),
                 Test("harness: versioning rejects malformed metadata", VersioningRejectsMalformedMetadata),
                 Test("harness: versioning release gates are explicit", VersioningReleaseGatesAreExplicit),
                 Test("harness: versioning tags cannot be reused", VersioningTagsCannotBeReused),
