@@ -16,7 +16,7 @@ namespace RNAssistant.Core.ModelProtocol
             @"\A(?:true|false|null|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\z",
             RegexOptions.CultureInvariant);
 
-        internal static ConversationResponseParseResult Read(string content, bool legacyV2)
+        internal static ConversationResponseParseResult Read(string content)
         {
             var raw = (content ?? string.Empty).Trim(' ', '\t', '\r', '\n');
             if (!raw.StartsWith("{", StringComparison.Ordinal) || !raw.EndsWith("}", StringComparison.Ordinal))
@@ -47,13 +47,9 @@ namespace RNAssistant.Core.ModelProtocol
                 return ConversationResponseParseResult.Fail("Conversation response is invalid JSON: " + ex.Message);
             }
 
-            var unsupported = root.Properties().FirstOrDefault(property => property.Name != "message" &&
-                property.Name != "tool_calls" && !(legacyV2 && property.Name == "status"));
+            var unsupported = root.Properties().FirstOrDefault(property => property.Name != "message" && property.Name != "tool_calls");
             if (unsupported != null)
                 return ConversationResponseParseResult.Fail("Conversation response contains unsupported root field: " + unsupported.Name + ".");
-            if (legacyV2 && (root["status"] == null || root["status"].Type != JTokenType.String ||
-                !AgentResponseStatuses.IsKnown((string)root["status"])))
-                return ConversationResponseParseResult.Fail("The v2 read adapter requires a known string status; use the v3 parser for new responses.");
             if (root["message"] == null || root["message"].Type != JTokenType.String)
                 return ConversationResponseParseResult.Fail("Conversation response requires a string message field.");
             var calls = root["tool_calls"] as JArray;

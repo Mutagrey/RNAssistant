@@ -10,6 +10,15 @@ namespace RNAssistant.Core.ModelProtocol
 {
     public sealed class ConversationResponseParser
     {
+        public ConversationResponseParseResult Parse(string content, IEnumerable<ToolDefinition> callableTools,
+            IEnumerable<ToolDefinition> runnableCatalog, ModelProtocolCallContext context)
+        {
+            if (context == null || !context.IsComplete)
+                return ConversationResponseParseResult.Fail("V3 requires a complete accepted-run call context: " +
+                    (context == null ? "missing context" : context.Error));
+            return Parse(content, callableTools, runnableCatalog, context.AcceptedToolCallIds, context.BatchSafeReadOnlyToolIds);
+        }
+
         // Both sets come from the caller's accepted run / local execution authority.
         // Parsing never reserves ids. Only accepting the complete response may do so.
         // Batching is opt-in: external or unresolved effects must NOT be in the read-only set.
@@ -22,7 +31,7 @@ namespace RNAssistant.Core.ModelProtocol
         {
             if (callableTools == null || runnableCatalog == null || acceptedToolCallIds == null || batchSafeReadOnlyToolIds == null)
                 return ConversationResponseParseResult.Fail("V3 parsing requires explicit callable/catalog, accepted-run ids and batch-safe read-only context.");
-            var parsed = ConversationResponseJson.Read(content, false);
+            var parsed = ConversationResponseJson.Read(content);
             if (!parsed.Success) return parsed;
 
             var knownTools = callableTools.Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))

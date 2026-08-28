@@ -31,6 +31,7 @@
 13. В отчёте всегда указывать изменённые файлы, обеспеченный инвариант, тесты, требуемую Windows/Office validation и оставшиеся риски.
 14. Никогда не утверждать, что Office/VSTO поведение проверено, если не было реального запуска на Windows x64 с Office x64.
 15. Не создавать tag после обычного commit.
+16. Каждый подэтап завершать локальной чисткой и сокращением рабочего контекста по §15.1; Phase 10 не является общей отсрочкой удаления заменённых путей.
 
 ---
 
@@ -443,7 +444,9 @@ web
 
 ### Совместимость
 
-Текущий response v2 временно читается через adapter:
+Совместимость с историческими v2-чатами не является требованием. После cutover несовместимый чат явно пропускается либо сбрасывается отдельным действием пользователя; его stream не переписывается и не удаляется автоматически. Новый run не должен молча продолжаться с урезанной историей старого чата.
+
+Временный v2 adapter допустим только при доказанной необходимости для действующего consumer до его переключения по §15.1, а не ради сохранения старого формата. Если такой adapter ещё нужен:
 
 ```text
 v2 status игнорируется как источник runtime truth;
@@ -1395,6 +1398,36 @@ CompatibilityRuntime
 
 Compatibility adapter имеет владельца, срок удаления и список оставшихся consumers.
 
+## 15.1. Обязательная локальная чистка после каждого подэтапа
+
+Чистка входит в Definition of Done текущего подэтапа, а не копится до Phase 10. Её цель — уменьшать число действующих путей и объём контекста для следующего шага, сохраняя доказательства корректности.
+
+1. **Проверить потребителей.** Через targeted search установить, кто ещё использует заменённые contracts, helpers и adapters, включая tests и project includes. Удалять путь только после switch потребителей и релевантной проверки. Если обязательная Windows/Office проверка остаётся gate, явно сохранить её как блокер удаления.
+2. **Удалить заменённое.** Удалить ставшие ненужными implementation branches, aliases, fallbacks, helpers и project includes. Удалять obsolete tests только вместе с заменённым контрактом; сохранять покрытие актуальных инвариантов. Не сохранять мёртвый код или совместимость со старыми чатами «на всякий случай».
+3. **Ограничить временные adapters.** Для каждого оставшегося adapter указать owner, конкретных consumers, причину сохранения и ближайший removal substep/gate в `MIGRATION_MAP.md`. После исчезновения consumers удалить в том же подэтапе; Phase 10 не служит сроком по умолчанию. Существующий runtime consumer нельзя удалять лишь потому, что он legacy.
+4. **Сократить актуальную документацию.** Обновить canonical doc изменённого контура, убрать из него отменённые инструкции и дубли. Исторические ADR/отчёты/verification evidence сохранять как историю, а не обязательное чтение следующего шага. Не удалять действующие требования или открытые риски ради числа строк.
+5. **Оставить короткий контекст продолжения.** В начале `PROGRESS.md` поддерживать текущий подэтап, следующий шаг, его gates, оставшийся legacy и ссылки только на необходимые документы/разделы. Подробные результаты сохранять ниже или в существующем отчёте подэтапа; не копировать историю в каждый новый отчёт.
+6. **Проверить и зафиксировать.** Проверить dangling references и `.csproj`, запустить минимальную релевантную проверку; для docs-only — diff/links без build. В отчёте указать удалённое, оставленное с причиной и обязательный контекст следующего шага. Если чистить нечего, так и записать; искусственное дробление файлов и косметические изменения не требуются.
+
+Работать только в текущем контуре и в change budget §14.3. Массовые moves/renames не смешивать с behavior changes; проблемы других контуров записывать в backlog. Отказ от исторической совместимости не разрешает автоматически удалять chats/events/CAS/VBA journals, settings, API key или custom tools; reset требует отдельного явного действия. Safety и recovery evidence не ослабляются.
+
+## 15.2. Рефакторинг, который облегчает миграцию
+
+Перед изменением контура оценить, мешает ли смешение обязанностей ближайшему шагу текущей фазы. Если да, выделить небольшой подготовительный подэтап внутри этой фазы; отдельная общая кампания рефакторинга до миграции не нужна. Если целевое извлечение уже решает проблему, выполнять его напрямую, без промежуточного сервиса, который сразу придётся заменять.
+
+До начала рефакторинга кратко зафиксировать в задаче/отчёте:
+
+1. Какое конкретное ближайшее изменение станет проще и какие callers сейчас вынуждают читать монолит.
+2. Какая ответственность получит одного владельца и какие зависимости/общее mutable state перестанут пересекать эту границу.
+3. Какая минимальная проверка покажет сохранение поведения и позволит проверять выделенный контракт отдельно; существующие tests предпочтительнее нового набора.
+4. Какие consumers переключатся, какой старый путь будет удалён и какой ближайший removal gate останется при поэтапном switch.
+
+Критерий пользы — следующее локальное изменение можно понять и проверить по контракту и его реализации без изучения несвязанных областей. Уменьшение числа строк, файлов или токенов само по себе не является результатом. Новый `partial`, передача всего controller/session без необходимости или набор callbacks обратно в монолит могут лишь разнести прежнюю связанность; без объяснения новой границы такое выделение не выполнять. `Partial` допустим как короткий механический шаг к конкретному извлечению, но не как его завершение.
+
+Подготовительное выделение сохраняет поведение; изменение семантики выполняется явным следующим подэтапом с его проверками. Соблюдать change budget §14.3, C#/.csproj requirements и cleanup §15.1. Не переносить архитектуру следующих фаз заранее: например, при извлечении AgentKernel не менять Resource Fabric/ToolPack lifecycle, а при выделении текстового VBA engine не менять journal/CAS protocol. Существующие доменные services переиспользовать; не создавать универсальные обёртки и временные дубликаты.
+
+Конкретные точки и фазы указаны в `MIGRATION_MAP.md` и ниже; перед своей фазой повторно проверить актуальных consumers. После закрытия подэтапа записать, какие обязанности больше не смешаны и какие файлы/контракты нужны следующему шагу. Контекст сужается внутри контура, но не обязан монотонно уменьшаться при переходе к новой области. Если полезного выделения нет, продолжать миграцию без обязательного распила.
+
 ---
 # 16. Поэтапный план исполнения
 
@@ -1550,7 +1583,7 @@ ui.projected
 - [ ] Rejected attempts записываются только в diagnostics.
 - [ ] Ввести typed `ModelProtocolFailure`.
 - [ ] Ввести parser/schema builder для Conversation Response v3.
-- [ ] Добавить v2 compatibility adapter.
+- [ ] Проверить необходимость введённого v2 adapter по §15.1; не подключать ради старых чатов, удалить после switch последних действующих consumers.
 - [ ] Добавить tests для:
   - [ ] tLLM protection response;
   - [ ] HTML response;
@@ -1586,6 +1619,8 @@ ui.projected
 ### Выполнить
 
 - [ ] Создать `AgentKernel`.
+- [ ] По §15.2 отделить извлекаемый цикл `ConversationRunService` от подготовки prompts/compaction/media и материализации результатов; использовать существующие services, не менять ToolPack/Resource Fabric semantics Phase 8.
+- [ ] Обычный запуск и confirmation continuation в `AssistantController.Agent` подключить к общей kernel-логике учёта выполнения; сохранить confirmation/fingerprint gates и отдельную проверку controller wiring.
 - [ ] Создать `RunSummary`.
 - [ ] Создать `ExecutionHealth`.
 - [ ] Создать `ToolExecutionRecord`.
@@ -1633,6 +1668,7 @@ ui.projected
   - [ ] `ToolRuntime`;
   - [ ] `ToolHandlerRegistry`.
 - [ ] Добавить `LegacyToolDefinitionAdapter`.
+- [ ] Из `OfficeToolExecutor` извлекать общий validation/policy/confirmation/dispatch runtime, переиспользуя уже выделенные domain executors; не дробить каждый dispatch branch и не менять document binding до Phase 5.
 - [ ] Не удалять текущие tools сразу.
 - [ ] Перенести один read-only tool первым.
 - [ ] Проверить exact id lookup.
@@ -1663,6 +1699,7 @@ ui.projected
 
 - [ ] Ввести `IOfficeDocumentSession`.
 - [ ] Ввести `ExcelDocumentSession`.
+- [ ] Выделить выбор/удержание workbook из `ExcelAdapter` и границу document access/serialization из `OfficeToolExecutor`; read-back должен получать тот же bound object. Charts/formatting и прочие host adapters не рефакторить попутно.
 - [ ] Bind конкретного document object до execution.
 - [ ] Сериализовать writes по `RuntimeDocumentId`.
 - [ ] Удалить fallback на `ActiveWorkbook` из agent mutation path.
@@ -1704,8 +1741,8 @@ ui.projected
 
 ### Выполнить
 
-- [ ] Извлечь `VbaPatchEngine`.
-- [ ] Извлечь `VbaTextCanonicalizer`.
+- [ ] Извлечь `VbaPatchEngine` из `VbaToolExecutor.Patching`: текстовая логика отдельно от `ToolResult`, resource-подсказок, COM и journal orchestration.
+- [ ] Извлечь `VbaTextCanonicalizer`, включая используемые правила из `VbaToolManifestParser`; переключить patch/verification/package consumers без второй реализации нормализации и без изменения journal/CAS protocol.
 - [ ] Определить Transport/Canonical/VBE-comparable representations.
 - [ ] Извлечь `VbaReader`.
 - [ ] Извлечь `VbaMutationService`.
@@ -1749,6 +1786,7 @@ ui.projected
 
 - [ ] Перенести `inspect/read_range`.
 - [ ] Перенести `write_range`.
+- [ ] Выделить только необходимый read/write backend из `ExcelAdapter` на подготовленной в Phase 5 DocumentSession; размер остальных частей adapter не является поводом расширять slice.
 - [ ] Write tool использует bound `ExcelDocumentSession`.
 - [ ] Добавить read-back/verification для write.
 - [ ] Сохранить range limits до COM materialization.
@@ -1846,14 +1884,16 @@ Resource provider можно добавить без изменения AgentKer
 
 После стабилизации поведения привести структуру файлов и документов в соответствие с реальными boundaries.
 
+Это финальная структурная сверка, а не начало чистки. Заменённые пути, мёртвые зависимости и устаревшие инструкции удаляются в своих подэтапах по §15.1.
+
 ### Выполнить
 
 - [ ] Переместить файлы через `git mv`.
 - [ ] Не смешивать moves с behavior changes.
 - [ ] Обновить namespaces.
 - [ ] Обновить old-style `.csproj`.
-- [ ] Удалить legacy branches после миграции consumers.
-- [ ] Удалить superseded docs.
+- [ ] Проверить отсутствие забытых legacy branches; удалить оставшиеся после переключения последних consumers, не повторять уже выполненную локальную чистку.
+- [ ] Проверить отсутствие superseded canonical docs; исторические evidence/ADR не считать действующими инструкциями.
 - [ ] Добавить architecture tests:
   - [ ] Core.Agent не зависит от Office;
   - [ ] ModelProtocol не зависит от Tools execution;
@@ -2098,7 +2138,7 @@ Stable release запрещён, пока не выполнены все усл�
 
 6. refactor(model): extract stateless model protocol retry
 
-7. feat(protocol): add conversation-response v3 with v2 read adapter
+7. feat(protocol): introduce conversation-response v3
 
 8. refactor(agent): introduce host-neutral AgentKernel
 
@@ -2120,6 +2160,9 @@ Stable release запрещён, пока не выполнены все усл�
 Задача не считается завершённой, пока:
 
 - [ ] ответственность находится в правильном контуре;
+- [ ] выполнена локальная чистка по §15.1; у каждого оставшегося adapter есть consumers, причина и ближайший removal gate;
+- [ ] если выполнялся подготовительный рефакторинг, обоснована и проверена польза по §15.2, а не только уменьшен файл;
+- [ ] актуальный контекст следующего шага в `PROGRESS.md` не требует перечитывать все завершённые подэтапы;
 - [ ] публичный контракт минимален;
 - [ ] нет нового hidden fallback;
 - [ ] нет safety logic по тексту;
@@ -2178,7 +2221,10 @@ Task:
 ## Legacy path
 
 - removed / still used by ...
-- planned removal phase ...
+- remaining owner / consumers / reason / nearest removal substep and gate ...
+- obsolete helpers/tests/docs removed or no cleanup needed ...
+- if refactored: next change simplified / dependencies removed / focused verification ...
+- next-step required context: canonical docs/sections and open gates ...
 
 ## Versioning
 
@@ -2198,6 +2244,9 @@ Task:
 Current target: 16.1.0
 Current phase: Phase N
 Current task: ...
+Next step: ...
+Required context: ссылки на canonical docs/sections; не вся история этапов.
+Open gates / remaining legacy: ...
 
 | Phase | Status | Commit/PR | Tests | Windows validation | Notes |
 |---|---|---|---|---|---|
@@ -2207,9 +2256,9 @@ Current task: ...
 
 ## Active compatibility adapters
 
-| Adapter | Owner | Consumers | Removal phase |
+| Adapter | Owner | Consumers | Reason / nearest removal substep and gate |
 |---|---|---|---|
-| ConversationV2Adapter | ModelProtocol | ... | Phase 10 |
+| Только фактически нужный adapter | ... | Конкретные действующие consumers | ... |
 
 ## Open P0/P1 risks
 

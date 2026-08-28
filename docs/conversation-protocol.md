@@ -8,10 +8,12 @@ RNAssistant has three explicit modes and one `ConversationRunService` transport/
 
 All modes return the same conversation-response v2 JSON envelope: `status + message + tool_calls[]`. They use the same bounded request-local format repair. Explicit structure and the tool catalog, never model wording, are the authority: a Chat response naming any other tool is rejected before execution.
 
-Phase 2C1 introduces the [status-free v3 contract](protocols/CONVERSATION_RESPONSE_V3.md),
-parser/schema and explicit v2 read adapter in Core, **without switching this runtime**.
-Active prompts, retry, schema selection and accepted history remain v2. The
-coordinated switch/delete is Phase 2C2; no new v3 events or dual-write exist yet.
+The [status-free v3 contract](protocols/CONVERSATION_RESPONSE_V3.md) is introduced;
+Phase 2C2 adapts full-turn ID/safety snapshots to the boundary and prepares a
+v3-only history reader, **without switching this runtime**. The unused v2 read
+adapter is removed. Active prompts, retry, schema selection and accepted history
+remain v2; coordinated switch/delete and explicit old-chat skip/reset are Phase
+2C3 gates. No new v3 events, historical migration or dual-write exist yet.
 
 ## Conversation context
 
@@ -141,7 +143,7 @@ If a call needs confirmation, execution pauses at that call and later calls from
 
 The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections plus `ChatSystemPrompt`, `PlanSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
 
-## ModelProtocol boundary (Phases 2A–2B)
+## ModelProtocol boundary (Phase 2)
 
 One `IModelProtocol` instance serves a conversation run. `GetResponseAsync` receives
 the accepted materialized messages, current callable schemas, runnable catalog and
@@ -149,6 +151,13 @@ request-local transport options. It returns an accepted `AgentResponse` and only
 that completion's metadata, or a typed `ModelProtocolFailure`. Provider failures,
 cancellation, prompt-budget rejection and protocol exhaustion are distinct. The
 separate bounded provider retry policy is defined below.
+
+The loop now also supplies an immutable `ModelProtocolCallContext`: all accepted
+IDs in the logical turn (not just the compacted prompt) and a conservative local
+batch-safe projection. Confirmation restores IDs across `RunId` changes from full
+accepted history. This is preparation for v3 validation; the live v2 client does
+not enforce the snapshot or its incomplete-history error. See the canonical
+[context contract and remaining gates](protocols/CONVERSATION_RESPONSE_V3.md#accepted-context-and-current-v3-history-phase-2c2).
 
 The loop owns step ids, tool execution, summaries and transcript append. Core owns
 raw attempt ids, parsing, fixed repair instructions, format fallback and the

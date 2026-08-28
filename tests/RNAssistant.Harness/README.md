@@ -34,7 +34,7 @@ Filtering limits executed tests. The harness source-links Core and Office-neutra
 | --- | --- | --- |
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
-| Conversation v3 introduction | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v3:` |
+| Conversation v3 contract/context | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v3:`, `protocol context:` |
 | Resources and attachments | `Program.ResourceFabricTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.AttachmentTests.cs` | `resources:`, `attachments:` |
 | Session storage and CAS | `Program.SessionEventStoreTests.cs`, `Program.CasMaintenanceTests.cs` | `storage:` |
 | Chats, context and bridge | `Program.ChatSessionTests.cs`, `Program.ChatEditTests.cs`, `Program.ContextBridgeTests.cs`, `Program.PromptContextInspectorTests.cs` | `chat:`, `chat sessions:`, `context:`, `bridge:` |
@@ -106,12 +106,15 @@ do not prove production bridge delivery or WebView rendering. See
 
 ## Stabilization v3 contract
 
-Phase 2C1 uses `conversation v3:` for the new status-free parser/schema and explicit
-v2 read adapter: envelope/JSON strictness, argument validation, accepted-run IDs,
-read-only batching, adapter isolation and generated schema transport. These are
-Core contract tests, **not a runtime cutover**. The existing `agent:` and
-`model protocol:` slices still exercise the active v2 path.
-See [Phase 2C1 evidence](../../docs/stabilization/PHASE_2C1_V3_CONTRACT.md).
+`conversation v3:` covers the status-free parser/schema, strict JSON/arguments,
+run IDs, singleton safety, schema transport and current v3 history forms. The
+unused historical v2 adapter and its obsolete tests were removed in Phase 2C2.
+`protocol context:` covers detached snapshots, full-turn IDs across compaction
+and confirmation, incomplete history and conservative batch safety. Two cases
+exercise the real host-neutral loop/ModelProtocol/executor with fake LLM/Office;
+the controller's identity transition is simulated, not production controller execution.
+This is **not a runtime v3 cutover**: `agent:` and `model protocol:` still exercise
+the active v2 path. See [current evidence](../../docs/stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
 
 ## Full suite
 

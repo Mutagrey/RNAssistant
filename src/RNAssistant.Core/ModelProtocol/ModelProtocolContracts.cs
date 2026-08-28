@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -24,7 +25,31 @@ namespace RNAssistant.Core.ModelProtocol
         public IReadOnlyList<ChatMessage> AcceptedMessages { get; set; }
         public IReadOnlyList<ToolDefinition> CallableTools { get; set; }
         public IReadOnlyList<ToolDefinition> RunnableCatalog { get; set; }
+        // Phase 2C2 supplies this from the full logical run, not the compacted prompt.
+        // The live v2 client does not enforce it; the v3 switch must require IsComplete.
+        public ModelProtocolCallContext CallContext { get; set; }
         public LlmRequestOptions Options { get; set; }
+    }
+
+    public sealed class ModelProtocolCallContext
+    {
+        public IReadOnlyList<string> AcceptedToolCallIds { get; private set; }
+        public IReadOnlyList<string> BatchSafeReadOnlyToolIds { get; private set; }
+        public string Error { get; private set; }
+        public bool IsComplete { get { return string.IsNullOrEmpty(Error); } }
+
+        public ModelProtocolCallContext(IEnumerable<string> acceptedIds, IEnumerable<string> batchSafeIds, string error = null)
+        {
+            Error = !string.IsNullOrWhiteSpace(error) ? error
+                : acceptedIds == null || batchSafeIds == null ? "Model protocol call context is incomplete." : null;
+            AcceptedToolCallIds = Error == null ? Snapshot(acceptedIds, StringComparer.OrdinalIgnoreCase) : null;
+            BatchSafeReadOnlyToolIds = batchSafeIds == null ? null : Snapshot(batchSafeIds, StringComparer.Ordinal);
+        }
+
+        private static IReadOnlyList<string> Snapshot(IEnumerable<string> values, StringComparer comparer)
+        {
+            return Array.AsReadOnly(values.Distinct(comparer).OrderBy(value => value, StringComparer.Ordinal).ToArray());
+        }
     }
 
     // Presentation controls carry no repair instruction or attempt count. StreamUpdate

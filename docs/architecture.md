@@ -36,12 +36,13 @@ Editable general/tool/skill Agent, Plan, Chat, title, compaction, and attachment
 
 `IModelProtocol` in `Core/ModelProtocol` owns conversation endpoint attempts, local validation/repair, native refusals, prompt-budget checks and format fallback. The loop receives one accepted response/metadata or typed failure per logical step; it neither counts raw attempts nor executes tools before acceptance. See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) for the transitional v2 and controller adapters.
 
-Phase 2C1 adds the status-free `ConversationResponse` parser/schema/writer and
-explicit v2 envelope read adapter in that same Core boundary. Their current
-consumer is the focused harness; production requests/history still use the v2
-path below. [V3 cutover gates](protocols/CONVERSATION_RESPONSE_V3.md#cutover-gates--not-completed-in-2c1)
-require accepted-run ID and effective batch-safety inputs plus coordinated
-prompt/schema/history switching, without AgentKernel or tool-contract changes.
+Phase 2C1 introduced the status-free `ConversationResponse` parser/schema/writer.
+Phase 2C2 supplies immutable accepted-ID and conservative batch-safety context
+from the full logical turn to `IModelProtocol`, including confirmation/compaction.
+It adds a v3-only accepted-history reader and removes the unused v2 read adapter.
+The live client still uses the v2 path below; v3 enforcement, old-chat skip/reset
+and prompt/schema/history switching remain [cutover gates](protocols/CONVERSATION_RESPONSE_V3.md#remaining-cutover-gates)
+for Phase 2C3. No AgentKernel or tool-contract changes are introduced here.
 
 `AgentResponseParser` requires the conversation-response v2 `status`, `message`, and `tool_calls` fields. `in_progress` requires calls; terminal statuses require an empty array. Message wording and punctuation never determine run state. `json_schema` derives a strict response contract from the current callable tools; original optional properties become nullable so the endpoint does not force the model to invent irrelevant values. Before executable-schema validation, optional nulls are removed and declared defaults are applied. `json_object` uses the same envelope with local validation. The legacy setting `MaxAgentFormatRetries` now limits total protocol responses including the first (default 10, range 1–20). A separate budget allows two transient provider retries per step with 1s/2s cancellable delays, plus at most one explicit schema fallback. The raw request ceiling is N+3, at most 23; twenty invalid responses over a healthy transport stop at twenty requests (R20 fixed in Phase 2B). Each starts from clean accepted history and invalid content never enters replay. Accepted status and protocol version `2` are persisted with the assistant message and logical turn. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error, resources?}` and emits the selected replay role. Generic oversized data becomes an exact CAS-backed `tool_result` resource while the envelope retains only a bounded preview; trusted resource/tool/skill reads are not duplicated through that path. Specialized chart payloads are materialized once before the next model step and reused by the storage/UI projection.
 

@@ -111,6 +111,7 @@
     <Compile Include="Services\ToolResultResourceService.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\ConversationRunService.cs" />
+    <Compile Include="Services\ConversationProtocolContext.cs" />
     <Compile Include="Services\ConversationStreamProgressProjector.cs" />
     <Compile Include="Services\ConversationRunPolicy.cs" />
     <Compile Include="Services\AgentJsonProtocol.cs" />

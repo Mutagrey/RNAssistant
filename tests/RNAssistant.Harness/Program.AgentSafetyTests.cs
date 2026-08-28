@@ -20,6 +20,266 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static ChatMessage ContextAcceptedCall(string id, string role = ToolResultRoles.User)
+        {
+            return AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
+            {
+                Id = id, Name = "excel.inspect", Arguments = new Dictionary<string, object> { ["kind"] = "sheets" }
+            }, "Read.", null, role);
+        }
+
+        private static ChatSession ContextContinuationSession()
+        {
+            var session = new ChatSession
+            {
+                LastRun = new ChatRunRecord { RunId = "resume_2", TurnId = "current_turn" }
+            };
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "Earlier request", RunId = "old_turn" });
+            session.Messages.Add(ContextAcceptedCall("old_id"));
+            session.Messages.Add(new ChatMessage { Role = "user", Content = "Current request", RunId = "current_turn" });
+            session.Messages.Add(ContextAcceptedCall("before_compaction"));
+            session.Messages[3].RunId = "current_turn";
+            session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "before_compaction", ToolId = "excel.inspect" }, ToolResult.Ok("ok")));
+            var pending = ContextAcceptedCall("pending_id", ToolResultRoles.Tool);
+            pending.RunId = "resume_1";
+            pending.ExcludeFromModelContext = true;
+            session.Messages.Add(pending);
+            return session;
+        }
+
+        private static void ProtocolContextSnapshotsAreIndependent()
+        {
+            var ids = new List<string> { "accepted" };
+            var safe = new List<string> { "test.read" };
+            var context = new ModelProtocolCallContext(ids, safe);
+            ids.Add("later");
+            safe.Clear();
+            AssertTrue(context.IsComplete, "explicit complete context");
+            AssertTrue(context.AcceptedToolCallIds.SequenceEqual(new[] { "accepted" }), "accepted ids copied per step");
+            AssertTrue(context.BatchSafeReadOnlyToolIds.SequenceEqual(new[] { "test.read" }), "safety projection copied per step");
+            AssertTrue(((IList<string>)context.AcceptedToolCallIds).IsReadOnly, "snapshot does not expose a mutable accepted-id array");
+            AssertTrue(new ConversationResponseParser().Parse(V3Envelope(), new ToolDefinition[0], new ToolDefinition[0], context).Success,
+                "v3 overload accepts a final response with complete context");
+            foreach (var incomplete in new[]
+            {
+                new ModelProtocolCallContext(null, safe), new ModelProtocolCallContext(ids, null),
+                new ModelProtocolCallContext(ids, safe, "history is incomplete")
+            })
+            {
+                AssertTrue(!incomplete.IsComplete && incomplete.AcceptedToolCallIds == null, "incomplete context is not a valid empty run");
+                AssertTrue(!new ConversationResponseParser().Parse(V3Envelope(), new ToolDefinition[0], new ToolDefinition[0], incomplete).Success,
+                    "v3 overload rejects incomplete context even for a final response");
+            }
+        }
+
+        private static void ProtocolContextSeedsFullAcceptedTurn()
+        {
+            var session = ContextContinuationSession();
+            var checkpoint = new ContextCheckpoint { ThroughMessageId = session.Messages[3].Id, SummaryMarkdown = "Earlier reads summarized." };
+            session.ContextCheckpoints.Add(checkpoint);
+            session.ActiveContextCheckpointId = checkpoint.Id;
+            AssertTrue(!ContextCompactionService.BuildActiveWindow(session).Any(message => message.Id == session.Messages[3].Id),
+                "compaction really excludes the earlier accepted call from the prompt window");
+            session.Messages.Add(new ChatMessage { Role = "assistant", Content = V3Envelope(V3Call("quoted_id")) });
+            session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 2,
+                ToolCallId = "diagnostic_id", Activity = new ChatActivity { Kind = "model_response" } });
+            var batch = new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 3,
+                Content = V3Envelope(V3Call("batch_1"), V3Call("batch_2")) };
+            session.Messages.Add(batch);
+            var before = JsonConvert.SerializeObject(session);
+            var scope = ConversationProtocolContext.Begin(session, new ToolDefinition[0], new ToolCommand { ToolCallId = "pending_id" });
+            var snapshot = scope.Snapshot();
+            AssertTrue(snapshot.IsComplete, "full turn reconstructed across runtime RunId changes");
+            AssertTrue(snapshot.AcceptedToolCallIds.SequenceEqual(new[] { "batch_1", "batch_2", "before_compaction", "pending_id" }),
+                "collect all envelope/native ids, not previous turn, quoted JSON, diagnostics or tool results");
+            AssertEqual(before, JsonConvert.SerializeObject(session), "scope construction does not rewrite history or checkpoints");
+            scope.ObserveAccepted(new[] { new AgentToolCall { Id = "new_1" }, new AgentToolCall { Id = "new_2" } });
+            AssertEqual(4, snapshot.AcceptedToolCallIds.Count, "earlier step snapshot is stable");
+            AssertEqual(6, scope.Snapshot().AcceptedToolCallIds.Count, "entire accepted response observed before any tools execute");
+            var fresh = ConversationProtocolContext.Begin(session, new ToolDefinition[0], null).Snapshot();
+            AssertTrue(fresh.IsComplete && fresh.AcceptedToolCallIds.Count == 0, "fresh user run never inherits ids from older turns");
+            var tool = V3ReadTool();
+            AssertTrue(!new ConversationResponseParser().Parse(V3Envelope(V3Call("before_compaction")), new[] { tool }, new[] { tool }, snapshot).Success,
+                "v3 rejects a compacted-away id using the actual reconstructed context");
+        }
+
+        private static void ProtocolContextRejectsIncompleteContinuation()
+        {
+            var invalid = new List<ChatSession> { null, new ChatSession() };
+            var wrongTurn = ContextContinuationSession();
+            wrongTurn.LastRun.TurnId = "another_turn";
+            invalid.Add(wrongTurn);
+            var unknown = ContextContinuationSession();
+            unknown.Messages[3].ResponseProtocolVersion = 4;
+            invalid.Add(unknown);
+            var mismatch = ContextContinuationSession();
+            AsV3HistoryFixture(mismatch.Messages[3]);
+            mismatch.Messages[3].ToolCallId = "wrong_metadata";
+            invalid.Add(mismatch);
+            var malformed = ContextContinuationSession();
+            AsV3HistoryFixture(malformed.Messages[3]);
+            malformed.Messages[3].Content = "{broken";
+            invalid.Add(malformed);
+            var missingMetadata = ContextContinuationSession();
+            missingMetadata.Messages[3].ToolCallId = null;
+            invalid.Add(missingMetadata);
+            var nativeMismatch = ContextContinuationSession();
+            nativeMismatch.Messages[5].ToolCalls[0].Id = "wrong_native_id";
+            invalid.Add(nativeMismatch);
+            var missing = ContextContinuationSession();
+            missing.Messages.RemoveAt(missing.Messages.Count - 1);
+            invalid.Add(missing);
+            foreach (var session in invalid)
+            {
+                var scope = ConversationProtocolContext.Begin(session, new ToolDefinition[0], new ToolCommand { ToolCallId = "pending_id" });
+                var snapshot = scope.Snapshot();
+                AssertTrue(!snapshot.IsComplete && snapshot.AcceptedToolCallIds == null && !string.IsNullOrWhiteSpace(snapshot.Error),
+                    "incomplete continuation is explicit, not a partial id set");
+                scope.ObserveAccepted(new[] { new AgentToolCall { Id = "later" } });
+                AssertTrue(!scope.Snapshot().IsComplete, "later accepted data cannot erase an incomplete seed");
+            }
+            AssertTrue(!ConversationProtocolContext.Begin(ContextContinuationSession(), new ToolDefinition[0], new ToolCommand()).Snapshot().IsComplete,
+                "unidentified confirmation fails closed");
+        }
+
+        private static void ProtocolContextBatchSafetyUsesLocalAuthority()
+        {
+            var read = OfficeBuiltInToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.inspect");
+            var write = OfficeBuiltInToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.add_sheet");
+            var external = new ToolDefinition { Id = "external.lookup", BuiltIn = true };
+            var pipeline = new ToolDefinition { Id = "pipeline.read", Executor = "pipeline", PipelineJson =
+                "{\"steps\":[{\"id\":\"read\",\"toolId\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}" };
+            var scope = ConversationProtocolContext.Begin(null, new[] { read, write, external, pipeline }, null);
+            AssertTrue(scope.Snapshot().BatchSafeReadOnlyToolIds.SequenceEqual(new[] { "excel.inspect" }),
+                "only audited local reads with safe metadata can batch; external/unclassified/pipelines stay singleton");
+            foreach (var kind in new[] { "document", "local", "confirmation", "not_agent", "disabled", "custom", "vba", "pipeline" })
+            {
+                var changed = read.Clone();
+                changed.MutatesDocument = kind == "document";
+                changed.MutatesLocalState = kind == "local";
+                changed.RequiresConfirmation = kind == "confirmation";
+                changed.AgentCanRun = kind != "not_agent";
+                changed.Enabled = kind != "disabled";
+                changed.BuiltIn = kind != "custom";
+                if (kind == "vba" || kind == "pipeline") changed.Executor = kind;
+                if (kind == "pipeline") changed.PipelineJson = "{\"steps\":[{\"id\":\"write\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}";
+                var context = ConversationProtocolContext.Begin(null, new[] { changed, write }, null).Snapshot();
+                AssertTrue(context.IsComplete && context.BatchSafeReadOnlyToolIds.Count == 0, "batch permission cannot override " + kind + " metadata/binding");
+            }
+            read.RequiresConfirmation = true;
+            AssertTrue(scope.Snapshot().BatchSafeReadOnlyToolIds.Contains("excel.inspect"), "run projection is a snapshot of the original catalog");
+            AssertTrue(!ConversationProtocolContext.Begin(null, new[] { read }, null).Snapshot().BatchSafeReadOnlyToolIds.Contains("excel.inspect"),
+                "new run/confirmation rebuilds safety from the current catalog");
+        }
+
+        private sealed class RecordingModelProtocol : IModelProtocol
+        {
+            private readonly ModelProtocolClient _inner;
+            private readonly List<ModelProtocolRequest> _requests;
+
+            internal RecordingModelProtocol(LlmCompletionDelegate completion, List<ModelProtocolRequest> requests)
+            {
+                _inner = new ModelProtocolClient(completion);
+                _requests = requests;
+            }
+
+            public Task<ModelProtocolResult> GetResponseAsync(ModelProtocolRequest request, ModelProtocolProgress progress, CancellationToken cancellationToken)
+            {
+                _requests.Add(request);
+                return _inner.GetResponseAsync(request, progress, cancellationToken);
+            }
+        }
+
+        private static void ProtocolContextBoundaryTracksOnlyAcceptedCalls()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"status\":\"in_progress\",\"message\":\"Bad attempt\",\"tool_calls\":[{\"id\":\"rejected_id\",\"name\":\"unknown.tool\",\"arguments\":{}}]}",
+                    LoadToolSchemaResponse("excel.inspect", "schema_id"),
+                    "{\"status\":\"in_progress\",\"message\":\"Read\",\"tool_calls\":[{\"id\":\"read_id\",\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Done\",\"tool_calls\":[]}",
+                    "{\"status\":\"completed\",\"message\":\"Fresh answer\",\"tool_calls\":[]}"
+                });
+                var rawCalls = 0;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    rawCalls++;
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var requests = new List<ModelProtocolRequest>();
+                var service = new ConversationRunService(adapter, executor, completion, null,
+                    () => new RecordingModelProtocol(completion, requests));
+                var session = NewSession(adapter);
+                var settingsForRun = new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 2 };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var result = service.ExecuteAsync(ChatModes.Agent, "Inspect sheets", session, NewContext(adapter), settingsForRun, tools, null)
+                    .GetAwaiter().GetResult();
+                AssertEqual(4, rawCalls, "one rejected attempt is repaired inside a single logical step");
+                AssertEqual(3, requests.Count, "boundary captures logical steps, not raw attempts");
+                AssertTrue(requests.All(request => request.CallContext != null && request.CallContext.IsComplete), "real loop supplies complete call context");
+                AssertEqual(0, requests[0].CallContext.AcceptedToolCallIds.Count, "fresh scope begins empty");
+                AssertTrue(requests[1].CallContext.AcceptedToolCallIds.SequenceEqual(new[] { "schema_id" }), "accepted schema call enters next step");
+                AssertTrue(requests[2].CallContext.AcceptedToolCallIds.SequenceEqual(new[] { "read_id", "schema_id" }), "accepted read enters next step, rejected id never does");
+                AssertTrue(requests[0].CallContext.BatchSafeReadOnlyToolIds.Contains("common.resources_read") &&
+                    requests[0].CallContext.BatchSafeReadOnlyToolIds.Contains("excel.inspect"), "runtime metadata feeds the batch-safe projection");
+                AssertEqual(2, result.ResponseProtocolVersion, "context adaptation does not change active v2 writes");
+                service.ExecuteAsync(ChatModes.Agent, "New request", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
+                AssertEqual(0, requests[3].CallContext.AcceptedToolCallIds.Count, "next user run gets an independent scope");
+                AssertEqual(0, requests[0].CallContext.AcceptedToolCallIds.Count, "older snapshot was not mutated by later accepted calls");
+            });
+        }
+
+        private static void ProtocolContextBoundaryRestoresConfirmation()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("common.skills_upsert", "schema_id"),
+                    "{\"status\":\"in_progress\",\"message\":\"Create skill\",\"tool_calls\":[{\"id\":\"skill_id\",\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.context_probe\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    "{\"status\":\"completed\",\"message\":\"Done\",\"tool_calls\":[]}"
+                });
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                var requests = new List<ModelProtocolRequest>();
+                var service = new ConversationRunService(adapter, executor, completion, null,
+                    () => new RecordingModelProtocol(completion, requests));
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "original_run", TurnId = "original_run", ResponseProtocolVersion = 2, Status = "running" };
+                var settingsForRun = new AppSettings { AutoConfirmToolActions = false };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                ToolCommand confirmed = null;
+                var first = service.ExecuteAsync(ChatModes.Agent, "Create test skill", session, NewContext(adapter), settingsForRun, tools, null,
+                    (pendingSession, command, result) => { confirmed = command; return "pending_context"; }).GetAwaiter().GetResult();
+                AssertTrue(first.WaitingForConfirmation && confirmed != null, "real runtime pauses after the accepted confirmation-required call");
+                foreach (var message in session.Messages) message.RunId = "original_run";
+                var through = session.Messages.First(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == "schema_id");
+                var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, SummaryMarkdown = "Schema discovery summarized." };
+                session.ContextCheckpoints.Add(checkpoint);
+                session.ActiveContextCheckpointId = checkpoint.Id;
+                session.LastRun.RunId = "confirmation_run";
+                session.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" && message.ToolCallId == "skill_id").RunId = "confirmation_run";
+                // Same controller-style identity transition, with real host-neutral tool
+                // execution against the fixture's disposable skill store (no Office COM).
+                var actual = executor.Execute(confirmed, tools, settingsForRun, false, true, session);
+                AssertTrue(actual.Success, "confirmed fixture skill writes successfully");
+                var last = service.ContinueAfterToolAsync(confirmed, actual, session, NewContext(adapter), settingsForRun, tools, null, null,
+                    initialIterationsUsed: session.LastRun.IterationsUsed, initialToolStepsUsed: session.LastRun.ToolStepsUsed)
+                    .GetAwaiter().GetResult();
+                AssertEqual(3, requests.Count, "one model step after confirmation");
+                var continuation = requests[2];
+                AssertTrue(continuation.CallContext.IsComplete, "confirmation context is complete");
+                AssertTrue(continuation.CallContext.AcceptedToolCallIds.SequenceEqual(new[] { "schema_id", "skill_id" }),
+                    "new runtime RunId retains logical-turn ids, including compacted-away schema discovery");
+                AssertTrue(!continuation.AcceptedMessages.Any(message => message.ProtocolMessage && message.Role == "assistant" && message.ToolCallId == "schema_id"),
+                    "id scope is wider than the actual materialized prompt");
+                AssertTrue(!continuation.CallContext.BatchSafeReadOnlyToolIds.Contains("common.skills_upsert"), "confirmation tool is never batch-safe");
+                AssertEqual(2, last.ResponseProtocolVersion, "confirmation still writes the active v2 protocol");
+            });
+        }
+
         private static ModelProtocolRequest NewProtocolRequest(int attempts = 2, bool strict = false)
         {
             return new ModelProtocolRequest

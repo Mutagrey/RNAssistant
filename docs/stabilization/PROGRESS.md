@@ -2,7 +2,11 @@
 
 Current target: 16.1.0
 Current phase: Phase 2
-Current task: Phase 2C1 завершена (introduce v3 parser/schema/writer + explicit v2 read adapter, без runtime switch). Следующая — Phase 2C2, adapt/switch/delete по cutover gates; active protocol/history остаются v2. Phase 3 не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
+Current task: Phase 2C2 завершена host-neutral: validation context и локальная чистка. Параллельные governance-правки включены с явного разрешения пользователя. Active wire/history остаются v2; Phase 3 не начата. Windows/controller/WebView validation pending; known baseline test failure: R22
+
+Next step: отдельная Phase 2C3 — coordinated v3 switch/delete. Не начинать её в текущем изменении.
+Required context: [v3 context](../protocols/CONVERSATION_RESPONSE_V3.md#accepted-context-and-current-v3-history-phase-2c2) и [remaining cutover gates](../protocols/CONVERSATION_RESPONSE_V3.md#remaining-cutover-gates), [active model boundary](../conversation-protocol.md#modelprotocol-boundary-phase-2), [migration map](MIGRATION_MAP.md); master plan Phase 2 и §§15.1–15.2. [2C2 evidence](PHASE_2C2_PROTOCOL_CONTEXT.md) — по необходимости; предыдущая история не обязательна.
+Open gates / remaining legacy: R26 — enforce complete context до dispatch/в каждом v3 parse; saved prompts/probes, v3 writes/version marker и explicit old-chat skip/reset. Live v2 parser/schema/DTO и current-v2 typed-ID helper нужны до switch 2C3; unused v2 read adapter удалён. Windows/controller/WebView validation остаётся открытой.
 
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
@@ -12,7 +16,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 |---|---|---|---|---|---|
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
 | 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: `40282c0` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
-| 2 | in progress | 2A: `d911826`; 2B: `a51bdda`; 2C1: этот commit `feat(protocol): introduce v3 contract and explicit v2 read adapter` | 2C1: 68 targeted harness pass; one numeric failure red→green; ValidateVersionFormat pass | not performed | V3 contract/read adapter введены, но runtime cutover не выполнен; R20 закрыт, R26 — cutover gate |
+| 2 | in progress | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: этот commit `refactor(protocol): adapt accepted-run validation context` | 2C2: 86 targeted harness pass; ValidateVersionFormat pass | not performed | Full-turn context adapted, unused v2 adapter removed; active wire/history v2; R26 enforcement gate, switch 2C3 |
 | 3 | pending | — | — | — | AgentKernel |
 | 4 | pending | — | — | — | ToolRuntime |
 | 5 | pending | — | — | — | Bound DocumentSession |
@@ -177,15 +181,28 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Windows x64 + Office x64 + VS 2022 / VSTO / COM / real WebView — not performed. Harness использует controller stub и не доказывает runtime cutover или Windows qualification.
 - Точные команды, changed files, legacy paths и ограничения: [PHASE_2C1_V3_CONTRACT.md](PHASE_2C1_V3_CONTRACT.md).
 
+## Phase 2C2 — context adaptation and local cleanup
+
+- Baseline `5a6b550`, исходно clean. Полный switch не укладывается в §14.3; этот adapt затрагивает 9 production files (включая project includes и удалённый adapter), tests/docs. Phase 3 не начата.
+- Loop подаёт immutable `ModelProtocolCallContext`: accepted-only IDs всего logical turn и conservative batch-safe projection. Confirmation читает full history до compaction, сохраняет scope при смене RunId; incomplete history не выдаётся за пустой set. Live v2 client пока context не enforce.
+- Current-v3 history reader поддерживает canonical JSON, single native call с canonical metadata и literal final text; не читает старые форматы и не меняет данные.
+- Неиспользуемый v2 read adapter, legacy JSON branch, include и obsolete tests удалены. Current-v2 typed-ID helper нужен текущей confirmation; удалить при writer/version switch 2C3. Local-read registry + effective metadata — до typed ToolPolicy Phase 4; bookkeeping — до kernel Phase 3.
+- `conversation v3:` 13/13, `protocol context:` 6/6, `model protocol:` 13/13, `agent:` 41/41, `conversation:` 4/4, `completion guard:` 5/5, `plan mode:` 2/2, Chat read-only 1/1, production includes 1/1: 86 разных targeted cases. Linked C# 7.3 build и ValidateVersionFormat — pass.
+- Runtime switch, saved prompts/probes, old-chat skip/reset, live provider и Windows x64 + Office x64 + VS 2022 не проверены/не выполнены. Harness моделирует controller identity transition; production controller остаётся stub. Full harness/UI/VSTO builds не запускались; baseline R22 остаётся открытым.
+- Параллельные правки шести governance files включены с явного разрешения пользователя. Исходные docs-only проверки от 2026-08-28: cleanup policy — diff и 5 links/anchors OK; refactoring policy — diff и 7 links/anchors OK, без builds/runtime tests. Правила теперь canonical в master plan §§7.1, 15.1–15.2.
+- Повторная чистка по §15.1: consumers/includes проверены, устаревшая рекомендация добавить v2 read adapter убрана из master plan §21, вводная PROGRESS сокращена; исторические evidence/ADR сохранены. Дополнительных мёртвых production paths в текущем контуре не найдено; live v2 callers нужны до 2C3. Ранее проверенный код и version/tag не менялись. Команды и границы: [PHASE_2C2_PROTOCOL_CONTEXT.md](PHASE_2C2_PROTOCOL_CONTEXT.md).
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
 | Legacy ToolResult/safety → RunSummaryBuilder | Runtime / ToolRuntime | Loop, confirmation continuation | Перенос builder Phase 3; typed result mapping Phase 4 |
-| Optional RunExecutionSummary / отсутствующая legacy evidence | Application / Persistence / UI | Messages, LastRun, clones, bridge, static UI | Полный RunSummary/projection switch Phases 3/9; obsolete paths cleanup Phase 10 |
+| Optional RunExecutionSummary / отсутствующая legacy evidence | Application / Persistence / UI | Messages, LastRun, clones, bridge, static UI | Phases 3/9: удалить каждый obsolete path при switch последних consumers |
 | Nonserialized ModelProtocolFailure.Cause rethrow | Runtime / Application | ConversationRunService → controller cancellation/failure path | Phase 3 AgentKernel switch |
 | Accepted completion / current context-usage metadata | ModelProtocol / Application | Loop → transcript / turn result | Пересмотреть при v3/kernel Phases 2/3; заменить current transcript consumer при switch |
-| ConversationResponseV2Adapter.Read (introduced, not wired) | ModelProtocol | Сейчас только focused harness; intended accepted-history projection Phase 2C2 | Phase 10 после удаления legacy consumers; не live parser fallback |
+| Current-v2 typed call IDs → ConversationProtocolContext | Runtime / ModelProtocol | Confirmation seed пока current protocol=2 | Phase 2C3 writer/version switch; удалить helper, не поддерживать old chats |
+| Legacy safety + positive local-read registry → batch-safe snapshot | Runtime / ToolRuntime | Context constructor → ModelProtocol request | Phase 4 typed external/nested metadata + safety tests; неизвестные/pipelines singleton |
+| Office transient accepted-ID bookkeeping → ModelProtocolCallContext | Runtime | ConversationRunService start/confirmation | Phase 3 kernel switch; один owner, без второго loop/store |
 
 Существующие runtime paths остаются текущей реализацией, а не введёнными adapters.
 Их владельцы и фазы замены указаны в [MIGRATION_MAP.md](MIGRATION_MAP.md).
@@ -197,5 +214,5 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.
 - R22: compact catalog harness failure воспроизведён до изменений 1B; owner ToolPack/Tests, Phase 8.
-- R26: v3 runtime switch требует полного accepted-run ID scope и effective batch-safe projection; текущие Core tests не доказывают их wiring, gate Phase 2C2.
+- R26: context wiring проверен в 2C2; complete-context guard, live v3 parser enforcement, writer/confirmation и explicit old-chat skip/reset остаются gates 2C3.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).

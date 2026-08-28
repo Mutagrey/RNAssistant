@@ -1,8 +1,8 @@
 # Conversation Response v3
 
-Status: **introduced, not active in the conversation runtime** (Phase 2C1).
+Status: **contract introduced; validation context adapted; live protocol still v2** (Phase 2C2).
 Canonical requirements: [master plan §7.1](../stabilization/STABILIZATION_MASTER_PLAN.md#71-conversation-response-v3).
-The active wire/history version remains v2 until the coordinated Phase 2C2
+The active wire/history version remains v2 until the coordinated Phase 2C3
 cutover. Product version remains `16.1.0-dev`; protocol version is independent.
 
 ## Envelope
@@ -36,7 +36,8 @@ cutover. Product version remains `16.1.0-dev`; protocol version is independent.
   case are rejected before the existing case-insensitive argument normalization.
 - At most 32 calls per response, retaining the existing bound. Call IDs cannot
   repeat within the response or the accepted run; comparison remains conservatively
-  case-insensitive. A different run has a fresh ID scope.
+  case-insensitive. A new user turn starts a fresh scope; confirmation continues
+  the same logical scope even when its runtime RunId changes.
 - Write, external and confirmation-required calls must be singleton. Multiple
   independent read-only calls may be returned in order and executed sequentially.
   Parsing does not execute or schedule calls and does not prove independence.
@@ -57,7 +58,8 @@ existing `AgentToolCall` records, with no Status member. `ToJson()` is the expli
 canonical v3 envelope writer; do not serialize a runtime DTO as the wire contract.
 The legacy `AgentResponse` DTO remains in the active v2 path until switching.
 
-`ConversationResponseParser.Parse` requires five explicit inputs:
+`ConversationResponseParser.Parse` requires these explicit inputs; its context
+overload takes the last two as a complete `ModelProtocolCallContext` snapshot:
 
 | Input | Authority / use |
 |---|---|
@@ -71,14 +73,14 @@ Null authority/ID inputs fail closed; empty sets are valid. Parsing copies the
 sets, never reserves IDs and never mutates the caller's catalog or history.
 A rejected response returns no partial calls. Only the caller's acceptance of
 the entire response may advance accepted-run IDs. The next parse must receive
-that updated set. A read adapter is not such an acceptance operation.
+that updated set. Reading accepted history is not a new acceptance operation.
 
 Batching is opt-in. A missing ID in the batch-safe set forces singleton even if
 all legacy tool flags are false. `MutatesDocument`, `MutatesLocalState` or
 `RequiresConfirmation` also force singleton despite a supplied batch-safe ID.
 Core does not infer safety from tool-name suffixes or duplicate Office pipeline
-analysis. Building this effective safety projection and seeding run IDs are
-**cutover gates**, not runtime behavior delivered by 2C1. See R26.
+analysis. Phase 2C2 supplies this context to the boundary, but the live v2 client
+does not enforce it. V3 enforcement remains a cutover gate (R26).
 
 For callable tools the parser reuses `ToolSchemaSupport` to validate original
 argument contracts before acceptance. Optional structured-output nulls are
@@ -99,48 +101,71 @@ as provider-specific cross-field schema constructs. Both `json_object` and
 `json_schema` must use the same local parser after the cutover. The existing
 bounded retry/fallback policy is unchanged by this introduction.
 
-## Explicit v2 read adapter
+## Accepted context and current v3 history (Phase 2C2)
 
-`ConversationResponseV2Adapter.Read` reads an **explicitly identified historical
-v2 JSON envelope**, requiring a known string `status` as a version discriminator.
-It then discards status; there is no mapping from model status to runtime truth:
+`ConversationProtocolContext` owns transient ID bookkeeping in the current Office
+loop. It snapshots the entire accepted response before any call can pause/fail;
+rejected raw attempts never enter the set. Every request gets detached read-only
+lists. A fresh user run starts empty; confirmation reconstructs IDs from full
+`session.Messages` after the latest real user boundary, including compacted-away
+and suppressed pending call records. `LastRun.TurnId` checks that boundary when
+present; confirmation's new `RunId` must not reset the logical turn's ID scope.
+Missing/ambiguous records produce an incomplete context, never a valid empty set.
 
-- v2 `completed` with empty calls means only the model ended its loop;
-- continuation is determined only by a nonempty call list, even if status disagrees;
-- `blocked`, `refused`, `planned` or `awaiting_user` strings do not produce runtime outcomes.
+`ConversationResponseHistoryReader` reads **only explicitly marked v3** assistant
+records: canonical JSON envelopes, one native call with canonical `ToolName` and
+matching call metadata, or plain final text. It does not reverse provider-safe
+names, interpret final text as JSON, grant tool authority, or rewrite history.
+Ambiguous native batches/metadata and unknown versions fail; full canonical JSON
+batches retain all IDs. Diagnostics and tool-result records are not responses.
 
-The adapter checks envelope structure/bounds but deliberately does not require
-today's callable catalog or revalidate historical arguments against today's
-schema. It preserves exact old names without aliases and grants no permission to
-execute them. Reusing converted content as a new response requires normal v3
-validation. New v3 parsing never falls back to this adapter.
+The still-active v2 transcript has a temporary typed-metadata consumer in
+`ConversationProtocolContext.ReadCurrentV2CallIds`. It reads only current call IDs,
+not v2 JSON/status, and is removed with the v3 writer switch. It is not old-chat
+compatibility. The unused `ConversationResponseV2Adapter`, its legacy structural
+branch, project include and obsolete tests were **removed in 2C2**. Incompatible
+old chats require explicit skip/reset, without deletion, migration or silent
+history truncation; that guard is still a cutover prerequisite.
 
-Owner: **ModelProtocol**. Current consumers: the focused harness only. Intended
-consumer: accepted-history projection during Phase 2C2. Removal: **Phase 10** after
-legacy consumers are removed under an explicit history compatibility decision.
-The adapter does not migrate event streams, rewrite files, handle native-tool
-replay records/plain final messages, or introduce a second durable store.
+Until ToolPolicy has external-effect metadata, the Office projection permits
+only audited built-in local reads: `common.resources_list/resolve/search/read`,
+`common.capabilities_search/read`, `excel.inspect/read_range/find_cells`. Enabled,
+built-in binding and effective `ToolSafetyPolicy` must also permit Agent execution
+without document/local mutation or confirmation. All other IDs, including pure
+pipelines and unclassified/external calls, conservatively stay singleton. No tool
+definition/executor policy changes here. Rebuild the projection for each new run
+or confirmation; do not infer safety from false legacy flags alone.
 
-## Cutover gates — not completed in 2C1
+Owners/consumers/removal gates: [migration map](../stabilization/MIGRATION_MAP.md).
+ID bookkeeping moves to AgentKernel in Phase 3; the positive safety registry is
+replaced by typed ToolPolicy in Phase 4, after equivalent nested/external tests.
+
+## Remaining cutover gates
 
 Per [change budget §14.3](../stabilization/STABILIZATION_MASTER_PLAN.md#143-change-budget),
-introduce/read-adapt is separate from the coordinated switch/delete:
+2C1 introduced the contract and 2C2 adapted context; 2C3 must coordinate switch/delete:
 
 1. Switch ModelProtocol result/parser/repair, mode instructions and compatibility
    probes together. Resolve saved custom v2 prompts explicitly; never silently
    accept a v2 response on a v3 request. Preserve provider-native refusal metadata
    separately from model-authored status.
-2. Supply the accepted-run ID scope, including confirmation continuation and
-   compaction, and trusted effective batch safety. No new tool policies, automatic
-   tool retries, planner or hidden runtime phase selection.
-3. Adapt all accepted-history forms (JSON envelope, native tool role and plain
-   final text) explicitly. Do not read only the currently visible prompt to seed IDs.
+2. Require complete `CallContext` before v3 dispatch and pass it to the local
+   parser on every attempt. Incomplete history is a runtime boundary failure,
+   not something model repair can fix. Verify run-wide duplicates and singleton
+   enforcement through the live v3 client. No tool retries/planner/policy changes.
+3. Handle all accepted-history forms of the current v3 run (JSON envelope, native
+   tool role and plain final text) with the prepared reader, including actual
+   replay/confirmation writers. Incompatible old
+   chats require an explicit skip/reset boundary; never silently truncate their
+   history and continue the same run. Keep the existing controller protocol-version
+   confirmation guard; historical v2 projection is not required.
 4. Switch request schema, canonical accepted writes and protocol version marker
    together. **After cutover all new accepted events are v3; no dual-write.**
-   Historical event sources remain untouched; compatibility is a read projection.
-5. Remove superseded live v2 parser/schema/DTO consumers at the switch; keep only
-   the mapped temporary read adapter. Run integration tests for repair, history,
+   Historical event sources remain untouched; no automatic deletion or migration.
+5. Remove superseded live v2 parser/schema/DTO consumers and the temporary typed-ID helper
+   at the switch per master plan §15.1. Run integration tests for repair, history,
    confirmation, streaming, tools and completion guard. Phase 3 remains separate.
 
-Current implementation/evidence: [Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md).
+Current evidence: [Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
+Historical contract introduction: [Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md).
 Decision: [ADR-0002](../decisions/ADR-0002-model-protocol-boundary.md).

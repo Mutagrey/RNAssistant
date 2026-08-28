@@ -54,11 +54,12 @@ namespace RNAssistant.Office.Services
             IOfficeApplicationAdapter adapter,
             OfficeToolExecutor toolExecutor,
             LlmCompletionDelegate completeAsync,
-            ContextCompactionService contextCompactionService)
+            ContextCompactionService contextCompactionService,
+            Func<IModelProtocol> modelProtocolFactory = null)
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor;
-            _modelProtocolFactory = () => new ModelProtocolClient(completeAsync);
+            _modelProtocolFactory = modelProtocolFactory ?? (() => new ModelProtocolClient(completeAsync));
             _promptComposer = new ConversationPromptComposer();
             _contextCompactionService = contextCompactionService;
             _attachmentAnalysisService = new AttachmentAnalysisService(completeAsync);
@@ -163,6 +164,7 @@ namespace RNAssistant.Office.Services
             runnableCatalog = _toolExecutor.AvailableConversationToolsForSession(runnableCatalog, session);
             runnableCatalog = policy.SelectTools(runnableCatalog);
             CapabilityDiscoveryExecutor.BindReadSchema(runnableCatalog, enabledSkills);
+            var protocolContext = ConversationProtocolContext.Begin(session, runnableCatalog, initialCommand);
             if (!policy.AllowsConfirmation) pendingToolRegistrar = null;
             summaryBuilder = summaryBuilder ?? new RunSummaryBuilder(runnableCatalog,
                 initialCommand == null ? null : RunSummaryBuilder.ContinuationSeed(session));
@@ -223,6 +225,7 @@ namespace RNAssistant.Office.Services
                         AcceptedMessages = messages,
                         CallableTools = activeTools,
                         RunnableCatalog = runnableCatalog,
+                        CallContext = protocolContext.Snapshot(),
                         Options = options
                     }, protocolProgress, cancellationToken).ConfigureAwait(false);
                 }
@@ -244,6 +247,7 @@ namespace RNAssistant.Office.Services
                         budgetFailure ? "prompt_budget_exceeded" : "invalid_model_response");
                 }
                 var response = protocolResult.Response;
+                protocolContext.ObserveAccepted(response.ToolCalls);
                 var completion = protocolResult.Completion;
                 if (response.ToolCalls.Count == 0)
                 {

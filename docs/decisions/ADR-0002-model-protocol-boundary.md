@@ -1,7 +1,7 @@
 # ADR-0002: ModelProtocol owns raw model attempts
 
 Date: 2026-08-28
-Status: Accepted (Phase 2A boundary, 2B retry policy, 2C1 v3 contract; runtime cutover remains)
+Status: Accepted (2A boundary, 2B retry policy, 2C1 v3 contract, 2C2 context adaptation; runtime cutover remains)
 
 ## Context
 
@@ -83,7 +83,7 @@ integration. Accepted `LlmCompletionResult` and the existing context-usage
 projection are metadata for current transcript consumers, not a second protocol
 or durable result store.
 
-## V3 introduction and explicit legacy read (Phase 2C1)
+## V3 introduction and explicit legacy read (Phase 2C1, historical)
 
 Introduce `ConversationResponse`, parser/schema builder and a canonical v3 writer
 in Core/ModelProtocol. V3 contains only `message` and `tool_calls`; no Status member
@@ -97,22 +97,73 @@ not an automatic live-parser fallback. A known v2 status identifies the old form
 and is discarded; continuation follows the call list, never a success assertion.
 Historical names/arguments need not match a current catalog and grant no execution
 authority. Owner: ModelProtocol; current consumers: focused harness; intended
-consumer: history projection at cutover; removal: Phase 10.
+consumer: history projection at cutover; original removal plan: Phase 10.
+This historical compatibility plan is superseded by the 2026-08-28 amendment below.
 
 The complete switch exceeds the ten-production-file budget: it includes current
 DTO/parser/schema, ModelProtocol contracts/client, AppSettings prompts, transcript,
 AgentJsonProtocol, loop, compatibility probes and project includes. Apply §14.3:
-2C1 introduces the tested contract; 2C2 coordinates adapt/switch/delete. There is
+2C1 introduced the tested contract; the original plan assigned adapt/switch/delete
+to 2C2. The result below records the completed adaptation and remaining 2C3 switch. There is
 no feature flag, dual execution or dual-write. Active requests/history still use
 v2; the current `AgentResponseProtocol.CurrentVersion` remains 2. Native refusals,
 retry counts, runtime health and Office dispatch are unchanged.
 
 [The v3 canonical contract](../protocols/CONVERSATION_RESPONSE_V3.md) defines the
 remaining gates: saved prompts, complete run-ID/effective-safety context (R26),
-all legacy history forms, v3-only new accepted writes and removal of superseded
+all current-run history forms, v3-only new accepted writes and removal of superseded
 live v2 paths. Phase 2 is not complete and Phase 3 is not authorized by this commit.
 
+## Amendment 2026-08-28 — local cleanup and no historical compatibility requirement
+
+Preserving old chats/formats is not a stabilization requirement. At the v3 cutover,
+incompatible old chats require an explicit skip/reset boundary without automatic
+deletion, stream rewriting or silent history truncation. Current v3 run history,
+replay, confirmation and complete accepted-run ID scope remain required.
+
+The v2 read adapter must not be wired solely to preserve old chats. Recheck actual
+consumers at cutover and remove it with obsolete tests when no necessary runtime
+consumer remains. Temporary retention requires an owner, concrete consumers,
+reason and nearest removal gate. Master plan §15.1 makes verified local cleanup
+mandatory in each substep; Phase 10 is a final structural audit. This amendment
+changes the migration plan, not the recorded 2C1 implementation or validation.
+
 ## Consequences and verification
+
+### Context adaptation and cleanup (Phase 2C2)
+
+The next v3 switch needs complete accepted-run IDs without importing Office
+session/compaction logic into Core. `ConversationProtocolContext` now owns that
+transient bookkeeping in the existing loop and passes detached
+`ModelProtocolCallContext` snapshots to each logical model step. It records the
+entire accepted response before dispatch; rejected attempts cannot reserve IDs.
+Confirmation seeds the full latest user turn, including compacted/suppressed
+records, rather than the prompt window or confirmation's new `RunId`. An
+incomplete seed stays explicit; the v3 context overload rejects it. The active v2
+client does not enforce this new context yet.
+
+Core's current-v3 history reader handles canonical envelopes, identified single
+native calls and literal final text without mutating sources or granting tool
+authority. The 2C1 v2 read adapter had no production consumers: it, its legacy JSON
+branch, project include and obsolete tests are removed now. Only a typed-ID
+helper for the current v2 transcript remains in the Office context builder; delete
+it at the coordinated v3 writer switch, not in Phase 10. Old chats need explicit
+skip/reset; no compatibility parser, silent truncation or historical rewrite.
+
+Legacy ToolDefinition lacks external-effect metadata. The context therefore uses
+an explicit audited local-read set intersected with built-in binding and existing
+effective safety; unknown/external tools and all pipelines remain singleton.
+This is a conservative projection for the future parser, not a new executor
+policy. Ownership/removal: bookkeeping to AgentKernel in Phase 3; replace the
+positive registry with typed ToolPolicy and nested/external tests in Phase 4.
+
+Nine production files (including project includes and the deleted adapter) change
+within the ModelProtocol adaptation. Real host-neutral loop/executor tests verify
+accepted-only IDs and confirmation after compaction, while focused Core tests
+verify history/context failures. The next Phase 2C3 change can consume this
+contract without rediscovering session boundaries; it must still switch client,
+prompts/schema/writes and remove live v2 consumers together. No Phase 3 extraction
+or Office tool changes are part of 2C2.
 
 The old loop completion/parse/repair/fallback/trace methods and
 `AgentJsonProtocol.CreateFormatRepairMessage` are removed, without aliases or dual
@@ -124,4 +175,5 @@ Windows/Office/controller/WebView qualification remains open.
 
 Evidence and exact commands: [Phase 2A](../stabilization/PHASE_2A_MODEL_PROTOCOL.md),
 [Phase 2B](../stabilization/PHASE_2B_RETRY_POLICY.md),
-[Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md).
+[Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md),
+[Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).

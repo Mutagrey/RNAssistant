@@ -99,7 +99,7 @@
     <Compile Include="ModelProtocol\ConversationResponseJson.cs" />
     <Compile Include="ModelProtocol\ConversationResponseParser.cs" />
     <Compile Include="ModelProtocol\ConversationResponseSchemaBuilder.cs" />
-    <Compile Include="ModelProtocol\ConversationResponseV2Adapter.cs" />
+    <Compile Include="ModelProtocol\ConversationResponseHistoryReader.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />

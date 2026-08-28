@@ -10,6 +10,7 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -17,6 +18,84 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static ChatMessage AsV3HistoryFixture(ChatMessage message)
+        {
+            message.ResponseProtocolVersion = 3;
+            if (message.ProtocolMessage && message.ToolCalls.Count == 0)
+            {
+                var root = JObject.Parse(message.Content);
+                root.Remove("status");
+                message.Content = root.ToString(Formatting.None);
+            }
+            return message;
+        }
+
+        private static void ConversationHistoryReadsAcceptedForms()
+        {
+            var call = new AgentToolCall { Id = "history_call", Name = "removed.old_tool",
+                Arguments = new Dictionary<string, object> { ["at"] = "2026-08-28T12:34:56Z" } };
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            {
+                var message = AsV3HistoryFixture(AgentJsonProtocol.CreateToolCallMessage(call, "Accepted step.", null, role));
+                message.ExcludeFromModelContext = true; // A suppressed pending call was still accepted.
+                var before = JsonConvert.SerializeObject(message);
+                var parsed = ConversationResponseHistoryReader.Read(message);
+                AssertTrue(parsed.Success, "current v3 history form reads: " + role);
+                AssertEqual(call.Id, parsed.Response.ToolCalls.Single().Id, "exact accepted id preserved");
+                AssertEqual(call.Name, parsed.Response.ToolCalls.Single().Name, "canonical id comes from metadata, never a reversed API alias");
+                AssertTrue(parsed.Response.ToolCalls[0].Arguments["at"] is string, "native ISO argument remains text");
+                AssertTrue(JObject.Parse(parsed.Response.ToJson())["status"] == null, "history projection has no model status");
+                AssertTrue(!ParseV3(parsed.Response.ToJson(), V3ReadTool()).Success, "history reading does not grant execution authority");
+                parsed.Response.ToolCalls[0].Arguments["at"] = "changed copy";
+                AssertEqual(before, JsonConvert.SerializeObject(message), "history reader does not rewrite the source record");
+            }
+            var final = AsV3HistoryFixture(AgentTranscript.CreateAssistantMessage(V3Envelope(V3Call("quoted_id")), null, null, AgentResponseStatuses.Refused));
+            var plain = ConversationResponseHistoryReader.Read(final);
+            AssertTrue(plain.Success && plain.Response.ToolCalls.Count == 0, "plain final text is not sniffed as a tool envelope");
+            AssertEqual(final.Content, plain.Response.Message, "JSON-looking final text remains exact text");
+        }
+
+        private static void ConversationHistoryRejectsAmbiguousRecords()
+        {
+            Func<ChatMessage> jsonMessage = () => AsV3HistoryFixture(AgentJsonProtocol.CreateToolCallMessage(
+                new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.", null, ToolResultRoles.User));
+            Func<ChatMessage> nativeMessage = () => AsV3HistoryFixture(AgentJsonProtocol.CreateToolCallMessage(
+                new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.", null, ToolResultRoles.Tool));
+            var mismatched = jsonMessage();
+            mismatched.ToolCallId = "other";
+            AssertTrue(!ConversationResponseHistoryReader.Read(mismatched).Success, "metadata/body id mismatch fails closed");
+            mismatched = jsonMessage();
+            mismatched.ToolName = "another.tool";
+            AssertTrue(!ConversationResponseHistoryReader.Read(mismatched).Success, "metadata/body name mismatch fails closed");
+            foreach (var version in new[] { 0, 1, 2, 4 })
+            {
+                var unknown = jsonMessage();
+                unknown.ResponseProtocolVersion = version;
+                AssertTrue(!ConversationResponseHistoryReader.Read(unknown).Success, "unknown protocol is not guessed");
+            }
+            var wrongV3 = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.", null, ToolResultRoles.User);
+            wrongV3.ResponseProtocolVersion = 3;
+            AssertTrue(!ConversationResponseHistoryReader.Read(wrongV3).Success, "v3 marker cannot silently use a v2 body");
+            var noCanonicalName = nativeMessage();
+            noCanonicalName.ToolName = null;
+            AssertTrue(!ConversationResponseHistoryReader.Read(noCanonicalName).Success, "provider-safe name cannot reconstruct an exact canonical id");
+            var batch = nativeMessage();
+            batch.ToolCalls.Add(new LlmToolCall { Id = "second", Name = "rna_test_read", ArgumentsJson = "{}" });
+            AssertTrue(!ConversationResponseHistoryReader.Read(batch).Success, "ambiguous native batch is not partially adapted");
+            foreach (var arguments in new[] { "{", "[]", "{\"at\":01}", "{}},{\"id\":\"injected\",\"name\":\"test.read\",\"arguments\":{}" })
+            {
+                var invalid = nativeMessage();
+                invalid.ToolCalls[0].ArgumentsJson = arguments;
+                AssertTrue(!ConversationResponseHistoryReader.Read(invalid).Success, "native argument JSON cannot change envelope structure");
+            }
+            var diagnostic = jsonMessage();
+            diagnostic.Activity = new ChatActivity { Kind = "model_response" };
+            AssertTrue(!ConversationResponseHistoryReader.Read(diagnostic).Success, "diagnostics are not accepted model responses");
+            var result = AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "call_1", ToolId = "test.read" }, ToolResult.Ok("ok"));
+            result.ResponseProtocolVersion = 3;
+            AssertTrue(!ConversationResponseHistoryReader.Read(result).Success, "tool results are not assistant responses");
+        }
+
         private static ToolDefinition V3ReadTool(string id = "test.read")
         {
             return new ToolDefinition
@@ -252,46 +331,6 @@ namespace RNAssistant.Harness
             AssertTrue(ParseV3(V3Envelope(calls), tool).Success, "32 read-only calls accepted");
             var oversized = V3Envelope(calls.Concat(new[] { V3Call("last") }).ToArray());
             AssertTrue(!ParseV3(oversized, tool).Success, "33 calls rejected");
-            var legacy = JObject.Parse(oversized);
-            legacy["status"] = "in_progress";
-            AssertTrue(!ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None)).Success, "read adapter keeps the same envelope bound");
-        }
-
-        private static void ConversationV2AdapterDiscardsStatus()
-        {
-            foreach (var status in new[] { "completed", "in_progress", "awaiting_user", "blocked", "refused", "planned" })
-            {
-                foreach (var v3 in new[] { V3Envelope(), V3Envelope(V3Call()) })
-                {
-                    var legacy = JObject.Parse(v3);
-                    legacy["status"] = status;
-                    var adapted = ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None));
-                    AssertTrue(adapted.Success, "v2 status is only a discriminator, not lifecycle truth: " + status);
-                    AssertTrue(JToken.DeepEquals(JObject.Parse(v3), JObject.Parse(adapted.Response.ToJson())),
-                        "v2 adapter derives continuation only from calls and writes status-free v3");
-                    AssertTrue(!ParseV3(legacy.ToString(Formatting.None), V3ReadTool()).Success, "new parser never silently falls back to v2");
-                }
-            }
-        }
-
-        private static void ConversationV2AdapterDoesNotGrantToolAuthority()
-        {
-            var legacy = JObject.Parse(V3Envelope(V3Call(name: "removed.old_tool", arguments: new JObject { ["old_arg"] = 42 })));
-            legacy["status"] = "completed";
-            var adapted = ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None));
-            AssertTrue(adapted.Success, "historical read does not require a current catalog/schema");
-            AssertEqual("removed.old_tool", adapted.Response.ToolCalls[0].Name, "historical exact name preserved without alias");
-            AssertTrue(!ParseV3(adapted.Response.ToJson(), V3ReadTool()).Success,
-                "read conversion does not make a removed historical tool executable");
-            foreach (var status in new JToken[] { new JValue("unknown"), JValue.CreateNull(), new JValue(2) })
-            {
-                legacy["status"] = status;
-                AssertTrue(!ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None)).Success, "only identified v2 envelopes accepted");
-            }
-            legacy["status"] = "completed";
-            legacy["verified"] = true;
-            AssertTrue(!ConversationResponseV2Adapter.Read(legacy.ToString(Formatting.None)).Success, "read adapter rejects unknown root fields");
-            AssertTrue(!ConversationResponseV2Adapter.Read(V3Envelope()).Success, "v3 is not autodetected as legacy");
         }
 
         private static void SimpleAgentParsesFinalJson()

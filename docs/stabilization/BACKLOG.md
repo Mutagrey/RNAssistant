@@ -11,7 +11,8 @@
 | 2A | Выделить IModelProtocol, raw attempts/repair/fallback и typed failure | done; 68 targeted harness pass; v2 и legacy retry semantics сохранены |
 | 2B | Общий лимит 1–20 attempts, provider/protocol retry policy | done; 74 targeted harness pass, 4 red→green cases; R20 закрыт host-neutral, fallback работает во время repair |
 | 2C1 | Introduce v3 parser/schema/writer, явный v2 read adapter и canonical doc | done; 68 targeted harness pass; active runtime/history всё ещё v2, no cutover |
-| 2C2 | Adapt/switch/delete: ModelProtocol/prompts/schema/history, run IDs и effective singleton safety | next, отдельное изменение по §14.3; gates в CONVERSATION_RESPONSE_V3.md, R26; новые accepted writes только v3 после switch |
+| 2C2 | Adapt full-turn ID/safety snapshots, current-v3 history reader; удалить unused v2 read adapter | done host-neutral; 86 targeted tests pass; live wire/history остаются v2 |
+| 2C3 | Switch/delete: client/prompts/schema/history/version, complete-context enforcement и explicit old-chat skip/reset | next, отдельное изменение по §14.3; все gates в CONVERSATION_RESPONSE_V3.md; новые accepted writes только v3 после switch |
 | 3 | Минимальный AgentKernel и runtime-owned RunSummary | Вся Phase 2 завершена, не только boundary extraction |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests смены активной книги и lifetime |
@@ -19,7 +20,7 @@
 | 7 | Excel read/write vertical slice | Bound target, write-effect evidence |
 | 8 | Resource read plane / immutable ToolPack | Нет LRU eviction во время run |
 | 9 | Persistence / UI projection | Replay не принимает execution decisions |
-| 10 | Удаление заменённых paths и architecture tests | Нет consumers; закрыть MIGRATION_MAP |
+| 10 | Финальная структурная сверка и architecture tests | Локальная чистка уже выполняется при каждом switch; закрыть MIGRATION_MAP |
 | 11 | Optional contours | Только после отдельной миграции; не расширять release-critical scope |
 | 12 | Release qualification и packaging | Все gates master plan; Windows x64 + Office x64 + VS 2022 |
 
@@ -41,14 +42,17 @@ R25: перед release проверить реальную latency, timeout и 
 Phase 1 host-neutral containment выполнена; production controller, Office и WebView
 qualification остаются в R21/R16 и не объявляются выполненными.
 
-Phase 2B добавила bounded provider retry/backoff. Phase 2C1 вводит v3 contract и
-read adapter без runtime switch: старые v2 parser/schema/DTO пока нужны живым
-consumers. Phase 2C2 должна удалить заменяемые live paths, а не оставить два
-production parsers или automatic v2 fallback. Owner/consumers/removal — MIGRATION_MAP.
-R26: accepted IDs нужно восстанавливать из всего logical run, включая confirmation
-и не попавшие в prompt сообщения; batch-safe set — из effective local authority,
-не только false legacy flags. Saved custom v2 prompts и все history forms должны
-быть рассмотрены при coordinated cutover; controller/Windows qualification отдельно.
+Phase 2C2 передаёт immutable accepted-ID/safety snapshots на boundary, восстанавливает
+весь logical turn при confirmation и удаляет unused v2 read adapter вместе с tests/include.
+Live v2 parser/schema/DTO и typed-ID helper пока нужны действующим consumers; удалить
+в coordinated switch 2C3, без automatic v2 fallback. Owner/reason/gate — MIGRATION_MAP.
+R26 частично закрыт wiring/tests; 2C3 должна enforce complete context до dispatch и
+в каждом v3 parse, проверить real v3 writer/confirmation и explicit skip/reset старого чата.
+Saved custom v2 prompts (включая instruction-authoring skill), compatibility probes,
+schema и writes/marker переключаются согласованно; старые streams не переписываются.
+Без нового ToolPolicy все external/unclassified/pipelines остаются singleton;
+positive local-read registry заменяется typed metadata в Phase 4.
+Controller/Windows qualification остаётся отдельной.
 `Failure.Cause` временно сохраняет прежний controller exception path; удалить при
 переключении на AgentKernel в Phase 3, не вводить второй loop.
 
