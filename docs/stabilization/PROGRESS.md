@@ -1,12 +1,12 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 2
-Current task: Phase 2C3C завершена host-neutral: active wire/history v3, prompt schema 12, полный history/context preflight и удаление live v2 paths. Phase 3 не начата. Windows/controller/WebView/DPAPI и live-provider qualification pending; known baseline test failure: R22
+Current phase: Phase 3
+Current task: Phase 3A завершена host-neutral: model context/materialization вынесены из loop, activity projection — в существующий AgentTranscript; runtime semantics сохранены. AgentKernel/новый RunSummary ещё не внедрены. Windows/controller/WebView/DPAPI и live-provider qualification pending; known baseline test failure: R22
 
-Next step: отдельная Phase 3 — минимальный AgentKernel/RunSummary по master plan; working set/resource lifecycle остаётся снаружи, минимальный replay использует существующие events. Не смешивать с полным ToolRuntime, Resource Fabric или persistence/UI cutover. Windows gates не считать выполненными.
-Required context: master plan [Phase 3](STABILIZATION_MASTER_PLAN.md#phase-3--минимальный-agentkernel-и-runtime-truth) и §§15.1–15.2, [активный v3 contract](../protocols/CONVERSATION_RESPONSE_V3.md), [migration map](MIGRATION_MAP.md), R26/R27 в risk register. Исторические evidence — только по необходимости.
-Open gates / remaining legacy: R26/R27 закрыты host-neutral для actual v3, но controller ordering, Office/WebView/DPAPI и реальные providers не проверены. Live v2 DTO/parser/schema/typed-ID helper удалены. Failure.Cause и runtime lifecycle projections — Phase 3; legacy effect mapping / positive local-read registry — Phase 4.
+Next step: отдельная Phase 3B — минимальный AgentKernel/RunSummary и общий start/confirmation accounting; минимальный IRunStore/replay использует существующие events. ConversationModelSession остаётся Office-владельцем контекста, working set и media. Не смешивать с полным ToolRuntime, Resource Fabric или persistence/UI cutover; Windows gates не считать выполненными.
+Required context: master plan [Phase 3](STABILIZATION_MASTER_PLAN.md#phase-3--минимальный-agentkernel-и-runtime-truth) и §§15.1–15.2, [граница model context](../conversation-protocol.md#conversation-context), [активный v3 contract](../protocols/CONVERSATION_RESPONSE_V3.md), [session events](../session-events.md), [migration map](MIGRATION_MAP.md). Исторические evidence — только по необходимости.
+Open gates / remaining legacy: kernel/новый RunSummary/replay (R11) ещё не проверены; Failure.Cause и runtime lifecycle projections — Phase 3B, legacy effect mapping / positive local-read registry — Phase 4. Live v2 и заменённые prompt/media/materialization helpers удалены. R26/R27 закрыты host-neutral для v3, но controller ordering, Office/WebView/DPAPI и реальные providers не проверены.
 
 Workflow update (2026-08-28, docs-only): §§14.3, 22–23 — обоснованный единый switch может затронуть более 10 файлов; проверки применяются по изменению, повторные прогоны без новой причины не нужны; отчёт краткий. Runtime и открытые gates не изменены. Docs diff/links — OK; pre-commit ValidateVersionFormat — pass; build/tests для этой правки не запускались.
 
@@ -14,7 +14,7 @@ Migration sequencing update (2026-08-28, docs-only): Phase 3 изолирует 
 
 Pipelines disabled (2026-08-28, отдельное согласованное сокращение scope): удалены executor/parser, `PipelineJson`, nested dependency/safety/document/fingerprint traversal, transcript children parsing и editor. Catalog/discovery, direct/manual/dry-run execution, authoring и storage writes закрыты; старые определения skipped без migration/replay и без автоматического удаления файлов. Совместимость не сохраняется; возврат только отдельным решением Phase 11 после stable core. Это не начало Phase 3/11 и не дополнительный gate текущей миграции.
 
-Pipeline verification: `pipeline:` 3/3; `tools:` 22/23 (единственный failure — известный R22); `vba: package` 5/5; `vba: session execution` 1/1; `vba: code-only UserForm authoring skill` 1/1; `completion guard:` 5/5; `agent: bounds oversized tool result data` 1/1; `protocol context: batch safety uses local authority` 1/1; production project includes 1/1. Итого 40 pass + R22; одна актуальная host-neutral сборка, следующие filters с `--no-build`. `node tests/web/tools-editor.test.js` — pass, syntax 5 затронутых JS — OK. Windows x64 + Office + VS 2022 / controller/WebView validation не выполнялась и остаётся открытой. V3 зафиксирован отдельно в `dbb8ce1`; pipelines оформляются отдельным commit. Pre-commit ValidateVersionFormat — pass.
+Pipeline verification: `pipeline:` 3/3; `tools:` 22/23 (единственный failure — известный R22); `vba: package` 5/5; `vba: session execution` 1/1; `vba: code-only UserForm authoring skill` 1/1; `completion guard:` 5/5; `agent: bounds oversized tool result data` 1/1; `protocol context: batch safety uses local authority` 1/1; production project includes 1/1. Итого 40 pass + R22; одна актуальная host-neutral сборка, следующие filters с `--no-build`. `node tests/web/tools-editor.test.js` — pass, syntax 5 затронутых JS — OK. Windows x64 + Office + VS 2022 / controller/WebView validation не выполнялась и остаётся открытой. V3 зафиксирован отдельно в `dbb8ce1`; pipelines — `f35e85c`. Pre-commit ValidateVersionFormat — pass.
 
 Historical baseline: `v16.0.4` = `225a05bb44dd7701892b5f8c98ea2e3b342274a7`.
 Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
@@ -24,8 +24,8 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 |---|---|---|---|---|---|
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
 | 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: `40282c0` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
-| 2 | done (host-neutral) | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: `c9f8b07`; 2C3A: `330aa79`; 2C3B: `4bbb039`; 2C3C: этот commit `refactor(protocol): switch conversation responses to v3` | 2C3C: 100 targeted cases; ValidateVersionFormat pass; подробности в evidence | not performed | Active v3; old-chat skip/reset и prompt review/reset проверены локально; Windows/live-provider gates открыты |
-| 3 | pending | — | — | — | AgentKernel |
+| 2 | done (host-neutral) | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: `c9f8b07`; 2C3A: `330aa79`; 2C3B: `4bbb039`; 2C3C: `dbb8ce1` | 2C3C: 100 targeted cases; ValidateVersionFormat pass; подробности в evidence | not performed | Active v3; old-chat skip/reset и prompt review/reset проверены локально; Windows/live-provider gates открыты |
+| 3 | in progress | 3A: этот commit `refactor(agent): isolate conversation model context` | 64 targeted harness cases; ValidateVersionFormat pass; см. 3A ниже | not performed | Подготовительная граница проверена; kernel/RunSummary/replay — следующий 3B |
 | 4 | pending | — | — | — | ToolRuntime |
 | 5 | pending | — | — | — | Bound DocumentSession |
 | 6 | pending | — | — | — | VBA vertical slice |
@@ -225,15 +225,23 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Удалены live v2 DTO/parser/schema/includes, typed-ID helper, LastRun-only controller helper и 9 obsolete parser tests; fixtures используют настоящие v3 writers. Один связанный scope: 15 production files, без нового kernel/tool policy/storage/UI.
 - Проверка и границы: [PHASE_2C3C_V3_CUTOVER.md](PHASE_2C3C_V3_CUTOVER.md). Windows/controller/Office/WebView/DPAPI и live provider не проверены; Phase 3 остаётся отдельной. Product `16.1.0-dev`, нового tag нет.
 
+## Phase 3A — Office model context boundary
+
+- Baseline `f35e85c`, исходно clean; pipelines уже отключены отдельным commit. По §15.2 извлечение нужно для ближайшего Core AgentKernel: loop больше не требует prompt/compaction/media и working-set implementation. Это один контур, 5 production files включая old-style project include; новый kernel или resource/store protocol не вводятся.
+- Постоянный Office-владелец `ConversationModelSession` хранит model messages, request cache/options, read evidence/LRU и bounded result/media lifecycle, используя существующие services. Start/confirmation и prompt inspector переключены; прежние BuildMessages/BuildRequestOptions/materialization/media helpers и DTO из loop удалены без alias. Activity/resource/chart/checkpoint projection перенесена в существующий `AgentTranscript`; callback-связей обратно в loop нет.
+- Сохранены v3, preflight, policies, execution/confirmation budgets, accepted IDs, summary и порядок result/history/projection. Failure.Cause, legacy summary и controller path остаются до 3B/4; владельцы/removal gates — в migration map. Phase 3 целиком не закрыта.
+- Проверка: baseline `agent:` 32/32 и `protocol context:` 6/6. На изолированном составе Phase 3A (baseline `f35e85c` + 14 файлов; параллельные versioning/demo правки исключены) `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "agent:"` — 33/33, включая новый auto-compaction/rebuilt callable-set case; существующий oversized-result/chart fixture проверяет перенесённую activity/provenance projection. После той же актуальной сборки `dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "<filter>"`: `protocol context:` 6/6; `preflight` 3/3; `conversation:` 4/4; `context inspector:` 3/3; `causal trace:` 6/6; `completion guard:` 5/5; `plan mode:` 2/2; `chat: uses only read-only resource loop` 1/1; `harness: production projects` 1/1. Всего 64 разных cases pass, C# 7.3 source-linked build pass. Pre-commit `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal` — pass; diff/затронутые ссылки — OK. Full harness/JS не запускались: нет новых domain/storage/UI semantics; known R22 не перепроверялся.
+- Windows x64 + Office x64 + VS 2022 / VSTO, production controller и real WebView/DPAPI/live providers не проверялись. IRunStore/новый RunSummary replay не реализованы и не считаются проверенными. Product `16.1.0-dev` и tags сохраняются; release script/push не выполняются.
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
 | Legacy ToolResult/safety → RunSummaryBuilder | Runtime / ToolRuntime | Loop, confirmation continuation | Перенос builder Phase 3; typed result mapping Phase 4 |
 | Optional RunExecutionSummary / отсутствующая legacy evidence | Application / Persistence / UI | Messages, LastRun, clones, bridge, static UI | Phases 3/9: удалить каждый obsolete path при switch последних consumers |
-| Nonserialized ModelProtocolFailure.Cause rethrow | Runtime / Application | ConversationRunService → controller cancellation/failure path | Phase 3 AgentKernel switch |
+| Nonserialized ModelProtocolFailure.Cause rethrow | Runtime / Application | ConversationRunService → controller cancellation/failure path | Phase 3B AgentKernel switch |
 | Accepted completion / current context-usage metadata | ModelProtocol / Application | Loop → transcript / turn result | Phase 3: пересмотреть metadata boundary и заменить current transcript consumer при switch |
-| Legacy safety + positive local-read registry → batch-safe snapshot | Runtime / ToolRuntime | Context constructor → ModelProtocol request | Phase 4 typed external/nested metadata + safety tests; неизвестные/pipelines singleton |
+| Legacy safety + positive local-read registry → batch-safe snapshot | Runtime / ToolRuntime | Context constructor → ModelProtocol request | Phase 4 typed external/nested metadata + safety tests; неизвестные/external singleton, pipelines отключены |
 | Office transient accepted-ID bookkeeping → ModelProtocolCallContext | Runtime | ConversationRunService start/confirmation | Phase 3 kernel switch; один owner, без второго loop/store |
 
 Существующие runtime paths остаются текущей реализацией, а не введёнными adapters.

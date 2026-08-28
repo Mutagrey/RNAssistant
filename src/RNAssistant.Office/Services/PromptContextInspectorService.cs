@@ -116,7 +116,7 @@ namespace RNAssistant.Office.Services
                     runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens, capabilityCatalog);
             }
 
-            var options = ConversationRunService.BuildRequestOptions(
+            var options = ConversationModelSession.BuildRequestOptions(
                 mode,
                 AgentResponseModes.Normalize(settings.AgentResponseMode),
                 runnableTools,

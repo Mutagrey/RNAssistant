@@ -1457,18 +1457,18 @@ namespace RNAssistant.Harness
             AssertEqual(chartArtifact.Id, ToolResultResourceService.ExternalizeIfNeeded(
                 chartSession, command, chartResult, 10000, new AppSettings()).Id,
                 "chart result externalization is idempotent for an existing exact reference");
-            var chartActivity = AgentTranscript.CreateToolActivity(command, chartResult, "tool");
+            var chartMessage = AgentTranscript.CreateRunningToolMessage(chartSession, command, "chart_step", "Read chart");
+            chartMessage.RunId = "chart_run";
+            AgentTranscript.CompleteToolActivityMessage(chartSession, chartMessage, command, chartResult, "chart_step", "Read chart");
+            var chartActivity = chartMessage.Activity;
+            AssertEqual(chartMessage.Id, chartArtifact.SourceMessageId, "chart provenance points at the visible tool activity");
+            AssertEqual(chartMessage.RunId, chartArtifact.RunId, "chart provenance retains the activity run");
             AssertEqual(true, (bool?)JObject.Parse(chartActivity.DataJson)["externalized"],
                 "durable chart activity keeps a resource pointer instead of duplicate chart data");
             AssertEqual(ArtifactUri(chartSession, chartArtifact),
                 (string)JObject.Parse(chartActivity.DataJson).SelectToken("resource.uri"),
                 "durable chart activity points at the exact chart revision");
-            chartSession.Messages.Add(new ChatMessage
-            {
-                Role = "assistant",
-                Activity = chartActivity,
-                ResourceRefs = chartResult.ModelResourceRefs.ToList()
-            });
+            chartSession.Messages.Add(chartMessage);
             WithTempPaths(paths =>
             {
                 new ChatStore(paths).Save(chartSession);

@@ -100,6 +100,7 @@ namespace RNAssistant.Harness
                 Test("tools: discovery is complete and exact", ToolDiscoveryIsCompleteAndLoadsExactSchema),
                 Test("agent: progressive tools require exact read", ProgressiveAgentRequiresExactToolRead),
                 Test("agent: tool working set evicts and replays", ProgressiveToolWorkingSetEvictsAndReplaysDeterministically),
+                Test("agent: model session rebuilds authority after compaction", ConversationModelSessionRebuildsAuthorityAfterCompaction),
                 Test("agent: characterization write ok preserves final status", SimpleAgentExecutesToolAndReceivesJsonResult),
                 Test("agent: characterization completed after write error", SimpleAgentCharacterizesCompletedAfterWriteError),
                 Test("agent: characterization completed after write unknown", SimpleAgentCharacterizesCompletedAfterWriteUnknown),

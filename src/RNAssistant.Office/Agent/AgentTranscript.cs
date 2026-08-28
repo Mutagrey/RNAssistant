@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 
@@ -18,6 +19,54 @@ namespace RNAssistant.Office
         private const int MaxTranscriptDataChars = 128000;
         private const int MaxRenderableTranscriptDataChars = ChatArtifactLimits.MaximumTextCharacters;
         private const int MaxTranscriptMessageChars = 16000;
+
+        internal static ChatMessage CreateRunningToolMessage(ChatSession session, ToolCommand command,
+            string stepId, string stepMessage)
+        {
+            return new ChatMessage
+            {
+                Role = "assistant",
+                Content = string.Empty,
+                ExcludeFromModelContext = true,
+                HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId),
+                Activity = CreateRunningToolActivity(command, stepId, stepMessage)
+            };
+        }
+
+        internal static void CompleteToolActivityMessage(ChatSession session, ChatMessage activityMessage,
+            ToolCommand command, ToolResult result, string stepId, string stepMessage)
+        {
+            var completed = CreateLocalResultMessage(command, result, stepId, stepMessage);
+            activityMessage.Content = completed.Content;
+            activityMessage.Activity = completed.Activity;
+            activityMessage.ResourceRefs = CloneResourceRefs(result.ModelResourceRefs);
+            LinkChartArtifactsToActivity(session, activityMessage);
+            activityMessage.HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId);
+        }
+
+        private static void LinkChartArtifactsToActivity(ChatSession session, ChatMessage activityMessage)
+        {
+            if (session == null || activityMessage == null) return;
+            var referencedIds = new HashSet<string>(
+                ChatResourceUri.CurrentArtifactIds(session, activityMessage.ResourceRefs),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var artifact in (session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null &&
+                referencedIds.Contains(item.Id) &&
+                string.Equals(item.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (string.IsNullOrWhiteSpace(artifact.SourceMessageId)) artifact.SourceMessageId = activityMessage.Id;
+                if (string.IsNullOrWhiteSpace(artifact.RunId)) artifact.RunId = activityMessage.RunId;
+            }
+        }
+
+        internal static List<ResourceRef> CloneResourceRefs(IEnumerable<ResourceRef> references)
+        {
+            return (references ?? new ResourceRef[0])
+                .Where(reference => reference != null && !string.IsNullOrWhiteSpace(reference.Uri))
+                .GroupBy(reference => reference.Uri + "\n" + (reference.Revision ?? string.Empty), StringComparer.Ordinal)
+                .Select(group => new ResourceRef(group.First().Uri, group.First().Revision))
+                .ToList();
+        }
 
         public static ChatMessage CreateLocalResultMessage(
             ToolCommand command,

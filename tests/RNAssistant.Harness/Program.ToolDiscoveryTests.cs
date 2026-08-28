@@ -316,6 +316,65 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ConversationModelSessionRebuildsAuthorityAfterCompaction()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var catalog = ConversationRunService.PrepareToolsForRun(
+                    adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.add_sheet")
+                        .Concat(executor.GetControllerTools().Where(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId)));
+                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                var settings = new AppSettings { ContextWindowOverrideTokens = 16384, MaxTokens = 1024, AutoCompressContext = true };
+                var session = NewSession(adapter);
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Inspect the tool before continuing." });
+                session.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
+                {
+                    Id = "read_before_compaction",
+                    Name = CapabilityDiscoveryExecutor.ReadToolId,
+                    Arguments = new Dictionary<string, object> { { "id", "excel.add_sheet" } }
+                }, string.Empty, null, ToolResultRoles.User));
+                var evidence = ReadSchemaEvidence(executor, catalog, "excel.add_sheet", "read_before_compaction");
+                session.Messages.Add(evidence);
+                var loaded = ProgressiveToolWorkingSet.Create(ChatModes.Agent, catalog, settings, session.Messages);
+                AssertTrue(loaded.Tools.Any(tool => tool.Id == "excel.add_sheet"), "seed schema is callable before compaction");
+
+                // Many small messages overflow the prompt but leave a complete prefix
+                // within the compactor's bounded source budget, including the schema pair.
+                var unbounded = new ConversationPromptComposer().BuildMessages(
+                    ChatModes.Agent, "Continue.", adapter, loaded.Tools, null, NewContext(adapter), settings,
+                    session, null, true, 100000, loaded.CapabilityContext(null));
+                while (ModelContextBudget.EstimateMessagesTokens(unbounded, settings) <= ModelContextBudget.InputBudgetTokens(settings) + 256)
+                {
+                    var message = new ChatMessage { Role = "user", Content = string.Concat(Enumerable.Repeat("Earlier context. ", 40)) };
+                    session.Messages.Add(message);
+                    unbounded.Add(message);
+                }
+                var originalMessages = session.Messages.ToArray();
+                var compactions = 0;
+                LlmCompletionDelegate completion = (optionsSettings, messages, options, stream, cancellationToken) =>
+                {
+                    AssertEqual("context_compaction", options.TracePurpose, "materialization calls only the compactor");
+                    compactions++;
+                    return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Earlier work summarized.\"}" });
+                };
+                using (var modelSession = ConversationModelSession.CreateAsync(adapter, new ContextCompactionService(completion),
+                    new AttachmentAnalysisService(completion), ChatModes.Agent, "Continue.", session, NewContext(adapter),
+                    settings, catalog, null, null, true, null, CancellationToken.None).GetAwaiter().GetResult())
+                {
+                    var request = modelSession.CreateRequest("after_compaction",
+                        new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new[] { "read_before_compaction" }, new string[0]));
+                    AssertEqual(1, compactions, "over-budget preparation compacts once and recomposes");
+                    AssertTrue(request.RunnableCatalog.Any(tool => tool.Id == "excel.add_sheet"), "local execution catalog is preserved");
+                    AssertTrue(!request.CallableTools.Any(tool => tool.Id == "excel.add_sheet"), "compacted schema requires a fresh exact read");
+                    AssertContains(FlattenSimple(request.AcceptedMessages), "Earlier work summarized.", "request uses the new checkpoint");
+                    AssertTrue(!request.AcceptedMessages.Any(message => message.Id == evidence.Id), "old schema evidence is absent from the request");
+                    AssertTrue(ModelContextBudget.EstimateMessagesTokens(request.AcceptedMessages, settings) <= ModelContextBudget.InputBudgetTokens(settings),
+                        "recomposed request fits the input budget");
+                    AssertTrue(originalMessages.SequenceEqual(session.Messages.Take(originalMessages.Length)), "compaction keeps the original transcript");
+                }
+            });
+        }
+
         private static ChatMessage ReadSchemaEvidence(
             OfficeToolExecutor executor,
             IReadOnlyList<ToolDefinition> catalog,

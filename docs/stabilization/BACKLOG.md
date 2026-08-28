@@ -15,7 +15,8 @@
 | 2C3A | Общий active wire owner для runtime/probes, удалить duplicated schema/JSON/validation paths | done host-neutral; 76 targeted tests pass; v2 сохранён |
 | 2C3B | R27: сохранять custom prompts, явный review/reset, guard до model preparation/confirmation | done host-neutral/JS; 22 harness + 5 Node pass; active v2 и prompt schema 11 сохранены; Windows pending |
 | 2C3C | Switch/delete: shared wire/client/prompts/history/version, complete-context enforcement и explicit old-chat skip/reset | done host-neutral; actual v3, 100 targeted cases; explicit review/reset на schema 12; Windows/live-provider qualification открыта |
-| 3 | Минимальный AgentKernel, runtime-owned RunSummary и его save/replay через существующий event store | Вся Phase 2 завершена; working set/resource lifecycle остаётся вне kernel, граница проверяется при switch |
+| 3A | Отделить model context/materialization от извлекаемого loop по §15.2 | done host-neutral; ConversationModelSession и существующий AgentTranscript, прежние loop helpers удалены, semantics сохранены |
+| 3B | Минимальный AgentKernel, runtime-owned RunSummary и его save/replay через существующий event store | Следующий подэтап; model context/resource lifecycle уже вне loop; shared start/confirmation accounting и controller wiring требуют проверки |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests смены активной книги и lifetime |
 | 6 | VBA vertical slice; отдельно оценить необходимость пользовательского package lifecycle для stable | Canonicalization, exact patch, journal, read-back/fault matrix; общий package journal нужен rename, сокращение scope пока не согласовано |

@@ -12,6 +12,15 @@ Phase 2C3C switches client, prompts, schema, probes and accepted history togethe
 
 ## Conversation context
 
+`ConversationModelSession` is the Office owner for one start/confirmation invocation's
+accepted model messages, request options/cache, working-set evidence and temporary
+media. It composes through `ConversationPromptComposer`, recreates the working set
+after automatic compaction, appends bounded accepted tool results and emits the
+updated callable state after a response. The loop supplies step IDs and complete
+accepted-call context; it does not own prompt, media or LRU state. Confirmation
+continues the existing replay/result ordering. This Phase 3A extraction preserves
+current behavior; runtime-summary/kernel migration remains a separate step.
+
 Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Plan uses `PlanSystemPrompt` with the same progressive capability policy; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:
 
 - current host and document identity;
@@ -151,7 +160,7 @@ cancellation, prompt-budget rejection and protocol exhaustion are distinct. The
 separate bounded provider retry policy is defined below.
 
 `ModelProtocolWire` owns active response schema options, envelope writing and local
-JSON validation. The loop adds only its reasoning/cache/trace fields to fresh
+JSON validation. `ConversationModelSession` adds reasoning/cache/trace fields to fresh
 options; AgentJsonProtocol retains native-role mapping and local history metadata.
 Compatibility probes reuse that same contract and transcript writer, but retain
 one raw attempt per check: no format repair, provider retry or fallback may turn a
@@ -170,7 +179,9 @@ the tool. Incompatible/unmarked history requires an explicit new chat or reset,
 without automatic truncation, conversion or deletion. The live v3 parser enforces run-ID/singleton rules on every attempt. See the canonical
 [preflight and remaining gates](protocols/CONVERSATION_RESPONSE_V3.md#history-and-context-preflight-phase-2c3c).
 
-The loop owns step ids, tool execution, summaries and transcript append. Core owns
+The loop owns step ids, tool execution, summaries and presentation timing.
+`ConversationModelSession` appends accepted model messages; `AgentTranscript`
+constructs visible activity, resource/chart provenance and HTML checkpoints. Core owns
 raw attempt ids, parsing, fixed repair instructions, format fallback and the
 accepted/rejected diagnostics sent through the existing configured trace sink.
 Rejected diagnostic append failure stops the step; optional accepted marker
