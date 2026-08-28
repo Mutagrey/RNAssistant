@@ -39,6 +39,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Active wire / compatibility probes | `Program.AgentSafetyTests.cs` | `model compatibility:`, `agent: supports selectable`, `model protocol:` |
 | Prompt schema review / settings | `Program.ChatSettingsTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ContextBridgeTests.cs` | `settings:`, `bridge: typed settings`, `chat: prompt save` |
 | Conversation v3 contract/context | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v3:`, `protocol context:` |
+| History/context preflight | `Program.AgentSafetyTests.cs` | `preflight`, `protocol context:`, `model protocol:` |
 | Resources and attachments | `Program.ResourceFabricTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.AttachmentTests.cs` | `resources:`, `attachments:` |
 | Session storage and CAS | `Program.SessionEventStoreTests.cs`, `Program.CasMaintenanceTests.cs` | `storage:` |
 | Chats, context and bridge | `Program.ChatSessionTests.cs`, `Program.ChatEditTests.cs`, `Program.ContextBridgeTests.cs`, `Program.PromptContextInspectorTests.cs` | `chat:`, `chat sessions:`, `context:`, `bridge:` |
@@ -117,12 +118,26 @@ unused historical v2 adapter and its obsolete tests were removed in Phase 2C2.
 and confirmation, incomplete history and conservative batch safety. Two cases
 exercise the real host-neutral loop/ModelProtocol/executor with fake LLM/Office;
 the controller's identity transition is simulated, not production controller execution.
-This is **not a runtime v3 cutover**: `agent:` and `model protocol:` still exercise
-the active v2 path. Context evidence: [2C2](../../docs/stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
+Since Phase 2C3C, `agent:` and `model protocol:` exercise the **active v3 path**.
+Real integration covers run-wide duplicates, a batch of two local reads, unsafe
+write-batch rejection/repair to singletons, native refusal and all three result
+roles. Fixtures use production v3 writers; the old conversion helper and nine
+obsolete v2 parser tests are deleted. Context introduction evidence remains
+[2C2](../../docs/stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
+
+Phase 2C3C's `preflight` filter covers incompatible full history in all three modes
+and accepted-history forms, including suppressed/compacted-away records; incomplete
+confirmation, current/new chat success, and zero raw attempts/repair/progress for
+missing CallContext. Snapshots prove no history/checkpoint/run mutation on rejection.
+The real shared confirmation guard is exercised, but production controller ordering
+and manual-compaction wiring are reviewed in source only; controllers are stubbed
+in this harness. Existing confirmation fixtures now carry the current LastRun
+marker that production writes. See [2C3C evidence](../../docs/stabilization/PHASE_2C3C_V3_CUTOVER.md).
 
 Phase 2C3A extends the two `model compatibility:` cases across both formats and all
 three tool-result roles, strict sentinels/status/casing and one raw attempt per
-probe. Runtime/probes share ModelProtocolWire; v3 is still not active.
+probe. Phase 2C3C switches runtime/probes together through ModelProtocolWire and
+rejects native refusal even when JSON content matches the expected sentinel.
 See [2C3A evidence](../../docs/stabilization/PHASE_2C3A_WIRE_OWNER.md).
 
 Phase 2C3B replaces the obsolete destructive-reset characterization with prompt
@@ -135,6 +150,8 @@ The existing typed-settings bridge test uses the controller stub, not production
 controller execution. `node tests/web/prompt-review.test.js` verifies actual form
 serialization and action handlers with minimal DOM/transport substitutes, including
 cancel/failure/reset and Plan preservation; it does not verify WebView layout.
+Phase 2C3C reruns preservation/review/reset against actual v3 defaults/schema 12,
+including saved schema 11. JS review behavior is unchanged by the v3 cutover.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
 ## Full suite

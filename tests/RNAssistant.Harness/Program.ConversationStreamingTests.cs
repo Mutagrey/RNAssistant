@@ -23,7 +23,7 @@ namespace RNAssistant.Harness
                 "\uFEFF {\"tool_calls\":[],\"meta\":{\"message\":\"ignore\"},\"mes",
                 "sage\":\"Line 1\\nquote: \\\"",
                 "ok\\\" \\\\ slash \\uD83D",
-                "\\uDE00\",\"status\":\"completed\"}"
+                "\\uDE00\"}"
             };
             var visible = string.Concat(chunks.Select(extractor.Add).ToArray()) + extractor.Complete();
 
@@ -40,9 +40,9 @@ namespace RNAssistant.Harness
                 var responseChunks = new[]
                 {
                     "<think>" + thinking,
-                    "</think>{\"meta\":{\"message\":\"скрыто\"},\"mes",
+                    "</think>{\"mes",
                     "sage\":\"Привет\\nмир \\uD83D",
-                    "\\uDE00\",\"tool_calls\":[],\"status\":\"completed\"}"
+                    "\\uDE00\",\"tool_calls\":[]}"
                 };
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>
                 {
@@ -97,7 +97,7 @@ namespace RNAssistant.Harness
                     BuildDeltaSse("reasoning_content", "Размышление "),
                     BuildDeltaSse("reasoning", "продолжается."),
                     BuildDeltaSse("content", "{\"message\":\"Ответ"),
-                    BuildDeltaSse("content", ".\",\"tool_calls\":[],\"status\":\"completed\"}"),
+                    BuildDeltaSse("content", ".\",\"tool_calls\":[]}"),
                     "data: [DONE]\n\n"
                 });
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>
@@ -136,7 +136,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     "{\"status\":\"in_progress\",\"message\":\"Жил-был потоковый черновик.\",\"tool_calls\":[]}",
-                    "{\"status\":\"completed\",\"message\":\"Исправлено.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Исправлено.\",\"tool_calls\":[]}"
                 });
                 var thoughts = new Queue<string>(new[] { "Первая мысль.", "Исправленная мысль." });
                 var calls = 0;
@@ -182,16 +182,16 @@ namespace RNAssistant.Harness
                     .ToList();
 
                 AssertEqual(2, calls, "status/tool_calls mismatch gets one repair request");
-                AssertContains(requests[1].Last().Content, "status in_progress requires at least one tool call",
+                AssertContains(requests[1].Last().Content, "unsupported root field: status",
                     "repair receives the first parser rejection");
                 AssertEqual(2, traces.Count, "rejected and accepted parser verdicts are traced");
                 AssertEqual("rejected", traces[0].Type, "trace identifies the rejected response");
                 AssertContains(traces[0].PayloadJson, "Жил-был потоковый черновик.",
                     "trace preserves the first rejected payload");
-                AssertContains(traces[0].Error, "status in_progress requires at least one tool call",
+                AssertContains(traces[0].Error, "unsupported root field: status",
                     "trace preserves the exact parser error");
                 AssertEqual("accepted", traces[1].Type, "repair acceptance has its own marker");
-                AssertEqual("completed", traces[1].ResponseStatus, "accepted marker retains declared status");
+                AssertTrue(traces[1].ResponseStatus == null, "accepted v3 marker has no model-declared lifecycle status");
                 AssertTrue(traces[1].PayloadJson == null, "accepted marker does not duplicate model content");
                 AssertEqual(4, streamEvents.Count, "each attempt emits reset and visible message");
                 AssertEqual(string.Empty, streamEvents[0], "first attempt reset");

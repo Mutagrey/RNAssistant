@@ -141,8 +141,7 @@ namespace RNAssistant.Office.Services
             var expected = ModelProtocolWire.Parse(sentinel, tools, tools, context);
             if (!expected.Success) throw new InvalidOperationException("Invalid local compatibility sentinel: " + expected.Error);
             // Compare validated responses, not DTO serialization as a wire contract.
-            // This preserves exact status/call/message checks for active v2 without
-            // embedding its fields in probes; the coordinated switch changes one owner.
+            // Exact message/calls must match; the v3 parser rejects additional fields.
             return JToken.DeepEquals(JToken.FromObject(actual.Response), JToken.FromObject(expected.Response))
                 ? null : "Endpoint changed the required compatibility sentinel.";
         }
@@ -200,7 +199,9 @@ namespace RNAssistant.Office.Services
                 try
                 {
                     var completion = await _completeAsync(settings, messages, options, null, probe.Token).ConfigureAwait(false);
-                    var error = validate(completion);
+                    var error = completion != null && !string.IsNullOrWhiteSpace(completion.RefusalContent)
+                        ? "Endpoint refused the compatibility probe."
+                        : validate(completion);
                     return Check(id, title, string.IsNullOrWhiteSpace(error), watch.ElapsedMilliseconds,
                         string.IsNullOrWhiteSpace(error) ? "Поддерживается." : error);
                 }

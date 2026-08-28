@@ -97,6 +97,7 @@ namespace RNAssistant.Office.Services
         {
             settings = settings ?? new AppSettings();
             settings.EnsureAgentPromptsReviewed();
+            ConversationProtocolContext.EnsureCurrentHistory(session);
             mode = ValidateMode(mode, session);
             if (appendUserMessage)
             {
@@ -134,6 +135,9 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("Only Agent mode can continue a confirmed tool call.");
             }
+            settings = settings ?? new AppSettings();
+            settings.EnsureAgentPromptsReviewed();
+            ConversationProtocolContext.EnsureCanContinue(session, confirmedCommand);
             return RunLoopAsync(ChatModes.Agent, LatestUserRequest(session), session, documentContext, settings, tools, attachments,
                 progress, pendingToolRegistrar, skills, confirmedCommand, confirmedResult, cancellationToken,
                 initialIterationsUsed, initialToolStepsUsed, summaryBuilder);
@@ -157,8 +161,6 @@ namespace RNAssistant.Office.Services
             int initialToolStepsUsed = 0,
             RunSummaryBuilder summaryBuilder = null)
         {
-            settings = settings ?? new AppSettings();
-            settings.EnsureAgentPromptsReviewed();
             var policy = ConversationRunPolicy.For(mode);
             ReleaseHydratedArtifactMedia(session == null ? null : session.Messages);
             var runnableCatalog = PrepareToolsForRun(tools);
@@ -168,6 +170,7 @@ namespace RNAssistant.Office.Services
             runnableCatalog = policy.SelectTools(runnableCatalog);
             CapabilityDiscoveryExecutor.BindReadSchema(runnableCatalog, enabledSkills);
             var protocolContext = ConversationProtocolContext.Begin(session, runnableCatalog, initialCommand);
+            protocolContext.EnsureComplete();
             if (!policy.AllowsConfirmation) pendingToolRegistrar = null;
             summaryBuilder = summaryBuilder ?? new RunSummaryBuilder(runnableCatalog,
                 initialCommand == null ? null : RunSummaryBuilder.ContinuationSeed(session));
@@ -249,6 +252,13 @@ namespace RNAssistant.Office.Services
                         budgetFailure ? "Контекст переполнен" : "Некорректный ответ модели",
                         budgetFailure ? "prompt_budget_exceeded" : "invalid_model_response");
                 }
+                if (protocolResult.ProviderRefusal != null)
+                {
+                    session.Messages.Add(AgentTranscript.CreateAssistantMessage(protocolResult.ProviderRefusal,
+                        protocolResult.Completion, null, AgentResponseStatuses.Refused));
+                    return Result(session, summaryBuilder, protocolResult.ProviderRefusal, results, contextUsage,
+                        false, AgentResponseStatuses.Refused, AgentResponseStatuses.Refused);
+                }
                 var response = protocolResult.Response;
                 protocolContext.ObserveAccepted(response.ToolCalls);
                 var completion = protocolResult.Completion;
@@ -256,8 +266,11 @@ namespace RNAssistant.Office.Services
                 {
                     var finalText = response.Message;
                     session.Messages.Add(AgentTranscript.CreateAssistantMessage(
-                        finalText, completion, null, response.Status));
-                    return Result(session, summaryBuilder, finalText, results, contextUsage, false, response.Status, response.Status);
+                        finalText, completion, null, AgentResponseStatuses.Completed));
+                    // Empty calls end the model loop; the existing independent execution
+                    // summary remains the authority for effects, errors and unknowns.
+                    return Result(session, summaryBuilder, finalText, results, contextUsage, false,
+                        AgentResponseStatuses.Completed, AgentResponseStatuses.Completed);
                 }
 
                 var stepMessage = string.IsNullOrWhiteSpace(response.Message) ? string.Empty : response.Message.Trim();

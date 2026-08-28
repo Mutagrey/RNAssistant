@@ -1,9 +1,9 @@
 # Conversation Response v3
 
-Status: **contract/context prepared; shared wire owner and explicit saved-prompt review; live protocol still v2** (Phase 2C3B).
+Status: **active wire/history v3; coordinated switch/delete completed host-neutral** (Phase 2C3C).
 Canonical requirements: [master plan §7.1](../stabilization/STABILIZATION_MASTER_PLAN.md#71-conversation-response-v3).
-The active wire/history version remains v2 until the coordinated Phase 2C3C
-cutover. Product version remains `16.1.0-dev`; protocol version is independent.
+Prompt schema is 12; saved instructions require explicit review. Product version
+remains `16.1.0-dev`; protocol version is independent. Windows qualification is open.
 
 ## Envelope
 
@@ -56,7 +56,11 @@ No repair of the model's content is performed by the parser.
 `Core/ModelProtocol/ConversationResponse` contains a message and the ordered
 existing `AgentToolCall` records, with no Status member. `ToJson()` is the explicit
 canonical v3 envelope writer; do not serialize a runtime DTO as the wire contract.
-The legacy `AgentResponse` DTO remains in the active v2 path until switching.
+The legacy `AgentResponse` DTO and live v2 parser/schema are removed.
+`ModelProtocolResult` carries either a `ConversationResponse`, separate native
+`ProviderRefusal` metadata with its completion, or a typed failure. A provider
+refusal takes precedence even when the same completion also contains JSON. It
+does not become a model-authored status or a synthetic response envelope.
 
 `ConversationResponseParser.Parse` requires these explicit inputs; its context
 overload takes the last two as a complete `ModelProtocolCallContext` snapshot:
@@ -78,9 +82,9 @@ that updated set. Reading accepted history is not a new acceptance operation.
 Batching is opt-in. A missing ID in the batch-safe set forces singleton even if
 all legacy tool flags are false. `MutatesDocument`, `MutatesLocalState` or
 `RequiresConfirmation` also force singleton despite a supplied batch-safe ID.
-Core does not infer safety from tool-name suffixes or duplicate Office pipeline
-analysis. Phase 2C2 supplies this context to the boundary, but the live v2 client
-does not enforce it. V3 enforcement remains a cutover gate (R26).
+Core does not infer safety from tool-name suffixes or duplicate Office execution
+analysis. Phase 2C2 introduced this context; Phase 2C3C requires completeness before
+raw dispatch and checks run-wide IDs and singleton safety on every response.
 
 For callable tools the parser reuses `ToolSchemaSupport` to validate original
 argument contracts before acceptance. Optional structured-output nulls are
@@ -98,8 +102,8 @@ closed; no callable tools means `tool_calls.maxItems = 0`.
 The schema expresses shape, names, argument contracts and the 32-call bound.
 Run ID uniqueness and effective singleton safety are checked locally, not encoded
 as provider-specific cross-field schema constructs. Both `json_object` and
-`json_schema` must use the same local parser after the cutover. The existing
-bounded retry/fallback policy is unchanged by this introduction.
+`json_schema` use the same local parser. The existing bounded retry/fallback
+policy is unchanged by the cutover.
 
 ## Accepted context and current v3 history (Phase 2C2)
 
@@ -119,13 +123,12 @@ names, interpret final text as JSON, grant tool authority, or rewrite history.
 Ambiguous native batches/metadata and unknown versions fail; full canonical JSON
 batches retain all IDs. Diagnostics and tool-result records are not responses.
 
-The still-active v2 transcript has a temporary typed-metadata consumer in
-`ConversationProtocolContext.ReadCurrentV2CallIds`. It reads only current call IDs,
-not v2 JSON/status, and is removed with the v3 writer switch. It is not old-chat
-compatibility. The unused `ConversationResponseV2Adapter`, its legacy structural
-branch, project include and obsolete tests were **removed in 2C2**. Incompatible
-old chats require explicit skip/reset, without deletion, migration or silent
-history truncation; that guard is still a cutover prerequisite.
+The temporary `ConversationProtocolContext.ReadCurrentV2CallIds` consumer is
+**removed in 2C3C** with the writer switch. The unused `ConversationResponseV2Adapter`,
+its legacy structural branch, project include and obsolete tests were already
+removed in 2C2. Incompatible old chats require explicit skip/reset, without deletion,
+migration or silent history truncation. Integration tests use actual v3 writers,
+including confirmation in all three tool-result roles, without fixture conversion.
 
 Until ToolPolicy has external-effect metadata, the Office projection permits
 only audited built-in local reads: `common.resources_list/resolve/search/read`,
@@ -146,46 +149,75 @@ replaced by typed ToolPolicy in Phase 4, after equivalent nested/external tests.
 and envelope writing. ModelProtocolClient, ConversationRunService, AgentJsonProtocol
 and ModelCompatibilityService use it; duplicate Office schema/writer/parser paths
 are removed. It is a permanent contract owner, not another loop, version selector
-or historical fallback. It currently uses v2 and does not enforce v3 CallContext.
+or historical fallback. Since 2C3C it selects only the v3 schema, parser and writer;
+there is no v2 fallback or dual-write.
 
 Probes derive fixed sentinels from the active writer and compare validated responses;
-each still makes one raw attempt, without repair/fallback. Their native call history
-uses the actual transcript writer. Prompt-authoring guidance reads current defaults
-instead of repeating a separate version-specific envelope. Thus the next switch
-can update runtime and qualification coherently without editing probe internals.
+each still makes one raw attempt, without repair/fallback. Native refusal fails a
+probe even if its content matches the sentinel. Their native call history uses
+the actual transcript writer. Prompt-authoring guidance reads current defaults
+instead of repeating a separate version-specific envelope.
+
+## History and context preflight (Phase 2C3C)
+
+`ConversationProtocolContext.EnsureCurrentHistory` checks the entire session
+projection against the active `AgentResponseProtocol.CurrentVersion`, including
+suppressed and compacted-away assistant records. Null history/records, a nonzero
+incompatible LastRun marker, or an unmarked/different-version assistant response
+block use of that chat. Every current assistant record also passes the v3 history
+reader, so a current marker cannot bless malformed content/metadata. Diagnostic
+activities and tool-result messages are not
+assistant responses. A LastRun without a response marker is allowed for a fresh
+turn when the history itself is compatible (for example, after an interrupted
+request that accepted no response).
+
+`EnsureCanContinue` additionally requires a current LastRun marker, a command and
+complete accepted IDs for its logical user turn. It runs before the controller
+consumes pending state or executes the confirmed tool. The full seed is checked
+again with the current safety catalog before neutral-loop materialization.
+
+Send/edit/retry entry calls preflight before `prepareTurn`, attachment analysis or
+compaction; manual **«Сжать контекст»** has the same history gate. Both neutral
+service entries are guarded before history/summary mutation. Failure asks for an
+explicit new chat or history reset; cancellation of a pending action remains
+available. The guard does not migrate, truncate, delete or relabel any history.
+
+`ModelProtocolClient` rejects a missing/incomplete CallContext as an `Infrastructure`
+failure with the existing exception cause, before any raw attempt, progress or
+attempt trace. It cannot be repaired by FORMAT_REPAIR. This is a caller precondition;
+the accepted response then passes the same v3 parser on every attempt. Production
+controller/Office/WebView execution is still a Windows qualification gate;
+host-neutral preflight and integration tests pass.
+
+The controller's old LastRun-only `EnsureCurrentResponseProtocol` helper is removed;
+all relevant entry points use the existing context owner. The coordinated switch
+adds no compatibility adapter or automatic settings/history migration.
 
 ## Remaining cutover gates
 
-Per [change budget §14.3](../stabilization/STABILIZATION_MASTER_PLAN.md#143-change-budget),
-2C1 introduced the contract, 2C2 adapted context, 2C3A removed duplicate wire
-ownership and 2C3B handles saved-prompt review. Phase 2C3C must coordinate
-switch/delete, rechecking the change budget:
+The shared wire, client/result/repair, mode defaults, canonical accepted writes,
+version marker and all active consumers switched together in Phase 2C3C. The live
+v2 DTO/parser/schema, their project includes and typed-ID helper are deleted.
+Fifteen production files form one contract change; [§14.3](../stabilization/STABILIZATION_MASTER_PLAN.md#143-change-budget)
+permits this bounded coordinated switch without another count-driven substep.
+History/context preflight is part of the same change. Phase 3 is separate.
 
-1. Switch ModelProtocol result/parser/repair, mode instructions and compatibility
-   probes together through ModelProtocolWire. Resolve saved custom v2 prompts explicitly; never silently
-   accept a v2 response on a v3 request. Preserve provider-native refusal metadata
-   separately from model-authored status. Advance the prompt schema marker with
-   that switch so saved v2 instructions require the explicit review implemented
-   in 2C3B. Recheck preservation/reset with actual v3 defaults; never erase saved
-   custom prompts as a hidden part of the protocol switch.
-2. Require complete `CallContext` before v3 dispatch and pass it to the local
-   parser on every attempt. Incomplete history is a runtime boundary failure,
-   not something model repair can fix. Controller attachment analysis/compaction
-   can precede the neutral loop, so guard the full request before those calls too.
-   Verify run-wide duplicates and singleton
-   enforcement through the live v3 client. No tool retries/planner/policy changes.
-3. Handle all accepted-history forms of the current v3 run (JSON envelope, native
-   tool role and plain final text) with the prepared reader, including actual
-   replay/confirmation writers. Incompatible old
-   chats require an explicit skip/reset boundary; never silently truncate their
-   history and continue the same run. Keep the existing controller protocol-version
-   confirmation guard; historical v2 projection is not required.
-4. Switch request schema, canonical accepted writes and protocol version marker
-   together. **After cutover all new accepted events are v3; no dual-write.**
-   Historical event sources remain untouched; no automatic deletion or migration.
-5. Remove superseded live v2 parser/schema/DTO consumers and the temporary typed-ID helper
-   at the switch per master plan §15.1. Run integration tests for repair, history,
-   confirmation, streaming, tools and completion guard. Phase 3 remains separate.
+Host-neutral tests cover strict parsing, real loop/repair/streaming, run IDs,
+read-only batches, singleton writes, refusal, confirmation, prompt review/reset,
+versioned history/replay and the independent completion guard. Existing runtime
+`AgentResponseStatuses` labels remain projection/lifecycle metadata until Phase 3;
+`completed` on empty calls means only model-loop end, not proof of effect.
+`RunExecutionSummary` still reports actual errors/unknown and verified write counts.
+
+Remaining qualification:
+
+- Windows x64 + Office + VS 2022: actual controller send/edit/retry, attachment
+  preparation, manual compaction and confirmation ordering; WebView and DPAPI.
+- Real provider strict-schema support, explicit fallback and native refusal.
+  Fake endpoints verify local behavior, not provider conformance.
+
+No release or Windows gate is marked passed by the host-neutral cutover. R26/R27
+track those limits; the next architecture change is the separate Phase 3 boundary.
 
 ## Saved-prompt review (Phase 2C3B)
 
@@ -206,10 +238,15 @@ The shared AppSettings guard runs before controller preparation/auxiliary model
 calls, before pending confirmation is consumed, and at neutral loop entry. It is
 a configuration precondition, not format repair. Controller wiring is code-reviewed
 only here; Windows x64 + Office + VS 2022 and DPAPI remain qualification gates.
-Host-neutral persistence/loop and JS action tests pass. Active response version 2,
-prompt schema 11 and product `16.1.0-dev` do not change in 2C3B.
+Phase 2C3B verified host-neutral persistence/loop and JS actions without changing
+response v2 or prompt schema 11. Phase 2C3C advances the prompt schema to 12 with
+v3 defaults. Tests now cover old marker 11 as well as missing marker 0: ordinary
+and failed saves preserve authored text; explicit review retains it; explicit
+reset selects the actual v3 defaults. The unchanged JS review action is not a
+substitute for Windows controller/DPAPI qualification.
 
-Current evidence: [Phase 2C3B](../stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
+Current evidence: [Phase 2C3C](../stabilization/PHASE_2C3C_V3_CUTOVER.md).
+Prompt review: [Phase 2C3B](../stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 Wire ownership: [Phase 2C3A](../stabilization/PHASE_2C3A_WIRE_OWNER.md).
 Context adaptation: [Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md).
 Historical contract introduction: [Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md).

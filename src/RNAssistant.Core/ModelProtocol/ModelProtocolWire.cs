@@ -1,17 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.ModelProtocol
 {
     // One active wire contract for model attempts, transcript envelopes and probes.
-    // No version selection or historical fallback: the coordinated cutover replaces
-    // the v2 implementation here with the already introduced v3 contract.
+    // No version selection or historical fallback: all active responses use v3.
     public static class ModelProtocolWire
     {
         public static LlmRequestOptions CreateRequestOptions(string responseMode, IEnumerable<ToolDefinition> tools)
@@ -21,33 +16,20 @@ namespace RNAssistant.Core.ModelProtocol
             return new LlmRequestOptions
             {
                 ResponseFormat = jsonSchema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
-                ResponseSchemaName = jsonSchema ? AgentResponseSchemaBuilder.SchemaName : null,
-                ResponseSchemaJson = jsonSchema ? AgentResponseSchemaBuilder.Build(tools) : null
+                ResponseSchemaName = jsonSchema ? ConversationResponseSchemaBuilder.SchemaName : null,
+                ResponseSchemaJson = jsonSchema ? ConversationResponseSchemaBuilder.Build(tools) : null
             };
         }
 
-        public static AgentResponseParseResult Parse(string content, IEnumerable<ToolDefinition> callableTools,
+        public static ConversationResponseParseResult Parse(string content, IEnumerable<ToolDefinition> callableTools,
             IEnumerable<ToolDefinition> runnableCatalog, ModelProtocolCallContext context)
         {
-            // Preserve current v2 acceptance. Context is supplied by all production
-            // callers for the v3 switch; v2 does not yet enforce run IDs/batch safety.
-            return new AgentResponseParser().Parse(content, callableTools, runnableCatalog);
+            return new ConversationResponseParser().Parse(content, callableTools, runnableCatalog, context);
         }
 
         public static string Write(string message, IEnumerable<AgentToolCall> calls)
         {
-            var ordered = (calls ?? new AgentToolCall[0]).ToArray();
-            return new JObject
-            {
-                ["status"] = ordered.Length == 0 ? AgentResponseStatuses.Completed : AgentResponseStatuses.InProgress,
-                ["message"] = message ?? string.Empty,
-                ["tool_calls"] = new JArray(ordered.Select(call => new JObject
-                {
-                    ["id"] = call == null ? string.Empty : call.Id ?? string.Empty,
-                    ["name"] = call == null ? string.Empty : call.Name ?? string.Empty,
-                    ["arguments"] = call == null || call.Arguments == null ? new JObject() : JObject.FromObject(call.Arguments)
-                }))
-            }.ToString(Formatting.None);
+            return new ConversationResponse(message ?? string.Empty, calls ?? new AgentToolCall[0]).ToJson();
         }
     }
 }

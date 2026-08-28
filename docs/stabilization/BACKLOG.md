@@ -14,7 +14,7 @@
 | 2C2 | Adapt full-turn ID/safety snapshots, current-v3 history reader; удалить unused v2 read adapter | done host-neutral; 86 targeted tests pass; live wire/history остаются v2 |
 | 2C3A | Общий active wire owner для runtime/probes, удалить duplicated schema/JSON/validation paths | done host-neutral; 76 targeted tests pass; v2 сохранён |
 | 2C3B | R27: сохранять custom prompts, явный review/reset, guard до model preparation/confirmation | done host-neutral/JS; 22 harness + 5 Node pass; active v2 и prompt schema 11 сохранены; Windows pending |
-| 2C3C | Switch/delete: shared wire/client/prompts/history/version, complete-context enforcement и explicit old-chat skip/reset | next по §14.3; R26 и gates в CONVERSATION_RESPONSE_V3.md; проверить explicit review на actual v3 defaults |
+| 2C3C | Switch/delete: shared wire/client/prompts/history/version, complete-context enforcement и explicit old-chat skip/reset | done host-neutral; actual v3, 100 targeted cases; explicit review/reset на schema 12; Windows/live-provider qualification открыта |
 | 3 | Минимальный AgentKernel и runtime-owned RunSummary | Вся Phase 2 завершена, не только boundary extraction |
 | 4 | Tool contracts / ToolRuntime | Нормальный, error и unknown сценарии |
 | 5 | Bound DocumentSession / HostRuntime | Windows tests смены активной книги и lifetime |
@@ -44,24 +44,16 @@ R25: перед release проверить реальную latency, timeout и 
 Phase 1 host-neutral containment выполнена; production controller, Office и WebView
 qualification остаются в R21/R16 и не объявляются выполненными.
 
-Phase 2C2 передаёт immutable accepted-ID/safety snapshots на boundary, восстанавливает
-весь logical turn при confirmation и удаляет unused v2 read adapter вместе с tests/include.
-Live v2 parser/schema/DTO и typed-ID helper пока нужны действующим consumers; удалить
-в coordinated switch 2C3C, без automatic v2 fallback. Owner/reason/gate — MIGRATION_MAP.
-2C3A удаляет раздельные schema/parser/writer paths: ModelProtocolWire теперь общий
-для runtime/probes, prompt-authoring guidance не дублирует version-specific contract.
-R26 частично закрыт wiring/tests; 2C3C должна enforce complete context до dispatch и
-в каждом v3 parse, проверить real v3 writer/confirmation и explicit skip/reset старого чата.
-Saved custom v2 prompts, shared wire и writes/marker переключаются согласованно;
-probes наследуют contract, но их точность нужно проверить после switch. Старые streams
-не переписываются. R27 исправлен host-neutral/JS в 2C3B: normalization/save сохраняют
-custom text, обычный save не даёт review, явное подтверждение/сброс проверены.
-Production controllers вызывают guard до auxiliary model calls/consumption pending
-state; это wiring требует Windows validation. В 2C3C проверить новую prompt version
-и guards старого чата также до controller attachment analysis/compaction.
-Без нового ToolPolicy все external/unclassified/pipelines остаются singleton;
-positive local-read registry заменяется typed metadata в Phase 4.
-Controller/Windows qualification остаётся отдельной.
+Phase 2C3C переключает единый ModelProtocolWire/client/prompts/history на v3 и удаляет
+live v2 DTO/parser/schema/typed-ID helper. R26 host-neutral enforcement проверен:
+полная история, current-v3 confirmation, run-wide IDs, singleton safety и explicit
+old-chat skip/reset до model preparation. Невалидный attempt не исполняется частично
+и не попадает в accepted history; старые streams не переписываются.
+R27: schema 11 custom text сохраняется; explicit review/reset проверены с v3 defaults
+и новым prompt marker 12. Production controller ordering, WebView/DPAPI и реальные
+providers всё ещё требуют qualification. До Phase 4 external/unclassified calls
+остаются singleton; positive local-read registry заменяется typed ToolPolicy.
+Точные проверки и границы: [Phase 2C3C](PHASE_2C3C_V3_CUTOVER.md).
 `Failure.Cause` временно сохраняет прежний controller exception path; удалить при
 переключении на AgentKernel в Phase 3, не вводить второй loop.
 

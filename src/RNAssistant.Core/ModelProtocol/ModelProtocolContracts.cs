@@ -25,8 +25,8 @@ namespace RNAssistant.Core.ModelProtocol
         public IReadOnlyList<ChatMessage> AcceptedMessages { get; set; }
         public IReadOnlyList<ToolDefinition> CallableTools { get; set; }
         public IReadOnlyList<ToolDefinition> RunnableCatalog { get; set; }
-        // Phase 2C2 supplies this from the full logical run, not the compacted prompt.
-        // The live v2 client does not enforce it; the v3 switch must require IsComplete.
+        // Required before raw dispatch, supplied from the full logical run rather
+        // than the compacted prompt. V3 also validates each response against its IDs/safety.
         public ModelProtocolCallContext CallContext { get; set; }
         public LlmRequestOptions Options { get; set; }
     }
@@ -97,7 +97,9 @@ namespace RNAssistant.Core.ModelProtocol
 
     public sealed class ModelProtocolResult
     {
-        public AgentResponse Response { get; private set; }
+        public ConversationResponse Response { get; private set; }
+        // Provider-native refusal is not a model-authored conversation envelope.
+        public string ProviderRefusal { get; private set; }
         // Only an accepted completion may cross the protocol boundary.
         public LlmCompletionResult Completion { get; private set; }
         public ModelProtocolFailure Failure { get; private set; }
@@ -106,9 +108,14 @@ namespace RNAssistant.Core.ModelProtocol
 
         private ModelProtocolResult() { }
 
-        internal static ModelProtocolResult Accepted(AgentResponse response, LlmCompletionResult completion, object contextUsage)
+        internal static ModelProtocolResult Accepted(ConversationResponse response, LlmCompletionResult completion, object contextUsage)
         {
             return new ModelProtocolResult { Response = response, Completion = completion, ContextUsage = contextUsage };
+        }
+
+        internal static ModelProtocolResult Refused(LlmCompletionResult completion, object contextUsage)
+        {
+            return new ModelProtocolResult { ProviderRefusal = completion.RefusalContent, Completion = completion, ContextUsage = contextUsage };
         }
 
         internal static ModelProtocolResult Failed(ModelProtocolFailure failure, object contextUsage)

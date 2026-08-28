@@ -26,7 +26,7 @@ static WebView UI
 
 There are three persisted modes and one structured execution service.
 
-- `Chat` uses `ConversationRunService` with `ChatSystemPrompt`, the shared conversation-response v2 `status + message + tool_calls[]` JSON contract, and only the four read-only `common.resources_list/resolve/search/read` tools. Runtime policy removes skills, Office tools, local mutations, and confirmation regardless of prompt wording.
+- `Chat` uses `ConversationRunService` with `ChatSystemPrompt`, the shared conversation-response v3 `message + tool_calls[]` JSON contract, and only the four read-only `common.resources_list/resolve/search/read` tools. Runtime policy removes skills, Office tools, local mutations, and confirmation regardless of prompt wording.
 - `Plan` uses the same loop with `PlanSystemPrompt`, read-only discovery, skills, typed user questions, a single revisioned Markdown plan document, and an optional temporary Task List. Runtime policy removes Office/shared mutations and confirmation. A ready plan is handed to Agent by its exact revision-pinned `rna://` URI.
 - `Agent` uses the same service and transcript loop with progressive tool discovery, enabled skill metadata, confirmation, and policy-approved mutations. The full mode/session-filtered catalog stays local as execution authority; it is not injected into every prompt.
 
@@ -34,24 +34,23 @@ There are three persisted modes and one structured execution service.
 
 Editable general/tool/skill Agent, Plan, Chat, title, compaction, and attachment-analysis prompts are stored as Markdown. Their instruction role (`developer`/`system`/`user`) is independent from the shared response format (`json_object`/strict `json_schema`) and tool-result role (`user`/`developer`/matched `tool`). Protocol repair and compatibility-probe instructions remain fixed.
 
-`IModelProtocol` in `Core/ModelProtocol` owns conversation endpoint attempts, local validation/repair, native refusals, prompt-budget checks and format fallback. The loop receives one accepted response/metadata or typed failure per logical step; it neither counts raw attempts nor executes tools before acceptance. See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) for the transitional v2 and controller adapters.
+`IModelProtocol` in `Core/ModelProtocol` owns conversation endpoint attempts, local validation/repair, native refusals, prompt-budget checks and format fallback. The loop receives one accepted response/metadata or typed failure per logical step; it neither counts raw attempts nor executes tools before acceptance. See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) for the v3 boundary and remaining controller adapters.
 
-Phase 2C1 introduced the status-free `ConversationResponse` parser/schema/writer.
-Phase 2C2 supplies immutable accepted-ID and conservative batch-safety context
-from the full logical turn to `IModelProtocol`, including confirmation/compaction.
-It adds a v3-only accepted-history reader and removes the unused v2 read adapter.
-The live client still uses the v2 path below; v3 enforcement, old-chat skip/reset
-and prompt/schema/history switching remain [cutover gates](protocols/CONVERSATION_RESPONSE_V3.md#remaining-cutover-gates)
-for Phase 2C3C. Phase 2C3A centralizes active schema/validation/JSON writing in
-`Core/ModelProtocol/ModelProtocolWire`, shared by the loop, transcript and compatibility
-probes. Probes retain one raw attempt per check and never invoke conversation repair.
-Phase 2C3B preserves custom prompts across schema mismatches and requires explicit
-review through the typed settings bridge. A Core settings guard runs before
-controller preparation/confirmation and neutral-loop materialization; it does not
-add a protocol retry or silently reset instructions.
-No AgentKernel or tool-contract changes are introduced here.
+Phase 2C3C activates the status-free `ConversationResponse` through the single
+`Core/ModelProtocol/ModelProtocolWire` owner: schema, local validation and canonical
+JSON writing are shared by the client, loop, transcript and compatibility probes.
+The old v2 parser/schema/DTO and temporary typed-ID helper are removed. Native
+provider refusal is a separate result; it cannot schedule tool calls.
 
-`AgentResponseParser` requires the conversation-response v2 `status`, `message`, and `tool_calls` fields. `in_progress` requires calls; terminal statuses require an empty array. Message wording and punctuation never determine run state. `json_schema` derives a strict response contract from the current callable tools; original optional properties become nullable so the endpoint does not force the model to invent irrelevant values. Before executable-schema validation, optional nulls are removed and declared defaults are applied. `json_object` uses the same envelope with local validation. The legacy setting `MaxAgentFormatRetries` now limits total protocol responses including the first (default 10, range 1–20). A separate budget allows two transient provider retries per step with 1s/2s cancellable delays, plus at most one explicit schema fallback. The raw request ceiling is N+3, at most 23; twenty invalid responses over a healthy transport stop at twenty requests (R20 fixed in Phase 2B). Each starts from clean accepted history and invalid content never enters replay. Accepted status and protocol version `2` are persisted with the assistant message and logical turn. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error, resources?}` and emits the selected replay role. Generic oversized data becomes an exact CAS-backed `tool_result` resource while the envelope retains only a bounded preview; trusted resource/tool/skill reads are not duplicated through that path. Specialized chart payloads are materialized once before the next model step and reused by the storage/UI projection.
+Immutable accepted-ID/safety snapshots cover the full logical user turn, including
+confirmation after compaction. Full-history and confirmation preflight precede
+controller preparation, manual compaction and pending consumption; incomplete
+CallContext cannot trigger a raw request or format repair. Saved prompts retain
+their text, while schema marker 12 requires explicit review of prior instructions.
+No old chat is converted/truncated automatically. See the [v3 contract and
+qualification gates](protocols/CONVERSATION_RESPONSE_V3.md#remaining-cutover-gates).
+
+Both `json_schema` and `json_object` enforce the same v3 contract against the current callable tools. Model-owned lifecycle fields are absent; empty calls only end the model loop. The existing runtime execution summary still owns effects/errors/unknowns. Protocol/provider retries remain bounded and separate, with clean accepted history on every attempt. `OfficeToolExecutor` remains the authority for formal argument schemas, effective pipeline safety, confirmation, and dispatch. `AgentJsonProtocol` serializes each result to `{ok, tool_call_id, name, status, message, data, error, resources?}` and emits the selected replay role. Generic oversized data becomes an exact CAS-backed `tool_result` resource while the envelope retains only a bounded preview; trusted resource/tool/skill reads are not duplicated through that path. Specialized chart payloads are materialized once before the next model step and reused by the storage/UI projection.
 
 Before a turn mutates a chat, the controller acquires a per-chat lease backed by an in-process registry and a cross-process lock file, reloads a newer persisted revision, and appends the user request, committed attachment references, and run state before calling the model. Attachment drafts stay in staging until their content-addressed references and the message are durable. Tool-start and tool-result boundaries are appended as typed operations. First-class turn events keep one logical `TurnId` across confirmation continuations, while every model request has `step.started`/`step.ended` boundaries correlated by request id. The event tail sequence is the monotonic compare-and-swap revision, so a stale window fails instead of overwriting newer history. A confirmation pause persists its pending id and cumulative iteration/tool counters; a new request is rejected until the action is confirmed or cancelled. Confirmation acquires a new lease and resumes the same logical budget. On startup, recovery checks the canonical event stream for a tool start without its matching finish; only that case becomes `interrupted_unknown`, while already persisted results remain replayable. Open model steps receive a synthetic interrupted terminal event.
 

@@ -2,11 +2,11 @@
 
 Current target: 16.1.0
 Current phase: Phase 2
-Current task: Phase 2C3B завершена host-neutral/JS: custom prompts сохраняются, schema review только явный, guard стоит до model preparation/confirmation. Active wire/history v2, prompt schema 11; Phase 3 не начата. Windows/controller/WebView/DPAPI validation pending; known baseline test failure: R22
+Current task: Phase 2C3C завершена host-neutral: active wire/history v3, prompt schema 12, полный history/context preflight и удаление live v2 paths. Phase 3 не начата. Windows/controller/WebView/DPAPI и live-provider qualification pending; known baseline test failure: R22
 
-Next step: отдельная Phase 2C3C — coordinated v3 switch/delete; по §14.3 число файлов само по себе не требует нового подготовительного подэтапа, связанный scope обосновать. Prompt marker переключить вместе с v3; проверить review/reset уже на v3 defaults.
-Required context: [saved-prompt review](../protocols/CONVERSATION_RESPONSE_V3.md#saved-prompt-review-phase-2c3b), [remaining cutover gates](../protocols/CONVERSATION_RESPONSE_V3.md#remaining-cutover-gates), [migration map](MIGRATION_MAP.md), R26/R27 в risk register; master plan Phase 2 и §§15.1–15.2. Исторические evidence — только по необходимости.
-Open gates / remaining legacy: R26 — complete-context enforcement и old-chat skip/reset до controller attachment analysis/compaction, не только loop. Live v2 parser/schema/DTO и typed-ID helper нужны до switch 2C3C. Native refusal, prompts, writer/version marker переключаются согласованно. R27 host-neutral/JS исправлен; Windows controller/DPAPI qualification открыта.
+Next step: отдельная Phase 3 — минимальный AgentKernel/RunSummary по master plan; working set/resource lifecycle остаётся снаружи, минимальный replay использует существующие events. Не смешивать с полным ToolRuntime, Resource Fabric или persistence/UI cutover. Windows gates не считать выполненными.
+Required context: master plan [Phase 3](STABILIZATION_MASTER_PLAN.md#phase-3--минимальный-agentkernel-и-runtime-truth) и §§15.1–15.2, [активный v3 contract](../protocols/CONVERSATION_RESPONSE_V3.md), [migration map](MIGRATION_MAP.md), R26/R27 в risk register. Исторические evidence — только по необходимости.
+Open gates / remaining legacy: R26/R27 закрыты host-neutral для actual v3, но controller ordering, Office/WebView/DPAPI и реальные providers не проверены. Live v2 DTO/parser/schema/typed-ID helper удалены. Failure.Cause и runtime lifecycle projections — Phase 3; legacy effect mapping / positive local-read registry — Phase 4.
 
 Workflow update (2026-08-28, docs-only): §§14.3, 22–23 — обоснованный единый switch может затронуть более 10 файлов; проверки применяются по изменению, повторные прогоны без новой причины не нужны; отчёт краткий. Runtime и открытые gates не изменены. Docs diff/links — OK; pre-commit ValidateVersionFormat — pass; build/tests для этой правки не запускались.
 
@@ -18,7 +18,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 |---|---|---|---|---|---|
 | 0 | done | `10e52bf` | ValidateVersionFormat pass; harness 7/7 | not performed | Только governance/build versioning; target установлен один раз |
 | 1 | done (host-neutral) | 1A: `a24feb1`; 1B: `5df587b`; 1C: `40282c0` | 61 targeted harness + 8 UI pass; red→green 4 cases; ValidateVersionFormat pass; last full 320/321 (R22) | not performed | 1A/1B/1C done; production Windows qualification остаётся открытой |
-| 2 | in progress | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: `c9f8b07`; 2C3A: `330aa79`; 2C3B: этот commit `fix(settings): require explicit prompt schema review` | 2C3B: 22 targeted harness + 5 JS pass; ValidateVersionFormat pass | not performed | R27 fixed host-neutral/JS; active v2; R26 cutover и Windows gates открыты |
+| 2 | done (host-neutral) | 2A: `d911826`; 2B: `a51bdda`; 2C1: `5a6b550`; 2C2: `c9f8b07`; 2C3A: `330aa79`; 2C3B: `4bbb039`; 2C3C: этот commit `refactor(protocol): switch conversation responses to v3` | 2C3C: 100 targeted cases; ValidateVersionFormat pass; подробности в evidence | not performed | Active v3; old-chat skip/reset и prompt review/reset проверены локально; Windows/live-provider gates открыты |
 | 3 | pending | — | — | — | AgentKernel |
 | 4 | pending | — | — | — | ToolRuntime |
 | 5 | pending | — | — | — | Bound DocumentSession |
@@ -212,6 +212,13 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - Реальный SettingsService теперь включён в linked C# 7.3 harness. Test-only ProtectedSecretStore поддерживает только отсутствующие fixture secrets и бросает ошибку при secret-file read/write; DPAPI не эмулируется. Windows x64 + Office + VS 2022, production controllers/WebView, DPAPI/live provider и full harness не проверялись.
 - Чистка: удалены destructive mismatch branch, duplicate Chat/Plan defaulting и obsolete hard-reset test; устранены UI marker 0→1 и blank fallback при отсутствии editor. Нового production adapter нет. Product остаётся 16.1.0-dev; tags/push/release script не выполнялись. Подробности: [PHASE_2C3B_PROMPT_REVIEW.md](PHASE_2C3B_PROMPT_REVIEW.md).
 
+## Phase 2C3C — v3 switch/delete
+
+- Shared wire, typed result, repair, mode defaults и accepted-history marker переключены вместе: v3 содержит только `message + tool_calls`, prompt schema 12. Native refusal — отдельный outcome; model-loop end не является proof of effect.
+- Полный history/context preflight стоит до подготовки, ручной compaction и подтверждения. Run-wide IDs и singleton safety enforce на каждом response; rejected batch не резервирует IDs и не исполняется частично. Saved prompts schema 11 сохраняются до explicit review/reset.
+- Удалены live v2 DTO/parser/schema/includes, typed-ID helper, LastRun-only controller helper и 9 obsolete parser tests; fixtures используют настоящие v3 writers. Один связанный scope: 15 production files, без нового kernel/tool policy/storage/UI.
+- Проверка и границы: [PHASE_2C3C_V3_CUTOVER.md](PHASE_2C3C_V3_CUTOVER.md). Windows/controller/Office/WebView/DPAPI и live provider не проверены; Phase 3 остаётся отдельной. Product `16.1.0-dev`, нового tag нет.
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
@@ -219,8 +226,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | Legacy ToolResult/safety → RunSummaryBuilder | Runtime / ToolRuntime | Loop, confirmation continuation | Перенос builder Phase 3; typed result mapping Phase 4 |
 | Optional RunExecutionSummary / отсутствующая legacy evidence | Application / Persistence / UI | Messages, LastRun, clones, bridge, static UI | Phases 3/9: удалить каждый obsolete path при switch последних consumers |
 | Nonserialized ModelProtocolFailure.Cause rethrow | Runtime / Application | ConversationRunService → controller cancellation/failure path | Phase 3 AgentKernel switch |
-| Accepted completion / current context-usage metadata | ModelProtocol / Application | Loop → transcript / turn result | Пересмотреть при v3/kernel Phases 2/3; заменить current transcript consumer при switch |
-| Current-v2 typed call IDs → ConversationProtocolContext | Runtime / ModelProtocol | Confirmation seed пока current protocol=2 | Phase 2C3C writer/version switch; удалить helper, не поддерживать old chats |
+| Accepted completion / current context-usage metadata | ModelProtocol / Application | Loop → transcript / turn result | Phase 3: пересмотреть metadata boundary и заменить current transcript consumer при switch |
 | Legacy safety + positive local-read registry → batch-safe snapshot | Runtime / ToolRuntime | Context constructor → ModelProtocol request | Phase 4 typed external/nested metadata + safety tests; неизвестные/pipelines singleton |
 | Office transient accepted-ID bookkeeping → ModelProtocolCallContext | Runtime | ConversationRunService start/confirmation | Phase 3 kernel switch; один owner, без второго loop/store |
 
@@ -234,6 +240,6 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.
 - R22: compact catalog harness failure воспроизведён до изменений 1B; owner ToolPack/Tests, Phase 8.
-- R26: context wiring проверен в 2C2; complete-context guard до любых controller model calls, live v3 parser enforcement, writer/confirmation и explicit old-chat skip/reset остаются gates 2C3C.
-- R27: destructive reset удалён, explicit review и guards проверены host-neutral/JS в 2C3B; production controller/WebView/DPAPI validation остаётся открытой.
+- R26: preflight, actual v3 writer/confirmation, run-wide IDs и singleton enforcement проверены в 2C3C; production controller ordering/Office qualification и замена temporary safety registry в Phase 4 остаются открыты.
+- R27: explicit review/reset проверены на actual v3 defaults/schema 12, старый custom text schema 11 сохраняется; production controller/WebView/DPAPI validation открыта.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).

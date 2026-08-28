@@ -6,7 +6,7 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.ModelProtocol
 {
-    // Status-free wire contract. AgentResponse remains the live v2 DTO until the cutover.
+    // Status-free wire contract, separate from runtime lifecycle/effect projections.
     public sealed class ConversationResponse
     {
         public const int ProtocolVersion = 3;

@@ -110,6 +110,7 @@ namespace RNAssistant.Office
             using (ReserveChatOperation(session))
             {
                 session = ReloadReservedSession(session);
+                ConversationProtocolContext.EnsureCurrentHistory(session);
                 var settings = ResolveChatSettings(session);
                 try
                 {

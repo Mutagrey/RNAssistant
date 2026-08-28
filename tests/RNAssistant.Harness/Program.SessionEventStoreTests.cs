@@ -414,7 +414,7 @@ namespace RNAssistant.Harness
                     options.TraceSink = record => { throw new InvalidOperationException("optional acceptance trace failed"); };
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"status\":\"completed\",\"message\":\"Answer.\",\"tool_calls\":[]}"
+                        Content = "{\"message\":\"Answer.\",\"tool_calls\":[]}"
                     });
                 };
                 var final = new ConversationRunService(adapter, executor, completion).ExecuteAsync(

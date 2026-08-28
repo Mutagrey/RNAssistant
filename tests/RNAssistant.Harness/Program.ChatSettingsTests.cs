@@ -112,12 +112,13 @@ namespace RNAssistant.Harness
 
         private static void SettingsPromptReviewPreservesStoredText()
         {
+            foreach (var oldVersion in new[] { 0, 11 })
             WithTempPaths(paths =>
             {
                 var service = new SettingsService(paths);
                 var legacy = new AppSettings
                 {
-                    AgentPromptSchemaVersion = 0,
+                    AgentPromptSchemaVersion = oldVersion,
                     SystemPrompt = " custom general ", AgentToolsPrompt = "custom tools",
                     AgentSkillsPrompt = "custom skills", ChatSystemPrompt = "custom chat", PlanSystemPrompt = "custom plan",
                     ContextCompactionPrompt = "custom compaction", ChatTitlePrompt = "custom title",
@@ -135,7 +136,7 @@ namespace RNAssistant.Harness
                 loaded.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion;
                 service.Save(loaded);
                 loaded = service.Load();
-                AssertEqual(0, loaded.AgentPromptSchemaVersion, "ordinary save cannot approve stored legacy prompts using a fresh marker");
+                AssertEqual(oldVersion, loaded.AgentPromptSchemaVersion, "ordinary save cannot approve stored legacy prompts using a fresh marker");
                 AssertEqual("after", loaded.Model, "unrelated settings can still be saved before review");
                 AssertTrue(prompts(legacy).SequenceEqual(prompts(loaded)), "ordinary save preserves custom prompts");
 
@@ -147,13 +148,13 @@ namespace RNAssistant.Harness
                 try { service.Save(rejected, null, null, true); }
                 catch (InvalidOperationException) { failed = true; }
                 AssertTrue(failed, "invalid protection settings reject the whole save");
-                AssertEqual(0, rejected.AgentPromptSchemaVersion, "failed review does not mutate the caller's marker");
+                AssertEqual(oldVersion, rejected.AgentPromptSchemaVersion, "failed review does not mutate the caller's marker");
                 AssertEqual(rejectedFile, File.ReadAllText(paths.SettingsFile), "failed review does not alter durable settings");
 
                 service.Save(loaded, null, null, true);
                 var reviewed = service.Load();
                 reviewed.EnsureAgentPromptsReviewed();
-                AssertEqual(0, loaded.AgentPromptSchemaVersion, "save stages review on a copy, not the caller's draft");
+                AssertEqual(oldVersion, loaded.AgentPromptSchemaVersion, "save stages review on a copy, not the caller's draft");
                 AssertTrue(prompts(legacy).SequenceEqual(prompts(reviewed)), "explicit review preserves custom text");
                 AssertEqual(AppSettings.CurrentAgentPromptSchemaVersion, reviewed.AgentPromptSchemaVersion, "review persists current schema");
                 AssertTrue(File.ReadAllText(paths.SettingsFile).IndexOf("reviewAgentPrompts", StringComparison.OrdinalIgnoreCase) < 0,
@@ -166,6 +167,8 @@ namespace RNAssistant.Harness
                 service.Save(reset, null, null, true);
                 var defaults = service.Load();
                 defaults.EnsureAgentPromptsReviewed();
+                foreach (var instruction in new[] { defaults.SystemPrompt, defaults.ChatSystemPrompt, defaults.PlanSystemPrompt })
+                    AssertContains(instruction, "conversation-response-v3", "explicit reset installs actual v3 defaults");
                 AssertTrue(prompts(new AppSettings()).SequenceEqual(prompts(defaults)), "explicit cleared prompts and review select current defaults");
                 AssertEqual("custom compaction", defaults.ContextCompactionPrompt, "conversation review leaves helper instructions alone");
                 AssertEqual("custom title", defaults.ChatTitlePrompt, "title prompt is not implicitly reset");

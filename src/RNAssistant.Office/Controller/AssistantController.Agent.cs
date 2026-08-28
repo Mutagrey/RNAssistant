@@ -53,7 +53,7 @@ namespace RNAssistant.Office
                 {
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
-                EnsureCurrentResponseProtocol(session);
+                ConversationProtocolContext.EnsureCanContinue(session, pending.Command);
                 var settings = ResolveChatSettings(session);
                 settings.EnsureAgentPromptsReviewed();
                 var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
@@ -485,16 +485,6 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException("Pending tool belongs to another chat session.");
             }
-        }
-
-        private static void EnsureCurrentResponseProtocol(ChatSession session)
-        {
-            var version = session == null || session.LastRun == null
-                ? 0
-                : session.LastRun.ResponseProtocolVersion;
-            if (version == AgentResponseProtocol.CurrentVersion) return;
-            throw new InvalidOperationException(
-                "Pending action uses an older conversation response protocol. Cancel it and send the request again.");
         }
 
         private static PendingAgentTool FindPendingAgentTool(ChatSession session, string pendingId)

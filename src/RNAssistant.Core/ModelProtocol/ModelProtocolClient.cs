@@ -40,6 +40,10 @@ namespace RNAssistant.Core.ModelProtocol
             object contextUsage = null;
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (request.CallContext == null || !request.CallContext.IsComplete)
+                    throw new InvalidOperationException("Model protocol requires a complete accepted-run call context: " +
+                        (request.CallContext == null ? "missing context" : request.CallContext.Error));
                 var budget = new ModelProtocolRetryBudget(settings);
                 var fallbackUsed = false;
                 string lastError = null;
@@ -89,10 +93,15 @@ namespace RNAssistant.Core.ModelProtocol
                     }
 
                     contextUsage = ContextUsageEstimator.FromPrompt(attemptMessages, settings, completion.PromptTokens, options);
-                    var parsed = Parse(completion, request);
+                    if (!string.IsNullOrWhiteSpace(completion.RefusalContent))
+                    {
+                        TraceAccepted(options, null, true, progress);
+                        return ModelProtocolResult.Refused(completion, contextUsage);
+                    }
+                    var parsed = ModelProtocolWire.Parse(completion.Content, request.CallableTools, request.RunnableCatalog, request.CallContext);
                     if (parsed.Success)
                     {
-                        TraceAccepted(options, parsed.Response, progress);
+                        TraceAccepted(options, parsed.Response, false, progress);
                         return ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage);
                     }
                     lastError = parsed.Error;
@@ -117,19 +126,6 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.Infrastructure, ex.Message, ex), contextUsage);
             }
-        }
-
-        private AgentResponseParseResult Parse(LlmCompletionResult completion, ModelProtocolRequest request)
-        {
-            if (string.IsNullOrWhiteSpace(completion.Content) && !string.IsNullOrWhiteSpace(completion.RefusalContent))
-                return AgentResponseParseResult.Ok(new AgentResponse
-                {
-                    Status = AgentResponseStatuses.Refused,
-                    Message = completion.RefusalContent
-                });
-            var parsed = ModelProtocolWire.Parse(completion.Content, request.CallableTools, request.RunnableCatalog, request.CallContext);
-            if (parsed.Success) parsed.Response.Message = parsed.Response.Message.Trim();
-            return parsed;
         }
 
         private async Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IReadOnlyList<ChatMessage> messages,
@@ -180,12 +176,12 @@ namespace RNAssistant.Core.ModelProtocol
                 ["attempt"] = attempt,
                 ["max_attempts"] = maxAttempts,
                 ["instruction"] =
-                    "Return a new response to the current user request as exactly one conversation-response-v2 JSON object " +
-                    "with required status, message, and tool_calls. Do not use Markdown, fences, or surrounding prose. " +
-                    "Choose tool_calls before status. If tool_calls is empty, never use in_progress; use completed, " +
-                    "awaiting_user, blocked, or refused. If tool_calls is non-empty, use in_progress. planned is unavailable. " +
-                    "Message wording never determines status. " +
-                    "Every call requires a unique id, exact name, and object arguments. Follow the error action exactly. " +
+                    "Return a new response to the current user request as exactly one conversation-response-v3 JSON object " +
+                    "containing only message (string) and tool_calls (array). Never return status or any other root field. " +
+                    "Do not use Markdown, fences, or surrounding prose. Empty tool_calls ends the model loop; wording proves no effect. " +
+                    "Every call requires an id not used anywhere in this accepted run, an exact name, and object arguments. " +
+                    "Write, external, confirmation-required and unclassified calls must be singleton; batch only independent local reads. " +
+                    "Follow the error action exactly. " +
                     "If a known tool schema is not loaded, replace the rejected call with common.capabilities_read for that exact id, " +
                     "wait for its successful complete tool-schema result, and call the loaded tool only in a later response."
             };
@@ -204,7 +200,7 @@ namespace RNAssistant.Core.ModelProtocol
             });
         }
 
-        private static void TraceAccepted(LlmRequestOptions options, AgentResponse response, ModelProtocolProgress progress)
+        private static void TraceAccepted(LlmRequestOptions options, ConversationResponse response, bool providerRefusal, ModelProtocolProgress progress)
         {
             if (options.TraceSink == null) return;
             try
@@ -213,8 +209,8 @@ namespace RNAssistant.Core.ModelProtocol
                 {
                     Type = "accepted", RequestId = options.TraceRequestId, Purpose = options.TracePurpose,
                     Model = options.TraceSession == null ? null : options.TraceSession.Model,
-                    ResponseFormat = options.ResponseFormat, ResponseStatus = response.Status,
-                    ToolCallIds = response.ToolCalls.Select(call => call.Id).ToArray()
+                    ResponseFormat = options.ResponseFormat, ResponseStatus = providerRefusal ? AgentResponseStatuses.Refused : null,
+                    ToolCallIds = response == null ? new string[0] : response.ToolCalls.Select(call => call.Id).ToArray()
                 });
             }
             catch (Exception)

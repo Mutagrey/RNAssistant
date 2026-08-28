@@ -179,10 +179,10 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"status\":\"in_progress\",\"message\":\"Добавляю сразу.\",\"tool_calls\":[{\"id\":\"unloaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
+                    "{\"message\":\"Добавляю сразу.\",\"tool_calls\":[{\"id\":\"unloaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
                     LoadToolSchemaResponse("excel.add_sheet", "schema_progressive"),
-                    "{\"status\":\"in_progress\",\"message\":\"Добавляю после загрузки схемы.\",\"tool_calls\":[{\"id\":\"loaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
-                    "{\"status\":\"completed\",\"message\":\"Лист создан.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Добавляю после загрузки схемы.\",\"tool_calls\":[{\"id\":\"loaded\",\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
+                    "{\"message\":\"Лист создан.\",\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var options = new List<LlmRequestOptions>();

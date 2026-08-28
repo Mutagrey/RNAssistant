@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -675,7 +676,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!string.Equals(mixedResult.ErrorCode, "mixed_skill_reference_update", StringComparison.Ordinal), "mixed call never reaches the old runtime trap");
 
                 var upsertDefinition = executor.GetControllerTools().Single(item => item.Id == "common.skills_upsert");
-                var responseSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { upsertDefinition }));
+                var responseSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { upsertDefinition }));
                 var upsertVariants = responseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
                 AssertEqual(2, upsertVariants == null ? 0 : upsertVariants.Count, "skill upsert strict schema separates core and reference calls");
                 AssertTrue(upsertVariants.OfType<JObject>().Any(item => item.SelectToken("properties.referencePath") != null && item.SelectToken("properties.description") == null),

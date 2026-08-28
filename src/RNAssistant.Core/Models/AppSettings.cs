@@ -172,15 +172,15 @@ namespace RNAssistant.Core.Models
 
         private const string StructuredResponseContract =
             "## Response contract\n\n" +
-            "Return exactly one raw conversation-response-v2 JSON object with no Markdown fence or surrounding prose. `status` is required and its wording-independent value controls the run state.\n\n" +
+            "Return exactly one raw conversation-response-v3 JSON object with only `message` (string) and `tool_calls` (array). Do not return `status` or any other root field, Markdown fence, or surrounding prose.\n\n" +
             "Terminal answer:\n\n" +
-            "```json\n{\"message\":\"user-facing answer\",\"tool_calls\":[],\"status\":\"completed\"}\n```\n\n" +
+            "```json\n{\"message\":\"user-facing answer\",\"tool_calls\":[]}\n```\n\n" +
             "Tool turn:\n\n" +
-            "```json\n{\"message\":\"short visible progress\",\"tool_calls\":[{\"id\":\"call_unique\",\"name\":\"exact tool name\",\"arguments\":{}}],\"status\":\"in_progress\"}\n```\n\n" +
-            "Choose `tool_calls` before `status`. If `tool_calls` is empty, never use `in_progress`; use `completed`, `awaiting_user`, `blocked`, or `refused`. If it is non-empty, use `in_progress`. " +
-            "Use `awaiting_user` for a needed user decision or missing information, `blocked` for a concrete dependency or inability, and `refused` only for an explicit refusal. " +
-            "`planned` is reserved and unavailable. Never derive or describe status through special wording; declare it in `status`. " +
-            "Every call needs a unique id. Keep the envelope even when the request cannot be fulfilled and escape message content as valid JSON.\n\n";
+            "```json\n{\"message\":\"short visible progress\",\"tool_calls\":[{\"id\":\"call_unique\",\"name\":\"exact tool name\",\"arguments\":{}}]}\n```\n\n" +
+            "Empty `tool_calls` ends your loop but does not prove successful execution or verification. Explain a blocker, needed user input or refusal in `message`; do not add lifecycle fields. " +
+            "Every call needs an id not used anywhere in this accepted user run, including confirmation continuations. " +
+            "Write, external, confirmation-required and unclassified calls must be the only call in the response. Batch only independent local read-only calls. " +
+            "Keep the envelope even when the request cannot be fulfilled and escape message content as valid JSON.\n\n";
 
         public const string GeneralInstructions =
             RoleAndRuntime +
@@ -213,14 +213,14 @@ namespace RNAssistant.Core.Models
             "4. Use status=draft while decisions remain and status=ready only when implementation is decision-complete. Never implement the plan in this mode.\n\n" +
             "For work with at least three meaningful discovery/design stages, use the temporary task list and close it before marking the plan ready. " +
             "Load exact tool schemas and relevant skills through common.capabilities_read as required by the capability catalog. " +
-            "Never substitute chat prose or an HTML workspace for the required Markdown plan artifact. Finish with status=completed or awaiting_user; the active plan artifact, not hidden reasoning or message text, is the handoff contract.";
+            "Never substitute chat prose or an HTML workspace for the required Markdown plan artifact. Finish with an empty tool_calls array; the active plan artifact, not hidden reasoning or message text, is the handoff contract.";
 
         public const string ToolInstructions =
             "# Agent tool policy\n\n" +
             "- `RUNTIME_CONTEXT.tools` is the current callable schema working set. `RUNTIME_CONTEXT.capabilities.items` is the complete compact catalog of exact runnable tool and enabled skill ids for this run. Select only an exact listed id; never invent, autocomplete, translate, or derive an id from a namespace, name, summary, or user wording. `common.capabilities_search` is only an optional filter over this same complete list. Load the selected capability with `common.capabilities_read`.\n" +
             "- For an item with `kind=tool`, a complete `common.capabilities_read` result loads its exact schema revision. Do not call that tool in the same response as the read. The working set is bounded; if `TOOL_WORKING_SET.evicted` names a tool, read that exact capability again before use. For `kind=skill`, the same reader loads Markdown instructions only; it never loads tool schemas named by that skill.\n" +
-            "- A visible progress message does not execute anything. Declare `status=in_progress` and include every action to execute in the same non-empty `tool_calls` array.\n" +
-            "- Return several calls only when independent and all arguments are already known. Calls run sequentially in array order. Use one call when the next action depends on its result or may require confirmation.\n" +
+            "- A visible progress message does not execute anything. Include every action to execute in `tool_calls`; never add a response status.\n" +
+            "- Return several calls only for independent local read-only work when all arguments are known. Calls run sequentially in array order. Write, external, confirmation-required and unclassified calls are singleton; wait for their result before the next call.\n" +
             "- For work with at least three meaningful user-level stages, load `common.task_tracking`, create one task list before execution, update it after material progress, and close it before a successful final answer. Do not count individual reads or tool calls as artificial stages.\n" +
             "- Each `TOOL_RESULT` contains `ok`, `tool_call_id`, `name`, `status`, `message`, `data`, `error`, and optional exact `resources`; `relation=result` identifies the full result resource. Read current Office state when an edit depends on it. After a failure, inspect `error` and change the call or explain the blocker; do not retry unchanged. When `data.truncated=true`, read that exact result URI or request a smaller scope.";
 
@@ -235,7 +235,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 11;
+        public const int CurrentAgentPromptSchemaVersion = 12;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

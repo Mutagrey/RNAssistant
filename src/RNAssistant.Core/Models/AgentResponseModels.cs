@@ -5,9 +5,11 @@ namespace RNAssistant.Core.Models
 {
     public static class AgentResponseProtocol
     {
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
     }
 
+    // Existing runtime/history projection labels, never model-owned v3 fields.
+    // Their lifecycle replacement belongs to Phase 3.
     public static class AgentResponseStatuses
     {
         public const string InProgress = "in_progress";
@@ -33,18 +35,6 @@ namespace RNAssistant.Core.Models
         }
     }
 
-    public sealed class AgentResponse
-    {
-        public string Status { get; set; }
-        public string Message { get; set; }
-        public List<AgentToolCall> ToolCalls { get; set; }
-
-        public AgentResponse()
-        {
-            ToolCalls = new List<AgentToolCall>();
-        }
-    }
-
     public sealed class AgentToolCall
     {
         public string Id { get; set; }
@@ -57,24 +47,4 @@ namespace RNAssistant.Core.Models
         }
     }
 
-    public sealed class AgentResponseParseResult
-    {
-        public AgentResponse Response { get; set; }
-        public string Error { get; set; }
-
-        public bool Success
-        {
-            get { return Response != null && string.IsNullOrWhiteSpace(Error); }
-        }
-
-        public static AgentResponseParseResult Ok(AgentResponse response)
-        {
-            return new AgentResponseParseResult { Response = response };
-        }
-
-        public static AgentResponseParseResult Fail(string error)
-        {
-            return new AgentResponseParseResult { Error = error };
-        }
-    }
 }

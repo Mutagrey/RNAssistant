@@ -1,7 +1,7 @@
 # ADR-0002: ModelProtocol owns raw model attempts
 
 Date: 2026-08-28
-Status: Accepted (2A boundary, 2B retry policy, 2C1 v3 contract, 2C2 context, 2C3A shared wire, 2C3B prompt review; runtime cutover remains)
+Status: Accepted (2A boundary, 2B retry policy, 2C1–2C3B preparation, 2C3C active v3 switch/delete; Windows qualification open)
 
 ## Context
 
@@ -16,8 +16,10 @@ concerns to Core and requires the loop to consume one typed outcome per step.
   One instance serves one run; only the endpoint-format fallback choice survives
   between steps. Confirmation continuation creates a fresh instance, as before.
 - Pass the accepted materialized prompt, current callable tools, runnable catalog
-  and request-local options. Return either an accepted `AgentResponse` with its
-  completion/usage metadata, or a typed `ModelProtocolFailure`. No rejected
+  and request-local options, including complete run-ID/safety context. Return
+  either an accepted `ConversationResponse` with completion/usage metadata,
+  separate native `ProviderRefusal` with its completion, or a typed
+  `ModelProtocolFailure`. No rejected
   completion is returned. Core neither executes tools nor changes chat history,
   resource revisions or the working set.
 - Each repair copies the accepted message sequence and appends one current fixed
@@ -40,7 +42,7 @@ concerns to Core and requires the loop to consume one typed outcome per step.
 
 `ModelProtocolRetryBudget` is created once per `GetResponseAsync`, not for each
 repair or raw request. A protocol attempt counts a received completion submitted
-to the v2 parser (or accepted native refusal), including the first response.
+to the active parser (now v3) or accepted native refusal, including the first response.
 
 | Budget | Limit | On exhaustion |
 |---|---|---|
@@ -74,7 +76,7 @@ Phase 2A preserved initial + configured retries; Phase 2B removes that extra
 attempt (R20). The existing `MaxAgentFormatRetries` settings/bridge key and stored
 numeric values remain; the value now means total protocol responses. The caption
 and tooltip explain this change. There is no second key, alias or settings rewrite.
-V2 parsing/status/history remain unchanged.
+V2 parsing/status/history were preserved by 2B; 2C3C replaces that live path below.
 
 `ModelProtocolFailure.Cause` is a nonserialized exception adapter. Owner: Runtime /
 Application. Consumer: the loop rethrows it with its original stack into the
@@ -215,6 +217,35 @@ Host-neutral loop/settings and JS actions are verified; production controllers,
 WebView and Windows DPAPI are not. Phase 2C3C still needs the coordinated v3 switch,
 full-context/old-chat guards before any model call, and its own integration tests.
 
+### Coordinated v3 switch/delete (Phase 2C3C)
+
+Switch `ModelProtocolWire` to the strict v3 parser/schema/canonical writer and
+`ModelProtocolResult` to `ConversationResponse`. Root fields are only `message`
+and `tool_calls`. Native provider refusal remains separate metadata and takes
+precedence over accompanying JSON; compatibility probes reject it without retry.
+An empty call list ends the model loop but does not determine effects. Existing
+runtime projection labels remain until Phase 3; completion health stays local.
+
+Advance accepted-history version to 3 and prompt schema to 12 together with all
+mode defaults. Saved instructions from schema 11 are preserved until explicit
+review or reset; tests exercise both paths with actual v3 defaults. No live-v2
+fallback, dual-write, status coercion or automatic history/settings migration.
+
+Use the existing context owner for full-history preflight before controller
+send/edit/retry preparation, manual compaction and pending confirmation. Require
+a complete detached call context before the first raw attempt; an incomplete
+context is an infrastructure precondition failure, never a repair request.
+Read actual v3 history for all three result roles, keep IDs for the full logical
+user turn, and validate run-wide uniqueness and conservative singleton safety
+on every response. Rejected batches cannot reserve IDs or execute partial calls.
+
+Delete the live v2 parser/schema/DTO and their includes, the temporary typed-ID
+reader and the old controller LastRun-only helper. The coordinated contract has
+15 production-file changes; the amended §14.3 permits this bounded switch, so
+preflight stays in 2C3C rather than creating another preparation step. No AgentKernel,
+tool execution, Resource URI, VBA journal or persistence refactor is part of it.
+Controller/Office/WebView/DPAPI and real-provider qualification remain open.
+
 The old loop completion/parse/repair/fallback/trace methods and
 `AgentJsonProtocol.CreateFormatRepairMessage` are removed, without aliases or dual
 execution. Tool orchestration, completion guard and native refusal behavior stay
@@ -228,4 +259,5 @@ Evidence and exact commands: [Phase 2A](../stabilization/PHASE_2A_MODEL_PROTOCOL
 [Phase 2C1](../stabilization/PHASE_2C1_V3_CONTRACT.md),
 [Phase 2C2](../stabilization/PHASE_2C2_PROTOCOL_CONTEXT.md),
 [Phase 2C3A](../stabilization/PHASE_2C3A_WIRE_OWNER.md),
-[Phase 2C3B](../stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
+[Phase 2C3B](../stabilization/PHASE_2C3B_PROMPT_REVIEW.md),
+[Phase 2C3C](../stabilization/PHASE_2C3C_V3_CUTOVER.md).

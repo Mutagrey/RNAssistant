@@ -6,16 +6,9 @@ RNAssistant has three explicit modes and one `ConversationRunService` transport/
 - `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, typed `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_*`, and optional `common.task_list_*`. Office/shared mutations and confirmation are unavailable by runtime policy.
 - `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
-All modes return the same conversation-response v2 JSON envelope: `status + message + tool_calls[]`. They use the same bounded request-local format repair. Explicit structure and the tool catalog, never model wording, are the authority: a Chat response naming any other tool is rejected before execution.
+All modes return conversation-response v3: only `message` (string) and `tool_calls` (array). The shared ModelProtocol boundary owns strict parsing/schema, bounded repair and provider compatibility; the loop receives one accepted typed response, separate provider-native refusal, or typed failure. Model wording is never execution evidence.
 
-The [status-free v3 contract](protocols/CONVERSATION_RESPONSE_V3.md) is introduced;
-Phase 2C2 adapts full-turn ID/safety snapshots to the boundary and prepares a
-v3-only history reader, **without switching this runtime**. The unused v2 read
-adapter is removed. Active prompts, retry, schema selection and accepted history
-remain v2; coordinated switch/delete and explicit old-chat skip/reset are Phase
-2C3C gates. Phase 2C3A gives runtime and probes one active ModelProtocolWire owner;
-2C3B replaces destructive prompt reset with explicit schema review. No new v3
-events, historical migration or dual-write exist yet.
+Phase 2C3C switches client, prompts, schema, probes and accepted history together. The live v2 DTO/parser/schema and temporary typed-ID helper are removed. Full-history/context preflight rejects incompatible chats before preparation or confirmation; no historical migration or dual-write is performed. See the [canonical v3 contract](protocols/CONVERSATION_RESPONSE_V3.md).
 
 ## Conversation context
 
@@ -106,7 +99,7 @@ All modes always return the same raw JSON envelope with no Markdown or surroundi
 
 With SSE enabled, transport chunks still contain that raw JSON envelope. The live UI projection incrementally decodes only the root `message` string and never exposes `tool_calls` or other raw JSON. A new model attempt marks the previous provisional projection for replacement, but UI applies that reset only with the first new content/reasoning delta so a format repair cannot create an empty blink. Provider reasoning and one leading `<think>` block use the separate reasoning projection; its terminal update is emitted before visible message content starts or when the stream ends.
 
-Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; immediately before normal validation, runtime removes those optional nulls and applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.
+Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; ModelProtocol removes those optional nulls before schema validation; the executor later applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.
 
 When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json_schema`, ModelProtocol retries once with `json_object`, including during format repair, and keeps that choice for the rest of the run. The exact current prompt is reused and the saved selection is unchanged. This compatibility fallback has its own limit and is not model routing.
 
@@ -114,7 +107,6 @@ Tool call:
 
 ```json
 {
-  "status": "in_progress",
   "message": "Читаю диапазон.",
   "tool_calls": [
     {
@@ -130,38 +122,22 @@ Final answer:
 
 ```json
 {
-  "status": "completed",
   "message": "Готово.",
   "tool_calls": []
 }
 ```
 
-Conversation-response v2 requires a root `status`. The strict response schema enforces its presence and exposes only statuses callable for the current request; the local parser additionally enforces its relationship with `tool_calls`. The schema puts `status` after `tool_calls` so constrained decoders choose the action list first. This avoids unsupported cross-field constructs in provider structured-output schemas while keeping the same invariant in both `json_schema` and `json_object` modes:
+The v3 parser rejects every extra root field in both response modes. Each of at most 32 calls contains only a nonblank `id`, an exact callable `name`, and object `arguments`. IDs cannot repeat within a response or the accepted user run, including confirmation after compaction/RunId changes. Rejected attempts execute nothing and reserve no IDs. Duplicate JSON/argument names and unsupported JSON extensions are rejected. The string `message` may be empty; text and punctuation never classify lifecycle or effects.
 
-| `status` | Meaning | `tool_calls` | UI/run projection |
-| --- | --- | --- | --- |
-| `in_progress` | The model is requesting executable work now. | At least one call. | Run continues. |
-| `completed` | The model declares its answer complete. | Empty. | Loop ended; runtime execution health independently describes tool outcomes. |
-| `awaiting_user` | A user decision or missing information is required. | Empty. | Current run ends and visibly waits for the user. |
-| `blocked` | Work cannot proceed because of a concrete dependency or inability. | Empty. | Final blocked outcome. |
-| `refused` | The request is explicitly refused. | Empty. | Final refusal. |
-| `planned` | Reserved and unavailable in current modes. | Empty. | Rejected by the parser. |
+Write, external, confirmation-required and unclassified calls are singleton. Independent local reads may be batched and execute sequentially. Effective safety comes from local authority, not tool-name guesses or model claims. The executor still validates policy/arguments and applies execution defaults.
 
-The runtime enforces these rules:
+Empty calls mean only that the model ended its loop. The existing runtime projection uses `completed` for that boundary, while `RunExecutionSummary` independently retains errors/unknown effects; a model cannot inject that summary. Provider-native refusal is a separate ModelProtocol result and projects `refused`, including when the provider also supplied content. Model-authored refusal or question text remains ordinary message text. `common.questions_ask`, confirmation and technical failures keep their existing runtime outcomes. Full lifecycle/summary migration belongs to Phase 3.
 
-- `status` is explicit and required; it is never derived from `message`, punctuation, historical tool failures, or plan text.
-- `in_progress` with no calls and any terminal status with calls are structural format errors handled by the bounded format-repair path.
-- `awaiting_user` is the structured form of a model question. Plan mode normally uses `common.questions_ask` for typed questions and publishes its ready artifact before returning `completed`.
-- Provider-native refusal metadata maps directly to `refused`; ordinary response text is never classified as a refusal.
-- `failed`, `cancelled`, `interrupted`, and `interrupted_unknown` remain runtime-owned states and are not model-selectable.
-- Tool failures do not rewrite the accepted model status, but do prevent `clean` execution health. The UI shows the runtime warning outside the collapsed trace even if the model later says `completed`.
-- Accepted status and response protocol version `2` are persisted in the append-only session stream; replay never reconstructs them from message wording.
+Accepted history is marked protocol `3`: v3 JSON tool-call envelopes, native history with canonical call metadata, or plain final text. Both service entries and controller preparation check full history, not a truncated prompt window. Unmarked/incompatible or ambiguous responses block dispatch and require an explicit new chat/reset. Confirmation validates the complete accepted-turn seed before consuming pending state or executing the tool; old pending actions can still be cancelled. No stream is converted, truncated, relabeled or deleted automatically.
 
-The parser accepts at most 32 calls, requires a non-empty user-facing `message` for every tool turn, unique call ids, and each call to contain exactly `id`, `name`, and an object `arguments`. Duplicate JSON properties and argument names that differ only by case are rejected. Structured arguments remain native JSON objects/arrays through parsing; escaped JSON strings are not coerced. The executor checks each exact tool name and validates arguments against its tool schema immediately before execution. Calls execute locally and sequentially in array order. A multi-call response is appropriate only when calls are independent and later arguments do not depend on earlier results.
+A confirmation pause persists its pending id, cumulative iteration/tool-step counters and execution fingerprint. After the singleton call is confirmed, its result returns to the same logical user run. A new request stays blocked until confirmation or cancellation; replaced definitions cannot execute. There is no persistent batch state.
 
-If a call needs confirmation, execution pauses at that call and later calls from the same response are not retained or executed. The pending id, cumulative iteration/tool-step counters, and execution fingerprint of that tool and its pipeline dependencies are persisted with the chat, so confirmation survives a WebView or Office restart but cannot execute a replaced definition. Cosmetic changes to unrelated tools do not invalidate it. A new request in that chat is blocked until the action is confirmed or cancelled. After confirmation, the model receives that result and chooses the remaining work normally using the remaining original budget. There is no separate batch state. The local parser tolerates additional root fields in `json_object`; strict `json_schema` rejects them at the endpoint.
-
-`ModelProtocolClient` permits `MaxAgentFormatRetries` total protocol responses per logical step (default 10, normalized 1–20), **including the first response**. Limit 1 means no format repair; limit 20 accepts a valid twentieth response and stops after twenty invalid responses. Every repair starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored in accepted history. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. A refusal is valid user-facing content only as `status:"refused"` with an empty `tool_calls` array. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
+`ModelProtocolClient` permits `MaxAgentFormatRetries` total protocol responses per logical step (default 10, normalized 1–20), **including the first response**. Limit 1 means no format repair; limit 20 accepts a valid twentieth response and stops after twenty invalid responses. Every repair starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored in accepted history. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. Native provider refusal is a separate accepted metadata outcome, including when accompanied by JSON content; it cannot dispatch calls. A model-authored refusal sentence is ordinary `message` text and does not set runtime status. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
 The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections plus `ChatSystemPrompt`, `PlanSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
 
@@ -169,8 +145,8 @@ The Prompts UI and confirmed `common.prompts_save` edit the three Agent sections
 
 One `IModelProtocol` instance serves a conversation run. `GetResponseAsync` receives
 the accepted materialized messages, current callable schemas, runnable catalog and
-request-local transport options. It returns an accepted `AgentResponse` and only
-that completion's metadata, or a typed `ModelProtocolFailure`. Provider failures,
+request-local transport options. It returns an accepted `ConversationResponse` and only
+that completion's metadata, a separate `ProviderRefusal`, or a typed `ModelProtocolFailure`. Provider failures,
 cancellation, prompt-budget rejection and protocol exhaustion are distinct. The
 separate bounded provider retry policy is defined below.
 
@@ -186,9 +162,13 @@ copying another protocol version's field/status rules.
 The loop now also supplies an immutable `ModelProtocolCallContext`: all accepted
 IDs in the logical turn (not just the compacted prompt) and a conservative local
 batch-safe projection. Confirmation restores IDs across `RunId` changes from full
-accepted history. This is preparation for v3 validation; the live v2 client does
-not enforce the snapshot or its incomplete-history error. See the canonical
-[context contract and remaining gates](protocols/CONVERSATION_RESPONSE_V3.md#accepted-context-and-current-v3-history-phase-2c2).
+accepted history. Since Phase 2C3C, a missing/incomplete snapshot fails with typed
+`Infrastructure` before any raw request or format repair. Full-session version
+checks run before send/edit/retry preparation and manual compaction; confirmation
+also validates the accepted-turn seed before consuming pending state or executing
+the tool. Incompatible/unmarked history requires an explicit new chat or reset,
+without automatic truncation, conversion or deletion. The live v3 parser enforces run-ID/singleton rules on every attempt. See the canonical
+[preflight and remaining gates](protocols/CONVERSATION_RESPONSE_V3.md#history-and-context-preflight-phase-2c3c).
 
 The loop owns step ids, tool execution, summaries and transcript append. Core owns
 raw attempt ids, parsing, fixed repair instructions, format fallback and the
@@ -205,8 +185,8 @@ or load/evict tool schemas between attempts.
 
 The nonserialized `Failure.Cause` adapter rethrows provider/cancellation and
 infrastructure exceptions into the existing controller handling until the Phase 3
-AgentKernel switch. V2 parsing/history and response status remain current. V3 and
-its compatibility adapter are not introduced by Phases 2A/2B.
+AgentKernel switch. The v3 parser/history switch is complete in Phase 2C3C;
+existing runtime lifecycle projections remain until the separate Phase 3 switch.
 See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) and the
 [validation evidence](stabilization/PHASE_2A_MODEL_PROTOCOL.md).
 
@@ -214,7 +194,7 @@ See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) and the
 
 | Outcome | Action | Budget |
 |---|---|---|
-| Received completion fails the v2 contract | Retry from accepted prompt + one fresh repair instruction | Total 1–20 responses, including first |
+| Received completion fails the v3 contract | Retry from accepted prompt + one fresh repair instruction | Total 1–20 responses, including first |
 | Typed timeout, network failure or HTTP 5xx/server failure | Retry the exact current prompt after a cancellable delay | Two extra requests for the whole step, delays 1s then 2s |
 | Explicit `json_schema` rejection with fallback enabled | Switch to `json_object`, including during repair | One extra request, independent of other budgets |
 | Authorization/other HTTP errors, 429, size limits, invalid provider envelope | Typed provider failure | No automatic retry |
@@ -273,8 +253,9 @@ Phase 1B left the v2 response, retry limits and outcome behavior unchanged. See 
 `RunSummaryBuilder` aggregates actual executor results using effective
 `ToolSafetyPolicy` metadata, including nested pipelines and local-state mutations.
 Model text, descriptions and model-supplied extra JSON fields are not evidence.
-Existing v2 statuses and lifecycle names remain unchanged; no AgentKernel or v3
-contract is introduced in this phase.
+Introduced with v2 in Phase 1C, this independent summary remains after the v3
+cutover. Runtime lifecycle labels are transitional; model JSON no longer owns
+them. AgentKernel and full lifecycle migration remain Phase 3 work.
 
 `RunExecutionSummary` contains `ExecutionHealth` (`clean`, `errors`, `unknown`) and
 `ReadOk`, `ReadError`, `WriteOk`, `WriteError`, `WriteUnknown` invocation counts.

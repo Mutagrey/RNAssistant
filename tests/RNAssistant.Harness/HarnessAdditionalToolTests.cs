@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -427,7 +428,7 @@ namespace RNAssistant.Harness
                 AssertContains(invalidBindResult.Message, "unsupported property kind", "HTML bind reports the exact invalid nested field");
 
                 var bindDefinition = executor.GetControllerTools().Single(item => item.Id == HtmlArtifactToolExecutor.BindDataToolId);
-                var bindResponseSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { bindDefinition }));
+                var bindResponseSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { bindDefinition }));
                 var bindVariants = bindResponseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
                 var rangeVariant = bindVariants == null ? null : bindVariants.OfType<JObject>().FirstOrDefault(item =>
                     string.Equals((string)item.SelectToken("properties.sourceTool.enum[0]"), "excel.read_range", StringComparison.OrdinalIgnoreCase));
@@ -810,7 +811,7 @@ namespace RNAssistant.Harness
                 AssertContains(simplifiedResult.DataJson, "\"arguments\":{\"name\":\"{{args.sheet}}\"}", "pipelineSteps compile to native keyed arguments");
 
                 var authoringTool = executor.GetControllerTools().Single(item => item.Id == "common.tools_validate");
-                var authoringResponseSchema = JObject.Parse(AgentResponseSchemaBuilder.Build(new[] { authoringTool }));
+                var authoringResponseSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { authoringTool }));
                 AssertTrue(authoringResponseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.parameterDefinitions.items.properties.name") != null,
                     "strict Agent schema exposes parameterDefinitions");
                 AssertTrue(authoringResponseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.pipelineSteps.items.properties.arguments.items.properties.value.anyOf") != null,

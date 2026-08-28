@@ -755,7 +755,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.Model = "omni";
                 session.Messages.Add(source);
-                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Stored." });
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Stored.", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion });
                 session.Artifacts.Add(new ChatArtifact
                 {
                     Id = "attachment_historic-image",
@@ -787,7 +787,7 @@ namespace RNAssistant.Harness
                         AssertEqual(0, mediaMessages.Count, "historical media is absent before explicit read");
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"status\":\"in_progress\",\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"id\":\"call_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
+                            Content = "{\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"id\":\"call_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     if (calls == 2)
@@ -812,7 +812,7 @@ namespace RNAssistant.Harness
                         "media stays available until the logical model step accepts or fails");
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"status\":\"completed\",\"message\":\"Изображение прочитано.\",\"tool_calls\":[]}"
+                        Content = "{\"message\":\"Изображение прочитано.\",\"tool_calls\":[]}"
                     });
                 };
                 var tools = executor.GetControllerTools().ToList();
@@ -858,7 +858,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.Model = "text-only";
                 session.Messages.Add(source);
-                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Stored." });
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Stored.", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion });
                 session.Artifacts.Add(new ChatArtifact
                 {
                     Id = "attachment_helper-image",
@@ -900,7 +900,7 @@ namespace RNAssistant.Harness
                     {
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"status\":\"in_progress\",\"message\":\"Читаю скан.\",\"tool_calls\":[{\"id\":\"call_helper_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
+                            Content = "{\"message\":\"Читаю скан.\",\"tool_calls\":[{\"id\":\"call_helper_media\",\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     var evidenceMessage = messages.First(message => message != null && message.ProtocolMessage &&
@@ -916,7 +916,7 @@ namespace RNAssistant.Harness
                     AssertTrue(!rawRead, "text-only primary does not reload helper-routed raw media");
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"status\":\"completed\",\"message\":\"На скане указано 42.\",\"tool_calls\":[]}"
+                        Content = "{\"message\":\"На скане указано 42.\",\"tool_calls\":[]}"
                     });
                 };
 

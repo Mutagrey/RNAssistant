@@ -155,7 +155,6 @@ namespace RNAssistant.Harness
         {
             return JsonConvert.SerializeObject(new
             {
-                status = AgentResponseStatuses.InProgress,
                 message = "Загружаю схему инструмента.",
                 tool_calls = new[]
                 {

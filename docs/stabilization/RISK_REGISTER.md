@@ -15,12 +15,14 @@ active v2 client context не enforce. V3 cutover/old-chat guard и Windows ещ
 Phase 2C3A проверяет shared active wire и probes; v2 остаётся. Existing prompt-reset
 characterization подтверждает R27 как gate будущего cutover, не как новый regression.
 Phase 2C3B заменяет этот reset preservation/review flow; Core settings/loop и JS
-проверены, production controllers/WebView/DPAPI — нет. Protocol остаётся v2.
+проверены, production controllers/WebView/DPAPI — нет.
+Phase 2C3C переключает actual wire/history на v3 и проверяет preflight, run IDs, singleton
+safety, refusal и review/reset на prompt schema 12. Windows/live-provider gates остаются.
 
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |
 |---|---|---|---|---|---|
 | R01 | P0 | Model completed скрывает write error/unknown или отсутствие write | AgentKernel / Application / UI | Guard Phase 1C: red→green + отдельный UI warning; RunSummary Phase 3; production validation R21 | contained host-neutral 1C; Windows qualification open |
-| R02 | P1 | tLLM protection вместо JSON | ModelProtocol | 2A/2B: typed boundary, clean repair, общий лимит и fake protection/HTML tests; v3 ещё в Phase 2, live endpoint qualification отдельно | contained for fake content 2A/2B; open |
+| R02 | P1 | tLLM protection вместо JSON | ModelProtocol | 2A/2B: typed boundary, clean repair, общий лимит и fake protection/HTML tests; v3 validation/repair проверены в 2C3C; live endpoint qualification отдельно | contained for fake content 2A/2B; open |
 | R03 | P0 | Write применён, ответ потерян | Domain/Host | unknown + reconciliation, Phases 4–7 | open |
 | R04 | P0 | Patch направлен не в ту книгу | HostRuntime | Bound DocumentSession, Phase 5 | open |
 | R05 | P1 | LRU удалил schema | ToolPack | No eviction in run, Phase 8 | open |
@@ -44,8 +46,8 @@ Phase 2C3B заменяет этот reset preservation/review flow; Core settin
 | R23 | P2 | Legacy ToolResult не всегда различает частичный/неизвестный effect; успешный mutating call может быть no-op или иметь слабую domain verification | ToolRuntime / Domains | 1C консервативно маркирует partial/missing/uncertain как unknown; counts — top-level вызовы, не document diff; заменить adapter typed evidence Phase 4, domain qualification Phases 6/7 | documented 1C; open |
 | R24 | P2 | Media сохраняются и могут отправляться повторно на protocol repair: больше traffic и дольше lifetime | ModelProtocol / Resources | Один materialized accepted prompt, bounded retry/budget и release в finally; fake image integration pass; проверить реальные media/endpoint budgets до qualification Phase 12 | documented 2A; open |
 | R25 | P2 | Provider retry после timeout/потери ответа может повторить оплачиваемую генерацию и увеличить latency | ModelProtocol / Release | Не более двух transient retries на весь step, delays 1s/2s с cancellation; raw ceiling N+3; no Office tool replay, no auth/429 retry; проверить реальные timeout/media/endpoint budgets до Phase 12 | documented 2B; open |
-| R26 | P1 | Неполный accepted-run ID scope или неверная batch-safe projection при v3 cutover допустят повтор IDs / unsafe batch | ModelProtocol / Runtime | 2C2: detached snapshots, полный user-turn seed через compaction/RunId changes, incomplete context не пустой set; local-read registry + effective metadata, external/unclassified/pipelines singleton. 2C3C: require complete context до controller attachment analysis/compaction и dispatch, v3 client enforcement и writer/confirmation/explicit old-chat guard tests. Registry заменить typed ToolPolicy в Phase 4 | contained context wiring 2C2; live v3 enforcement/skip-reset gates open |
-| R27 | P1 | Schema mismatch / UI save могли молча заменить custom prompts или подтвердить старую схему; PlanSystemPrompt отсутствовал в UI payload | ModelProtocol / Settings | 2C3B: mismatch reset удалён; реальные load/save сохраняют text/marker, explicit request-local review на clone; Plan/fallback сохранены, guard до controller preparation/pending mutation и neutral loop. 22 targeted harness + 5 JS pass, preservation red→green. Prompt schema 11 и v2 не менялись | fixed host-neutral/JS; production controller/WebView/DPAPI qualification pending |
+| R26 | P1 | Неполный accepted-run ID scope или неверная batch-safe projection допустят повтор IDs / unsafe batch | ModelProtocol / Runtime | 2C3C: complete context до raw dispatch, full-history guards до controller preparation/manual compaction/confirmation; actual v3 writer/reader во всех result roles, run-wide IDs и singleton enforcement; rejected batch без partial execution. Temporary local-read registry заменить typed ToolPolicy в Phase 4 | contained host-neutral 2C3C; production controller/Office qualification open |
+| R27 | P1 | Schema mismatch / UI save могли молча заменить custom prompts или подтвердить старую схему; PlanSystemPrompt отсутствовал в UI payload | ModelProtocol / Settings | 2C3B удаляет reset и проверяет explicit review/JS; 2C3C сохраняет schema 11 custom text, ordinary/failed save не подтверждают её; explicit review/reset проверены на actual v3 defaults/schema 12. Shared guard до preparation/confirmation | fixed host-neutral; production controller/WebView/DPAPI qualification pending |
 
 Новые дефекты вне текущей фазы фиксировать здесь или в [BACKLOG.md](BACKLOG.md),
 не исправлять попутно. Исключение P0 требует отдельного явно ограниченного изменения.

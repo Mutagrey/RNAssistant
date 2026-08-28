@@ -54,6 +54,48 @@ namespace RNAssistant.Office.Services
             return new ModelProtocolCallContext(_acceptedIds, _batchSafeIds, _error);
         }
 
+        internal static void EnsureCurrentHistory(ChatSession session)
+        {
+            if (session == null || session.Messages == null || session.Messages.Any(message => message == null))
+                throw HistoryFailure("Нет полной истории чата.");
+            if (session.LastRun != null && session.LastRun.ResponseProtocolVersion != 0 &&
+                session.LastRun.ResponseProtocolVersion != AgentResponseProtocol.CurrentVersion)
+                throw HistoryFailure("Версия протокола последнего запуска несовместима.");
+            // Check the full projection, never the compacted prompt window. Suppressed
+            // accepted responses still belong to this chat; activities/results do not.
+            foreach (var message in session.Messages)
+            {
+                if (message.Activity != null || !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)) continue;
+                if (message.ResponseProtocolVersion != AgentResponseProtocol.CurrentVersion)
+                    throw HistoryFailure("История содержит ответ другой или неизвестной версии протокола.");
+                var parsed = ConversationResponseHistoryReader.Read(message);
+                if (!parsed.Success) throw HistoryFailure("Неполная запись принятого ответа: " + parsed.Error);
+            }
+        }
+
+        internal static void EnsureCanContinue(ChatSession session, ToolCommand command)
+        {
+            EnsureCurrentHistory(session);
+            if (command == null || session.LastRun == null ||
+                session.LastRun.ResponseProtocolVersion != AgentResponseProtocol.CurrentVersion)
+                throw HistoryFailure("Ожидающее действие не связано с текущим протоколом запуска.");
+            // The controller calls this BEFORE consuming pending state or executing the
+            // confirmed tool. Safety authority is rebuilt later from the current catalog.
+            Begin(session, new ToolDefinition[0], command).EnsureComplete();
+        }
+
+        internal void EnsureComplete()
+        {
+            if (!string.IsNullOrEmpty(_error)) throw HistoryFailure(_error);
+        }
+
+        private static InvalidOperationException HistoryFailure(string reason)
+        {
+            return new InvalidOperationException(reason +
+                " Откройте новый чат или явно сбросьте историю. Для ожидающего действия доступна отмена. " +
+                "Автоматическое преобразование или удаление истории не выполняется.");
+        }
+
         internal void ObserveAccepted(IEnumerable<AgentToolCall> calls)
         {
             // Observe the entire accepted response BEFORE any tool can pause/fail.
@@ -65,7 +107,8 @@ namespace RNAssistant.Office.Services
                     _error = "Accepted response contains an unidentified tool call.";
                     continue;
                 }
-                _acceptedIds.Add(call.Id);
+                if (!_acceptedIds.Add(call.Id))
+                    _error = "Accepted user-turn history contains a repeated tool-call id: " + call.Id + ".";
             }
         }
 
@@ -98,15 +141,7 @@ namespace RNAssistant.Office.Services
             {
                 var message = messages[index];
                 if (message == null || message.Activity != null ||
-                    !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
-                    (!message.ProtocolMessage && (message.ToolCalls == null || message.ToolCalls.Count == 0))) continue;
-                // Temporary consumer of the CURRENT v2 transcript's typed call metadata,
-                // not a v2 JSON reader or an old-chat migration. Remove at the v3 switch.
-                if (message.ResponseProtocolVersion == 2 && AgentResponseProtocol.CurrentVersion == 2)
-                {
-                    if (!ReadCurrentV2CallIds(message)) return;
-                    continue;
-                }
+                    !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)) continue;
                 var parsed = ConversationResponseHistoryReader.Read(message);
                 if (!parsed.Success)
                 {
@@ -119,26 +154,5 @@ namespace RNAssistant.Office.Services
                 _error = "Confirmed call is missing from accepted user-turn history.";
         }
 
-        private bool ReadCurrentV2CallIds(ChatMessage message)
-        {
-            if (string.IsNullOrWhiteSpace(message.ToolCallId))
-            {
-                _error = "Current v2 transcript is missing its accepted ToolCallId.";
-                return false;
-            }
-            var native = message.ToolCalls;
-            if (native != null && native.Count > 0)
-            {
-                if (native.Any(call => call == null || string.IsNullOrWhiteSpace(call.Id)) ||
-                    !native.Any(call => call.Id == message.ToolCallId))
-                {
-                    _error = "Current native transcript has inconsistent accepted call ids.";
-                    return false;
-                }
-                foreach (var call in native) _acceptedIds.Add(call.Id);
-            }
-            _acceptedIds.Add(message.ToolCallId);
-            return true;
-        }
     }
 }
