@@ -7,6 +7,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
+using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Services
 {
@@ -119,6 +120,18 @@ namespace RNAssistant.Office.Services
         private List<ToolDefinition> GetDocumentVbaTools()
         {
             if (!SupportsVbaHost()) return new List<ToolDefinition>();
+            try
+            {
+                // Cache identity, list and every component read share one access.
+                // Failed access is not a successful empty catalog and is not cached.
+                return _toolExecutor.DocumentRuntime.ReadDocument(null, ReadDocumentVbaTools);
+            }
+            catch (OfficeDocumentGuardException) { return new List<ToolDefinition>(); }
+            catch (HostRuntime.MutationLockException) { return new List<ToolDefinition>(); }
+        }
+
+        private List<ToolDefinition> ReadDocumentVbaTools()
+        {
             var host = _adapter.HostName ?? string.Empty;
             var documentKey = _adapter.DocumentKey ?? string.Empty;
             var runtimeDocumentKey = _adapter.RuntimeDocumentKey ?? string.Empty;
@@ -134,15 +147,8 @@ namespace RNAssistant.Office.Services
                 cacheGeneration = _documentVbaCacheGeneration;
             }
 
-            var documentGuard = _adapter as IOfficeDocumentExecutionGuard;
-            List<ToolDefinition> loaded;
-            using (documentGuard == null
-                ? null
-                : documentGuard.BeginExpectedDocument(host, documentKey, runtimeDocumentKey))
-            {
-                loaded = LoadDocumentVbaTools();
-            }
-            if (!string.Equals(cacheKey, CurrentDocumentVbaCacheKey(), StringComparison.OrdinalIgnoreCase))
+            var loaded = LoadDocumentVbaTools();
+            if (loaded == null || !string.Equals(cacheKey, CurrentDocumentVbaCacheKey(), StringComparison.OrdinalIgnoreCase))
             {
                 return new List<ToolDefinition>();
             }
@@ -182,15 +188,13 @@ namespace RNAssistant.Office.Services
 
         private List<ToolDefinition> LoadDocumentVbaTools()
         {
+            // Null means a backend read failed. Never publish a partial load or
+            // confuse failed access with a successfully empty document catalog.
             var result = new List<ToolDefinition>();
             ToolResult read;
-            try
-            {
-                var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_list_project_components_internal") };
-                read = _adapter.ExecuteTool(command);
-            }
-            catch { return result; }
-            if (read == null || !read.Success || string.IsNullOrWhiteSpace(read.DataJson)) return result;
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_list_project_components_internal") };
+            if (!TryReadDocumentVba(command, out read)) return null;
+            if (string.IsNullOrWhiteSpace(read.DataJson)) return result;
 
             JArray modules;
             try { modules = JObject.Parse(read.DataJson)["modules"] as JArray; }
@@ -206,7 +210,9 @@ namespace RNAssistant.Office.Services
                 string.Equals((string)module["type"], "StdModule", StringComparison.OrdinalIgnoreCase) &&
                 module.Value<bool?>("hasToolManifest") != false).ToList())
             {
-                var module = ReadDocumentModule(moduleMap, (string)moduleInfo["name"]);
+                bool readFailed;
+                var module = ReadDocumentModule(moduleMap, (string)moduleInfo["name"], out readFailed);
+                if (readFailed) return null;
                 if (module == null) continue;
                 var code = (string)module["code"] ?? string.Empty;
                 if (code.IndexOf("<RNAssistantTool>", StringComparison.Ordinal) < 0 || code.EndsWith("\n...[truncated]", StringComparison.Ordinal)) continue;
@@ -215,7 +221,8 @@ namespace RNAssistant.Office.Services
                 var discovered = parsed.Tool;
                 discovered.Scope = "document";
                 discovered.StoragePath = "VBA project: " + _adapter.DocumentTitle;
-                discovered.Components = ResolveDocumentComponents(discovered, moduleMap);
+                discovered.Components = ResolveDocumentComponents(discovered, moduleMap, out readFailed);
+                if (readFailed) return null;
                 if (discovered.Components.Any(component => string.IsNullOrWhiteSpace(component.Code)))
                 {
                     discovered.CapabilityStatus = "unavailable";
@@ -227,12 +234,15 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private List<VbaToolComponent> ResolveDocumentComponents(ToolDefinition tool, IDictionary<string, JObject> modules)
+        private List<VbaToolComponent> ResolveDocumentComponents(ToolDefinition tool, IDictionary<string, JObject> modules,
+            out bool readFailed)
         {
+            readFailed = false;
             var result = new List<VbaToolComponent>();
             foreach (var declared in tool.Components ?? new List<VbaToolComponent>())
             {
-                var module = ReadDocumentModule(modules, declared.Name);
+                var module = ReadDocumentModule(modules, declared.Name, out readFailed);
+                if (readFailed) return null;
                 var type = module == null ? string.Empty : (string)module["type"] ?? string.Empty;
                 var supported = string.Equals(type, "StdModule", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase) ||
@@ -252,22 +262,23 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private JObject ReadDocumentModule(IDictionary<string, JObject> modules, string moduleName)
+        private JObject ReadDocumentModule(IDictionary<string, JObject> modules, string moduleName, out bool readFailed)
         {
+            readFailed = false;
             JObject module;
             if (modules == null || !modules.TryGetValue(moduleName ?? string.Empty, out module)) return null;
             if (module["code"] != null) return module;
 
             ToolResult read;
-            try
+            var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_read_module") };
+            command.Arguments["moduleName"] = moduleName;
+            command.Arguments["maxChars"] = 2000000;
+            if (!TryReadDocumentVba(command, out read))
             {
-                var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_read_module") };
-                command.Arguments["moduleName"] = moduleName;
-                command.Arguments["maxChars"] = 2000000;
-                read = _adapter.ExecuteTool(command);
+                readFailed = true;
+                return null;
             }
-            catch { return null; }
-            if (read == null || !read.Success || string.IsNullOrWhiteSpace(read.DataJson)) return null;
+            if (string.IsNullOrWhiteSpace(read.DataJson)) return null;
 
             try
             {
@@ -278,6 +289,19 @@ namespace RNAssistant.Office.Services
                 return module;
             }
             catch (JsonException) { return null; }
+        }
+
+        private bool TryReadDocumentVba(ToolCommand command, out ToolResult read)
+        {
+            try { read = _adapter.ExecuteTool(command); }
+            catch (OfficeDocumentGuardException) { throw; }
+            catch (HostRuntime.MutationLockException) { throw; }
+            catch
+            {
+                read = null;
+                return false;
+            }
+            return read != null && read.Success;
         }
 
         private static bool PackageMatches(ToolDefinition global, ToolDefinition document)

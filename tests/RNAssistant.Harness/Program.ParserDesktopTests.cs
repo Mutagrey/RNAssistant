@@ -724,6 +724,283 @@ namespace RNAssistant.Harness
             AssertEqual("Excel:DocumentId:legacy-id", legacy, "existing persisted identity remains supported");
         }
 
+        private static void HostRuntimeDirectReadsPreserveRootAndTarget()
+        {
+            WithTempPaths(paths =>
+            {
+                using (var dispatcher = new OfficeStaDispatcher())
+                {
+                    var document = new BoundTestDocument { StableId = "doc", IsAlive = true };
+                    var session = new BoundTestOfficeSession(dispatcher, document, "direct-read", new object());
+                    var runtime = new HostRuntime(new BoundTestOfficeAdapter(session), paths);
+                    var target = BoundTestTarget(session);
+                    var calls = 0;
+                    AssertEqual("read", runtime.ReadDocument(target, () =>
+                    {
+                        AssertTrue(dispatcher.CheckAccess, "typed read runs on owner STA");
+                        using (runtime.BeginDocumentAccess(target)) { calls++; }
+                        AssertDirectReadBusy(runtime);
+                        return "read";
+                    }), "typed result preserved");
+                    try
+                    {
+                        runtime.ReadDocument<int>(target, () => { throw new InvalidOperationException("read failure"); });
+                        throw new Exception("read exception was swallowed");
+                    }
+                    catch (InvalidOperationException ex) { AssertEqual("read failure", ex.Message, "read failure propagated"); }
+                    AssertEqual(2, runtime.ReadDocument(target, () => ++calls), "failed read releases gate");
+                    target.RuntimeDocumentKey = "different-lifetime";
+                    try
+                    {
+                        runtime.ReadDocument(target, () => ++calls);
+                        throw new Exception("mismatched target was accepted");
+                    }
+                    catch (OfficeDocumentGuardException) { }
+                    dispatcher.Invoke(() => document.IsAlive = false);
+                    try
+                    {
+                        runtime.ReadDocument(null, () => ++calls);
+                        throw new Exception("closed document was accepted");
+                    }
+                    catch (OfficeDocumentGuardException) { }
+                    AssertEqual(2, calls, "rejected reads never enter action");
+                }
+            });
+        }
+
+        private static void DirectContextReadsShareDocumentAccess()
+        {
+            WithTempPaths(paths =>
+            {
+                using (var dispatcher = new OfficeStaDispatcher())
+                {
+                    var session = new BoundTestOfficeSession(dispatcher,
+                        new BoundTestDocument { StableId = "doc", IsAlive = true }, "context-read", new object());
+                    var adapter = new BoundTestOfficeAdapter(session);
+                    var runtime = new HostRuntime(adapter, paths);
+                    var capture = new OfficeContextCaptureService(adapter, runtime);
+                    var target = BoundTestTarget(session);
+                    var calls = new List<string>();
+                    adapter.BeforeRead = kind =>
+                    {
+                        AssertTrue(dispatcher.CheckAccess, "context/catalog callback on owner STA");
+                        AssertDirectReadBusy(runtime);
+                        calls.Add(kind);
+                    };
+                    var note = capture.CaptureSelection(target, "selection", 2000);
+                    AssertTrue(note != null && !string.IsNullOrWhiteSpace(note.Text), "selection returned");
+                    AssertTrue(calls.SequenceEqual(new[] { "prepare", "selection" }), "preparation and capture both gated");
+                    AssertTrue(capture.CaptureOfficeContext() != null, "UI context capture succeeds");
+                    AssertTrue(calls.Contains("context"), "UI context provider reached under gate");
+                    calls.Clear();
+                    var held = runtime.ExecuteForExpectedDocument(BoundTestTarget(session), true, () =>
+                    {
+                        AssertTrue(capture.CaptureOfficeContext() == null, "reentered UI context omitted on busy");
+                        try
+                        {
+                            capture.CaptureSelection(target, "selection", 2000);
+                            throw new Exception("reentered selection borrowed mutation access");
+                        }
+                        catch (HostRuntime.MutationLockException) { }
+                        return ToolResult.Ok("held");
+                    });
+                    AssertTrue(held.Success, "outer operation survives reentrant reads");
+                    AssertEqual(0, calls.Count, "busy reads do not call Office");
+                    adapter.BeforeRead = kind =>
+                    {
+                        if (kind == "prepare") throw new OfficeDocumentGuardException(
+                            ToolResult.Fail("closed during prepare", null, "active_document_changed", false));
+                        calls.Add(kind);
+                    };
+                    try
+                    {
+                        capture.CaptureSelection(target, "selection", 2000);
+                        throw new Exception("preparation guard was swallowed");
+                    }
+                    catch (OfficeDocumentGuardException) { }
+                    AssertEqual(0, calls.Count, "capture skipped after preparation guard failure");
+                    adapter.BeforeRead = null;
+                    AssertTrue(capture.CaptureOfficeContext() != null, "read gate released after preparation failure");
+                }
+            });
+        }
+
+        private static void DirectVbaCatalogReadsShareDocumentAccess()
+        {
+            WithTempPaths(paths =>
+            {
+                using (var dispatcher = new OfficeStaDispatcher())
+                {
+                    var document = new BoundTestDocument { StableId = "doc", IsAlive = true };
+                    var session = new BoundTestOfficeSession(dispatcher, document, "catalog-read", new object());
+                    var fake = new FakeOfficeAdapter();
+                    var package = BuildVbaPackageToolForTest();
+                    foreach (var component in package.Components)
+                        fake.SetVbaModule(component.Name, component.Code, component.Type);
+                    var adapter = new BoundTestOfficeAdapter(session, fake);
+                    var runtime = new HostRuntime(adapter, paths);
+                    var store = new ToolStore(paths);
+                    var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store, paths: paths);
+                    var catalog = new ToolCatalogService(adapter, executor, store);
+                    adapter.BeforeRead = kind =>
+                    {
+                        AssertTrue(dispatcher.CheckAccess, "VBA list and module read on owner STA");
+                        AssertDirectReadBusy(runtime);
+                    };
+                    Func<bool> hasPackage = () => catalog.GetVisibleTools().Any(tool => tool.Id == package.Id);
+                    AssertTrue(runtime.ExecuteForExpectedDocument(BoundTestTarget(session), true, () =>
+                    {
+                        AssertTrue(!hasPackage(), "busy catalog excludes unavailable document tools");
+                        AssertEqual(0, fake.Executed.Count, "busy catalog never reaches Office");
+                        return ToolResult.Ok("held");
+                    }).Success, "busy catalog preserves outer operation");
+                    AssertTrue(hasPackage(), "busy failure was not cached as empty discovery");
+                    AssertTrue(fake.Executed.Count(command => command.ToolId == "excel.vba_read_module") >= 2,
+                        "manifest and declared components read under the same gate");
+                    var readCount = fake.Executed.Count;
+                    AssertTrue(hasPackage(), "cache remains available with valid access");
+                    AssertEqual(readCount, fake.Executed.Count, "cache avoids repeated COM reads");
+
+                    foreach (var failComponent in new[] { false, true })
+                    foreach (var failureKind in new[] { "result", "gate", "exception" })
+                    {
+                        catalog.InvalidateDocumentVbaTools();
+                        var attempts = 0;
+                        var matchingReads = 0;
+                        fake.BeforeExecuteTool = command =>
+                        {
+                            attempts++;
+                            var failedTool = failComponent ? "excel.vba_read_module" : "excel.vba_list_project_components_internal";
+                            if (command.ToolId != failedTool || ++matchingReads != (failComponent ? 2 : 1)) return;
+                            if (failureKind == "gate") throw new HostRuntime.MutationLockException("transient catalog access failure", true);
+                            if (failureKind == "exception") throw new InvalidOperationException("transient backend read failure");
+                            fake.QueueResult(command.ToolId, ToolResult.Fail(
+                                "transient document guard failure", null, "active_document_changed", false));
+                        };
+                        AssertTrue(!catalog.GetVisibleTools().Any(tool => tool.Scope == "document"),
+                            "failed discovery publishes neither empty-cache success nor a partial package: " + failureKind);
+                        AssertEqual(failComponent ? 3 : 1, attempts, "failed access ends this load without retry");
+                        fake.BeforeExecuteTool = null;
+                        readCount = fake.Executed.Count;
+                        AssertTrue(hasPackage(), "next independent load recovers after " + failureKind);
+                        AssertTrue(fake.Executed.Count > readCount, "failed load was not cached");
+                    }
+
+                    catalog.InvalidateDocumentVbaTools();
+                    fake.QueueResult("excel.vba_list_project_components_internal", ToolResult.Ok("empty project", "{\"modules\":[]}"));
+                    AssertTrue(!hasPackage(), "successfully empty project has no document tools");
+                    readCount = fake.Executed.Count;
+                    AssertTrue(!hasPackage(), "successful empty catalog remains cached");
+                    AssertEqual(readCount, fake.Executed.Count, "successful empty discovery avoids repeated reads");
+                    catalog.InvalidateDocumentVbaTools();
+                    AssertTrue(hasPackage(), "explicit invalidation refreshes the successful empty cache");
+                    readCount = fake.Executed.Count;
+                    dispatcher.Invoke(() => document.IsAlive = false);
+                    AssertTrue(!hasPackage(), "closed session cannot reuse document catalog cache");
+                    AssertEqual(readCount, fake.Executed.Count, "closed session cannot access Office");
+                }
+            });
+        }
+
+        private static void AssertDirectReadBusy(HostRuntime runtime)
+        {
+            try
+            {
+                runtime.ReadDocument<int>(null, () => { throw new Exception("independent read borrowed access"); });
+                throw new Exception("independent read unexpectedly succeeded");
+            }
+            catch (HostRuntime.MutationLockException ex) { AssertTrue(ex.Retryable, "independent read reports busy"); }
+        }
+
+        private static void ExcelIdentityProbeParsesObjectIdentity()
+        {
+            var packet = ExcelIdentityProbePacket();
+            var parsed = ExcelIdentityProbe.ComIdentitySample.Parse(packet);
+            AssertEqual("fedcba9876543210:0123456789abcdef", parsed.Candidate, "unsigned little-endian OXID/OID decoded");
+            // Interface id and ref-count metadata are not document identity.
+            packet[24] = 32;
+            packet[28] = 17;
+            packet[48] = 99;
+            var otherInterface = ExcelIdentityProbe.ComIdentitySample.Parse(packet);
+            AssertEqual(parsed.Candidate, otherInterface.Candidate, "IPID and reference counts do not alter candidate");
+            AssertTrue(parsed.Ipid != otherInterface.Ipid, "interface observations remain distinguishable");
+            packet[40] ^= 1;
+            AssertTrue(parsed.Candidate != ExcelIdentityProbe.ComIdentitySample.Parse(packet).Candidate,
+                "different object in same exporter has a different candidate");
+        }
+
+        private static void ExcelIdentityProbeRejectsInvalidPackets()
+        {
+            var samples = new List<byte[]> { null, new byte[0], new byte[65537] };
+            var packet = ExcelIdentityProbePacket();
+            for (var length = 1; length < packet.Length; length++) samples.Add(packet.Take(length).ToArray());
+            foreach (var format in new byte[] { 0, 2, 3, 4, 8, 255 })
+            {
+                var unsupported = (byte[])packet.Clone();
+                unsupported[4] = format;
+                samples.Add(unsupported);
+            }
+            foreach (var offset in new[] { 0, 8, 64, 66, 70, 74 })
+            {
+                var malformed = (byte[])packet.Clone();
+                malformed[offset] = 255;
+                samples.Add(malformed);
+            }
+            foreach (var offset in new[] { 32, 40, 48 })
+            {
+                var emptyIdentity = (byte[])packet.Clone();
+                Array.Clear(emptyIdentity, offset, offset == 48 ? 16 : 8);
+                samples.Add(emptyIdentity);
+            }
+            samples.Add(packet.Concat(new byte[] { 0 }).ToArray());
+            foreach (var sample in samples)
+            {
+                try
+                {
+                    ExcelIdentityProbe.ComIdentitySample.Parse(sample);
+                    throw new Exception("invalid OBJREF acquired a candidate identity");
+                }
+                catch (InvalidDataException) { }
+            }
+        }
+
+        private static void ExcelIdentityProbeRejectsNonWindowsAccess()
+        {
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT) return;
+            try
+            {
+                ExcelIdentityProbe.ComIdentityLease.Create(new object());
+                throw new Exception("probe reached native work outside Windows");
+            }
+            catch (PlatformNotSupportedException) { }
+            try
+            {
+                ExcelIdentityProbe.ExcelProbeTarget.ResolveApplication(1);
+                throw new Exception("resolver reached native work outside Windows");
+            }
+            catch (PlatformNotSupportedException) { }
+        }
+
+        private static byte[] ExcelIdentityProbePacket()
+        {
+            using (var buffer = new MemoryStream())
+            using (var writer = new BinaryWriter(buffer))
+            {
+                writer.Write(0x574f454du);
+                writer.Write(1u);
+                writer.Write(new Guid("00000000-0000-0000-C000-000000000046").ToByteArray());
+                writer.Write(0u);
+                writer.Write(1u);
+                writer.Write(0xfedcba9876543210ul);
+                writer.Write(0x0123456789abcdeful);
+                writer.Write(new Guid("01234567-89ab-cdef-0123-456789abcdef").ToByteArray());
+                writer.Write((ushort)4);
+                writer.Write((ushort)2);
+                writer.Write(new byte[8]);
+                return buffer.ToArray();
+            }
+        }
+
         // Contract-only fixtures: caller-supplied identities do not simulate Excel COM identity resolution.
         private sealed class BoundTestDocument
         {
@@ -775,11 +1052,16 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider
         {
-            private readonly FakeOfficeAdapter _inner = new FakeOfficeAdapter();
+            private readonly FakeOfficeAdapter _inner;
 
-            public BoundTestOfficeAdapter(BoundTestOfficeSession session) { Session = session; }
+            public BoundTestOfficeAdapter(BoundTestOfficeSession session, FakeOfficeAdapter inner = null)
+            {
+                Session = session;
+                _inner = inner ?? new FakeOfficeAdapter();
+            }
+            public Action<string> BeforeRead { get; set; }
             public BoundTestOfficeSession Session { get; private set; }
             public IOfficeDocumentSession DocumentSession { get { return Session; } }
             public IOfficeStaDispatcher StaDispatcher { get { return Session.StaDispatcher; } }
@@ -788,10 +1070,11 @@ namespace RNAssistant.Harness
             public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
             public string DocumentTitle { get { return "Bound test document"; } }
             public string GetDocumentSnapshot(int maxChars) { return _inner.GetDocumentSnapshot(maxChars); }
-            public void PrepareForContextCapture() { _inner.PrepareForContextCapture(); }
-            public ContextNote CaptureSelectionContext(string mode, int maxChars) { return _inner.CaptureSelectionContext(mode, maxChars); }
+            public void PrepareForContextCapture() { BeforeRead?.Invoke("prepare"); _inner.PrepareForContextCapture(); }
+            public ContextNote CaptureSelectionContext(string mode, int maxChars) { BeforeRead?.Invoke("selection"); return _inner.CaptureSelectionContext(mode, maxChars); }
+            public OfficeContext GetOfficeContext() { BeforeRead?.Invoke("context"); return _inner.GetOfficeContext(); }
             public IEnumerable<ToolDefinition> GetBuiltInTools() { return _inner.GetBuiltInTools(); }
-            public ToolResult ExecuteTool(ToolCommand command) { return _inner.ExecuteTool(command); }
+            public ToolResult ExecuteTool(ToolCommand command) { BeforeRead?.Invoke(command.ToolId); return _inner.ExecuteTool(command); }
         }
 
         private sealed class BoundTestQueuedDispatcher : IOfficeStaDispatcher

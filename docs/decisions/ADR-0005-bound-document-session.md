@@ -73,6 +73,41 @@ whole synchronous action runs on its owner STA. Fake sessions exercise this port
 no production Excel factory supplies it yet. Legacy production adapters still use
 stable-key locks and stable-key OR runtime-key validation.
 
+## Delivered in 5B2: direct context/catalog reads
+
+`HostRuntime.ReadDocument` creates a new operation root and uses the same target,
+gate and guarded STA execution as tool access. `OfficeContextCaptureService` owns
+preparation plus selection capture; controller persistence follows after release.
+Preparation guard/access failures propagate; best-effort UI context returns null
+on failed access. `ToolCatalogService` holds one gate across cache identity/lookup,
+module discovery and every component read. A failed/null backend result or read
+exception aborts the entire load without an empty/partial cache or internal retry;
+a successful empty list remains cacheable. Closed bound sessions cannot reuse
+cached document tools. The former direct
+controller capture and catalog guard-only scope are removed.
+
+This independently switches the remaining read roots while the prerequisite
+Windows identity qualification blocks factory switching. Neutral fixtures cover
+root isolation, owner dispatch, failure cleanup, target/close rejection and cache
+behavior, not real controller/WebView/COM execution.
+
+## 5B2 identity candidate — qualification pending
+
+The diagnostic candidate is a retained standard COM marshal reference and its
+OXID/OID, scoped by the local Excel process and creation time. It is not yet the
+production runtime identity. The isolated [Excel identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md)
+records independent observations without modifying workbooks or switching factories.
+Only OBJREF_STANDARD/IUnknown is supported; any other format or cross-client mismatch
+blocks the candidate. No fallback to local pointer, path, HWND or a generated ID.
+
+The probe owns its marshal packet until explicit disposal on its creating STA.
+Identity lifetime, client attach/detach, close/reopen and in-process VSTO/native
+equivalence must be demonstrated, not inferred from parser tests. The probe README
+defines observations, actual call sites and cleanup evidence. Production liveness
+must remain separate from a retained COM reference. The diagnostic reader/resolver
+has no production consumer and is removed or replaced by the qualified implementation
+at the 5B2 candidate decision; it is not an additional runtime path.
+
 ## Remaining switch and qualification
 
 Phase 5B2 replaces the remaining legacy identity/binding together with all Excel factories and access
@@ -84,8 +119,8 @@ One live identity must be shared by desktop, VSTO and native clients/proxies. Th
 current local `IUnknown` address is not proof of that identity across apartments or
 processes; a path, HWND or per-adapter GUID is not a substitute. The identity and
 ownership mechanism must be chosen and qualified before switching factories.
-Direct context capture/selection and VBA catalog reads still need the same access
-boundary in 5B2; they are not gateway consumers protected by 5B1.
+The direct context/catalog access switch delivered above does not qualify this
+production identity mechanism or its UI/STA behavior.
 
 Fake host checks can cover ordering, cancellation and access release. They cannot
 close the Windows x64 + Office + VS 2022 gates for STA/COM identity, workbook switches,

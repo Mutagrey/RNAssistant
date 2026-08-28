@@ -155,6 +155,7 @@
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />
     <Compile Include="Services\DocumentOpenService.cs" />
     <Compile Include="Services\ContextService.cs" />
+    <Compile Include="Services\OfficeContextCaptureService.cs" />
     <Compile Include="Services\BuiltInSkillProvider.cs" />
     <Compile Include="Services\SkillCatalogService.cs" />
     <Compile Include="Services\ToolCatalogService.cs" />

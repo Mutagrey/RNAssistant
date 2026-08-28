@@ -31,6 +31,8 @@ namespace RNAssistant.Office.Tools
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
         private readonly HostRuntime _hostRuntime;
 
+        internal HostRuntime DocumentRuntime { get { return _hostRuntime; } }
+
         public OfficeToolExecutor(
             IOfficeApplicationAdapter adapter,
             VbaJournalStore vbaJournalStore,

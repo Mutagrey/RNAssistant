@@ -112,14 +112,48 @@ namespace RNAssistant.Office.Runtime
             }
         }
 
+        internal T ReadDocument<T>(OfficeDocumentExecutionExpectation target, Func<T> action)
+        {
+            // UI/context/catalog reads are independent roots, including callbacks
+            // reentered on an STA already executing another document operation.
+            using (DocumentAccessGate.BeginOperation())
+            {
+                var provider = _adapter as IOfficeDocumentSessionProvider;
+                if (target == null && (provider == null || provider.DocumentSession == null))
+                {
+                    target = new OfficeDocumentExecutionExpectation
+                    {
+                        Host = _adapter.HostName,
+                        DocumentKey = _adapter.DocumentKey,
+                        RuntimeDocumentKey = _adapter.RuntimeDocumentKey
+                    };
+                }
+                var access = CaptureAccess(target);
+                using (EnterAccess(access, CancellationToken.None))
+                {
+                    return ExecuteGuarded<T>(access, target, CancellationToken.None, action);
+                }
+            }
+        }
+
         private ToolResult ExecuteGuarded(DocumentAccess access,
             OfficeDocumentExecutionExpectation target, CancellationToken cancellationToken, Func<ToolResult> action)
         {
-            Func<ToolResult> guarded = delegate
+            try { return ExecuteGuarded<ToolResult>(access, target, cancellationToken, action); }
+            catch (OfficeDocumentGuardException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+            }
+        }
+
+        private T ExecuteGuarded<T>(DocumentAccess access,
+            OfficeDocumentExecutionExpectation target, CancellationToken cancellationToken, Func<T> action)
+        {
+            Func<T> guarded = delegate
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var mismatch = CheckTarget(access, target);
-                if (mismatch != null) return mismatch;
+                if (mismatch != null) throw new OfficeDocumentGuardException(mismatch);
                 var expectation = HasExpectation(target) ? target : access.Session == null ? null :
                     new OfficeDocumentExecutionExpectation
                     {

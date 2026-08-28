@@ -1,12 +1,12 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 5B1 — document access gate (done host-neutral)
-Current task: guard/preparation/dispatch/read-back и live readers используют один operation/target gate; введён нейтральный bound-session port. Удалены прежние monitor/depth helpers, fake tests проверяют reentry, STA/cancellation и cleanup. [Evidence](#phase-5b1--document-access-gate).
+Current phase: Phase 5B2 — direct context/catalog reads switched host-neutral; Excel binding pending
+Current task: review direct reads завершён; исправлена публикация cache после failed backend read. Подготовлен изолированный Windows probe кандидата OXID/OID + retained marshal reference. Production identity/factories не переключены. [Read evidence](#phase-5b2--direct-contextcatalog-reads), [probe evidence](#phase-5b2--identity-qualification-probe).
 
-Next step: отдельный Phase 5B2 — выбрать и квалифицировать общую runtime lifetime identity desktop/VSTO/native, ввести ExcelDocumentSession и переключить factories/прямые context/catalog reads. ActiveWorkbook fallback удаляется после bound switch и Windows tests. Phase 6 и Phase 9 не начаты; R32 остаётся requirements-only.
+Next step: выполнить Windows qualification по [probe README](../../tests/RNAssistant.ExcelIdentityProbe/README.md): два внешних клиента плюс реальные desktop/VSTO/native owner STA, Save As/close/reopen/attach-detach и cleanup. После evidence принять или отклонить кандидат, затем ввести ExcelDocumentSession и переключить factories. ActiveWorkbook fallback удаляется после bound switch и Windows tests. Phase 6 и Phase 9 не начаты; R32 остаётся requirements-only.
 Required context: [master Phase 5](STABILIZATION_MASTER_PLAN.md#phase-5--bound-documentsession-и-hostruntime), [Document Session contract](STABILIZATION_MASTER_PLAN.md#79-document-session-v1), [ADR-0005](../decisions/ADR-0005-bound-document-session.md), [architecture](../architecture.md), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: R04 открыт — production adapters ещё используют stable-key locks, OR identity и ActiveWorkbook/descriptor lookup. Нейтральный port/fake identity не являются Excel binding; прямые selection/context capture и VBA catalog reads ещё вне gate. Требуются Windows x64 + Office + VS 2022; R28 streaming / R29 live-provider и R30 Phase 8 lifecycle gates остаются. Domain→typed/UI-only adapters — по MIGRATION_MAP. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: R04 открыт — production adapters ещё используют stable-key locks, OR identity и ActiveWorkbook/descriptor lookup. Нейтральный port/fake identity не являются Excel binding; direct reads уже под gate, но controller wiring и production identity/STA ещё не квалифицированы. Требуются Windows x64 + Office + VS 2022; R28 streaming / R29 live-provider и R30 Phase 8 lifecycle gates остаются. Domain→typed/UI-only adapters — по MIGRATION_MAP. Product 16.1.0-dev, no release/tag.
 
 R32 requirements (2026-08-28, docs-only поверх `b754443`): по замечанию пользователя зафиксированы [сквозной журнал запуска и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md), inventory read-only consumers и acceptance Phase 9A–9C. Vendor-first оценка компактных готовых компонентов добавлена; конкретный vendor не выбран/не подключён. Runtime/UI не менялись; итоги 4B и следующий Phase 5 сохранены. Docs diff/9 новых локальных ссылок и anchors — pass; build/tests не запускались. Реализация, targeted UI/query tests и Windows/WebView qualification открыты; R28/R29 live gates этим требованием не закрываются.
 
@@ -40,7 +40,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 3 | done host-neutral | 3A: `f01c3f2`; 3B1: `c1628ce`; 3B2: `15dea46` | 130 unique targeted cases; MockDemo compile; [evidence](PHASE_3B2_KERNEL_CUTOVER.md) | not performed | Production kernel switch + minimal real-store replay; Phase 4 отдельно |
 | 2/3 R29 | done host-neutral | этот commit | 141 unique targeted cases; MockDemo compile; [evidence](R29_RUNTIME_CALL_IDS.md) | not performed | Runtime IDs + v4; no v3 fallback, product version unchanged |
 | 4 | done host-neutral: 4A + 4B | 85cc3f4 (4A); b754443 (4B) | 4B: 127 distinct targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime](PHASE_4A_TOOL_RUNTIME.md), [v1 wire/cleanup](PHASE_4B_TOOL_RESULT_V1.md); domain/Windows gates remain |
-| 5 | 5A + 5B1 done host-neutral; 5B2 pending | 3a6c2aa (5A); current 5B1 commit | [26 targeted checks](#phase-5b1--document-access-gate) | not performed | Operation gate switched; production Excel binding/common runtime identity remains 5B2 |
+| 5 | 5A + 5B1 done host-neutral; 5B2 read switch done, identity probe ready | 3a6c2aa (5A); a1b3d80 (5B1); текущий 5B2 commit | [read checks](#phase-5b2--direct-contextcatalog-reads), [probe checks](#phase-5b2--identity-qualification-probe) | not performed | Production binding blocked on identity qualification |
 | 6 | pending | — | — | — | VBA vertical slice |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
@@ -319,6 +319,42 @@ Verification (2026-08-28): **26 distinct tests pass**, C# 7.3 / host-neutral .NE
 
 Реальная COM identity/STA reentrancy, desktop/VSTO/native factories, active window/close/reopen/Save As и несколько клиентов требуют Windows x64 + Office + VS 2022. Здесь не запускались Office/VSTO validation, full harness или MockDemo build. Phase 5 целиком и R04 не закрыты; следующий шаг 5B2, без Phase 6/9.
 
+## Phase 5B2 — direct context/catalog reads
+
+Закрыт host-neutral read switch внутри 5B2. Конкретный блокер полного switch — предварительная Windows qualification общей runtime lifetime identity до переключения Excel factories (ADR-0005); production identity/binding не вводились. `HostRuntime.ReadDocument` использует существующий gate/guard/STA path отдельным operation root. `OfficeContextCaptureService` убирает прямой capture из controller, держит prepare/capture вместе и возвращает результат до persistence; VBA catalog держит cache identity/list/components под тем же gate. Busy/closed access не кэшируется как пустой catalog. Review выявил и исправил второй путь: failed/null backend result или exception при module list/component read теперь прерывает всю загрузку без публикации пустого/частичного cache и без внутреннего retry. Следующее независимое чтение может загрузить catalog заново; успешный пустой список по-прежнему кэшируется. UI context остаётся best-effort, selection guard/access failure не проглатывается.
+
+Локальная чистка: удалены controller-owned capture implementation и catalog guard-only scope; общая guarded execution переиспользована без второго gate. Новый service включён в old-style Office project. Kernel, protocol, storage, UI и Excel/VBA algorithms не менялись. Consumers/removal gates обновлены в MIGRATION_MAP; legacy stable-key/OR identity и ActiveWorkbook/descriptor lookup остаются до production switch и Windows tests.
+
+Verification после review (2026-08-28): **12/12 свежих targeted cases pass**, C# 7.3 / host-neutral .NET 8. Один build: `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "host runtime:"` — 10/10. Расширен существующий catalog case: list/component failure через failed result, gate exception и generic exception; отсутствие cache/internal retry, последующая независимая загрузка и cache успешного пустого списка. Затем `dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "<filter>"`: `vba: document tools discovered` — 1/1, `tools: catalog merges visible tools` — 1/1.
+
+Из первоначального 5B2 read-switch run переиспользованы ещё **9 pass**: относящиеся production/test methods, dependencies, build settings и environment не менялись review-fix; повторного запуска этих filters не было.
+
+| Reused filter | Pass |
+|---|---:|
+| `harness: production projects include all source files` | 1 |
+| `vba: queued guard` | 1 |
+| `vba: confirmed mutation` | 1 |
+| `waits for active mutation` | 5 |
+| `desktop com: adapter dispatches calls` | 1 |
+
+Harness использует controller bridge stub; его tests проверяют production capture service, не controller wiring. Поэтому дополнительно выполнен `dotnet build demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -c Release --nologo -v:minimal`: **pass, 0 errors / 3 существующих CA1416 PDF warnings**; actual controller sources компилируются. Demo runtime/self-test и Windows controller/WebView поведение этим не проверены.
+
+Pre-commit `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal` — pass. Diff и 11 затронутых local links/anchors — pass. Product version остаётся `16.1.0-dev`; release script/tag/push не выполнялись.
+
+Windows x64 + Office + VS 2022 обязательны для controller/WebView, COM identity/STA reentrancy и всех factory/lifetime сценариев. Office/VSTO validation и full harness не запускались. Phase 5/R04 не закрыты; следующий шаг и обязательные документы — в заголовке.
+
+## Phase 5B2 — identity qualification probe
+
+Подготовлен отдельный `tests/RNAssistant.ExcelIdentityProbe` (net48/x64, C# 7.3), не подключённый к production/solution. Кандидат — OXID/OID из стандартного IUnknown OBJREF плюс scope Excel process/start time; original marshal reference удерживается до STA dispose. Неизвестный format, неполный packet и пустая identity отвергаются без fallback. Native-OM driver выбирает explicit HWND/workbook index один раз; последующие snapshots не перепривязывают закрытую книгу. Данные книги не меняются, raw marshal packets не экспортируются.
+
+Проверены primary Microsoft specifications; выбор остаётся кандидатом до реальных proxy/lifetime наблюдений. [Probe README](../../tests/RNAssistant.ExcelIdentityProbe/README.md) содержит Windows команды, реальные desktop/VSTO/native call sites, acceptance observations и ownership/removal gate. Это инструмент для конкретного блокера ближайшего factory switch, не новый runtime adapter. Production `RuntimeKey`, ExcelAdapter/factories и ActiveWorkbook fallback не изменены; cleanup кандидата — при его принятии/отклонении в 5B2.
+
+Исходная verification (2026-08-28): `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "excel identity probe:"` — **3/3 pass**: unsigned LE/object-vs-interface identity, malformed/unsupported/bounded packets, non-Windows refusal до native access. Этот результат переиспользован при review: probe sources/tests, dependencies, build settings и environment неизменны. Свежий read-switch build также скомпилировал probe C# sources; 4 ожидаемых CA1416 warnings у guarded Windows COM calls. Итого для 5B2 **24 distinct cases: 12 свежих + 12 reused**, без повторного полного прогона. Это не net48/PowerShell/Office validation.
+
+Probe project XML/explicit includes/whitespace проверены при исходной подготовке; sources/project не менялись при review. В README уточнено: запись `released` подтверждает только успешный return из Dispose, а полное освобождение ссылок/lifetime требует отдельных Windows наблюдений.
+
+Windows net48 build, PowerShell driver, COM marshal/cleanup, реальная identity и full controller/Office matrix **не запускались**; PowerShell здесь отсутствует. R04/Phase 5 остаются открытыми. Next gate — результаты Windows qualification; без них factories не переключать, Phase 6/9 не начинать.
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
@@ -328,7 +364,7 @@ Verification (2026-08-28): **26 distinct tests pass**, C# 7.3 / host-neutral .NE
 | LegacyToolDefinitionAdapter | ToolRuntime | Current catalog/schema/authoring, legacy execution, source policy projection | Phase 8 typed catalog/ToolPack; domain switches 6–7 / optional authoring 11; central name list removed in 4A |
 | LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Handler switches 6–7 / optional 11; no old-history reader |
 | ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 typed UI projection; manual/domain consumers 6–7 / optional 11 |
-| Unbound host identity/access | HostRuntime / host factories | Production adapters and direct context/catalog reads | 5B2 bound Excel/common lifetime identity + Windows gates; neutral gate не удаляет этот legacy |
+| Unbound host identity/access | HostRuntime / host factories | Production adapters, including gated context/catalog reads | 5B2 bound Excel/common lifetime identity + Windows gates; neutral gate не удаляет этот legacy |
 
 Permanent model-session/metadata owners не являются compatibility adapters.
 Остальные consumers/removal gates — в [MIGRATION_MAP.md](MIGRATION_MAP.md).

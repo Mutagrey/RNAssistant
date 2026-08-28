@@ -1732,13 +1732,16 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 ### Выполнить
 
 - [x] 5B1: ввести `IOfficeDocumentSession` и нейтрального consumer в HostRuntime; production providers появятся только в 5B2.
+- [x] 5B2: подготовить отдельный [identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md) кандидата OXID/OID с retained marshal reference; production identity не переключать по результатам parser tests.
+- [ ] 5B2: квалифицировать candidate lifetime и равенство desktop/VSTO/native на Windows до выбора production identity и switch factories.
 - [ ] Ввести `ExcelDocumentSession`.
 - [x] 5A: выделить текущую document access/serialization из `OfficeToolExecutor` в `HostRuntime`; старые helpers удалить.
 - [ ] 5B2: выделить выбор/удержание workbook из `ExcelAdapter`; write/read-back должны получать тот же bound object. Charts/formatting и прочие host adapters не рефакторить попутно.
 - [ ] Bind конкретного document object до execution.
 - [ ] Сериализовать writes по `RuntimeDocumentId`.
 - [x] 5B1: gate охватывает guard/preparation/live read, dispatch и read-back; resource/manual/editor paths используют тот же gate. Reentry только для той же operation/target, порядок document → shared; release при confirmation, повторная проверка после ожидания. Evidence — [PROGRESS](PROGRESS.md#phase-5b1--document-access-gate); Windows gate ниже остаётся открыт.
-- [ ] 5B2: прямые selection/context capture и VBA catalog reads переключить на bound access; UI reentrancy не должна наследовать доступ текущей mutation.
+- [x] 5B2 read switch (host-neutral): selection/context capture и VBA catalog reads используют HostRuntime.ReadDocument; отдельный operation root не наследует доступ mutation. Gate охватывает prepare/capture и cache/list/components; [evidence](PROGRESS.md#phase-5b2--direct-contextcatalog-reads).
+- [ ] 5B2: квалифицировать эти reads с production ExcelDocumentSession/factories и реальной UI/STA reentrancy на Windows; neutral switch не доказывает COM binding.
 - [ ] Удалить fallback на `ActiveWorkbook` из agent mutation path.
 - [ ] `ActiveWorkbook` оставить только для user action «выбрать текущую книгу».
 - [ ] Write и read-back выполнять через один bound object.

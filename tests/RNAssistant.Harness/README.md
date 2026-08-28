@@ -37,7 +37,8 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
 | Tool Result v1 / strict JSON | `Program.ToolResultWireTests.cs`; projection checks in `Program.ToolRuntimeTests.cs` | `tool result wire:`, `tool result materialization:` |
 | Native ToolRuntime / typed contracts and effect evidence | `Program.ToolRuntimeTests.cs`; native read in `Program.ResourceGatewayTests.cs` | `tool runtime:` |
-| Host document gate / neutral bound session | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
+| Host document gate / neutral bound session / direct context and catalog reads | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
+| Excel identity candidate probe (no Office execution) | `Program.ParserDesktopTests.cs`; source-linked `RNAssistant.ExcelIdentityProbe` | `excel identity probe:` |
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
 | Office model-context owner | `Program.ToolDiscoveryTests.cs`; result/projection coverage in `Program.AgentSafetyTests.cs` | `agent: model session`, `agent: bounds oversized`, `context inspector:`, `protocol context:` |
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
@@ -56,9 +57,16 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 The `harness:` slice also verifies that every production `.cs` file is explicitly included in its old-style `.csproj`, preventing source-linked harness globs from hiding a broken production project.
 
 The bound-session fixtures test operation ownership, STA handoff/cancellation,
-Save As, close/reopen rejection and gate cleanup using supplied fake identities.
+Save As, close/reopen rejection, gate cleanup and direct context/catalog root isolation
+using supplied fake identities. Capture service tests do not run the real controller;
+the harness uses a bridge stub, so controller wiring remains a Windows gate.
 They do not validate real Excel COM identity, production binding or Windows UI
 reentrancy. Those remain Phase 5B2 gates in [ADR-0005](../../docs/decisions/ADR-0005-bound-document-session.md).
+
+The [Excel identity probe](../RNAssistant.ExcelIdentityProbe/README.md) is an isolated
+Windows diagnostic project, not referenced by production. Its harness filter checks
+bounded OBJREF parsing and non-Windows refusal only; it does not execute COM, marshal
+cleanup, the PowerShell driver or Windows qualification.
 
 Versioning changes use the existing `Program.ProjectStructureTests.cs` suite:
 

@@ -40,6 +40,7 @@ namespace RNAssistant.Office
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
         private readonly ContextService _contextService;
+        private readonly OfficeContextCaptureService _officeContextCapture;
         private readonly LlmClient _llmClient;
         private readonly LlmCompletionDelegate _llmCompletion;
         private readonly object _syncRoot;
@@ -82,6 +83,7 @@ namespace RNAssistant.Office
                 _chatStore.LoadArtifactBody,
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
+            _officeContextCapture = new OfficeContextCaptureService(_adapter, _toolExecutor.DocumentRuntime);
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
             _chatRuns = new ChatRunRegistry(_paths);
             _casMaintenanceService = new CasMaintenanceService(
@@ -184,7 +186,7 @@ namespace RNAssistant.Office
                 Host = _adapter.HostName,
                 DocumentKey = _adapter.DocumentKey,
                 Title = _adapter.DocumentTitle,
-                OfficeContext = CaptureOfficeContext(),
+                OfficeContext = _officeContextCapture.CaptureOfficeContext(),
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
@@ -211,24 +213,6 @@ namespace RNAssistant.Office
                     session == null ? null : session.HtmlWorkspaceRecovery),
                 QuickAction = DequeueQuickAction()
             };
-        }
-
-        private OfficeContext CaptureOfficeContext()
-        {
-            var provider = _adapter as IOfficeContextProvider;
-            if (provider == null)
-            {
-                return null;
-            }
-
-            try
-            {
-                return provider.GetOfficeContext();
-            }
-            catch
-            {
-                return null;
-            }
         }
 
         internal IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()

@@ -53,18 +53,15 @@ namespace RNAssistant.Office
                 var settings = ResolveChatSettings(session);
                 EnsureCurrentDocument(session);
                 var context = LoadContext(session);
-                try
+                var target = new OfficeDocumentExecutionExpectation
                 {
-                    _adapter.PrepareForContextCapture();
-                }
-                catch
-                {
-                }
-                var note = _adapter.CaptureSelectionContext(
-                    mode,
+                    Host = session.Host,
+                    DocumentKey = session.DocumentKey,
+                    RuntimeDocumentKey = CaptureExpectedRuntimeDocumentKey(session)
+                };
+                var note = _officeContextCapture.CaptureSelection(target, mode,
                     ModelContextBudget.ApproximateTextCharacterCapacity(
-                        ModelContextBudget.InputBudgetTokens(settings),
-                        settings));
+                        ModelContextBudget.InputBudgetTokens(settings), settings));
                 if (note == null)
                 {
                     throw new InvalidOperationException("No selectable Office context was found.");
