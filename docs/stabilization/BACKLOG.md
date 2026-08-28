@@ -26,6 +26,7 @@
 | 7 | Excel read/write vertical slice | Bound target, write-effect evidence |
 | 8 | Resource read plane / immutable ToolPack | Заменить внешний lifecycle без переделки kernel; bounded pinned schema/policy/binding, compaction materialization, atomic admission; no LRU eviction и no CAS transport (R30) |
 | 9 | Persistence / UI projection | Расширить minimal replay Phase 3: один event authority, mandatory durable barriers/result-append faults, typed verification projection; replay не принимает execution decisions |
+| 9A–9C / R32 | Сквозной журнал запуска и общий JSON viewer | [Требования и acceptance](R32_DIAGNOSTICS_JSON_VIEWER.md): correlated query → lossless bounded viewer для всех read-only JSON surfaces → раскрываемый журнал; удалить заменённые paths, Windows/WebView gate. Не входит в 4B |
 | 10 | Финальная структурная сверка и architecture tests | Чистка и проверки границ уже выполняются при switch; дополнить coverage, закрыть core-миграции; optional consumers оставить с gates Phase 11 |
 | 12 | Release qualification и packaging | Gates основного маршрута; Windows x64 + Office x64 + VS 2022; Phase 11 не блокирует |
 | 11 | Optional contours | После stable core либо отдельно согласованный post-beta milestone; не расширять release-critical scope автоматически |

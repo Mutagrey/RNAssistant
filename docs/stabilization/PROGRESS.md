@@ -4,9 +4,11 @@ Current target: 16.1.0
 Current phase: Phase 4B — Tool Result v1 atomic cutover (done host-neutral)
 Current task: writer/readers/prompts/history gate переключены одним изменением; R31 исправлен. [Evidence / 127 distinct targeted tests](PHASE_4B_TOOL_RESULT_V1.md#verification), MockDemo 0 errors / 3 existing CA1416.
 
-Next step: отдельный Phase 5 — bound DocumentSession / HostRuntime. Phase 5 не начата; Phase 9/R32 docs готовятся отдельно и не включены в этот switch.
+Next step: отдельный Phase 5 — bound DocumentSession / HostRuntime. Phase 5 не начата; Phase 9/R32 requirements оформлены отдельным docs-only изменением, UI не реализован.
 Required context: [master Phase 5](STABILIZATION_MASTER_PLAN.md#phase-5--bound-documentsession-и-hostruntime), [Document Session contract](STABILIZATION_MASTER_PLAN.md#79-document-session-v1), [architecture](../architecture.md), [active result contract](../conversation-protocol.md#tool-result), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
 Open gates / remaining legacy: Windows x64 + Office + VS 2022, controller cancellation/WebView delivery; R28 streaming и R29 live-provider qualification. R30 wire/resource gate закрыт host-neutral, Phase 8 lifecycle открыт. Legacy domain preparation/document binding и domain→typed/UI-only adapters — по MIGRATION_MAP. Старые result writer/readers и ProjectLegacy удалены. Product 16.1.0-dev, no release/tag.
+
+R32 requirements (2026-08-28, docs-only поверх `b754443`): по замечанию пользователя зафиксированы [сквозной журнал запуска и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md), inventory read-only consumers и acceptance Phase 9A–9C. Vendor-first оценка компактных готовых компонентов добавлена; конкретный vendor не выбран/не подключён. Runtime/UI не менялись; итоги 4B и следующий Phase 5 сохранены. Docs diff/9 новых локальных ссылок и anchors — pass; build/tests не запускались. Реализация, targeted UI/query tests и Windows/WebView qualification открыты; R28/R29 live gates этим требованием не закрываются.
 
 R29 (предыдущий commit `6a256f0`): model wire содержит только name/arguments, kernel выдаёт ID до accepted append/confirmation/dispatch; ToolCallId + immutable attempt/position origin сохраняются в том же stream без переписывания raw response. Tests покрывают long HTML, allocator failure, native pairing, repair correlation, confirmation/replay и ISO-preserving clone. [Evidence/ограничения/чистка](R29_RUNTIME_CALL_IDS.md); этот protocol switch завершён до Phase 4, product version остаётся 16.1.0-dev.
 

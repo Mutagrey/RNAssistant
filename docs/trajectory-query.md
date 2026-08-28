@@ -2,6 +2,11 @@
 
 `ITrajectoryQuery` is a read-only, disposable projection over a fully validated session event stream. The implementation receives canonical `SessionEvent` records from `ChatStore`, builds query metadata in memory, returns one page, and discards it. It never writes an index or another history file.
 
+Planned Phase 9 UI, not current behavior: [R32 — run journal and shared JSON viewer](stabilization/R32_DIAGNOSTICS_JSON_VIEWER.md).
+It will expose one expandable causal run view over these source events, with bounded,
+lossless JSON inspection and explicit missing/truncated evidence. Existing query/export
+authority and raw pagination remain intact; the target UI is not a second durable log.
+
 ## Query contract
 
 Results are ordered newest first. `pageSize` defaults to 100 and is capped at 200. `nextCursor` is an exclusive sequence cursor (`seq:<n>`), so later appends do not shift older pages.

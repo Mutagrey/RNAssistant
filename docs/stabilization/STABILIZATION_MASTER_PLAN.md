@@ -1911,10 +1911,16 @@ Resource provider можно добавить без изменения AgentKer
 - [ ] Не вводить второй durable source of truth.
 - [ ] Сохранить ordered durability: referenced CAS payload durable до ссылающегося event; accepted call/start до effect, result evidence до следующего model step. Mandatory append failure до dispatch запрещает effect; после возможного dispatch — остановка и reload/reconciliation, без fabricated terminal и auto retry.
 - [ ] Проверить result-append failure после write, restart при незавершённом tool start, CAS failure и конфликт revision при queued stream chunks. Optional trace не заменяет mandatory run/tool events; replay не выполняет tools и не пересчитывает прошлое по новой policy.
+- [ ] R32: реализовать [сквозной журнал и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md) отдельными подэтапами: 9A — truth/query, 9B — viewer и read-only consumers, 9C — journal UI/qualification. Phases 4–8 этим требованием не расширяются.
+- [ ] Из сообщения/ошибки открывать один хронологический журнал запуска с раскрываемыми строками request → model attempts/repair → accepted call → confirmation/dispatch → result/effect. Сохранять source IDs/origin и различать proposal, execution, verified effect, no-op, unknown и отсутствующие evidence; не вводить второй durable журнал.
+- [ ] Все read-only JSON surfaces используют один bounded viewer: дерево/подсветка, raw/pretty, node/path/value copy, явные incomplete/redacted/error states. Raw/token fidelity, безопасный text rendering и async stale guards обязательны; редакторы/transport serializers не подменяются viewer. Удалить заменённые render/copy paths при switch.
 
 ### Definition of Done
 
 После restart/replay UI показывает тот же authoritative outcome, что был рассчитан при выполнении.
+Acceptance R32 включает понятную навигацию по одному запуску, lossless JSON/HTML copy,
+bounded rendering и реальные WebView/clipboard проверки на Windows. R28/live streaming
+проверяется отдельно; новый viewer или синтетический trace не закрывает его автоматически.
 
 ---
 
