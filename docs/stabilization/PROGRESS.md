@@ -12,6 +12,15 @@ Cleanup/readiness review (2026-08-28, baseline `1ea3ce0`): удаление cont
 
 R32 requirements (2026-08-28, docs-only поверх `b754443`): по замечанию пользователя зафиксированы [сквозной журнал запуска и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md), inventory read-only consumers и acceptance Phase 9A–9C. Vendor-first оценка компактных готовых компонентов добавлена; конкретный vendor не выбран/не подключён. Runtime/UI не менялись; итоги 4B и следующий Phase 5 сохранены. Docs diff/9 новых локальных ссылок и anchors — pass; build/tests не запускались. Реализация, targeted UI/query tests и Windows/WebView qualification открыты; R28/R29 live gates этим требованием не закрываются.
 
+R35 security hotfix (2026-08-29, отдельно от Phase 9): existing `DOMPurify 3.1.6`,
+который очищает результат `marked` перед HTML insertion, заменён точным upstream
+`3.4.14`; версия 3.1.6 входит в affected range GHSA-v2wj-7wpq-c8vv. Зафиксированы
+npm integrity, git head, vendored SHA-256 и обе license texts. Markdown adapter,
+CSP и остальные vendors не менялись. Headless Chromium загрузил vendored bundle
+с `file://`, подтвердил version 3.4.14 и удаление script/event handlers в двух
+malicious inputs; `node --check`, diff/links и version format — перед commit.
+Реальный WebView2 на Windows не проверен; текущая Phase 6 и следующий slice не меняются.
+
 R29 (предыдущий commit `6a256f0`): model wire содержит только name/arguments, kernel выдаёт ID до accepted append/confirmation/dispatch; ToolCallId + immutable attempt/position origin сохраняются в том же stream без переписывания raw response. Tests покрывают long HTML, allocator failure, native pairing, repair correlation, confirmation/replay и ISO-preserving clone. [Evidence/ограничения/чистка](R29_RUNTIME_CALL_IDS.md); этот protocol switch завершён до Phase 4, product version остаётся 16.1.0-dev.
 
 Architecture audit (2026-08-28, docs-only commit `1f65f5d`, baseline `15dea46`): уточнены ID ownership, batch/control boundaries, actual effect evidence, ResourceRef transport (R30), pinned/bounded ToolPack, host gate, raw/comparable hashes и durable barriers будущих Phases 4–9. Убраны stale v2/media указания в canonical docs. Решение Phase 8 о конечном immutable pack сохранено; действовавшие на том baseline v3/LRU/runtime не менялись этим docs commit, позднее v4 включён отдельным R29. Критерии привязаны к фазам в master/backlog; R28/R29 и Windows gates открыты. Diff/13 затронутых ссылок — OK; pre-commit `ValidateVersionFormat` — pass. Build/tests не запускались, новые runtime-инварианты не объявлены проверенными. Phase 4 оставалась отдельным следующим этапом.
