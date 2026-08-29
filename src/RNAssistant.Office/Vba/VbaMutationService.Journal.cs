@@ -1,5 +1,5 @@
 using System;
-using Newtonsoft.Json;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -9,116 +9,150 @@ namespace RNAssistant.Office.Vba
 {
     internal sealed partial class VbaMutationService
     {
-        public bool TryPrepareJournaledMutation(
-            ToolCommand command,
-            ChatSession session,
-            string operation,
-            string moduleName,
-            VbaModuleState before,
-            bool intendedAfterExists,
-            string intendedAfterCode,
-            string intendedComponentType,
-            out VbaMutationPreparation prepared,
-            out ToolResult error)
+        public VbaMutationPreparationResult PrepareJournaledMutation(
+            VbaModuleMutationRequest request)
         {
-            prepared = null;
-            error = null;
+            if (request == null)
+            {
+                return new VbaMutationPreparationResult
+                {
+                    Error = VbaMutationOutcome.Error(
+                        "VBA mutation preparation is missing.",
+                        null,
+                        "vba_mutation_preparation_missing",
+                        false)
+                };
+            }
+
             try
             {
-                var guard = ReadGuard(command);
-                var beforeExists = before != null;
-                prepared = _journalStore.PrepareMutation(new VbaMutationPreparation
+                var beforeExists = request.Before != null;
+                var correlation = request.Correlation ?? new VbaMutationCorrelation();
+                var prepared = _journal.PrepareMutation(new VbaMutationPreparation
                 {
-                    Operation = operation,
-                    Host = _adapter.HostName ?? string.Empty,
-                    DocumentKey = _adapter.DocumentKey ?? string.Empty,
-                    RuntimeDocumentKey = _adapter.RuntimeDocumentKey ?? string.Empty,
-                    DocumentTitle = _adapter.DocumentTitle ?? string.Empty,
-                    ModuleName = moduleName ?? string.Empty,
+                    Operation = request.Operation,
+                    Host = _document.HostName ?? string.Empty,
+                    DocumentKey = _document.DocumentKey ?? string.Empty,
+                    RuntimeDocumentKey = _document.RuntimeDocumentKey ?? string.Empty,
+                    DocumentTitle = _document.DocumentTitle ?? string.Empty,
+                    ModuleName = request.ModuleName ?? string.Empty,
                     ComponentType = beforeExists
-                        ? before.ComponentType ?? string.Empty
-                        : intendedComponentType ?? string.Empty,
+                        ? request.Before.ComponentType ?? string.Empty
+                        : request.IntendedComponentType ?? string.Empty,
                     BeforeExists = beforeExists,
-                    BeforeCodeSha256 = beforeExists ? CodeSha256(before.Code) : null,
+                    BeforeCodeSha256 = beforeExists ? CodeSha256(request.Before.Code) : null,
                     BeforeComparableCodeSha256 = beforeExists
-                        ? VbaTextCanonicalizer.VbeComparableCodeSha256(before.Code)
+                        ? VbaTextCanonicalizer.VbeComparableCodeSha256(request.Before.Code)
                         : null,
-                    IntendedAfterExists = intendedAfterExists,
-                    IntendedAfterCodeSha256 = intendedAfterExists ? CodeSha256(intendedAfterCode) : null,
-                    IntendedAfterComparableCodeSha256 = intendedAfterExists
-                        ? VbaTextCanonicalizer.VbeComparableCodeSha256(intendedAfterCode)
+                    IntendedAfterExists = request.IntendedAfterExists,
+                    IntendedAfterCodeSha256 = request.IntendedAfterExists
+                        ? CodeSha256(request.IntendedAfterCode)
                         : null,
-                    SessionId = guard == null
-                        ? (session == null ? string.Empty : session.Id ?? string.Empty)
-                        : guard.SessionId,
-                    RunId = guard == null
-                        ? (session == null || session.LastRun == null ? null : session.LastRun.RunId)
-                        : guard.RunId,
-                    TurnId = guard == null
-                        ? (session == null || session.LastRun == null ? null : session.LastRun.TurnId)
-                        : guard.TurnId,
-                    StepId = guard == null ? command == null ? null : command.RuntimeStepId : guard.StepId,
-                    ToolCallId = guard == null ? command == null ? null : command.ToolCallId : guard.ToolCallId
-                }, beforeExists ? before.Code : null, intendedAfterExists ? intendedAfterCode : null);
-                return true;
+                    IntendedAfterComparableCodeSha256 = request.IntendedAfterExists
+                        ? VbaTextCanonicalizer.VbeComparableCodeSha256(request.IntendedAfterCode)
+                        : null,
+                    SessionId = correlation.SessionId ?? string.Empty,
+                    RunId = correlation.RunId,
+                    TurnId = correlation.TurnId,
+                    StepId = correlation.StepId,
+                    ToolCallId = correlation.ToolCallId
+                }, beforeExists ? request.Before.Code : null,
+                   request.IntendedAfterExists ? request.IntendedAfterCode : null);
+                return new VbaMutationPreparationResult { Preparation = prepared };
             }
             catch (Exception ex)
             {
-                error = ToolResult.Fail(
-                    "VBA " + operation + " was blocked because its prepared journal record could not be saved. " + ex.Message,
-                    null,
-                    "vba_journal_prepare_failed",
-                    false);
-                return false;
+                return new VbaMutationPreparationResult
+                {
+                    Error = VbaMutationOutcome.Error(
+                        "VBA " + (request.Operation ?? "mutation") +
+                        " was blocked because its prepared journal record could not be saved. " + ex.Message,
+                        null,
+                        "vba_journal_prepare_failed",
+                        false)
+                };
             }
         }
 
-        public ToolResult ExecuteJournaledMutation(
+        public VbaMutationOutcome ExecuteJournaledMutation(
             VbaMutationPreparation prepared,
-            Func<ToolResult> action)
+            Func<VbaMutationActionResult> action,
+            CancellationToken cancellationToken)
         {
+            if (prepared == null)
+            {
+                return VbaMutationOutcome.Error(
+                    "VBA mutation preparation is missing.",
+                    null,
+                    "vba_mutation_preparation_missing",
+                    false);
+            }
+
             TraceMutation(prepared, "domain.effect.prepared", null);
-            ToolResult result;
-            Exception actionException = null;
             try
             {
-                if (action != null) TraceMutation(prepared, "domain.effect.dispatched", null);
-                result = action == null ? null : action();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException)
+            {
+                CompleteCancelledBeforeDispatch(prepared);
+                throw;
+            }
+
+            VbaMutationActionResult actionResult;
+            try
+            {
+                TraceMutation(prepared, "domain.effect.dispatched", null);
+                actionResult = action == null ? null : action();
+            }
+            catch (OperationCanceledException ex)
+            {
+                actionResult = VbaMutationActionResult.Unknown(
+                    "VBA mutation was cancelled after dispatch. " + ex.Message,
+                    null,
+                    "vba_mutation_cancelled_after_dispatch");
             }
             catch (Exception ex)
             {
-                actionException = ex;
-                result = ToolResult.Fail(
+                actionResult = VbaMutationActionResult.Error(
                     "VBA mutation threw after its prepared record was persisted. " + ex.Message,
                     null,
                     "vba_mutation_exception",
                     false);
             }
-            if (result == null)
+            if (actionResult == null)
             {
-                result = ToolResult.Fail("VBA mutation returned no result.", null, "vba_mutation_missing_result", false);
+                actionResult = VbaMutationActionResult.Error(
+                    "VBA mutation returned no result.",
+                    null,
+                    "vba_mutation_missing_result",
+                    false);
             }
 
             VbaMutationAssessment assessment;
-            if (result.Success)
+            if (actionResult.Status == VbaMutationActionStatus.Verified)
             {
-                assessment = VbaVerifier.CommittedAssessment(prepared, result);
+                assessment = VbaVerifier.CommittedAssessment(prepared, actionResult);
             }
             else
             {
                 assessment = _verifier.InspectMutation(prepared);
-                if (string.Equals(assessment.Status, VbaMutationStatuses.NotApplied, StringComparison.Ordinal) &&
-                    ReportsRollback(result, actionException))
+                if (string.Equals(
+                        assessment.Status,
+                        VbaMutationStatuses.NotApplied,
+                        StringComparison.Ordinal) &&
+                    actionResult.Disposition == VbaMutationDisposition.RolledBack)
                 {
                     assessment.Status = VbaMutationStatuses.RolledBack;
-                    assessment.Message = "The runtime reported rollback and live state matches the recorded before state.";
+                    assessment.Message =
+                        "The backend explicitly reported rollback and live state matches the recorded before state.";
                 }
             }
 
             TraceMutation(prepared, "domain.effect.verified", assessment.Status);
             try
             {
-                _journalStore.CompleteMutation(
+                _journal.CompleteMutation(
                     prepared.Host,
                     prepared.DocumentKey,
                     prepared.MutationId,
@@ -126,37 +160,66 @@ namespace RNAssistant.Office.Vba
                     assessment.ActualExists,
                     assessment.ActualCodeSha256,
                     assessment.ActualComparableCodeSha256,
-                    result.ErrorCode ?? assessment.ErrorCode,
+                    actionResult.ErrorCode ?? assessment.ErrorCode,
                     assessment.Message);
             }
             catch (Exception ex)
             {
-                return ToolResult.PartialFailure(
-                    "The VBA effect was inspected as " + assessment.Status +
-                    ", but its terminal journal record could not be saved. Inspect the module before retrying. " + ex.Message,
-                    JournalData(result.DataJson, prepared, "unknown", assessment),
+                var terminalFailureData = JournalData(actionResult.Data, prepared, assessment);
+                terminalFailureData["terminalRecorded"] = false;
+                return VbaMutationOutcome.Unknown(
+                    "The VBA effect was inspected, but its terminal journal record could not be saved. " +
+                    "Inspect the module before retrying. " + ex.Message,
+                    terminalFailureData,
                     "vba_journal_terminal_failed");
             }
 
-            result.DataJson = JournalData(result.DataJson, prepared, assessment.Status, assessment);
+            var data = JournalData(actionResult.Data, prepared, assessment);
+            if (string.Equals(assessment.Status, VbaMutationStatuses.Committed, StringComparison.Ordinal))
+            {
+                if (actionResult.Status != VbaMutationActionStatus.Verified)
+                {
+                    data["backendReportedError"] =
+                        actionResult.Status == VbaMutationActionStatus.Error ||
+                        actionResult.Status == VbaMutationActionStatus.Unknown;
+                    if (!string.IsNullOrWhiteSpace(actionResult.ErrorCode))
+                    {
+                        data["backendErrorCode"] = actionResult.ErrorCode;
+                    }
+                }
+                var message = actionResult.Status == VbaMutationActionStatus.Verified
+                    ? actionResult.Message
+                    : (actionResult.Message ?? "VBA mutation reported an error.") +
+                      " Live state matches the intended result and terminal evidence was recorded.";
+                return VbaMutationOutcome.Ok(
+                    message,
+                    data);
+            }
+
             if (string.Equals(assessment.Status, VbaMutationStatuses.Unknown, StringComparison.Ordinal))
             {
-                result.Success = false;
-                result.Status = "partial_failure";
-                result.ErrorCode = "vba_mutation_unknown";
-                result.Retryable = false;
-                result.Message = (result.Message ?? "VBA mutation failed.") +
-                    " Final VBA state is unknown; inspect it or explicitly restore a backup before retrying.";
+                return VbaMutationOutcome.Unknown(
+                    (actionResult.Message ?? "VBA mutation failed.") +
+                    " Final VBA state is unknown; inspect it or explicitly restore a backup before retrying.",
+                    data,
+                    "vba_mutation_unknown");
             }
-            else if (!result.Success && string.Equals(assessment.Status, VbaMutationStatuses.Committed, StringComparison.Ordinal))
+
+            var errorCode = actionResult.ErrorCode;
+            if (string.IsNullOrWhiteSpace(errorCode))
             {
-                return ToolResult.PartialFailure(
-                    (result.Message ?? "VBA mutation reported failure.") +
-                    " Live state matches the intended result, so the journal classified it as committed.",
-                    result.DataJson,
-                    "vba_mutation_committed_after_error");
+                errorCode = string.Equals(
+                    assessment.Status,
+                    VbaMutationStatuses.RolledBack,
+                    StringComparison.Ordinal)
+                    ? "vba_mutation_rolled_back"
+                    : "vba_mutation_not_applied";
             }
-            return result;
+            return VbaMutationOutcome.Error(
+                actionResult.Message,
+                data,
+                errorCode,
+                actionResult.Retryable);
         }
 
         public VbaMutationAssessment InspectMutation(VbaMutationPreparation prepared)
@@ -164,42 +227,84 @@ namespace RNAssistant.Office.Vba
             return _verifier.InspectMutation(prepared);
         }
 
-        internal static bool ReportsRollback(ToolResult result, Exception exception)
+        internal static VbaMutationCorrelation CorrelationFrom(
+            VbaMutationGuard guard,
+            VbaMutationCorrelation fallback)
         {
-            var message = ((result == null ? null : result.Message) ?? string.Empty) + " " +
-                (exception == null ? string.Empty : exception.Message ?? string.Empty);
-            return message.IndexOf("was restored", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                message.IndexOf("was removed", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                message.IndexOf("rolled back", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (guard == null)
+            {
+                fallback = fallback ?? new VbaMutationCorrelation();
+                return new VbaMutationCorrelation
+                {
+                    SessionId = fallback.SessionId,
+                    RunId = fallback.RunId,
+                    TurnId = fallback.TurnId,
+                    StepId = fallback.StepId,
+                    ToolCallId = fallback.ToolCallId
+                };
+            }
+            return new VbaMutationCorrelation
+            {
+                SessionId = guard.SessionId,
+                RunId = guard.RunId,
+                TurnId = guard.TurnId,
+                StepId = guard.StepId,
+                ToolCallId = guard.ToolCallId
+            };
         }
 
-        private static string JournalData(
-            string dataJson,
-            VbaMutationPreparation prepared,
-            string status,
-            VbaMutationAssessment assessment)
+        private void CompleteCancelledBeforeDispatch(VbaMutationPreparation prepared)
         {
-            JObject data;
+            var assessment = _verifier.InspectMutation(prepared);
+            TraceMutation(prepared, "domain.effect.verified", assessment.Status);
             try
             {
-                data = string.IsNullOrWhiteSpace(dataJson) ? new JObject() : JObject.Parse(dataJson);
+                _journal.CompleteMutation(
+                    prepared.Host,
+                    prepared.DocumentKey,
+                    prepared.MutationId,
+                    assessment.Status,
+                    assessment.ActualExists,
+                    assessment.ActualCodeSha256,
+                    assessment.ActualComparableCodeSha256,
+                    "vba_mutation_cancelled_before_dispatch",
+                    "Cancellation was observed after preparation and before dispatch. " +
+                    assessment.Message);
             }
-            catch (JsonException)
+            catch (Exception ex)
             {
-                data = new JObject { ["operationData"] = dataJson ?? string.Empty };
+                throw new InvalidOperationException(
+                    "VBA mutation was cancelled before dispatch, but the terminal journal record could not be saved. " +
+                    "The prepared record must be reconciled on the next safe access.",
+                    ex);
             }
+        }
+
+        private static JObject JournalData(
+            JObject actionData,
+            VbaMutationPreparation prepared,
+            VbaMutationAssessment assessment)
+        {
+            var data = VbaMutationData.Clone(actionData);
+            data.Remove("journalStatus");
+            data.Remove("packageJournalStatus");
+            data.Remove("terminalRecorded");
+            data.Remove("actualExists");
+            data.Remove("actualCodeSha256");
+            data.Remove("backendReportedError");
+            data.Remove("backendErrorCode");
+            data.Remove("compileValidation");
             data["journaled"] = true;
             data["mutationId"] = prepared == null ? null : prepared.MutationId;
             data["rollbackBackupId"] = prepared == null || string.IsNullOrWhiteSpace(prepared.BackupId)
                 ? null
                 : prepared.BackupId;
-            data["journalStatus"] = status;
             data["actualExists"] = assessment == null ? null : assessment.ActualExists;
             if (assessment != null && !string.IsNullOrWhiteSpace(assessment.ActualCodeSha256))
             {
                 data["actualCodeSha256"] = assessment.ActualCodeSha256;
             }
-            return data.ToString(Formatting.None);
+            return data;
         }
 
         private static void TraceMutation(

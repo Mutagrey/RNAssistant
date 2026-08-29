@@ -33,8 +33,14 @@ namespace RNAssistant.Office.Tools
             if (string.IsNullOrWhiteSpace(moduleName)) return ToolResult.Fail("moduleName is required.", null, "vba_module_name_required", true);
             string resolvedName;
             VbaModuleState current;
-            ToolResult readError;
-            if (!_mutationService.TryReadExistingModule(moduleName, out resolvedName, out current, out readError)) return readError;
+            var readError = _mutationService.TryReadExistingModule(
+                moduleName,
+                out resolvedName,
+                out current);
+            if (readError != null)
+            {
+                return VbaMutationToolResultMapper.ToToolResult(readError);
+            }
             command.Arguments["moduleName"] = resolvedName;
             var currentHash = CodeSha256(current.Code);
             string observedHash;
@@ -95,10 +101,13 @@ namespace RNAssistant.Office.Tools
             var requestedSourceName = moduleName.Trim();
             string resolvedSourceName;
             VbaModuleState source;
-            ToolResult sourceError;
-            if (!_mutationService.TryReadExistingModule(requestedSourceName, out resolvedSourceName, out source, out sourceError))
+            var sourceError = _mutationService.TryReadExistingModule(
+                requestedSourceName,
+                out resolvedSourceName,
+                out source);
+            if (sourceError != null)
             {
-                return sourceError;
+                return VbaMutationToolResultMapper.ToToolResult(sourceError);
             }
             if (!CanRenameComponent(source))
             {
@@ -343,7 +352,15 @@ namespace RNAssistant.Office.Tools
 
         private static VbaMutationGuard ReadGuard(ToolCommand command)
         {
-            return VbaMutationService.ReadGuard(command);
+            if (command == null || string.IsNullOrWhiteSpace(command.RuntimeGuardJson)) return null;
+            try
+            {
+                return JsonConvert.DeserializeObject<VbaMutationGuard>(command.RuntimeGuardJson);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         private void BindGuard(
@@ -477,17 +494,17 @@ namespace RNAssistant.Office.Tools
 
         private void RecordObservation(ChatSession session, string moduleName, string hash)
         {
-            _mutationService.RecordObservation(session, moduleName, hash);
+            _mutationService.RecordObservation(SessionId(session), moduleName, hash);
         }
 
         private bool TryGetObservation(ChatSession session, string moduleName, out string hash)
         {
-            return _mutationService.TryGetObservation(session, moduleName, out hash);
+            return _mutationService.TryGetObservation(SessionId(session), moduleName, out hash);
         }
 
         private void RemoveObservation(ChatSession session, string moduleName)
         {
-            _mutationService.RemoveObservation(session, moduleName);
+            _mutationService.RemoveObservation(SessionId(session), moduleName);
         }
 
         internal static string CodeSha256(string code)

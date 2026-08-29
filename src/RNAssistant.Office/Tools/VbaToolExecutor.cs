@@ -25,7 +25,11 @@ namespace RNAssistant.Office.Tools
             _adapter = adapter;
             _vbaJournalStore = vbaJournalStore;
             _reader = new VbaReader(adapter, BackendToolId);
-            _mutationService = new VbaMutationService(adapter, vbaJournalStore, _reader);
+            _mutationService = new VbaMutationService(
+                new VbaMutationDocumentContextAdapter(adapter),
+                new VbaMutationJournalStoreAdapter(vbaJournalStore),
+                new VbaMutationReaderAdapter(_reader),
+                new VbaMutationBackendAdapter(adapter, BackendToolId));
             _verifier = _mutationService.Verifier;
         }
 
@@ -79,17 +83,30 @@ namespace RNAssistant.Office.Tools
             {
                 object patchValue;
                 command.Arguments.TryGetValue("patch", out patchValue);
-                return _mutationService.ApplyPatch(
-                    command,
-                    ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                    patchValue as JArray,
-                    dryRun,
-                    session,
+                var outcome = _mutationService.ApplyPatch(
+                    new VbaApplyPatchRequest
+                    {
+                        RequestedModuleName = ToolArgumentReader.String(
+                            command.Arguments,
+                            "moduleName",
+                            string.Empty),
+                        Operations = ParsePatchOperations(patchValue as JArray),
+                        DryRun = dryRun,
+                        Guard = ReadGuard(command),
+                        Correlation = MutationCorrelation(command, session)
+                    },
                     cancellationToken);
+                return VbaMutationToolResultMapper.ToToolResult(outcome);
             }
 
-            if (string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase)) return WriteVbaModule(command, dryRun, session);
-            if (string.Equals(command.ToolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase)) return DeleteModule(command, dryRun, session);
+            if (string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase))
+            {
+                return WriteVbaModule(command, dryRun, session, cancellationToken);
+            }
+            if (string.Equals(command.ToolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase))
+            {
+                return DeleteModule(command, dryRun, session, cancellationToken);
+            }
             if (string.Equals(command.ToolId, ToolId("office_run_macro"), StringComparison.OrdinalIgnoreCase)) return RunMacro(command, dryRun);
 
             return ToolResult.Fail("Unknown VBA controller tool: " + command.ToolId);
@@ -101,7 +118,19 @@ namespace RNAssistant.Office.Tools
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             if (string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
             {
-                return _mutationService.PrepareApplyPatchGuard(command, session, moduleName);
+                var preparation = _mutationService.PrepareApplyPatchGuard(
+                    new VbaApplyPatchGuardRequest
+                    {
+                        RequestedModuleName = moduleName,
+                        Correlation = MutationCorrelation(command, session)
+                    });
+                if (!preparation.Success)
+                {
+                    return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
+                }
+                command.Arguments["moduleName"] = preparation.ResolvedModuleName;
+                command.RuntimeGuardJson = JsonConvert.SerializeObject(preparation.Guard);
+                return null;
             }
             if (IsExistingModuleMutation(command.ToolId))
             {
@@ -239,7 +268,11 @@ namespace RNAssistant.Office.Tools
             return result;
         }
 
-        private ToolResult WriteVbaModule(ToolCommand command, bool dryRun, ChatSession session)
+        private ToolResult WriteVbaModule(
+            ToolCommand command,
+            bool dryRun,
+            ChatSession session,
+            CancellationToken cancellationToken)
         {
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             var componentType = ToolArgumentReader.String(command.Arguments, "componentType", "StdModule");
@@ -277,43 +310,45 @@ namespace RNAssistant.Office.Tools
                     true);
             }
             var guard = ReadGuard(command);
-            var operationData = JsonConvert.SerializeObject(new
+            var operationData = new JObject
             {
-                requestedModuleName = guard == null ? moduleName : guard.RequestedModuleName,
-                moduleName = moduleName,
-                nameNormalized = guard != null && !string.Equals(guard.RequestedModuleName, moduleName, StringComparison.Ordinal),
-                componentType = exists ? existing.ComponentType : componentType,
-                mode = mode,
-                created = !exists,
-                codeSha256 = CodeSha256(code)
-            });
+                ["requestedModuleName"] = guard == null ? moduleName : guard.RequestedModuleName,
+                ["moduleName"] = moduleName,
+                ["nameNormalized"] = guard != null &&
+                    !string.Equals(guard.RequestedModuleName, moduleName, StringComparison.Ordinal),
+                ["componentType"] = exists ? existing.ComponentType : componentType,
+                ["mode"] = mode,
+                ["created"] = !exists,
+                ["codeSha256"] = CodeSha256(code)
+            };
             if (dryRun)
             {
                 return ToolResult.Ok(
                     "Dry run: would " + (exists ? "update" : "create") + " VBA " +
                     (exists ? existing.ComponentType : componentType) + " " + moduleName + ".",
-                    operationData);
+                    operationData.ToString(Formatting.None));
             }
 
             var expectedComponentType = exists ? existing.ComponentType : componentType;
-            VbaMutationPreparation prepared;
-            ToolResult journalError;
-            if (!_mutationService.TryPrepareJournaledMutation(
-                command,
-                session,
-                "write",
-                moduleName,
-                exists ? existing : null,
-                true,
-                code,
-                expectedComponentType,
-                out prepared,
-                out journalError))
+            var preparation = _mutationService.PrepareJournaledMutation(
+                new VbaModuleMutationRequest
+                {
+                    Operation = "write",
+                    ModuleName = moduleName,
+                    Before = exists ? existing : null,
+                    IntendedAfterExists = true,
+                    IntendedAfterCode = code,
+                    IntendedComponentType = expectedComponentType,
+                    Correlation = MutationCorrelation(command, session)
+                });
+            if (!preparation.Success)
             {
-                return journalError;
+                return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
             }
 
-            return _mutationService.ExecuteJournaledMutation(prepared, () =>
+            var outcome = _mutationService.ExecuteJournaledMutation(
+                preparation.Preparation,
+                delegate
             {
                 ToolResult written;
                 if (exists)
@@ -328,9 +363,13 @@ namespace RNAssistant.Office.Tools
                     create.Arguments["code"] = code;
                     written = _adapter.ExecuteTool(create);
                 }
-                if (written == null || !written.Success)
+                var action = VbaMutationToolResultMapper.FromBackend(
+                    written,
+                    "VBA module write returned no result.",
+                    "vba_write_failed");
+                if (action.Status != VbaMutationActionStatus.Succeeded)
                 {
-                    return written ?? ToolResult.Fail("VBA module write returned no result.", null, "vba_write_failed", false);
+                    return action;
                 }
                 return _verifier.VerifyModuleWrite(
                     moduleName,
@@ -339,8 +378,9 @@ namespace RNAssistant.Office.Tools
                     operationData,
                     "vba_write",
                     expectedComponentType,
-                    session);
-            });
+                    SessionId(session));
+            }, cancellationToken);
+            return VbaMutationToolResultMapper.ToToolResult(outcome);
         }
 
         private ToolResult RenameVbaModule(
@@ -453,7 +493,11 @@ namespace RNAssistant.Office.Tools
             });
         }
 
-        private ToolResult DeleteModule(ToolCommand command, bool dryRun, ChatSession session)
+        private ToolResult DeleteModule(
+            ToolCommand command,
+            bool dryRun,
+            ChatSession session,
+            CancellationToken cancellationToken)
         {
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             VbaModuleState module;
@@ -469,35 +513,44 @@ namespace RNAssistant.Office.Tools
                     "Dry run: would delete VBA " + module.ComponentType + " " + moduleName + ".",
                     JsonConvert.SerializeObject(new { moduleName = moduleName, componentType = module.ComponentType }));
             }
-            VbaMutationPreparation prepared;
-            ToolResult journalError;
-            if (!_mutationService.TryPrepareJournaledMutation(
-                command,
-                session,
-                "delete",
-                moduleName,
-                module,
-                false,
-                null,
-                module.ComponentType,
-                out prepared,
-                out journalError))
+            var preparation = _mutationService.PrepareJournaledMutation(
+                new VbaModuleMutationRequest
+                {
+                    Operation = "delete",
+                    ModuleName = moduleName,
+                    Before = module,
+                    IntendedAfterExists = false,
+                    IntendedAfterCode = null,
+                    IntendedComponentType = module.ComponentType,
+                    Correlation = MutationCorrelation(command, session)
+                });
+            if (!preparation.Success)
             {
-                return journalError;
+                return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
             }
 
-            return _mutationService.ExecuteJournaledMutation(prepared, () =>
+            var outcome = _mutationService.ExecuteJournaledMutation(
+                preparation.Preparation,
+                delegate
             {
                 var delete = new ToolCommand { ToolId = BackendToolId("vba_delete_module_internal") };
                 delete.Arguments["moduleName"] = moduleName;
                 delete.Arguments["expectedCodeSha256"] = CodeSha256(module.Code);
                 var deleted = _adapter.ExecuteTool(delete);
-                if (deleted == null || !deleted.Success)
+                var action = VbaMutationToolResultMapper.FromBackend(
+                    deleted,
+                    "VBA delete returned no result.",
+                    "vba_delete_failed");
+                if (action.Status != VbaMutationActionStatus.Succeeded)
                 {
-                    return deleted ?? ToolResult.Fail("VBA delete returned no result.", null, "vba_delete_failed", false);
+                    return action;
                 }
-                return _verifier.VerifyModuleDeleted(moduleName, deleted.DataJson, session);
-            });
+                return _verifier.VerifyModuleDeleted(
+                    moduleName,
+                    action.Data,
+                    SessionId(session));
+            }, cancellationToken);
+            return VbaMutationToolResultMapper.ToToolResult(outcome);
         }
 
         private ToolResult RestoreVbaBackup(ToolCommand command, bool dryRun, ChatSession session, CancellationToken cancellationToken)
@@ -565,24 +618,25 @@ namespace RNAssistant.Office.Tools
             var componentType = string.IsNullOrWhiteSpace(backup.ComponentType)
                 ? (moduleExists ? current.ComponentType : "StdModule")
                 : backup.ComponentType;
-            VbaMutationPreparation prepared;
-            ToolResult journalError;
-            if (!_mutationService.TryPrepareJournaledMutation(
-                command,
-                session,
-                "restore",
-                backup.ModuleName,
-                moduleExists ? current : null,
-                true,
-                backup.Code,
-                componentType,
-                out prepared,
-                out journalError))
+            var preparation = _mutationService.PrepareJournaledMutation(
+                new VbaModuleMutationRequest
+                {
+                    Operation = "restore",
+                    ModuleName = backup.ModuleName,
+                    Before = moduleExists ? current : null,
+                    IntendedAfterExists = true,
+                    IntendedAfterCode = backup.Code,
+                    IntendedComponentType = componentType,
+                    Correlation = MutationCorrelation(command, session)
+                });
+            if (!preparation.Success)
             {
-                return journalError;
+                return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
             }
 
-            return _mutationService.ExecuteJournaledMutation(prepared, () =>
+            var outcome = _mutationService.ExecuteJournaledMutation(
+                preparation.Preparation,
+                delegate
             {
                 ToolResult result;
                 if (moduleExists)
@@ -597,26 +651,31 @@ namespace RNAssistant.Office.Tools
                     create.Arguments["code"] = backup.Code ?? string.Empty;
                     result = _adapter.ExecuteTool(create);
                 }
-                if (result == null || !result.Success)
+                var action = VbaMutationToolResultMapper.FromBackend(
+                    result,
+                    "VBA restore write returned no result.",
+                    "vba_restore_failed");
+                if (action.Status != VbaMutationActionStatus.Succeeded)
                 {
-                    return result ?? ToolResult.Fail("VBA restore write returned no result.", null, "vba_restore_failed", false);
+                    return action;
                 }
 
                 return _verifier.VerifyModuleWrite(
                     backup.ModuleName,
                     backup.Code,
                     "VBA backup restored: " + backup.BackupId,
-                    JsonConvert.SerializeObject(new
+                    new JObject
                     {
-                        backupId = backup.BackupId,
-                        moduleName = backup.ModuleName,
-                        codeSha256 = CodeSha256(backup.Code),
-                        restore = result
-                    }),
+                        ["backupId"] = backup.BackupId,
+                        ["moduleName"] = backup.ModuleName,
+                        ["codeSha256"] = CodeSha256(backup.Code),
+                        ["restore"] = action.Data
+                    },
                     "vba_restore",
                     componentType,
-                    session);
-            });
+                    SessionId(session));
+            }, cancellationToken);
+            return VbaMutationToolResultMapper.ToToolResult(outcome);
         }
 
         private ToolResult WriteModule(string moduleName, string code, bool createIfMissing, string expectedCodeSha256)
@@ -630,6 +689,44 @@ namespace RNAssistant.Office.Tools
                 write.Arguments["expectedCodeSha256"] = expectedCodeSha256;
             }
             return _adapter.ExecuteTool(write);
+        }
+
+        private static IReadOnlyList<VbaPatchOperationRequest> ParsePatchOperations(JArray patch)
+        {
+            var operations = new List<VbaPatchOperationRequest>();
+            if (patch == null) return operations;
+            foreach (var token in patch)
+            {
+                var item = token as JObject;
+                operations.Add(item == null
+                    ? null
+                    : new VbaPatchOperationRequest
+                    {
+                        Operation = (string)item["op"],
+                        Find = (string)item["find"],
+                        Text = (string)item["text"]
+                    });
+            }
+            return operations;
+        }
+
+        private static VbaMutationCorrelation MutationCorrelation(
+            ToolCommand command,
+            ChatSession session)
+        {
+            return new VbaMutationCorrelation
+            {
+                SessionId = SessionId(session),
+                RunId = session == null || session.LastRun == null ? null : session.LastRun.RunId,
+                TurnId = session == null || session.LastRun == null ? null : session.LastRun.TurnId,
+                StepId = command == null ? null : command.RuntimeStepId,
+                ToolCallId = command == null ? null : command.ToolCallId
+            };
+        }
+
+        private static string SessionId(ChatSession session)
+        {
+            return session == null ? string.Empty : session.Id ?? string.Empty;
         }
 
         private string HostToolPrefix()

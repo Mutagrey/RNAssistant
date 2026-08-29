@@ -71,13 +71,15 @@ After the Office operation and read-back, one `mutation.terminal` records:
 
 - `committed` — verified intended state;
 - `not_applied` — verified before state;
-- `rolled_back` — runtime reported rollback and live state matches before;
+- `rolled_back` — a structured backend disposition explicitly reports rollback and live state matches before; message text is never classification evidence;
 - `failed` — reserved for a definite terminal failure without an uncertain external effect;
 - `unknown` — live state is unreadable or matches neither side.
 
-Tool results expose `mutationId`, `rollbackBackupId`, and `journalStatus`. Restore is not a special side channel: it validates the current guard, journals the current source as the new before/rollback state, writes the selected CAS backup, verifies it, and appends its own terminal event.
+The typed domain outcome is only `ok`, `error`, or `unknown`. Verified intended state maps to `ok`; verified before/not-applied maps to a definite `error`; unreadable or divergent state maps to non-retryable `unknown`. Source read-back verifies the requested text/type state, not VBA compilation or runtime behavior.
 
-Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope and every component's before/intended existence, type, normalized and VBE-comparable package source hashes, and CAS reference. The comparable hash also excludes import headers and RNAssistant ownership markers. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hashes and whether it matches before and/or intended state. Mixed or unreadable component state is `unknown`, never partial success.
+Common tool results expose `mutationId`, `rollbackBackupId`, and bounded actual-effect evidence, but never the internal journal status. If terminal persistence fails after inspection, the result is non-retryable `unknown` with `terminalRecorded=false`; the prepared record stays open for later read-only reconciliation and the mutation is not replayed merely to write a terminal. Restore is not a special side channel: it validates the current guard, journals the current source as the new before/rollback state, writes the selected CAS backup, verifies it, and appends its own terminal event.
+
+Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope and every component's before/intended existence, type, normalized and VBE-comparable package source hashes, and CAS reference. The comparable hash also excludes import headers and RNAssistant ownership markers. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hashes and whether it matches before and/or intended state. Mixed or unreadable component state is `unknown`, never partial success. Current package/rename orchestration remains executor-owned until later Phase 6 slices, but its common result already omits `packageJournalStatus`/`journalStatus` and no longer infers rollback from exception/result prose.
 
 Phase 1B observes the existing journalled module/rename/package wrappers through
 metadata-only `domain.effect.prepared/dispatched/verified` events in the chat stream.

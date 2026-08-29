@@ -1,5 +1,4 @@
 using System;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -8,76 +7,116 @@ namespace RNAssistant.Office.Vba
 {
     internal sealed class VbaVerifier
     {
-        private readonly VbaReader _reader;
-        private readonly Action<ChatSession, string, string> _recordObservation;
-        private readonly Action<ChatSession, string> _removeObservation;
+        private readonly IVbaMutationReader _reader;
+        private readonly Action<string, string, string> _recordObservation;
+        private readonly Action<string, string> _removeObservation;
 
         public VbaVerifier(
-            VbaReader reader,
-            Action<ChatSession, string, string> recordObservation,
-            Action<ChatSession, string> removeObservation)
+            IVbaMutationReader reader,
+            Action<string, string, string> recordObservation,
+            Action<string, string> removeObservation)
         {
             _reader = reader ?? throw new ArgumentNullException(nameof(reader));
             _recordObservation = recordObservation;
             _removeObservation = removeObservation;
         }
 
-        public ToolResult VerifyModuleWrite(
+        public VbaMutationActionResult VerifyModuleWrite(
             string moduleName,
             string expectedCode,
             string successMessage,
-            string successDataJson,
+            JObject successData,
             string errorPrefix,
             string expectedComponentType = null,
-            ChatSession session = null)
+            string sessionId = null)
         {
             var expectedHash = VbaTextCanonicalizer.LiveCodeSha256(expectedCode);
             var expectedComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(expectedCode);
             var expectedLineCount = VbaTextCanonicalizer.LiveCodeLineCount(expectedCode);
-            VbaModuleState actual;
-            ToolResult readError;
-            if (!_reader.TryReadModule(moduleName, 1000000, out actual, out readError))
+            var read = _reader.ReadModule(moduleName, 1000000);
+            if (read == null)
             {
-                return ToolResult.PartialFailure(
-                    "VBA write completed but final state could not be read back: " +
-                    (readError == null ? moduleName : readError.Message),
-                    VerificationData(moduleName, expectedHash, null, successDataJson, expectedComponentType, null, expectedLineCount, null),
+                return VbaMutationActionResult.Unknown(
+                    "VBA write completed but final state could not be read back: " + moduleName,
+                    VerificationData(
+                        moduleName,
+                        expectedHash,
+                        null,
+                        successData,
+                        expectedComponentType,
+                        null,
+                        expectedLineCount,
+                        null),
                     (errorPrefix ?? "vba_write") + "_verify_failed");
             }
+            if (!read.Success)
+            {
+                return VbaMutationActionResult.Unknown(
+                    "VBA write completed but final state could not be read back: " +
+                    (string.IsNullOrWhiteSpace(read.Message) ? moduleName : read.Message),
+                    VerificationData(
+                        moduleName,
+                        expectedHash,
+                        null,
+                        successData,
+                        expectedComponentType,
+                        null,
+                        expectedLineCount,
+                        null),
+                    (errorPrefix ?? "vba_write") + "_verify_failed");
+            }
+            var actual = read.Module;
 
             var actualHash = VbaTextCanonicalizer.LiveCodeSha256(actual.Code);
             var actualComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(actual.Code);
-            var codeMatches = string.Equals(expectedComparableHash, actualComparableHash, StringComparison.OrdinalIgnoreCase);
+            var codeMatches = string.Equals(
+                expectedComparableHash,
+                actualComparableHash,
+                StringComparison.OrdinalIgnoreCase);
             var componentTypeMatches = string.IsNullOrWhiteSpace(expectedComponentType) ||
-                string.Equals(expectedComponentType, actual.ComponentType, StringComparison.OrdinalIgnoreCase);
+                string.Equals(
+                    expectedComponentType,
+                    actual.ComponentType,
+                    StringComparison.OrdinalIgnoreCase);
             if (!codeMatches || !componentTypeMatches)
             {
-                return ToolResult.PartialFailure(
+                return VbaMutationActionResult.Unknown(
                     "VBA write verification failed for " + moduleName +
                     ": final code or component type differs from the requested state.",
-                    VerificationData(moduleName, expectedHash, actualHash, successDataJson, expectedComponentType, actual.ComponentType, expectedLineCount, actual.LineCount),
+                    VerificationData(
+                        moduleName,
+                        expectedHash,
+                        actualHash,
+                        successData,
+                        expectedComponentType,
+                        actual.ComponentType,
+                        expectedLineCount,
+                        actual.LineCount),
                     (errorPrefix ?? "vba_write") + "_verify_mismatch");
             }
 
-            if (_recordObservation != null) _recordObservation(session, moduleName, actualHash);
-            return ToolResult.Ok(successMessage, SuccessfulVerificationData(
-                moduleName,
-                expectedHash,
-                actualHash,
-                successDataJson,
-                actual.ComponentType,
-                actual.LineCount));
+            if (_recordObservation != null)
+            {
+                _recordObservation(sessionId, moduleName, actualHash);
+            }
+            return VbaMutationActionResult.Verified(
+                successMessage,
+                SuccessfulVerificationData(
+                    moduleName,
+                    expectedHash,
+                    actualHash,
+                    successData,
+                    actual.ComponentType,
+                    actual.LineCount));
         }
 
         public VbaMutationAssessment InspectMutation(VbaMutationPreparation prepared)
         {
             if (prepared == null) throw new ArgumentNullException(nameof(prepared));
-            VbaModuleState actual;
-            ToolResult readError;
-            bool readSucceeded;
+            VbaMutationReadResult read;
             try
             {
-                readSucceeded = _reader.TryReadModule(prepared.ModuleName, 1000000, out actual, out readError);
+                read = _reader.ReadModule(prepared.ModuleName, 1000000);
             }
             catch (Exception ex)
             {
@@ -89,9 +128,20 @@ namespace RNAssistant.Office.Vba
                     Message = "Live module inspection threw an exception. " + ex.Message
                 };
             }
-
-            if (readSucceeded)
+            if (read == null)
             {
+                return new VbaMutationAssessment
+                {
+                    Status = VbaMutationStatuses.Unknown,
+                    ActualExists = null,
+                    ErrorCode = "vba_mutation_read_failed",
+                    Message = "Live module inspection returned no typed result."
+                };
+            }
+
+            if (read.Success)
+            {
+                var actual = read.Module;
                 var rawHash = VbaTextCanonicalizer.LiveCodeSha256(actual.Code);
                 var comparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(actual.Code);
                 if (prepared.IntendedAfterExists && MatchesRecordedState(
@@ -135,7 +185,7 @@ namespace RNAssistant.Office.Vba
                 };
             }
 
-            if (VbaReader.IsModuleNotFound(readError))
+            if (read.IsNotFound)
             {
                 if (!prepared.IntendedAfterExists)
                 {
@@ -168,61 +218,71 @@ namespace RNAssistant.Office.Vba
             {
                 Status = VbaMutationStatuses.Unknown,
                 ActualExists = null,
-                ErrorCode = readError == null ? "vba_mutation_read_failed" : readError.ErrorCode,
-                Message = "Live module could not be inspected. " + (readError == null ? string.Empty : readError.Message)
+                ErrorCode = string.IsNullOrWhiteSpace(read.ErrorCode)
+                    ? "vba_mutation_read_failed"
+                    : read.ErrorCode,
+                Message = "Live module could not be inspected. " +
+                    read.Message
             };
         }
 
-        public ToolResult VerifyModuleDeleted(
+        public VbaMutationActionResult VerifyModuleDeleted(
             string moduleName,
-            string successDataJson,
-            ChatSession session)
+            JObject successData,
+            string sessionId)
         {
-            VbaModuleState remaining;
-            ToolResult readError;
-            if (_reader.TryReadModule(moduleName, 1000000, out remaining, out readError))
+            var read = _reader.ReadModule(moduleName, 1000000);
+            if (read == null)
             {
-                return ToolResult.PartialFailure(
+                return VbaMutationActionResult.Unknown(
+                    "VBA module deletion completed but could not be verified: " + moduleName,
+                    VerificationData(moduleName, null, null, successData, null, null, null, null),
+                    "vba_delete_verify_failed");
+            }
+            if (read.Success)
+            {
+                var remaining = read.Module;
+                return VbaMutationActionResult.Unknown(
                     "VBA delete returned success but the module is still present: " + moduleName + ".",
                     VerificationData(
                         moduleName,
                         null,
                         VbaTextCanonicalizer.LiveCodeSha256(remaining.Code),
-                        successDataJson,
+                        successData,
                         null,
                         null,
                         null,
                         null),
                     "vba_delete_verify_failed");
             }
-            if (!VbaReader.IsModuleNotFound(readError))
+            if (!read.IsNotFound)
             {
-                return ToolResult.PartialFailure(
+                return VbaMutationActionResult.Unknown(
                     "VBA module deletion completed but could not be verified: " +
-                    (readError == null ? moduleName : readError.Message),
-                    VerificationData(moduleName, null, null, successDataJson, null, null, null, null),
+                    (string.IsNullOrWhiteSpace(read.Message) ? moduleName : read.Message),
+                    VerificationData(moduleName, null, null, successData, null, null, null, null),
                     "vba_delete_verify_failed");
             }
-            if (_removeObservation != null) _removeObservation(session, moduleName);
-            return ToolResult.Ok(
+            if (_removeObservation != null)
+            {
+                _removeObservation(sessionId, moduleName);
+            }
+            var data = VbaMutationData.Clone(successData);
+            data["moduleName"] = moduleName ?? string.Empty;
+            return VbaMutationActionResult.Verified(
                 "VBA module deleted: " + moduleName,
-                successDataJson ?? JsonConvert.SerializeObject(new { moduleName = moduleName }));
+                data);
         }
 
         public static VbaMutationAssessment CommittedAssessment(
             VbaMutationPreparation prepared,
-            ToolResult result)
+            VbaMutationActionResult result)
         {
             var actualHash = prepared.IntendedAfterCodeSha256;
-            if (result != null && !string.IsNullOrWhiteSpace(result.DataJson))
+            var resultData = result == null ? null : result.Data;
+            if (resultData != null)
             {
-                try
-                {
-                    actualHash = (string)JObject.Parse(result.DataJson)["codeSha256"] ?? actualHash;
-                }
-                catch (JsonException)
-                {
-                }
+                actualHash = (string)resultData["codeSha256"] ?? actualHash;
             }
             return new VbaMutationAssessment
             {
@@ -244,62 +304,64 @@ namespace RNAssistant.Office.Vba
         {
             if (!string.IsNullOrWhiteSpace(expectedComparable))
             {
-                return string.Equals(actualComparable, expectedComparable, StringComparison.OrdinalIgnoreCase);
+                return string.Equals(
+                    actualComparable,
+                    expectedComparable,
+                    StringComparison.OrdinalIgnoreCase);
             }
             return !string.IsNullOrWhiteSpace(expectedRaw) &&
                 string.Equals(actualRaw, expectedRaw, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static string SuccessfulVerificationData(
+        private static JObject SuccessfulVerificationData(
             string moduleName,
             string requestedHash,
             string actualHash,
-            string operationDataJson,
+            JObject operationData,
             string actualComponentType,
             int actualLineCount)
         {
-            JObject data;
-            try { data = string.IsNullOrWhiteSpace(operationDataJson) ? new JObject() : JObject.Parse(operationDataJson); }
-            catch (JsonException) { data = new JObject { ["operationData"] = operationDataJson ?? string.Empty }; }
+            var data = VbaMutationData.Clone(operationData);
             data["moduleName"] = moduleName ?? string.Empty;
             data["codeSha256"] = actualHash;
             data["lineCount"] = actualLineCount;
             data["componentType"] = actualComponentType ?? string.Empty;
-            data["vbeNormalized"] = !string.Equals(requestedHash, actualHash, StringComparison.OrdinalIgnoreCase);
+            data["vbeNormalized"] = !string.Equals(
+                requestedHash,
+                actualHash,
+                StringComparison.OrdinalIgnoreCase);
             if (!string.Equals(requestedHash, actualHash, StringComparison.OrdinalIgnoreCase))
             {
                 data["requestedCodeSha256"] = requestedHash;
             }
-            return data.ToString(Formatting.None);
+            return data;
         }
 
-        private static string VerificationData(
+        private static JObject VerificationData(
             string moduleName,
             string expectedHash,
             string actualHash,
-            string operationDataJson,
+            JObject operationData,
             string expectedComponentType,
             string actualComponentType,
             int? expectedLineCount,
             int? actualLineCount)
         {
-            JToken operationData = null;
-            if (!string.IsNullOrWhiteSpace(operationDataJson))
-            {
-                try { operationData = JToken.Parse(operationDataJson); }
-                catch (JsonException) { operationData = new JValue(operationDataJson); }
-            }
             return new JObject
             {
                 ["moduleName"] = moduleName ?? string.Empty,
                 ["expectedCodeSha256"] = string.IsNullOrWhiteSpace(expectedHash) ? null : expectedHash,
                 ["actualCodeSha256"] = string.IsNullOrWhiteSpace(actualHash) ? null : actualHash,
-                ["expectedComponentType"] = string.IsNullOrWhiteSpace(expectedComponentType) ? null : expectedComponentType,
-                ["actualComponentType"] = string.IsNullOrWhiteSpace(actualComponentType) ? null : actualComponentType,
+                ["expectedComponentType"] = string.IsNullOrWhiteSpace(expectedComponentType)
+                    ? null
+                    : expectedComponentType,
+                ["actualComponentType"] = string.IsNullOrWhiteSpace(actualComponentType)
+                    ? null
+                    : actualComponentType,
                 ["expectedLineCount"] = expectedLineCount,
                 ["actualLineCount"] = actualLineCount,
-                ["operationData"] = operationData
-            }.ToString(Formatting.None);
+                ["operationData"] = operationData == null ? null : operationData.DeepClone()
+            };
         }
     }
 

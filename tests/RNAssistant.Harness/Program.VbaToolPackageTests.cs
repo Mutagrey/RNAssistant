@@ -189,7 +189,8 @@ namespace RNAssistant.Harness
                 AssertTrue(installed.Success, "journaled package install succeeds");
                 var installData = JObject.Parse(installed.DataJson);
                 AssertTrue((bool)installData["packageJournaled"], "package install result exposes journal boundary");
-                AssertEqual("committed", (string)installData["packageJournalStatus"], "package install journal status");
+                AssertTrue(installData["packageJournalStatus"] == null,
+                    "package result does not expose internal journal status");
                 var records = journal.ListPackageMutations("Excel", "doc");
                 AssertEqual(1, records.Count, "one transaction records the complete install");
                 AssertEqual(2, records[0].Prepared.Components.Count, "install transaction contains every component");

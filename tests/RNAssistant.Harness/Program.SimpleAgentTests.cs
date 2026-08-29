@@ -766,7 +766,11 @@ namespace RNAssistant.Harness
                 AssertEqual("partial_failure", (string)write["status"], "current unknown transport is partial_failure");
                 AssertEqual("vba_mutation_unknown", (string)write["errorCode"], "real journal classified the divergent effect");
                 AssertEqual(false, (bool)write["retryable"], "unknown write cannot be retried automatically");
-                AssertEqual("unknown", (string)JObject.Parse((string)write["dataJson"])["journalStatus"], "unknown evidence reaches the loop");
+                var writeData = JObject.Parse((string)write["dataJson"]);
+                AssertTrue(writeData["journalStatus"] == null,
+                    "internal journal status does not leak into model-facing data");
+                AssertTrue(!string.IsNullOrWhiteSpace((string)writeData["mutationId"]),
+                    "unknown evidence retains mutation correlation");
                 AssertEqual(VbaMutationStatuses.Unknown,
                     journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status, "durable journal also records unknown");
                 AssertContains(adapter.VbaModuleCode, "\"diverged\"", "fake host state matches neither before nor intended");

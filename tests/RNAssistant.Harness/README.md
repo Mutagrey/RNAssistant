@@ -50,7 +50,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Session storage and CAS | `Program.SessionEventStoreTests.cs`, `Program.CasMaintenanceTests.cs` | `storage:` |
 | Chats, context and bridge | `Program.ChatSessionTests.cs`, `Program.ChatEditTests.cs`, `Program.ContextBridgeTests.cs`, `Program.PromptContextInspectorTests.cs` | `chat:`, `chat sessions:`, `context:`, `bridge:` |
 | Tools and disabled pipelines | `Program.ToolStoreTests.cs`, `Program.PipelineToolTests.cs`, `Program.SearchToolTests.cs` | `tools:`, `pipeline:`, `search:` |
-| VBA reader, mutation/journal, pure patch and text canonicalization | `Program.VbaPromptTests.cs`, `Program.VbaToolPackageTests.cs`; catalog gate regression in `Program.ParserDesktopTests.cs` | `vba:`, `vba: reader validates typed snapshots`, `host runtime: direct VBA catalog reads share access`, `vba: pure patch text contract`, `vba: live hash preserves line structure`, `vba: code hash normalizes export` |
+| VBA reader, mutation/journal, pure patch and text canonicalization | `Program.VbaPromptTests.cs`, `Program.VbaToolPackageTests.cs`; catalog gate regression in `Program.ParserDesktopTests.cs` | `vba:`, `vba: mutation`, `vba: reader validates typed snapshots`, `host runtime: direct VBA catalog reads share access`, `vba: pure patch text contract`, `vba: live hash preserves line structure`, `vba: code hash normalizes export` |
 | HTML, plans and charts | `Program.HtmlArtifactStorageTests.cs`, `Program.PlanToolTests.cs`, `Program.ChartArtifactTests.cs` | `artifacts:`, `plans:`, `chart:` |
 | Desktop/WebView-neutral | `Program.ParserDesktopTests.cs`, `Program.WebViewSecurityTests.cs` | `desktop target:`, `webview:` |
 
@@ -114,6 +114,14 @@ coverage under `IMaterializedModelProtocol`; no second parser/retry loop is adde
 MockDemo compilation includes the actual controller; the harness's controller
 remains a stub. [Phase 3B2 evidence](../../docs/stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
 separates that compile/source review from the unperformed Windows delivery gate.
+
+## Typed VBA mutation outcome (Phase 6D)
+
+`vba: mutation` covers the typed service boundary and injected prepare, terminal,
+backend, read-back and cancellation faults. The broader `vba:` slice reuses
+restart, normalization, collision and not-found cases. These are fake-host ordering
+checks, not real COM/VBE qualification. See
+[Phase 6D evidence](../../docs/stabilization/PHASE_6D_VBA_MUTATION_OUTCOME.md).
 
 ## Stabilization completion guard
 

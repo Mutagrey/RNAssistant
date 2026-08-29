@@ -152,33 +152,412 @@ namespace RNAssistant.Harness
                 var reader = new VbaReader(
                     adapter,
                     suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
-                var service = new VbaMutationService(adapter, journal, reader);
+                var service = new VbaMutationService(
+                    new VbaMutationDocumentContextAdapter(adapter),
+                    new VbaMutationJournalStoreAdapter(journal),
+                    new VbaMutationReaderAdapter(reader),
+                    new VbaMutationBackendAdapter(
+                        adapter,
+                        suffix => adapter.HostName.ToLowerInvariant() + "." + suffix));
                 var session = NewSession(adapter);
                 var command = Command("common.vba_apply_patch", "moduleName", "Module1");
-                var patch = new JArray(new JObject
+                var correlation = new VbaMutationCorrelation
                 {
-                    ["op"] = "replace",
-                    ["find"] = "\"before\"",
-                    ["text"] = "\"after\""
-                });
+                    SessionId = session.Id,
+                    StepId = command.RuntimeStepId,
+                    ToolCallId = command.ToolCallId
+                };
 
-                var preparationError = service.PrepareApplyPatchGuard(command, session, "Module1");
-                AssertTrue(preparationError == null, "service prepares its own patch guard");
+                var guard = service.PrepareApplyPatchGuard(new VbaApplyPatchGuardRequest
+                {
+                    RequestedModuleName = "Module1",
+                    Correlation = correlation
+                });
+                AssertTrue(guard.Success, "service prepares its own typed patch guard");
                 var result = service.ApplyPatch(
-                    command,
-                    "Module1",
-                    patch,
-                    false,
-                    session,
+                    new VbaApplyPatchRequest
+                    {
+                        RequestedModuleName = guard.ResolvedModuleName,
+                        Operations = new List<VbaPatchOperationRequest>
+                        {
+                            new VbaPatchOperationRequest
+                            {
+                                Operation = "replace",
+                                Find = "\"before\"",
+                                Text = "\"after\""
+                            }
+                        },
+                        Guard = guard.Guard,
+                        Correlation = correlation
+                    },
                     CancellationToken.None);
 
-                AssertTrue(result.Success, "service applies and verifies patch");
+                AssertEqual(VbaMutationOutcomeStatus.Ok, result.Status, "service applies and verifies patch");
                 AssertContains(adapter.VbaModuleCode, "\"after\"", "service dispatches the intended source");
-                AssertContains(result.DataJson, "\"journalStatus\":\"committed\"",
-                    "service maps verified journal evidence into the legacy result adapter");
+                AssertTrue(result.Data["journalStatus"] == null,
+                    "typed outcome does not expose internal journal status");
+                AssertTrue(!string.IsNullOrWhiteSpace((string)result.Data["mutationId"]),
+                    "typed outcome keeps mutation correlation evidence");
                 var record = journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
                 AssertEqual(VbaMutationStatuses.Committed, record.Terminal.Status,
                     "service owns terminal module assessment");
+            });
+        }
+
+        private static void VbaMutationPrepareFailureBlocksDispatch()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter
+                {
+                    VbaModuleCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub"
+                };
+                var store = new VbaJournalStore(paths);
+                var journal = new FaultingVbaMutationJournal(store) { FailPrepare = true };
+                var backend = new ScriptedVbaMutationBackend(request =>
+                {
+                    adapter.VbaModuleCode = request.Code;
+                    return VbaMutationActionResult.Succeeded("written");
+                });
+                var service = CreateTypedMutationService(adapter, journal, backend);
+
+                var outcome = service.ApplyPatch(
+                    PrepareTypedPatch(service, "prepare-failure", "\"before\"", "\"after\""),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status,
+                    "prepare persistence failure is a definite error");
+                AssertEqual("vba_journal_prepare_failed", outcome.ErrorCode,
+                    "prepare failure keeps a stable code");
+                AssertEqual(0, backend.DispatchCount, "prepare failure blocks backend dispatch");
+                AssertEqual(0, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "prepare failure creates no durable mutation");
+            });
+        }
+
+        private static void VbaMutationTerminalFailureIsUnknown()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter
+                {
+                    VbaModuleCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub"
+                };
+                var store = new VbaJournalStore(paths);
+                var journal = new FaultingVbaMutationJournal(store) { FailComplete = true };
+                var backend = new ScriptedVbaMutationBackend(request =>
+                {
+                    adapter.VbaModuleCode = request.Code;
+                    return VbaMutationActionResult.Succeeded("written");
+                });
+                var service = CreateTypedMutationService(adapter, journal, backend);
+
+                var outcome = service.ApplyPatch(
+                    PrepareTypedPatch(service, "terminal-failure", "\"before\"", "\"after\""),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
+                    "terminal persistence failure cannot claim a durable outcome");
+                AssertEqual(false, outcome.Retryable,
+                    "unknown terminal persistence failure is never automatically retryable");
+                AssertEqual(false, (bool)outcome.Data["terminalRecorded"],
+                    "public evidence exposes only terminal durability, not its internal status");
+                AssertTrue(outcome.Data["journalStatus"] == null,
+                    "terminal failure does not leak internal journal status");
+                AssertEqual(1, backend.DispatchCount, "mutation is dispatched only once");
+                AssertTrue(store.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal == null,
+                    "failed terminal append leaves the prepared record open for reconciliation");
+            });
+        }
+
+        private static void VbaMutationRollbackProseIsNotEvidence()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter
+                {
+                    VbaModuleCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub"
+                };
+                var store = new VbaJournalStore(paths);
+                var backend = new ScriptedVbaMutationBackend(request =>
+                    VbaMutationActionResult.Error(
+                        "Write failed; original code was restored.",
+                        null,
+                        "scripted_write_failed",
+                        false));
+                var service = CreateTypedMutationService(
+                    adapter,
+                    new VbaMutationJournalStoreAdapter(store),
+                    backend);
+
+                var outcome = service.ApplyPatch(
+                    PrepareTypedPatch(service, "rollback-prose", "\"before\"", "\"after\""),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status,
+                    "backend failure with unchanged state is a definite error");
+                AssertEqual(VbaMutationStatuses.NotApplied,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status,
+                    "journal uses inspected live state rather than message text");
+
+                var explicitBackend = new ScriptedVbaMutationBackend(request =>
+                    VbaMutationActionResult.Error(
+                        "Structured rollback result.",
+                        null,
+                        "scripted_write_failed",
+                        false,
+                        VbaMutationDisposition.RolledBack));
+                var explicitService = CreateTypedMutationService(
+                    adapter,
+                    new VbaMutationJournalStoreAdapter(store),
+                    explicitBackend);
+                var explicitOutcome = explicitService.ApplyPatch(
+                    PrepareTypedPatch(explicitService, "rollback-structured", "\"before\"", "\"after\""),
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Error, explicitOutcome.Status,
+                    "structured rollback remains a definite error outcome");
+                AssertEqual(VbaMutationStatuses.RolledBack,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey).Last().Terminal.Status,
+                    "only explicit disposition plus verified before state records rollback");
+            });
+        }
+
+        private static void VbaMutationBackendThrowBeforeEffect()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter
+                {
+                    VbaModuleCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub"
+                };
+                var store = new VbaJournalStore(paths);
+                var backend = new ScriptedVbaMutationBackend(request =>
+                {
+                    throw new InvalidOperationException("scripted backend throw");
+                });
+                var service = CreateTypedMutationService(
+                    adapter,
+                    new VbaMutationJournalStoreAdapter(store),
+                    backend);
+
+                var outcome = service.ApplyPatch(
+                    PrepareTypedPatch(service, "throw-before", "\"before\"", "\"after\""),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status,
+                    "throw before mutation is a definite error after inspection");
+                AssertEqual(VbaMutationStatuses.NotApplied,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status,
+                    "unchanged live state is durably not applied");
+                AssertEqual(1, backend.DispatchCount, "throwing backend is not retried");
+            });
+        }
+
+        private static void VbaMutationCommittedAfterBackendThrow()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter
+                {
+                    VbaModuleCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub"
+                };
+                var store = new VbaJournalStore(paths);
+                var backend = new ScriptedVbaMutationBackend(request =>
+                {
+                    adapter.VbaModuleCode = request.Code;
+                    throw new InvalidOperationException("throw after write");
+                });
+                var service = CreateTypedMutationService(
+                    adapter,
+                    new VbaMutationJournalStoreAdapter(store),
+                    backend);
+
+                var outcome = service.ApplyPatch(
+                    PrepareTypedPatch(service, "throw-after", "\"before\"", "\"after\""),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Ok, outcome.Status,
+                    "verified intended state wins over a backend error report");
+                AssertEqual(VbaMutationStatuses.Committed,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status,
+                    "intended live state is durably committed");
+                AssertEqual(true, (bool)outcome.Data["backendReportedError"],
+                    "result retains that the backend reported an error");
+                AssertEqual(1, backend.DispatchCount, "post-effect throw is not retried");
+            });
+        }
+
+        private static void VbaMutationReadBackDivergenceIsUnknown()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter
+                {
+                    VbaModuleCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub"
+                };
+                var store = new VbaJournalStore(paths);
+                var backend = new ScriptedVbaMutationBackend(request =>
+                {
+                    adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"diverged\"\nEnd Sub";
+                    return VbaMutationActionResult.Succeeded(
+                        "backend reported success",
+                        new JObject
+                        {
+                            ["journalStatus"] = "forged",
+                            ["packageJournalStatus"] = "forged",
+                            ["terminalRecorded"] = true,
+                            ["backendReportedError"] = false,
+                            ["compileValidation"] = "forged"
+                        });
+                });
+                var service = CreateTypedMutationService(
+                    adapter,
+                    new VbaMutationJournalStoreAdapter(store),
+                    backend);
+
+                var outcome = service.ApplyPatch(
+                    PrepareTypedPatch(service, "divergence", "\"before\"", "\"after\""),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
+                    "diverged read-back is unknown");
+                AssertEqual(false, outcome.Retryable, "unknown divergence cannot be retried automatically");
+                AssertTrue(outcome.Data["journalStatus"] == null &&
+                    outcome.Data["packageJournalStatus"] == null &&
+                    outcome.Data["terminalRecorded"] == null &&
+                    outcome.Data["backendReportedError"] == null &&
+                    outcome.Data["compileValidation"] == null,
+                    "backend data cannot forge reserved journal evidence");
+                AssertEqual(VbaMutationStatuses.Unknown,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status,
+                    "durable assessment records unknown");
+                AssertEqual(1, backend.DispatchCount, "diverged write is dispatched once");
+            });
+        }
+
+        private static void VbaMutationUnavailableReadBackIsUnknown()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter
+                {
+                    VbaModuleCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub"
+                };
+                var store = new VbaJournalStore(paths);
+                var backend = new ScriptedVbaMutationBackend(request =>
+                {
+                    adapter.VbaModuleCode = request.Code;
+                    adapter.QueueResult(
+                        "excel.vba_read_module",
+                        ToolResult.Fail("VBA access denied.", null, "vba_access_error", false));
+                    adapter.QueueResult(
+                        "excel.vba_read_module",
+                        ToolResult.Fail("VBA access denied.", null, "vba_access_error", false));
+                    return VbaMutationActionResult.Succeeded("backend reported success");
+                });
+                var service = CreateTypedMutationService(
+                    adapter,
+                    new VbaMutationJournalStoreAdapter(store),
+                    backend);
+
+                var outcome = service.ApplyPatch(
+                    PrepareTypedPatch(service, "unavailable-readback", "\"before\"", "\"after\""),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
+                    "unavailable read-back cannot claim success or failure");
+                AssertEqual(false, outcome.Retryable,
+                    "unreadable final state cannot be retried automatically");
+                AssertEqual(VbaMutationStatuses.Unknown,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status,
+                    "unreadable live state is durably unknown");
+                AssertEqual(1, backend.DispatchCount, "unreadable write is dispatched once");
+            });
+        }
+
+        private static void VbaMutationCancellationBoundaries()
+        {
+            WithTempPaths(paths =>
+            {
+                const string beforeCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub";
+                const string intendedCode = "Sub Main()\nDebug.Print \"after\"\nEnd Sub";
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = beforeCode };
+                var store = new VbaJournalStore(paths);
+                var backend = new ScriptedVbaMutationBackend(request =>
+                    VbaMutationActionResult.Succeeded("unused"));
+                var service = CreateTypedMutationService(
+                    adapter,
+                    new VbaMutationJournalStoreAdapter(store),
+                    backend);
+                var before = new VbaModuleState
+                {
+                    Name = "Module1",
+                    Code = beforeCode,
+                    ComponentType = "StdModule"
+                };
+                var preDispatch = service.PrepareJournaledMutation(new VbaModuleMutationRequest
+                {
+                    Operation = "write",
+                    ModuleName = "Module1",
+                    Before = before,
+                    IntendedAfterExists = true,
+                    IntendedAfterCode = intendedCode,
+                    IntendedComponentType = "StdModule",
+                    Correlation = new VbaMutationCorrelation { SessionId = "cancel-before" }
+                });
+                AssertTrue(preDispatch.Success, "pre-dispatch cancellation has a prepared record");
+                var source = new CancellationTokenSource();
+                source.Cancel();
+                var dispatched = 0;
+                try
+                {
+                    service.ExecuteJournaledMutation(
+                        preDispatch.Preparation,
+                        () =>
+                        {
+                            dispatched += 1;
+                            return VbaMutationActionResult.Succeeded("unexpected");
+                        },
+                        source.Token);
+                    throw new InvalidOperationException("pre-dispatch cancellation was ignored");
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                AssertEqual(0, dispatched, "pre-dispatch cancellation blocks the effect");
+                AssertEqual(VbaMutationStatuses.NotApplied,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey)
+                        .Single(item => item.Prepared.MutationId == preDispatch.Preparation.MutationId)
+                        .Terminal.Status,
+                    "pre-dispatch cancellation records not applied");
+
+                var postDispatch = service.PrepareJournaledMutation(new VbaModuleMutationRequest
+                {
+                    Operation = "write",
+                    ModuleName = "Module1",
+                    Before = before,
+                    IntendedAfterExists = true,
+                    IntendedAfterCode = intendedCode,
+                    IntendedComponentType = "StdModule",
+                    Correlation = new VbaMutationCorrelation { SessionId = "cancel-after" }
+                });
+                var outcome = service.ExecuteJournaledMutation(
+                    postDispatch.Preparation,
+                    () =>
+                    {
+                        adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"diverged\"\nEnd Sub";
+                        throw new OperationCanceledException("cancelled after dispatch");
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
+                    "post-dispatch cancellation with diverged state is unknown");
+                AssertEqual(false, outcome.Retryable,
+                    "post-dispatch cancellation cannot trigger an automatic retry");
+                AssertEqual(VbaMutationStatuses.Unknown,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey)
+                        .Single(item => item.Prepared.MutationId == postDispatch.Preparation.MutationId)
+                        .Terminal.Status,
+                    "post-dispatch cancellation records unknown");
             });
         }
 
@@ -384,7 +763,10 @@ namespace RNAssistant.Harness
                 AssertEqual("OldModule", (string)data["previousModuleName"], "result returns previous name");
                 AssertEqual("RenamedModule", (string)data["moduleName"], "result returns actual new name");
                 AssertEqual("rename", (string)data["mode"], "result identifies rename branch");
-                AssertEqual(VbaMutationStatuses.Committed, (string)data["journalStatus"], "two-name journal commits");
+                AssertTrue(data["journalStatus"] == null,
+                    "rename result does not expose internal journal status");
+                AssertTrue(!string.IsNullOrWhiteSpace((string)data["mutationId"]),
+                    "rename result keeps mutation correlation evidence");
                 AssertEqual(0, store.List("Excel", "doc").Count, "identity-only rename does not expose a misleading source backup");
                 var journal = store.ListPackageMutations("Excel", "doc").Single();
                 AssertEqual("rename", journal.Prepared.Operation, "rename uses a two-identity prepared record");
@@ -1429,11 +1811,15 @@ namespace RNAssistant.Harness
                     new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertTrue(!result.Success, "write drift is not reported as success");
-                AssertEqual("partial_failure", result.Status, "write drift status");
+                AssertEqual("failed", result.Status,
+                    "verified unchanged state is a definite not-applied error");
                 AssertEqual("vba_patch_verify_mismatch", result.ErrorCode, "write drift error code");
                 AssertContains(result.DataJson, "expectedCodeSha256", "expected hash returned");
                 AssertContains(result.DataJson, "actualCodeSha256", "actual hash returned");
                 AssertEqual(1, backupStore.List("Excel", "doc").Count, "rollback backup retained");
+                AssertEqual(VbaMutationStatuses.NotApplied,
+                    backupStore.ListMutations("Excel", "doc").Single().Terminal.Status,
+                    "read-back drift matching before state is durably not applied");
             });
         }
 
@@ -2037,6 +2423,115 @@ namespace RNAssistant.Harness
                 {
                 }
             });
+        }
+
+        private static VbaMutationService CreateTypedMutationService(
+            FakeOfficeAdapter adapter,
+            IVbaMutationJournal journal,
+            IVbaMutationBackend backend)
+        {
+            return new VbaMutationService(
+                new VbaMutationDocumentContextAdapter(adapter),
+                journal,
+                new VbaMutationReaderAdapter(new VbaReader(
+                    adapter,
+                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix)),
+                backend);
+        }
+
+        private static VbaApplyPatchRequest PrepareTypedPatch(
+            VbaMutationService service,
+            string sessionId,
+            string find,
+            string text)
+        {
+            var correlation = new VbaMutationCorrelation { SessionId = sessionId };
+            var preparation = service.PrepareApplyPatchGuard(new VbaApplyPatchGuardRequest
+            {
+                RequestedModuleName = "Module1",
+                Correlation = correlation
+            });
+            AssertTrue(preparation.Success, "typed patch guard preparation succeeds");
+            return new VbaApplyPatchRequest
+            {
+                RequestedModuleName = preparation.ResolvedModuleName,
+                Operations = new List<VbaPatchOperationRequest>
+                {
+                    new VbaPatchOperationRequest
+                    {
+                        Operation = "replace",
+                        Find = find,
+                        Text = text
+                    }
+                },
+                Guard = preparation.Guard,
+                Correlation = correlation
+            };
+        }
+
+        private sealed class ScriptedVbaMutationBackend : IVbaMutationBackend
+        {
+            private readonly Func<VbaModuleWriteRequest, VbaMutationActionResult> _replace;
+
+            public ScriptedVbaMutationBackend(
+                Func<VbaModuleWriteRequest, VbaMutationActionResult> replace)
+            {
+                _replace = replace;
+            }
+
+            public int DispatchCount { get; private set; }
+
+            public VbaMutationActionResult ReplaceModule(VbaModuleWriteRequest request)
+            {
+                DispatchCount += 1;
+                return _replace == null ? null : _replace(request);
+            }
+        }
+
+        private sealed class FaultingVbaMutationJournal : IVbaMutationJournal
+        {
+            private readonly VbaJournalStore _store;
+
+            public FaultingVbaMutationJournal(VbaJournalStore store)
+            {
+                _store = store;
+            }
+
+            public bool FailPrepare { get; set; }
+            public bool FailComplete { get; set; }
+
+            public VbaMutationPreparation PrepareMutation(
+                VbaMutationPreparation preparation,
+                string beforeCode,
+                string intendedAfterCode)
+            {
+                if (FailPrepare) throw new IOException("scripted prepare persistence failure");
+                return _store.PrepareMutation(preparation, beforeCode, intendedAfterCode);
+            }
+
+            public void CompleteMutation(
+                string host,
+                string documentKey,
+                string mutationId,
+                string status,
+                bool? actualExists,
+                string actualCodeSha256,
+                string actualComparableCodeSha256,
+                string errorCode,
+                string message)
+            {
+                if (FailComplete) throw new IOException("scripted terminal persistence failure");
+                _store.CompleteMutation(
+                    host,
+                    documentKey,
+                    mutationId,
+                    status,
+                    actualExists,
+                    actualCodeSha256,
+                    actualComparableCodeSha256,
+                    errorCode,
+                    message);
+            }
         }
 
         private static void ContextUsageEstimatorCountsPromptAndSession()

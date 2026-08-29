@@ -1843,6 +1843,26 @@ journal/CAS format, COM implementation, `HostRuntime`, factories, UI или Phas
 оставшихся entrypoints требуют отдельного подэтапа. 5B2/R04, Windows/VBE/package
 qualification и полный Phase 6 gate остаются открытыми.
 
+### Согласованное продолжение 6D typed mutation outcome (2026-08-29)
+
+После завершения 6C пользователь разрешил продолжить («Далее»). Этот host-neutral
+slice заменяет временную service-границу на typed module-mutation requests,
+action results и финальный `ok/error/unknown` outcome. `VbaMutationService` получает
+только узкие document-context, read, backend и journal ports; единственный
+domain→legacy `ToolResult` mapping остаётся в `VbaToolExecutor`/Tools adapter.
+Действующие write/delete/restore callers переключаются на общий typed journal
+pipeline механически, но ownership их полных workflows остаётся в executor до
+следующих отдельных подэтапов.
+
+String-based rollback classification удаляется и из остающегося package/rename
+path: `rolled_back` допустим только по явному structured backend disposition при
+совпадении live state с before. Текущий legacy backend adapter такой disposition
+не изобретает. Internal journal status не входит в общий Tool Result; остаются
+только correlation/effect evidence и явный `terminalRecorded=false`, когда terminal
+append не подтверждён. Journal/CAS format, COM implementation, `HostRuntime`,
+factories, protocol и UI не меняются. Реальная COM/VBE qualification остаётся
+WQ-VBA; после 6D следующий отдельный slice — whole-module write ownership.
+
 ### Цель
 
 Стабилизировать наиболее опасный write contour до переноса остальных mutations.
@@ -1868,28 +1888,28 @@ qualification и полный Phase 6 gate остаются открытыми.
 - [x] 6C host-neutral: `Office.Vba.VbaMutationService` владеет полным `apply_patch` workflow и общей module prepare/dispatch/terminal orchestration; прежний executor patch path удалён.
 - [x] 6C host-neutral: `Office.Vba.VbaVerifier` владеет module write/delete read-back и assessment; write/delete/restore и reconciliation используют одного verifier без изменения package semantics.
 - [x] 6C: current journal/CAS bytes, event schema, hashes, correlation и public result shape сохранены; service ownership не создаёт второй store/dual-write.
-- [ ] 6D: заменить временную service-границу `ToolCommand`/`ToolResult` на typed domain request/outcome и оставить mapping в executor.
-- [ ] Удалить string-based rollback classification.
-- [ ] Маппировать domain result в `ok/error/unknown`.
-- [ ] Не выносить internal journal states в общий ToolResult.
-- [ ] Compile validation хранить отдельно.
-- [ ] Unknown mutation не retry.
+- [x] 6D host-neutral: временная service-граница `ToolCommand`/`ToolResult` заменена typed domain request/read/action/outcome; mutation service/verifier больше не потребляют legacy `ToolResult`, mapping остался в Tools adapters/executor.
+- [x] String-based rollback classification удалена из module и остающегося package/rename path; `rolled_back` требует явный structured disposition и verified before state.
+- [x] Domain result детерминированно маппится в `ok/error/unknown`; verified intended state побеждает backend error, verified before state даёт definite error/not-applied.
+- [x] Internal journal states не входят в общий ToolResult data/status/message; mutation/backup correlation и effect evidence сохранены.
+- [x] Compile validation не смешана с source read-back: текущий contour её не выполняет и не утверждает; будущая compile evidence должна оставаться отдельной.
+- [x] Unknown mutation не retry; terminal append failure не создаёт выдуманный terminal и не повторяет dispatch.
 - [x] R33 host-neutral: exact patch требует единственного стартового смещения, включая перекрытия; отказ до confirmation/write/нового backup/journal проверен отдельно от 6A extraction. Windows/VBE и полный VBA gate остаются открытыми.
-- [ ] Добавить fault injection:
-  - [ ] before journal prepare;
-  - [ ] after prepare/before COM;
-  - [ ] COM throws before mutation;
-  - [ ] COM mutates then throws;
-  - [ ] read-back unavailable;
-  - [ ] read-back mismatch;
-  - [ ] terminal journal write fails;
-  - [ ] cancellation before dispatch;
-  - [ ] cancellation after dispatch;
-  - [ ] restart after prepared;
-  - [ ] VBE newline normalization;
-  - [ ] duplicate target;
-  - [ ] target not found.
-- [ ] Добавить real Excel/VBE test checklist.
+- [x] Добавить host-neutral fault injection/reused regression matrix:
+  - [x] before journal prepare;
+  - [x] after prepare/before COM;
+  - [x] backend/COM boundary throws before mutation;
+  - [x] backend/COM boundary mutates then throws;
+  - [x] read-back unavailable;
+  - [x] read-back mismatch;
+  - [x] terminal journal write fails;
+  - [x] cancellation before dispatch;
+  - [x] cancellation after dispatch;
+  - [x] restart after prepared;
+  - [x] VBE newline normalization (fake normalization only);
+  - [x] duplicate target;
+  - [x] target not found.
+- [x] Real Excel/VBE сценарии зафиксированы в [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md#3-финальный-прогон-candidate); исполнение WQ-VBA остаётся открытым.
 
 ### Definition of Done
 

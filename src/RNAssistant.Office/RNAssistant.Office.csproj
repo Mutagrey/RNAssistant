@@ -101,6 +101,8 @@
     <Compile Include="Contracts\IOfficeDocumentSession.cs" />
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Vba\VbaReader.cs" />
+    <Compile Include="Vba\VbaMutationContracts.cs" />
+    <Compile Include="Vba\VbaMutationJournal.cs" />
     <Compile Include="Vba\VbaMutationService.cs" />
     <Compile Include="Vba\VbaMutationService.ApplyPatch.cs" />
     <Compile Include="Vba\VbaMutationService.Guards.cs" />
@@ -187,6 +189,7 @@
     <Compile Include="Tools\UserQuestionToolExecutor.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
+    <Compile Include="Tools\VbaMutationToolAdapter.cs" />
     <Compile Include="Tools\VbaToolExecutor.Guards.cs" />
     <Compile Include="Tools\VbaToolExecutor.Journal.cs" />
     <Compile Include="Tools\VbaToolExecutor.Packages.cs" />

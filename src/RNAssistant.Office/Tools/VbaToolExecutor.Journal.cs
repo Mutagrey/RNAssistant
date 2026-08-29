@@ -36,7 +36,7 @@ namespace RNAssistant.Office.Tools
                 foreach (var record in openPackages)
                 {
                     if (record == null || record.Prepared == null) continue;
-                    var assessment = InspectPackageMutation(record.Prepared, null, null);
+                    var assessment = InspectPackageMutation(record.Prepared);
                     _vbaJournalStore.CompletePackageMutation(
                         _adapter.HostName,
                         _adapter.DocumentKey,
@@ -224,7 +224,6 @@ namespace RNAssistant.Office.Tools
             var rename = prepared != null && string.Equals(prepared.Operation, "rename", StringComparison.OrdinalIgnoreCase);
             var mutationLabel = rename ? "VBA rename" : "VBA package mutation";
             ToolResult result;
-            Exception actionException = null;
             try
             {
                 if (action != null) TraceMutation(prepared, "domain.effect.dispatched", null);
@@ -232,7 +231,6 @@ namespace RNAssistant.Office.Tools
             }
             catch (Exception ex)
             {
-                actionException = ex;
                 result = ToolResult.Fail(
                     mutationLabel + " threw after its prepared record was persisted. " + ex.Message,
                     null,
@@ -248,7 +246,7 @@ namespace RNAssistant.Office.Tools
                     false);
             }
 
-            var assessment = InspectPackageMutation(prepared, result, actionException);
+            var assessment = InspectPackageMutation(prepared);
             TraceMutation(prepared, "domain.effect.verified", assessment.Status);
             try
             {
@@ -264,13 +262,14 @@ namespace RNAssistant.Office.Tools
             catch (Exception ex)
             {
                 return ToolResult.PartialFailure(
-                    "The " + mutationLabel + " effect was inspected as " + assessment.Status +
-                    ", but its terminal journal record could not be saved. Inspect the affected component identities before retrying. " + ex.Message,
-                    PackageJournalData(result.DataJson, prepared, "unknown", assessment),
+                    "The " + mutationLabel +
+                    " effect was inspected, but its terminal journal record could not be saved. " +
+                    "Inspect the affected component identities before retrying. " + ex.Message,
+                    PackageJournalData(result.DataJson, prepared, assessment, false),
                     rename ? "vba_rename_journal_terminal_failed" : "vba_package_journal_terminal_failed");
             }
 
-            result.DataJson = PackageJournalData(result.DataJson, prepared, assessment.Status, assessment);
+            result.DataJson = PackageJournalData(result.DataJson, prepared, assessment);
             if (string.Equals(assessment.Status, VbaMutationStatuses.Unknown, StringComparison.Ordinal))
             {
                 result.Success = false;
@@ -292,7 +291,7 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolResult.PartialFailure(
                     (result.Message ?? mutationLabel + " reported failure.") +
-                    " Live components match the intended result, so the journal classified it as committed.",
+                    " Live components match the intended result despite the backend failure report.",
                     result.DataJson,
                     rename ? "vba_rename_committed_after_error" : "vba_package_mutation_committed_after_error");
             }
@@ -300,9 +299,7 @@ namespace RNAssistant.Office.Tools
         }
 
         private PackageMutationAssessment InspectPackageMutation(
-            VbaPackageMutationPreparation prepared,
-            ToolResult result,
-            Exception exception)
+            VbaPackageMutationPreparation prepared)
         {
             var components = new System.Collections.Generic.List<VbaPackageMutationComponentAssessment>();
             var packageOperation = prepared != null &&
@@ -317,9 +314,7 @@ namespace RNAssistant.Office.Tools
             var status = allIntended
                 ? VbaMutationStatuses.Committed
                 : allBefore
-                    ? VbaMutationService.ReportsRollback(result, exception)
-                        ? VbaMutationStatuses.RolledBack
-                        : VbaMutationStatuses.NotApplied
+                    ? VbaMutationStatuses.NotApplied
                     : VbaMutationStatuses.Unknown;
             var failed = components.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.ErrorCode));
             var rename = prepared != null && string.Equals(prepared.Operation, "rename", StringComparison.OrdinalIgnoreCase);
@@ -425,8 +420,8 @@ namespace RNAssistant.Office.Tools
         private static string PackageJournalData(
             string dataJson,
             VbaPackageMutationPreparation prepared,
-            string status,
-            PackageMutationAssessment assessment)
+            PackageMutationAssessment assessment,
+            bool terminalRecorded = true)
         {
             JObject data;
             try
@@ -437,19 +432,22 @@ namespace RNAssistant.Office.Tools
             {
                 data = new JObject { ["operationData"] = dataJson ?? string.Empty };
             }
+            data.Remove("journalStatus");
+            data.Remove("packageJournalStatus");
+            data.Remove("terminalRecorded");
+            data.Remove("componentAssessments");
             var rename = prepared != null && string.Equals(prepared.Operation, "rename", StringComparison.OrdinalIgnoreCase);
             if (rename)
             {
                 data["journaled"] = true;
                 data["mutationId"] = prepared.MutationId;
-                data["journalStatus"] = status;
             }
             else
             {
                 data["packageJournaled"] = true;
                 data["packageMutationId"] = prepared == null ? null : prepared.MutationId;
-                data["packageJournalStatus"] = status;
             }
+            if (!terminalRecorded) data["terminalRecorded"] = false;
             data["componentAssessments"] = assessment == null
                 ? new JArray()
                 : JArray.FromObject(assessment.Components ?? new System.Collections.Generic.List<VbaPackageMutationComponentAssessment>());
