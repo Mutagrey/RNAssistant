@@ -144,11 +144,17 @@ namespace RNAssistant.Office.Vba
                 var actual = read.Module;
                 var rawHash = VbaTextCanonicalizer.LiveCodeSha256(actual.Code);
                 var comparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(actual.Code);
+                var componentTypeMatches = string.IsNullOrWhiteSpace(prepared.ComponentType) ||
+                    string.Equals(
+                        prepared.ComponentType,
+                        actual.ComponentType,
+                        StringComparison.OrdinalIgnoreCase);
                 if (prepared.IntendedAfterExists && MatchesRecordedState(
                     rawHash,
                     comparableHash,
                     prepared.IntendedAfterCodeSha256,
-                    prepared.IntendedAfterComparableCodeSha256))
+                    prepared.IntendedAfterComparableCodeSha256) &&
+                    componentTypeMatches)
                 {
                     return new VbaMutationAssessment
                     {
@@ -163,7 +169,8 @@ namespace RNAssistant.Office.Vba
                     rawHash,
                     comparableHash,
                     prepared.BeforeCodeSha256,
-                    prepared.BeforeComparableCodeSha256))
+                    prepared.BeforeComparableCodeSha256) &&
+                    componentTypeMatches)
                 {
                     return new VbaMutationAssessment
                     {
@@ -180,8 +187,12 @@ namespace RNAssistant.Office.Vba
                     ActualExists = true,
                     ActualCodeSha256 = rawHash,
                     ActualComparableCodeSha256 = comparableHash,
-                    ErrorCode = "vba_mutation_diverged",
-                    Message = "Live module matches neither the recorded before nor intended state."
+                    ErrorCode = componentTypeMatches
+                        ? "vba_mutation_diverged"
+                        : "vba_mutation_component_type_diverged",
+                    Message = componentTypeMatches
+                        ? "Live module matches neither the recorded before nor intended state."
+                        : "Live module component type differs from the recorded mutation state."
                 };
             }
 

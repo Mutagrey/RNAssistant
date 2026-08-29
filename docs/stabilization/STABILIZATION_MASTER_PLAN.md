@@ -1863,6 +1863,22 @@ append не подтверждён. Journal/CAS format, COM implementation, `Hos
 factories, protocol и UI не меняются. Реальная COM/VBE qualification остаётся
 WQ-VBA; после 6D следующий отдельный slice — whole-module write ownership.
 
+### Согласованное продолжение 6E whole-module write (2026-08-29)
+
+После завершения 6D пользователь разрешил следующий отдельный подэтап («Далее»).
+Scope ограничен write-веткой `common.vba_write_module` с режимами
+`upsert/createOnly/updateOnly`: normalization/existence preparation, confirmation
+guard recheck, create/replace dispatch, prepared/terminal journal и source/type
+read-back переходят в typed `VbaMutationService`. `VbaToolExecutor` оставляет
+только legacy argument/mode/result adapter и отдельно маршрутизирует неизменённый
+`mode=rename`.
+
+Delete, restore, rename/package, reconciliation outer loop, COM implementation,
+`HostRuntime`, factories, protocol/wire и UI не меняются. Create reconciliation
+обязана учитывать component type вместе с source hash: совпавший код чужого типа
+не доказывает committed effect и даёт non-retryable `unknown`. После 6E следующий
+отдельный slice — delete ownership; Windows COM/VBE qualification остаётся WQ-VBA.
+
 ### Цель
 
 Стабилизировать наиболее опасный write contour до переноса остальных mutations.
@@ -1871,8 +1887,8 @@ WQ-VBA; после 6D следующий отдельный slice — whole-modu
 
 1. `vba.read` — 6B host-neutral extraction done; Windows/VBE qualification remains open.
 2. `vba.apply_patch` — 6C workflow/verifier ownership done host-neutral; typed outcome/fault matrix and Windows/VBE qualification remain open.
-3. whole-module write.
-4. delete.
+3. whole-module write — 6E done host-neutral; Windows/VBE qualification open.
+4. delete — next separate slice.
 5. restore.
 6. package operations.
 
@@ -1894,6 +1910,9 @@ WQ-VBA; после 6D следующий отдельный slice — whole-modu
 - [x] Internal journal states не входят в общий ToolResult data/status/message; mutation/backup correlation и effect evidence сохранены.
 - [x] Compile validation не смешана с source read-back: текущий contour её не выполняет и не утверждает; будущая compile evidence должна оставаться отдельной.
 - [x] Unknown mutation не retry; terminal append failure не создаёт выдуманный terminal и не повторяет dispatch.
+- [x] 6E host-neutral: полный whole-module write workflow (`upsert/createOnly/updateOnly`) перенесён из executor в typed `VbaMutationService`; старые write guard/workflow helpers удалены, `mode=rename` не смешивался.
+- [x] 6E: create/replace выбирает domain service через typed backend actions; guard, prepared journal, source/type read-back и `Ok/Error/Unknown` остаются одним workflow без второго execution/store path.
+- [x] 6E: reconciliation проверяет component type вместе с source hash; same-source/different-type create race даёт non-retryable `unknown`, а existence rejection не создаёт preparation и не dispatches.
 - [x] R33 host-neutral: exact patch требует единственного стартового смещения, включая перекрытия; отказ до confirmation/write/нового backup/journal проверен отдельно от 6A extraction. Windows/VBE и полный VBA gate остаются открытыми.
 - [x] Добавить host-neutral fault injection/reused regression matrix:
   - [x] before journal prepare;

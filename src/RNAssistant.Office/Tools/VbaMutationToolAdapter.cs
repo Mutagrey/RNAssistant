@@ -50,6 +50,19 @@ namespace RNAssistant.Office.Tools
                 "VBA module write returned no result.",
                 "vba_write_missing_result");
         }
+
+        public VbaMutationActionResult CreateModule(VbaModuleCreateRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            var command = new ToolCommand { ToolId = _backendToolId("vba_create_module_internal") };
+            command.Arguments["moduleName"] = request.ModuleName;
+            command.Arguments["componentType"] = request.ComponentType;
+            command.Arguments["code"] = request.Code;
+            return VbaMutationToolResultMapper.FromBackend(
+                _adapter.ExecuteTool(command),
+                "VBA module create returned no result.",
+                "vba_write_failed");
+        }
     }
 
     internal sealed class VbaMutationReaderAdapter : IVbaMutationReader

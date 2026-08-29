@@ -160,7 +160,8 @@ namespace RNAssistant.Office.Vba
             VbaMutationCorrelation correlation,
             string moduleName,
             string hash,
-            string requestedModuleName)
+            string requestedModuleName,
+            bool moduleExists = true)
         {
             correlation = correlation ?? new VbaMutationCorrelation();
             return new VbaMutationGuard
@@ -178,8 +179,8 @@ namespace RNAssistant.Office.Vba
                 RequestedModuleName = string.IsNullOrWhiteSpace(requestedModuleName)
                     ? moduleName ?? string.Empty
                     : requestedModuleName,
-                ModuleExists = true,
-                CodeSha256 = hash ?? string.Empty
+                ModuleExists = moduleExists,
+                CodeSha256 = moduleExists ? hash ?? string.Empty : string.Empty
             };
         }
 
@@ -206,9 +207,12 @@ namespace RNAssistant.Office.Vba
             string operation)
         {
             var editor = string.Equals(operation, "editor", StringComparison.OrdinalIgnoreCase);
+            var wholeWrite = string.Equals(operation, "write", StringComparison.OrdinalIgnoreCase);
             var message = editor
                 ? "The VBA module changed after it was loaded in the editor. Reload it and reconcile the changes before saving."
-                : "The VBA module changed after this action was prepared. Retry the same tool so runtime can bind the current state; read it only if the intended action may no longer match.";
+                : wholeWrite
+                    ? "The VBA module changed after the source was inspected or this write was prepared. Re-read and reconcile if the complete source was derived from that version; retry the same write only for an intentional complete overwrite."
+                    : "The VBA module changed after this action was prepared. Retry the same tool so runtime can bind the current state; read it only if the intended action may no longer match.";
             return VbaMutationOutcome.Error(
                 message,
                 new JObject
@@ -220,7 +224,7 @@ namespace RNAssistant.Office.Vba
                     ["actualCodeSha256"] = string.IsNullOrWhiteSpace(actualHash) ? null : actualHash,
                     ["retrySameTool"] = !editor,
                     ["reloadEditor"] = editor,
-                    ["reconcileBeforeOverwrite"] = false,
+                    ["reconcileBeforeOverwrite"] = wholeWrite,
                     ["inspectTool"] = "common.resources_read",
                     ["resourceProvider"] = VbaResourceProvider.ProviderName,
                     ["resourceKind"] = VbaResourceProvider.ComponentKind

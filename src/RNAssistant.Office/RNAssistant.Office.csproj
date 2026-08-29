@@ -107,6 +107,8 @@
     <Compile Include="Vba\VbaMutationService.ApplyPatch.cs" />
     <Compile Include="Vba\VbaMutationService.Guards.cs" />
     <Compile Include="Vba\VbaMutationService.Journal.cs" />
+    <Compile Include="Vba\VbaMutationService.WholeModuleWrite.cs" />
+    <Compile Include="Vba\VbaWholeModuleWriteContracts.cs" />
     <Compile Include="Vba\VbaVerifier.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ChatCloneService.cs" />

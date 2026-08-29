@@ -204,6 +204,159 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaWholeModuleWriteServiceOwnsWorkflow()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new VbaJournalStore(paths);
+                var reader = new VbaReader(
+                    adapter,
+                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
+                var service = new VbaMutationService(
+                    new VbaMutationDocumentContextAdapter(adapter),
+                    new VbaMutationJournalStoreAdapter(store),
+                    new VbaMutationReaderAdapter(reader),
+                    new VbaMutationBackendAdapter(
+                        adapter,
+                        suffix => adapter.HostName.ToLowerInvariant() + "." + suffix));
+                var correlation = new VbaMutationCorrelation { SessionId = "whole-write-service" };
+                const string requestedName = "123 phase 6E target!";
+
+                var preparation = service.PrepareWholeModuleWriteGuard(
+                    new VbaWholeModuleWriteGuardRequest
+                    {
+                        RequestedModuleName = requestedName,
+                        Correlation = correlation
+                    });
+                AssertTrue(preparation.Success, "typed service prepares a missing whole-write target");
+                AssertTrue(!string.Equals(requestedName, preparation.ResolvedModuleName, StringComparison.Ordinal),
+                    "typed service owns deterministic create-name normalization");
+
+                var created = service.WriteWholeModule(
+                    new VbaWholeModuleWriteRequest
+                    {
+                        ModuleName = preparation.ResolvedModuleName,
+                        Code = "Option Explicit\nPublic Value As Long",
+                        ComponentType = "ClassModule",
+                        Mode = VbaWholeModuleWriteMode.CreateOnly,
+                        Guard = preparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Ok, created.Status,
+                    "typed whole-write service creates and verifies the module");
+                AssertContains(adapter.GetVbaModuleCode(preparation.ResolvedModuleName), "Public Value",
+                    "typed backend receives complete source");
+                AssertEqual("ClassModule", (string)created.Data["componentType"],
+                    "creation preserves the requested component type");
+                AssertEqual(1, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "domain workflow dispatches one create action");
+                AssertEqual(VbaMutationStatuses.Committed,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status,
+                    "domain workflow owns the terminal journal result");
+
+                var existingPreparation = service.PrepareWholeModuleWriteGuard(
+                    new VbaWholeModuleWriteGuardRequest
+                    {
+                        RequestedModuleName = requestedName,
+                        Correlation = correlation
+                    });
+                AssertTrue(existingPreparation.Success,
+                    "typed service prepares the existing normalized target");
+                var createDispatches = adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase));
+                var rejected = service.WriteWholeModule(
+                    new VbaWholeModuleWriteRequest
+                    {
+                        ModuleName = existingPreparation.ResolvedModuleName,
+                        Code = "Option Explicit\nPublic Value As String",
+                        ComponentType = "StdModule",
+                        Mode = VbaWholeModuleWriteMode.CreateOnly,
+                        Guard = existingPreparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Error, rejected.Status,
+                    "createOnly rejects an existing target inside the domain service");
+                AssertEqual("vba_module_exists", rejected.ErrorCode,
+                    "createOnly keeps its stable error code");
+                AssertEqual(1, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "existence rejection does not create a journal preparation");
+                AssertEqual(createDispatches, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "existence rejection does not dispatch create");
+
+                var missingPreparation = service.PrepareWholeModuleWriteGuard(
+                    new VbaWholeModuleWriteGuardRequest
+                    {
+                        RequestedModuleName = "MissingUpdateTarget",
+                        Correlation = correlation
+                    });
+                AssertTrue(missingPreparation.Success,
+                    "typed service prepares a missing update-only target");
+                var missingUpdate = service.WriteWholeModule(
+                    new VbaWholeModuleWriteRequest
+                    {
+                        ModuleName = missingPreparation.ResolvedModuleName,
+                        Code = "Sub Missing()\nEnd Sub",
+                        ComponentType = "StdModule",
+                        Mode = VbaWholeModuleWriteMode.UpdateOnly,
+                        Guard = missingPreparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual("vba_module_not_found", missingUpdate.ErrorCode,
+                    "updateOnly rejects a missing target before persistence or dispatch");
+                AssertEqual(1, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "missing update rejection creates no journal preparation");
+                AssertEqual(createDispatches, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "missing update rejection does not dispatch create");
+
+                const string raceName = "TypeRaceTarget";
+                const string raceCode = "Option Explicit\nPublic SameSource As Long";
+                var racePreparation = service.PrepareWholeModuleWriteGuard(
+                    new VbaWholeModuleWriteGuardRequest
+                    {
+                        RequestedModuleName = raceName,
+                        Correlation = correlation
+                    });
+                AssertTrue(racePreparation.Success, "type-race target is initially missing");
+                adapter.BeforeExecuteTool = command =>
+                {
+                    if (command.ToolId.EndsWith(
+                        ".vba_create_module_internal",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        adapter.SetVbaModule(raceName, raceCode, "StdModule");
+                    }
+                };
+                var raced = service.WriteWholeModule(
+                    new VbaWholeModuleWriteRequest
+                    {
+                        ModuleName = raceName,
+                        Code = raceCode,
+                        ComponentType = "ClassModule",
+                        Mode = VbaWholeModuleWriteMode.CreateOnly,
+                        Guard = racePreparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                adapter.BeforeExecuteTool = null;
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, raced.Status,
+                    "same source with a different raced component type is not false committed");
+                AssertEqual(false, raced.Retryable, "type-diverged create is not retried");
+                AssertEqual(VbaMutationStatuses.Unknown,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey)
+                        .Single(item => item.Prepared.ModuleName == raceName)
+                        .Terminal.Status,
+                    "type-diverged create is durably unknown");
+            });
+        }
+
         private static void VbaMutationPrepareFailureBlocksDispatch()
         {
             WithTempPaths(paths =>
@@ -2485,6 +2638,16 @@ namespace RNAssistant.Harness
             {
                 DispatchCount += 1;
                 return _replace == null ? null : _replace(request);
+            }
+
+            public VbaMutationActionResult CreateModule(VbaModuleCreateRequest request)
+            {
+                DispatchCount += 1;
+                return VbaMutationActionResult.Error(
+                    "Scripted create backend is not configured.",
+                    null,
+                    "scripted_create_not_configured",
+                    false);
             }
         }
 

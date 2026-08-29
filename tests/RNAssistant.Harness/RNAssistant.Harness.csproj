@@ -65,6 +65,8 @@
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.ApplyPatch.cs" Link="Office\Vba\VbaMutationService.ApplyPatch.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Guards.cs" Link="Office\Vba\VbaMutationService.Guards.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Journal.cs" Link="Office\Vba\VbaMutationService.Journal.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.WholeModuleWrite.cs" Link="Office\Vba\VbaMutationService.WholeModuleWrite.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaWholeModuleWriteContracts.cs" Link="Office\Vba\VbaWholeModuleWriteContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaVerifier.cs" Link="Office\Vba\VbaVerifier.cs" />
     <Compile
       Include="..\..\src\RNAssistant.Office\Services\*.cs"

@@ -75,7 +75,7 @@ After the Office operation and read-back, one `mutation.terminal` records:
 - `failed` — reserved for a definite terminal failure without an uncertain external effect;
 - `unknown` — live state is unreadable or matches neither side.
 
-The typed domain outcome is only `ok`, `error`, or `unknown`. Verified intended state maps to `ok`; verified before/not-applied maps to a definite `error`; unreadable or divergent state maps to non-retryable `unknown`. Source read-back verifies the requested text/type state, not VBA compilation or runtime behavior.
+The typed domain outcome is only `ok`, `error`, or `unknown`. Verified intended state maps to `ok`; verified before/not-applied maps to a definite `error`; unreadable or divergent state maps to non-retryable `unknown`. Existing live components must match the recorded component type as well as the applicable source hash: a create race that leaves identical source under another type is `unknown`, not committed. Source read-back verifies the requested text/type state, not VBA compilation or runtime behavior.
 
 Common tool results expose `mutationId`, `rollbackBackupId`, and bounded actual-effect evidence, but never the internal journal status. If terminal persistence fails after inspection, the result is non-retryable `unknown` with `terminalRecorded=false`; the prepared record stays open for later read-only reconciliation and the mutation is not replayed merely to write a terminal. Restore is not a special side channel: it validates the current guard, journals the current source as the new before/rollback state, writes the selected CAS backup, verifies it, and appends its own terminal event.
 

@@ -123,6 +123,15 @@ restart, normalization, collision and not-found cases. These are fake-host order
 checks, not real COM/VBE qualification. See
 [Phase 6D evidence](../../docs/stabilization/PHASE_6D_VBA_MUTATION_OUTCOME.md).
 
+## Whole-module VBA write owner (Phase 6E)
+
+`vba: whole write service owns workflow` checks the direct typed owner, normalized
+create, existence refusals before persistence/dispatch and same-source/different-type
+create-race classification. The full `vba:` filter retains confirmation races,
+upsert/update, invalid snapshots, read-back drift, journal correlation, UserForm and
+VBE normalization coverage. See
+[Phase 6E evidence](../../docs/stabilization/PHASE_6E_VBA_WHOLE_MODULE_WRITE.md).
+
 ## Stabilization completion guard
 
 ```bash

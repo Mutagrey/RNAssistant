@@ -54,35 +54,6 @@ namespace RNAssistant.Office.Tools
             return null;
         }
 
-        private ToolResult PrepareWriteGuard(ToolCommand command, ChatSession session, string moduleName)
-        {
-            if (string.IsNullOrWhiteSpace(moduleName)) return ToolResult.Fail("moduleName is required.", null, "vba_module_name_required", true);
-            var requestedName = moduleName.Trim();
-            VbaModuleState existing;
-            ToolResult readError;
-            if (_reader.TryReadModule(requestedName, 1000000, out existing, out readError))
-            {
-                var existingName = string.IsNullOrWhiteSpace(existing.Name) ? requestedName : existing.Name;
-                command.Arguments["moduleName"] = existingName;
-                return BindWriteGuard(command, session, existingName, existing, requestedName);
-            }
-            if (!VbaReader.IsModuleNotFound(readError)) return readError;
-
-            var normalizedName = VbaReader.NormalizeModuleName(requestedName);
-            if (!string.Equals(requestedName, normalizedName, StringComparison.OrdinalIgnoreCase) &&
-                _reader.TryReadModule(normalizedName, 1000000, out existing, out readError))
-            {
-                var existingName = string.IsNullOrWhiteSpace(existing.Name) ? normalizedName : existing.Name;
-                command.Arguments["moduleName"] = existingName;
-                return BindWriteGuard(command, session, existingName, existing, requestedName);
-            }
-            if (!VbaReader.IsModuleNotFound(readError)) return readError;
-
-            command.Arguments["moduleName"] = normalizedName;
-            BindGuard(command, session, normalizedName, false, null, requestedName);
-            return null;
-        }
-
         private ToolResult PrepareRenameGuard(
             ToolCommand command,
             ChatSession session,
@@ -173,25 +144,6 @@ namespace RNAssistant.Office.Tools
             return null;
         }
 
-        private ToolResult BindWriteGuard(
-            ToolCommand command,
-            ChatSession session,
-            string moduleName,
-            VbaModuleState existing,
-            string requestedName)
-        {
-            var currentHash = CodeSha256(existing == null ? string.Empty : existing.Code);
-            string observedHash;
-            if (TryGetObservation(session, moduleName, out observedHash) &&
-                !string.Equals(observedHash, currentHash, StringComparison.OrdinalIgnoreCase))
-            {
-                RemoveObservation(session, moduleName);
-                return StaleSnapshot(moduleName, true, observedHash, true, currentHash, "write");
-            }
-            BindGuard(command, session, moduleName, true, currentHash, requestedName);
-            return null;
-        }
-
         private ToolResult PrepareCurrentModuleGuard(ToolCommand command, ChatSession session, string moduleName, string expectedComponentType)
         {
             VbaModuleState current;
@@ -259,10 +211,13 @@ namespace RNAssistant.Office.Tools
                 moduleExists && !string.Equals(guard.CodeSha256, actualHash, StringComparison.OrdinalIgnoreCase))
             {
                 RemoveObservation(session, moduleName);
-                var operation = string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase)
-                    ? "write"
-                    : "mutation";
-                return StaleSnapshot(moduleName, guard.ModuleExists, guard.CodeSha256, moduleExists, actualHash, operation);
+                return StaleSnapshot(
+                    moduleName,
+                    guard.ModuleExists,
+                    guard.CodeSha256,
+                    moduleExists,
+                    actualHash,
+                    "mutation");
             }
             return null;
         }
@@ -454,12 +409,9 @@ namespace RNAssistant.Office.Tools
             string operation)
         {
             var editor = string.Equals(operation, "editor", StringComparison.OrdinalIgnoreCase);
-            var wholeWrite = string.Equals(operation, "write", StringComparison.OrdinalIgnoreCase);
             var message = editor
                 ? "The VBA module changed after it was loaded in the editor. Reload it and reconcile the changes before saving."
-                : wholeWrite
-                    ? "The VBA module changed after the source was inspected or this write was prepared. Re-read and reconcile if the complete source was derived from that version; retry the same write only for an intentional complete overwrite."
-                    : "The VBA module changed after this action was prepared. Retry the same tool so runtime can bind the current state; read it only if the intended action may no longer match.";
+                : "The VBA module changed after this action was prepared. Retry the same tool so runtime can bind the current state; read it only if the intended action may no longer match.";
             return ToolResult.Fail(
                 message,
                 JsonConvert.SerializeObject(new
@@ -471,7 +423,7 @@ namespace RNAssistant.Office.Tools
                     actualCodeSha256 = string.IsNullOrWhiteSpace(actualHash) ? null : actualHash,
                     retrySameTool = !editor,
                     reloadEditor = editor,
-                    reconcileBeforeOverwrite = wholeWrite,
+                    reconcileBeforeOverwrite = false,
                     inspectTool = "common.resources_read",
                     resourceProvider = VbaResourceProvider.ProviderName,
                     resourceKind = VbaResourceProvider.ComponentKind
