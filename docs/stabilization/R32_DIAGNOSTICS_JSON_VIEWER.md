@@ -1,7 +1,7 @@
 # R32 — Сквозная диагностика и общий JSON viewer
 
-Статус: требования пользователя от 2026-08-28. **9A реализована host-neutral
-2026-08-29; 9B/9C и Windows/WebView qualification открыты.** Baseline source review —
+Статус: требования пользователя от 2026-08-28. **9A и 9B1 реализованы host-neutral
+2026-08-29; consumer switch 9B2, 9B3, 9C и Windows/WebView qualification открыты.** Baseline source review —
 `85cc3f4`; перенос документации — поверх `b754443`. Реализация и qualification —
 [Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), до release gate Phase 12.
 
@@ -52,8 +52,9 @@
 
 ## Общий JSON viewer
 
-Предполагаемое размещение — `web/js/app-json-viewer.js` и тематический CSS, без нового
-проекта, npm/bundler, сетевой зависимости или отдельного storage. Это UI-компонент,
+Размещение — `web/js/app-json-viewer.js`, allowlisted `app-viewer-registry.js` и
+тематический CSS, без нового проекта, npm/bundler, сетевой зависимости или
+отдельного storage. Это UI-компонент,
 не owner diagnostic queries, protocol parsing, tool execution или clipboard policy.
 
 | Возможность | Обязательное поведение |
@@ -96,14 +97,14 @@ preview и разрешённое получение/экспорт оригин
 `summerstyle/jsonTreeViewer` не проходят authoritative diagnostics gate: оба
 преобразуют данные через обычный JavaScript object/`JSON.parse`, поэтому не сохраняют
 raw fidelity duplicate keys и больших чисел; кроме того, у них нет полного bounded
-render/copy/accessibility contract. В 9B1 общий `JsonAdapter` владеет исходным текстом,
+render/copy/accessibility contract. В 9B1 общий `JsonAdapter` реализован с исходным текстом,
 bounded token model и собственным компактным renderer, пока иной vendor не докажет
 тот же контракт без большого fork.
 
 Web Awesome Tree условно выбран только для отдельного tree-navigation spike
 (Project/VBA/tools/artifacts). Его нельзя использовать как JSON renderer или timeline.
-Wunderbaum остаётся резервом для измеренно большого tree/treegrid. Ни один новый
-vendor этим docs-only решением не подключён.
+Wunderbaum остаётся резервом для измеренно большого tree/treegrid. В 9B1 новый
+vendor не подключался; R36 остаётся gate первого vendor switch.
 
 Vendor поставляется локально с pinned version/commit и hash, лицензией в
 `web/vendor-notices.md`; без CDN, telemetry и автоматической загрузки URL из данных.
@@ -136,7 +137,7 @@ pretty/copy/render paths в том же подэтапе. Сериализаци
    второй журнал, durable UI index, отдельный model transport или replay tools.
    Порядок определяется sequence; snapshot/cursor не теряют строки между страницами
    и при новых append. Новый хронологический вид не меняет контракт existing raw query.
-2. **9B — viewer (pending):** общий компонент и migration read-only consumers; targeted UI
+2. **9B — viewer (9B1 done, consumers pending):** общий компонент и migration read-only consumers; targeted UI
    tests и локальная чистка. До journal switch проверить fidelity и bounds отдельно.
 3. **9C — журнал (pending):** подключить раскрываемые строки и direct navigation, сохранить
    raw/специализированные views как доступные детали. Qualification всей цепочки,

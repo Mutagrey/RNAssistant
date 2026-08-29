@@ -1,0 +1,234 @@
+.rn-json-viewer {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--code-border);
+  border-radius: 7px;
+  background: var(--code);
+  color: var(--code-text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10.5px;
+}
+
+.rn-json-toolbar {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--code-border);
+  background: color-mix(in srgb, var(--code) 88%, var(--panel));
+}
+
+.rn-json-modes,
+.rn-json-actions {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+}
+
+.rn-json-mode,
+.rn-json-action,
+.rn-json-copy,
+.rn-json-more {
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid var(--code-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+}
+
+.rn-json-mode:hover,
+.rn-json-action:hover,
+.rn-json-copy:hover,
+.rn-json-more:hover,
+.rn-json-mode.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.rn-json-mode.active {
+  background: var(--secondary-bg-hover);
+}
+
+.rn-json-mode:focus-visible,
+.rn-json-action:focus-visible,
+.rn-json-copy:focus-visible,
+.rn-json-more:focus-visible,
+.rn-json-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+.rn-json-status {
+  min-height: 24px;
+  padding: 5px 8px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--code-border);
+  color: var(--muted);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rn-json-status.error {
+  color: var(--danger);
+}
+
+.rn-json-status.ok {
+  color: var(--muted);
+}
+
+.rn-json-body,
+.rn-json-tree,
+.rn-json-text {
+  min-width: 0;
+  min-height: 0;
+}
+
+.rn-json-body {
+  overflow: auto;
+}
+
+.rn-json-text {
+  min-height: 100%;
+  margin: 0;
+  padding: 9px;
+  overflow: visible;
+  color: var(--code-text);
+  font: inherit;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rn-json-node {
+  min-width: 0;
+}
+
+.rn-json-node > summary {
+  list-style: none;
+}
+
+.rn-json-node > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rn-json-row {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 25px;
+  gap: 5px;
+  align-items: baseline;
+  padding: 4px 7px;
+  border-bottom: 1px solid color-mix(in srgb, var(--code-border) 55%, transparent);
+  cursor: default;
+}
+
+.rn-json-container > summary {
+  cursor: pointer;
+}
+
+.rn-json-container > summary::before {
+  width: 10px;
+  color: var(--muted);
+  content: "›";
+  transform: rotate(0);
+  transition: transform .12s ease;
+}
+
+.rn-json-container[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.rn-json-row:hover {
+  background: var(--secondary-bg-hover);
+}
+
+.rn-json-children {
+  margin-left: 15px;
+  border-left: 1px solid var(--code-border);
+}
+
+.rn-json-key {
+  color: #8250df;
+}
+
+.rn-json-index,
+.rn-json-count,
+.rn-json-punctuation {
+  color: var(--muted);
+}
+
+.rn-json-string {
+  color: #0a7b48;
+}
+
+.rn-json-number {
+  color: #0969da;
+}
+
+.rn-json-boolean,
+.rn-json-null {
+  color: #cf222e;
+}
+
+.rn-json-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.rn-json-duplicate {
+  padding: 1px 4px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, .14);
+  color: #9a6700;
+  font-size: 8.5px;
+}
+
+.rn-json-node-actions {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+  opacity: 0;
+}
+
+.rn-json-row:hover .rn-json-node-actions,
+.rn-json-row:focus-within .rn-json-node-actions {
+  opacity: 1;
+}
+
+.rn-json-copy {
+  min-height: 20px;
+  padding: 1px 4px;
+  font-size: 8.5px;
+}
+
+.rn-json-more {
+  margin: 6px 8px;
+}
+
+html[data-theme="dark"] .rn-json-key { color: #d2a8ff; }
+html[data-theme="dark"] .rn-json-string { color: #7ee2a8; }
+html[data-theme="dark"] .rn-json-number { color: #79c0ff; }
+html[data-theme="dark"] .rn-json-boolean,
+html[data-theme="dark"] .rn-json-null { color: #ff7b72; }
+html[data-theme="dark"] .rn-json-duplicate { color: #f2cc60; }
+
+@media (max-width: 720px) {
+  .rn-json-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rn-json-actions {
+    justify-content: flex-end;
+  }
+}

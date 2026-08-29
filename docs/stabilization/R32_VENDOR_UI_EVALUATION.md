@@ -130,9 +130,9 @@ Tool Result v1 / ResourceRef / typed UI DTO
 
 ## Порядок реализации
 
-1. **До 9B:** закрыть R36 manifest/license/hash для уже vendored assets.
+1. **До первого vendor switch:** закрыть R36 manifest/license/hash для уже vendored assets. Собственный 9B1 adapter не добавляет vendor и не снимает этот gate.
 2. **9A (done host-neutral):** correlated run projection и direct navigation contract.
-3. **9B1:** lossless bounded `JsonAdapter` + raw/pretty/tree/copy tests.
+3. **9B1 (done host-neutral):** lossless bounded `JsonAdapter` + raw/pretty/tree/copy tests.
 4. **9B2:** switch всех read-only JSON surfaces и удалить старые pretty/copy paths.
 5. **9B3:** отдельный Web Awesome Tree spike для bounded navigation; при провале
    offline/WebView gates оставить существующее дерево или измерить Wunderbaum.
