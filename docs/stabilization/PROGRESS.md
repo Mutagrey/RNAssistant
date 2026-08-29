@@ -3,10 +3,22 @@
 Current target: 16.1.0
 Current phase: Phase 9 — 9B3 bounded tree vendor switch (done host-neutral)
 Current task: Wunderbaum 0.14.1 подключён через bounded local-array `TreeAdapter` к одному HTML workspace/artifact navigation consumer; Web Awesome отложен без host switch/custom bundle.
+Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
 Next step: отдельный 9B4 Diff2Html compact read-only diff spike, только если существующий consumer передаёт exact bounded unified diff без второго diff algorithm.
-Required context: [master Phase 9 / exception](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Required context: [master Phase 9 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
 Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory, R36 и 9B3 закрыты host-neutral; 9B4/9C и общий R32 Windows acceptance открыты. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+
+Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
+разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
+обязательного маршрута. Каждый slice по-прежнему закрывает targeted host-neutral tests,
+cleanup и отдельный commit; статус до реального прогона — только `done host-neutral`.
+Накопленные COM/VSTO/WebView/live-provider scenarios сведены в
+[Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md) и обязательный
+Milestone WQ перед Phase 12. Неизвестная Office semantics не угадывается: WQ0 Excel
+identity probe остаётся prerequisite production factory switch. Непроверенный build —
+`16.1.0-dev` qualification candidate, не stable/beta/RC. Runtime не менялся; текущий
+9B4 next step сохранён. Docs diff/links проверяются без build/harness.
 
 Phase 9B3 bounded tree vendor switch (2026-08-29): actual `file://` probe
 официального Web Awesome Tree 3.12.0 ESM graph не зарегистрировал `wa-tree`; custom

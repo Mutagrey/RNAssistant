@@ -17,7 +17,7 @@
 ### Обязательные правила для агента
 
 1. Выполнять только текущую фазу и текущий подэтап.
-2. Не начинать следующую фазу, пока не выполнен Definition of Done текущей, кроме явно согласованных исключений Phase 6A, R33 и 6B ниже; они не закрывают отложенные gates.
+2. Не начинать следующую фазу в том же изменении. Переход к следующему dependency-safe host-neutral подэтапу при открытом Windows gate разрешён только режимом §16.1; он не закрывает отложенные gates и не разрешает угадывать Office/COM semantics.
 3. Не добавлять новые продуктовые функции во время стабилизации.
 4. Не повышать продуктовую версию и не создавать Git tag, если это прямо не указано в разделе релиза.
 5. Не менять одновременно runtime, UI, persistence, resources и Office/VBA ради одного локального исправления.
@@ -1448,6 +1448,45 @@ Compatibility adapter имеет владельца, срок удаления �
 ---
 # 16. Поэтапный план исполнения
 
+## 16.1. Режим отложенной Windows qualification (согласован 2026-08-29)
+
+Пока регулярный доступ к Windows x64 + Office x64 + VS 2022 отсутствует, обязательный
+маршрут стабилизации не останавливается после каждого открытого Office/WebView gate.
+Разрешено последовательно выполнять dependency-safe host-neutral подэтапы Phases 5–10,
+сохраняя обычные границы: один подэтап/инвариант на commit, targeted проверки по §22.1,
+локальная чистка и обновление `PROGRESS.md`. Следующая фаза не начинается в том же
+изменении.
+
+Для каждого такого подэтапа Definition of Done разделяется явно:
+
+1. **Host-neutral implementation** — код, contracts, fake-host/fault/static UI tests и
+   локальная чистка завершены; этот статус можно отметить `done host-neutral`.
+2. **Deferred Windows gate** — конкретные реальные сценарии добавлены в
+   [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md) и очередь
+   `PROGRESS.md`; отсутствие среды означает `not performed`, не pass.
+3. **Qualified** — статус допустим только после прогона затронутых сценариев на
+   зафиксированном Windows build и сохранения evidence.
+
+Открытый Windows gate не блокирует следующий независимый host-neutral slice. Если
+следующий switch зависит от неизвестного реального поведения COM/VSTO/WebView2,
+семантику нельзя выбирать по fake-host тестам или предположению: зависимый switch
+остаётся blocked, готовится минимальный probe, а работа продолжается только в
+независимом контуре. Первый такой обязательный probe — 5B2 Excel lifetime identity;
+его результаты нужны **до** production identity/factory switch. Это один design-input
+gate, а не требование постоянно прогонять всю программу на Windows.
+
+После host-neutral реализации обязательных контуров создаётся воспроизводимый
+`16.1.0-dev` qualification candidate. Он не называется stable, beta или RC. Единый
+Milestone WQ после Phase 10 проверяет накопленные Windows/Office/WebView gates и
+маршрутизирует дефекты владельцам контуров по causal diagnostics. Исправление каждого
+дефекта выполняется отдельным change с targeted regression и повтором только
+затронутых Windows scenarios. Phase 12 начинается лишь после WQ.
+
+Этот общий режим заменяет ограничения «следующий локальный scope согласовать отдельно»
+в исторических исключениях 6A/R33/6B и раннем старте Phase 9 только для будущего
+dependency-safe host-neutral продолжения. Их прежний scope/evidence не меняются,
+отложенные gates не считаются закрытыми, а feature freeze сохраняется.
+
 ---
 
 ## Phase 0 — Freeze, governance и versioning
@@ -2002,6 +2041,38 @@ bounded rendering и реальные WebView/clipboard проверки на Wi
 
 ---
 
+## Milestone WQ — отложенная Windows/Office qualification
+
+### Цель
+
+Проверить один собранный qualification candidate на реальном Windows/Office runtime,
+не смешивая найденные дефекты обратно в один большой change. Полный сценарный порядок,
+evidence и карта владельцев заданы в
+[Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md).
+
+### Порядок
+
+1. При первом доступном коротком Windows окне отдельно выполнить WQ0 identity probe
+   для 5B2. Зафиксировать наблюдения, затем отдельным подэтапом выбрать production
+   identity/factory semantics и повторить его host-neutral проверки.
+2. После Phase 10 собрать один versioned `16.1.0-dev` candidate из известного commit;
+   полный host-neutral harness и architecture tests должны быть зелёными.
+3. Выполнить runbook по контурам: baseline/controller, DocumentSession, VBA, Excel,
+   Resource/ToolPack, persistence/UI/WebView и сквозные fault/restart scenarios.
+4. Для каждого failure сохранить causal export/source IDs, expected/actual и назначить
+   owner Phase 5–9 либо cross-cutting gate. Не исправлять разные контуры одним commit.
+5. После исправления повторить targeted local regression и только затронутый Windows
+   scenario; полный smoke повторить перед выходом из WQ.
+
+### Definition of Done
+
+Все обязательные runbook scenarios имеют evidence и pass; нет неразобранных P0/P1,
+false-positive mutation success или неизвестного target/effect. Блокированные внешней
+средой проверки остаются блокерами и не переносятся молча в Phase 12. Только после
+этого candidate допускается к release hardening; prerelease tags создаются по §13.4.
+
+---
+
 ## Phase 11 — Optional contours
 
 **Pipelines: отключены по явному решению пользователя (2026-08-28).** Это сокращение действующего scope в Phase 2, не начало Phase 11. Нет исполнения (включая manual/dry-run/confirmation resume), discovery, authoring и UI; parser/executor и обходы вложенных зависимостей удалены. Старые определения не поддерживаются, не мигрируются и не replay-ятся; файлы пользователя автоматически не удаляются. Pipelines не участвуют в gates Phases 3–10/12. Их возврат — отдельное решение после stable core через общие ToolRuntime/contracts с собственными тестами; совместимость со старым форматом не требуется.
@@ -2080,7 +2151,12 @@ Phase 11 — отдельная ветка после stable core, не prerequi
 
 ### Qualification
 
-Проверки document binding/lifetime и VBA/Excel effects, назначенные в Phases 5–7, выполняются в своих фазах на Windows x64 + Office + VS 2022. Phase 12 — итоговая qualification, не основание откладывать эти gates или считать fake host tests заменой COM validation.
+Milestone WQ должен быть закрыт до начала Phase 12. При доступной Windows проверки
+document binding/lifetime и VBA/Excel effects предпочтительно выполнять в своих фазах;
+в согласованном режиме §16.1 они могут быть накоплены до WQ, кроме blocking 5B2
+identity probe перед production factory switch. Fake-host tests не заменяют COM,
+WebView2 или live-provider validation. Phase 12 повторяет итоговые release gates, а не
+служит первым реальным тестированием candidate.
 
 - [ ] Полный host-neutral harness.
 - [ ] Architecture tests.
@@ -2179,6 +2255,7 @@ Stable release запрещён, пока не выполнены все усл�
 20. Документация соответствует коду.
 21. Call IDs назначает runtime по исправленному контракту R29; неизменный валидный payload не регенерируется ради ID.
 22. Model-facing большие результаты используют exact ResourceRef, не CAS/content_ref transport; actual verification не выводится из policy или invocation counts.
+23. Milestone WQ закрыт на зафиксированном Windows x64 + Office x64 build; отложенные COM/WebView/live-provider gates не числятся как host-neutral pass.
 
 ---
 
@@ -2414,7 +2491,7 @@ Release qualification
 Optional contours — отдельные последующие milestones
 ```
 
-Основной маршрут: Phases 0–10 → Phase 12 → stable core. Phase 11 не блокирует этот маршрут; исключение для отдельно согласованного post-beta milestone описано в Phase 11.
+Основной маршрут: Phases 0–10 host-neutral → Milestone WQ → Phase 12 → stable core. Phase 11 не блокирует этот маршрут; исключение для отдельно согласованного post-beta milestone описано в Phase 11.
 
 Основная проверка каждого архитектурного решения:
 
