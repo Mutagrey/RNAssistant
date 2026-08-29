@@ -1908,6 +1908,12 @@ Resource provider можно добавить без изменения AgentKer
 
 ## Phase 9 — Persistence и UI projection
 
+**Согласованное раннее начало 2026-08-29:** при недоступной Windows пользователь
+разрешил начать host-neutral R32/9A до закрытия Phase 5B2/6 и Phases 7–8. Эти фазы
+остаются открытыми; 9A не зависит от будущего Phase 8 ToolPack, не меняет execution
+policy и не закрывает Windows gates. 9B/9C начинаются только отдельными commits после
+acceptance предыдущего подэтапа.
+
 ### Цель
 
 Сделать stored/replayed truth равной runtime truth и убрать inference из UI.
