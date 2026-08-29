@@ -26,6 +26,15 @@
    а не PTY/ANSI stream. `xterm.js` оправдан только при отдельном настоящем terminal
    artifact с процессом, input/output и lifetime contract.
 
+Worker сам по себе не нарушает offline: это локальный background execution context,
+а не сетевой сервис. Запрещены remote/unpinned worker scripts и runtime download.
+Допустим exact vendored worker, загружаемый с mapped local HTTPS origin через
+host-owned allowlist/factory, с CSP `worker-src 'self'`, bounded lifetime и обязательным
+`terminate`. Текущий RNAssistant открывает UI через `file://`; Monaco и PDF.js прямо
+не поддерживают worker в таком origin. Исправление возможно через
+[WebView2 virtual host mapping](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/working-with-local-content),
+но это отдельное изменение hosting/security boundary с Windows gate.
+
 ## Уже есть
 
 | Vendor | Текущая версия | Использование | Решение |
@@ -47,7 +56,7 @@ texts. DOMPurify уже приведён к новому правилу; ост�
 |---|---|---|
 | [Web Awesome Tree 3.12.0](https://webawesome.com/docs/components/tree/) | MIT; stable; latest Edge; selection/lazy/icons/ARIA. Cherry-picked transitive `dist-cdn` graph: 48 JS files, 204,087 bytes + 16,773-byte theme. Tree imports checkbox/icon/spinner/tree-item; default icon path способен fetch, system icons встроены | **Условно принять для tree-only spike.** Только статические локальные imports, system/inline curated SVG, без autoloader/default remote icon library. Zero-request test и WebView2 keyboard/theme check обязательны |
 | [Wunderbaum 0.14.1](https://github.com/mar10/wunderbaum) | MIT; zero dependencies; UMD 102,824 bytes + CSS 21,756; performant tree/treegrid, keyboard. Upstream quick start помечает API/CSS как beta | **Резерв для measured large tree/treegrid.** Не default: лишние edit/DnD/grid capabilities и нестабильный API при текущей простой навигации |
-| [Monaco Editor 0.56.0](https://github.com/microsoft/monaco-editor) | MIT; npm unpacked около 98 MB; language services используют workers; upstream указывает, что worker не создаётся с `file://`; AMD deprecated | **Не подключать сейчас.** Противоречит no-worker/static-file ограничениям и дублирует работающий CodeMirror. Вернуться только при отдельном editor milestone и изменённом hosting contract |
+| [Monaco Editor 0.56.0](https://github.com/microsoft/monaco-editor) | MIT; npm unpacked около 98 MB; language services используют workers; upstream указывает, что worker не создаётся с `file://`; AMD deprecated | **Не подключать сейчас.** Worker допустим локально после virtual-host switch, но Monaco дублирует работающий CodeMirror и слишком велик для R32. Вернуться только при отдельном editor milestone с измеренной пользой |
 | [Diff2Html 3.4.56](https://github.com/rtfpessoa/diff2html) | MIT; parser/browser bundle 77,747 bytes + CSS 17,331; unified/git diff, line/side-by-side | **Условный кандидат для compact read-only diff.** Feed only bounded diff text; output проходит adapter/sanitization; UI bundle с highlight не брать, поскольку highlight.js уже есть |
 | [andypf/json-viewer 2.8.0](https://github.com/andypf/json-viewer) | MIT; IIFE 40,093 bytes; красивое Shadow DOM tree/copy/search. Source использует `JSON.parse`/`JSON.stringify`, принимает URL и вызывает `fetch`, keyboard handlers отсутствуют | **Отклонить для authoritative diagnostics.** Теряет duplicate keys/large numbers/raw fidelity и имеет запрещённый URL path |
 | [summerstyle/jsonTreeViewer](https://github.com/summerstyle/jsonTreeViewer) | MIT; около 18 KB JS + 2 KB CSS; object tree. README прямо предлагает `JSON.parse`; нет packaged releases, bounds, copy contract или полноценной accessibility | **Отклонить.** Малый размер не компенсирует несовместимость с R32 |
@@ -62,7 +71,7 @@ JSON tree создаёт DOM порциями из нашего token model. О�
 | Назначение | Решение |
 |---|---|
 | Markdown | **marked + DOMPurify оставить.** markdown-it 15.0.1 добавляет runtime dependencies и migration без нужной функции |
-| PDF.js | **Не принимать при текущих ограничениях.** Generic build использует worker, optional WASM/CMaps/fonts и URL factories; upstream отдельно предупреждает о worker на `file://`. Нужен отдельный PDF contract либо остаётся нынешний host-side путь |
+| [PDF.js](https://mozilla.github.io/pdf.js/getting_started/) | **Условный кандидат вне R32.** Worker не является запретом, но требует virtual-host switch и exact local `workerSrc`; optional WASM/CMaps/fonts и URL factories должны быть отключены либо отдельно vendored/allowlisted. Нужен отдельный PDF contract и bounds |
 | PhotoSwipe | **Кандидат позже** для обычных изображений. Подключать core напрямую, без lazy dynamic import; размеры изображения известны до открытия |
 | OpenSeadragon | **P3**, только подтверждённые tiled scans/карты; для обычных screenshots лишний |
 | Tabulator | **Кандидат позже** для измеренно больших typed tables. Только local data; ajax/edit/download/persistence отключены adapter-ом. Не использовать как journal |
@@ -93,8 +102,10 @@ Tool Result v1 / ResourceRef / typed UI DTO
 - Registry принимает exact allowlisted `viewerKind`, MIME, completeness/redaction,
   byte/character counts и already-loaded content. Unknown kind даёт safe text/file
   fallback.
-- Adapter не вызывает `fetch`, XHR, WebSocket, EventSource, Worker, dynamic import,
-  bridge или clipboard без callback владельца.
+- Adapter не вызывает `fetch`, XHR, WebSocket, EventSource, dynamic import, bridge
+  или clipboard без callback владельца. Worker создаётся только через host factory,
+  который принимает exact manifest id, разрешает pinned same-origin file и владеет
+  cancellation/termination.
 - Vendor никогда не видит secrets, скрытые поля или полный CAS payload, если owner
   выдал только preview.
 - Viewer state (expanded nodes, focus, scroll) — ephemeral projection, не durable
@@ -106,11 +117,12 @@ Tool Result v1 / ResourceRef / typed UI DTO
 
 1. Exact package version/commit, upstream URL, npm/tarball integrity, SHA-256 каждого
    vendored runtime файла, полный LICENSE/NOTICE и список transitive runtime assets.
-2. Только локальные статические JS/CSS/SVG. CDN/autoloader/remote icon library,
-   telemetry, update check, URL input, dynamic workers/WASM/fonts выключены либо
-   кандидат отклоняется.
+2. Только локальные pinned JS/CSS/SVG/worker assets. CDN/autoloader/remote icon
+   library, telemetry, update check и URL input запрещены. WASM/fonts выключены
+   либо проходят отдельный exact-asset review; произвольный worker URL запрещён.
 3. Main UI сохраняет `connect-src 'none'`; adapter tests подменяют `fetch`, XHR,
-   WebSocket, EventSource и Worker на fail-fast и подтверждают zero calls.
+   WebSocket и EventSource на fail-fast и подтверждают zero calls. Worker factory
+   отклоняет URL вне manifest и проверяет ожидаемые create/terminate boundaries.
 4. Bounds до parse/render: raw bytes/chars, depth, nodes, children page, long strings,
    DOM rows и cancellation. «Expand all» не снимает limits.
 5. Keyboard/focus/ARIA, обе темы, clipboard failure и stale async response проверяются

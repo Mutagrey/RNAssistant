@@ -27,13 +27,22 @@ vendors и предложенный shortlist по source/package metadata, фа
 Web Awesome Tree допускается только как tree-navigation spike; Wunderbaum — резерв
 для measured large treegrid; оба JSON-кандидата отклонены для authoritative payload,
 поэтому 9B начинает с собственного bounded/lossless `JsonAdapter`. Monaco/PDF.js
-не подходят текущему static-file/no-worker contract; `xterm.js` не используется
-для structured logs. `ViewerRegistry` закреплён как UI-only adapter boundary поверх
+требуют смены текущего `file://` hosting; pinned local Worker разрешён и не считается
+сетью, но Monaco всё ещё не оправдан в R32. `xterm.js` не используется для structured
+logs. `ViewerRegistry` закреплён как UI-only adapter boundary поверх
 Tool Result v1/`ResourceRef`, не новый model transport. R36 фиксирует незакрытый
 provenance/offline inventory остальных vendors. Runtime/UI не менялись, Phase 6 и
 следующий шаг сохранены; diff/7 docs, 99 local links и ValidateVersionFormat — pass,
 build/harness не запускались. Windows/WebView qualification и Phase 9 implementation
 открыты.
+
+R32 Worker clarification (2026-08-29, docs-only): offline больше не трактуется как
+запрет Web Worker. Текущий `file://` origin действительно блокирует worker path
+Monaco/PDF.js; target допускает только pinned same-origin worker через WebView2
+virtual-host mapping, host allowlist/factory, CSP и bounded termination, при полном
+zero-network gate. Monaco остаётся вне R32 из-за размера/дублирования CodeMirror;
+PDF.js — условный отдельный viewer. Runtime/hosting/CSP не менялись; diff/6 docs,
+94 local links и ValidateVersionFormat — pass, build/harness не запускались.
 
 R29 (предыдущий commit `6a256f0`): model wire содержит только name/arguments, kernel выдаёт ID до accepted append/confirmation/dispatch; ToolCallId + immutable attempt/position origin сохраняются в том же stream без переписывания raw response. Tests покрывают long HTML, allocator failure, native pairing, repair correlation, confirmation/replay и ISO-preserving clone. [Evidence/ограничения/чистка](R29_RUNTIME_CALL_IDS.md); этот protocol switch завершён до Phase 4, product version остаётся 16.1.0-dev.
 
