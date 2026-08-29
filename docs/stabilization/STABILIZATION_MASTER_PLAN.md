@@ -1879,6 +1879,22 @@ Delete, restore, rename/package, reconciliation outer loop, COM implementation,
 не доказывает committed effect и даёт non-retryable `unknown`. После 6E следующий
 отдельный slice — delete ownership; Windows COM/VBE qualification остаётся WQ-VBA.
 
+### Согласованное продолжение 6F delete ownership (2026-08-29)
+
+После завершения 6E пользователь разрешил следующий отдельный подэтап («Далее»).
+Scope ограничен `common.vba_delete_module`: existing-target preparation,
+observation/confirmation guard, component-type refusal, dry-run, prepared journal,
+compare-and-swap delete backend, absence read-back и terminal outcome переходят в
+typed `VbaMutationService`. `VbaToolExecutor` оставляет только legacy
+argument/guard serialization/result adapter; прежний delete workflow и его
+дублирующие guard helpers удаляются без alias/fallback.
+
+Restore, rename/package, reconciliation outer loop, COM implementation,
+`HostRuntime`, factories, protocol/wire и UI не меняются. Internal host command
+остаётся за `VbaMutationBackendAdapter`, модель и domain service его не видят.
+После 6F следующий отдельный slice — restore ownership; Windows COM/VBE
+qualification остаётся WQ-VBA.
+
 ### Цель
 
 Стабилизировать наиболее опасный write contour до переноса остальных mutations.
@@ -1886,10 +1902,10 @@ Delete, restore, rename/package, reconciliation outer loop, COM implementation,
 ### Порядок
 
 1. `vba.read` — 6B host-neutral extraction done; Windows/VBE qualification remains open.
-2. `vba.apply_patch` — 6C workflow/verifier ownership done host-neutral; typed outcome/fault matrix and Windows/VBE qualification remain open.
+2. `vba.apply_patch` — 6C workflow/verifier and 6D typed outcome/fault matrix done host-neutral; Windows/VBE qualification remains open.
 3. whole-module write — 6E done host-neutral; Windows/VBE qualification open.
-4. delete — next separate slice.
-5. restore.
+4. delete — 6F done host-neutral; Windows/VBE qualification open.
+5. restore — next separate slice.
 6. package operations.
 
 До переноса package operations отдельно проверить, нужен ли весь пользовательский install/run/remove lifecycle первому stable core. Это вопрос scope, а не разрешение пропустить пункт: перенос в Phase 11 возможен только после проверки consumers и явного согласования. Общий package journal/recovery сохраняется для основных mutations: текущий rename использует `ExecuteJournaledPackageMutation`; отсутствие пользовательских packages не делает этот путь мёртвым.
@@ -1913,6 +1929,8 @@ Delete, restore, rename/package, reconciliation outer loop, COM implementation,
 - [x] 6E host-neutral: полный whole-module write workflow (`upsert/createOnly/updateOnly`) перенесён из executor в typed `VbaMutationService`; старые write guard/workflow helpers удалены, `mode=rename` не смешивался.
 - [x] 6E: create/replace выбирает domain service через typed backend actions; guard, prepared journal, source/type read-back и `Ok/Error/Unknown` остаются одним workflow без второго execution/store path.
 - [x] 6E: reconciliation проверяет component type вместе с source hash; same-source/different-type create race даёт non-retryable `unknown`, а existence rejection не создаёт preparation и не dispatches.
+- [x] 6F host-neutral: полный delete workflow перенесён в typed `VbaMutationService`; executor-owned delete guard/journal/backend/read-back path удалён без второго execution/store path.
+- [x] 6F: только `StdModule`/`ClassModule` допускаются до preparation/dispatch; backend получает live-source compare-and-swap hash, а `ok` требует verified absence и durable terminal.
 - [x] R33 host-neutral: exact patch требует единственного стартового смещения, включая перекрытия; отказ до confirmation/write/нового backup/journal проверен отдельно от 6A extraction. Windows/VBE и полный VBA gate остаются открытыми.
 - [x] Добавить host-neutral fault injection/reused regression matrix:
   - [x] before journal prepare;

@@ -63,6 +63,21 @@ namespace RNAssistant.Office.Tools
                 "VBA module create returned no result.",
                 "vba_write_failed");
         }
+
+        public VbaMutationActionResult DeleteModule(VbaModuleDeleteRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            var command = new ToolCommand { ToolId = _backendToolId("vba_delete_module_internal") };
+            command.Arguments["moduleName"] = request.ModuleName;
+            if (!string.IsNullOrWhiteSpace(request.ExpectedCodeSha256))
+            {
+                command.Arguments["expectedCodeSha256"] = request.ExpectedCodeSha256;
+            }
+            return VbaMutationToolResultMapper.FromBackend(
+                _adapter.ExecuteTool(command),
+                "VBA delete returned no result.",
+                "vba_delete_failed");
+        }
     }
 
     internal sealed class VbaMutationReaderAdapter : IVbaMutationReader

@@ -60,10 +60,12 @@
       Link="Core\Storage\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\*.cs" Link="Office\Contracts\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaReader.cs" Link="Office\Vba\VbaReader.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaDeleteModuleContracts.cs" Link="Office\Vba\VbaDeleteModuleContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationContracts.cs" Link="Office\Vba\VbaMutationContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationJournal.cs" Link="Office\Vba\VbaMutationJournal.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.cs" Link="Office\Vba\VbaMutationService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.ApplyPatch.cs" Link="Office\Vba\VbaMutationService.ApplyPatch.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.DeleteModule.cs" Link="Office\Vba\VbaMutationService.DeleteModule.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Guards.cs" Link="Office\Vba\VbaMutationService.Guards.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Journal.cs" Link="Office\Vba\VbaMutationService.Journal.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.WholeModuleWrite.cs" Link="Office\Vba\VbaMutationService.WholeModuleWrite.cs" />

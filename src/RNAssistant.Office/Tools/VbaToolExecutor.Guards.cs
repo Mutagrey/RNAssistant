@@ -16,42 +16,11 @@ namespace RNAssistant.Office.Tools
                 string.Equals(toolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase);
         }
 
-        private bool IsExistingModuleMutation(string toolId)
-        {
-            return string.Equals(toolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase);
-        }
-
         private bool IsPreflightMutation(string toolId)
         {
             return IsPublicMutation(toolId) ||
                 string.Equals(toolId, ToolId("office_run_macro"), StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase);
-        }
-
-        private ToolResult PrepareExistingModuleGuard(ToolCommand command, ChatSession session, string moduleName)
-        {
-            if (string.IsNullOrWhiteSpace(moduleName)) return ToolResult.Fail("moduleName is required.", null, "vba_module_name_required", true);
-            string resolvedName;
-            VbaModuleState current;
-            var readError = _mutationService.TryReadExistingModule(
-                moduleName,
-                out resolvedName,
-                out current);
-            if (readError != null)
-            {
-                return VbaMutationToolResultMapper.ToToolResult(readError);
-            }
-            command.Arguments["moduleName"] = resolvedName;
-            var currentHash = CodeSha256(current.Code);
-            string observedHash;
-            if (TryGetObservation(session, resolvedName, out observedHash) &&
-                !string.Equals(observedHash, currentHash, StringComparison.OrdinalIgnoreCase))
-            {
-                RemoveObservation(session, resolvedName);
-                return StaleSnapshot(resolvedName, true, observedHash, true, currentHash, "mutation");
-            }
-            BindGuard(command, session, resolvedName, true, currentHash, moduleName);
-            return null;
         }
 
         private ToolResult PrepareRenameGuard(
@@ -165,25 +134,6 @@ namespace RNAssistant.Office.Tools
             if (!VbaReader.IsModuleNotFound(readError)) return readError;
             BindGuard(command, session, moduleName, false, null, moduleName);
             return null;
-        }
-
-        private ToolResult ValidateExistingModuleGuard(ToolCommand command, ChatSession session, string moduleName, VbaModuleState current)
-        {
-            if (current == null) return ToolResult.Fail("VBA module state is unavailable.", null, "vba_read_invalid", true);
-            if (string.IsNullOrWhiteSpace(command == null ? null : command.RuntimeGuardJson))
-            {
-                string observedHash;
-                if (!TryGetObservation(session, moduleName, out observedHash)) return SnapshotRequired(moduleName);
-                var actualHash = CodeSha256(current.Code);
-                if (!string.Equals(observedHash, actualHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    RemoveObservation(session, moduleName);
-                    return StaleSnapshot(moduleName, true, observedHash, true, actualHash, "editor");
-                }
-                BindGuard(command, session, moduleName, true, observedHash);
-                return null;
-            }
-            return ValidateModuleGuard(command, session, moduleName, true, current);
         }
 
         private ToolResult ValidateModuleGuard(

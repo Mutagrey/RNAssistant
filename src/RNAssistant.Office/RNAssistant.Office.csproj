@@ -101,10 +101,12 @@
     <Compile Include="Contracts\IOfficeDocumentSession.cs" />
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Vba\VbaReader.cs" />
+    <Compile Include="Vba\VbaDeleteModuleContracts.cs" />
     <Compile Include="Vba\VbaMutationContracts.cs" />
     <Compile Include="Vba\VbaMutationJournal.cs" />
     <Compile Include="Vba\VbaMutationService.cs" />
     <Compile Include="Vba\VbaMutationService.ApplyPatch.cs" />
+    <Compile Include="Vba\VbaMutationService.DeleteModule.cs" />
     <Compile Include="Vba\VbaMutationService.Guards.cs" />
     <Compile Include="Vba\VbaMutationService.Journal.cs" />
     <Compile Include="Vba\VbaMutationService.WholeModuleWrite.cs" />

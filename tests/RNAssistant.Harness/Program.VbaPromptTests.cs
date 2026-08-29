@@ -357,6 +357,131 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaDeleteModuleServiceOwnsWorkflow()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                const string moduleName = "DeleteTarget";
+                const string source = "Option Explicit\nPublic Value As Long";
+                adapter.SetVbaModule(moduleName, source, "ClassModule");
+                var store = new VbaJournalStore(paths);
+                var reader = new VbaReader(
+                    adapter,
+                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
+                var service = new VbaMutationService(
+                    new VbaMutationDocumentContextAdapter(adapter),
+                    new VbaMutationJournalStoreAdapter(store),
+                    new VbaMutationReaderAdapter(reader),
+                    new VbaMutationBackendAdapter(
+                        adapter,
+                        suffix => adapter.HostName.ToLowerInvariant() + "." + suffix));
+                var correlation = new VbaMutationCorrelation
+                {
+                    SessionId = "delete-service",
+                    RunId = "delete-run",
+                    TurnId = "delete-turn",
+                    StepId = "delete-step",
+                    ToolCallId = "delete-call"
+                };
+                var unguarded = service.DeleteModule(
+                    new VbaDeleteModuleRequest
+                    {
+                        ModuleName = moduleName,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Error, unguarded.Status,
+                    "typed delete service refuses an unprepared mutation");
+                AssertEqual("vba_internal_snapshot_missing", unguarded.ErrorCode,
+                    "missing delete guard fails with the stable snapshot code");
+                AssertEqual(0, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "unguarded delete creates no journal preparation");
+                AssertEqual(0, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_delete_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "unguarded delete does not dispatch the backend");
+
+                var preparation = service.PrepareDeleteModuleGuard(
+                    new VbaDeleteModuleGuardRequest
+                    {
+                        RequestedModuleName = moduleName,
+                        Correlation = correlation
+                    });
+                AssertTrue(preparation.Success, "typed service prepares the delete guard");
+
+                var dryRun = service.DeleteModule(
+                    new VbaDeleteModuleRequest
+                    {
+                        ModuleName = preparation.ResolvedModuleName,
+                        DryRun = true,
+                        Guard = preparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Ok, dryRun.Status,
+                    "typed delete service owns dry-run validation");
+                AssertEqual(0, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "delete dry-run does not prepare a journal record");
+                AssertEqual(0, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_delete_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "delete dry-run does not dispatch the backend");
+
+                var deleted = service.DeleteModule(
+                    new VbaDeleteModuleRequest
+                    {
+                        ModuleName = preparation.ResolvedModuleName,
+                        Guard = preparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Ok, deleted.Status,
+                    "typed delete service dispatches and verifies deletion");
+                var deleteCommand = adapter.Executed.Single(item =>
+                    item.ToolId.EndsWith(".vba_delete_module_internal", StringComparison.OrdinalIgnoreCase));
+                AssertEqual(VbaTextCanonicalizer.LiveCodeSha256(source),
+                    Convert.ToString(deleteCommand.Arguments["expectedCodeSha256"]),
+                    "typed backend receives the exact live-state compare-and-swap hash");
+                var finalRead = new VbaMutationReaderAdapter(reader).ReadModule(moduleName, 1000000);
+                AssertTrue(!finalRead.Success && finalRead.IsNotFound,
+                    "typed delete workflow verifies the module is absent");
+                var record = store.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
+                AssertEqual(VbaMutationStatuses.Committed, record.Terminal.Status,
+                    "typed delete workflow owns the terminal journal result");
+                AssertEqual("delete-call", record.Prepared.ToolCallId,
+                    "typed delete journal keeps accepted-call correlation");
+
+                const string protectedName = "ThisWorkbook";
+                adapter.SetVbaModule(protectedName, "Private Sub Workbook_Open()\nEnd Sub", "DocumentModule");
+                var protectedPreparation = service.PrepareDeleteModuleGuard(
+                    new VbaDeleteModuleGuardRequest
+                    {
+                        RequestedModuleName = protectedName,
+                        Correlation = correlation
+                    });
+                AssertTrue(protectedPreparation.Success,
+                    "protected component state can be prepared for a fail-closed preview");
+                var dispatches = adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_delete_module_internal", StringComparison.OrdinalIgnoreCase));
+                var protectedResult = service.DeleteModule(
+                    new VbaDeleteModuleRequest
+                    {
+                        ModuleName = protectedName,
+                        Guard = protectedPreparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Error, protectedResult.Status,
+                    "typed delete service blocks document modules");
+                AssertEqual("vba_component_type_read_only", protectedResult.ErrorCode,
+                    "protected component refusal keeps its stable code");
+                AssertEqual(dispatches, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_delete_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "protected component refusal does not dispatch delete");
+                AssertEqual(1, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "protected component refusal creates no journal preparation");
+            });
+        }
+
         private static void VbaMutationPrepareFailureBlocksDispatch()
         {
             WithTempPaths(paths =>
@@ -2647,6 +2772,16 @@ namespace RNAssistant.Harness
                     "Scripted create backend is not configured.",
                     null,
                     "scripted_create_not_configured",
+                    false);
+            }
+
+            public VbaMutationActionResult DeleteModule(VbaModuleDeleteRequest request)
+            {
+                DispatchCount += 1;
+                return VbaMutationActionResult.Error(
+                    "Scripted delete backend is not configured.",
+                    null,
+                    "scripted_delete_not_configured",
                     false);
             }
         }

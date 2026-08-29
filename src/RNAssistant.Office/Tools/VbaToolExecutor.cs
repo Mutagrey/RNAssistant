@@ -133,7 +133,19 @@ namespace RNAssistant.Office.Tools
             }
             if (string.Equals(command.ToolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase))
             {
-                return DeleteModule(command, dryRun, session, cancellationToken);
+                var outcome = _mutationService.DeleteModule(
+                    new VbaDeleteModuleRequest
+                    {
+                        ModuleName = ToolArgumentReader.String(
+                            command.Arguments,
+                            "moduleName",
+                            string.Empty),
+                        DryRun = dryRun,
+                        Guard = ReadGuard(command),
+                        Correlation = MutationCorrelation(command, session)
+                    },
+                    cancellationToken);
+                return VbaMutationToolResultMapper.ToToolResult(outcome);
             }
             if (string.Equals(command.ToolId, ToolId("office_run_macro"), StringComparison.OrdinalIgnoreCase)) return RunMacro(command, dryRun);
 
@@ -160,9 +172,21 @@ namespace RNAssistant.Office.Tools
                 command.RuntimeGuardJson = JsonConvert.SerializeObject(preparation.Guard);
                 return null;
             }
-            if (IsExistingModuleMutation(command.ToolId))
+            if (string.Equals(command.ToolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase))
             {
-                return PrepareExistingModuleGuard(command, session, moduleName);
+                var preparation = _mutationService.PrepareDeleteModuleGuard(
+                    new VbaDeleteModuleGuardRequest
+                    {
+                        RequestedModuleName = moduleName,
+                        Correlation = MutationCorrelation(command, session)
+                    });
+                if (!preparation.Success)
+                {
+                    return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
+                }
+                command.Arguments["moduleName"] = preparation.ResolvedModuleName;
+                command.RuntimeGuardJson = JsonConvert.SerializeObject(preparation.Guard);
+                return null;
             }
             if (string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase))
             {
@@ -416,66 +440,6 @@ namespace RNAssistant.Office.Tools
                 RecordObservation(session, newModuleName, CodeSha256(source.Code));
                 return renamed;
             });
-        }
-
-        private ToolResult DeleteModule(
-            ToolCommand command,
-            bool dryRun,
-            ChatSession session,
-            CancellationToken cancellationToken)
-        {
-            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            VbaModuleState module;
-            ToolResult error;
-            if (!_reader.TryReadModule(moduleName, 1000000, out module, out error)) return error;
-            if (!string.Equals(module.ComponentType, "StdModule", StringComparison.OrdinalIgnoreCase) && !string.Equals(module.ComponentType, "ClassModule", StringComparison.OrdinalIgnoreCase))
-                return ToolResult.Fail("Document modules and UserForms cannot be deleted through RNAssistant.", null, "vba_component_type_read_only", false);
-            var guardError = ValidateExistingModuleGuard(command, session, moduleName, module);
-            if (guardError != null) return guardError;
-            if (dryRun)
-            {
-                return ToolResult.Ok(
-                    "Dry run: would delete VBA " + module.ComponentType + " " + moduleName + ".",
-                    JsonConvert.SerializeObject(new { moduleName = moduleName, componentType = module.ComponentType }));
-            }
-            var preparation = _mutationService.PrepareJournaledMutation(
-                new VbaModuleMutationRequest
-                {
-                    Operation = "delete",
-                    ModuleName = moduleName,
-                    Before = module,
-                    IntendedAfterExists = false,
-                    IntendedAfterCode = null,
-                    IntendedComponentType = module.ComponentType,
-                    Correlation = MutationCorrelation(command, session)
-                });
-            if (!preparation.Success)
-            {
-                return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
-            }
-
-            var outcome = _mutationService.ExecuteJournaledMutation(
-                preparation.Preparation,
-                delegate
-            {
-                var delete = new ToolCommand { ToolId = BackendToolId("vba_delete_module_internal") };
-                delete.Arguments["moduleName"] = moduleName;
-                delete.Arguments["expectedCodeSha256"] = CodeSha256(module.Code);
-                var deleted = _adapter.ExecuteTool(delete);
-                var action = VbaMutationToolResultMapper.FromBackend(
-                    deleted,
-                    "VBA delete returned no result.",
-                    "vba_delete_failed");
-                if (action.Status != VbaMutationActionStatus.Succeeded)
-                {
-                    return action;
-                }
-                return _verifier.VerifyModuleDeleted(
-                    moduleName,
-                    action.Data,
-                    SessionId(session));
-            }, cancellationToken);
-            return VbaMutationToolResultMapper.ToToolResult(outcome);
         }
 
         private ToolResult RestoreVbaBackup(ToolCommand command, bool dryRun, ChatSession session, CancellationToken cancellationToken)

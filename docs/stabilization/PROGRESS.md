@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 6 — 6E whole-module VBA write (done host-neutral; full Phase 6 and Windows qualification open)
-Current task: полный `common.vba_write_module` workflow для `upsert/createOnly/updateOnly` принадлежит typed `VbaMutationService`: normalization/existence guard, journal, create/replace, source/type read-back и outcome. Executor только адаптирует command/result; `mode=rename` остаётся отдельным legacy contour.
+Current phase: Phase 6 — 6F VBA delete ownership (done host-neutral; full Phase 6 and Windows qualification open)
+Current task: полный `common.vba_delete_module` workflow принадлежит typed `VbaMutationService`: existing-target/observation guard, component refusal, journal, compare-and-swap delete, absence read-back и outcome. Executor только адаптирует arguments/serialized guard/result.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельно согласовать Phase 6F — перенести полный delete workflow в typed VBA domain service, не смешивая restore/rename/package и не меняя COM implementation.
-Required context: [master Phase 6 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-6--vba-vertical-slice), [6E evidence](PHASE_6E_VBA_WHOLE_MODULE_WRITE.md), [VBA journal](../vba-mutation-journal.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04; Phase 6 delete/restore ownership, package/rename typed ownership and full VBA/Windows gate; Phases 7–8/R30. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/Phase 9A–9C UI закрыты host-neutral, но общий Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
+Next step: отдельно согласовать Phase 6G — перенести полный restore workflow в typed VBA domain service, не смешивая rename/package и не меняя COM implementation.
+Required context: [master Phase 6 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-6--vba-vertical-slice), [6F evidence](PHASE_6F_VBA_DELETE.md), [VBA journal](../vba-mutation-journal.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: Phase 5B2/R04; Phase 6 restore ownership, package/rename typed ownership and full VBA/Windows gate; Phases 7–8/R30. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/Phase 9A–9C UI закрыты host-neutral, но общий Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -17,8 +17,8 @@ cleanup и отдельный commit; статус до реального пр�
 [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md) и обязательный
 Milestone WQ перед Phase 12. Неизвестная Office semantics не угадывается: WQ0 Excel
 identity probe остаётся prerequisite production factory switch. Непроверенный build —
-`16.1.0-dev` qualification candidate, не stable/beta/RC. 9C UI и Phase 6C–6E
-mutation slices выполнены отдельными host-neutral changes; следующий delete slice
+`16.1.0-dev` qualification candidate, не stable/beta/RC. 9C UI и Phase 6C–6F
+mutation slices выполнены отдельными host-neutral changes; следующий restore slice
 требует отдельного допуска. Windows WQ-UI/VBE не считаются
 закрытыми локальными проверками.
 
@@ -738,6 +738,30 @@ Same-source/different-type create race возвращает non-retryable `unkno
 Открыто: Phase 6F delete, затем restore и package/rename; 5B2/R04, реальный
 COM/VBE/controller и полный Windows x64 + Office + VS 2022 gate не выполнены.
 
+## Phase 6F — VBA delete service
+
+2026-08-29, baseline `57c157b`; пользователь разрешил следующий отдельный
+host-neutral slice. Полный `common.vba_delete_module` workflow перенесён из
+`VbaToolExecutor` в `VbaMutationService.DeleteModule`: exact existing-target read,
+optional observation/confirmation guard, `StdModule`/`ClassModule` policy, dry-run,
+prepared journal, typed compare-and-swap delete action, absence verification и
+terminal outcome теперь имеют одного domain owner.
+
+Executor разбирает legacy argument, сериализует typed guard и отображает outcome.
+Прежние `DeleteModule`, `PrepareExistingModuleGuard`,
+`ValidateExistingModuleGuard` и delete-only router helper удалены. Единственный
+`VbaMutationBackendAdapter` строит текущий host-prefixed internal command; COM,
+HostRuntime, journal/CAS format, public schema/result wire не менялись.
+
+Direct service case проверяет dry-run без persistence/dispatch, CAS hash на backend,
+verified absence, durable call correlation и fail-closed запрет DocumentModule до
+journal/dispatch. Полный `vba:` filter — **69/69**; связанные Agent/causal,
+source-inclusion и compile проверки перечислены в
+[Phase 6F evidence](PHASE_6F_VBA_DELETE.md).
+
+Открыто: Phase 6G restore, затем package/rename; 5B2/R04, реальный
+COM/VBE/controller и полный Windows x64 + Office + VS 2022 gate не выполнены.
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
@@ -748,7 +772,7 @@ COM/VBE/controller и полный Windows x64 + Office + VS 2022 gate не вы
 | LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Handler switches 6–7 / optional 11; no old-history reader |
 | ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 typed UI projection; manual/domain consumers 6–7 / optional 11 |
 | Unbound host identity/access | HostRuntime / host factories | Production adapters, including gated context/catalog reads | 5B2 bound Excel/common lifetime identity + Windows gates; neutral gate не удаляет этот legacy |
-| `VbaMutationDocumentContextAdapter` / `VbaMutationReaderAdapter` / `VbaMutationBackendAdapter` | VBA / Tools | Typed mutation service over current wide host and legacy read/mutation results; backend now serves patch and whole write | Document context switches with 5B2 bound session; read adapter leaves with the legacy `VbaReader` result seam; backend adapter expands only with admitted mutation slices and is removed after typed host binding/remaining Phase 6 consumers switch |
+| `VbaMutationDocumentContextAdapter` / `VbaMutationReaderAdapter` / `VbaMutationBackendAdapter` | VBA / Tools | Typed mutation service over current wide host and legacy read/mutation results; backend now serves patch, whole write and delete | Document context switches with 5B2 bound session; read adapter leaves with the legacy `VbaReader` result seam; backend adapter expands only with admitted mutation slices and is removed after typed host binding/remaining Phase 6 consumers switch |
 | `VbaMutationToolResultMapper` | VBA / Tools | Current VBA executor → legacy handler boundary | Remove when VBA handlers register direct typed ToolRuntime outcomes; Phase 6 completion / Phase 8 catalog switch, no model-history reader |
 
 `VbaMutationJournalStoreAdapter` — permanent narrow port к тому же
@@ -759,7 +783,7 @@ model-session/metadata owners не являются compatibility adapters.
 ## Open P0/P1 risks
 
 - R01: false completion воспроизведён в 1A; guard 1C закрывает host-neutral safety assertions, production qualification ещё не выполнена.
-- R02 и R07 contained host-neutral, но live-provider/Windows VBE gates открыты; R03–R06 остаются открыты. R08/R09 получили typed module outcome, terminal persistence и cancellation fault coverage в 6D; package/rename и Windows reconciliation/COM gates ещё открыты. R10 UI mitigated host-neutral через 9C, Windows acceptance открыт. R11 minimal replay covered в 3B2, full Phase 9/Windows matrix остаётся.
+- R02 и R07 contained host-neutral, но live-provider/Windows VBE gates открыты; R03–R06 остаются открыты. R08/R09 получили typed module outcome, terminal persistence и cancellation fault coverage в 6D; delete switched в 6F, restore/package/rename и Windows reconciliation/COM gates ещё открыты. R10 UI mitigated host-neutral через 9C, Windows acceptance открыт. R11 minimal replay covered в 3B2, full Phase 9/Windows matrix остаётся.
 - R04: operation gate проверен host-neutral в 5B1; production bound Excel/common identity и Windows wrong-target scenarios — 5B2.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.

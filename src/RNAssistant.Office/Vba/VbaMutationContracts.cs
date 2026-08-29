@@ -303,6 +303,7 @@ namespace RNAssistant.Office.Vba
     {
         VbaMutationActionResult ReplaceModule(VbaModuleWriteRequest request);
         VbaMutationActionResult CreateModule(VbaModuleCreateRequest request);
+        VbaMutationActionResult DeleteModule(VbaModuleDeleteRequest request);
     }
 
     internal interface IVbaMutationReader

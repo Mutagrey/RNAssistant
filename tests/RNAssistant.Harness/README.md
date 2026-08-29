@@ -132,6 +132,15 @@ upsert/update, invalid snapshots, read-back drift, journal correlation, UserForm
 VBE normalization coverage. See
 [Phase 6E evidence](../../docs/stabilization/PHASE_6E_VBA_WHOLE_MODULE_WRITE.md).
 
+## VBA delete owner (Phase 6F)
+
+`vba: delete service owns workflow` checks the direct typed owner: guard and
+component policy, dry-run without persistence/dispatch, live-source CAS hash,
+verified absence, durable call correlation and protected-component refusal before
+journal/dispatch. The full `vba:` filter retains stale confirmation, document
+identity, backend success without deletion, rollback backup and COM policy cases.
+See [Phase 6F evidence](../../docs/stabilization/PHASE_6F_VBA_DELETE.md).
+
 ## Stabilization completion guard
 
 ```bash
