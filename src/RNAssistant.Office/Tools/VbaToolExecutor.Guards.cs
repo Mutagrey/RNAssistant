@@ -1,10 +1,9 @@
 using System;
-using System.Text;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Tools
 {
@@ -59,23 +58,23 @@ namespace RNAssistant.Office.Tools
             var requestedName = moduleName.Trim();
             VbaModuleState existing;
             ToolResult readError;
-            if (TryReadVbaModule(requestedName, 1000000, out existing, out readError))
+            if (_reader.TryReadModule(requestedName, 1000000, out existing, out readError))
             {
                 var existingName = string.IsNullOrWhiteSpace(existing.Name) ? requestedName : existing.Name;
                 command.Arguments["moduleName"] = existingName;
                 return BindWriteGuard(command, session, existingName, existing, requestedName);
             }
-            if (!IsModuleNotFound(readError)) return readError;
+            if (!VbaReader.IsModuleNotFound(readError)) return readError;
 
-            var normalizedName = NormalizeModuleName(requestedName);
+            var normalizedName = VbaReader.NormalizeModuleName(requestedName);
             if (!string.Equals(requestedName, normalizedName, StringComparison.OrdinalIgnoreCase) &&
-                TryReadVbaModule(normalizedName, 1000000, out existing, out readError))
+                _reader.TryReadModule(normalizedName, 1000000, out existing, out readError))
             {
                 var existingName = string.IsNullOrWhiteSpace(existing.Name) ? normalizedName : existing.Name;
                 command.Arguments["moduleName"] = existingName;
                 return BindWriteGuard(command, session, existingName, existing, requestedName);
             }
-            if (!IsModuleNotFound(readError)) return readError;
+            if (!VbaReader.IsModuleNotFound(readError)) return readError;
 
             command.Arguments["moduleName"] = normalizedName;
             BindGuard(command, session, normalizedName, false, null, requestedName);
@@ -115,7 +114,7 @@ namespace RNAssistant.Office.Tools
             }
 
             var requestedTargetName = newModuleName.Trim();
-            var normalizedTargetName = NormalizeModuleName(requestedTargetName);
+            var normalizedTargetName = VbaReader.NormalizeModuleName(requestedTargetName);
             if (string.Equals(resolvedSourceName, normalizedTargetName, StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Fail(
@@ -132,7 +131,7 @@ namespace RNAssistant.Office.Tools
 
             VbaModuleState target;
             ToolResult targetError;
-            if (TryReadVbaModule(normalizedTargetName, 1000000, out target, out targetError))
+            if (_reader.TryReadModule(normalizedTargetName, 1000000, out target, out targetError))
             {
                 return ToolResult.Fail(
                     "VBA rename destination already exists: " + normalizedTargetName + ".",
@@ -145,7 +144,7 @@ namespace RNAssistant.Office.Tools
                     "vba_module_exists",
                     true);
             }
-            if (!IsModuleNotFound(targetError)) return targetError;
+            if (!VbaReader.IsModuleNotFound(targetError)) return targetError;
 
             var sourceHash = CodeSha256(source.Code);
             string observedHash;
@@ -192,7 +191,7 @@ namespace RNAssistant.Office.Tools
         {
             VbaModuleState current;
             ToolResult readError;
-            if (TryReadVbaModule(moduleName, 1000000, out current, out readError))
+            if (_reader.TryReadModule(moduleName, 1000000, out current, out readError))
             {
                 if (!string.IsNullOrWhiteSpace(expectedComponentType) &&
                     !string.Equals(expectedComponentType, current.ComponentType, StringComparison.OrdinalIgnoreCase))
@@ -206,7 +205,7 @@ namespace RNAssistant.Office.Tools
                 BindGuard(command, session, moduleName, true, CodeSha256(current.Code), moduleName);
                 return null;
             }
-            if (!IsModuleNotFound(readError)) return readError;
+            if (!VbaReader.IsModuleNotFound(readError)) return readError;
             BindGuard(command, session, moduleName, false, null, moduleName);
             return null;
         }
@@ -477,17 +476,16 @@ namespace RNAssistant.Office.Tools
                 true);
         }
 
-        private void RecordObservationFromRead(ChatSession session, string moduleName, ToolResult result)
+        private void RecordObservationFromModule(
+            ChatSession session,
+            string moduleName,
+            VbaModuleState module)
         {
-            if (result == null || !result.Success || string.IsNullOrWhiteSpace(result.DataJson)) return;
-            try
-            {
-                var data = JObject.Parse(result.DataJson);
-                var hash = (string)data["codeSha256"];
-                var actualName = (string)data["name"] ?? moduleName;
-                if (!string.IsNullOrWhiteSpace(hash)) RecordObservation(session, actualName, hash);
-            }
-            catch (JsonException) { }
+            if (module == null || string.IsNullOrWhiteSpace(module.CodeSha256)) return;
+            RecordObservation(
+                session,
+                string.IsNullOrWhiteSpace(module.Name) ? moduleName : module.Name,
+                module.CodeSha256);
         }
 
         private void RecordObservation(ChatSession session, string moduleName, string hash)
@@ -533,51 +531,6 @@ namespace RNAssistant.Office.Tools
         internal static string CodeSha256(string code)
         {
             return VbaTextCanonicalizer.LiveCodeSha256(code);
-        }
-
-        private static bool IsModuleNotFound(ToolResult result)
-        {
-            return result != null &&
-                (string.Equals(result.ErrorCode, "vba_module_not_found", StringComparison.OrdinalIgnoreCase) ||
-                 (result.Message ?? string.Empty).IndexOf("VBA module not found", StringComparison.OrdinalIgnoreCase) >= 0);
-        }
-
-        private static string NormalizeModuleName(string value)
-        {
-            value = (value ?? string.Empty).Trim();
-            if (VbaToolManifestParser.ValidComponentName(value)) return value;
-
-            var normalized = new StringBuilder();
-            foreach (var character in value)
-            {
-                var valid = character >= 'A' && character <= 'Z' ||
-                    character >= 'a' && character <= 'z' ||
-                    character >= '0' && character <= '9' ||
-                    character == '_';
-                if (valid)
-                {
-                    normalized.Append(character);
-                }
-                else if (normalized.Length > 0 && normalized[normalized.Length - 1] != '_')
-                {
-                    normalized.Append('_');
-                }
-            }
-
-            var candidate = normalized.ToString().Trim('_');
-            if (string.IsNullOrWhiteSpace(candidate)) candidate = "Module";
-            if (!IsAsciiLetter(candidate[0])) candidate = "Module_" + candidate;
-            if (string.IsNullOrWhiteSpace(candidate) || !IsAsciiLetter(candidate[0])) candidate = "Module";
-            var suffix = "_" + TextPatternEngine.Sha256(value).Substring(0, 8);
-            var maxBaseLength = 31 - suffix.Length;
-            if (candidate.Length > maxBaseLength) candidate = candidate.Substring(0, maxBaseLength).TrimEnd('_');
-            if (string.IsNullOrWhiteSpace(candidate)) candidate = "Module";
-            return candidate + suffix;
-        }
-
-        private static bool IsAsciiLetter(char value)
-        {
-            return value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z';
         }
 
     }

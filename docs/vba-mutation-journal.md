@@ -19,6 +19,12 @@ text replacement and returns typed status/text/match information. JSON validatio
 resource guidance, guards, ordered operations and journal orchestration remain in
 Office. Phase 6A changes ownership only, not stored hashes or source bytes.
 
+Phase 6B places internal VBA list/module command construction, deterministic name
+fallback and typed project/module payload validation in `Office.Vba.VbaReader`.
+Callers retain the HostRuntime gate and mutation/journal ownership. A malformed
+successful read is rejected and never converted into live or durable evidence;
+this extraction does not change CAS bytes, journal events, reconciliation or COM.
+
 | Representation | Purpose / existing transformation |
 |---|---|
 | Transport / raw CAS bytes | Exact stored source bytes; CAS SHA-256 is not a normalized text hash |

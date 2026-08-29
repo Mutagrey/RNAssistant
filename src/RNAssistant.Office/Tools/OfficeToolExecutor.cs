@@ -9,6 +9,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Tools
 {
@@ -32,6 +33,7 @@ namespace RNAssistant.Office.Tools
         private readonly HostRuntime _hostRuntime;
 
         internal HostRuntime DocumentRuntime { get { return _hostRuntime; } }
+        internal VbaReader VbaReader { get { return _vbaExecutor.Reader; } }
 
         public OfficeToolExecutor(
             IOfficeApplicationAdapter adapter,
@@ -202,11 +204,6 @@ namespace RNAssistant.Office.Tools
         internal string VbaToolId(string suffix)
         {
             return _vbaExecutor.ToolId(suffix);
-        }
-
-        internal string VbaBackendToolId(string suffix)
-        {
-            return _vbaExecutor.BackendToolId(suffix);
         }
 
         public void ObserveVbaHash(ChatSession session, string moduleName, string codeSha256)

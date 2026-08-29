@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Tools
 {
@@ -334,9 +335,9 @@ namespace RNAssistant.Office.Tools
             {
                 VbaModuleState current;
                 ToolResult readError;
-                if (!TryReadVbaModule(component.Name, 1000000, out current, out readError))
+                if (!_reader.TryReadModule(component.Name, 1000000, out current, out readError))
                 {
-                    if (!IsModuleNotFound(readError))
+                    if (!VbaReader.IsModuleNotFound(readError))
                     {
                         return new InstallationProbe { Status = "unavailable", DataJson = readError == null ? null : readError.DataJson };
                     }

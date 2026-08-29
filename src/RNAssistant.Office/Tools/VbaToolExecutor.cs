@@ -8,6 +8,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Tools
 {
@@ -15,6 +16,7 @@ namespace RNAssistant.Office.Tools
     {
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly VbaJournalStore _vbaJournalStore;
+        private readonly VbaReader _reader;
         private readonly object _observedModulesSync = new object();
         private readonly Dictionary<string, string> _observedModuleHashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -22,7 +24,10 @@ namespace RNAssistant.Office.Tools
         {
             _adapter = adapter;
             _vbaJournalStore = vbaJournalStore;
+            _reader = new VbaReader(adapter, BackendToolId);
         }
+
+        internal VbaReader Reader { get { return _reader; } }
 
         public IEnumerable<ToolDefinition> GetControllerTools()
         {
@@ -192,7 +197,18 @@ namespace RNAssistant.Office.Tools
         {
             var reconciliationError = ReconcilePendingMutations();
             if (reconciliationError != null) return reconciliationError;
-            return ListModules();
+            IReadOnlyList<VbaModuleState> project;
+            ToolResult error;
+            if (!_reader.TryReadProject(out project, out error)) return error;
+            var modules = new JArray(project.Select(module => new JObject
+            {
+                ["name"] = module.Name,
+                ["type"] = module.ComponentType,
+                ["lineCount"] = module.LineCount
+            }));
+            return ToolResult.Ok(
+                "VBA modules listed: " + modules.Count + ".",
+                JsonConvert.SerializeObject(new { modules = modules }));
         }
 
         ToolResult IVbaResourceSource.ReadResourceModule(
@@ -202,68 +218,11 @@ namespace RNAssistant.Office.Tools
         {
             var reconciliationError = ReconcilePendingMutations();
             if (reconciliationError != null) return reconciliationError;
-            var command = new ToolCommand();
-            command.Arguments["moduleName"] = moduleName;
-            command.Arguments["maxChars"] = Math.Max(1, Math.Min(1000000, maxChars));
-            return ReadModule(command, session);
-        }
-
-        private ToolResult ReadModule(ToolCommand command, ChatSession session)
-        {
-            var requestedModuleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            var moduleName = (requestedModuleName ?? string.Empty).Trim();
-            var exactLines = ToolArgumentReader.Int32(command.Arguments, "startLine", 0) > 0 ||
-                command.Arguments.ContainsKey("lineCount");
-            var result = ExecuteModuleRead(command, moduleName, exactLines);
-            var normalizedName = NormalizeModuleName(moduleName);
-            if (IsModuleNotFound(result) && !string.Equals(moduleName, normalizedName, StringComparison.OrdinalIgnoreCase))
-            {
-                moduleName = normalizedName;
-                command.Arguments["moduleName"] = moduleName;
-                result = ExecuteModuleRead(command, moduleName, exactLines);
-            }
-            RecordObservationFromRead(session, moduleName, result);
-            return result ?? ToolResult.Fail("VBA module read returned no result.", null, "vba_read_missing_result", true);
-        }
-
-        private ToolResult ExecuteModuleRead(ToolCommand command, string moduleName, bool exactLines)
-        {
-            var read = new ToolCommand
-            {
-                ToolId = BackendToolId("vba_read_module")
-            };
-            read.Arguments["moduleName"] = moduleName;
-            if (exactLines)
-            {
-                read.Arguments["startLine"] = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "startLine", 1));
-                read.Arguments["lineCount"] = ToolArgumentReader.Int32(command.Arguments, "lineCount", 200);
-            }
-            else
-            {
-                read.Arguments["maxChars"] = ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000);
-            }
-            return _adapter.ExecuteTool(read);
-        }
-
-        private ToolResult ListModules()
-        {
-            var read = new ToolCommand { ToolId = BackendToolId("vba_list_project_components_internal") };
-            var result = _adapter.ExecuteTool(read);
-            if (result == null || !result.Success) return result ?? ToolResult.Fail("VBA project returned no result.");
-            try
-            {
-                var data = JObject.Parse(result.DataJson ?? "{}");
-                var modules = new JArray();
-                foreach (var module in (data["modules"] as JArray ?? new JArray()).OfType<JObject>())
-                {
-                    modules.Add(new JObject
-                    {
-                        ["name"] = module["name"], ["type"] = module["type"], ["lineCount"] = module["lineCount"]
-                    });
-                }
-                return ToolResult.Ok("VBA modules listed: " + modules.Count + ".", JsonConvert.SerializeObject(new { modules = modules }));
-            }
-            catch (JsonException ex) { return ToolResult.Fail("Could not parse VBA project: " + ex.Message, null, "vba_read_invalid", true); }
+            VbaModuleState module;
+            ToolResult result;
+            if (!_reader.TryReadResourceModule(moduleName, maxChars, out module, out result)) return result;
+            RecordObservationFromModule(session, moduleName, module);
+            return result;
         }
 
         private ToolResult WriteVbaModule(ToolCommand command, bool dryRun, ChatSession session)
@@ -283,8 +242,8 @@ namespace RNAssistant.Office.Tools
             }
             VbaModuleState existing;
             ToolResult readError;
-            var exists = TryReadVbaModule(moduleName, 1000000, out existing, out readError);
-            if (!exists && !IsModuleNotFound(readError)) return readError;
+            var exists = _reader.TryReadModule(moduleName, 1000000, out existing, out readError);
+            if (!exists && !VbaReader.IsModuleNotFound(readError)) return readError;
             var guardError = ValidateModuleGuard(command, session, moduleName, exists, existing);
             if (guardError != null) return guardError;
             if (exists && string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
@@ -379,13 +338,13 @@ namespace RNAssistant.Office.Tools
         {
             VbaModuleState source;
             ToolResult sourceError;
-            var sourceExists = TryReadVbaModule(moduleName, 1000000, out source, out sourceError);
-            if (!sourceExists && !IsModuleNotFound(sourceError)) return sourceError;
+            var sourceExists = _reader.TryReadModule(moduleName, 1000000, out source, out sourceError);
+            if (!sourceExists && !VbaReader.IsModuleNotFound(sourceError)) return sourceError;
 
             VbaModuleState target;
             ToolResult targetError;
-            var targetExists = TryReadVbaModule(newModuleName, 1000000, out target, out targetError);
-            if (!targetExists && !IsModuleNotFound(targetError)) return targetError;
+            var targetExists = _reader.TryReadModule(newModuleName, 1000000, out target, out targetError);
+            if (!targetExists && !VbaReader.IsModuleNotFound(targetError)) return targetError;
 
             var guardError = ValidateRenameGuard(
                 command,
@@ -485,7 +444,7 @@ namespace RNAssistant.Office.Tools
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
             VbaModuleState module;
             ToolResult error;
-            if (!TryReadVbaModule(moduleName, 1000000, out module, out error)) return error;
+            if (!_reader.TryReadModule(moduleName, 1000000, out module, out error)) return error;
             if (!string.Equals(module.ComponentType, "StdModule", StringComparison.OrdinalIgnoreCase) && !string.Equals(module.ComponentType, "ClassModule", StringComparison.OrdinalIgnoreCase))
                 return ToolResult.Fail("Document modules and UserForms cannot be deleted through RNAssistant.", null, "vba_component_type_read_only", false);
             var guardError = ValidateExistingModuleGuard(command, session, moduleName, module);
@@ -525,14 +484,14 @@ namespace RNAssistant.Office.Tools
                 }
                 VbaModuleState remaining;
                 ToolResult verifyError;
-                if (TryReadVbaModule(moduleName, 1000000, out remaining, out verifyError))
+                if (_reader.TryReadModule(moduleName, 1000000, out remaining, out verifyError))
                 {
                     return ToolResult.PartialFailure(
                         "VBA delete returned success but the module is still present: " + moduleName + ".",
                         VerificationData(moduleName, null, CodeSha256(remaining.Code), deleted.DataJson),
                         "vba_delete_verify_failed");
                 }
-                if (!IsModuleNotFound(verifyError))
+                if (!VbaReader.IsModuleNotFound(verifyError))
                 {
                     return ToolResult.PartialFailure(
                         "VBA module deletion completed but could not be verified: " + (verifyError == null ? moduleName : verifyError.Message),
@@ -581,7 +540,7 @@ namespace RNAssistant.Office.Tools
             VbaModuleState current;
             ToolResult readError;
             var moduleExists = false;
-            if (TryReadVbaModule(backup.ModuleName, 1000000, out current, out readError))
+            if (_reader.TryReadModule(backup.ModuleName, 1000000, out current, out readError))
             {
                 moduleExists = true;
                 if (!string.IsNullOrWhiteSpace(backup.ComponentType) &&
@@ -594,7 +553,7 @@ namespace RNAssistant.Office.Tools
                         false);
                 }
             }
-            else if (!IsModuleNotFound(readError))
+            else if (!VbaReader.IsModuleNotFound(readError))
             {
                 return ToolResult.Fail(
                     "VBA restore was blocked because the current module could not be read. " +
@@ -781,56 +740,6 @@ namespace RNAssistant.Office.Tools
             });
         }
 
-        private bool TryReadVbaModule(string moduleName, int maxChars, out VbaModuleState module, out ToolResult error)
-        {
-            module = null;
-            error = null;
-            var read = new ToolCommand { ToolId = BackendToolId("vba_read_module") };
-            read.Arguments["moduleName"] = moduleName;
-            read.Arguments["maxChars"] = maxChars;
-            var current = _adapter.ExecuteTool(read);
-            if (current == null || !current.Success || string.IsNullOrWhiteSpace(current.DataJson))
-            {
-                error = current == null
-                    ? ToolResult.Fail("VBA module read returned no result.", null, "vba_read_missing_result", true)
-                    : current.Success ? ToolResult.Fail("VBA module returned no code.") : current;
-                return false;
-            }
-
-            try
-            {
-                var data = JObject.Parse(current.DataJson);
-                if (data["code"] == null || data["code"].Type == JTokenType.Null)
-                {
-                    error = ToolResult.Fail("VBA module data has no code field.", current.DataJson, "vba_read_invalid", true);
-                    return false;
-                }
-                module = new VbaModuleState
-                {
-                    Name = (string)data["name"] ?? moduleName,
-                    Code = (string)data["code"] ?? string.Empty,
-                    ComponentType = (string)data["type"] ?? string.Empty,
-                    CodeOnlyUserForm = (bool?)data["codeOnlyUserForm"],
-                    Truncated = (bool?)data["truncated"] ?? false,
-                    LineCount = (int?)data["lineCount"] ?? VbaTextCanonicalizer.LiveCodeLineCount((string)data["code"] ?? string.Empty)
-                };
-            }
-            catch (JsonException ex)
-            {
-                error = ToolResult.Fail("Could not parse VBA module data: " + ex.Message);
-                return false;
-            }
-
-            if (module.Truncated || module.Code.EndsWith("\n...[truncated]", StringComparison.Ordinal))
-            {
-                error = ToolResult.Fail("VBA module is too large for a safe patch.");
-                module = null;
-                return false;
-            }
-
-            return true;
-        }
-
         private bool TryReadExistingModule(
             string requestedModuleName,
             out string resolvedModuleName,
@@ -839,21 +748,21 @@ namespace RNAssistant.Office.Tools
         {
             requestedModuleName = (requestedModuleName ?? string.Empty).Trim();
             resolvedModuleName = requestedModuleName;
-            if (TryReadVbaModule(requestedModuleName, 1000000, out module, out error))
+            if (_reader.TryReadModule(requestedModuleName, 1000000, out module, out error))
             {
                 resolvedModuleName = string.IsNullOrWhiteSpace(module.Name) ? requestedModuleName : module.Name;
                 return true;
             }
-            if (!IsModuleNotFound(error)) return false;
+            if (!VbaReader.IsModuleNotFound(error)) return false;
 
-            var normalizedName = NormalizeModuleName(requestedModuleName);
+            var normalizedName = VbaReader.NormalizeModuleName(requestedModuleName);
             if (!string.Equals(requestedModuleName, normalizedName, StringComparison.OrdinalIgnoreCase) &&
-                TryReadVbaModule(normalizedName, 1000000, out module, out error))
+                _reader.TryReadModule(normalizedName, 1000000, out module, out error))
             {
                 resolvedModuleName = string.IsNullOrWhiteSpace(module.Name) ? normalizedName : module.Name;
                 return true;
             }
-            if (!IsModuleNotFound(error)) return false;
+            if (!VbaReader.IsModuleNotFound(error)) return false;
 
             resolvedModuleName = normalizedName;
             error = ToolResult.Fail(
@@ -906,7 +815,7 @@ namespace RNAssistant.Office.Tools
             var expectedLineCount = VbaTextCanonicalizer.LiveCodeLineCount(expectedCode);
             VbaModuleState actual;
             ToolResult readError;
-            if (!TryReadVbaModule(moduleName, 1000000, out actual, out readError))
+            if (!_reader.TryReadModule(moduleName, 1000000, out actual, out readError))
             {
                 return ToolResult.PartialFailure(
                     "VBA write completed but final state could not be read back: " +
@@ -1001,16 +910,6 @@ namespace RNAssistant.Office.Tools
             return string.Equals(_adapter.HostName, "Excel", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(_adapter.HostName, "Word", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private sealed class VbaModuleState
-        {
-            public string Name { get; set; }
-            public string Code { get; set; }
-            public string ComponentType { get; set; }
-            public bool? CodeOnlyUserForm { get; set; }
-            public bool Truncated { get; set; }
-            public int LineCount { get; set; }
         }
 
         private sealed class VbaMutationGuard

@@ -14,6 +14,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using RNAssistant.Office.Vba;
 using RNAssistant.Office.WebView;
 using RNAssistant.Desktop;
 using RNAssistant.OfficeHosts;
@@ -22,6 +23,84 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void VbaReaderValidatesTypedSnapshots()
+        {
+            var adapter = new FakeOfficeAdapter();
+            var source = "Option Explicit\r\nPublic Sub ReadMe()\r\nEnd Sub";
+            adapter.SetVbaModule("ReaderModule", source, "ClassModule");
+            var reader = new VbaReader(adapter, suffix => "excel." + suffix);
+
+            VbaModuleState module;
+            ToolResult error;
+            AssertTrue(reader.TryReadModule("ReaderModule", 1000000, out module, out error),
+                "reader accepts a complete typed module snapshot");
+            AssertEqual(source, module.Code, "reader preserves exact VBA source bytes");
+            AssertEqual("ClassModule", module.ComponentType, "reader carries component type");
+            AssertEqual(VbaTextCanonicalizer.LiveCodeLineCount(source), module.LineCount,
+                "reader carries live line metadata");
+
+            adapter.QueueResult("excel.vba_read_module", ToolResult.Ok(
+                "malformed module",
+                "{\"name\":\"ReaderModule\",\"code\":\"x\",\"type\":\"ClassModule\",\"lineCount\":\"invalid\"}"));
+            AssertTrue(!reader.TryReadModule("ReaderModule", 1000000, out module, out error),
+                "reader rejects a malformed typed field");
+            AssertEqual("vba_read_invalid", error.ErrorCode, "malformed module has stable error code");
+
+            foreach (var malformed in new[]
+            {
+                "{\"name\":\"OtherModule\",\"code\":\"x\",\"type\":\"ClassModule\"}",
+                "{\"name\":\"ReaderModule\",\"code\":\"x\",\"type\":\"ClassModule\",\"codeSha256\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+                "{\"name\":\"ReaderModule\",\"code\":\"x\",\"type\":\"ClassModule\",\"truncated\":true}"
+            })
+            {
+                adapter.QueueResult("excel.vba_read_module", ToolResult.Ok("inconsistent module", malformed));
+                AssertTrue(!reader.TryReadModule("ReaderModule", 1000000, out module, out error),
+                    "reader rejects target, hash and truncation inconsistencies");
+                AssertEqual("vba_read_invalid", error.ErrorCode, "inconsistent module has stable error code");
+            }
+
+            adapter.QueueResult("excel.vba_read_module", ToolResult.Ok(
+                "truncated module",
+                "{\"name\":\"ReaderModule\",\"code\":\"x\\n...[truncated]\",\"type\":\"ClassModule\",\"truncated\":true}"));
+            AssertTrue(!reader.TryReadModule("ReaderModule", 1000000, out module, out error),
+                "mutation snapshot rejects truncated source");
+
+            IReadOnlyList<VbaModuleState> project;
+            foreach (var malformed in new[]
+            {
+                "{}",
+                "{\"modules\":\"invalid\"}",
+                "{\"modules\":[1]}",
+                "{\"modules\":[{\"name\":\"Module1\",\"type\":\"StdModule\"},{\"name\":\"module1\",\"type\":\"ClassModule\"}]}"
+            })
+            {
+                adapter.QueueResult("excel.vba_list_project_components_internal", ToolResult.Ok("malformed project", malformed));
+                AssertTrue(!reader.TryReadProject(out project, out error),
+                    "reader rejects malformed project snapshots");
+                AssertEqual("vba_read_invalid", error.ErrorCode, "malformed project has stable error code");
+            }
+
+            adapter.QueueResult("excel.vba_list_project_components_internal", ToolResult.Ok("empty project", "{\"modules\":[]}"));
+            AssertTrue(reader.TryReadProject(out project, out error) && project.Count == 0,
+                "reader distinguishes a valid empty project");
+
+            var requestedName = "Sales report";
+            var normalizedName = VbaReader.NormalizeModuleName(requestedName);
+            adapter.SetVbaModule(normalizedName, "Sub Main()\nEnd Sub", "StdModule");
+            var readsBefore = adapter.Executed.Count;
+            ToolResult resource;
+            AssertTrue(reader.TryReadResourceModule(requestedName, 1000, out module, out resource),
+                "resource read falls back to the deterministic normalized name");
+            AssertEqual(2, adapter.Executed.Count - readsBefore, "normalization fallback performs exactly two reads");
+            AssertEqual(normalizedName, module.Name, "resource observation binds the resolved module name");
+
+            adapter.QueueResult("excel.vba_read_module", ToolResult.Ok("malformed resource", "{}"));
+            AssertTrue(!reader.TryReadResourceModule("ReaderModule", 1000, out module, out resource) &&
+                resource.ErrorCode == "vba_read_invalid",
+                "resource read does not expose malformed successful backend data");
+            AssertTrue(module == null, "malformed resource data creates no observation");
+        }
+
         private static void VbaApplyPatchBacksUpModule()
         {
             WithTempPaths(delegate(AppDataPaths paths)

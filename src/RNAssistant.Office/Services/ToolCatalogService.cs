@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Services
 {
@@ -16,6 +15,7 @@ namespace RNAssistant.Office.Services
         private static readonly TimeSpan DocumentVbaCacheDuration = TimeSpan.FromMinutes(1);
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
+        private readonly VbaReader _vbaReader;
         private readonly ToolStore _toolStore;
         private readonly object _documentVbaCacheSync = new object();
         private string _documentVbaCacheKey;
@@ -27,6 +27,7 @@ namespace RNAssistant.Office.Services
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor;
+            _vbaReader = toolExecutor.VbaReader;
             _toolStore = toolStore;
         }
 
@@ -191,32 +192,24 @@ namespace RNAssistant.Office.Services
             // Null means a backend read failed. Never publish a partial load or
             // confuse failed access with a successfully empty document catalog.
             var result = new List<ToolDefinition>();
-            ToolResult read;
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_list_project_components_internal") };
-            if (!TryReadDocumentVba(command, out read)) return null;
-            if (string.IsNullOrWhiteSpace(read.DataJson)) return result;
-
-            JArray modules;
-            try { modules = JObject.Parse(read.DataJson)["modules"] as JArray; }
-            catch (JsonException) { return result; }
-            if (modules == null) return result;
-            var moduleMap = new Dictionary<string, JObject>(StringComparer.OrdinalIgnoreCase);
-            foreach (var module in modules.OfType<JObject>())
+            IReadOnlyList<VbaModuleState> modules;
+            if (!TryReadDocumentVbaProject(out modules)) return null;
+            var moduleMap = new Dictionary<string, VbaModuleState>(StringComparer.OrdinalIgnoreCase);
+            foreach (var module in modules)
             {
-                var name = (string)module["name"];
-                if (!string.IsNullOrWhiteSpace(name) && !moduleMap.ContainsKey(name)) moduleMap.Add(name, module);
+                if (!moduleMap.ContainsKey(module.Name)) moduleMap.Add(module.Name, module);
             }
             foreach (var moduleInfo in moduleMap.Values.Where(module =>
-                string.Equals((string)module["type"], "StdModule", StringComparison.OrdinalIgnoreCase) &&
-                module.Value<bool?>("hasToolManifest") != false).ToList())
+                string.Equals(module.ComponentType, "StdModule", StringComparison.OrdinalIgnoreCase) &&
+                module.HasToolManifest != false).ToList())
             {
                 bool readFailed;
-                var module = ReadDocumentModule(moduleMap, (string)moduleInfo["name"], out readFailed);
+                var module = ReadDocumentModule(moduleMap, moduleInfo.Name, out readFailed);
                 if (readFailed) return null;
                 if (module == null) continue;
-                var code = (string)module["code"] ?? string.Empty;
+                var code = module.Code ?? string.Empty;
                 if (code.IndexOf("<RNAssistantTool>", StringComparison.Ordinal) < 0 || code.EndsWith("\n...[truncated]", StringComparison.Ordinal)) continue;
-                var parsed = new VbaToolManifestParser().Parse((string)module["name"], code);
+                var parsed = new VbaToolManifestParser().Parse(module.Name, code);
                 if (!parsed.Success || !string.Equals(parsed.Tool.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase)) continue;
                 var discovered = parsed.Tool;
                 discovered.Scope = "document";
@@ -234,7 +227,9 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private List<VbaToolComponent> ResolveDocumentComponents(ToolDefinition tool, IDictionary<string, JObject> modules,
+        private List<VbaToolComponent> ResolveDocumentComponents(
+            ToolDefinition tool,
+            IDictionary<string, VbaModuleState> modules,
             out bool readFailed)
         {
             readFailed = false;
@@ -243,11 +238,11 @@ namespace RNAssistant.Office.Services
             {
                 var module = ReadDocumentModule(modules, declared.Name, out readFailed);
                 if (readFailed) return null;
-                var type = module == null ? string.Empty : (string)module["type"] ?? string.Empty;
+                var type = module == null ? string.Empty : module.ComponentType ?? string.Empty;
                 var supported = string.Equals(type, "StdModule", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase) && (bool?)module["codeOnlyUserForm"] == true;
-                var code = supported ? (string)module["code"] ?? string.Empty : string.Empty;
+                    string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase) && module.CodeOnlyUserForm == true;
+                var code = supported ? module.Code ?? string.Empty : string.Empty;
                 result.Add(new VbaToolComponent
                 {
                     Name = declared.Name,
@@ -262,46 +257,56 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private JObject ReadDocumentModule(IDictionary<string, JObject> modules, string moduleName, out bool readFailed)
+        private VbaModuleState ReadDocumentModule(
+            IDictionary<string, VbaModuleState> modules,
+            string moduleName,
+            out bool readFailed)
         {
             readFailed = false;
-            JObject module;
+            VbaModuleState module;
             if (modules == null || !modules.TryGetValue(moduleName ?? string.Empty, out module)) return null;
-            if (module["code"] != null) return module;
+            if (module.HasCode) return module;
 
-            ToolResult read;
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaBackendToolId("vba_read_module") };
-            command.Arguments["moduleName"] = moduleName;
-            command.Arguments["maxChars"] = 2000000;
-            if (!TryReadDocumentVba(command, out read))
+            VbaModuleState loaded;
+            if (!TryReadDocumentVbaModule(moduleName, out loaded))
             {
                 readFailed = true;
                 return null;
             }
-            if (string.IsNullOrWhiteSpace(read.DataJson)) return null;
-
-            try
-            {
-                var data = JObject.Parse(read.DataJson);
-                module["code"] = data["code"];
-                module["type"] = data["type"] ?? module["type"];
-                module["lineCount"] = data["lineCount"] ?? module["lineCount"];
-                return module;
-            }
-            catch (JsonException) { return null; }
+            modules[moduleName] = loaded;
+            return loaded;
         }
 
-        private bool TryReadDocumentVba(ToolCommand command, out ToolResult read)
+        private bool TryReadDocumentVbaProject(out IReadOnlyList<VbaModuleState> modules)
         {
-            try { read = _adapter.ExecuteTool(command); }
+            try
+            {
+                ToolResult error;
+                return _vbaReader.TryReadProject(out modules, out error);
+            }
             catch (OfficeDocumentGuardException) { throw; }
             catch (HostRuntime.MutationLockException) { throw; }
             catch
             {
-                read = null;
+                modules = null;
                 return false;
             }
-            return read != null && read.Success;
+        }
+
+        private bool TryReadDocumentVbaModule(string moduleName, out VbaModuleState module)
+        {
+            try
+            {
+                ToolResult error;
+                return _vbaReader.TryReadModule(moduleName, 2000000, out module, out error);
+            }
+            catch (OfficeDocumentGuardException) { throw; }
+            catch (HostRuntime.MutationLockException) { throw; }
+            catch
+            {
+                module = null;
+                return false;
+            }
         }
 
         private static bool PackageMatches(ToolDefinition global, ToolDefinition document)

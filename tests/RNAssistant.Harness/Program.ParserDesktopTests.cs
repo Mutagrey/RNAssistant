@@ -886,6 +886,25 @@ namespace RNAssistant.Harness
                         AssertTrue(fake.Executed.Count > readCount, "failed load was not cached");
                     }
 
+                    foreach (var malformedProject in new[] { "{}", "{\"modules\":\"invalid\"}" })
+                    {
+                        catalog.InvalidateDocumentVbaTools();
+                        fake.QueueResult(
+                            "excel.vba_list_project_components_internal",
+                            ToolResult.Ok("malformed project", malformedProject));
+                        AssertTrue(!hasPackage(), "malformed project snapshot publishes no document tools");
+                        readCount = fake.Executed.Count;
+                        AssertTrue(hasPackage(), "malformed project snapshot is not cached as an empty project");
+                        AssertTrue(fake.Executed.Count > readCount, "project snapshot is reread after malformed data");
+                    }
+
+                    catalog.InvalidateDocumentVbaTools();
+                    fake.QueueResult("excel.vba_read_module", ToolResult.Ok("malformed module", "{}"));
+                    AssertTrue(!hasPackage(), "malformed module snapshot publishes no partial package");
+                    readCount = fake.Executed.Count;
+                    AssertTrue(hasPackage(), "malformed module snapshot is not cached as an unavailable package");
+                    AssertTrue(fake.Executed.Count > readCount, "module snapshot is reread after malformed data");
+
                     catalog.InvalidateDocumentVbaTools();
                     fake.QueueResult("excel.vba_list_project_components_internal", ToolResult.Ok("empty project", "{\"modules\":[]}"));
                     AssertTrue(!hasPackage(), "successfully empty project has no document tools");

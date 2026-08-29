@@ -58,6 +58,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Diagnostics\RuntimeLog.cs" Link="Office\Diagnostics\RuntimeLog.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\*.cs" Link="Office\Agent\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaProjectSupport.cs" Link="Office\Vba\VbaProjectSupport.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaReader.cs" Link="Office\Vba\VbaReader.cs" />
     <Compile
       Include="..\..\src\RNAssistant.Office\Services\*.cs"
       Exclude="..\..\src\RNAssistant.Office\Services\AttachmentImageService.cs;..\..\src\RNAssistant.Office\Services\ModelAttachmentService.cs"

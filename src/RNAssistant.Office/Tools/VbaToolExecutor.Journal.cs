@@ -6,6 +6,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Tools
 {
@@ -281,7 +282,7 @@ namespace RNAssistant.Office.Tools
             bool readSucceeded;
             try
             {
-                readSucceeded = TryReadVbaModule(prepared.ModuleName, 1000000, out actual, out readError);
+                readSucceeded = _reader.TryReadModule(prepared.ModuleName, 1000000, out actual, out readError);
             }
             catch (Exception ex)
             {
@@ -338,7 +339,7 @@ namespace RNAssistant.Office.Tools
                 };
             }
 
-            if (IsModuleNotFound(readError))
+            if (VbaReader.IsModuleNotFound(readError))
             {
                 if (!prepared.IntendedAfterExists)
                 {
@@ -443,8 +444,8 @@ namespace RNAssistant.Office.Tools
             {
                 VbaModuleState before;
                 ToolResult readError;
-                var beforeExists = TryReadVbaModule(component.Name, 1000000, out before, out readError);
-                if (!beforeExists && !IsModuleNotFound(readError))
+                var beforeExists = _reader.TryReadModule(component.Name, 1000000, out before, out readError);
+                if (!beforeExists && !VbaReader.IsModuleNotFound(readError))
                 {
                     error = ToolResult.Fail(
                         "VBA package mutation was blocked because component state could not be read: " + component.Name + ".",
@@ -641,7 +642,7 @@ namespace RNAssistant.Office.Tools
             ToolResult readError;
             try
             {
-                if (TryReadVbaModule(expected.ModuleName, 1000000, out actual, out readError))
+                if (_reader.TryReadModule(expected.ModuleName, 1000000, out actual, out readError))
                 {
                     var hash = VbaTextCanonicalizer.PackageCodeSha256(actual.Code);
                     var comparableHash = packageOperation
@@ -690,7 +691,7 @@ namespace RNAssistant.Office.Tools
                 };
             }
 
-            if (IsModuleNotFound(readError))
+            if (VbaReader.IsModuleNotFound(readError))
             {
                 return new VbaPackageMutationComponentAssessment
                 {

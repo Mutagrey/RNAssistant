@@ -17,7 +17,7 @@
 ### Обязательные правила для агента
 
 1. Выполнять только текущую фазу и текущий подэтап.
-2. Не начинать следующую фазу, пока не выполнен Definition of Done текущей, кроме явно согласованных исключений Phase 6A и R33 ниже; они не закрывают отложенные gates.
+2. Не начинать следующую фазу, пока не выполнен Definition of Done текущей, кроме явно согласованных исключений Phase 6A, R33 и 6B ниже; они не закрывают отложенные gates.
 3. Не добавлять новые продуктовые функции во время стабилизации.
 4. Не повышать продуктовую версию и не создавать Git tag, если это прямо не указано в разделе релиза.
 5. Не менять одновременно runtime, UI, persistence, resources и Office/VBA ради одного локального исправления.
@@ -1779,13 +1779,19 @@ Phase 5B2/R04 остаются открытыми; production ExcelDocumentSessi
 
 Это отдельное изменение semantics, не часть сохраняющего поведение 6A. Newline/hash правила, существующий error/result mapping, COM dispatch, journal/CAS protocol и production binding не меняются. 5B2/R04, Windows/VBE qualification и полный Phase 6 gate остаются открытыми. Следующие domain extractions и Phases 7–12 этим допуском не разрешены.
 
+### Согласованное продолжение 6B VbaReader (2026-08-29)
+
+После отдельного R33 пользователь разрешил следующий локальный подэтап с проверкой регрессий, чисткой и границ ответственности. Допуск ограничен host-neutral `VbaReader`: один владелец построения VBA read-команд, нормализации имени и typed validation project/module snapshots; действующие mutation guard/verification/package consumers и document-tool catalog переключаются на него. Malformed successful backend payload должен завершать текущую загрузку fail closed, не публиковаться и не кэшироваться как валидный пустой/частичный catalog; настоящий `modules: []` остаётся допустимым.
+
+`HostRuntime` сохраняет document gate и target binding; `VbaToolExecutor` сохраняет reconciliation, observations, guards, mutations, journal/read-back и mapping в текущий ToolResult/resource adapter. Host-specific COM остаётся в adapters/`VbaProjectSupport`. Не менять production factories/identity, COM implementation, journal/CAS/result wire, Phase 7 или UI. После 6B следующий mutation/verifier slice согласовать отдельно; 5B2/R04, Windows/VBE/package qualification и полный Phase 6 gate остаются открытыми.
+
 ### Цель
 
 Стабилизировать наиболее опасный write contour до переноса остальных mutations.
 
 ### Порядок
 
-1. `vba.read`.
+1. `vba.read` — 6B host-neutral extraction done; Windows/VBE qualification remains open.
 2. `vba.apply_patch`.
 3. whole-module write.
 4. delete.
@@ -1800,7 +1806,7 @@ Phase 5B2/R04 остаются открытыми; production ExcelDocumentSessi
 - [x] 6A: `Core.Tools.VbaTextCanonicalizer` — один владелец live/package/VBE-comparable text/hash правил; parser, patch, guard/verification/package/storage consumers переключены, прежние normalization methods удалены. Core-размещение сохраняет допустимые зависимости storage/parser; journal/CAS protocol не менялся.
 - [x] 6A: существующие Transport/live/package/VBE-comparable representations разделены и описаны в [VBA journal](../vba-mutation-journal.md#text-representations); comparison не переписывает source.
 - [x] 6A host-neutral: raw CAS hash не менялся и отделён от text/comparable hashes; targeted tests покрывают CRLF/LF/CR, literal backslash sequences, строки/апострофные комментарии. Это не Windows/VBE qualification.
-- [ ] Извлечь `VbaReader`.
+- [x] 6B host-neutral: извлечён `Office.Vba.VbaReader`; backend read construction/name normalization/typed project+module validation имеют одного владельца. Mutation/resource executor и document-tool catalog переключены; дублирующие executor/catalog raw parsers/read builders удалены. Malformed success fail closed и не кэшируется, valid empty project сохраняет cache semantics. HostRuntime/COM/journal/result wire не менялись; Windows/VBE gate открыт.
 - [ ] Извлечь `VbaMutationService`.
 - [ ] Извлечь `VbaVerifier`.
 - [ ] Сохранить current journal/CAS evidence.

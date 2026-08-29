@@ -8,7 +8,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 
 - Обязательные требования: `docs/stabilization/STABILIZATION_MASTER_PLAN.md`. Текущая фаза и результаты — в `docs/stabilization/PROGRESS.md`.
 - Работай только в текущей фазе и подэтапе. Не начинай следующую фазу в том же изменении; новые product features заморожены.
-- Согласованные исключения при недоступной Windows: 6A (2026-08-28) — чистые VBA patch/canonicalization функции и механический switch consumers; после отдельного commit 6A разрешён R33 (2026-08-29) — только отказ для перекрывающихся exact-match вхождений, targeted tests и чистка. Phase 5B2/R04 и Windows gates открыты; дальнейшие подэтапы отдельно согласуются по master plan.
+- Согласованные исключения при недоступной Windows: 6A (2026-08-28) — чистые VBA patch/canonicalization функции и механический switch consumers; после отдельного commit 6A разрешён R33 (2026-08-29) — только отказ для перекрывающихся exact-match вхождений; после отдельного R33 разрешён 6B VbaReader (2026-08-29) — единый typed read/validation owner и switch действующих executor/catalog consumers. COM/HostRuntime/factories/journal/result wire и Phase 7 не входят. Phase 5B2/R04 и Windows gates открыты; дальнейшие подэтапы отдельно согласуются по master plan.
 - Главная ветка — `stabilization/16.1`; короткие рабочие ветки — `stab/<phase>-<task>`. Не коммить стабилизацию в `main`.
 - Один commit — один инвариант или чёткий этап. Дефекты вне текущего контура записывай в `RISK_REGISTER.md` / `BACKLOG.md`, не исправляй попутно.
 - Текущие runtime-инварианты ниже остаются правилами существующей реализации до соответствующей фазы master plan; целевые контракты не вводятся заранее.
