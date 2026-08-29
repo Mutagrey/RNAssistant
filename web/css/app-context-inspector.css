@@ -350,8 +350,7 @@ button.context-meter {
   color: var(--danger);
 }
 
-.prompt-context-item pre,
-.prompt-context-raw pre {
+.prompt-context-item pre {
   max-height: 260px;
   margin: 0 0 8px;
   overflow: auto;
@@ -378,9 +377,14 @@ button.context-meter {
   font-size: 11px;
 }
 
-.prompt-context-raw pre {
-  max-height: 420px;
+.prompt-context-raw-viewer {
+  height: min(420px, 48vh);
+  min-height: 180px;
   margin-top: 8px;
+}
+
+.prompt-context-raw-viewer > .rn-json-viewer {
+  height: 100%;
 }
 
 .prompt-context-inspector-actions {

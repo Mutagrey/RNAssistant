@@ -1,18 +1,19 @@
 # R32 — Сквозная диагностика и общий JSON viewer
 
-Статус: требования пользователя от 2026-08-28. **9A, 9B1, diagnostics 9B2A и
-Agent 9B2B1 реализованы host-neutral 2026-08-29; остальные consumers, 9B3, 9C и
+Статус: требования пользователя от 2026-08-28. **9A, 9B1 и consumer switches
+через Context/Tools/VBA 9B2B2 реализованы host-neutral 2026-08-29; artifact/Markdown
+consumers, 9B3, 9C и
 Windows/WebView qualification открыты.** Baseline source review —
 `85cc3f4`; перенос документации — поверх `b754443`. Реализация и qualification —
 [Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), до release gate Phase 12.
 
 ## Что требуется исправить
 
-Сейчас `app-trajectory.js` разносит raw events, model/tool projections и payload по
-отдельным представлениям и действиям. JSON показывается через `prettyJson` +
-`textContent`; `app-agent-data.js` имеет собственное форматирование/copy UI.
-Пользователю трудно восстановить цепочку от запроса до фактического применения.
-Это подтверждённое замечание к удобству диагностики, не доказательство потери событий.
+На baseline до Phase 9 `app-trajectory.js` разносил raw events, model/tool projections
+и payload по отдельным представлениям, а diagnostics/Agent использовали разные
+`prettyJson`/`textContent`/copy paths. Эти paths уже заменены в 9B2A/9B2B1;
+хронологический journal UI остаётся 9C. Исходное замечание подтверждает проблему
+удобства диагностики, но само по себе не доказывает потерю событий.
 
 Цель: один понятный журнал выбранного пользовательского запуска с раскрываемыми
 строками и один переиспользуемый read-only JSON viewer во всех местах просмотра JSON.
@@ -120,9 +121,9 @@ Network/HTML/link features отключаются или кандидат отк
 |---|---|
 | `app-trajectory.js` / diagnostics | **9B2A switched:** exact event/row `DataJson`, separate source evidence и JSON CAS payload используют общий viewer; non-JSON CAS остаётся inert text. VBA before/after diff не является JSON |
 | `app-agent-data.js` | **9B2B1 switched:** tool arguments/results используют один lazy lossless viewer; прежний generic object/table/list/pretty renderer удалён. Chart card остаётся отдельным domain renderer со своим parser owner |
-| `app-context-inspector.js`, `app-context.js` | Структура request и context; ограничения/redaction сохраняются |
-| `app-tools-actions.js` и tool result panels | JSON manual-run/validation results, без изменения execution semantics |
-| `app-html-workspace-artifacts.js`, `app-vba-project.js` | JSON artifact metadata / VBA metadata, без изменения HTML preview/editor |
+| `app-context-inspector.js`, `app-context.js` | **9B2B2 switched:** exact materialized request сохраняет raw/preview completeness; context state явно остаётся сериализованной UI projection. Оба viewer lifecycle bounded/lazy |
+| `app-tools-actions.js` и tool result panels | **9B2B2 switched:** manual-run/package structured result использует viewer, loading/error остаются inert text; editable arguments/schema и execution semantics не менялись |
+| `app-html-workspace-artifacts.js`, `app-vba-project.js` | VBA metadata **switched 9B2B2** как UI projection; JSON artifact content/metadata остаётся 9B2B3, HTML preview/editor не меняется |
 | JSON code blocks сообщений (`app-markdown.js`) | Явно помеченные JSON-блоки используют тот же viewer; незавершённый stream остаётся помеченным текстом до безопасного обновления |
 | JSON editors/settings | Редактор и сохранение не заменяются read-only деревом; если есть preview, он использует общий viewer |
 

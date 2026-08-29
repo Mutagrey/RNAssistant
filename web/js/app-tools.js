@@ -6,7 +6,8 @@ var toolActions = window.RNAssistantToolActions.create({
   state: state,
   send: send,
   setBusy: setControlBusy,
-  setOutput: function (value) { $("toolRunOutput").textContent = value || ""; },
+  setJsonOutput: renderToolRunJson,
+  setTextOutput: renderToolRunText,
   syncSelected: syncSelectedToolFromEditor,
   validateSelected: validateSelectedToolEditors,
   validateAll: validateAllToolDefinitions,
@@ -18,6 +19,36 @@ var toolActions = window.RNAssistantToolActions.create({
   log: log,
   logToolResult: logToolResult
 });
+
+function clearToolRunOutput() {
+  var target = $("toolRunOutput");
+  if (!target) return null;
+  if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(target);
+  target.classList.add("is-text");
+  target.textContent = "";
+  return target;
+}
+
+function renderToolRunText(value) {
+  var target = clearToolRunOutput();
+  if (target) target.textContent = value === null || value === undefined ? "" : String(value);
+}
+
+function renderToolRunJson(value) {
+  var target = clearToolRunOutput();
+  if (!target) return;
+  if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has("json")) {
+    throw new Error("JSON viewer is unavailable.");
+  }
+  target.classList.remove("is-text");
+  var text = typeof value === "string" ? value : JSON.stringify(value === undefined ? null : value, null, 2);
+  window.RNAssistantViewerRegistry.mount("json", target, {
+    text: text,
+    completeness: "full",
+    mode: "tree",
+    onCopy: window.copyTextResult
+  });
+}
 
 function renderTools() {
   renderInstructions();
@@ -298,7 +329,7 @@ function renderToolEditor() {
     setCodeEditorValue("toolCodeInput", $("toolCodeInput").value);
     setCodeEditorValue("toolReadmeInput", $("toolReadmeInput").value);
   }
-  $("toolRunOutput").textContent = "";
+  renderToolRunText("");
   state.toolSchemaVisualDraft = null;
   toolStructuredEditor.syncSchemaDraft();
   state.toolLibraryRendering = true;

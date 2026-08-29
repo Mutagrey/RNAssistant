@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="css/vendor/katex.min.css">
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="css/app.css?v=html-workspace-auto-20260825-1">
+  <link rel="stylesheet" href="css/app.css?v=json-surfaces-20260829-1">
   <link rel="stylesheet" href="css/app-chat.css?v=response-status-20260826-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=chatui-20260622-1">
   <link rel="stylesheet" href="css/app-composer.css?v=composer-polish-20260826-1">
@@ -30,17 +30,17 @@
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-ui-20260825-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-viewer-20260829-2">
   <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-json-20260829-1">
-  <link rel="stylesheet" href="css/app-tools.css?v=skill-references-20260825-1">
-  <link rel="stylesheet" href="css/app-vba.css?v=resource-navigation-20260826-1">
-  <link rel="stylesheet" href="css/app-context-panel.css?v=context-close-20260825-1">
-  <link rel="stylesheet" href="css/app-context-inspector.css?v=context-inspector-20260824-1">
+  <link rel="stylesheet" href="css/app-tools.css?v=json-viewer-20260829-1">
+  <link rel="stylesheet" href="css/app-vba.css?v=json-viewer-20260829-1">
+  <link rel="stylesheet" href="css/app-context-panel.css?v=json-viewer-20260829-1">
+  <link rel="stylesheet" href="css/app-context-inspector.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-artifacts.css?v=utility-dock-20260826-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=resource-navigation-20260826-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=composer-polish-20260826-1">
   <link rel="stylesheet" href="css/app-agent.css?v=response-status-20260826-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-viewer-20260829-1">
-  <link rel="stylesheet" href="css/app-theme.css?v=agent-json-cleanup-20260829-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=json-surfaces-20260829-1">
 </head>
 <body>
   <div class="shell">
@@ -156,9 +156,9 @@
               </div>
             </div>
             <div class="context-list" id="contextList"></div>
-            <details class="context-json">
+            <details class="context-json" id="contextJsonDetails">
               <summary>JSON</summary>
-              <pre class="json-box" id="contextBox">{}</pre>
+              <div class="context-json-viewer" id="contextBox"></div>
             </details>
           </div>
           <div class="composer-toolbar">
@@ -261,7 +261,7 @@
               <div class="prompt-context-sections" id="promptContextInspectorSections"></div>
               <details class="prompt-context-raw hidden" id="promptContextInspectorRaw">
                 <summary>Структура запроса JSON</summary>
-                <pre id="promptContextInspectorRawText"></pre>
+                <div class="prompt-context-raw-viewer" id="promptContextInspectorRawText"></div>
               </details>
             </div>
           </div>
@@ -334,7 +334,7 @@
                 <div id="toolRunArgsVisual" class="structured-editor"></div>
                 <details class="advanced-json"><summary>Аргументы JSON</summary><textarea id="toolRunArgsInput" rows="7" spellcheck="false">{}</textarea></details>
                 <div class="tool-test-actions"><button class="secondary" id="dryRunToolButton" type="button">Проверить</button><button class="primary" id="runToolButton" type="button">Запустить</button></div>
-                <pre class="json-box tool-run-output" id="toolRunOutput"></pre>
+                <div class="tool-run-output is-text" id="toolRunOutput" aria-live="polite"></div>
               </div>
               <div class="tool-editor-page hidden" data-tool-page-view="docs"><label>README / заметки<textarea id="toolReadmeInput" rows="16" spellcheck="false" placeholder="Заметки по использованию и реализации"></textarea></label></div>
             </div>
@@ -506,7 +506,7 @@
                 <label class="inline-field vba-backup-field">Копия<select id="vbaBackupSelect"></select></label>
                 <button class="secondary" id="restoreVbaButton" type="button">Восстановить</button>
               </div>
-              <pre class="json-box vba-meta" id="vbaMetaBox"></pre>
+              <div class="vba-meta" id="vbaMetaBox"></div>
             </div>
           </section>
         </div>
@@ -967,12 +967,12 @@
   <script src="js/app-chat-state.js?v=resource-ingestion-20260826-1"></script>
   <script src="js/app-resource-list.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-tools-structured.js?v=library-dirty-20260825-1"></script>
-  <script src="js/app-tools-actions.js?v=library-dirty-20260825-1"></script>
-  <script src="js/app-tools.js?v=library-dirty-20260825-1"></script>
+  <script src="js/app-tools-actions.js?v=json-viewer-20260829-1"></script>
+  <script src="js/app-tools.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-skills.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
   <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>
-  <script src="js/app-vba-project.js?v=userform-20260824-1"></script>
+  <script src="js/app-vba-project.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-vba.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-html-workspace-preview.js?v=html-data-20260824-1"></script>
   <script src="js/app-html-workspace-artifacts.js?v=chat-context-stream-fix-20260826-1"></script>
@@ -981,8 +981,8 @@
   <script src="js/app-html-workspace-tree.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-recovery-20260825-1"></script>
   <script src="js/app-html-workspace.js?v=resource-navigation-20260826-1"></script>
-  <script src="js/app-context.js?v=chat-context-stream-fix-20260826-1"></script>
-  <script src="js/app-context-inspector.js?v=resource-ingestion-20260826-1"></script>
+  <script src="js/app-context.js?v=json-viewer-20260829-1"></script>
+  <script src="js/app-context-inspector.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-agent-data.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-agent-model.js?v=response-status-20260826-1"></script>
   <script src="js/app-chart-artifacts.js?v=chart-json-owner-20260829-1"></script>

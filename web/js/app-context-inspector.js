@@ -22,6 +22,8 @@ function setPromptContextInspectorOpen(open) {
   trigger.setAttribute("aria-expanded", open ? "true" : "false");
   if (open) {
     loadPromptContextInspector(false);
+  } else {
+    clearPromptContextRawViewer();
   }
 }
 
@@ -244,20 +246,54 @@ function renderPromptContextItem(item, included) {
 
 function renderPromptContextRaw(snapshot) {
   var raw = promptContextInspectorValue(snapshot, "rawRequestJson", "RawRequestJson", "");
-  var truncated = !!promptContextInspectorValue(snapshot, "rawTruncated", "RawTruncated", false);
   var details = $("promptContextInspectorRaw");
   var button = $("loadPromptContextRawButton");
+  clearPromptContextRawViewer();
   if (!raw) {
     details.classList.add("hidden");
     details.open = false;
-    $("promptContextInspectorRawText").textContent = "";
     button.textContent = "Показать JSON";
     return;
   }
   details.classList.remove("hidden");
   details.open = true;
-  $("promptContextInspectorRawText").textContent = raw;
-  button.textContent = truncated ? "JSON сокращён" : "Скрыть JSON";
+  mountPromptContextRawViewer(snapshot);
+  updatePromptContextRawButton(snapshot);
+}
+
+function clearPromptContextRawViewer() {
+  var target = $("promptContextInspectorRawText");
+  if (target && window.RNAssistantViewerRegistry) {
+    window.RNAssistantViewerRegistry.unmount(target);
+  }
+}
+
+function mountPromptContextRawViewer(snapshot) {
+  snapshot = snapshot || promptContextInspectorSnapshot || {};
+  var raw = promptContextInspectorValue(snapshot, "rawRequestJson", "RawRequestJson", "");
+  var target = $("promptContextInspectorRawText");
+  var details = $("promptContextInspectorRaw");
+  if (!raw || !target || !details || !details.open || target.firstElementChild) return;
+  if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has("json")) {
+    throw new Error("JSON viewer is unavailable.");
+  }
+  window.RNAssistantViewerRegistry.mount("json", target, {
+    text: String(raw),
+    completeness: promptContextInspectorValue(snapshot, "rawTruncated", "RawTruncated", false) ? "preview" : "full",
+    mode: "tree",
+    onCopy: window.copyTextResult
+  });
+}
+
+function updatePromptContextRawButton(snapshot) {
+  snapshot = snapshot || promptContextInspectorSnapshot || {};
+  var raw = promptContextInspectorValue(snapshot, "rawRequestJson", "RawRequestJson", "");
+  var truncated = !!promptContextInspectorValue(snapshot, "rawTruncated", "RawTruncated", false);
+  var details = $("promptContextInspectorRaw");
+  var button = $("loadPromptContextRawButton");
+  if (!raw) button.textContent = "Показать JSON";
+  else if (details.open) button.textContent = truncated ? "JSON сокращён · скрыть" : "Скрыть JSON";
+  else button.textContent = truncated ? "Показать сокращённый JSON" : "Показать JSON";
 }
 
 function formatPromptContextSize(bytes) {
@@ -282,7 +318,9 @@ function togglePromptContextRaw() {
   }
   var details = $("promptContextInspectorRaw");
   details.open = !details.open;
-  $("loadPromptContextRawButton").textContent = details.open ? "Скрыть JSON" : "Показать JSON";
+  if (details.open) mountPromptContextRawViewer(promptContextInspectorSnapshot);
+  else clearPromptContextRawViewer();
+  updatePromptContextRawButton(promptContextInspectorSnapshot);
 }
 
 function renderPromptContextInspectorAvailability() {
@@ -321,6 +359,11 @@ function bindContextInspectorActions() {
     loadPromptContextInspector(false);
   });
   $("loadPromptContextRawButton").addEventListener("click", togglePromptContextRaw);
+  $("promptContextInspectorRaw").addEventListener("toggle", function () {
+    if ($("promptContextInspectorRaw").open) mountPromptContextRawViewer(promptContextInspectorSnapshot);
+    else clearPromptContextRawViewer();
+    updatePromptContextRawButton(promptContextInspectorSnapshot);
+  });
   $("managePromptContextButton").addEventListener("click", function () {
     closePromptContextInspector();
     if (typeof setContextManagerOpen === "function") setContextManagerOpen(true);

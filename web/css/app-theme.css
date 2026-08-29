@@ -294,7 +294,6 @@ html[data-theme="dark"] .model-compatibility-summary.warning {
   color: #fbbf24;
 }
 
-html[data-theme="dark"] .json-box,
 html[data-theme="dark"] .log-box,
 html[data-theme="dark"] .rn-code-editor.CodeMirror {
   border-color: var(--code-border);
@@ -591,10 +590,9 @@ html[data-theme="dark"] .tool-form-section::after {
   background: var(--line);
 }
 
-html[data-theme="dark"] .tool-run-output,
+html[data-theme="dark"] .tool-run-output.is-text,
 html[data-theme="dark"] .vba-code-preview,
-html[data-theme="dark"] .vba-diff,
-html[data-theme="dark"] .vba-meta {
+html[data-theme="dark"] .vba-diff {
   background: var(--code);
 }
 

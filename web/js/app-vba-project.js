@@ -243,11 +243,7 @@ function renderSelectedVbaModule() {
   }
   $("vbaModuleTitle").textContent = module ? vbaModuleName(module) : "Модуль не выбран";
   $("vbaModuleMeta").textContent = module ? vbaModuleMetaText(module) + (loaded ? "" : (loading ? " - читаю код..." : " - код не загружен")) : "";
-  $("vbaMetaBox").textContent = module ? JSON.stringify({
-    name: vbaModuleName(module),
-    type: module.type || module.Type,
-    lineCount: module.lineCount || module.LineCount
-  }, null, 2) : "";
+  renderVbaMetadata(module);
   renderVbaDiff({
     summary: module && loaded ? "Нажмите «Показать diff», чтобы посмотреть изменения." : (module ? "Код модуля еще не загружен." : (state.bridgeUnavailable ? "Office bridge недоступен." : "Модуль не выбран.")),
     lines: []
@@ -261,6 +257,26 @@ function renderSelectedVbaModule() {
   $("reviewVbaButton").disabled = !module || !loaded || state.bridgeUnavailable;
   applyVbaMode();
   updateVbaMacroSuggestion();
+}
+
+function renderVbaMetadata(module) {
+  var target = $("vbaMetaBox");
+  if (!target) return;
+  if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(target);
+  if (!module) return;
+  if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has("json")) {
+    throw new Error("JSON viewer is unavailable.");
+  }
+  window.RNAssistantViewerRegistry.mount("json", target, {
+    text: JSON.stringify({
+      name: vbaModuleName(module),
+      type: module.type || module.Type,
+      lineCount: module.lineCount || module.LineCount
+    }, null, 2),
+    completeness: "full",
+    mode: "tree",
+    onCopy: window.copyTextResult
+  });
 }
 
 function selectedVbaModule() {

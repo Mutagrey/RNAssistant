@@ -1,3 +1,36 @@
+var contextJsonText = "{}";
+
+function clearContextJsonViewer() {
+  var target = $("contextBox");
+  if (target && window.RNAssistantViewerRegistry) {
+    window.RNAssistantViewerRegistry.unmount(target);
+  }
+}
+
+function mountContextJsonViewer() {
+  var target = $("contextBox");
+  var details = $("contextJsonDetails");
+  var manager = $("contextManager");
+  if (!target || !details || !details.open || !manager || manager.classList.contains("hidden")) {
+    clearContextJsonViewer();
+    return;
+  }
+  if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has("json")) {
+    throw new Error("JSON viewer is unavailable.");
+  }
+  window.RNAssistantViewerRegistry.mount("json", target, {
+    text: contextJsonText,
+    completeness: "full",
+    mode: "tree",
+    onCopy: window.copyTextResult
+  });
+}
+
+function renderContextJson(value) {
+  contextJsonText = JSON.stringify(value || {}, null, 2);
+  mountContextJsonViewer();
+}
+
 function createRemoveContextButton(note) {
   var button = document.createElement("button");
   button.type = "button";
@@ -159,9 +192,7 @@ function renderContext(skipUsageEstimate) {
   var notes = contextNotes();
   renderContextChips(notes);
   renderContextList(notes);
-  if ($("contextBox")) {
-    $("contextBox").textContent = JSON.stringify(state.context || {}, null, 2);
-  }
+  renderContextJson(state.context || {});
   if (!skipUsageEstimate) {
     updateEstimatedContextUsage();
   }
@@ -276,6 +307,8 @@ function setContextManagerOpen(open) {
     button.classList.toggle("active", !!open);
     button.setAttribute("aria-expanded", open ? "true" : "false");
   }
+  if (open) mountContextJsonViewer();
+  else clearContextJsonViewer();
 }
 
 function toggleContextManager() {
@@ -284,6 +317,10 @@ function toggleContextManager() {
 }
 
 function bindContextActions() {
+  $("contextJsonDetails").addEventListener("toggle", function () {
+    if ($("contextJsonDetails").open) mountContextJsonViewer();
+    else clearContextJsonViewer();
+  });
   $("openContextTabButton").addEventListener("click", toggleContextManager);
   $("closeContextManagerButton").addEventListener("click", function () { setContextManagerOpen(false); });
   $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });

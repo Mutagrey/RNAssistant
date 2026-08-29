@@ -422,10 +422,25 @@
 }
 
 .tool-run-output {
+  height: min(260px, 35vh);
   min-height: 90px;
   flex: none;
   margin: 0;
+}
+
+.tool-run-output > .rn-json-viewer {
+  height: 100%;
+}
+
+.tool-run-output.is-text {
+  height: auto;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid rgba(226, 231, 239, 0.86);
+  border-radius: var(--control-radius);
   background: #fbfcfe;
+  color: var(--code-text);
+  white-space: pre-wrap;
 }
 
 .tool-form-flags {

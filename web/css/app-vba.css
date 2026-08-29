@@ -263,9 +263,13 @@
 }
 
 .vba-meta {
+  height: min(240px, 35vh);
   min-height: 180px;
   flex: none;
-  background: #fbfcfe;
+}
+
+.vba-meta > .rn-json-viewer {
+  height: 100%;
 }
 
 .vba-macro-status {
