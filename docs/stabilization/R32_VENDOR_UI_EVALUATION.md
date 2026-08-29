@@ -136,12 +136,13 @@ Tool Result v1 / ResourceRef / typed UI DTO
 4. **9B2A (done host-neutral):** diagnostics event/evidence/JSON payload switch; удалён его старый pretty/plain-pre path.
 5. **9B2B1 (done host-neutral):** Agent arguments/results switched; generic object/table/pretty renderer удалён, chart parser локализован у domain owner.
 6. **9B2B2 (done host-neutral):** Context/materialized request, manual Tools results и VBA metadata switched; editable/transport paths исключены.
-7. **9B2B3+:** JSON artifact/Markdown consumers переключать отдельными slices с учётом preview/stream lifecycle.
-8. **9B3:** отдельный Web Awesome Tree spike для bounded navigation; при провале
+7. **9B2B3 (done host-neutral):** artifact inline/metadata JSON switched; bridge truncation становится explicit preview, non-JSON/HTML paths сохранены отдельно.
+8. **9B2B4:** завершённые fenced JSON blocks Markdown — отдельный post-sanitize/stream-aware slice.
+9. **9B3:** отдельный Web Awesome Tree spike для bounded navigation; при провале
    offline/WebView gates оставить существующее дерево или измерить Wunderbaum.
-9. **9B4:** Diff2Html только для существующего compact-diff consumer, если exact
+10. **9B4:** Diff2Html только для существующего compact-diff consumer, если exact
    unified diff доступен без второго diff algorithm.
-10. **9C:** один chronological run journal; raw/specialized views остаются деталями.
+11. **9C:** один chronological run journal; raw/specialized views остаются деталями.
 
 Общие PDF/image/table/diagram/layout viewers не входят автоматически в R32 и
 подключаются отдельными measured slices после stable diagnostics core.

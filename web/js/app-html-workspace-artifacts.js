@@ -22,6 +22,70 @@
     return prop(artifact, "InlineText", "inlineText", "") || "";
   }
 
+  function artifactInlineTruncated(artifact) {
+    return !!prop(artifact, "InlineTruncated", "inlineTruncated", false);
+  }
+
+  function artifactMimeType(artifact) {
+    return String(prop(artifact, "MimeType", "mimeType", "") || "").toLowerCase();
+  }
+
+  function isJsonArtifact(artifact) {
+    var mediaType = artifactMimeType(artifact).split(";", 1)[0].trim();
+    var kind = artifactKind(artifact);
+    return mediaType === "application/json" || /\+json$/.test(mediaType) || kind === "json" || kind === "data";
+  }
+
+  function clearDetail(root) {
+    if (window.RNAssistantViewerRegistry) {
+      Array.prototype.slice.call(root.querySelectorAll(".artifact-json-viewer")).forEach(function (target) {
+        window.RNAssistantViewerRegistry.unmount(target);
+      });
+    }
+    root.replaceChildren();
+  }
+
+  function appendContentLabel(root, text) {
+    var label = document.createElement("div");
+    label.className = "artifact-content-label";
+    label.textContent = text;
+    root.appendChild(label);
+  }
+
+  function appendJsonContent(root, text, completeness, label) {
+    if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has("json")) {
+      throw new Error("JSON viewer is unavailable.");
+    }
+    appendContentLabel(root, label);
+    var target = document.createElement("div");
+    target.className = "artifact-json-viewer";
+    root.appendChild(target);
+    window.RNAssistantViewerRegistry.mount("json", target, {
+      text: String(text),
+      completeness: completeness,
+      mode: "tree",
+      onCopy: window.copyTextResult
+    });
+  }
+
+  function appendArtifactContent(root, artifact) {
+    var inline = artifactInlineText(artifact);
+    var metadataJson = prop(artifact, "MetadataJson", "metadataJson", "") || "";
+    if (inline) {
+      if (isJsonArtifact(artifact)) {
+        appendJsonContent(root, inline, artifactInlineTruncated(artifact) ? "preview" : "full", "Содержимое JSON");
+      } else {
+        appendContentLabel(root, artifactInlineTruncated(artifact) ? "Содержимое · ограниченный preview" : "Содержимое");
+        var pre = document.createElement("pre");
+        pre.className = "artifact-text-viewer";
+        pre.textContent = inline;
+        root.appendChild(pre);
+      }
+      return;
+    }
+    if (metadataJson) appendJsonContent(root, metadataJson, "full", "Metadata JSON");
+  }
+
   function planStableId(artifact) {
     return storedPlanId(artifact);
   }
@@ -52,7 +116,7 @@
   }
 
   function renderDetail(root, selected, editorValue) {
-    root.replaceChildren();
+    clearDetail(root);
     if (selected.type === "plan") {
       var planMetadata = {};
       try { planMetadata = JSON.parse(prop(selected.item, "MetadataJson", "metadataJson", "{}") || "{}"); } catch (ignore) {}
@@ -103,13 +167,7 @@
       metadata.appendChild(value);
     });
     root.appendChild(metadata);
-    var content = artifactInlineText(selected.item) || prop(selected.item, "MetadataJson", "metadataJson", "");
-    if (content) {
-      var pre = document.createElement("pre");
-      try { pre.textContent = JSON.stringify(JSON.parse(content), null, 2); }
-      catch (error) { pre.textContent = content; }
-      root.appendChild(pre);
-    }
+    appendArtifactContent(root, selected.item);
   }
 
   function validatePlanDraft(artifact) {
