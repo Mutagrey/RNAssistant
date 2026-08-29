@@ -2,8 +2,8 @@
 
 Статус: требования пользователя от 2026-08-28. **9A, 9B1 и полный read-only
 consumer inventory через Markdown JSON 9B2B4, R36 vendor gate и bounded tree switch
-9B3 реализованы host-neutral 2026-08-29; 9B4, 9C и Windows/WebView qualification
-открыты.** Baseline source review —
+9B3 реализованы host-neutral 2026-08-29; 9B4 gate закрыт без Diff2Html, потому что
+authoritative unified diff отсутствует; 9C и Windows/WebView qualification открыты.** Baseline source review —
 `85cc3f4`; перенос документации — поверх `b754443`. Реализация и qualification —
 [Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), до release gate Phase 12.
 
@@ -110,6 +110,12 @@ local-array `TreeAdapter` для одного HTML workspace/artifact consumer. 
 JSON renderer или timeline. R36 manifest атомарно расширен assets/license/hashes;
 следующие Project/VBA/tools consumers автоматически не переключаются.
 
+9B4 проверил единственные VBA diff consumers и typed bridge DTO: они передают exact
+before/after source, но не source-owned unified diff. Diff2Html не подключён, потому
+что это потребовало бы второго diff algorithm либо выдало бы UI projection за
+evidence. Existing bounded formatter сохранён; решение зафиксировано в
+[R39](R39_DIFF_VENDOR_GATE.md) и не блокирует 9C.
+
 Vendor поставляется локально с pinned version/commit и hash, лицензией в
 `web/vendor-notices.md`; без CDN, telemetry и автоматической загрузки URL из данных.
 Network/HTML/link features отключаются или кандидат отклоняется. Source raw/copy,
@@ -141,8 +147,9 @@ pretty/copy/render paths в том же подэтапе. Сериализаци
    второй журнал, durable UI index, отдельный model transport или replay tools.
    Порядок определяется sequence; snapshot/cursor не теряют строки между страницами
    и при новых append. Новый хронологический вид не меняет контракт existing raw query.
-2. **9B — viewer (9B1 + 9B2 read-only inventory + R36 gate + 9B3 tree switch done host-neutral):** общий компонент и migration read-only consumers; targeted UI
-   tests и локальная чистка. 9B4 и Windows qualification остаются отдельными gates.
+2. **9B — viewer (9B1 + 9B2 read-only inventory + R36 + 9B3 + 9B4 gates done host-neutral):** общий компонент и migration read-only consumers; targeted UI
+   tests и локальная чистка. Diff2Html не admitted без source-owned unified diff;
+   Windows qualification остаётся отдельным gate.
 3. **9C — журнал (pending):** подключить раскрываемые строки и direct navigation, сохранить
    raw/специализированные views как доступные детали. Qualification всей цепочки,
    reload/confirmation и actual WebView на Windows, без inference из текста модели.

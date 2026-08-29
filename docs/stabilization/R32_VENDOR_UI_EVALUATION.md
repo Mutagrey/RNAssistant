@@ -63,7 +63,7 @@ source-only attribution. [Evidence](R36_WEB_VENDOR_GATE.md). 9B3 расшири�
 | [Web Awesome Tree 3.12.0](https://webawesome.com/docs/components/tree/) | MIT; stable; latest Edge; selection/lazy/icons/ARIA. Официальный `dist-cdn` — ESM graph из 48 относительных JS imports, 204,087 bytes + 16,773-byte theme; default icon path способен fetch. Реальный local Chrome probe из текущего `file://` host не зарегистрировал `wa-tree` | **Отложить до отдельного virtual-host milestone.** Не собирать custom classic bundle и не менять C#/WebView security boundary внутри tree consumer. Повторно оценить после mapped local HTTPS + Windows gate |
 | [Wunderbaum 0.14.1](https://github.com/mar10/wunderbaum) | MIT; zero dependencies; classic UMD 102,824 bytes + CSS 21,756; file-origin, local-array, keyboard и virtualization probe прошёл. Upstream API/CSS помечены beta; bundle содержит optional ajax/edit/DnD/grid code | **Принят в 9B3 для одного bounded consumer.** Adapter принимает только local arrays, ограничивает nodes/depth/text, не публикует URL/lazy/edit/DnD/grid/persistence и добавляет ARIA/локальные иконки. CSP `connect-src 'none'`; Windows WebView2 gate открыт |
 | [Monaco Editor 0.56.0](https://github.com/microsoft/monaco-editor) | MIT; npm unpacked около 98 MB; language services используют workers; upstream указывает, что worker не создаётся с `file://`; AMD deprecated | **Не подключать сейчас.** Worker допустим локально после virtual-host switch, но Monaco дублирует работающий CodeMirror и слишком велик для R32. Вернуться только при отдельном editor milestone с измеренной пользой |
-| [Diff2Html 3.4.56](https://github.com/rtfpessoa/diff2html) | MIT; parser/browser bundle 77,747 bytes + CSS 17,331; unified/git diff, line/side-by-side | **Условный кандидат для compact read-only diff.** Feed only bounded diff text; output проходит adapter/sanitization; UI bundle с highlight не брать, поскольку highlight.js уже есть |
+| [Diff2Html 3.4.56](https://github.com/rtfpessoa/diff2html) | MIT; parser/browser bundle 77,747 bytes + CSS 17,331; unified/git diff, line/side-by-side. 9B4 audit: оба VBA consumers и bridge DTO имеют exact before/after, но не authoritative unified diff | **Не подключать к текущим consumers.** Vendor вычисление diff не выполняет; генерация нового unified diff создала бы второй algorithm. Повторная оценка только после source-owned bounded unified-diff contract; manifest не расширять |
 | [andypf/json-viewer 2.8.0](https://github.com/andypf/json-viewer) | MIT; IIFE 40,093 bytes; красивое Shadow DOM tree/copy/search. Source использует `JSON.parse`/`JSON.stringify`, принимает URL и вызывает `fetch`, keyboard handlers отсутствуют | **Отклонить для authoritative diagnostics.** Теряет duplicate keys/large numbers/raw fidelity и имеет запрещённый URL path |
 | [summerstyle/jsonTreeViewer](https://github.com/summerstyle/jsonTreeViewer) | MIT; около 18 KB JS + 2 KB CSS; object tree. README прямо предлагает `JSON.parse`; нет packaged releases, bounds, copy contract или полноценной accessibility | **Отклонить.** Малый размер не компенсирует несовместимость с R32 |
 
@@ -150,8 +150,9 @@ Tool Result v1 / ResourceRef / typed UI DTO
    одному HTML workspace/artifact tree. Старый renderer этого consumer удалён;
    zero-network, keyboard/ARIA/themes и manifest gates прошли локально. Windows
    WebView2 qualification и возможный virtual-host milestone открыты.
-10. **9B4:** Diff2Html только для существующего compact-diff consumer, если exact
-   unified diff доступен без второго diff algorithm.
+10. **9B4 (done host-neutral, no vendor admitted):** exact unified diff у двух
+    действующих VBA consumers/bridge DTO отсутствует. Existing bounded formatter
+    сохранён; Diff2Html и второй algorithm не добавлены. [Evidence](R39_DIFF_VENDOR_GATE.md).
 11. **9C:** один chronological run journal; raw/specialized views остаются деталями.
 
 Общие PDF/image/table/diagram/layout viewers не входят автоматически в R32 и

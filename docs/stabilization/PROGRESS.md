@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9B3 bounded tree vendor switch (done host-neutral)
-Current task: Wunderbaum 0.14.1 подключён через bounded local-array `TreeAdapter` к одному HTML workspace/artifact navigation consumer; Web Awesome отложен без host switch/custom bundle.
+Current phase: Phase 9 — 9B4 compact diff vendor gate (done host-neutral; vendor not admitted)
+Current task: оба действующих VBA diff consumer получают exact `before/after`, но не authoritative unified diff; Diff2Html не подключён, существующий bounded formatter сохранён без второго algorithm.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный 9B4 Diff2Html compact read-only diff spike, только если существующий consumer передаёт exact bounded unified diff без второго diff algorithm.
+Next step: отдельный 9C chronological run journal поверх существующей `run-causal` projection; raw/specialized views остаются деталями, второй durable store запрещён.
 Required context: [master Phase 9 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory, R36 и 9B3 закрыты host-neutral; 9B4/9C и общий R32 Windows acceptance открыты. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory, R36, 9B3 и 9B4 gate закрыты host-neutral; 9C и общий R32 Windows acceptance открыты. Diff2Html требует будущего source-owned unified-diff contract и не является 9C gate. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -17,8 +17,20 @@ cleanup и отдельный commit; статус до реального пр�
 [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md) и обязательный
 Milestone WQ перед Phase 12. Неизвестная Office semantics не угадывается: WQ0 Excel
 identity probe остаётся prerequisite production factory switch. Непроверенный build —
-`16.1.0-dev` qualification candidate, не stable/beta/RC. Runtime не менялся; текущий
-9B4 next step сохранён. Docs diff/links проверяются без build/harness.
+`16.1.0-dev` qualification candidate, не stable/beta/RC. Runtime не менялся; 9B4
+gate выполнен отдельно, следующий dependency-safe slice — 9C. Docs diff/links
+проверяются без build/harness.
+
+Phase 9B4 compact diff vendor gate (2026-08-29): Diff2Html 3.4.56 не добавлен.
+Единственные consumers — VBA editor preview и hydrated mutation detail — передают
+exact `before/after` в `RNAssistantVbaDiff.format`; bridge DTO также содержит только
+эти source texts/hashes. Текущий formatter сам вычисляет bounded single-change
+projection и не создаёт authoritative unified diff. Diff2Html является parser/
+renderer готового unified/git diff, поэтому его подключение потребовало бы второго
+diff algorithm либо выдало бы синтетическую проекцию за source evidence. Existing
+formatter и CSS не менялись, vendor manifest остаётся 38 files. Повторно оценивать
+только после отдельного source-owned bounded unified-diff contract. [Evidence](R39_DIFF_VENDOR_GATE.md).
+Следующий шаг — 9C; Windows VBA/WebView qualification остаётся открытой.
 
 Phase 9B3 bounded tree vendor switch (2026-08-29): actual `file://` probe
 официального Web Awesome Tree 3.12.0 ESM graph не зарегистрировал `wa-tree`; custom
@@ -241,7 +253,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 6 | 6A + R33 + 6B VbaReader done host-neutral; remaining slices pending | `e0360f3` (6A); `62010c8` (R33); 6B evidence below | [6A: 58](#phase-6a--pure-vba-text-extraction); [R33: 8](#r33--overlapping-exact-matches); [6B: 60](#phase-6b--typed-vbareader) | deferred | Mutation/verifier/journal/result/fault matrix and full VBA gate open |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
-| 9 | through 9B3 done host-neutral; remainder pending | — | 17 harness reused for 9A; current web 58/58 pass | not performed | Read-only JSON inventory, vendor baseline and one bounded tree closed; compact diff/journal UI open |
+| 9 | through 9B4 done host-neutral; remainder pending | — | 17 harness reused for 9A; current web 58/58 pass; 9B4 static consumer/DTO audit | not performed | Read-only JSON inventory, vendor baseline and one bounded tree closed; Diff2Html correctly not admitted, journal UI open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
