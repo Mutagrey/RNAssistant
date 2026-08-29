@@ -2,8 +2,14 @@
   var saveTimers = {};
   var palette = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0891b2", "#c2410c", "#4b5563"];
 
+  function tryParseChartJson(text) {
+    if (!text) return { ok: false, value: null };
+    try { return { ok: true, value: JSON.parse(text) }; }
+    catch (error) { return { ok: false, value: null }; }
+  }
+
   function chartArtifactFromActivity(activity) {
-    var parsed = tryParseJson(activityDataJson(activity));
+    var parsed = tryParseChartJson(activityDataJson(activity));
     if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") {
       return null;
     }
@@ -508,7 +514,7 @@
         throw new Error(result.Message || result.message || "Tool failed.");
       }
       var dataJson = result.DataJson || result.dataJson || "";
-      var parsed = tryParseJson(dataJson);
+      var parsed = tryParseChartJson(dataJson);
       if (!parsed.ok) {
         throw new Error("Tool returned no chart artifact.");
       }

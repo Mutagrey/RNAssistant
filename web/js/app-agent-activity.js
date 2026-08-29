@@ -267,6 +267,20 @@ function appendActivityErrorPanel(node, activity) {
   node.appendChild(panel);
 }
 
+function createAgentCopyButton(label, text) {
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "agent-copy-button";
+  button.textContent = label;
+  button.addEventListener("click", function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var value = typeof text === "function" ? text() : text;
+    copyText(value || "");
+  });
+  return button;
+}
+
 function appendActivityDetailsContent(node, activity, context) {
   var children = activityChildren(activity);
 
@@ -301,7 +315,7 @@ function appendActivityDetailsContent(node, activity, context) {
     appendArgumentsData(body, activityArgumentsJson(activity));
   }
   if (typeof appendActivityData === "function") {
-    appendActivityData(body, "Данные результата", activityDataJson(activity), "Копировать результат");
+    appendActivityData(body, "Данные результата", activityDataJson(activity));
   }
 
   node.appendChild(body);

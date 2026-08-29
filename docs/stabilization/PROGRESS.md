@@ -1,12 +1,27 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9B2A diagnostics JSON consumer switch (done host-neutral)
-Current task: diagnostics event data/source evidence/JSON CAS payload переключены на общий `JsonAdapter`; non-JSON payload остаётся inert text.
+Current phase: Phase 9 — 9B2B1 Agent JSON consumer switch (done host-neutral)
+Current task: Agent tool arguments/results переключены на общий `JsonAdapter`; прежний object/table/pretty renderer удалён.
 
-Next step: отдельный 9B2B — инвентаризировать и узкими slices переключить read-only Agent/Context/Tools/artifact JSON surfaces; editable inputs и transport serializers не менять. До первого vendor switch закрыть R36.
+Next step: отдельный 9B2B2 — переключить read-only Context/Tools/VBA metadata surfaces, не меняя editable inputs и transport serializers; затем отдельно оценить Markdown JSON blocks/artifact metadata. До первого vendor switch закрыть R36.
 Required context: [master Phase 9 / exception](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 закрыта в частях 9A/9B1/9B2A; 9B2B/9B3/9C и R36 открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 закрыта в частях 9A/9B1/9B2A/9B2B1; остальные 9B2B consumers, 9B3/9C и R36 открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+
+Phase 9B2B1 Agent JSON switch (2026-08-29): раскрываемые tool arguments и result
+data теперь лениво mount/unmount общий lossless viewer. Удалены второй generic
+`JSON.parse → object/table/list`, pretty-copy/raw-pre path и его dead CSS; collapsed
+activity не удерживает tree DOM. Chart artifact parsing, который скрыто зависел от
+глобального `tryParseJson` из Agent renderer, получил собственный domain-local parser;
+chart transport/edit semantics не менялись. Общий `copyTextResult` теперь возвращает
+Promise с реальным clipboard/fallback outcome; прежний fire-and-forget `copyText`
+сохранён для существующих non-viewer callers, diagnostics/Agent adapters получают
+ошибку копирования через callback. Новый Agent integration test 4/4, diagnostics
+5/5 и JsonAdapter 7/7 pass; chart invalid/non-chart owner cases включены. Старый
+Agent renderer/classes и cross-owner parser references отсутствуют. Реальный
+WebView2/message layout/clipboard остаётся Windows gate. Regression UI:
+completion 8/8, prompt review 5/5, tools editor 1/1; `node --check`, 88 local
+Markdown links, `git diff --check` и `ValidateVersionFormat` — pass.
 
 Phase 9B2A diagnostics JSON switch (2026-08-29): `app-trajectory.js` больше не
 парсит/пересериализует `DataJson` через локальный `prettyJson` и не складывает JSON
@@ -140,7 +155,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 6 | 6A + R33 + 6B VbaReader done host-neutral; remaining slices pending | `e0360f3` (6A); `62010c8` (R33); 6B evidence below | [6A: 58](#phase-6a--pure-vba-text-extraction); [R33: 8](#r33--overlapping-exact-matches); [6B: 60](#phase-6b--typed-vbareader) | deferred | Mutation/verifier/journal/result/fault matrix and full VBA gate open |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
-| 9 | 9A + 9B1 + 9B2A done host-neutral; remainder pending | — | 17 harness + 12 JSON/diagnostics UI pass | not performed | Diagnostics switched; remaining consumers/journal UI open |
+| 9 | through 9B2B1 done host-neutral; remainder pending | — | 17 harness + 16 JSON consumer UI pass | not performed | Diagnostics + Agent switched; remaining consumers/journal UI open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |

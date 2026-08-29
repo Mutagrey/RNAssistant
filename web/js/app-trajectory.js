@@ -21,31 +21,6 @@
     catch (error) { return JSON.stringify({ displayError: "Typed projection cannot be serialized." }); }
   }
 
-  function copyDiagnosticText(text) {
-    if (window.navigator && window.navigator.clipboard && window.navigator.clipboard.writeText) {
-      try {
-        return Promise.resolve(window.navigator.clipboard.writeText(String(text)));
-      } catch (error) {
-        return Promise.reject(error);
-      }
-    }
-    return new Promise(function (resolve, reject) {
-      var input = document.createElement("textarea");
-      input.value = String(text);
-      input.setAttribute("aria-hidden", "true");
-      document.body.appendChild(input);
-      input.select();
-      try {
-        if (!document.execCommand("copy")) throw new Error("Clipboard command was rejected.");
-        resolve();
-      } catch (error) {
-        reject(error);
-      } finally {
-        document.body.removeChild(input);
-      }
-    });
-  }
-
   function mountTrajectoryJson(targetId, text, completeness, mode) {
     var registry = window.RNAssistantViewerRegistry;
     if (!registry || !registry.has("json")) throw new Error("JSON viewer is unavailable.");
@@ -53,7 +28,7 @@
       text: text === null || text === undefined ? "" : String(text),
       completeness: completeness || "full",
       mode: mode || "tree",
-      onCopy: copyDiagnosticText
+      onCopy: window.copyTextResult
     });
   }
 
@@ -95,7 +70,7 @@
     copy.textContent = truncated ? "Копировать preview" : "Копировать всё";
     copy.addEventListener("click", function () {
       copy.disabled = true;
-      copyDiagnosticText(text).then(function () {
+      window.copyTextResult(text).then(function () {
         status.textContent = "Скопировано";
       }, function () {
         status.textContent = "Не удалось скопировать";

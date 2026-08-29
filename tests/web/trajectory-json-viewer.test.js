@@ -104,7 +104,7 @@ context.window = context;
 get("trajectoryViewInput").value = "raw";
 get("trajectoryExportRedactionInput").value = "metadata";
 
-for (const file of ["app-viewer-registry.js", "app-json-viewer.js", "app-trajectory.js"]) {
+for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-trajectory.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 

@@ -178,18 +178,34 @@
     return value.toLocaleString ? value.toLocaleString() : String(value);
   };
 
-  window.copyText = function (text) {
+  window.copyTextResult = function (text) {
+    text = String(text === null || text === undefined ? "" : text);
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text);
-      return;
+      try {
+        return Promise.resolve(navigator.clipboard.writeText(text));
+      } catch (error) {
+        return Promise.reject(error);
+      }
     }
+    return new Promise(function (resolve, reject) {
+      var input = document.createElement("textarea");
+      input.value = text;
+      input.setAttribute("aria-hidden", "true");
+      document.body.appendChild(input);
+      input.select();
+      try {
+        if (!document.execCommand("copy")) throw new Error("Clipboard command was rejected.");
+        resolve();
+      } catch (error) {
+        reject(error);
+      } finally {
+        document.body.removeChild(input);
+      }
+    });
+  };
 
-    var input = document.createElement("textarea");
-    input.value = text;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand("copy");
-    document.body.removeChild(input);
+  window.copyText = function (text) {
+    window.copyTextResult(text).catch(function () {});
   };
 
   window.iconSvg = function (name) {

@@ -545,37 +545,8 @@ html[data-theme="dark"] .agent-approval-reason {
   color: #c3a97c;
 }
 
-html[data-theme="dark"] .agent-data-view,
-html[data-theme="dark"] .agent-data-table-wrap,
-html[data-theme="dark"] .agent-json pre {
-  border-color: var(--code-border);
-  background: var(--code);
-  color: var(--code-text);
-}
-
-html[data-theme="dark"] .agent-json > summary,
-html[data-theme="dark"] .agent-data > summary,
-html[data-theme="dark"] .agent-data-scalar,
-html[data-theme="dark"] .agent-data-compact {
+html[data-theme="dark"] .agent-data > summary {
   color: var(--text);
-}
-
-html[data-theme="dark"] .agent-data-table {
-  background: #171b21;
-}
-
-html[data-theme="dark"] .agent-data-table th,
-html[data-theme="dark"] .agent-data-table td {
-  border-color: #303844;
-}
-
-html[data-theme="dark"] .agent-data-table th {
-  background: #20252d;
-  color: #b6bfcc;
-}
-
-html[data-theme="dark"] .agent-data-table tbody tr:nth-child(even) {
-  background: #1b2027;
 }
 
 html[data-theme="dark"] .model-info-metrics span,
