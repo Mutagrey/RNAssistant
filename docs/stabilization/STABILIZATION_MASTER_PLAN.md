@@ -17,7 +17,7 @@
 ### Обязательные правила для агента
 
 1. Выполнять только текущую фазу и текущий подэтап.
-2. Не начинать следующую фазу, пока не выполнен Definition of Done текущей, кроме явно согласованного исключения Phase 6A ниже; оно не закрывает отложенные gates.
+2. Не начинать следующую фазу, пока не выполнен Definition of Done текущей, кроме явно согласованных исключений Phase 6A и R33 ниже; они не закрывают отложенные gates.
 3. Не добавлять новые продуктовые функции во время стабилизации.
 4. Не повышать продуктовую версию и не создавать Git tag, если это прямо не указано в разделе релиза.
 5. Не менять одновременно runtime, UI, persistence, resources и Office/VBA ради одного локального исправления.
@@ -1773,6 +1773,12 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 
 Phase 5B2/R04 остаются открытыми; production ExcelDocumentSession/factories ещё не реализованы. Наличие локальных tests не заменяет identity qualification и не разрешает factory switch. Следующие подэтапы Phase 6 и Phases 7–12 не включены в это исключение. После 6A остановиться на его границе; дальнейший локальный scope согласовывать отдельно, не объявляя Phase 5/6 завершёнными. Поздний Windows прогон должен включить накопленные gate/identity/controller сценарии 5B2 и VBE/read-back/package regression для 6A; identity проверяется до factory switch.
 
+### Согласованное продолжение R33 (2026-08-29)
+
+После предложения следующего локального шага R33 пользователь запросил «Коммит и далее». 6A зафиксирован отдельно (`e0360f3`); новый допуск ограничен подсчётом всех exact-match стартовых смещений, включая перекрытия, и отказом при неоднозначности до confirmation/write/backup/journal. Допустимы targeted pure-text и fake Office regression tests, canonical docs и локальная чистка.
+
+Это отдельное изменение semantics, не часть сохраняющего поведение 6A. Newline/hash правила, существующий error/result mapping, COM dispatch, journal/CAS protocol и production binding не меняются. 5B2/R04, Windows/VBE qualification и полный Phase 6 gate остаются открытыми. Следующие domain extractions и Phases 7–12 этим допуском не разрешены.
+
 ### Цель
 
 Стабилизировать наиболее опасный write contour до переноса остальных mutations.
@@ -1803,7 +1809,7 @@ Phase 5B2/R04 остаются открытыми; production ExcelDocumentSessi
 - [ ] Не выносить internal journal states в общий ToolResult.
 - [ ] Compile validation хранить отдельно.
 - [ ] Unknown mutation не retry.
-- [ ] Exact patch остаётся strict и unambiguous; отдельно закрыть унаследованный R33 (перекрывающиеся вхождения) до полного VBA gate, без смешения с 6A extraction.
+- [x] R33 host-neutral: exact patch требует единственного стартового смещения, включая перекрытия; отказ до confirmation/write/нового backup/journal проверен отдельно от 6A extraction. Windows/VBE и полный VBA gate остаются открытыми.
 - [ ] Добавить fault injection:
   - [ ] before journal prepare;
   - [ ] after prepare/before COM;

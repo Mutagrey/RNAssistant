@@ -1,12 +1,12 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 6A — pure VBA text extraction (done host-neutral, approved exception)
-Current task: VbaPatchEngine/VbaTextCanonicalizer выделены, текущие consumers переключены, локальная чистка выполнена. Windows/Office недоступна; Phase 5B2/R04 и остальная Phase 6 остаются открытыми.
+Current phase: Phase 6 — R33 exact patch ambiguity (done host-neutral)
+Current task: 6A закоммичен отдельно (`e0360f3`); R33 исправлен и проверен, локальная чистка завершена. Windows/Office недоступна; Phase 5B2/R04 и остальная Phase 6 остаются открытыми.
 
-Next step: отдельно согласовать следующий локальный подэтап Phase 6 — исправление R33 (перекрывающиеся exact-match вхождения). Не переключать Excel factories до Windows identity qualification. Накопленные 5B2 + 6A Windows сценарии проверить при появлении машины; qualification identity предшествует реализации/switch production binding, поэтому один будущий прогон не закрывает весь Phase 5 автоматически.
-Required context: [master Phase 6 / exception](STABILIZATION_MASTER_PLAN.md#phase-6--vba-vertical-slice), [architecture](../architecture.md), [VBA journal](../vba-mutation-journal.md), [VBA packages](../vba-tool-packages.md), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: production Excel identity/ExcelDocumentSession/factories, stable-key/OR identity и ActiveWorkbook/descriptor lookup — Phase 5B2; [probe and Windows matrix](../../tests/RNAssistant.ExcelIdentityProbe/README.md). Controller/WebView/COM lifetime и VBE/read-back/package regression требуют Windows x64 + Office + VS 2022. R33 и VBA domain extraction остаются Phase 6; R28/R29 live-provider, R30 Phase 8 и R32 Phase 9 не закрыты. Product 16.1.0-dev, no release/tag.
+Next step: отдельно согласовать границы следующего локального подэтапа — VbaReader (первый оставшийся extraction Phase 6), сохраняя действующий runtime gate. Не переключать Excel factories до Windows identity qualification; накопленные Windows сценарии проверить при появлении машины, не объявляя Phase 5/6 закрытыми заранее.
+Required context: [master Phase 6 / exception](STABILIZATION_MASTER_PLAN.md#phase-6--vba-vertical-slice), [architecture](../architecture.md), [VBA text/journal](../vba-mutation-journal.md#text-representations), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: production Excel identity/ExcelDocumentSession/factories, stable-key/OR identity и ActiveWorkbook/descriptor lookup — Phase 5B2; [probe and Windows matrix](../../tests/RNAssistant.ExcelIdentityProbe/README.md). Controller/WebView/COM lifetime и VBE/read-back/package regression, включая R33, требуют Windows x64 + Office + VS 2022. VBA domain extraction остаётся Phase 6; R28/R29 live-provider, R30 Phase 8 и R32 Phase 9 не закрыты. Product 16.1.0-dev, no release/tag.
 
 Cleanup/readiness review (2026-08-28, baseline `1ea3ce0`): удаление controller-owned capture, catalog guard-only scope и прежних monitor/depth helpers подтверждено targeted search; includes актуальны. Дополнительных мёртвых путей в контуре 5B2 не найдено; legacy/probe сохраняются по действующим consumers/removal gates. Это не аудит всего репозитория. Согласованный пользователем допуск 6A заменяет прежнее предложение; Phase 5 не закрывается и порядок остальных фаз не меняется.
 
@@ -43,7 +43,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 2/3 R29 | done host-neutral | этот commit | 141 unique targeted cases; MockDemo compile; [evidence](R29_RUNTIME_CALL_IDS.md) | not performed | Runtime IDs + v4; no v3 fallback, product version unchanged |
 | 4 | done host-neutral: 4A + 4B | 85cc3f4 (4A); b754443 (4B) | 4B: 127 distinct targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime](PHASE_4A_TOOL_RUNTIME.md), [v1 wire/cleanup](PHASE_4B_TOOL_RESULT_V1.md); domain/Windows gates remain |
 | 5 | 5A + 5B1 done host-neutral; 5B2 read switch done, identity probe ready | 3a6c2aa (5A); a1b3d80 (5B1); 1ea3ce0 (5B2) | [read checks](#phase-5b2--direct-contextcatalog-reads), [probe checks](#phase-5b2--identity-qualification-probe) | not performed | Production binding blocked on identity qualification |
-| 6 | 6A done host-neutral; remaining slices pending | этот commit (6A) | 58 targeted pass; [evidence](#phase-6a--pure-vba-text-extraction) | deferred | Approved pure text extraction only; R33 and full VBA gate open |
+| 6 | 6A + R33 done host-neutral; remaining slices pending | e0360f3 (6A); этот commit (R33) | [6A: 58 checks](#phase-6a--pure-vba-text-extraction); [R33: 8 checks](#r33--overlapping-exact-matches) | deferred | Full VBA gate open |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
 | 9 | pending | — | — | — | Persistence / UI projection |
@@ -381,7 +381,28 @@ Full harness, MockDemo build и Windows/Office/VSTO не запускались.
 - 5B2: controller/WebView selection/context/catalog reads, ошибки/закрытие книги/смена активной книги и несколько клиентов под gate.
 - 6A: exact patch/guard на реальном VBE с CRLF/LF/CR, literal backslashes и комментариями; read-back/hash normalization, restore и package/rename regression. Journal/CAS evidence проверять без автоматического replay/restore.
 
-Следующий локальный кандидат — R33; продолжение требует отдельного допуска по master plan. Остальные отложенные Windows gates сохраняются в своих phase reports.
+Продолжение R33 согласовано отдельно 2026-08-29 и описано ниже. Остальные отложенные Windows gates сохраняются в своих phase reports.
+
+## R33 — overlapping exact matches
+
+2026-08-29, baseline `e0360f3`; отдельный semantic fix после commit 6A. `VbaPatchEngine` считает все стартовые смещения, включая перекрытия: `aaaa` / `aaa` → 2, `aaaaa` / `aaa` → 3. Неоднозначная замена отвергается даже при неизменном replacement. Newline/hash semantics, существующий `vba_patch_ambiguous` mapping, COM и journal protocol не менялись.
+
+Два существующих tests расширены без новых fixtures/files. До fix оба дали ожидаемый **FAIL**: pure engine принимал overlap; executor пропускал его к confirmation. После fix **8 distinct targeted pass**:
+
+| Harness filter | Result |
+|---|---|
+| `vba: pure patch text contract` | 1/1: overlapping offsets/counts, LF/CRLF/CR, unchanged ambiguous replacement, unique full-source match |
+| `vba: patch` | 3/3: addressing/stale/ambiguity; reject до confirmation и при auto-confirm, без частичной записи ранее рассчитанной операции, backend write, backup или mutation record |
+| `vba: exact patch` | 2/2: complete lines, boundary newlines |
+| `vba: apply patch` | 2/2: valid unique mutation/backup, named target, mixed/all-no-op operations |
+
+Команды: `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "vba: pure patch text contract"`, затем остальные filters с `--no-build`. Одна host-neutral сборка для red tests и одна после production fix; 4 прежних CA1416 warnings из identity probe. Full harness, MockDemo и Windows/Office/VSTO не запускались; Office assertions используют fake adapter.
+
+Перед commit: обязательный `ValidateVersionFormat`, diff и 13 затронутых локальных ссылок/anchors — pass.
+
+Чистка: прежний non-overlapping counter заменён в единственном владельце, без alias/fallback/второй реализации; новые `.cs`/project includes не нужны. Canonical text contract, master/backlog/risk и migration status актуализированы. Следующий кандидат — VbaReader после отдельного согласования, не часть R33.
+
+Отложено: Windows x64 + Office + VS 2022 — overlapping one/multi-operation patch с обоими режимами confirmation, отсутствие live write/нового backup/journal при отказе. 5B2/R04, production binding и полный Phase 6 gate не закрыты; прежняя очередь Windows scenarios сохранена.
 
 ## Active compatibility adapters
 
@@ -408,5 +429,5 @@ Permanent model-session/metadata owners не являются compatibility adap
 - R26: preflight, actual v3 writer/confirmation, run-wide IDs и singleton enforcement проверены в 2C3C; production controller ordering/Office qualification и замена temporary safety registry в Phase 4 остаются открыты.
 - R27: explicit review/reset проверены на actual v3 defaults/schema 12, старый custom text schema 11 сохраняется; production controller/WebView/DPAPI validation открыта.
 - R29: runtime-owned IDs введены отдельным v4 switch; полного исходного incident trace нет, Windows/live-provider qualification остаётся открыта. Evidence и ограничения — [R29_RUNTIME_CALL_IDS](R29_RUNTIME_CALL_IDS.md).
-- R33: overlapping exact-match ambiguity выявлена source review 6A; отдельный локальный semantic fix ещё не выполнен.
+- R33: overlapping exact-match ambiguity исправлена host-neutral; 2 regression tests red→green, 8 targeted pass. Реальная Windows/VBE regression остаётся открытой.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).

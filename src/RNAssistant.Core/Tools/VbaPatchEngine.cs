@@ -54,7 +54,8 @@ namespace RNAssistant.Core.Tools
             while ((index = value.IndexOf(find, index, StringComparison.Ordinal)) >= 0)
             {
                 count++;
-                index += find.Length;
+                // Distinct start offsets are ambiguous even when matches overlap.
+                index++;
             }
             return count;
         }

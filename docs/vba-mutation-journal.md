@@ -29,8 +29,16 @@ Office. Phase 6A changes ownership only, not stored hashes or source bytes.
 
 Patch inputs match actual newline characters to the current source style. Literal
 backslash sequences are never decoded again. Comparison representations are never
-written over the original CAS body. Existing non-overlapping match counting is
-tracked separately as R33; extraction does not close the full ambiguity gate.
+written over the original CAS body. Every starting offset counts toward uniqueness,
+including overlaps (`aaaa` / `aaa` has two matches). A replacement requires exactly
+one match even when its text equals the find block. Ambiguity returns
+`vba_patch_ambiguous` with the full `matchCount` and leaves source unchanged.
+
+Ordered operations work on candidate text only. If any operation is ambiguous,
+the entire patch is rejected before confirmation, backend write or creation of a
+backup/prepared journal record for that patch; earlier candidate edits are not
+partially dispatched. This R33 correction does not change existing recovery or
+the journal protocol; Windows/VBE qualification remains open.
 
 ## Transaction protocol
 

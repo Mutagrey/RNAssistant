@@ -720,11 +720,29 @@ namespace RNAssistant.Harness
                     "literal backslashes and surrounding source preserved for each newline style");
                 AssertEqual(VbaPatchStatus.Unchanged,
                     VbaPatchEngine.Replace(source, source, source).Status, "no-op is distinct from change");
+                var overlappingLines = "A" + newline + "A" + newline + "A";
+                var overlap = VbaPatchEngine.Replace(overlappingLines, "A\nA", "B");
+                AssertEqual(VbaPatchStatus.Ambiguous, overlap.Status, "overlap rejected after newline matching");
+                AssertEqual(2, overlap.MatchCount, "both overlapping line blocks counted");
+                AssertEqual(overlappingLines, overlap.Text, "overlapping line patch preserves original source");
             }
-            var ambiguous = VbaPatchEngine.Replace("A\nA", "A", "B");
-            AssertEqual(VbaPatchStatus.Ambiguous, ambiguous.Status, "multiple matches rejected");
-            AssertEqual(2, ambiguous.MatchCount, "match count retained for tool guidance");
-            AssertEqual("A\nA", ambiguous.Text, "ambiguity preserves original text");
+            foreach (var sample in new[]
+            {
+                new { Source = "A\nA", Find = "A", Count = 2 },
+                new { Source = "aaaa", Find = "aaa", Count = 2 },
+                new { Source = "ababa", Find = "aba", Count = 2 },
+                new { Source = "aaaaa", Find = "aaa", Count = 3 }
+            })
+            {
+                var ambiguous = VbaPatchEngine.Replace(sample.Source, sample.Find, "B");
+                AssertEqual(VbaPatchStatus.Ambiguous, ambiguous.Status, "all starting offsets count for uniqueness");
+                AssertEqual(sample.Count, ambiguous.MatchCount, "full match count retained for tool guidance");
+                AssertEqual(sample.Source, ambiguous.Text, "ambiguity preserves original text");
+                AssertEqual(VbaPatchStatus.Ambiguous,
+                    VbaPatchEngine.Replace(sample.Source, sample.Find, sample.Find).Status,
+                    "unchanged replacement still requires one unambiguous match");
+            }
+            AssertEqual("B", VbaPatchEngine.Replace("aaa", "aaa", "B").Text, "full source remains a unique match");
             AssertEqual(VbaPatchStatus.NotFound, VbaPatchEngine.Replace("A", "B", "C").Status, "stale source rejected");
             AssertEqual(VbaPatchStatus.EmptyFind, VbaPatchEngine.Replace("A", null, "B").Status, "empty find rejected");
             AssertEqual(string.Empty, VbaPatchEngine.Replace("A", "A", null).Text, "null replacement is deletion");
@@ -1045,29 +1063,52 @@ namespace RNAssistant.Harness
 
         private static void VbaPatchRejectsAmbiguousExactSource()
         {
-            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            foreach (var sample in new[]
             {
-                adapter.VbaModuleCode = "Sub One()\nEnd Sub\nSub Two()\nEnd Sub";
-                var result = executor.Execute(
-                    Command(
-                        "common.vba_apply_patch",
-                        "moduleName", "Module1",
-                        "patch", new JArray(new JObject
+                new { Source = "Sub One()\nEnd Sub\nSub Two()\nEnd Sub", Find = "End Sub", AutoConfirm = false, ChangeFirst = false },
+                new { Source = "Sub One()\n' aaaa\nEnd Sub", Find = "aaa", AutoConfirm = false, ChangeFirst = false },
+                new { Source = "Sub One()\n' aaaa\nEnd Sub", Find = "aaa", AutoConfirm = true, ChangeFirst = true }
+            })
+            {
+                WithTempPaths(delegate(AppDataPaths paths)
+                {
+                    var adapter = new FakeOfficeAdapter { VbaModuleCode = sample.Source };
+                    var store = new VbaJournalStore(paths);
+                    var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
+                    var operations = new JArray();
+                    if (sample.ChangeFirst)
+                    {
+                        operations.Add(new JObject
                         {
                             ["op"] = "replace",
-                            ["find"] = "End Sub",
-                            ["text"] = "Debug.Print 1\nEnd Sub"
-                        })),
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
-                    new AppSettings { AutoConfirmToolActions = false },
-                    false,
-                    false);
-                AssertTrue(!result.Success, "ambiguous exact block rejected");
-                AssertEqual("vba_patch_ambiguous", result.ErrorCode, "ambiguous exact block error");
-                AssertTrue(!string.Equals("waiting_confirmation", result.Status, StringComparison.OrdinalIgnoreCase), "ambiguous patch fails before confirmation");
-                AssertContains(result.Message, "surrounding source", "ambiguous exact block recovery guidance");
-                AssertTrue(adapter.VbaModuleCode.IndexOf("Debug.Print", StringComparison.Ordinal) < 0, "module unchanged");
-            });
+                            ["find"] = "Sub One()",
+                            ["text"] = "Sub Changed()"
+                        });
+                    }
+                    operations.Add(new JObject
+                    {
+                        ["op"] = "replace",
+                        ["find"] = sample.Find,
+                        ["text"] = "Debug.Print 1\nEnd Sub"
+                    });
+                    var result = executor.Execute(
+                        Command("common.vba_apply_patch", "moduleName", "Module1", "patch", operations),
+                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                        new AppSettings { AutoConfirmToolActions = sample.AutoConfirm },
+                        false,
+                        false);
+                    AssertTrue(!result.Success, "ambiguous exact block rejected");
+                    AssertEqual("vba_patch_ambiguous", result.ErrorCode, "ambiguous exact block error");
+                    AssertTrue(!string.Equals("waiting_confirmation", result.Status, StringComparison.OrdinalIgnoreCase), "ambiguous patch fails before confirmation");
+                    AssertContains(result.Message, "surrounding source", "ambiguous exact block recovery guidance");
+                    AssertEqual(2, (int)JObject.Parse(result.DataJson)["matchCount"], "tool reports overlapping matches");
+                    AssertEqual(sample.Source, adapter.VbaModuleCode, "no earlier operation is partially written");
+                    AssertEqual(0, adapter.Executed.Count(item => item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase)),
+                        "ambiguous patch never dispatches a write");
+                    AssertEqual(0, store.List("Excel", "doc").Count, "ambiguous patch creates no backup");
+                    AssertEqual(0, store.ListMutations("Excel", "doc").Count, "ambiguous patch creates no mutation journal entry");
+                });
+            }
         }
 
         private static void VbaExactPatchPreservesBoundaryNewlines()
