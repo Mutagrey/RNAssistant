@@ -148,6 +148,7 @@
     <Compile Include="Services\HtmlWorkspaceNavigationService.cs" />
     <Compile Include="Services\EventStreamTrajectoryQuery.cs" />
     <Compile Include="Services\TrajectoryDerivedProjection.cs" />
+    <Compile Include="Services\TrajectoryRunProjection.cs" />
     <Compile Include="Services\TrajectoryExportService.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />

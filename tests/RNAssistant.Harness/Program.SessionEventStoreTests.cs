@@ -20,6 +20,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using TerminalToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
 {
@@ -1299,6 +1300,249 @@ namespace RNAssistant.Harness
                 "blocked outcome is diagnosable while awaiting_user is not mislabeled as failure");
             AssertEqual(AgentResponseStatuses.Blocked, declaredFailures.Single().Status,
                 "declared blocked outcome is preserved in failure diagnostics");
+        }
+
+        private static void TrajectoryRunCausalProjectionCorrelatesExactEvidence()
+        {
+            var started = new DateTime(2026, 8, 29, 8, 0, 0, DateTimeKind.Utc);
+            var events = new List<SessionEvent>
+            {
+                TrajectoryEvent(1, SessionEventTypes.TurnStarted, started, "run-1", "turn-1", null,
+                    new JObject { ["Status"] = "running" }),
+                TrajectoryEvent(2, SessionEventTypes.LlmRequest, started.AddSeconds(1), "run-1", "turn-1", "transport-1",
+                    new JObject { ["Stage"] = "model.request.prepared", ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-1", ["RequestId"] = "transport-1" }),
+                TrajectoryEvent(3, SessionEventTypes.LlmResponse, started.AddSeconds(2), "run-1", "turn-1", "transport-1",
+                    new JObject { ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-1" }),
+                TrajectoryEvent(4, SessionEventTypes.AgentResponseRejected, started.AddSeconds(3), "run-1", "turn-1", "transport-1",
+                    new JObject { ["Stage"] = "model.attempt.rejected", ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-1", ["FailureKind"] = "invalid_agent_response", ["Error"] = "duplicate model call id" }),
+                TrajectoryEvent(5, SessionEventTypes.LlmRequest, started.AddSeconds(4), "run-1", "turn-1", "transport-2",
+                    new JObject { ["Stage"] = "model.request.prepared", ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-2", ["RequestId"] = "transport-2" }),
+                TrajectoryEvent(6, SessionEventTypes.LlmResponse, started.AddSeconds(5), "run-1", "turn-1", "transport-2",
+                    new JObject
+                    {
+                        ["StepId"] = "logical-1",
+                        ["ModelAttemptId"] = "attempt-2",
+                        ["Resource"] = new JObject { ["uri"] = "rna://chat/trajectory-chat/artifact/html-1/revision/2", ["revision"] = "2" }
+                    }),
+                TrajectoryEvent(7, "model.response.accepted", started.AddSeconds(6), "run-1", "turn-1", "transport-2",
+                    new JObject { ["Stage"] = "model.response.accepted", ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-2", ["ResponseStatus"] = AgentResponseStatuses.InProgress }),
+                TrajectoryEvent(8, SessionEventTypes.SessionCommit, started.AddSeconds(7), "run-1", "turn-1", null,
+                    new JObject
+                    {
+                        ["Operations"] = new JArray(new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.ToolCallRecorded,
+                            ["Data"] = new JObject { ["Value"] = new JObject
+                            {
+                                ["Id"] = "accepted-message-1",
+                                ["RunId"] = "run-1",
+                                ["ToolCallId"] = "call-1",
+                                ["ToolName"] = "common.html_workspace_upsert",
+                                ["AcceptedCallOrigin"] = new JObject { ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-2", ["CallIndex"] = 0 },
+                                ["ToolCalls"] = new JArray(new JObject { ["Id"] = "call-1", ["Name"] = "rna_common_html_workspace_upsert", ["Arguments"] = "{\"html\":\"<main>ok</main>\"}" })
+                            } }
+                        })
+                    }),
+                TrajectoryEvent(9, SessionEventTypes.SessionCommit, started.AddSeconds(8), "run-1", "turn-1", "logical-1",
+                    new JObject
+                    {
+                        ["Operations"] = new JArray(new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.ToolExecutionStarted,
+                            ["Data"] = new JObject { ["Value"] = new JObject { ["Activity"] = new JObject
+                            {
+                                ["RunId"] = "run-1", ["StepId"] = "logical-1", ["ToolCallId"] = "call-1",
+                                ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "running"
+                            } } }
+                        })
+                    }),
+                TrajectoryEvent(10, "tool.execution.started", started.AddSeconds(9), "run-1", "turn-1", "logical-1",
+                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "running", ["Boundary"] = "office_tool_executor" }),
+                TrajectoryEvent(11, "domain.effect.prepared", started.AddSeconds(10), "run-1", "turn-1", "logical-1",
+                    new JObject { ["ToolCallId"] = "call-1", ["MutationId"] = "mutation-1", ["JournalRunId"] = "journal-run-1", ["Status"] = "prepared" }),
+                TrajectoryEvent(12, "domain.effect.dispatched", started.AddSeconds(11), "run-1", "turn-1", "logical-1",
+                    new JObject { ["ToolCallId"] = "call-1", ["MutationId"] = "mutation-1", ["JournalRunId"] = "journal-run-1", ["Status"] = "dispatched" }),
+                TrajectoryEvent(13, "domain.effect.verified", started.AddSeconds(12), "run-1", "turn-1", "logical-1",
+                    new JObject { ["ToolCallId"] = "call-1", ["MutationId"] = "mutation-1", ["JournalRunId"] = "journal-run-1", ["Status"] = "committed" }),
+                TrajectoryEvent(14, "tool.execution.completed", started.AddSeconds(13), "run-1", "turn-1", "logical-1",
+                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "ok", ["Boundary"] = "office_tool_executor" }),
+                TrajectoryEvent(15, SessionEventTypes.SessionCommit, started.AddSeconds(14), "run-1", "turn-1", "logical-1",
+                    new JObject
+                    {
+                        ["Operations"] = new JArray(new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.ToolExecutionFinished,
+                            ["Data"] = new JObject { ["Value"] = new JObject { ["Activity"] = new JObject
+                            {
+                                ["RunId"] = "run-1", ["StepId"] = "logical-1", ["ToolCallId"] = "call-1",
+                                ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "completed", ["ExecutionStatus"] = "completed"
+                            } } }
+                        })
+                    }),
+                TrajectoryEvent(16, SessionEventTypes.TurnEnded, started.AddSeconds(15), "run-1", "turn-1", null,
+                    new JObject { ["Status"] = "completed" }),
+                TrajectoryEvent(17, "ui.projected", started.AddSeconds(16), "run-1", "turn-1", null,
+                    new JObject { ["Boundary"] = "SendChatResponse" }),
+                TrajectoryEvent(18, SessionEventTypes.TurnStarted, started.AddSeconds(17), "run-2", "turn-2", null,
+                    new JObject { ["Status"] = "running" }),
+                TrajectoryEvent(19, SessionEventTypes.LlmRequest, started.AddSeconds(18), "run-2", "turn-2", "transport-3",
+                    new JObject { ["Stage"] = "model.request.prepared", ["StepId"] = "logical-2", ["ModelAttemptId"] = "attempt-3" }),
+                TrajectoryEvent(20, SessionEventTypes.LlmResponse, started.AddSeconds(19), "run-2", "turn-2", "transport-3",
+                    new JObject { ["StepId"] = "logical-2", ["ModelAttemptId"] = "attempt-3" }),
+                TrajectoryEvent(21, SessionEventTypes.TurnEnded, started.AddSeconds(20), "run-2", "turn-2", null,
+                    new JObject { ["Status"] = "failed" }),
+                TrajectoryEvent(22, SessionEventTypes.TurnStarted, started.AddSeconds(21), "run-3", "turn-3", null,
+                    new JObject { ["Status"] = "running" }),
+                TrajectoryEvent(23, SessionEventTypes.SessionCommit, started.AddSeconds(22), "run-3", "turn-3", null,
+                    new JObject
+                    {
+                        ["Operations"] = new JArray(new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.ToolResultRecorded,
+                            ["Data"] = new JObject { ["Value"] = new JObject
+                            {
+                                ["ToolCallId"] = "call-missing", ["ToolName"] = "excel.write_range",
+                                ["AcceptedCallOrigin"] = new JObject { ["StepId"] = "logical-3", ["ModelAttemptId"] = "attempt-4", ["CallIndex"] = 0 }
+                            } }
+                        })
+                    }),
+                TrajectoryEvent(24, SessionEventTypes.TurnEnded, started.AddSeconds(23), "run-3", "turn-3", null,
+                    new JObject { ["Status"] = "failed" })
+            };
+            events[5].Payload = new ChatBlobReference
+            {
+                Sha256 = new string('a', 64), ByteLength = 4096, ContentType = "application/json"
+            };
+
+            var query = new EventStreamTrajectoryQuery();
+            var first = query.QueryView(events, new TrajectoryViewQueryRequest
+            {
+                View = TrajectoryViews.RunCausal,
+                RunId = "run-1",
+                PageSize = 4
+            });
+            AssertEqual(1L, first.Rows.First().FirstSequence, "run causal rows are chronological");
+            AssertTrue(first.HasMore, "run causal projection is bounded and paged");
+            AssertContains(first.NextCursor, "view:run-causal:24:4", "run causal cursor pins the source snapshot");
+
+            events.Add(TrajectoryEvent(25, "ui.projected", started.AddSeconds(24), "run-1", "turn-1", null,
+                new JObject { ["Boundary"] = "late-ui-projection" }));
+            var remainder = query.QueryView(events, new TrajectoryViewQueryRequest
+            {
+                View = TrajectoryViews.RunCausal,
+                RunId = "run-1",
+                Cursor = first.NextCursor,
+                PageSize = 200
+            });
+            AssertTrue(remainder.Rows.All(item => item.LastSequence <= 24), "cursor excludes appends after its snapshot");
+            AssertEqual(0, first.Rows.Select(item => item.Id).Intersect(remainder.Rows.Select(item => item.Id)).Count(),
+                "run causal pagination does not duplicate rows");
+
+            var run = query.QueryView(events, new TrajectoryViewQueryRequest
+            {
+                View = TrajectoryViews.RunCausal,
+                RunId = "run-1",
+                PageSize = 200
+            }).Rows;
+            var rejected = run.Single(item => item.ModelAttemptId == "attempt-1" && item.Status == "rejected");
+            var accepted = run.Single(item => item.Kind == SessionOperationTypes.ToolCallRecorded && item.ToolCallId == "call-1");
+            AssertTrue(rejected.LastSequence < accepted.FirstSequence, "rejected repair attempt remains before accepted call mapping");
+            AssertEqual("attempt-2", accepted.ModelAttemptId, "accepted call links the exact raw model attempt");
+            AssertEqual("logical-1", accepted.StepId, "accepted call preserves logical step origin");
+            AssertEqual(0, (int)accepted.Data["acceptedCallOrigin"]["CallIndex"], "accepted call preserves raw call position");
+            AssertTrue((bool)accepted.Data["argumentsAvailable"], "accepted call points to persisted executor arguments");
+            AssertTrue(accepted.SourceEventSeqs.SequenceEqual(new long[] { 8 }), "accepted call retains exact source event");
+
+            var raw = run.Single(item => item.ModelAttemptId == "attempt-2" && item.Kind == SessionEventTypes.LlmResponse);
+            AssertEqual(new string('a', 64), (string)raw.Data["payload"]["sha256"], "raw response keeps lazy CAS metadata");
+            AssertEqual("2", raw.ResourceRefs.Single().Revision, "run causal row keeps exact revision evidence");
+            var effect = run.Single(item => item.Kind == "domain.effect.verified");
+            AssertEqual("committed", effect.Status, "verified effect keeps domain assessment");
+            AssertEqual("mutation-1", effect.MutationId, "effect links mutation journal identity");
+            AssertEqual("journal-run-1", effect.JournalRunId, "effect keeps journal run distinct from execution run");
+            AssertTrue(!run.Any(item => item.Kind == "diagnostic.evidence.missing"), "complete run has no invented gap");
+            AssertEqual("projected", run.First(item => item.Kind == "ui.projected").Status,
+                "UI projection is not promoted to delivered");
+
+            var missingVerdict = query.QueryView(events, new TrajectoryViewQueryRequest
+            {
+                View = TrajectoryViews.RunCausal, RunId = "run-2", PageSize = 200
+            }).Rows.Single(item => item.Kind == "diagnostic.evidence.missing");
+            AssertEqual("model.verdict", (string)missingVerdict.Data["expectedStage"], "terminal run exposes missing model verdict");
+            AssertTrue(missingVerdict.SourceEventSeqs.SequenceEqual(new long[] { 19, 21 }), "gap links request and terminal evidence");
+
+            var missingDispatch = query.QueryView(events, new TrajectoryViewQueryRequest
+            {
+                View = TrajectoryViews.RunCausal, RunId = "run-3", PageSize = 200
+            }).Rows.Single(item => item.Kind == "diagnostic.evidence.missing");
+            AssertEqual("tool.execution.start", (string)missingDispatch.Data["expectedStage"], "terminal run exposes missing tool dispatch evidence");
+            AssertEqual("call-missing", missingDispatch.ToolCallId, "tool gap retains allocated call id");
+            var compatibilityTool = query.QueryView(events, new TrajectoryViewQueryRequest
+            {
+                View = TrajectoryViews.ToolExecution, RunId = "run-3", PageSize = 200
+            }).Rows.Single();
+            AssertEqual("queued", compatibilityTool.Status,
+                "current misclassified accepted-call history is not promoted to a completed result");
+
+            var dto = TrajectoryViewRowDto.From(accepted);
+            AssertEqual("attempt-2", dto.ModelAttemptId, "bridge DTO exposes attempt correlation");
+            AssertEqual("call-1", dto.ToolCallId, "bridge DTO exposes tool correlation");
+        }
+
+        private static void AcceptedCallOperationIgnoresResultRole()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "accepted-call-operation", "Calls.xlsx", "Calls");
+                var roles = new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool };
+                foreach (var role in roles)
+                {
+                    var id = "call-" + role;
+                    var call = new AgentToolCall
+                    {
+                        Id = id,
+                        Name = "excel.read_range",
+                        Arguments = new Dictionary<string, object> { ["range"] = "A1" }
+                    };
+                    var message = AgentJsonProtocol.CreateToolCallMessage(call, "Read.", null, role,
+                        new AcceptedToolCallOrigin("step-" + role, "attempt-" + role, 0));
+                    message.RunId = "run-roles";
+                    session.Messages.Add(message);
+                }
+                store.Save(session);
+
+                var callOperations = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                    .Where(item => item.Type == SessionEventTypes.SessionCommit)
+                    .SelectMany(item => ((JArray)item.Data["Operations"]).OfType<JObject>())
+                    .Where(operation => operation["Data"]?["Value"]?["AcceptedCallOrigin"] != null)
+                    .ToList();
+                AssertEqual(roles.Length, callOperations.Count, "every configured result role persists one accepted call");
+                AssertTrue(callOperations.All(operation =>
+                    (string)operation["Type"] == SessionOperationTypes.ToolCallRecorded),
+                    "accepted origin, not native ToolCalls, owns operation classification");
+
+                foreach (var role in roles)
+                {
+                    var id = "call-" + role;
+                    var result = AgentJsonProtocol.CreateToolResultMessage(
+                        new ToolCommand { ToolCallId = id, ToolId = "excel.read_range" },
+                        TerminalToolResult.Ok("Read complete."), role);
+                    result.RunId = "run-roles";
+                    session.Messages.Add(result);
+                }
+                store.Save(session);
+                var resultOperations = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                    .Where(item => item.Type == SessionEventTypes.SessionCommit)
+                    .SelectMany(item => ((JArray)item.Data["Operations"]).OfType<JObject>())
+                    .Where(operation => operation["Data"]?["Value"]?["AcceptedCallOrigin"] == null &&
+                        roles.Any(role => (string)operation["Data"]?["Value"]?["ToolCallId"] == "call-" + role))
+                    .ToList();
+                AssertEqual(roles.Length, resultOperations.Count, "every configured result role persists one result");
+                AssertTrue(resultOperations.All(operation =>
+                    (string)operation["Type"] == SessionOperationTypes.ToolResultRecorded),
+                    "result messages remain distinct from accepted calls");
+            });
         }
 
         private static void TrajectoryExportRedactsAndVerifiesBundle()

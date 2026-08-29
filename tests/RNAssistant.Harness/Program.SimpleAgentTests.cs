@@ -8,6 +8,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
@@ -890,6 +891,11 @@ namespace RNAssistant.Harness
                         ((JArray)item.Data["Operations"]).Any(operation =>
                             (string)operation["Data"]?["Value"]?["ToolCallId"] == message.ToolCallId &&
                             operation["Data"]?["Value"]?["AcceptedCallOrigin"] != null));
+                    var mappedOperation = ((JArray)mapped.Data["Operations"]).OfType<JObject>().Single(operation =>
+                        (string)operation["Data"]?["Value"]?["ToolCallId"] == message.ToolCallId &&
+                        operation["Data"]?["Value"]?["AcceptedCallOrigin"] != null);
+                    AssertEqual(SessionOperationTypes.ToolCallRecorded, (string)mappedOperation["Type"],
+                        "writer classifies runtime-owned accepted origin independently of native tool-call shape");
                     var start = events.First(item => item.Type == "tool.execution.started" &&
                         (string)item.Data["ToolCallId"] == message.ToolCallId);
                     AssertTrue(raw.Sequence < mapped.Sequence && mapped.Sequence < start.Sequence,
@@ -909,6 +915,21 @@ namespace RNAssistant.Harness
                     AssertEqual(callId, (string)effect.Data["ToolCallId"], "domain links runtime allocated call");
                     AssertEqual(mutation.Prepared.RunId, (string)effect.Data["JournalRunId"], "journal origin remains explicit");
                 }
+                var causal = new EventStreamTrajectoryQuery().QueryView(events, new TrajectoryViewQueryRequest
+                {
+                    View = TrajectoryViews.RunCausal,
+                    TurnId = "trace-turn",
+                    PageSize = 200
+                }).Rows;
+                AssertTrue(causal.Select(item => item.FirstSequence).SequenceEqual(
+                    causal.Select(item => item.FirstSequence).OrderBy(value => value)),
+                    "causal projection keeps actual writer evidence chronological");
+                var mappedCall = causal.Single(item => item.Kind == SessionOperationTypes.ToolCallRecorded && item.ToolCallId == callId);
+                AssertEqual(acceptedCall.AcceptedCallOrigin.ModelAttemptId, mappedCall.ModelAttemptId,
+                    "causal projection joins the actual accepted call to its raw attempt");
+                AssertTrue(causal.Any(item => item.Kind == "domain.effect.verified" &&
+                    item.MutationId == mutation.Prepared.MutationId),
+                    "causal projection exposes actual journal verification evidence");
                 var expected = outcome == "unknown" ? VbaMutationStatuses.Unknown : outcome == "error" ? VbaMutationStatuses.NotApplied : VbaMutationStatuses.Committed;
                 AssertEqual(expected, (string)effects.Last().Data["Status"], "trace reports actual domain assessment without promoting unknown");
                 AssertEqual(expected, mutation.Terminal.Status, "durable journal agrees with assessment");

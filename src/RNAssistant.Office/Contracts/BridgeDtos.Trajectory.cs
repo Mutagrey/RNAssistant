@@ -189,8 +189,11 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("runId")] public string RunId { get; set; }
         [JsonProperty("turnId")] public string TurnId { get; set; }
         [JsonProperty("stepId")] public string StepId { get; set; }
+        [JsonProperty("modelAttemptId")] public string ModelAttemptId { get; set; }
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
         [JsonProperty("toolId")] public string ToolId { get; set; }
+        [JsonProperty("mutationId")] public string MutationId { get; set; }
+        [JsonProperty("journalRunId")] public string JournalRunId { get; set; }
         [JsonProperty("artifactId")] public string ArtifactId { get; set; }
         [JsonProperty("parentArtifactId")] public string ParentArtifactId { get; set; }
         [JsonProperty("resourceRefs")] public IReadOnlyList<ResourceRef> ResourceRefs { get; set; }
@@ -217,7 +220,9 @@ namespace RNAssistant.Office.Contracts
                 CreatedUtc = row.CreatedUtc, CompletedUtc = row.CompletedUtc, DurationMs = row.DurationMs,
                 FirstSequence = row.FirstSequence, LastSequence = row.LastSequence,
                 RunId = row.RunId, TurnId = row.TurnId, StepId = row.StepId,
+                ModelAttemptId = row.ModelAttemptId,
                 ToolCallId = row.ToolCallId, ToolId = row.ToolId,
+                MutationId = row.MutationId, JournalRunId = row.JournalRunId,
                 ArtifactId = row.ArtifactId, ParentArtifactId = row.ParentArtifactId,
                 ResourceRefs = row.ResourceRefs ?? new List<ResourceRef>(),
                 AttemptCount = row.AttemptCount, FailureCount = row.FailureCount,

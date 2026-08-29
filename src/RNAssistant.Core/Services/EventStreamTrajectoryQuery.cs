@@ -61,10 +61,12 @@ namespace RNAssistant.Core.Services
                 : cursor.SnapshotSequence;
             var snapshot = source.Where(item => item.Sequence <= snapshotSequence).ToList();
             var rows = TrajectoryDerivedProjection.Build(snapshot, request.View);
-            var filtered = rows.Where(item => Matches(item, request))
-                .OrderByDescending(item => item.LastSequence)
-                .ThenBy(item => item.Id, StringComparer.Ordinal)
-                .ToList();
+            var matching = rows.Where(item => Matches(item, request));
+            var filtered = string.Equals(request.View, TrajectoryViews.RunCausal, StringComparison.OrdinalIgnoreCase)
+                ? matching.OrderBy(item => item.FirstSequence).ThenBy(item => item.LastSequence)
+                    .ThenBy(item => item.Id, StringComparer.Ordinal).ToList()
+                : matching.OrderByDescending(item => item.LastSequence)
+                    .ThenBy(item => item.Id, StringComparer.Ordinal).ToList();
             var offset = cursor == null ? 0 : cursor.Offset;
             if (offset > filtered.Count) offset = filtered.Count;
             var pageSize = request.PageSize <= 0 ? 100 : Math.Min(MaxPageSize, request.PageSize);
@@ -200,7 +202,8 @@ namespace RNAssistant.Core.Services
             var text = string.Join("\n", new[]
             {
                 row.Id, row.View, row.Kind, row.Title, row.Status, row.RunId, row.TurnId, row.StepId,
-                row.ToolCallId, row.ToolId, row.ArtifactId, row.ParentArtifactId,
+                row.ModelAttemptId, row.ToolCallId, row.ToolId, row.MutationId, row.JournalRunId,
+                row.ArtifactId, row.ParentArtifactId,
                 row.Data == null ? string.Empty : row.Data.ToString(Formatting.None)
             }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
             return terms.All(term => text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
@@ -312,7 +315,7 @@ namespace RNAssistant.Core.Services
             return terms.All(term => text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
-        private static IEnumerable<JObject> Operations(SessionEvent sessionEvent)
+        internal static IEnumerable<JObject> Operations(SessionEvent sessionEvent)
         {
             var operations = sessionEvent == null || sessionEvent.Data == null
                 ? null
@@ -378,7 +381,7 @@ namespace RNAssistant.Core.Services
             return values;
         }
 
-        private static List<ResourceRef> ExtractResourceRefs(JToken token)
+        internal static List<ResourceRef> ExtractResourceRefs(JToken token)
         {
             var result = new List<ResourceRef>();
             ExtractResourceRefs(token, result);
@@ -414,7 +417,7 @@ namespace RNAssistant.Core.Services
             foreach (var child in token.Children()) ExtractResourceRefs(child, result);
         }
 
-        private static List<string> ExtractValues(JToken token, params string[] names)
+        internal static List<string> ExtractValues(JToken token, params string[] names)
         {
             var result = new List<string>();
             ExtractValues(token, new HashSet<string>(names ?? new string[0], StringComparer.OrdinalIgnoreCase), result);
@@ -455,13 +458,13 @@ namespace RNAssistant.Core.Services
             if (!string.IsNullOrWhiteSpace(value) && !values.Any(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase))) values.Add(value);
         }
 
-        private static JToken Property(JToken token, string name)
+        internal static JToken Property(JToken token, string name)
         {
             var obj = token as JObject;
             return obj == null ? null : obj.Properties().FirstOrDefault(property => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))?.Value;
         }
 
-        private static string StringProperty(JToken token, string name)
+        internal static string StringProperty(JToken token, string name)
         {
             var value = Property(token, name);
             return value == null || value.Type == JTokenType.Null ? null : (string)value;

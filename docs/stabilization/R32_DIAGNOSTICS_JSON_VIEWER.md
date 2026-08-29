@@ -1,9 +1,9 @@
 # R32 — Сквозная диагностика и общий JSON viewer
 
-Статус: требования пользователя от 2026-08-28, **не реализовано**. Baseline source review —
-`85cc3f4`; перенос документации — поверх `b754443`. Отдельный docs-only scope:
-Phase 4B завершена host-neutral, следующий runtime этап Phase 5 не меняется.
-Реализация и qualification — [Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), до release gate Phase 12.
+Статус: требования пользователя от 2026-08-28. **9A реализована host-neutral
+2026-08-29; 9B/9C и Windows/WebView qualification открыты.** Baseline source review —
+`85cc3f4`; перенос документации — поверх `b754443`. Реализация и qualification —
+[Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), до release gate Phase 12.
 
 ## Что требуется исправить
 
@@ -130,15 +130,15 @@ pretty/copy/render paths в том же подэтапе. Сериализаци
 
 ## Архитектурные границы и порядок
 
-1. **9A — truth/query:** existing `ITrajectoryQuery` строит временную correlated
+1. **9A — truth/query (done host-neutral):** existing `ITrajectoryQuery` строит временную correlated
    projection над проверенным stream. Сохраняются все `sourceEventIds/Seqs`,
    `AcceptedCallOrigin`, точные ResourceRef и ссылки на domain journals. Не вводятся
    второй журнал, durable UI index, отдельный model transport или replay tools.
    Порядок определяется sequence; snapshot/cursor не теряют строки между страницами
    и при новых append. Новый хронологический вид не меняет контракт existing raw query.
-2. **9B — viewer:** общий компонент и migration read-only consumers; targeted UI
+2. **9B — viewer (pending):** общий компонент и migration read-only consumers; targeted UI
    tests и локальная чистка. До journal switch проверить fidelity и bounds отдельно.
-3. **9C — журнал:** подключить раскрываемые строки и direct navigation, сохранить
+3. **9C — журнал (pending):** подключить раскрываемые строки и direct navigation, сохранить
    raw/специализированные views как доступные детали. Qualification всей цепочки,
    reload/confirmation и actual WebView на Windows, без inference из текста модели.
 

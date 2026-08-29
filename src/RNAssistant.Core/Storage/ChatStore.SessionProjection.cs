@@ -247,6 +247,14 @@ namespace RNAssistant.Core.Storage
             }
             if ((bool?)item["ProtocolMessage"] == true)
             {
+                // Accepted calls are identified by the runtime-owned origin, not by
+                // the provider-specific native ToolCalls representation. Markdown
+                // instruction roles intentionally have no native ToolCalls array.
+                if (item["AcceptedCallOrigin"] is JObject &&
+                    !string.IsNullOrWhiteSpace((string)item["ToolCallId"]))
+                {
+                    return SessionOperationTypes.ToolCallRecorded;
+                }
                 var calls = item["ToolCalls"] as JArray;
                 return calls != null && calls.Count > 0
                     ? SessionOperationTypes.ToolCallRecorded

@@ -13,6 +13,7 @@ namespace RNAssistant.Core.Services
         public static List<TrajectoryViewRow> Build(IReadOnlyList<SessionEvent> events, string view)
         {
             var source = (events ?? new List<SessionEvent>()).Where(item => item != null).OrderBy(item => item.Sequence).ToList();
+            if (string.Equals(view, TrajectoryViews.RunCausal, StringComparison.OrdinalIgnoreCase)) return TrajectoryRunProjection.Build(source);
             if (string.Equals(view, TrajectoryViews.ModelReplay, StringComparison.OrdinalIgnoreCase)) return BuildModelRows(source);
             if (string.Equals(view, TrajectoryViews.ToolExecution, StringComparison.OrdinalIgnoreCase)) return BuildToolRows(source);
             if (string.Equals(view, TrajectoryViews.ArtifactLineage, StringComparison.OrdinalIgnoreCase)) return BuildArtifactRows(source);
@@ -131,16 +132,29 @@ namespace RNAssistant.Core.Services
                     if (!IsToolOperation(operationType)) continue;
                     var data = Property(operation, "Data") as JObject ?? new JObject();
                     var message = Property(data, "Value") as JObject;
-                    if (string.Equals(operationType, SessionOperationTypes.ToolCallRecorded, StringComparison.OrdinalIgnoreCase))
+                    var acceptedOrigin = Property(message, "AcceptedCallOrigin") as JObject;
+                    var acceptedCallId = Text(Property(message, "ToolCallId"));
+                    if (string.Equals(operationType, SessionOperationTypes.ToolCallRecorded, StringComparison.OrdinalIgnoreCase) ||
+                        acceptedOrigin != null && !string.IsNullOrWhiteSpace(acceptedCallId))
                     {
                         var calls = Property(message, "ToolCalls") as JArray;
-                        foreach (var call in calls == null ? new List<JObject>() : calls.OfType<JObject>())
+                        var callList = calls == null ? new List<JObject>() : calls.OfType<JObject>().ToList();
+                        if (callList.Count == 0)
                         {
-                            var callId = Text(Property(call, "Id"));
+                            callList.Add(new JObject
+                            {
+                                ["Id"] = acceptedCallId,
+                                ["Name"] = Property(message, "ToolName") ?? JValue.CreateNull()
+                            });
+                        }
+                        foreach (var call in callList)
+                        {
+                            var callId = acceptedCallId ?? Text(Property(call, "Id"));
                             if (callId == null) continue;
                             var aggregate = Tool(tools, callId);
-                            aggregate.ToolId = Text(Property(call, "Name")) ?? aggregate.ToolId;
-                            aggregate.Add(item, operationType, "queued", message, null);
+                            aggregate.ToolId = Text(Property(message, "ToolName")) ?? Text(Property(call, "Name")) ?? aggregate.ToolId;
+                            aggregate.StepId = Text(Property(acceptedOrigin, "StepId")) ?? aggregate.StepId;
+                            aggregate.Add(item, SessionOperationTypes.ToolCallRecorded, "queued", message, null);
                         }
                         continue;
                     }
@@ -491,7 +505,9 @@ namespace RNAssistant.Core.Services
                 CreatedUtc = source.CreatedUtc, CompletedUtc = source.CompletedUtc, DurationMs = source.DurationMs,
                 FirstSequence = source.FirstSequence, LastSequence = source.LastSequence,
                 RunId = source.RunId, TurnId = source.TurnId, StepId = source.StepId,
+                ModelAttemptId = source.ModelAttemptId,
                 ToolCallId = source.ToolCallId, ToolId = source.ToolId,
+                MutationId = source.MutationId, JournalRunId = source.JournalRunId,
                 ArtifactId = source.ArtifactId, ParentArtifactId = source.ParentArtifactId,
                 ResourceRefs = (source.ResourceRefs ?? new List<ResourceRef>()).Select(reference =>
                     reference == null ? null : new ResourceRef(reference.Uri, reference.Revision)).Where(reference => reference != null).ToList(),

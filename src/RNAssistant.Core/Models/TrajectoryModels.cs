@@ -87,6 +87,7 @@ namespace RNAssistant.Core.Models
         public const string ConfirmationPauses = "confirmation-pauses";
         public const string FailureRetries = "failure-retries";
         public const string TurnUsage = "turn-usage";
+        public const string RunCausal = "run-causal";
 
         public static bool IsSupported(string value)
         {
@@ -96,7 +97,8 @@ namespace RNAssistant.Core.Models
                 string.Equals(value, ArtifactLineage, System.StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(value, ConfirmationPauses, System.StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(value, FailureRetries, System.StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(value, TurnUsage, System.StringComparison.OrdinalIgnoreCase);
+                string.Equals(value, TurnUsage, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, RunCausal, System.StringComparison.OrdinalIgnoreCase);
         }
 
         public static string Normalize(string value)
@@ -143,8 +145,11 @@ namespace RNAssistant.Core.Models
         public string RunId { get; set; }
         public string TurnId { get; set; }
         public string StepId { get; set; }
+        public string ModelAttemptId { get; set; }
         public string ToolCallId { get; set; }
         public string ToolId { get; set; }
+        public string MutationId { get; set; }
+        public string JournalRunId { get; set; }
         public string ArtifactId { get; set; }
         public string ParentArtifactId { get; set; }
         public List<ResourceRef> ResourceRefs { get; set; }

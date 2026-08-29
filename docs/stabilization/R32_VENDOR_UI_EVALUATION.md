@@ -131,7 +131,7 @@ Tool Result v1 / ResourceRef / typed UI DTO
 ## Порядок реализации
 
 1. **До 9B:** закрыть R36 manifest/license/hash для уже vendored assets.
-2. **9A:** correlated run projection и direct navigation contract.
+2. **9A (done host-neutral):** correlated run projection и direct navigation contract.
 3. **9B1:** lossless bounded `JsonAdapter` + raw/pretty/tree/copy tests.
 4. **9B2:** switch всех read-only JSON surfaces и удалить старые pretty/copy paths.
 5. **9B3:** отдельный Web Awesome Tree spike для bounded navigation; при провале

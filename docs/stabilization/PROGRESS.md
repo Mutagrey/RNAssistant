@@ -1,12 +1,33 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9A diagnostics truth/query (in progress)
-Current task: построить одну bounded correlated run projection поверх canonical chat events и existing `ITrajectoryQuery`, сохраняя source event ids/sequences и пробелы evidence; не вводить второй store или UI inference.
+Current phase: Phase 9 — 9A diagnostics truth/query (done host-neutral)
+Current task: завершена одна bounded correlated run projection поверх canonical chat events и existing `ITrajectoryQuery`; R37 writer classification исправлена без второго store или UI inference.
 
-Next step: завершить отдельный 9A query/projection slice и его host-neutral tests; 9B viewer не включать в тот же commit. После 9A отдельно начать bounded/lossless JSON viewer. Не подключать весь vendor shortlist и не объявлять Windows/WebView qualification закрытой.
+Next step: отдельный 9B1 — bounded/lossless `JsonAdapter` с raw/pretty/tree/copy и targeted UI tests. До первого vendor switch закрыть R36; не подключать весь shortlist и не объявлять Windows/WebView qualification закрытой.
 Required context: [master Phase 9 / exception](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранним Phase 9A. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 implementation начата только с 9A; 9B/9C и R36 открыты. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранним Phase 9A. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 закрыта только в части 9A; 9B/9C и R36 открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+
+Phase 9A diagnostics truth/query (2026-08-29): добавлен хронологический
+`run-causal` view поверх canonical `*.events.jsonl` и existing `ITrajectoryQuery`.
+Он сохраняет exact source event ids/sequences, model attempt/origin/call/mutation/
+journal ids, revision-pinned resources и показывает явный evidence gap только после
+typed terminal boundary; отсутствие события не объявляется успехом или ошибкой.
+Новых writes, durable index, execution/replay decisions и UI inference нет. R37:
+`ChatStore` теперь классифицирует accepted call по runtime-owned
+`AcceptedCallOrigin`, независимо от provider result role/native `ToolCalls`; узкий
+read-only adapter корректно проецирует ранее ошибочно помеченные current-v4 события,
+не переписывая историю. 9B/9C, direct navigation UI и Windows/WebView qualification
+остаются отдельными gates.
+
+Phase 9A verification: 17 targeted harness cases pass — trajectory raw/derived/
+run-causal/export 4, actual causal traces 6, accepted-call role classification 1,
+typed bridge 1, selectable result roles 1, v4 accepted-history forms 1, canonical
+event log 1 и complete-HTML runtime IDs 2. Одна актуальная host-neutral сборка,
+последующие filters с `--no-build`; 0 errors, 4 existing CA1416 warnings в
+`ExcelIdentityProbe`. `ValidateVersionFormat`, 117 local docs links и
+`git diff --check` — pass.
+Windows x64 + Office + VS 2022 / real WebView не запускались.
 
 Phase 9A early start (2026-08-29, explicit user decision, docs-only baseline
 `8d53d91`): из-за отсутствия Windows открытые Phase 5B2/6 и Phases 7–8 не закрываются,
@@ -86,7 +107,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 6 | 6A + R33 + 6B VbaReader done host-neutral; remaining slices pending | `e0360f3` (6A); `62010c8` (R33); 6B evidence below | [6A: 58](#phase-6a--pure-vba-text-extraction); [R33: 8](#r33--overlapping-exact-matches); [6B: 60](#phase-6b--typed-vbareader) | deferred | Mutation/verifier/journal/result/fault matrix and full VBA gate open |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
-| 9 | pending | — | — | — | Persistence / UI projection |
+| 9 | 9A done host-neutral; 9B/9C pending | — | 17 targeted pass | not performed | Correlated query/writer classification done; viewer/journal UI remain |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |

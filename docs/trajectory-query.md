@@ -2,14 +2,17 @@
 
 `ITrajectoryQuery` is a read-only, disposable projection over a fully validated session event stream. The implementation receives canonical `SessionEvent` records from `ChatStore`, builds query metadata in memory, returns one page, and discards it. It never writes an index or another history file.
 
-Planned Phase 9 UI, not current behavior: [R32 — run journal and shared JSON viewer](stabilization/R32_DIAGNOSTICS_JSON_VIEWER.md).
-It will expose one expandable causal run view over these source events, with bounded,
-lossless JSON inspection and explicit missing/truncated evidence. Existing query/export
-authority and raw pagination remain intact; the target UI is not a second durable log.
+Phase 9A now exposes a host-neutral `run-causal` projection over these source events.
+The expandable journal and shared JSON viewer remain Phase 9B/9C:
+[R32 — run journal and shared JSON viewer](stabilization/R32_DIAGNOSTICS_JSON_VIEWER.md).
+Existing query/export authority and raw pagination remain intact; neither projection
+nor future UI is a second durable log.
 
 ## Query contract
 
-Results are ordered newest first. `pageSize` defaults to 100 and is capped at 200. `nextCursor` is an exclusive sequence cursor (`seq:<n>`), so later appends do not shift older pages.
+Raw results and existing aggregate views are ordered newest first. `run-causal` is
+ordered chronologically. `pageSize` defaults to 100 and is capped at 200. Raw
+`nextCursor` is an exclusive sequence cursor (`seq:<n>`), so later appends do not shift older pages.
 
 Filters compose with AND:
 
@@ -26,8 +29,14 @@ Every returned raw-event row retains `sourceEventSeqs`, `sourceEventIds`, and de
 
 ## Derived views
 
-The same `ITrajectoryQuery` rebuilds six correlated, read-only projections:
+The same `ITrajectoryQuery` rebuilds seven correlated, read-only projections:
 
+- `run-causal`: one chronological row stream for persisted user/run boundaries,
+  exact model request/response/rejection/acceptance, runtime-owned accepted call
+  origin, tool activity/dispatch, domain effect, artifact, summary and UI projection
+  evidence. It exposes `ModelAttemptId`, `ToolCallId`, `MutationId`, `JournalRunId`,
+  exact source events and revision-pinned `ResourceRef`; `ui.projected` remains only
+  projected, never delivered;
 - `model-replay`: model step boundaries, request/response/chunk payload references, format repairs, failures, attempts and usage;
 - `tool-execution`: a tool call from protocol record through running/waiting/terminal states;
 - `artifact-lineage`: immutable artifact revision metadata and `parentArtifactId` links;
@@ -36,6 +45,19 @@ The same `ITrajectoryQuery` rebuilds six correlated, read-only projections:
 - `turn-usage`: lifecycle timing, model/tool/confirmation/failure counts, actual and estimated tokens, and provider-reported USD cost.
 
 Every row retains the complete contributing `sourceEventSeqs` and `sourceEventIds`. Derived pagination uses `view:<view>:<snapshotSequence>:<offset>`: all pages use the same upper event-stream boundary even if new events are appended. A changed view or filter starts a fresh cursor.
+
+`run-causal` adds a synthetic `diagnostic.evidence.missing` row only after a typed
+terminal turn when an accepted call has no dispatch/terminal evidence, or a completed
+model transport response has no parser verdict. The row links the observed source
+and terminal events and explicitly states that absence proves neither success nor
+failure. Waiting/confirmation/user pauses do not create gaps. No effect is inferred
+from tool name, response prose or timestamps.
+
+Accepted call/result classification is owned by runtime `AcceptedCallOrigin`, not by
+the configured provider-facing tool-result role or presence of native `ToolCalls`.
+Phase 9A corrects new event writes accordingly. A read-only adapter recognizes the
+same origin on earlier current-v4 commits that were mislabeled `tool.result.recorded`;
+it never rewrites history or affects replay/execution.
 
 Diagnostics turns row correlations into navigation rather than another index: run/turn/step/tool-call filters reopen the relevant chat projection, artifact and parent ids open lineage, and a source-event action opens the bounded raw sequence range. Document-scoped VBA mutation rows use their recorded `SessionId` to navigate back to the originating chat without treating VBA as a chat artifact.
 
