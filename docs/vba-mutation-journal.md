@@ -25,6 +25,16 @@ Callers retain the HostRuntime gate and mutation/journal ownership. A malformed
 successful read is rejected and never converted into live or durable evidence;
 this extraction does not change CAS bytes, journal events, reconciliation or COM.
 
+Phase 6C moves the complete `common.vba_apply_patch` workflow and shared module
+prepare/dispatch/terminal orchestration to `Office.Vba.VbaMutationService`.
+`Office.Vba.VbaVerifier` owns module write/delete read-back and before/intended
+assessment. `VbaToolExecutor` remains the argument/result adapter and retains
+other mutation entrypoints, the reconciliation loop and package/rename journal
+until their ordered switches. The journal format, CAS bytes, correlation, COM
+dispatch and public wire are unchanged. The current `ToolCommand`/`ToolResult`
+service seam and message-based rollback detection are explicit compatibility
+debt for Phase 6D, not permanent domain contracts.
+
 | Representation | Purpose / existing transformation |
 |---|---|
 | Transport / raw CAS bytes | Exact stored source bytes; CAS SHA-256 is not a normalized text hash |

@@ -142,6 +142,46 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaMutationServiceOwnsApplyPatch()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub";
+                var journal = new VbaJournalStore(paths);
+                var reader = new VbaReader(
+                    adapter,
+                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
+                var service = new VbaMutationService(adapter, journal, reader);
+                var session = NewSession(adapter);
+                var command = Command("common.vba_apply_patch", "moduleName", "Module1");
+                var patch = new JArray(new JObject
+                {
+                    ["op"] = "replace",
+                    ["find"] = "\"before\"",
+                    ["text"] = "\"after\""
+                });
+
+                var preparationError = service.PrepareApplyPatchGuard(command, session, "Module1");
+                AssertTrue(preparationError == null, "service prepares its own patch guard");
+                var result = service.ApplyPatch(
+                    command,
+                    "Module1",
+                    patch,
+                    false,
+                    session,
+                    CancellationToken.None);
+
+                AssertTrue(result.Success, "service applies and verifies patch");
+                AssertContains(adapter.VbaModuleCode, "\"after\"", "service dispatches the intended source");
+                AssertContains(result.DataJson, "\"journalStatus\":\"committed\"",
+                    "service maps verified journal evidence into the legacy result adapter");
+                var record = journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
+                AssertEqual(VbaMutationStatuses.Committed, record.Terminal.Status,
+                    "service owns terminal module assessment");
+            });
+        }
+
         private static void VbaConfirmedMutationRejectsStaleSnapshot()
         {
             WithTempPaths(delegate(AppDataPaths paths)

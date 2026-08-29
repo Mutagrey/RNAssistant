@@ -60,6 +60,11 @@
       Link="Core\Storage\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\*.cs" Link="Office\Contracts\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaReader.cs" Link="Office\Vba\VbaReader.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.cs" Link="Office\Vba\VbaMutationService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.ApplyPatch.cs" Link="Office\Vba\VbaMutationService.ApplyPatch.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Guards.cs" Link="Office\Vba\VbaMutationService.Guards.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Journal.cs" Link="Office\Vba\VbaMutationService.Journal.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaVerifier.cs" Link="Office\Vba\VbaVerifier.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\*.cs" Link="Office\Agent\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Controller\*.cs" Link="Office\Controller\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Diagnostics\*.cs" Link="Office\Diagnostics\%(Filename)%(Extension)" />

@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9C causal run journal UI (done host-neutral; Windows qualification open)
-Current task: primary Diagnostics view переключён на bounded chronological `run-causal`; Agent run/error открывает exact run, rows раскрывают shared JSON viewer и source correlations без второго store/vendor/query owner.
+Current phase: Phase 6 — 6C VBA apply-patch mutation service (done host-neutral; full Phase 6 and Windows qualification open)
+Current task: `common.vba_apply_patch` guard → journal → dispatch → read-back → terminal workflow перенесён в `Office.Vba.VbaMutationService`; `VbaVerifier` стал единым владельцем module write/delete verification и assessment. Executor остаётся adapter и владельцем остальных mutation/package entrypoints.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельно согласовать возврат в обязательный dependency route — Phase 6 remainder (`VbaMutationService`/`VbaVerifier`, начиная с apply_patch). 9C Windows/WebView acceptance накапливается в WQ-UI и не запускает полный Phase 9 persistence scope заранее.
-Required context: [master Phase 9 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory, R36, 9B3, 9B4 и 9C UI закрыты host-neutral; общий R32 Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter для затронутых current-v4 streams сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
+Next step: отдельно согласовать Phase 6D — typed VBA mutation request/outcome, mapping только в executor, удаление string-based rollback classification и fault/persistence matrix без fabricated terminal/retry. Затем переносить remaining whole-module/package entrypoints в порядке Phase 6.
+Required context: [master Phase 6 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-6--vba-vertical-slice), [6C evidence](PHASE_6C_VBA_MUTATION_SERVICE.md), [VBA journal](../vba-mutation-journal.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: Phase 5B2/R04; Phase 6 typed outcome/string rollback/fault matrix, other module entrypoints, package/rename ownership and full VBA gate; Phases 7–8/R30. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/Phase 9A–9C UI закрыты host-neutral, но общий Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -17,9 +17,9 @@ cleanup и отдельный commit; статус до реального пр�
 [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md) и обязательный
 Milestone WQ перед Phase 12. Неизвестная Office semantics не угадывается: WQ0 Excel
 identity probe остаётся prerequisite production factory switch. Непроверенный build —
-`16.1.0-dev` qualification candidate, не stable/beta/RC. 9C UI выполнен отдельно;
-следующий mandatory slice требует отдельного допуска Phase 6 remainder. Windows WQ-UI
-не считается закрытым host-neutral проверками.
+`16.1.0-dev` qualification candidate, не stable/beta/RC. 9C UI и 6C mutation
+boundary выполнены отдельными host-neutral slices; следующий 6D требует отдельного
+допуска. Windows WQ-UI/VBE не считаются закрытыми локальными проверками.
 
 Phase 9C causal run journal UI (2026-08-29): Diagnostics primary view теперь
 показывает latest/exact run как один chronological `run-causal` поток; completed
@@ -264,10 +264,10 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 2/3 R29 | done host-neutral | `6a256f0` | 141 unique targeted cases; MockDemo compile; [evidence](R29_RUNTIME_CALL_IDS.md) | not performed | Runtime IDs + v4; no v3 fallback, product version unchanged |
 | 4 | done host-neutral: 4A + 4B | 85cc3f4 (4A); b754443 (4B) | 4B: 127 distinct targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime](PHASE_4A_TOOL_RUNTIME.md), [v1 wire/cleanup](PHASE_4B_TOOL_RESULT_V1.md); domain/Windows gates remain |
 | 5 | 5A + 5B1 done host-neutral; 5B2 read switch done, identity probe ready | 3a6c2aa (5A); a1b3d80 (5B1); 1ea3ce0 (5B2) | [read checks](#phase-5b2--direct-contextcatalog-reads), [probe checks](#phase-5b2--identity-qualification-probe) | not performed | Production binding blocked on identity qualification |
-| 6 | 6A + R33 + 6B VbaReader done host-neutral; remaining slices pending | `e0360f3` (6A); `62010c8` (R33); 6B evidence below | [6A: 58](#phase-6a--pure-vba-text-extraction); [R33: 8](#r33--overlapping-exact-matches); [6B: 60](#phase-6b--typed-vbareader) | deferred | Mutation/verifier/journal/result/fault matrix and full VBA gate open |
+| 6 | 6A + R33 + 6B + 6C done host-neutral; remaining slices pending | `e0360f3` (6A); `62010c8` (R33); `dde18cf` (6B); 6C evidence below | [6A: 58](#phase-6a--pure-vba-text-extraction); [R33: 8](#r33--overlapping-exact-matches); [6B: 60](#phase-6b--typed-vbareader); [6C: 60](#phase-6c--vba-apply-patch-mutation-service) | deferred | Typed outcome/string rollback/fault matrix, remaining entrypoints/package ownership and full VBA gate open |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
-| 9 | through 9B4 done host-neutral; remainder pending | — | 17 harness reused for 9A; current web 58/58 pass; 9B4 static consumer/DTO audit | not performed | Read-only JSON inventory, vendor baseline and one bounded tree closed; Diff2Html correctly not admitted, journal UI open |
+| 9 | 9A–9C done host-neutral; Windows acceptance pending | through `fba247b` | 9A harness evidence; current web 58/58; 9C UI/DOM evidence | not performed | Correlated query, shared JSON viewer and causal run journal switched; full persistence/Windows acceptance and R37 removal gate open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
@@ -642,6 +642,40 @@ Verification: `vba:` — **58/58 pass**; `host runtime: direct VBA catalog reads
 
 Отложено: реальные Excel/Word/PowerPoint VBE list/read, denied Trust Access, large/truncated modules, close/reopen/Save As и catalog refresh под production session; затем отдельно согласовать `VbaMutationService`/`VbaVerifier` начиная с apply_patch. COM/HostRuntime/factories/journal/result wire и Phase 7 этим substep не менялись. Phase 5B2/R04 и полный Phase 6 gate открыты.
 
+## Phase 6C — VBA apply-patch mutation service
+
+2026-08-29, baseline `fba247b`; отдельный host-neutral mutation boundary после
+6B и завершённой Phase 9C. `Office.Vba.VbaMutationService` теперь владеет полным
+`common.vba_apply_patch` workflow: current snapshot/guard, ordered patch,
+prepared journal, backend dispatch, read-back и terminal classification.
+`Office.Vba.VbaVerifier` стал одним владельцем module write/delete verification
+и module assessment; действующие write/delete/restore и reconciliation используют
+его без изменения публичного результата или durable evidence.
+
+Границы после switch:
+
+- `VbaToolExecutor` разбирает tool arguments, вызывает сервис и пока маппирует
+  legacy `ToolCommand`/`ToolResult`; остальные whole-module entrypoints,
+  reconciliation loop и package/rename journal остаются в executor.
+- `VbaMutationService` не открывает `HostRuntime` gate и не выбирает документ:
+  caller сохраняет один bound operation scope, host adapter остаётся COM authority.
+- `VbaJournalStore` и CAS сохраняют прежние bytes/events/hashes; второго store,
+  dual-write, recovery replay или нового wire нет.
+- Удалён прежний `VbaToolExecutor.Patching.cs`; общие module journal/verifier
+  implementations не дублируются. Package assessment не перенесён скрыто.
+
+Новый direct service case проверяет собственные guard/dispatch/read-back/committed
+journal evidence. Полный `vba:` filter — **59/59**, production source includes —
+**1/1**, итого **60 distinct harness cases**; MockDemo compile — 0 errors /
+3 existing CA1416 warnings. `ValidateVersionFormat`, docs links и diff check —
+pass. Подробности: [Phase 6C evidence](PHASE_6C_VBA_MUTATION_SERVICE.md).
+
+Открыто: 6D должен заменить service-границу `ToolCommand`/`ToolResult` typed
+domain request/outcome, оставить mapping в executor, удалить rollback classification
+по тексту и закрыть terminal-persistence/fault matrix. Whole-module/package entrypoints,
+5B2/R04, production identity, Windows x64 + Office + VS 2022 VBE/read-back/package
+qualification и полный Phase 6 DoD не закрыты.
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
@@ -652,6 +686,7 @@ Verification: `vba:` — **58/58 pass**; `host runtime: direct VBA catalog reads
 | LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Handler switches 6–7 / optional 11; no old-history reader |
 | ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 typed UI projection; manual/domain consumers 6–7 / optional 11 |
 | Unbound host identity/access | HostRuntime / host factories | Production adapters, including gated context/catalog reads | 5B2 bound Excel/common lifetime identity + Windows gates; neutral gate не удаляет этот legacy |
+| `VbaMutationService` legacy `ToolCommand`/`ToolResult` boundary | Office.Vba + Tools adapter | `common.vba_apply_patch` и shared module journal callers | Phase 6D typed request/outcome; mapping остаётся в executor, string rollback classifier удаляется |
 
 Permanent model-session/metadata owners не являются compatibility adapters.
 Остальные consumers/removal gates — в [MIGRATION_MAP.md](MIGRATION_MAP.md).
@@ -659,7 +694,7 @@ Permanent model-session/metadata owners не являются compatibility adap
 ## Open P0/P1 risks
 
 - R01: false completion воспроизведён в 1A; guard 1C закрывает host-neutral safety assertions, production qualification ещё не выполнена.
-- R02 и R07 contained host-neutral, но live-provider/Windows VBE gates открыты; R03–R06 и R08–R10 ожидают своих domain/resource/UI фаз. R11 minimal replay covered в 3B2, full Phase 9/Windows matrix остаётся.
+- R02 и R07 contained host-neutral, но live-provider/Windows VBE gates открыты; R03–R06 и R09 остаются открыты. R08 получил единых module journal/verifier owners в 6C, но terminal persistence/fault matrix и Windows reconciliation ещё открыты. R10 UI mitigated host-neutral через 9C, Windows acceptance открыт. R11 minimal replay covered в 3B2, full Phase 9/Windows matrix остаётся.
 - R04: operation gate проверен host-neutral в 5B1; production bound Excel/common identity и Windows wrong-target scenarios — 5B2.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.

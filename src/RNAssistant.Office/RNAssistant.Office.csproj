@@ -101,6 +101,11 @@
     <Compile Include="Contracts\IOfficeDocumentSession.cs" />
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Vba\VbaReader.cs" />
+    <Compile Include="Vba\VbaMutationService.cs" />
+    <Compile Include="Vba\VbaMutationService.ApplyPatch.cs" />
+    <Compile Include="Vba\VbaMutationService.Guards.cs" />
+    <Compile Include="Vba\VbaMutationService.Journal.cs" />
+    <Compile Include="Vba\VbaVerifier.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatResourceReferenceService.cs" />
@@ -185,7 +190,6 @@
     <Compile Include="Tools\VbaToolExecutor.Guards.cs" />
     <Compile Include="Tools\VbaToolExecutor.Journal.cs" />
     <Compile Include="Tools\VbaToolExecutor.Packages.cs" />
-    <Compile Include="Tools\VbaToolExecutor.Patching.cs" />
     <Compile Include="Tools\VbaToolExecutor.Schemas.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />

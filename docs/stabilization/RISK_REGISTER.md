@@ -28,7 +28,7 @@ safety, refusal и review/reset на prompt schema 12. Windows/live-provider gat
 | R05 | P1 | Schema исчезла из контекста либо snapshot изменился под тем же tool ID | ToolPack | Phase 8: no eviction, pinned schema/policy/binding, bounded admission и повторная materialization после compaction | open |
 | R06 | P1 | Модель не знает о tool | ToolPack/Discovery | Deterministic core pack, Phase 8 | open |
 | R07 | P1 | VBE нормализует source | VBA | 6A: один comparable canonicalizer и raw CAS hash отдельно; 6B: typed host read validation без повторного source unescape. Реальный VBE/read-back требует Windows | contained host-neutral 6A/6B; Windows/VBE qualification open |
-| R08 | P0 | Journal расходится с live state | VBA | Read-only recovery, Phase 6 | open |
+| R08 | P0 | Journal расходится с live state | VBA | Read-only recovery; 6C centralizes module prepare/dispatch/read-back/assessment without changing durable evidence. 6D terminal-persistence/fault matrix and Windows reconciliation remain required | contained ownership host-neutral; fault/Windows gates open |
 | R09 | P0 | Cancellation после COM dispatch | Host/Domain | Unknown/reconciliation, Phases 5–7 | open |
 | R10 | P1 | UI показывает устаревший статус | UI/Persistence | Revisioned projection, Phase 9 | open |
 | R11 | P0 | Replay меняет outcome | Runtime / Persistence | Phase 3B2: минимальный RunSummary save/replay через существующие events; Phase 9: полная persistence/UI матрица | contained minimal 3B2: actual normal/error/unknown/pending/cancel replay + CAS/interruption; full Phase 9/Windows matrix open |

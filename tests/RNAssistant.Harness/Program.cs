@@ -395,6 +395,7 @@ namespace RNAssistant.Harness
                 Test("plan mode: plan document revisions and questions", PlanModePersistsMarkdownAndAwaitsAnswers),
 
                 Test("vba: reader validates typed snapshots", VbaReaderValidatesTypedSnapshots),
+                Test("vba: mutation service owns apply patch", VbaMutationServiceOwnsApplyPatch),
                 Test("vba: apply patch backs up module", VbaApplyPatchBacksUpModule),
                 Test("vba: confirmed mutation rejects stale snapshot", VbaConfirmedMutationRejectsStaleSnapshot),
                 Test("vba: queued guard reads wait for mutation", VbaQueuedGuardReadsWaitForMutation),

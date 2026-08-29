@@ -105,7 +105,8 @@ See [conversation-protocol.md](conversation-protocol.md).
 - `src/RNAssistant.Core/Llm`: HTTP transport, message construction, response/reasoning parsing, budgets.
 - `src/RNAssistant.Core/Tools/AgentResponseParser.cs`: minimal Agent JSON parser.
 - `src/RNAssistant.Core/Tools/VbaPatchEngine.cs` and `VbaTextCanonicalizer.cs`: pure VBA text operations/representations, shared by parser/storage and Office consumers. JSON/tool mapping, COM, guards and journal orchestration stay outside; Phase 6A preserves algorithms and does not qualify production binding.
-- `src/RNAssistant.Office/Vba/VbaReader.cs`: единственный host-neutral owner internal VBA list/module command construction, deterministic name fallback and typed snapshot validation. Callers already hold the `HostRuntime` document gate; reader does not own target binding, reconciliation, observations, mutations, journal/read-back or Tool Result v1. Host COM remains in `OfficeHosts`/`VbaProjectSupport`.
+- `src/RNAssistant.Office/Vba/VbaReader.cs`: единственный host-neutral owner internal VBA list/module command construction, deterministic name fallback and typed snapshot validation. Callers already hold the `HostRuntime` document gate; reader does not own target binding, mutation dispatch, journal persistence or Tool Result v1. Host COM remains in `OfficeHosts`/`VbaProjectSupport`.
+- `src/RNAssistant.Office/Vba/VbaMutationService*.cs` and `VbaVerifier.cs`: Phase 6C owners complete `common.vba_apply_patch` guard/journal/dispatch/read-back/terminal workflow and shared module verification/assessment. They do not choose the document or open the `HostRuntime` gate. `VbaToolExecutor` temporarily adapts `ToolCommand`/`ToolResult` and retains other entrypoints, reconciliation outer loop and package/rename until later Phase 6 slices.
 - `src/RNAssistant.Core/Storage`: settings, chats, tools, skills, attachments.
 - `src/RNAssistant.Core/Models/SessionEventModels.cs`: canonical event envelope and typed state-operation vocabulary.
 - `src/RNAssistant.Core/Storage/ChatBlobStore.cs`: shared content-addressed immutable payload store for chat payloads, artifacts, committed attachments, and VBA source snapshots.
@@ -128,7 +129,7 @@ See [conversation-protocol.md](conversation-protocol.md).
 - `src/RNAssistant.Office/Services/ContextCompactionService.cs`: optional checkpointing.
 - `src/RNAssistant.Office/Tools`: dispatch, schemas, tool/skill/prompt CRUD, VBA lifecycle.
 - `src/RNAssistant.Office/Tools/CapabilityDiscoveryExecutor.cs`: compact exact-id tool/skill metadata, bounded search, and unified exact capability reads.
-- `src/RNAssistant.Office/Tools/VbaToolExecutor*.cs`: VBA host orchestration and verification in the base partial, package install/run/remove lifecycle in `.Packages`, and deterministic text patching in `.Patching`.
+- `src/RNAssistant.Office/Tools/VbaToolExecutor*.cs`: VBA tool argument/result adapters plus remaining whole-module, reconciliation and package/rename orchestration. Patch workflow and common module journal/read-back owners live in `Office/Vba`; the deleted `.Patching` path has no compatibility alias.
 - `src/RNAssistant.Office/Controller`: typed bridge-facing orchestration.
 - `src/RNAssistant.OfficeHosts`: Excel/Word/PowerPoint/Outlook COM adapters.
 - `web/js/app-html-workspace.js`: HTML workspace view orchestration; normalized data/selection rules, editor state/rendering, sandbox assembly, artifact/plan presentation, resource-tree rendering, and mutation bridge calls live in the adjacent `app-html-workspace-model.js`, `app-html-workspace-editor.js`, `app-html-workspace-preview.js`, `app-html-workspace-artifacts.js`, `app-html-workspace-tree.js`, and `app-html-workspace-actions.js` modules.

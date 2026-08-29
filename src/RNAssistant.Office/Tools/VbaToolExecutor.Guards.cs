@@ -18,8 +18,7 @@ namespace RNAssistant.Office.Tools
 
         private bool IsExistingModuleMutation(string toolId)
         {
-            return string.Equals(toolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase);
+            return string.Equals(toolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase);
         }
 
         private bool IsPreflightMutation(string toolId)
@@ -35,7 +34,7 @@ namespace RNAssistant.Office.Tools
             string resolvedName;
             VbaModuleState current;
             ToolResult readError;
-            if (!TryReadExistingModule(moduleName, out resolvedName, out current, out readError)) return readError;
+            if (!_mutationService.TryReadExistingModule(moduleName, out resolvedName, out current, out readError)) return readError;
             command.Arguments["moduleName"] = resolvedName;
             var currentHash = CodeSha256(current.Code);
             string observedHash;
@@ -43,10 +42,7 @@ namespace RNAssistant.Office.Tools
                 !string.Equals(observedHash, currentHash, StringComparison.OrdinalIgnoreCase))
             {
                 RemoveObservation(session, resolvedName);
-                var operation = string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase)
-                    ? "patch"
-                    : "mutation";
-                return StaleSnapshot(resolvedName, true, observedHash, true, currentHash, operation);
+                return StaleSnapshot(resolvedName, true, observedHash, true, currentHash, "mutation");
             }
             BindGuard(command, session, resolvedName, true, currentHash, moduleName);
             return null;
@@ -100,7 +96,7 @@ namespace RNAssistant.Office.Tools
             string resolvedSourceName;
             VbaModuleState source;
             ToolResult sourceError;
-            if (!TryReadExistingModule(requestedSourceName, out resolvedSourceName, out source, out sourceError))
+            if (!_mutationService.TryReadExistingModule(requestedSourceName, out resolvedSourceName, out source, out sourceError))
             {
                 return sourceError;
             }
@@ -256,9 +252,7 @@ namespace RNAssistant.Office.Tools
                 RemoveObservation(session, moduleName);
                 var operation = string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase)
                     ? "write"
-                    : string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase)
-                        ? "patch"
-                        : "mutation";
+                    : "mutation";
                 return StaleSnapshot(moduleName, guard.ModuleExists, guard.CodeSha256, moduleExists, actualHash, operation);
             }
             return null;
@@ -349,14 +343,7 @@ namespace RNAssistant.Office.Tools
 
         private static VbaMutationGuard ReadGuard(ToolCommand command)
         {
-            try
-            {
-                return JsonConvert.DeserializeObject<VbaMutationGuard>(command == null ? null : command.RuntimeGuardJson);
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
+            return VbaMutationService.ReadGuard(command);
         }
 
         private void BindGuard(
@@ -490,42 +477,17 @@ namespace RNAssistant.Office.Tools
 
         private void RecordObservation(ChatSession session, string moduleName, string hash)
         {
-            if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(hash)) return;
-            var key = ObservationKey(session, moduleName);
-            lock (_observedModulesSync)
-            {
-                if (_observedModuleHashes.Count >= 1024 && !_observedModuleHashes.ContainsKey(key))
-                {
-                    _observedModuleHashes.Clear();
-                }
-                _observedModuleHashes[key] = hash;
-            }
+            _mutationService.RecordObservation(session, moduleName, hash);
         }
 
         private bool TryGetObservation(ChatSession session, string moduleName, out string hash)
         {
-            lock (_observedModulesSync)
-            {
-                return _observedModuleHashes.TryGetValue(ObservationKey(session, moduleName), out hash);
-            }
+            return _mutationService.TryGetObservation(session, moduleName, out hash);
         }
 
         private void RemoveObservation(ChatSession session, string moduleName)
         {
-            lock (_observedModulesSync)
-            {
-                _observedModuleHashes.Remove(ObservationKey(session, moduleName));
-            }
-        }
-
-        private string ObservationKey(ChatSession session, string moduleName)
-        {
-            var runtimeKey = _adapter.RuntimeDocumentKey ?? string.Empty;
-            var documentIdentity = string.IsNullOrWhiteSpace(runtimeKey)
-                ? "document:" + (_adapter.DocumentKey ?? string.Empty)
-                : "runtime:" + runtimeKey;
-            return (session == null ? string.Empty : session.Id ?? string.Empty) + "|" +
-                (_adapter.HostName ?? string.Empty) + "|" + documentIdentity + "|" + (moduleName ?? string.Empty);
+            _mutationService.RemoveObservation(session, moduleName);
         }
 
         internal static string CodeSha256(string code)

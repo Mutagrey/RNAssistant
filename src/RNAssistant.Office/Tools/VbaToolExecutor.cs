@@ -17,14 +17,16 @@ namespace RNAssistant.Office.Tools
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly VbaJournalStore _vbaJournalStore;
         private readonly VbaReader _reader;
-        private readonly object _observedModulesSync = new object();
-        private readonly Dictionary<string, string> _observedModuleHashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly VbaMutationService _mutationService;
+        private readonly VbaVerifier _verifier;
 
         public VbaToolExecutor(IOfficeApplicationAdapter adapter, VbaJournalStore vbaJournalStore)
         {
             _adapter = adapter;
             _vbaJournalStore = vbaJournalStore;
             _reader = new VbaReader(adapter, BackendToolId);
+            _mutationService = new VbaMutationService(adapter, vbaJournalStore, _reader);
+            _verifier = _mutationService.Verifier;
         }
 
         internal VbaReader Reader { get { return _reader; } }
@@ -75,7 +77,15 @@ namespace RNAssistant.Office.Tools
 
             if (string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
             {
-                return ApplyVbaPatch(command, dryRun, session, cancellationToken);
+                object patchValue;
+                command.Arguments.TryGetValue("patch", out patchValue);
+                return _mutationService.ApplyPatch(
+                    command,
+                    ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                    patchValue as JArray,
+                    dryRun,
+                    session,
+                    cancellationToken);
             }
 
             if (string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase)) return WriteVbaModule(command, dryRun, session);
@@ -89,6 +99,10 @@ namespace RNAssistant.Office.Tools
         {
             if (command == null || !string.IsNullOrWhiteSpace(command.RuntimeGuardJson)) return null;
             var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
+            if (string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
+            {
+                return _mutationService.PrepareApplyPatchGuard(command, session, moduleName);
+            }
             if (IsExistingModuleMutation(command.ToolId))
             {
                 return PrepareExistingModuleGuard(command, session, moduleName);
@@ -284,7 +298,7 @@ namespace RNAssistant.Office.Tools
             var expectedComponentType = exists ? existing.ComponentType : componentType;
             VbaMutationPreparation prepared;
             ToolResult journalError;
-            if (!TryPrepareJournaledMutation(
+            if (!_mutationService.TryPrepareJournaledMutation(
                 command,
                 session,
                 "write",
@@ -299,7 +313,7 @@ namespace RNAssistant.Office.Tools
                 return journalError;
             }
 
-            return ExecuteJournaledMutation(prepared, () =>
+            return _mutationService.ExecuteJournaledMutation(prepared, () =>
             {
                 ToolResult written;
                 if (exists)
@@ -318,7 +332,7 @@ namespace RNAssistant.Office.Tools
                 {
                     return written ?? ToolResult.Fail("VBA module write returned no result.", null, "vba_write_failed", false);
                 }
-                return VerifyModuleWrite(
+                return _verifier.VerifyModuleWrite(
                     moduleName,
                     code,
                     "VBA module " + (exists ? "updated: " : "created: ") + moduleName,
@@ -457,7 +471,7 @@ namespace RNAssistant.Office.Tools
             }
             VbaMutationPreparation prepared;
             ToolResult journalError;
-            if (!TryPrepareJournaledMutation(
+            if (!_mutationService.TryPrepareJournaledMutation(
                 command,
                 session,
                 "delete",
@@ -472,7 +486,7 @@ namespace RNAssistant.Office.Tools
                 return journalError;
             }
 
-            return ExecuteJournaledMutation(prepared, () =>
+            return _mutationService.ExecuteJournaledMutation(prepared, () =>
             {
                 var delete = new ToolCommand { ToolId = BackendToolId("vba_delete_module_internal") };
                 delete.Arguments["moduleName"] = moduleName;
@@ -482,24 +496,7 @@ namespace RNAssistant.Office.Tools
                 {
                     return deleted ?? ToolResult.Fail("VBA delete returned no result.", null, "vba_delete_failed", false);
                 }
-                VbaModuleState remaining;
-                ToolResult verifyError;
-                if (_reader.TryReadModule(moduleName, 1000000, out remaining, out verifyError))
-                {
-                    return ToolResult.PartialFailure(
-                        "VBA delete returned success but the module is still present: " + moduleName + ".",
-                        VerificationData(moduleName, null, CodeSha256(remaining.Code), deleted.DataJson),
-                        "vba_delete_verify_failed");
-                }
-                if (!VbaReader.IsModuleNotFound(verifyError))
-                {
-                    return ToolResult.PartialFailure(
-                        "VBA module deletion completed but could not be verified: " + (verifyError == null ? moduleName : verifyError.Message),
-                        VerificationData(moduleName, null, null, deleted.DataJson),
-                        "vba_delete_verify_failed");
-                }
-                RemoveObservation(session, moduleName);
-                return ToolResult.Ok("VBA module deleted: " + moduleName, deleted.DataJson ?? JsonConvert.SerializeObject(new { moduleName = moduleName }));
+                return _verifier.VerifyModuleDeleted(moduleName, deleted.DataJson, session);
             });
         }
 
@@ -570,7 +567,7 @@ namespace RNAssistant.Office.Tools
                 : backup.ComponentType;
             VbaMutationPreparation prepared;
             ToolResult journalError;
-            if (!TryPrepareJournaledMutation(
+            if (!_mutationService.TryPrepareJournaledMutation(
                 command,
                 session,
                 "restore",
@@ -585,7 +582,7 @@ namespace RNAssistant.Office.Tools
                 return journalError;
             }
 
-            return ExecuteJournaledMutation(prepared, () =>
+            return _mutationService.ExecuteJournaledMutation(prepared, () =>
             {
                 ToolResult result;
                 if (moduleExists)
@@ -605,7 +602,7 @@ namespace RNAssistant.Office.Tools
                     return result ?? ToolResult.Fail("VBA restore write returned no result.", null, "vba_restore_failed", false);
                 }
 
-                return VerifyModuleWrite(
+                return _verifier.VerifyModuleWrite(
                     backup.ModuleName,
                     backup.Code,
                     "VBA backup restored: " + backup.BackupId,
@@ -622,172 +619,6 @@ namespace RNAssistant.Office.Tools
             });
         }
 
-        private ToolResult ApplyVbaPatch(ToolCommand command, bool dryRun, ChatSession session, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            if (string.IsNullOrWhiteSpace(moduleName))
-            {
-                return ToolResult.Fail("moduleName is required.");
-            }
-
-            object patchValue;
-            command.Arguments.TryGetValue("patch", out patchValue);
-            var operations = ParsePatchOperations(patchValue);
-
-            if (operations.Count == 0)
-            {
-                return ToolResult.Fail("Patch has no operations.");
-            }
-
-            VbaModuleState module;
-            ToolResult error;
-            string resolvedModuleName;
-            if (!TryReadExistingModule(moduleName, out resolvedModuleName, out module, out error))
-            {
-                return error;
-            }
-            moduleName = resolvedModuleName;
-
-            var code = module.Code;
-            var currentHash = CodeSha256(code);
-            var guardError = ValidateExistingModuleGuard(command, session, moduleName, module);
-            if (guardError != null) return guardError;
-            var updated = code;
-            var summary = new List<object>();
-            foreach (JObject operation in operations.OfType<JObject>())
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var beforeOperation = updated;
-                var result = ApplyPatchOperation(updated, operation, out updated);
-                if (!result.Success)
-                {
-                    return result;
-                }
-
-                summary.Add(new
-                {
-                    op = (string)operation["op"],
-                    changed = !string.Equals(beforeOperation, updated, StringComparison.Ordinal),
-                    message = result.Message
-                });
-            }
-            if (summary.Count != operations.Count)
-            {
-                return ToolResult.Fail("Each patch operation must be a JSON object.");
-            }
-            if (string.Equals(updated, code, StringComparison.Ordinal))
-            {
-                return ToolResult.Ok(
-                    "VBA patch is already satisfied; no document write was needed.",
-                    JsonConvert.SerializeObject(new
-                    {
-                        moduleName = moduleName,
-                        operations = summary,
-                        changed = false,
-                        codeSha256 = currentHash
-                    }));
-            }
-
-            var preview = JsonConvert.SerializeObject(new
-            {
-                moduleName = moduleName,
-                operations = summary,
-                changed = true,
-                oldLength = code.Length,
-                newLength = updated.Length,
-                previousCodeSha256 = currentHash,
-                codeSha256 = CodeSha256(updated)
-            });
-            if (dryRun)
-            {
-                return ToolResult.Ok("Dry run: would apply VBA patch to " + moduleName + ".", preview);
-            }
-
-            VbaMutationPreparation prepared;
-            ToolResult journalError;
-            if (!TryPrepareJournaledMutation(
-                command,
-                session,
-                "patch",
-                moduleName,
-                module,
-                true,
-                updated,
-                module.ComponentType,
-                out prepared,
-                out journalError))
-            {
-                return journalError;
-            }
-
-            return ExecuteJournaledMutation(prepared, () =>
-            {
-                var writeResult = WriteModule(moduleName, updated, false, currentHash);
-                if (writeResult == null || !writeResult.Success)
-                {
-                    return writeResult ?? ToolResult.Fail("VBA patch write returned no result.", null, "vba_patch_failed", false);
-                }
-
-                return VerifyModuleWrite(
-                    moduleName,
-                    updated,
-                    "VBA patch applied to " + moduleName + ".",
-                    preview,
-                    "vba_patch",
-                    null,
-                    session);
-            });
-        }
-
-        private bool TryReadExistingModule(
-            string requestedModuleName,
-            out string resolvedModuleName,
-            out VbaModuleState module,
-            out ToolResult error)
-        {
-            requestedModuleName = (requestedModuleName ?? string.Empty).Trim();
-            resolvedModuleName = requestedModuleName;
-            if (_reader.TryReadModule(requestedModuleName, 1000000, out module, out error))
-            {
-                resolvedModuleName = string.IsNullOrWhiteSpace(module.Name) ? requestedModuleName : module.Name;
-                return true;
-            }
-            if (!VbaReader.IsModuleNotFound(error)) return false;
-
-            var normalizedName = VbaReader.NormalizeModuleName(requestedModuleName);
-            if (!string.Equals(requestedModuleName, normalizedName, StringComparison.OrdinalIgnoreCase) &&
-                _reader.TryReadModule(normalizedName, 1000000, out module, out error))
-            {
-                resolvedModuleName = string.IsNullOrWhiteSpace(module.Name) ? normalizedName : module.Name;
-                return true;
-            }
-            if (!VbaReader.IsModuleNotFound(error)) return false;
-
-            resolvedModuleName = normalizedName;
-            error = ToolResult.Fail(
-                "VBA module not found: " + requestedModuleName +
-                (string.Equals(requestedModuleName, normalizedName, StringComparison.Ordinal)
-                    ? "."
-                    : ". Runtime also tried the normalized name " + normalizedName + ".") +
-                " To create it, call common.vba_write_module with moduleName, complete code, and mode=upsert. " +
-                "When the existing target name is unknown, list provider vba with kind vba-component.",
-                JsonConvert.SerializeObject(new
-                {
-                    requestedModuleName = requestedModuleName,
-                    normalizedModuleName = normalizedName,
-                    discoveryTool = "common.resources_list",
-                    resourceProvider = VbaResourceProvider.ProviderName,
-                    resourceKind = VbaResourceProvider.ComponentKind,
-                    creationTool = ToolId("vba_write_module"),
-                    creationMode = "upsert"
-                }),
-                "vba_module_not_found",
-                true);
-            module = null;
-            return false;
-        }
-
         private ToolResult WriteModule(string moduleName, string code, bool createIfMissing, string expectedCodeSha256)
         {
             var write = new ToolCommand { ToolId = BackendToolId("vba_replace_module") };
@@ -799,105 +630,6 @@ namespace RNAssistant.Office.Tools
                 write.Arguments["expectedCodeSha256"] = expectedCodeSha256;
             }
             return _adapter.ExecuteTool(write);
-        }
-
-        private ToolResult VerifyModuleWrite(
-            string moduleName,
-            string expectedCode,
-            string successMessage,
-            string successDataJson,
-            string errorPrefix,
-            string expectedComponentType = null,
-            ChatSession session = null)
-        {
-            var expectedHash = CodeSha256(expectedCode);
-            var expectedComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(expectedCode);
-            var expectedLineCount = VbaTextCanonicalizer.LiveCodeLineCount(expectedCode);
-            VbaModuleState actual;
-            ToolResult readError;
-            if (!_reader.TryReadModule(moduleName, 1000000, out actual, out readError))
-            {
-                return ToolResult.PartialFailure(
-                    "VBA write completed but final state could not be read back: " +
-                    (readError == null ? moduleName : readError.Message),
-                    VerificationData(moduleName, expectedHash, null, successDataJson, expectedComponentType, null, expectedLineCount, null),
-                    (errorPrefix ?? "vba_write") + "_verify_failed");
-            }
-
-            var actualHash = CodeSha256(actual.Code);
-            var actualComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(actual.Code);
-            var codeMatches = string.Equals(expectedComparableHash, actualComparableHash, StringComparison.OrdinalIgnoreCase);
-            var componentTypeMatches = string.IsNullOrWhiteSpace(expectedComponentType) ||
-                string.Equals(expectedComponentType, actual.ComponentType, StringComparison.OrdinalIgnoreCase);
-            if (!codeMatches || !componentTypeMatches)
-            {
-                return ToolResult.PartialFailure(
-                    "VBA write verification failed for " + moduleName +
-                    ": final code or component type differs from the requested state.",
-                    VerificationData(moduleName, expectedHash, actualHash, successDataJson, expectedComponentType, actual.ComponentType, expectedLineCount, actual.LineCount),
-                    (errorPrefix ?? "vba_write") + "_verify_mismatch");
-            }
-
-            RecordObservation(session, moduleName, actualHash);
-            return ToolResult.Ok(successMessage, SuccessfulVerificationData(
-                moduleName,
-                expectedHash,
-                actualHash,
-                successDataJson,
-                actual.ComponentType,
-                actual.LineCount));
-        }
-
-        private static string SuccessfulVerificationData(
-            string moduleName,
-            string requestedHash,
-            string actualHash,
-            string operationDataJson,
-            string actualComponentType,
-            int actualLineCount)
-        {
-            JObject data;
-            try { data = string.IsNullOrWhiteSpace(operationDataJson) ? new JObject() : JObject.Parse(operationDataJson); }
-            catch (JsonException) { data = new JObject { ["operationData"] = operationDataJson ?? string.Empty }; }
-            data["moduleName"] = moduleName ?? string.Empty;
-            data["codeSha256"] = actualHash;
-            data["lineCount"] = actualLineCount;
-            data["componentType"] = actualComponentType ?? string.Empty;
-            data["vbeNormalized"] = !string.Equals(requestedHash, actualHash, StringComparison.OrdinalIgnoreCase);
-            if (!string.Equals(requestedHash, actualHash, StringComparison.OrdinalIgnoreCase))
-            {
-                data["requestedCodeSha256"] = requestedHash;
-            }
-            return data.ToString(Formatting.None);
-        }
-
-        private static string VerificationData(
-            string moduleName,
-            string expectedHash,
-            string actualHash,
-            string operationDataJson,
-            string expectedComponentType = null,
-            string actualComponentType = null,
-            int? expectedLineCount = null,
-            int? actualLineCount = null)
-        {
-            JToken operationData = null;
-            if (!string.IsNullOrWhiteSpace(operationDataJson))
-            {
-                try { operationData = JToken.Parse(operationDataJson); }
-                catch (JsonException) { operationData = new JValue(operationDataJson); }
-            }
-            return new JObject
-            {
-                ["moduleName"] = moduleName ?? string.Empty,
-                ["expectedCodeSha256"] = string.IsNullOrWhiteSpace(expectedHash) ? null : expectedHash,
-                ["actualCodeSha256"] = string.IsNullOrWhiteSpace(actualHash) ? null : actualHash,
-                ["expectedComponentType"] = string.IsNullOrWhiteSpace(expectedComponentType) ? null : expectedComponentType,
-                ["actualComponentType"] = string.IsNullOrWhiteSpace(actualComponentType) ? null : actualComponentType,
-                ["expectedLineCount"] = expectedLineCount,
-                ["actualLineCount"] = actualLineCount,
-                ["operationData"] = operationData
-            }.ToString(Formatting.None);
         }
 
         private string HostToolPrefix()
@@ -912,26 +644,6 @@ namespace RNAssistant.Office.Tools
                 string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase);
         }
 
-        private sealed class VbaMutationGuard
-        {
-            public int Version { get; set; }
-            public string Host { get; set; }
-            public string DocumentKey { get; set; }
-            public string RuntimeDocumentKey { get; set; }
-            public string SessionId { get; set; }
-            public string RunId { get; set; }
-            public string TurnId { get; set; }
-            public string StepId { get; set; }
-            public string ToolCallId { get; set; }
-            public string ModuleName { get; set; }
-            public string RequestedModuleName { get; set; }
-            public bool ModuleExists { get; set; }
-            public string CodeSha256 { get; set; }
-            public string TargetModuleName { get; set; }
-            public string RequestedTargetModuleName { get; set; }
-            public bool TargetModuleExists { get; set; }
-            public string TargetCodeSha256 { get; set; }
-        }
 
     }
 

@@ -1824,6 +1824,25 @@ Phase 5B2/R04 остаются открытыми; production ExcelDocumentSessi
 
 `HostRuntime` сохраняет document gate и target binding; `VbaToolExecutor` сохраняет reconciliation, observations, guards, mutations, journal/read-back и mapping в текущий ToolResult/resource adapter. Host-specific COM остаётся в adapters/`VbaProjectSupport`. Не менять production factories/identity, COM implementation, journal/CAS/result wire, Phase 7 или UI. После 6B следующий mutation/verifier slice согласовать отдельно; 5B2/R04, Windows/VBE/package qualification и полный Phase 6 gate остаются открытыми.
 
+### Согласованное продолжение 6C mutation service (2026-08-29)
+
+После завершения 6B пользователь разрешил продолжить обязательный Phase 6. Этот
+host-neutral slice ограничен полным workflow `common.vba_apply_patch`:
+guard → prepared journal → dispatch → read-back → terminal assessment. Общая
+module-mutation journal orchestration и read-back verification выносятся в
+`Office.Vba.VbaMutationService` и `Office.Vba.VbaVerifier`; действующие
+write/delete/restore consumers переключаются на эти общие владельцы механически,
+без изменения их внешнего поведения.
+
+`VbaToolExecutor` остаётся tool adapter и пока сохраняет argument/result mapping,
+остальные mutation entrypoints, reconciliation loop и package/rename orchestration.
+Текущие `ToolCommand`/`ToolResult` на границе сервиса и string-based rollback
+classification являются явно временными до отдельного 6D. Не менять protocol/wire,
+journal/CAS format, COM implementation, `HostRuntime`, factories, UI или Phase 7.
+После 6C остановиться: typed domain outcome, fault/persistence matrix и перенос
+оставшихся entrypoints требуют отдельного подэтапа. 5B2/R04, Windows/VBE/package
+qualification и полный Phase 6 gate остаются открытыми.
+
 ### Цель
 
 Стабилизировать наиболее опасный write contour до переноса остальных mutations.
@@ -1831,7 +1850,7 @@ Phase 5B2/R04 остаются открытыми; production ExcelDocumentSessi
 ### Порядок
 
 1. `vba.read` — 6B host-neutral extraction done; Windows/VBE qualification remains open.
-2. `vba.apply_patch`.
+2. `vba.apply_patch` — 6C workflow/verifier ownership done host-neutral; typed outcome/fault matrix and Windows/VBE qualification remain open.
 3. whole-module write.
 4. delete.
 5. restore.
@@ -1846,9 +1865,10 @@ Phase 5B2/R04 остаются открытыми; production ExcelDocumentSessi
 - [x] 6A: существующие Transport/live/package/VBE-comparable representations разделены и описаны в [VBA journal](../vba-mutation-journal.md#text-representations); comparison не переписывает source.
 - [x] 6A host-neutral: raw CAS hash не менялся и отделён от text/comparable hashes; targeted tests покрывают CRLF/LF/CR, literal backslash sequences, строки/апострофные комментарии. Это не Windows/VBE qualification.
 - [x] 6B host-neutral: извлечён `Office.Vba.VbaReader`; backend read construction/name normalization/typed project+module validation имеют одного владельца. Mutation/resource executor и document-tool catalog переключены; дублирующие executor/catalog raw parsers/read builders удалены. Malformed success fail closed и не кэшируется, valid empty project сохраняет cache semantics. HostRuntime/COM/journal/result wire не менялись; Windows/VBE gate открыт.
-- [ ] Извлечь `VbaMutationService`.
-- [ ] Извлечь `VbaVerifier`.
-- [ ] Сохранить current journal/CAS evidence.
+- [x] 6C host-neutral: `Office.Vba.VbaMutationService` владеет полным `apply_patch` workflow и общей module prepare/dispatch/terminal orchestration; прежний executor patch path удалён.
+- [x] 6C host-neutral: `Office.Vba.VbaVerifier` владеет module write/delete read-back и assessment; write/delete/restore и reconciliation используют одного verifier без изменения package semantics.
+- [x] 6C: current journal/CAS bytes, event schema, hashes, correlation и public result shape сохранены; service ownership не создаёт второй store/dual-write.
+- [ ] 6D: заменить временную service-границу `ToolCommand`/`ToolResult` на typed domain request/outcome и оставить mapping в executor.
 - [ ] Удалить string-based rollback classification.
 - [ ] Маппировать domain result в `ok/error/unknown`.
 - [ ] Не выносить internal journal states в общий ToolResult.
