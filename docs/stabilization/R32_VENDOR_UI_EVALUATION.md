@@ -137,7 +137,7 @@ Tool Result v1 / ResourceRef / typed UI DTO
 5. **9B2B1 (done host-neutral):** Agent arguments/results switched; generic object/table/pretty renderer удалён, chart parser локализован у domain owner.
 6. **9B2B2 (done host-neutral):** Context/materialized request, manual Tools results и VBA metadata switched; editable/transport paths исключены.
 7. **9B2B3 (done host-neutral):** artifact inline/metadata JSON switched; bridge truncation становится explicit preview, non-JSON/HTML paths сохранены отдельно.
-8. **9B2B4:** завершённые fenced JSON blocks Markdown — отдельный post-sanitize/stream-aware slice.
+8. **9B2B4 (done host-neutral):** завершённые top-level fenced JSON blocks Markdown switched post-sanitize; live/unclosed/mismatched blocks остаются code.
 9. **9B3:** отдельный Web Awesome Tree spike для bounded navigation; при провале
    offline/WebView gates оставить существующее дерево или измерить Wunderbaum.
 10. **9B4:** Diff2Html только для существующего compact-diff consumer, если exact

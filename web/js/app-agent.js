@@ -108,9 +108,10 @@ function appendAgentFinalAnswer(parent, finalMessage) {
 
   var answer = document.createElement("div");
   answer.className = "agent-run-final markdown";
-  answer.innerHTML = markdown(messageContent(finalMessage.message));
+  var content = messageContent(finalMessage.message);
+  answer.innerHTML = markdown(content);
   parent.appendChild(answer);
-  enhanceMarkdown(answer);
+  enhanceMarkdown(answer, { enableJsonViewer: true, sourceText: content });
 }
 
 function enhanceActivity(root) {
@@ -229,7 +230,7 @@ function appendAgentStepMessage(parent, text) {
   message.className = "agent-step-message markdown";
   message.innerHTML = markdown(text);
   parent.appendChild(message);
-  enhanceMarkdown(message);
+  enhanceMarkdown(message, { enableJsonViewer: true, sourceText: text });
 }
 
 function appendCollapsedAgentStep(parent, step, isCurrent, finished) {

@@ -1,12 +1,26 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9B2B3 Artifact JSON consumer switch (done host-neutral)
-Current task: read-only artifact JSON content/metadata переключены на общий `JsonAdapter`; non-JSON и HTML preview/editor не менялись.
+Current phase: Phase 9 — 9B2B4 Markdown JSON consumer switch (done host-neutral)
+Current task: завершённые top-level fenced `json` blocks в message/Agent diagnostics переключены на общий `JsonAdapter`; live/unclosed/non-JSON blocks не менялись.
 
-Next step: отдельный 9B2B4 — оценить и переключить только завершённые fenced JSON code blocks Markdown с безопасным post-sanitize enhancement; незавершённый stream не превращать в viewer. До первого vendor switch закрыть R36.
+Next step: отдельный R36 provenance/offline gate для уже vendored assets; только после него — 9B3 Web Awesome Tree bounded-navigation spike. Local workers разрешены политикой, но этот slice их не вводит.
 Required context: [master Phase 9 / exception](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 закрыта через 9B2B3; Markdown consumer, 9B3/9C и R36 открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory закрыт host-neutral; 9B3/9B4/9C, R36 и общий R32 Windows acceptance открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+
+Phase 9B2B4 Markdown JSON switch (2026-08-29): только закрытые top-level fenced
+blocks с exact language `json` в завершённых persisted/Agent/diagnostic сообщениях
+заменяются post-sanitize на общий viewer. Exact fenced body остаётся источником raw
+copy и сохраняет CRLF, duplicate keys и numeric lexemes; DOM/source mismatch
+fail-safe остаётся обычным code block, content sniffing нет. Viewer collapsed/lazy,
+уничтожается при collapse и перед message re-render. Незакрытый fence и каждый live
+stream delta не парсятся как JSON; обычные code blocks, prompt/skill/plan preview и
+Markdown transport не менялись. Новый UI test 8/8; прежние 27 JSON adapter/consumer
+cases переиспользованы при неизменных inputs, итого 35. Local Chrome: light
+1000×820 и dark responsive 560×820, horizontal overflow 0, malicious JSON не создал
+script/image nodes, remote requests 0; fixture/screenshots удалены. `node --check`,
+local links, diff check и `ValidateVersionFormat` — pass. Windows WebView2/clipboard
+и R28 live-provider gate открыты.
 
 Phase 9B2B3 Artifact JSON switch (2026-08-29): artifact detail больше не
 выполняет lossy `JSON.parse → JSON.stringify → pre`. Exact inline JSON и exact
@@ -186,7 +200,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 6 | 6A + R33 + 6B VbaReader done host-neutral; remaining slices pending | `e0360f3` (6A); `62010c8` (R33); 6B evidence below | [6A: 58](#phase-6a--pure-vba-text-extraction); [R33: 8](#r33--overlapping-exact-matches); [6B: 60](#phase-6b--typed-vbareader) | deferred | Mutation/verifier/journal/result/fault matrix and full VBA gate open |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
-| 9 | through 9B2B3 done host-neutral; remainder pending | — | 17 harness + 27 JSON consumer UI pass | not performed | Read-only JSON surfaces switched except Markdown code blocks; journal UI open |
+| 9 | through 9B2B4 done host-neutral; remainder pending | — | 17 harness + 35 JSON consumer UI pass | not performed | Read-only JSON inventory switched; R36/tree/diff/journal UI open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |

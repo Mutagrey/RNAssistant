@@ -310,11 +310,12 @@ function renderCompactionArticle(message, activity) {
   body.appendChild(note);
   var markdownBody = document.createElement("div");
   markdownBody.className = "markdown context-compaction-markdown";
-  markdownBody.innerHTML = markdown(activityResultMessage(activity) || messageContent(message));
+  var compactionText = activityResultMessage(activity) || messageContent(message);
+  markdownBody.innerHTML = markdown(compactionText);
   body.appendChild(markdownBody);
   details.appendChild(body);
   node.appendChild(details);
-  enhanceMarkdown(markdownBody);
+  enhanceMarkdown(markdownBody, { enableJsonViewer: true, sourceText: compactionText });
   return node;
 }
 
@@ -358,11 +359,12 @@ function renderMessageArticle(message, index) {
 
   var body = document.createElement("div");
   body.className = "markdown";
-  body.innerHTML = markdown(messageContent(message));
+  var content = messageContent(message);
+  body.innerHTML = markdown(content);
   node.appendChild(body);
   appendMessageFooter(node, message, index, null);
 
-  enhanceMarkdown(body);
+  enhanceMarkdown(body, { enableJsonViewer: true, sourceText: content });
 
   return node;
 }
@@ -402,7 +404,7 @@ function renderLiveStreamMessage() {
   }
   body.appendChild(cursor);
   live.appendChild(body);
-  enhanceMarkdown(body);
+  enhanceMarkdown(body, { enableJsonViewer: true, sourceText: state.liveStreamContent, streaming: true });
   return live;
 }
 
@@ -430,6 +432,7 @@ function renderMessages(options) {
   var shouldScroll = !!options.forceScroll || chatChanged || isChatNearBottom(box);
 
   renderedMessagesChatId = state.activeChatId;
+  if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(box);
   box.innerHTML = "";
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
   if (!visibleMessages.length && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {

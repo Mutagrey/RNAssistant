@@ -176,6 +176,54 @@
   height: 13px;
 }
 
+.markdown-json-block {
+  margin: 10px 0;
+  overflow: hidden;
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius);
+  background: var(--code);
+}
+
+.markdown-json-block > summary {
+  padding: 8px 10px;
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-json-block[open] > summary {
+  border-bottom: 1px solid var(--code-border);
+}
+
+.markdown-json-label {
+  margin-right: 8px;
+  color: var(--text);
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 11px;
+  font-weight: var(--label-font-weight);
+}
+
+.markdown-json-preview {
+  color: var(--muted);
+}
+
+.markdown-json-viewer {
+  height: min(380px, 48vh);
+  min-height: 190px;
+  padding: 7px;
+}
+
+.markdown-json-viewer:empty {
+  display: none;
+}
+
+.markdown-json-viewer > .rn-json-viewer {
+  height: 100%;
+}
+
 .markdown table {
   width: 100%;
   border-collapse: collapse;

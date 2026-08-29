@@ -1,9 +1,8 @@
 # R32 — Сквозная диагностика и общий JSON viewer
 
-Статус: требования пользователя от 2026-08-28. **9A, 9B1 и consumer switches
-через Artifact JSON 9B2B3 реализованы host-neutral 2026-08-29; Markdown consumer,
-9B3, 9C и
-Windows/WebView qualification открыты.** Baseline source review —
+Статус: требования пользователя от 2026-08-28. **9A, 9B1 и полный read-only
+consumer inventory через Markdown JSON 9B2B4 реализованы host-neutral 2026-08-29;
+9B3/9B4, 9C, R36 и Windows/WebView qualification открыты.** Baseline source review —
 `85cc3f4`; перенос документации — поверх `b754443`. Реализация и qualification —
 [Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), до release gate Phase 12.
 
@@ -124,7 +123,7 @@ Network/HTML/link features отключаются или кандидат отк
 | `app-context-inspector.js`, `app-context.js` | **9B2B2 switched:** exact materialized request сохраняет raw/preview completeness; context state явно остаётся сериализованной UI projection. Оба viewer lifecycle bounded/lazy |
 | `app-tools-actions.js` и tool result panels | **9B2B2 switched:** manual-run/package structured result использует viewer, loading/error остаются inert text; editable arguments/schema и execution semantics не менялись |
 | `app-html-workspace-artifacts.js`, `app-vba-project.js` | VBA metadata **switched 9B2B2** как UI projection; artifact exact inline/metadata JSON **switched 9B2B3** с `InlineTruncated → preview`, typed MIME/kind и explicit non-JSON text fallback. HTML preview/editor не менялся |
-| JSON code blocks сообщений (`app-markdown.js`) | Явно помеченные JSON-блоки используют тот же viewer; незавершённый stream остаётся помеченным текстом до безопасного обновления |
+| JSON code blocks сообщений (`app-markdown.js`) | **9B2B4 switched:** закрытые top-level fenced `json` blocks завершённых message/Agent diagnostic renderers используют lazy viewer post-sanitize с exact source match/copy; live/unclosed/mismatched blocks остаются обычным code |
 | JSON editors/settings | Редактор и сохранение не заменяются read-only деревом; если есть preview, он использует общий viewer |
 
 При switch составить полный inventory видимых JSON surfaces и удалить заменённые
@@ -139,8 +138,8 @@ pretty/copy/render paths в том же подэтапе. Сериализаци
    второй журнал, durable UI index, отдельный model transport или replay tools.
    Порядок определяется sequence; snapshot/cursor не теряют строки между страницами
    и при новых append. Новый хронологический вид не меняет контракт existing raw query.
-2. **9B — viewer (9B1 + diagnostics 9B2A done; other consumers pending):** общий компонент и migration read-only consumers; targeted UI
-   tests и локальная чистка. До journal switch проверить fidelity и bounds отдельно.
+2. **9B — viewer (9B1 + 9B2 read-only inventory done host-neutral):** общий компонент и migration read-only consumers; targeted UI
+   tests и локальная чистка. R36/9B3/9B4 и Windows qualification остаются отдельными gates.
 3. **9C — журнал (pending):** подключить раскрываемые строки и direct navigation, сохранить
    raw/специализированные views как доступные детали. Qualification всей цепочки,
    reload/confirmation и actual WebView на Windows, без inference из текста модели.
@@ -165,7 +164,7 @@ pretty/copy/render paths в том же подэтапе. Сериализаци
   truncated JSON, clipboard failure, redacted input, большая ширина/глубина и bounds.
 - [ ] Query/UI tests: пагинация без потерь/дублей, source evidence, live append,
   смена чата при pending load, reset/reload, сохранение раскрытия/focus/scroll.
-- [ ] Все read-only JSON consumers из inventory используют один компонент;
+- [x] Все read-only JSON consumers из inventory используют один компонент host-neutral;
   преобразования raw/pretty/copy и бывшие renderers не остаются параллельными paths.
 - [ ] Targeted tests в существующих suites; отдельный тест компонента оправдан его
   самостоятельным поведением. Windows x64 + Office + VS 2022 / реальный WebView

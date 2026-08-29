@@ -380,5 +380,5 @@ function appendAgentDiagnosticMessage(parent, text) {
   message.className = "agent-diagnostic-message markdown";
   message.innerHTML = markdown(text);
   parent.appendChild(message);
-  enhanceMarkdown(message);
+  enhanceMarkdown(message, { enableJsonViewer: true, sourceText: text });
 }

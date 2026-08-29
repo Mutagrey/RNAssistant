@@ -49,20 +49,130 @@
     return preview;
   }
 
-  function enhanceMarkdown(root) {
+  function completeJsonFences(sourceText) {
+    var source = String(sourceText || "");
+    var result = [];
+    var offset = 0;
+    var open = null;
+    while (offset < source.length) {
+      var lineStart = offset;
+      var lineEnd = offset;
+      while (lineEnd < source.length && source.charAt(lineEnd) !== "\r" && source.charAt(lineEnd) !== "\n") lineEnd += 1;
+      var next = lineEnd;
+      if (source.substr(next, 2) === "\r\n") next += 2;
+      else if (next < source.length) next += 1;
+      var line = source.slice(lineStart, lineEnd);
+      if (!open) {
+        var opener = line.match(/^( {0,3})(`{3,}|~{3,})(.*)$/);
+        if (opener && !(opener[2].charAt(0) === "`" && opener[3].indexOf("`") >= 0)) {
+          var info = opener[3].trim().split(/[ \t]+/)[0].toLowerCase();
+          open = {
+            character: opener[2].charAt(0),
+            length: opener[2].length,
+            indentation: opener[1].length,
+            json: info === "json",
+            bodyStart: next
+          };
+        }
+      } else {
+        var closer = line.match(/^ {0,3}(`+|~+)[ \t]*$/);
+        if (closer && closer[1].charAt(0) === open.character && closer[1].length >= open.length) {
+          if (open.json) {
+            var text = source.slice(open.bodyStart, lineStart);
+            var renderedText = text.replace(/\r\n?/g, "\n");
+            if (open.indentation) {
+              renderedText = renderedText.split("\n").map(function (bodyLine) {
+                var remove = 0;
+                while (remove < open.indentation && bodyLine.charAt(remove) === " ") remove += 1;
+                return bodyLine.slice(remove);
+              }).join("\n");
+            }
+            result.push({ text: text, renderedText: renderedText });
+          }
+          open = null;
+        }
+      }
+      offset = next;
+    }
+    return result;
+  }
+
+  function clearMarkdownEnhancements(root) {
+    if (!root || !window.RNAssistantViewerRegistry) return;
+    Array.prototype.slice.call(root.querySelectorAll(".markdown-json-viewer")).forEach(function (target) {
+      window.RNAssistantViewerRegistry.unmount(target);
+    });
+  }
+
+  function replaceJsonCodeBlock(pre, code, fence) {
+    if (!pre || !pre.parentNode || !window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has("json")) {
+      return false;
+    }
+    var details = document.createElement("details");
+    details.className = "markdown-json-block";
+    var summary = document.createElement("summary");
+    var language = document.createElement("span");
+    language.className = "markdown-json-label";
+    language.textContent = "JSON";
+    var preview = document.createElement("span");
+    preview.className = "markdown-json-preview";
+    preview.textContent = codePreviewText(code, pre);
+    summary.appendChild(language);
+    summary.appendChild(preview);
+    var target = document.createElement("div");
+    target.className = "markdown-json-viewer";
+    details.appendChild(summary);
+    details.appendChild(target);
+
+    function mount() {
+      if (!details.open || target.firstElementChild) return;
+      window.RNAssistantViewerRegistry.mount("json", target, {
+        text: fence.text,
+        completeness: "full",
+        mode: "tree",
+        onCopy: window.copyTextResult
+      });
+    }
+    details.addEventListener("toggle", function () {
+      if (details.open) mount();
+      else window.RNAssistantViewerRegistry.unmount(target);
+    });
+    pre.parentNode.replaceChild(details, pre);
+    return true;
+  }
+
+  function enhanceMarkdown(root, options) {
+    options = options || {};
+    var jsonFences = options.enableJsonViewer && !options.streaming
+      ? completeJsonFences(options.sourceText)
+      : [];
+    var jsonFenceIndex = 0;
     Array.prototype.slice.call(root.querySelectorAll("pre code")).forEach(function (code) {
-      highlightCode(code);
+      var language = normalizeCodeLanguage(detectCodeLanguage(code));
+      var fence = jsonFences[jsonFenceIndex];
+      if (language === "json" && fence && code.textContent === fence.renderedText) {
+        code.__rnJsonFence = fence;
+        jsonFenceIndex += 1;
+      } else {
+        highlightCode(code);
+      }
     });
 
     Array.prototype.slice.call(root.querySelectorAll("pre")).forEach(function (pre) {
       if (pre.parentNode.classList.contains("code-wrap")) {
         return;
       }
+      var code = pre.querySelector("code");
+      if (code && code.__rnJsonFence && replaceJsonCodeBlock(pre, code, code.__rnJsonFence)) {
+        return;
+      }
+      if (code && code.__rnJsonFence) {
+        highlightCode(code);
+      }
       var wrap = document.createElement("div");
       wrap.className = "code-wrap";
       var tools = document.createElement("div");
       tools.className = "block-tools";
-      var code = pre.querySelector("code");
       if (code && code.dataset.language) {
         var language = document.createElement("span");
         language.className = "code-lang";
@@ -202,6 +312,7 @@
   }
 
   window.enhanceMarkdown = enhanceMarkdown;
+  window.clearMarkdownEnhancements = clearMarkdownEnhancements;
   window.highlightCode = highlightCode;
   window.highlightAllCode = highlightAllCode;
   window.scheduleHighlightRetry = scheduleHighlightRetry;
