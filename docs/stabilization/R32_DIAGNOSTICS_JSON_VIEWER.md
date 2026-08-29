@@ -3,7 +3,8 @@
 Статус: требования пользователя от 2026-08-28. **9A, 9B1 и полный read-only
 consumer inventory через Markdown JSON 9B2B4, R36 vendor gate и bounded tree switch
 9B3 реализованы host-neutral 2026-08-29; 9B4 gate закрыт без Diff2Html, потому что
-authoritative unified diff отсутствует; 9C и Windows/WebView qualification открыты.** Baseline source review —
+authoritative unified diff отсутствует; 9C journal UI реализован host-neutral,
+Windows/WebView и полный scenario acceptance открыты.** [Evidence 9C](PHASE_9C_RUN_JOURNAL_UI.md). Baseline source review —
 `85cc3f4`; перенос документации — поверх `b754443`. Реализация и qualification —
 [Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), до release gate Phase 12.
 
@@ -12,7 +13,7 @@ authoritative unified diff отсутствует; 9C и Windows/WebView qualifi
 На baseline до Phase 9 `app-trajectory.js` разносил raw events, model/tool projections
 и payload по отдельным представлениям, а diagnostics/Agent использовали разные
 `prettyJson`/`textContent`/copy paths. Эти paths уже заменены в 9B2A/9B2B1;
-хронологический journal UI остаётся 9C. Исходное замечание подтверждает проблему
+хронологический journal UI подключён в 9C. Исходное замечание подтверждает проблему
 удобства диагностики, но само по себе не доказывает потерю событий.
 
 Цель: один понятный журнал выбранного пользовательского запуска с раскрываемыми
@@ -120,8 +121,8 @@ Vendor поставляется локально с pinned version/commit и has
 `web/vendor-notices.md`; без CDN, telemetry и автоматической загрузки URL из данных.
 Network/HTML/link features отключаются или кандидат отклоняется. Source raw/copy,
 полнота/redaction и доступ к payload остаются под контролем нашего adapter/owner.
-Итог tree spike и причины окончательного switch записываются при 9B; сейчас ничего
-не скачано и не подключено.
+9B3 добавил только pinned Wunderbaum для одного bounded tree consumer; остальные
+кандидаты shortlist не подключены. Каждый следующий vendor требует отдельного gate.
 
 ## Повторное использование и удаление дубликатов
 
@@ -150,9 +151,10 @@ pretty/copy/render paths в том же подэтапе. Сериализаци
 2. **9B — viewer (9B1 + 9B2 read-only inventory + R36 + 9B3 + 9B4 gates done host-neutral):** общий компонент и migration read-only consumers; targeted UI
    tests и локальная чистка. Diff2Html не admitted без source-owned unified diff;
    Windows qualification остаётся отдельным gate.
-3. **9C — журнал (pending):** подключить раскрываемые строки и direct navigation, сохранить
-   raw/специализированные views как доступные детали. Qualification всей цепочки,
-   reload/confirmation и actual WebView на Windows, без inference из текста модели.
+3. **9C — журнал (UI done host-neutral):** раскрываемые строки и direct navigation
+   подключены поверх `run-causal`; raw/специализированные views сохранены как детали,
+   JSON lifecycle остаётся у shared viewer. Qualification всей цепочки,
+   reload/confirmation и actual WebView на Windows открыты, без inference из текста модели.
 
 Если trace недостаточно, UI показывает пробел. Новые необходимые evidence events
 добавляются у владельца соответствующей границы с typed contracts и тестом, а не

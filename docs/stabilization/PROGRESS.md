@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9B4 compact diff vendor gate (done host-neutral; vendor not admitted)
-Current task: оба действующих VBA diff consumer получают exact `before/after`, но не authoritative unified diff; Diff2Html не подключён, существующий bounded formatter сохранён без второго algorithm.
+Current phase: Phase 9 — 9C causal run journal UI (done host-neutral; Windows qualification open)
+Current task: primary Diagnostics view переключён на bounded chronological `run-causal`; Agent run/error открывает exact run, rows раскрывают shared JSON viewer и source correlations без второго store/vendor/query owner.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный 9C chronological run journal поверх существующей `run-causal` projection; raw/specialized views остаются деталями, второй durable store запрещён.
+Next step: отдельно согласовать возврат в обязательный dependency route — Phase 6 remainder (`VbaMutationService`/`VbaVerifier`, начиная с apply_patch). 9C Windows/WebView acceptance накапливается в WQ-UI и не запускает полный Phase 9 persistence scope заранее.
 Required context: [master Phase 9 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory, R36, 9B3 и 9B4 gate закрыты host-neutral; 9C и общий R32 Windows acceptance открыты. Diff2Html требует будущего source-owned unified-diff contract и не является 9C gate. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory, R36, 9B3, 9B4 и 9C UI закрыты host-neutral; общий R32 Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter для затронутых current-v4 streams сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -17,9 +17,23 @@ cleanup и отдельный commit; статус до реального пр�
 [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md) и обязательный
 Milestone WQ перед Phase 12. Неизвестная Office semantics не угадывается: WQ0 Excel
 identity probe остаётся prerequisite production factory switch. Непроверенный build —
-`16.1.0-dev` qualification candidate, не stable/beta/RC. Runtime не менялся; 9B4
-gate выполнен отдельно, следующий dependency-safe slice — 9C. Docs diff/links
-проверяются без build/harness.
+`16.1.0-dev` qualification candidate, не stable/beta/RC. 9C UI выполнен отдельно;
+следующий mandatory slice требует отдельного допуска Phase 6 remainder. Windows WQ-UI
+не считается закрытым host-neutral проверками.
+
+Phase 9C causal run journal UI (2026-08-29): Diagnostics primary view теперь
+показывает latest/exact run как один chronological `run-causal` поток; completed
+Agent run и failed activity имеют direct action. Bounded summary считает unique
+`ToolCallId`, typed failure/unknown/interruption statuses не теряются; filters,
+expansion и scroll остаются UI state. Row details lazy-mount общий lossless JSON
+viewer, exact source IDs видны, а raw range/CAS payload остаются у existing
+Diagnostics owner. Компонент не читает bridge/CAS/network/storage, не вводит durable
+index и не использует prose для effect. 12 web test files / 65 internal cases,
+syntax/diff checks pass; unchanged Phase 9A 17 Core/bridge cases reused. Chrome
+`file://` DOM probe: 12 rows, 1 problem, 2 lazy viewers, component network/data-driven
+active elements/page overflow = 0; dark theme/clipboard/keyboard/DPI и real WebView2
+не проверены. [Evidence](PHASE_9C_RUN_JOURNAL_UI.md). R28 и full Phase 9 persistence
+matrix открыты; R37 read-only adapter сохраняется до Windows/reset decision.
 
 Phase 9B4 compact diff vendor gate (2026-08-29): Diff2Html 3.4.56 не добавлен.
 Единственные consumers — VBA editor preview и hydrated mutation detail — передают
@@ -30,7 +44,7 @@ renderer готового unified/git diff, поэтому его подключ
 diff algorithm либо выдало бы синтетическую проекцию за source evidence. Existing
 formatter и CSS не менялись, vendor manifest остаётся 38 files. Повторно оценивать
 только после отдельного source-owned bounded unified-diff contract. [Evidence](R39_DIFF_VENDOR_GATE.md).
-Следующий шаг — 9C; Windows VBA/WebView qualification остаётся открытой.
+9C выполнен отдельным последующим UI commit; Windows VBA/WebView qualification остаётся открытой.
 
 Phase 9B3 bounded tree vendor switch (2026-08-29): actual `file://` probe
 официального Web Awesome Tree 3.12.0 ESM graph не зарегистрировал `wa-tree`; custom

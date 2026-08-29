@@ -418,7 +418,7 @@ function appendAgentRunOutcome(parent, activity, overview) {
   parent.appendChild(outcome);
 }
 
-function appendAgentExecutionSummary(parent, summary) {
+function appendAgentExecutionSummary(parent, summary, runId) {
   var health = summary ? summary.executionHealth : "unknown";
   var note = document.createElement("div");
   note.className = "message-outcome " + (health === "clean" ? "status-unknown" : "status-blocked");
@@ -440,6 +440,32 @@ function appendAgentExecutionSummary(parent, summary) {
       ", ошибка — " + summary.writeError + ", результат неизвестен — " + summary.writeUnknown + ".";
   }
   parent.appendChild(note);
+  if (runId) {
+    var actions = document.createElement("div");
+    actions.className = "agent-inline-actions agent-run-journal-actions";
+    var openJournal = document.createElement("button");
+    openJournal.type = "button";
+    openJournal.className = "agent-action-button secondary";
+    openJournal.textContent = "Открыть журнал запуска";
+    openJournal.addEventListener("click", function () {
+      if (typeof window.openRunJournal !== "function") return;
+      window.openRunJournal({
+        chatId: state.activeChatId,
+        runId: runId,
+        filter: health === "clean" ? "all" : "problems"
+      });
+    });
+    actions.appendChild(openJournal);
+    parent.appendChild(actions);
+  }
+}
+
+function agentRunId(items, finalMessage) {
+  if (finalMessage && messageRunId(finalMessage.message)) return messageRunId(finalMessage.message);
+  for (var index = (items || []).length - 1; index >= 0; index -= 1) {
+    if (items[index] && messageRunId(items[index].message)) return messageRunId(items[index].message);
+  }
+  return "";
 }
 
 function renderAgentRunArticle(run) {
@@ -473,7 +499,7 @@ function renderAgentRunArticle(run) {
     }
   }
   // This warning is outside collapsed trace and never derived from the model's prose.
-  if (!run.live) appendAgentExecutionSummary(body, executionSummary);
+  if (!run.live) appendAgentExecutionSummary(body, executionSummary, agentRunId(items, finalMessage));
   if (finalMessage) {
     var finalSection = document.createElement("section");
     finalSection.className = "agent-final-step";

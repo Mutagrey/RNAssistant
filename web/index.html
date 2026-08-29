@@ -30,7 +30,8 @@
   <link rel="stylesheet" href="css/app-models.css?v=model-capability-inline-20260826-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-ui-20260825-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-viewer-20260829-2">
-  <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-json-20260829-1">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=run-journal-20260829-1">
+  <link rel="stylesheet" href="css/app-run-journal.css?v=run-journal-20260829-1">
   <link rel="stylesheet" href="css/app-tools.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-vba.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-viewer-20260829-1">
@@ -822,7 +823,7 @@
               <div class="diagnostics-tabs" role="tablist" aria-label="Разделы диагностики">
                 <button class="diagnostics-tab-button active" type="button" role="tab" aria-selected="true" data-diagnostics-tab="overview">Проверки</button>
                 <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="events">События JSONL</button>
-                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="trajectory">Траектория</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="trajectory">Журнал запуска</button>
                 <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="vba-journal">VBA journal</button>
                 <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="runtime-log">Журнал UI</button>
               </div>
@@ -830,7 +831,7 @@
               <div class="diagnostics-tab-panel diagnostics-overview active" data-diagnostics-panel="overview">
                 <div class="diagnostics-concepts" aria-label="Различие событий и траектории">
                   <div><strong>События JSONL</strong><span>Неизменяемый источник истины: точные записи session stream с hash chain.</span></div>
-                  <div><strong>Траектория</strong><span>Временная проекция из проверенных событий: связывает turns, model steps, tools и версии артефактов.</span></div>
+                  <div><strong>Журнал запуска</strong><span>Один причинный поток из проверенных событий: запрос, попытки модели, tools, эффекты и явные пробелы evidence.</span></div>
                   <div><strong>VBA journal</strong><span>Отдельный document-scoped JSONL-журнал мутаций модулей и пакетов с before/intended source в CAS.</span></div>
                 </div>
                 <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="modelConnectionTitle">
@@ -873,7 +874,7 @@
                   </div>
                 </div>
                 <div class="trajectory-querybar">
-                  <label class="trajectory-field" id="trajectoryViewField"><span>Представление</span><select id="trajectoryViewInput"><option value="raw" hidden>События JSONL</option><option value="model-replay">Шаги модели</option><option value="tool-execution">Вызовы инструментов</option><option value="artifact-lineage">Дерево артефактов</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations" hidden>VBA mutations</option></select></label>
+                  <label class="trajectory-field" id="trajectoryViewField"><span>Представление</span><select id="trajectoryViewInput"><option value="raw" hidden>События JSONL</option><option value="run-causal">Журнал запуска</option><option value="model-replay">Только шаги модели</option><option value="tool-execution">Только вызовы tools</option><option value="artifact-lineage">Дерево артефактов</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations" hidden>VBA mutations</option></select></label>
                   <label class="trajectory-field trajectory-search-field"><span>Поиск</span><input id="trajectorySearchInput" maxlength="512" placeholder="Metadata и event data"></label>
                   <label class="trajectory-field" id="trajectoryTypeField"><span>Тип события</span><input id="trajectoryTypeInput" maxlength="256" placeholder="Типы через запятую"></label>
                   <label class="trajectory-field" id="trajectoryVisibilityField"><span>Состояние</span><select id="trajectoryVisibilityInput"><option value="">Все</option><option value="current">Текущее</option><option value="shadowed">Заменённое</option><option value="log-only">Только журнал</option></select></label>
@@ -959,7 +960,8 @@
   <script src="js/app-diagnostics.js?v=diagnostics-ui-20260825-1"></script>
   <script src="js/app-viewer-registry.js?v=viewer-registry-20260829-1"></script>
   <script src="js/app-json-viewer.js?v=json-viewer-20260829-1"></script>
-  <script src="js/app-trajectory.js?v=diagnostics-json-20260829-1"></script>
+  <script src="js/app-run-journal.js?v=run-journal-20260829-1"></script>
+  <script src="js/app-trajectory.js?v=run-journal-20260829-1"></script>
   <script src="js/app-prompts.js?v=prompt-sections-20260825-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
@@ -992,9 +994,9 @@
   <script src="js/app-chart-artifacts.js?v=chart-json-owner-20260829-1"></script>
   <script src="js/app-artifacts.js?v=utility-dock-20260826-1"></script>
   <script src="js/app-task-list.js?v=task-list-20260826-1"></script>
-  <script src="js/app-agent-activity.js?v=markdown-json-20260829-1"></script>
+  <script src="js/app-agent-activity.js?v=run-journal-20260829-1"></script>
   <script src="js/app-agent-approval.js?v=agent-modules-20260823-2"></script>
-  <script src="js/app-agent.js?v=markdown-json-20260829-1"></script>
+  <script src="js/app-agent.js?v=run-journal-20260829-1"></script>
   <script src="js/app-messages.js?v=markdown-json-20260829-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=resource-ingestion-20260826-1"></script>

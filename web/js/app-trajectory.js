@@ -9,7 +9,9 @@
   var trajectoryChatId = null;
   var trajectoryRequestId = 0;
   var detailRequestId = 0;
-  var lastDerivedView = "model-replay";
+  var journalFilter = "all";
+  var expandedJournalRows = {};
+  var journalStateChatId = "";
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
@@ -96,6 +98,18 @@
   function eventId(item) { return value(item, "EventId", "eventId", ""); }
   function mutationId(item) { return value(item, "MutationId", "mutationId", ""); }
   function isVbaView() { return activeView === "vba-mutations"; }
+  function isRunJournal() { return activeView === "run-causal"; }
+
+  function latestKnownRunId() {
+    var active = state.chatRuns && state.activeChatId ? state.chatRuns[state.activeChatId] : null;
+    if (active && active.runId) return active.runId;
+    for (var index = (state.messages || []).length - 1; index >= 0; index -= 1) {
+      var message = state.messages[index] || {};
+      var runId = message.runId !== undefined ? message.runId : message.RunId;
+      if (runId && !value(message, "Local", "local", false)) return String(runId);
+    }
+    return "";
+  }
 
   function itemId(item) {
     if (isVbaView()) return mutationId(item);
@@ -153,7 +167,6 @@
     }
     trajectoryChatId = sourceChatId || state.activeChatId;
     $("trajectoryViewInput").value = targetView;
-    if (targetView !== "raw") lastDerivedView = targetView;
     nextCursor = null;
     updateViewControls();
     refreshTrajectory(false);
@@ -172,11 +185,21 @@
   }
 
   function activeFilterText() {
+    var labels = {
+      runId: "запуск",
+      turnId: "turn",
+      stepId: "step",
+      toolCallId: "tool call",
+      artifactId: "artifact",
+      resourceUri: "resource",
+      minSequence: "от #",
+      maxSequence: "до #"
+    };
     var parts = Object.keys(correlationFilter).map(function (key) {
-      return key + "=" + correlationFilter[key];
+      return (labels[key] || key) + "=" + correlationFilter[key];
     });
     if (trajectoryChatId && trajectoryChatId !== state.activeChatId) parts.push("chat=" + trajectoryChatId);
-    return parts.length ? "active: " + parts.join(" · ") : "";
+    return parts.length ? "Фильтр: " + parts.join(" · ") : "";
   }
 
   function renderCorrelationActions(item) {
@@ -384,12 +407,98 @@
       : value(item, "Title", "title", value(item, "Kind", "kind", "row"));
   }
 
-  function renderEvents(response, append) {
+  function renderRunJournal(response, previousScroll, loadedLimitReached) {
+    var root = $("trajectoryEvents");
+    var adapter = window.RNAssistantRunJournal;
+    previousScroll = Number(previousScroll || 0);
+    var responseChatId = value(response, "ChatId", "chatId", trajectoryChatId || state.activeChatId || "");
+    if (journalStateChatId && responseChatId && journalStateChatId !== responseChatId) {
+      expandedJournalRows = {};
+    }
+    journalStateChatId = responseChatId;
+    selected = null;
+    var loadedIds = {};
+    events.forEach(function (item) { loadedIds[itemId(item)] = true; });
+    Object.keys(expandedJournalRows).forEach(function (id) {
+      if (!loadedIds[id]) delete expandedJournalRows[id];
+    });
+    root.setAttribute("role", "region");
+    root.setAttribute("aria-label", "Хронологический журнал запуска");
+    if (!adapter || typeof adapter.render !== "function") {
+      root.replaceChildren();
+      var unavailable = document.createElement("div");
+      unavailable.className = "rn-run-journal-empty is-error";
+      unavailable.textContent = "RunJournal renderer недоступен.";
+      root.appendChild(unavailable);
+      $("trajectoryStatus").textContent = "Журнал запуска не загружен.";
+      $("trajectoryWorkspace").classList.remove("hidden");
+      return;
+    }
+    var result;
+    function rerender(keepScroll) {
+      renderRunJournal(response, keepScroll !== false ? root.scrollTop : 0, loadedLimitReached);
+    }
+    result = adapter.render(root, events, {
+      filter: journalFilter,
+      expanded: expandedJournalRows,
+      activeRunId: correlationFilter.runId || "",
+      onFilterChange: function (filter) {
+        journalFilter = filter;
+        renderRunJournal(response, 0, loadedLimitReached);
+      },
+      onExpandedChange: function (id, open) {
+        if (open) expandedJournalRows[id] = true;
+        else delete expandedJournalRows[id];
+      },
+      onExpandedSet: function (ids, open) {
+        (ids || []).forEach(function (id) {
+          if (open) expandedJournalRows[id] = true;
+          else delete expandedJournalRows[id];
+        });
+        rerender(true);
+      },
+      onNavigate: function (field, filterValue, targetView) {
+        navigateCorrelation(field, filterValue, targetView, trajectoryChatId || state.activeChatId);
+      }
+    });
+    root.scrollTop = previousScroll;
+    nextCursor = value(response, "NextCursor", "nextCursor", null);
+    var hasMore = !!value(response, "HasMore", "hasMore", false);
+    var total = value(response, "TotalRows", "totalRows", events.length);
+    var matches = value(response, "TotalMatches", "totalMatches", total);
+    var message = result.error
+      ? "Журнал не отображён: " + result.error
+      : "Показано " + result.displayed + " из загруженных " + result.loaded +
+        " · совпадений в projection " + matches + " из " + total +
+        " · пересобрано из проверенного JSONL stream" +
+        (result.truncated || loadedLimitReached ? " · достигнут UI-лимит" : "");
+    $("trajectoryStatus").textContent = message;
+    $("loadMoreTrajectoryButton").textContent = "Ещё строки";
+    $("loadMoreTrajectoryButton").classList.toggle("hidden", !hasMore || !!loadedLimitReached);
+    $("trajectoryWorkspace").classList.remove("hidden");
+    renderCorrelationActions({});
+  }
+
+  function renderEvents(response, append, journalScrollTop) {
     activeView = value(response, "View", "view", "raw") || "raw";
     var page = activeView === "raw"
       ? (value(response, "Events", "events", []) || [])
       : (value(response, "Rows", "rows", []) || []);
-    events = append ? events.concat(page) : page;
+    var combined = append ? events.concat(page) : page;
+    var loadedLimitReached = false;
+    if (isRunJournal()) {
+      var journalLimit = window.RNAssistantRunJournal
+        ? window.RNAssistantRunJournal.maxRenderedRows : 1000;
+      loadedLimitReached = combined.length > journalLimit ||
+        (combined.length === journalLimit && !!value(response, "HasMore", "hasMore", false));
+      events = combined.slice(0, journalLimit);
+    } else {
+      events = combined;
+    }
+    if (isRunJournal()) {
+      renderRunJournal(response, journalScrollTop, loadedLimitReached);
+      return;
+    }
     var root = $("trajectoryEvents");
     root.replaceChildren();
     var artifactMap = {};
@@ -461,6 +570,7 @@
       ? " · пересобрано из VBA journal; source из CAS только по запросу"
       : (activeView === "raw" ? " · payload из CAS только по запросу" : " · пересобрано из JSONL event stream");
     $("trajectoryStatus").textContent = "Совпадений: " + matches + " из " + total + " · загружено " + events.length + projectionNote;
+    $("loadMoreTrajectoryButton").textContent = "Старше";
     $("loadMoreTrajectoryButton").classList.toggle("hidden", !hasMore);
     $("trajectoryWorkspace").classList.toggle("hidden", events.length === 0);
     if (!append && renderedEvents.length) {
@@ -554,7 +664,7 @@
       chatId: chatId,
       view: view,
       cursor: cursor || null,
-      pageSize: 100,
+      pageSize: view === "run-causal" ? 200 : 100,
       search: $("trajectorySearchInput").value.trim(),
       eventTypes: view === "raw" ? $("trajectoryTypeInput").value.split(",").map(function (item) { return item.trim(); }).filter(Boolean) : [],
       visibility: view === "raw" ? ($("trajectoryVisibilityInput").value || null) : null
@@ -638,7 +748,8 @@
     events = [];
     selected = null;
     nextCursor = null;
-    $("trajectoryEvents").replaceChildren();
+    if (window.RNAssistantRunJournal) window.RNAssistantRunJournal.unmount($("trajectoryEvents"));
+    else $("trajectoryEvents").replaceChildren();
     $("trajectoryWorkspace").classList.add("hidden");
     $("trajectoryEventTitle").textContent = "Запись не выбрана";
     $("trajectoryEventMeta").textContent = "";
@@ -648,10 +759,12 @@
     renderCorrelationActions({});
   }
 
-  async function refreshTrajectory(append) {
+  async function refreshTrajectory(append, preserveJournalScroll) {
     var requestedView = $("trajectoryViewInput").value || "raw";
     var vba = requestedView === "vba-mutations";
     var chatId = trajectoryChatId || state.activeChatId;
+    var journalScrollTop = requestedView === "run-causal" && (append || preserveJournalScroll)
+      ? $("trajectoryEvents").scrollTop : 0;
     if (!append) clearTrajectoryRows();
     if (!vba && !chatId) {
       $("trajectoryStatus").textContent = "Нет активного чата.";
@@ -665,7 +778,7 @@
       if (requestId !== trajectoryRequestId ||
         requestedView !== ($("trajectoryViewInput").value || "raw") ||
         (!vba && (trajectoryChatId || state.activeChatId) !== chatId)) return;
-      renderEvents(response, !!append);
+      renderEvents(response, !!append, journalScrollTop);
     } catch (error) {
       if (requestId !== trajectoryRequestId) return;
       $("trajectoryStatus").textContent = "Не удалось прочитать диагностику: " + error.message;
@@ -829,11 +942,13 @@
     var view = $("trajectoryViewInput").value || "raw";
     var raw = view === "raw";
     var vba = view === "vba-mutations";
+    var journal = view === "run-causal";
     var panel = document.querySelector(".trajectory-panel");
     if (panel) {
       panel.classList.toggle("is-derived", !raw);
       panel.classList.toggle("is-artifact-tree", view === "artifact-lineage");
       panel.classList.toggle("is-vba", vba);
+      panel.classList.toggle("is-run-journal", journal);
     }
     $("trajectoryViewField").classList.toggle("hidden", raw || vba);
     $("trajectoryTypeField").classList.toggle("hidden", !raw);
@@ -850,8 +965,11 @@
     } else if (vba) {
       $("trajectoryTitle").textContent = "VBA mutation journal";
       $("trajectoryDescription").textContent = "Document-scoped операции из mutations.events.jsonl. Before/after source загружается из CAS только по запросу.";
+    } else if (journal) {
+      $("trajectoryTitle").textContent = "Журнал запуска";
+      $("trajectoryDescription").textContent = "Один причинный поток: запрос, попытки модели и repair, accepted calls, dispatch, результат и фактический effect evidence. Строки раскрываются на месте.";
     } else {
-      $("trajectoryTitle").textContent = "Траектория выполнения";
+      $("trajectoryTitle").textContent = "Специализированная проекция";
       $("trajectoryDescription").textContent = "Read-only проекция, которая каждый раз пересобирается из проверенного JSONL stream и связывает исходные event seq/id.";
     }
     updateExportControls();
@@ -863,16 +981,41 @@
     trajectoryChatId = null;
     nextCursor = null;
     if (mode === "events") {
-      var current = $("trajectoryViewInput").value || "raw";
-      if (current !== "raw" && current !== "vba-mutations") lastDerivedView = current;
       $("trajectoryViewInput").value = "raw";
     } else if (mode === "vba-journal") {
       $("trajectoryViewInput").value = "vba-mutations";
     } else {
-      $("trajectoryViewInput").value = lastDerivedView === "raw" ? "model-replay" : lastDerivedView;
+      $("trajectoryViewInput").value = "run-causal";
+      var latestRunId = latestKnownRunId();
+      if (latestRunId) correlationFilter.runId = latestRunId;
     }
     updateViewControls();
     if (refresh) refreshTrajectory(false);
+  }
+
+  function openRunJournal(options) {
+    options = options || {};
+    if (typeof switchTab === "function") switchTab("settings");
+    var diagnosticsNav = document.querySelector('.settings-nav-button[data-settings-page="service"]');
+    if (diagnosticsNav) diagnosticsNav.click();
+    if (typeof setDiagnosticsTab === "function") setDiagnosticsTab("trajectory", false);
+    invalidateTrajectoryRequest();
+    correlationFilter = {};
+    trajectoryChatId = options.chatId || state.activeChatId || null;
+    $("trajectoryViewInput").value = "run-causal";
+    if (options.runId) correlationFilter.runId = String(options.runId);
+    if (options.turnId) correlationFilter.turnId = String(options.turnId);
+    if (options.stepId) correlationFilter.stepId = String(options.stepId);
+    if (options.toolCallId) correlationFilter.toolCallId = String(options.toolCallId);
+    if (!correlationFilter.runId && !correlationFilter.toolCallId) {
+      var latestRunId = latestKnownRunId();
+      if (latestRunId) correlationFilter.runId = latestRunId;
+    }
+    journalFilter = options.filter || "all";
+    expandedJournalRows = {};
+    nextCursor = null;
+    updateViewControls();
+    refreshTrajectory(false);
   }
 
   window.bindTrajectoryActions = function () {
@@ -881,7 +1024,7 @@
     var payload = $("loadTrajectoryPayloadButton");
     var vbaDetail = $("loadVbaMutationButton");
     var exportButton = $("exportTrajectoryButton");
-    if (refresh) refresh.addEventListener("click", function () { refreshTrajectory(false); });
+    if (refresh) refresh.addEventListener("click", function () { refreshTrajectory(false, true); });
     if (more) more.addEventListener("click", function () { refreshTrajectory(true); });
     if (exportButton) exportButton.addEventListener("click", exportTrajectory);
     ["trajectorySearchInput", "trajectoryTypeInput"].forEach(function (id) {
@@ -899,7 +1042,10 @@
       correlationFilter = {};
       trajectoryChatId = null;
       nextCursor = null;
-      if ($("trajectoryViewInput").value !== "raw") lastDerivedView = $("trajectoryViewInput").value;
+      if ($("trajectoryViewInput").value === "run-causal") {
+        var latestRunId = latestKnownRunId();
+        if (latestRunId) correlationFilter.runId = latestRunId;
+      }
       updateViewControls();
       refreshTrajectory(false);
     });
@@ -910,4 +1056,5 @@
     updateViewControls();
   };
   window.setTrajectoryDiagnosticsMode = setDiagnosticsMode;
+  window.openRunJournal = openRunJournal;
 }());

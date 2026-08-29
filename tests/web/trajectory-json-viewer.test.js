@@ -75,9 +75,10 @@ const rawResponse = {
   }]
 };
 let trajectoryResponse = rawResponse;
+const trajectoryQueries = [];
 
 const context = vm.createContext({
-  state: { activeChatId: "chat-1" },
+  state: { activeChatId: "chat-1", chatRuns: {}, messages: [] },
   $: get,
   document: {
     body,
@@ -87,8 +88,8 @@ const context = vm.createContext({
     execCommand: () => true
   },
   navigator: { clipboard: { writeText(text) { clipboard.push(String(text)); return Promise.resolve(); } } },
-  send(action) {
-    if (action === "getChatTrajectory") return Promise.resolve(trajectoryResponse);
+  send(action, payload) {
+    if (action === "getChatTrajectory") { trajectoryQueries.push(payload); return Promise.resolve(trajectoryResponse); }
     if (action === "getChatEventPayload") return Promise.resolve(payloadResponse);
     throw new Error("Unexpected bridge action: " + action);
   },
@@ -104,7 +105,7 @@ context.window = context;
 get("trajectoryViewInput").value = "raw";
 get("trajectoryExportRedactionInput").value = "metadata";
 
-for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-trajectory.js"]) {
+for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-run-journal.js", "app-trajectory.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 
@@ -166,7 +167,32 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.equal(get("trajectoryEvidenceDetails").classList.contains("hidden"), true);
   assert.equal(payloadHost.classList.contains("hidden"), true);
   console.log("PASS trajectory JSON viewer: refresh cleanup destroys stale detail viewers");
-  console.log("OK 5/5");
+
+  context.state.messages = [{ Id: "assistant-1", RunId: "run-1", Local: false }];
+  trajectoryResponse = {
+    ChatId: "chat-1", View: "run-causal", TotalRows: 3, TotalMatches: 3, HasMore: false,
+    Rows: [
+      { Id: "run-row-1", Kind: "model.request.prepared", Title: "Model request prepared", Status: "prepared", CreatedUtc: "2026-08-29T10:00:00Z", FirstSequence: 40, LastSequence: 40, RunId: "run-1", ModelAttemptId: "attempt-1", DataJson: '{"request":9007199254740993123456789}', DataTruncated: false, SourceEventSeqs: [40], SourceEventIds: ["evt-40"], ResourceRefs: [] },
+      { Id: "run-row-2", Kind: "model.attempt.rejected", Title: "Model response rejected", Status: "rejected", FailureCount: 1, CreatedUtc: "2026-08-29T10:00:01Z", FirstSequence: 41, LastSequence: 41, RunId: "run-1", ModelAttemptId: "attempt-1", DataJson: '{"error":"duplicate id","html":"</script><img onerror=1>"}', DataTruncated: false, SourceEventSeqs: [41], SourceEventIds: ["evt-41"], ResourceRefs: [] },
+      { Id: "run-row-3", Kind: "turn.ended", Title: "Turn ended", Status: "failed", CreatedUtc: "2026-08-29T10:00:02Z", FirstSequence: 42, LastSequence: 42, RunId: "run-1", DataJson: '{"status":"failed"}', DataTruncated: false, SourceEventSeqs: [42], SourceEventIds: ["evt-42"], ResourceRefs: [] }
+    ]
+  };
+  context.setTrajectoryDiagnosticsMode("trajectory", true);
+  await settle();
+  const lastQuery = trajectoryQueries.at(-1);
+  assert.equal(lastQuery.view, "run-causal");
+  assert.equal(lastQuery.pageSize, 200);
+  assert.equal(lastQuery.runId, "run-1");
+  assert.equal(panel.classList.contains("is-run-journal"), true);
+  assert.equal(get("trajectoryEvents").querySelectorAll(".rn-run-journal-row").length, 3);
+  button(get("trajectoryEvents"), "Проблемы 2").click();
+  assert.equal(get("trajectoryEvents").querySelectorAll(".rn-run-journal-row").length, 2);
+  const rejected = get("trajectoryEvents").querySelectorAll(".rn-run-journal-row")[0];
+  rejected.open = true; rejected.dispatch("toggle");
+  assert.match(rejected.textContent, /duplicate id/);
+  assert.match(rejected.textContent, /<\/script><img onerror=1>/);
+  console.log("PASS run journal integration: latest persisted run opens bounded causal rows with lazy exact JSON");
+  console.log("OK 6/6");
 })().catch(error => {
   console.error(error);
   process.exitCode = 1;

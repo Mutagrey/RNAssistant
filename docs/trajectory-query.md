@@ -2,11 +2,12 @@
 
 `ITrajectoryQuery` is a read-only, disposable projection over a fully validated session event stream. The implementation receives canonical `SessionEvent` records from `ChatStore`, builds query metadata in memory, returns one page, and discards it. It never writes an index or another history file.
 
-Phase 9A now exposes a host-neutral `run-causal` projection over these source events.
-The expandable journal and shared JSON viewer remain Phase 9B/9C:
+Phase 9A exposes a host-neutral `run-causal` projection over these source events.
+Phase 9B supplies the shared JSON viewer and Phase 9C now renders the projection as
+an expandable host-neutral run journal:
 [R32 — run journal and shared JSON viewer](stabilization/R32_DIAGNOSTICS_JSON_VIEWER.md).
-Existing query/export authority and raw pagination remain intact; neither projection
-nor future UI is a second durable log.
+Existing query/export authority and raw pagination remain intact; the journal is not
+a second durable log.
 
 ## Query contract
 
@@ -60,6 +61,14 @@ same origin on earlier current-v4 commits that were mislabeled `tool.result.reco
 it never rewrites history or affects replay/execution.
 
 Diagnostics turns row correlations into navigation rather than another index: run/turn/step/tool-call filters reopen the relevant chat projection, artifact and parent ids open lineage, and a source-event action opens the bounded raw sequence range. Document-scoped VBA mutation rows use their recorded `SessionId` to navigate back to the originating chat without treating VBA as a chat artifact.
+
+The Phase 9C UI defaults Diagnostics to the latest known run, requests at most 200
+chronological rows per page and passes already loaded DTOs to `RNAssistantRunJournal`.
+It keeps filters, expansion and scroll in UI memory only. Expanded row data and exact
+projection correlations use the shared JSON viewer; the source-range action returns
+to raw JSONL rows and their existing lazy CAS payload owner. Missing evidence and
+`ui.projected` retain their non-proof wording. No journal component reads bridge,
+network, CAS or storage directly.
 
 New `llm.response` events keep compact actual token usage inline beside the immutable CAS response reference. Older streams fall back to token usage in replayable assistant-message operations. Cost is shown only when the provider persisted it in `usage`; RNAssistant does not recalculate historical cost from mutable current price tables.
 

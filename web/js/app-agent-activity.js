@@ -235,7 +235,7 @@ function createAgentTextButton(label, className, onClick) {
   return button;
 }
 
-function appendActivityErrorPanel(node, activity) {
+function appendActivityErrorPanel(node, activity, context) {
   if (activityStatus(activity) !== "failed") {
     return;
   }
@@ -263,6 +263,17 @@ function appendActivityErrorPanel(node, activity) {
     "Status: " + activityStatus(activity),
     "Reason: " + result
   ].join("\n")));
+  actions.appendChild(createAgentTextButton("Открыть журнал запуска", "secondary", function () {
+    if (typeof window.openRunJournal !== "function") return;
+    var message = context && context.message ? context.message : null;
+    window.openRunJournal({
+      chatId: state.activeChatId,
+      runId: activityValue(activity, "RunId", "runId", "") || (message ? messageRunId(message) : ""),
+      stepId: activityStepId(activity),
+      toolCallId: activityToolCallId(activity),
+      filter: "problems"
+    });
+  }));
   panel.appendChild(actions);
   node.appendChild(panel);
 }
@@ -303,7 +314,7 @@ function appendActivityDetailsContent(node, activity, context) {
     body.appendChild(childList);
   }
 
-  appendActivityErrorPanel(body, activity);
+  appendActivityErrorPanel(body, activity, context);
 
   if (activityStatus(activity) !== "failed" && activityResultMessage(activity)) {
     var result = document.createElement("div");
