@@ -1,8 +1,8 @@
 # R32 — Vendor/UI evaluation
 
-Дата оценки: 2026-08-29. Baseline: `dde18cf`; security hotfix DOMPurify —
-`a5cd6ff`. Это docs-only решение для будущей Phase 9B. Новые UI vendors не
-подключены, текущая Phase 6 и её следующий mutation/verifier slice не меняются.
+Дата оценки: 2026-08-29. Baseline оценки: `dde18cf`; security hotfix DOMPurify —
+`a5cd6ff`. R36 provenance/offline baseline закрыт host-neutral поверх `e278db8`;
+первый новый vendor остаётся отдельным 9B3 switch.
 
 ## Решение
 
@@ -30,7 +30,8 @@ Worker сам по себе не нарушает offline: это локальн
 а не сетевой сервис. Запрещены remote/unpinned worker scripts и runtime download.
 Допустим exact vendored worker, загружаемый с mapped local HTTPS origin через
 host-owned allowlist/factory, с CSP `worker-src 'self'`, bounded lifetime и обязательным
-`terminate`. Текущий RNAssistant открывает UI через `file://`; Monaco и PDF.js прямо
+`terminate`. Пока worker manifest пуст, main UI явно держит `worker-src 'none'`.
+Текущий RNAssistant открывает UI через `file://`; Monaco и PDF.js прямо
 не поддерживают worker в таком origin. Исправление возможно через
 [WebView2 virtual host mapping](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/working-with-local-content),
 но это отдельное изменение hosting/security boundary с Windows gate.
@@ -43,12 +44,14 @@ host-owned allowlist/factory, с CSP `worker-src 'self'`, bounded lifetime и о
 | marked | 12.0.2 | Markdown | оставить; замена на markdown-it не даёт пользы R32 |
 | highlight.js | 11.9.0 | code blocks | оставить до отдельного upgrade review |
 | CodeMirror | 5.65.16 | JSON/VBA/Markdown/HTML editors | оставить; read-only viewer им не подменять |
-| KaTeX | 0.16.11 | формулы | оставить; добавить в общий provenance manifest |
+| KaTeX | 0.16.11 | формулы | оставить; R36 manifest фиксирует WOFF2-only локальную производную CSS |
 | ECharts | 5.6.0 | chart artifacts | оставить за существующим chart adapter |
 
-Vendored runtime сейчас занимает около 2.0 MB. `web/vendor-notices.md` фиксировал
-версии только части пакетов, без общего file manifest/hashes и полного набора license
-texts. DOMPurify уже приведён к новому правилу; остальной inventory — R36 до 9B.
+Vendored runtime занимает около 2.0 MB. R36 добавил
+[`vendor-manifest.json`](../../web/vendor-manifest.json) для всех 36 runtime files,
+полные local licenses/transitive decisions, KaTeX WOFF2-only cleanup и Feather
+source-only attribution. [Evidence](R36_WEB_VENDOR_GATE.md). Lucide и новые tree
+assets пока не bundled.
 
 ## P0/P1 кандидаты
 
@@ -130,7 +133,7 @@ Tool Result v1 / ResourceRef / typed UI DTO
 
 ## Порядок реализации
 
-1. **До первого vendor switch:** закрыть R36 manifest/license/hash для уже vendored assets. Собственный 9B1 adapter не добавляет vendor и не снимает этот gate.
+1. **R36 (done host-neutral):** manifest/license/hash/transitive/offline gate для уже vendored assets закрыт; каждый новый vendor расширяет тот же allowlist отдельно.
 2. **9A (done host-neutral):** correlated run projection и direct navigation contract.
 3. **9B1 (done host-neutral):** lossless bounded `JsonAdapter` + raw/pretty/tree/copy tests.
 4. **9B2A (done host-neutral):** diagnostics event/evidence/JSON payload switch; удалён его старый pretty/plain-pre path.

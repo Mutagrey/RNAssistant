@@ -20,8 +20,20 @@ these NuGet packages.
 Task pane JS/CSS is committed in `web/`:
 
 - `marked 12.0.2`
-- `DOMPurify 3.1.6`
+- `DOMPurify 3.4.14`
 - `highlight.js 11.9.0`
+- `CodeMirror 5.65.16`
+- `KaTeX 0.16.11`
+- `Apache ECharts 5.6.0`
+
+Exact runtime files, SHA-256 hashes, package commits/integrities, transitive browser
+asset decisions and local license texts are recorded in
+[`web/vendor-manifest.json`](../web/vendor-manifest.json) and
+[`web/vendor-notices.md`](../web/vendor-notices.md). Feather Icons 4.29.2 is
+source-only attribution for adapted inline SVG paths; its runtime package is not
+loaded. The current main UI has no worker or WASM asset and admits only the 20
+manifested KaTeX WOFF2 fonts. Local workers remain allowed after an explicit
+manifest/factory/CSP/lifecycle change.
 
 The fixed WebView2 runtime is intentionally not expanded here because it is over 250 MB. The code supports it from `vendor/webview2-runtime/<version>/` and falls back to Evergreen runtime when absent.
 

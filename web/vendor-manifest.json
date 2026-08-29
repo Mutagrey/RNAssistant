@@ -1,0 +1,443 @@
+{
+  "schemaVersion": 1,
+  "scope": "RNAssistant main static WebView UI",
+  "sourceUrlsAreProvenanceOnly": true,
+  "policy": {
+    "runtimeNetwork": "deny",
+    "telemetry": "deny",
+    "autoUpdate": "deny",
+    "dynamicImport": "deny",
+    "csp": {
+      "connectSrc": [
+        "'none'"
+      ],
+      "fontSrc": [
+        "'self'"
+      ],
+      "workerSrc": [
+        "'none'"
+      ]
+    },
+    "workers": {
+      "mode": "deny-until-manifested-host-factory",
+      "allowed": [],
+      "requiredLifecycle": [
+        "create-by-manifest-id",
+        "cancel",
+        "terminate"
+      ]
+    },
+    "wasm": {
+      "mode": "deny",
+      "allowed": []
+    },
+    "fonts": {
+      "mode": "manifest-only",
+      "formats": [
+        "woff2"
+      ],
+      "allowedCount": 20
+    }
+  },
+  "packages": [
+    {
+      "id": "dompurify",
+      "npmPackage": "dompurify",
+      "version": "3.4.14",
+      "license": "MPL-2.0 OR Apache-2.0",
+      "gitHead": "4e6fe24173f1a85eafacd95e3c82966e29d34d49",
+      "npmTarball": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.14.tgz",
+      "npmIntegrity": "sha512-dVoH9z+MY+C9IilgGCk3YfFqjLi3fChm2OiKJMzh6axrJ5qwxqWaZamgmHrpv22CN/KdbZJuGEGgfQoL00LTdg==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "licenseFiles": [
+        {
+          "path": "licenses/dompurify-3.4.14/Apache-2.0.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "licenses/dompurify-3.4.14/MPL-2.0.txt",
+          "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+        }
+      ]
+    },
+    {
+      "id": "marked",
+      "npmPackage": "marked",
+      "version": "12.0.2",
+      "license": "MIT",
+      "gitHead": "c6a98ea66c36d12255543e2fabd8f8236dbc5276",
+      "npmTarball": "https://registry.npmjs.org/marked/-/marked-12.0.2.tgz",
+      "npmIntegrity": "sha512-qXUm7e/YKFoqFPYPa3Ukg9xlI5cyAtGmyEIzMfW//m6kXwCy2Ps9DYf5ioijFKQ8qyuscrHoY04iJGctu2Kg0Q==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "licenseFiles": [
+        {
+          "path": "licenses/marked-12.0.2/LICENSE.md",
+          "sha256": "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c"
+        }
+      ]
+    },
+    {
+      "id": "highlight.js",
+      "npmPackage": "highlight.js",
+      "version": "11.9.0",
+      "license": "BSD-3-Clause",
+      "gitHead": "f47103d4f1ac1592c56904574d1fbf5bf2475605",
+      "npmTarball": "https://registry.npmjs.org/highlight.js/-/highlight.js-11.9.0.tgz",
+      "npmIntegrity": "sha512-fJ7cW7fQGCYAkgv4CPfwFHrfd/cLS4Hau96JuJ+ZTOWhjnhoeN1ub1tFmALm/+lW5z4WCAuAV9bm05AP0mS6Gw==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "licenseFiles": [
+        {
+          "path": "licenses/highlight.js-11.9.0/LICENSE",
+          "sha256": "6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490"
+        }
+      ]
+    },
+    {
+      "id": "codemirror",
+      "npmPackage": "codemirror",
+      "version": "5.65.16",
+      "license": "MIT",
+      "gitHead": "e84384b4210bc35300994de07c6333666f2a5c9e",
+      "npmTarball": "https://registry.npmjs.org/codemirror/-/codemirror-5.65.16.tgz",
+      "npmIntegrity": "sha512-br21LjYmSlVL0vFCPWPfhzUCT34FM/pAdK7rRIZwa0rrtrIdotvP4Oh4GUHsu2E3IrQMCfRkL/fN3ytMNxVQvg==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "licenseFiles": [
+        {
+          "path": "licenses/codemirror-5.65.16/LICENSE",
+          "sha256": "168a4becc968f5001e2ee2e0291b6e4daabafc1894a11ade1e11d56e96096e07"
+        }
+      ]
+    },
+    {
+      "id": "feather-icons",
+      "npmPackage": "feather-icons",
+      "version": "4.29.2",
+      "license": "MIT",
+      "gitHead": "1b002399e8758fb2bccea4d07312dc9e0f43dcb8",
+      "npmTarball": "https://registry.npmjs.org/feather-icons/-/feather-icons-4.29.2.tgz",
+      "npmIntegrity": "sha512-0TaCFTnBTVCz6U+baY2UJNKne5ifGh7sMG4ZC2LoBWCZdIyPa+y6UiR4lEYGws1JOFWdee8KAsAIvu0VcXqiqA==",
+      "packageDependencies": {
+        "classnames": "^2.2.5",
+        "core-js": "^3.1.3"
+      },
+      "browserRuntimeDependencies": [],
+      "sourceOnly": true,
+      "dependencyNotes": "Selected inline SVG paths are adapted into application HTML/JS; no Feather runtime package or dependencies are loaded.",
+      "licenseFiles": [
+        {
+          "path": "licenses/feather-icons-4.29.2/LICENSE",
+          "sha256": "308028e93fcf84972523cdf6e616f73168546b4953895f516d01287f16fe7bee"
+        }
+      ]
+    },
+    {
+      "id": "katex",
+      "npmPackage": "katex",
+      "version": "0.16.11",
+      "license": "MIT",
+      "gitHead": "fbbea3573439d51e6568356f5886053b111b1f88",
+      "npmTarball": "https://registry.npmjs.org/katex/-/katex-0.16.11.tgz",
+      "npmIntegrity": "sha512-RQrI8rlHY92OLf3rho/Ts8i/XvjgguEjOkO1BEXcU3N8BqPpSzBNwV/G0Ukr+P/l3ivvJUE/Fa/CwbS6HesGNQ==",
+      "packageDependencies": {
+        "commander": "^8.3.0"
+      },
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "commander is CLI-only and is not loaded by the selected browser dist assets.",
+      "licenseFiles": [
+        {
+          "path": "licenses/katex-0.16.11/LICENSE",
+          "sha256": "766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3"
+        }
+      ]
+    },
+    {
+      "id": "echarts",
+      "npmPackage": "echarts",
+      "version": "5.6.0",
+      "license": "Apache-2.0",
+      "gitHead": "fe42bc1ea3a8d2ef7864cfe303de34f480149d09",
+      "npmTarball": "https://registry.npmjs.org/echarts/-/echarts-5.6.0.tgz",
+      "npmIntegrity": "sha512-oTbVTsXfKuEhxftHqL5xprgLoc0k7uScAwtryCgWF6hPYFLRwOUHiFmHGCBKP5NPFNkDVopOieyUqYGH8Fa3kA==",
+      "packageDependencies": {
+        "tslib": "2.3.0",
+        "zrender": "5.6.1"
+      },
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "The selected dist bundle embeds tslib/zrender; no separate runtime files are loaded. Bundled d3-derived code is covered by licenses/echarts-5.6.0/licenses/LICENSE-d3.",
+      "licenseFiles": [
+        {
+          "path": "licenses/echarts-5.6.0/LICENSE",
+          "sha256": "634293835b43a6dd2094fa39182a3d9a6b9ca43b7fdb9ac354e8037af2a3093a"
+        },
+        {
+          "path": "licenses/echarts-5.6.0/NOTICE",
+          "sha256": "fa99ac3af859d0e13166906dc53a73ad34a08898da7e8ae83407275496e9e30c"
+        },
+        {
+          "path": "licenses/echarts-5.6.0/licenses/LICENSE-d3",
+          "sha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "css/vendor/codemirror/codemirror.min.css",
+      "package": "codemirror",
+      "bytes": 6037,
+      "sha256": "11077112ab6955d29fe41085c62365c7d4a2f00a570c7475e2aec2a8cbc85fc4",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_AMS-Regular.woff2",
+      "package": "katex",
+      "bytes": 28076,
+      "sha256": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_AMS-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Caligraphic-Bold.woff2",
+      "package": "katex",
+      "bytes": 6912,
+      "sha256": "de7701e42cf1f4cf0b766c03fb27977207eee2f4fd5d76fa82188406da43ea4c",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Caligraphic-Bold.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Caligraphic-Regular.woff2",
+      "package": "katex",
+      "bytes": 6908,
+      "sha256": "5d53e70ad607c2352162dec9e0923fb54ecdafaccbf604cd8dcf7d00facb989b",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Caligraphic-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Fraktur-Bold.woff2",
+      "package": "katex",
+      "bytes": 11348,
+      "sha256": "74444efd593c005e3f4573b44524704c0af0a937fe911cca9e94068d0d140d3f",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Fraktur-Bold.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Fraktur-Regular.woff2",
+      "package": "katex",
+      "bytes": 11316,
+      "sha256": "51814d270d06ff0255dba0799994fa4d8c84d11f09951d47595f4abb1f3602dc",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Fraktur-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Main-Bold.woff2",
+      "package": "katex",
+      "bytes": 25324,
+      "sha256": "0f60d1b897938ec918c8ce073092411baf9438f6739465693ff18b0f9d20b021",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Main-Bold.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Main-BoldItalic.woff2",
+      "package": "katex",
+      "bytes": 16780,
+      "sha256": "99cd42a3c072d918f2f44984a807cf7aa16e13545fd0875fc07c6c65f99e715b",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Main-BoldItalic.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Main-Italic.woff2",
+      "package": "katex",
+      "bytes": 16988,
+      "sha256": "97479ca6cce906abc961ecac96faa5f9ca2e61b8e7670d475826bcdee9a7c267",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Main-Italic.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Main-Regular.woff2",
+      "package": "katex",
+      "bytes": 26272,
+      "sha256": "c2342cd8b869e01752a9321dc17213fc40d4d04c79688c1d43f2cf316abd7866",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Main-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Math-BoldItalic.woff2",
+      "package": "katex",
+      "bytes": 16400,
+      "sha256": "dc47344dbb6cb5b655c8460d561f4df5f501b90c804ad3c6cec65fe322351ab1",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Math-BoldItalic.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Math-Italic.woff2",
+      "package": "katex",
+      "bytes": 16440,
+      "sha256": "7af58c5ec8f132a2ddde9027c6d7814decce4d3b822a11192a42a20e2e973264",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Math-Italic.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_SansSerif-Bold.woff2",
+      "package": "katex",
+      "bytes": 12216,
+      "sha256": "e99ae51144bf1232efcc1bfe5add36262c6866b0faab24fa75740e1b98577a62",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_SansSerif-Bold.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_SansSerif-Italic.woff2",
+      "package": "katex",
+      "bytes": 12028,
+      "sha256": "00b26ac825e2095056396e0553b8ac26d3f8ad158c3826e28b4c45b385c4714a",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_SansSerif-Italic.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_SansSerif-Regular.woff2",
+      "package": "katex",
+      "bytes": 10344,
+      "sha256": "68e8c73ef42afd3ccec58bf0fba302cce448938e7fc020a5e31f8a952eee1342",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_SansSerif-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Script-Regular.woff2",
+      "package": "katex",
+      "bytes": 9644,
+      "sha256": "036d4e95149b69ff9bcc0cd55771efeb25ffa3947293e69acd78d5ac328c684b",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Script-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Size1-Regular.woff2",
+      "package": "katex",
+      "bytes": 5468,
+      "sha256": "6b47c40166b6dbe21a5dfca7718413f2147fd2399be1ba605d8ad39cedf25dfe",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Size1-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Size2-Regular.woff2",
+      "package": "katex",
+      "bytes": 5208,
+      "sha256": "d04c54219f9eaec6d4d4fd42dfb28785975a4794d6b2fc71e566b9cd6db842dd",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Size2-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Size3-Regular.woff2",
+      "package": "katex",
+      "bytes": 3624,
+      "sha256": "73d591271b1604960cb10bb90fee021670af7297017e0e98480b332d11f51995",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Size3-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Size4-Regular.woff2",
+      "package": "katex",
+      "bytes": 4928,
+      "sha256": "a4af7d414440a1c1790825cfb700cf9cf43b0f2c4b04f0ebc523011ad9853ec0",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Size4-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/fonts/KaTeX_Typewriter-Regular.woff2",
+      "package": "katex",
+      "bytes": 13568,
+      "sha256": "71d517d67827787cfabdf186914cc3358eda539e37931941f2b2fd4a21f68c0b",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/fonts/KaTeX_Typewriter-Regular.woff2"
+    },
+    {
+      "path": "css/vendor/highlight-github-dark.min.css",
+      "package": "highlight.js",
+      "bytes": 1315,
+      "sha256": "9f208d022102b1d0c7aebfecd8e42ca7997d5de636649d2b31ea63093d809019",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
+    },
+    {
+      "path": "css/vendor/katex.min.css",
+      "package": "katex",
+      "bytes": 21201,
+      "sha256": "f0dbfcc2940b4d788c805c1a1e117e898d2814b0f1a52bf16640543216e0964d",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css",
+      "upstreamSha256": "717bc9ae7853b61f0f76455dddf0ecd4f527a783f42de2ac24684899c1c46258",
+      "localTransform": "Removed .woff/.ttf fallback URLs; WebView2 uses only the 20 manifest-owned WOFF2 files."
+    },
+    {
+      "path": "js/vendor/auto-render.min.js",
+      "package": "katex",
+      "bytes": 3481,
+      "sha256": "7b57d427ac6270677daf8d8380ded2cc73336f9149a167b8e1fe0d6ef66604ae",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/addon/edit/closebrackets.min.js",
+      "package": "codemirror",
+      "bytes": 3523,
+      "sha256": "df4a87dd3b175b509468755b74d06f0e82ff56f213f341f776c26ff0f0d27b37",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/addon/edit/matchbrackets.min.js",
+      "package": "codemirror",
+      "bytes": 3096,
+      "sha256": "f359c5f395a2a08191557d40b61ef8c3893803da9019171cc44b8d9c8c7d4a3a",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/addon/selection/active-line.min.js",
+      "package": "codemirror",
+      "bytes": 1328,
+      "sha256": "bbca0b4ba03a94163a1eaa604b45ef038c12d8572b7cc16a41dd287b40cc998c",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/codemirror.min.js",
+      "package": "codemirror",
+      "bytes": 170535,
+      "sha256": "f102bb61fb2ac45c3a611847edd9948faad0ab22a83a2dfa9974be5031079b15",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/mode/javascript/javascript.min.js",
+      "package": "codemirror",
+      "bytes": 17315,
+      "sha256": "99b46f351b4b1ce8a14cdf04fe4235ecb429b5b7b986867034a7dc195a710a58",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/mode/markdown/markdown.min.js",
+      "package": "codemirror",
+      "bytes": 14631,
+      "sha256": "6d31310a4719d151d198b604864fa7cb7dcaa5013888863585e06d7c7085f3d8",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/mode/vb/vb.min.js",
+      "package": "codemirror",
+      "bytes": 4108,
+      "sha256": "89b6b67e864d6b532c11cb1eaab77f832c94ef34330d4b21526ae073bdc964b6",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/vb/vb.min.js"
+    },
+    {
+      "path": "js/vendor/echarts.min.js",
+      "package": "echarts",
+      "bytes": 1034102,
+      "sha256": "bf4a223524e40b77c304bec67e1222cf551f14880cf42c69dc046558e11c07b1",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"
+    },
+    {
+      "path": "js/vendor/highlight.min.js",
+      "package": "highlight.js",
+      "bytes": 121727,
+      "sha256": "837a6fa5b0c736b52bbde2b2b6190f305da3fc9ed41681db5321507057b5c846",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
+    },
+    {
+      "path": "js/vendor/katex.min.js",
+      "package": "katex",
+      "bytes": 275414,
+      "sha256": "e6bfe5deebd4c7ccd272055bab63bd3ab2c73b907b6e6a22d352740a81381fd4",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"
+    },
+    {
+      "path": "js/vendor/marked.min.js",
+      "package": "marked",
+      "bytes": 35479,
+      "sha256": "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"
+    },
+    {
+      "path": "js/vendor/purify.min.js",
+      "package": "dompurify",
+      "bytes": 29204,
+      "sha256": "c2f26ea4fc0d88141c9aa430eb515ac86fce59418ceebd85fa475b87a8d6c3e6",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.14/purify.min.js"
+    }
+  ]
+}

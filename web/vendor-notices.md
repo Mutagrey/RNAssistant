@@ -1,14 +1,36 @@
 # Web Vendor Notices
 
-Files under `web/js/vendor` and `web/css/vendor` are vendored for offline Windows builds.
+Files under `web/js/vendor` and `web/css/vendor` are fixed, local browser assets
+for the main RNAssistant WebView UI. The machine-readable authority is
+[`vendor-manifest.json`](vendor-manifest.json): it records every runtime file,
+exact byte length/SHA-256, package version, npm tarball integrity/git commit,
+license files and transitive browser-asset policy. Its HTTPS URLs are provenance
+only; the application never loads the manifest or those URLs at runtime.
 
-- `marked.min.js` from `marked@12.0.2`
-- `purify.min.js` from `dompurify@3.4.14` (`gitHead`
-  `4e6fe24173f1a85eafacd95e3c82966e29d34d49`), npm integrity
-  `sha512-dVoH9z+MY+C9IilgGCk3YfFqjLi3fChm2OiKJMzh6axrJ5qwxqWaZamgmHrpv22CN/KdbZJuGEGgfQoL00LTdg==`,
-  vendored SHA-256 `c2f26ea4fc0d88141c9aa430eb515ac86fce59418ceebd85fa475b87a8d6c3e6`.
-  Dual licensed Apache-2.0 OR MPL-2.0; exact texts are under
-  `web/licenses/dompurify-3.4.14/`.
-- `highlight.min.js` and `highlight-github-dark.min.css` from `highlight.js@11.9.0`
-- `codemirror/**` from `codemirror@5.65.16`
-- `echarts.min.js` from `echarts@5.6.0`, Apache License 2.0
+| Package | Version | License | Local license text |
+|---|---:|---|---|
+| DOMPurify | 3.4.14 | MPL-2.0 OR Apache-2.0 | [`licenses/dompurify-3.4.14`](licenses/dompurify-3.4.14/) |
+| marked | 12.0.2 | MIT (plus bundled Markdown notice) | [`licenses/marked-12.0.2/LICENSE.md`](licenses/marked-12.0.2/LICENSE.md) |
+| highlight.js | 11.9.0 | BSD-3-Clause | [`licenses/highlight.js-11.9.0/LICENSE`](licenses/highlight.js-11.9.0/LICENSE) |
+| CodeMirror | 5.65.16 | MIT | [`licenses/codemirror-5.65.16/LICENSE`](licenses/codemirror-5.65.16/LICENSE) |
+| Feather Icons | 4.29.2 | MIT | [`licenses/feather-icons-4.29.2/LICENSE`](licenses/feather-icons-4.29.2/LICENSE) |
+| KaTeX | 0.16.11 | MIT | [`licenses/katex-0.16.11/LICENSE`](licenses/katex-0.16.11/LICENSE) |
+| Apache ECharts | 5.6.0 | Apache-2.0; bundled d3 notice BSD-3-Clause | [`licenses/echarts-5.6.0`](licenses/echarts-5.6.0/) |
+
+KaTeX ships only the 20 WOFF2 files used by current WebView2. Its local CSS is a
+documented derivative of the exact 0.16.11 distribution: unused `.woff`/`.ttf`
+fallback URLs were removed so every URL resolves to a manifested local file.
+ECharts uses its prebuilt browser bundle; `zrender`/`tslib` are embedded and no
+separate dependency is loaded.
+
+Selected existing inline SVG paths are adapted from Feather Icons. Feather is
+source-only: its JavaScript package and npm dependencies are not loaded at runtime.
+Lucide is not currently bundled; a future shared icon adapter requires its own
+pinned manifest entry and consumer switch.
+
+The main UI keeps `connect-src 'none'`, `font-src 'self'` and, while the worker
+allowlist is empty, `worker-src 'none'`. There are no runtime WASM or worker files.
+A future local worker is permitted only after one atomic change adds its exact
+manifest entry, local host factory/allowlist, cancellation/`terminate` ownership,
+CSP update and zero-network test. User-approved HTML-workspace HTTP access is a
+separate host bridge and does not relax the main UI vendor policy.

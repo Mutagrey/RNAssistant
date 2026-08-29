@@ -1,12 +1,24 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9B2B4 Markdown JSON consumer switch (done host-neutral)
-Current task: завершённые top-level fenced `json` blocks в message/Agent diagnostics переключены на общий `JsonAdapter`; live/unclosed/non-JSON blocks не менялись.
+Current phase: Phase 9 — R36 web vendor provenance/offline gate (done host-neutral)
+Current task: существующие WebView assets, licenses, exact hashes и transitive runtime policy сведены в fail-closed manifest; новых vendors/consumers нет.
 
-Next step: отдельный R36 provenance/offline gate для уже vendored assets; только после него — 9B3 Web Awesome Tree bounded-navigation spike. Local workers разрешены политикой, но этот slice их не вводит.
+Next step: отдельный 9B3 Web Awesome Tree bounded-navigation spike через `TreeAdapter` на одном bounded consumer. Local workers разрешены политикой, но текущий allowlist пуст и Web Awesome Tree worker не требует.
 Required context: [master Phase 9 / exception](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory закрыт host-neutral; 9B3/9B4/9C, R36 и общий R32 Windows acceptance открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory и R36 закрыты host-neutral; 9B3/9B4/9C и общий R32 Windows acceptance открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+
+R36 web vendor gate (2026-08-29): добавлен exact allowlist для 36 существующих
+runtime files: версии/git heads/npm integrity, bytes/SHA-256, local licenses и
+transitive browser decisions. Закрыты реальные gaps: KaTeX CSS больше не ссылается
+на отсутствующие 20 WOFF + 20 TTF и использует только 20 manifested WOFF2; Feather
+Icons зафиксирован как source-only provenance существующих inline SVG без runtime
+package. Main UI явно держит `connect-src 'none'`, `font-src 'self'` и при пустом
+allowlist `worker-src 'none'`; локальные workers разрешены только после manifested
+factory/cancel/terminate/CSP slice. Vendor gate 5/5 и existing web regression 49/49;
+local Chromium загрузил 7
+existing globals, remote/failed requests и page errors 0. [Evidence](R36_WEB_VENDOR_GATE.md).
+Новый vendor/UI consumer не подключался; Windows WebView2 gate открыт.
 
 Phase 9B2B4 Markdown JSON switch (2026-08-29): только закрытые top-level fenced
 blocks с exact language `json` в завершённых persisted/Agent/diagnostic сообщениях
@@ -200,7 +212,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 6 | 6A + R33 + 6B VbaReader done host-neutral; remaining slices pending | `e0360f3` (6A); `62010c8` (R33); 6B evidence below | [6A: 58](#phase-6a--pure-vba-text-extraction); [R33: 8](#r33--overlapping-exact-matches); [6B: 60](#phase-6b--typed-vbareader) | deferred | Mutation/verifier/journal/result/fault matrix and full VBA gate open |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
-| 9 | through 9B2B4 done host-neutral; remainder pending | — | 17 harness + 35 JSON consumer UI pass | not performed | Read-only JSON inventory switched; R36/tree/diff/journal UI open |
+| 9 | through R36 done host-neutral; remainder pending | — | 17 harness + 49 existing UI + 5 vendor gate pass | not performed | Read-only JSON inventory and vendor baseline closed; tree/diff/journal UI open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |

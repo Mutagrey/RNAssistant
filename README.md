@@ -165,6 +165,7 @@ If the Signing page is unavailable, unload the project and add a local line manu
 ```
 
 The add-ins copy `web/**` to output and load `web/index.html` inside a WinForms `WebView2` hosted by a VSTO custom task pane.
+Pinned offline browser assets and their licenses are governed by [`web/vendor-manifest.json`](web/vendor-manifest.json) and [`web/vendor-notices.md`](web/vendor-notices.md).
 
 ## WebView2 Runtime
 
