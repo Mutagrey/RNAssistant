@@ -21,6 +21,20 @@ CSP и остальные vendors не менялись. Headless Chromium за�
 malicious inputs; `node --check`, diff/links и version format — перед commit.
 Реальный WebView2 на Windows не проверен; текущая Phase 6 и следующий slice не меняются.
 
+R32 vendor/UI evaluation (2026-08-29, docs-only после R35): проверены existing
+vendors и предложенный shortlist по source/package metadata, фактические bundles
+четырёх основных кандидатов измерены. [Решение](R32_VENDOR_UI_EVALUATION.md):
+Web Awesome Tree допускается только как tree-navigation spike; Wunderbaum — резерв
+для measured large treegrid; оба JSON-кандидата отклонены для authoritative payload,
+поэтому 9B начинает с собственного bounded/lossless `JsonAdapter`. Monaco/PDF.js
+не подходят текущему static-file/no-worker contract; `xterm.js` не используется
+для structured logs. `ViewerRegistry` закреплён как UI-only adapter boundary поверх
+Tool Result v1/`ResourceRef`, не новый model transport. R36 фиксирует незакрытый
+provenance/offline inventory остальных vendors. Runtime/UI не менялись, Phase 6 и
+следующий шаг сохранены; diff/7 docs, 99 local links и ValidateVersionFormat — pass,
+build/harness не запускались. Windows/WebView qualification и Phase 9 implementation
+открыты.
+
 R29 (предыдущий commit `6a256f0`): model wire содержит только name/arguments, kernel выдаёт ID до accepted append/confirmation/dispatch; ToolCallId + immutable attempt/position origin сохраняются в том же stream без переписывания raw response. Tests покрывают long HTML, allocator failure, native pairing, repair correlation, confirmation/replay и ISO-preserving clone. [Evidence/ограничения/чистка](R29_RUNTIME_CALL_IDS.md); этот protocol switch завершён до Phase 4, product version остаётся 16.1.0-dev.
 
 Architecture audit (2026-08-28, docs-only commit `1f65f5d`, baseline `15dea46`): уточнены ID ownership, batch/control boundaries, actual effect evidence, ResourceRef transport (R30), pinned/bounded ToolPack, host gate, raw/comparable hashes и durable barriers будущих Phases 4–9. Убраны stale v2/media указания в canonical docs. Решение Phase 8 о конечном immutable pack сохранено; действовавшие на том baseline v3/LRU/runtime не менялись этим docs commit, позднее v4 включён отдельным R29. Критерии привязаны к фазам в master/backlog; R28/R29 и Windows gates открыты. Diff/13 затронутых ссылок — OK; pre-commit `ValidateVersionFormat` — pass. Build/tests не запускались, новые runtime-инварианты не объявлены проверенными. Phase 4 оставалась отдельным следующим этапом.

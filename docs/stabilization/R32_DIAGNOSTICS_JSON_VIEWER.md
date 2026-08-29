@@ -91,30 +91,26 @@ preview и разрешённое получение/экспорт оригин
 
 ## Готовый vendor или собственный компонент
 
-Уточнение пользователя 2026-08-28: собственный renderer не предрешён. В 9B сначала
-оценить компактные готовые компоненты; общий `app-json-viewer.js` может быть тонким
-adapter над выбранным vendor. Этим docs-only изменением библиотека не подключается.
+Итог одинаковой source/package оценки shortlist зафиксирован в
+[R32 vendor/UI evaluation](R32_VENDOR_UI_EVALUATION.md). `andypf/json-viewer` и
+`summerstyle/jsonTreeViewer` не проходят authoritative diagnostics gate: оба
+преобразуют данные через обычный JavaScript object/`JSON.parse`, поэтому не сохраняют
+raw fidelity duplicate keys и больших чисел; кроме того, у них нет полного bounded
+render/copy/accessibility contract. В 9B1 общий `JsonAdapter` владеет исходным текстом,
+bounded token model и собственным компактным renderer, пока иной vendor не докажет
+тот же контракт без большого fork.
 
-Кандидаты по README/source overview, без объявления production-ready:
-
-- [andypf/json-viewer](https://github.com/andypf/json-viewer): Web Component,
-  browser bundle, раскрытие, themes и copy controls; MIT. Размер по README —
-  около 37.9 KB minified / 12.4 KB gzip, фактический vendored размер не измерен.
-- [summerstyle/jsonTreeViewer](https://github.com/summerstyle/jsonTreeViewer):
-  lightweight pure-JavaScript jsonTree для дерева JSON objects, MIT; отдельная
-  проверка полноты copy/accessibility/bounds и fidelity обязательна.
-
-Выбор определяется полной стоимостью интеграции: фактический размер JS/CSS и
-runtime dependencies, license/source audit, WebView/offline support, keyboard,
-безопасность, fidelity и limits по acceptance ниже. README/демо этих gates не закрывают.
-Готовый компонент используется только если небольшого adapter достаточно; иначе
-допустим собственный ограниченный viewer, без тяжёлого framework или большого fork.
+Web Awesome Tree условно выбран только для отдельного tree-navigation spike
+(Project/VBA/tools/artifacts). Его нельзя использовать как JSON renderer или timeline.
+Wunderbaum остаётся резервом для измеренно большого tree/treegrid. Ни один новый
+vendor этим docs-only решением не подключён.
 
 Vendor поставляется локально с pinned version/commit и hash, лицензией в
 `web/vendor-notices.md`; без CDN, telemetry и автоматической загрузки URL из данных.
 Network/HTML/link features отключаются или кандидат отклоняется. Source raw/copy,
 полнота/redaction и доступ к payload остаются под контролем нашего adapter/owner.
-Итог выбора и причины записываются при 9B; сейчас ничего не скачано и не подключено.
+Итог tree spike и причины окончательного switch записываются при 9B; сейчас ничего
+не скачано и не подключено.
 
 ## Повторное использование и удаление дубликатов
 
