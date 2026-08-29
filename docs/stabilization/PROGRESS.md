@@ -1,12 +1,29 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — R36 web vendor provenance/offline gate (done host-neutral)
-Current task: существующие WebView assets, licenses, exact hashes и transitive runtime policy сведены в fail-closed manifest; новых vendors/consumers нет.
+Current phase: Phase 9 — 9B3 bounded tree vendor switch (done host-neutral)
+Current task: Wunderbaum 0.14.1 подключён через bounded local-array `TreeAdapter` к одному HTML workspace/artifact navigation consumer; Web Awesome отложен без host switch/custom bundle.
 
-Next step: отдельный 9B3 Web Awesome Tree bounded-navigation spike через `TreeAdapter` на одном bounded consumer. Local workers разрешены политикой, но текущий allowlist пуст и Web Awesome Tree worker не требует.
+Next step: отдельный 9B4 Diff2Html compact read-only diff spike, только если существующий consumer передаёт exact bounded unified diff без второго diff algorithm.
 Required context: [master Phase 9 / exception](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory и R36 закрыты host-neutral; 9B3/9B4/9C и общий R32 Windows acceptance открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/9B2 read-only JSON inventory, R36 и 9B3 закрыты host-neutral; 9B4/9C и общий R32 Windows acceptance открыты. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+
+Phase 9B3 bounded tree vendor switch (2026-08-29): actual `file://` probe
+официального Web Awesome Tree 3.12.0 ESM graph не зарегистрировал `wa-tree`; custom
+bundle и C#/WebView virtual-host switch не вводились. Вместо этого pinned
+Wunderbaum 0.14.1 UMD/CSS (zero npm dependencies) прошёл file-origin probe и
+подключён через новый UI-only `TreeAdapter` к одному HTML workspace/artifact tree.
+Adapter допускает только bounded local arrays (consumer 1,800 nodes/12 levels;
+hard 2,500/16), stable typed keys, local icons и owner callbacks; URL/lazy,
+edit/DnD/filter/grid/persistence API не опубликованы. Старый renderer этого consumer
+и его dead CSS удалены; search/group/collapse/select/delete ownership сохранён.
+Manifest расширен с 36 до 38 runtime files с exact version/git head/npm integrity,
+bytes/SHA-256 и local MIT license. Targeted tree 4/4, vendor gate 5/5 и все
+`tests/web/*.test.js` 58/58 pass. Local Chrome
+`file://`: 19 rows, keyboard active descendant/ARIA/themes pass, malicious title
+остаётся text, horizontal overflow и network calls 0. [Evidence](R38_TREE_VENDOR_SWITCH.md).
+Windows WebView2 keyboard/focus/DPI/lifecycle gate открыт; workers не используются,
+allowlist остаётся пустым и CSP сохраняет `worker-src 'none'`.
 
 R36 web vendor gate (2026-08-29): добавлен exact allowlist для 36 существующих
 runtime files: версии/git heads/npm integrity, bytes/SHA-256, local licenses и
@@ -212,7 +229,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 6 | 6A + R33 + 6B VbaReader done host-neutral; remaining slices pending | `e0360f3` (6A); `62010c8` (R33); 6B evidence below | [6A: 58](#phase-6a--pure-vba-text-extraction); [R33: 8](#r33--overlapping-exact-matches); [6B: 60](#phase-6b--typed-vbareader) | deferred | Mutation/verifier/journal/result/fault matrix and full VBA gate open |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
-| 9 | through R36 done host-neutral; remainder pending | — | 17 harness + 49 existing UI + 5 vendor gate pass | not performed | Read-only JSON inventory and vendor baseline closed; tree/diff/journal UI open |
+| 9 | through 9B3 done host-neutral; remainder pending | — | 17 harness reused for 9A; current web 58/58 pass | not performed | Read-only JSON inventory, vendor baseline and one bounded tree closed; compact diff/journal UI open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |

@@ -438,46 +438,6 @@
   font-size: 11px;
 }
 
-.html-workspace-tree .tool-list-item.is-compact.has-icon {
-  grid-template-columns: 30px minmax(0, 1fr) minmax(24px, 72px) 8px;
-}
-
-.html-workspace-tree .tool-list-item.is-compact.has-icon:not(.has-meta) {
-  grid-template-columns: 30px minmax(0, 1fr) 8px;
-}
-
-.html-workspace-tree .tool-list-icon {
-  display: grid;
-  grid-column: 1;
-  grid-row: 1;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--accent);
-  font-size: 8px;
-  font-weight: 700;
-}
-
-.html-workspace-tree .tool-list-icon svg {
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.html-workspace-tree .tool-list-item.is-compact.has-icon .tool-list-title {
-  grid-column: 2;
-}
-
-.html-workspace-tree .tool-list-item.is-compact.has-icon .tool-list-meta {
-  grid-column: 3;
-}
-
 @media (max-width: 480px) {
   .chat-resource-popover {
     max-height: min(420px, 55vh);

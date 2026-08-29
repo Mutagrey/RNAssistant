@@ -37,6 +37,6 @@ Web Awesome Tree worker не требует.
 
 User-approved HTTP HTML workspace остаётся отдельным host bridge и не ослабляет
 main UI CSP. R36 не выбирает vendor, не меняет model/tool contracts и не закрывает
-Windows WebView2 qualification. Следующий отдельный этап — 9B3 bounded-navigation
-spike Web Awesome Tree через `TreeAdapter`; первый новый vendor обязан расширить
-этот manifest и пройти тот же gate.
+Windows WebView2 qualification. Последующий отдельный 9B3 проверил Web Awesome,
+выбрал Wunderbaum и расширил тот же manifest; решение и собственный gate
+зафиксированы в [R38](R38_TREE_VENDOR_SWITCH.md).

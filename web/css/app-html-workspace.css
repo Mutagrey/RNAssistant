@@ -118,22 +118,6 @@
   color: var(--danger);
 }
 
-.html-workspace-group {
-  margin-bottom: 8px;
-}
-
-.html-workspace-group-title {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 6px 7px 4px;
-  background: var(--bg);
-  color: var(--muted);
-  font-size: 10.5px;
-  font-weight: var(--label-font-weight);
-  letter-spacing: 0;
-}
-
 .html-workspace-editor {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);

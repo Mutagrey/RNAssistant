@@ -67,7 +67,11 @@ assert.equal(feather.sourceOnly, true);
 assert.equal(manifest.files.some(item => item.package === feather.id), false, "source-only icons must not add a runtime package");
 const actual = filesBelow(path.join(web, "js/vendor")).concat(filesBelow(path.join(web, "css/vendor"))).map(webPath).sort();
 assert.deepEqual(Array.from(entries.keys()).sort(), actual, "manifest must include every and only vendored runtime file");
-console.log("PASS vendor gate: 36 runtime files have exact size/hash and no unmanifested sibling");
+assert.ok(packages.has("wunderbaum"));
+assert.equal(packages.get("wunderbaum").version, "0.14.1");
+assert.deepEqual(packages.get("wunderbaum").packageDependencies, {});
+assert.equal(entries.size, 38);
+console.log("PASS vendor gate: 38 runtime files have exact size/hash and no unmanifested sibling");
 
 let cssDependencyCount = 0;
 for (const item of manifest.files.filter(item => item.path.endsWith(".css"))) {

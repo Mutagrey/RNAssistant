@@ -132,10 +132,11 @@
     var changingSelection = String(selected.type || "") !== String(type || "") || String(selected.id || "") !== String(id || "");
     if (state.htmlWorkspaceDirty && changingSelection) {
       window.alert("Сначала сохраните изменения текущего артефакта.");
-      return;
+      return false;
     }
     state.htmlWorkspaceSelection = { type: type, id: id };
     renderHtmlWorkspace();
+    return true;
   }
 
   function applyHtmlWorkspaceResponse(response, expectedChatId) {

@@ -16,12 +16,18 @@ only; the application never loads the manifest or those URLs at runtime.
 | Feather Icons | 4.29.2 | MIT | [`licenses/feather-icons-4.29.2/LICENSE`](licenses/feather-icons-4.29.2/LICENSE) |
 | KaTeX | 0.16.11 | MIT | [`licenses/katex-0.16.11/LICENSE`](licenses/katex-0.16.11/LICENSE) |
 | Apache ECharts | 5.6.0 | Apache-2.0; bundled d3 notice BSD-3-Clause | [`licenses/echarts-5.6.0`](licenses/echarts-5.6.0/) |
+| Wunderbaum | 0.14.1 | MIT | [`licenses/wunderbaum-0.14.1/LICENSE`](licenses/wunderbaum-0.14.1/LICENSE) |
 
 KaTeX ships only the 20 WOFF2 files used by current WebView2. Its local CSS is a
 documented derivative of the exact 0.16.11 distribution: unused `.woff`/`.ttf`
 fallback URLs were removed so every URL resolves to a manifested local file.
 ECharts uses its prebuilt browser bundle; `zrender`/`tslib` are embedded and no
 separate dependency is loaded.
+
+Wunderbaum ships its pinned UMD and CSS only. RNAssistant's `TreeAdapter` accepts
+bounded local arrays and does not expose URL/lazy loading, edit, DnD, grid or
+persistence capabilities. Its local icon layer uses CSS masks; no icon font or
+remote asset is loaded.
 
 Selected existing inline SVG paths are adapted from Feather Icons. Feather is
 source-only: its JavaScript package and npm dependencies are not loaded at runtime.

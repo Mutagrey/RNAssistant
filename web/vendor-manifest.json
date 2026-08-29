@@ -182,6 +182,24 @@
           "sha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304"
         }
       ]
+    },
+    {
+      "id": "wunderbaum",
+      "npmPackage": "wunderbaum",
+      "version": "0.14.1",
+      "license": "MIT",
+      "gitHead": "337b7f8ef6e04fcf60a4834f4617262b717b9d72",
+      "npmTarball": "https://registry.npmjs.org/wunderbaum/-/wunderbaum-0.14.1.tgz",
+      "npmIntegrity": "sha512-RCpQxfmJLs87xqHxqI6gXW3hhRCMEQOeUkVlXykBtKNuXLUG6yjU31tmE7uUy27R7WcyHs/ZiDquZTkqstEIdA==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "Only the pinned UMD and CSS assets are shipped. TreeAdapter admits local bounded arrays and does not expose ajax, lazy fetch, DnD, edit, grid, or persistence features.",
+      "licenseFiles": [
+        {
+          "path": "licenses/wunderbaum-0.14.1/LICENSE",
+          "sha256": "81b700e1f8e7c1aed5c147ccf8cc3c8d757734e34de4b38c94794443149c0de1"
+        }
+      ]
     }
   ],
   "files": [
@@ -438,6 +456,20 @@
       "bytes": 29204,
       "sha256": "c2f26ea4fc0d88141c9aa430eb515ac86fce59418ceebd85fa475b87a8d6c3e6",
       "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.14/purify.min.js"
+    },
+    {
+      "path": "js/vendor/wunderbaum.umd.min.js",
+      "package": "wunderbaum",
+      "bytes": 102824,
+      "sha256": "a0f20f3a8d0c4c3ad03956a9f2765c546bc88b65ef04244a0b8a1691cb67686b",
+      "provenanceUrl": "https://unpkg.com/wunderbaum@0.14.1/dist/wunderbaum.umd.min.js"
+    },
+    {
+      "path": "css/vendor/wunderbaum.css",
+      "package": "wunderbaum",
+      "bytes": 21756,
+      "sha256": "1ae1d7d7e5a78650b49b3b4d5e0af9c3119ce06ad23a05b0ddc8931e99776ddb",
+      "provenanceUrl": "https://unpkg.com/wunderbaum@0.14.1/dist/wunderbaum.css"
     }
   ]
 }

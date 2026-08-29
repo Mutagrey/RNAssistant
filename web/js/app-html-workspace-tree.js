@@ -26,148 +26,75 @@
     return file.kind === "html" || /\.html?$/i.test(file.path);
   }
 
-  function isSelected(options, type, id) {
-    var selected = options.selected || {};
-    return String(selected.type || "") === String(type || "") && String(selected.id || "") === String(id || "");
+  function fileCategory(file) {
+    if (isHtmlFile(file)) return "html-pages";
+    if (isStyleFile(file)) return "html-styles";
+    if (isScriptFile(file)) return "html-scripts";
+    return "html-files";
   }
 
-  function select(options, type, id) {
-    if (typeof options.onSelect === "function") options.onSelect(type, id);
+  function itemKey(type, id) {
+    return "item::" + String(type || "") + "::" + String(id || "");
   }
 
-  function artifactVisuals() {
-    return window.RNAssistantArtifactVisuals || null;
+  function groupKey(key) {
+    return "group::" + String(key || "");
   }
 
-  function resourceIconSvg(kind) {
-    var visuals = artifactVisuals();
-    return visuals && typeof visuals.iconSvg === "function" ? visuals.iconSvg(kind) : "";
+  function isGroupExpanded(key) {
+    return !(state.collapsedResourceGroups && state.collapsedResourceGroups[key] === true);
   }
 
-  function appendTreeItem(parent, itemOptions, action) {
-    var row = document.createElement("div");
-    row.className = "resource-tree-item-row" + (action ? " has-action" : "");
-    var item = createResourceListItem(itemOptions);
-    item.classList.add("resource-tree-item-main");
-    item.setAttribute("role", "treeitem");
-    row.appendChild(item);
-    if (action) {
-      var button = document.createElement("button");
-      button.type = "button";
-      button.className = "resource-tree-item-action" + (action.danger ? " is-danger" : "");
-      button.title = action.title || "Действие";
-      button.setAttribute("aria-label", button.title);
-      button.innerHTML = iconSvg(action.icon || "trash");
-      button.addEventListener("click", function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        action.onClick();
-      });
-      row.appendChild(button);
-    }
-    parent.appendChild(row);
-    return row;
+  function setGroupExpanded(key, expanded) {
+    state.collapsedResourceGroups = state.collapsedResourceGroups || {};
+    state.collapsedResourceGroups[key] = !expanded;
   }
 
-  function renderFileGroup(parent, label, key, items, query, options) {
-    var count = 0;
-    var group = createResourceGroup({ key: key, title: label, count: items.length });
-    group.className += " html-workspace-group";
-    var body = group.treeChildren || group;
-    var matched = items.filter(function (file) {
-      return matchesText([file.path, file.kind, file.content].join(" "), query);
-    });
-    renderFileTreeNode(body, key, buildFileTree(matched), function (container, file) {
-      appendTreeItem(container, {
-        title: fileDisplayName(file),
-        active: isSelected(options, "file", file.id),
-        meta: file.kind || "file",
-        tooltip: file.path + " - " + (file.kind || "file"),
-        icon: fileListIcon(file),
-        iconHtml: resourceIconSvg(file.kind),
-        description: firstLine(file.content) || "HTML workspace file",
-        compact: true,
-        depth: 1,
-        onClick: function () { select(options, "file", file.id); }
-      }, {
-        title: "Удалить " + file.path,
-        icon: "trash",
-        danger: true,
-        onClick: function () { options.onDelete("file", file.id); }
-      });
-      count += 1;
-    });
-    if (count) parent.appendChild(group);
-    return count;
+  function tooltip(title, meta, description) {
+    return [title, meta, description].filter(function (part) { return !!part; }).join(" — ");
   }
 
-  function renderDataGroup(parent, items, query, options) {
-    var count = 0;
-    var group = createResourceGroup({ key: "html-data", title: "Данные", count: items.length });
-    group.className += " html-workspace-group";
-    var body = group.treeChildren || group;
-    items.forEach(function (data) {
-      var binding = data.binding || null;
-      var sourceTool = bindingValue(binding, "ToolId", "toolId", "");
-      var status = bindingValue(binding, "Status", "status", "ready");
-      var lastError = bindingValue(binding, "LastError", "lastError", "");
-      var refreshPolicy = bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual");
-      if (!matchesText([data.name, data.json, sourceTool, status, lastError].join(" "), query)) return;
-      appendTreeItem(body, {
-        title: data.name,
-        active: isSelected(options, "data", data.id),
-        meta: binding ? sourceTool + " · " + status : "data/*.json · static",
-        icon: "JSON",
-        iconHtml: resourceIconSvg("json"),
-        description: binding ? (lastError || (refreshPolicy === "on_preview" ? "Обновляется при открытии" : "Обновляется вручную")) : (firstLine(data.json) || "JSON data source"),
-        compact: true,
-        depth: 1,
-        onClick: function () { select(options, "data", data.id); }
-      }, {
-        title: "Удалить " + data.name,
-        icon: "trash",
-        danger: true,
-        onClick: function () { options.onDelete("data", data.id); }
-      });
-      count += 1;
-    });
-    if (count) parent.appendChild(group);
-    return count;
+  function treeIconKind(kind) {
+    kind = String(kind || "").toLowerCase();
+    if (kind === "script") return "js";
+    if (kind === "data") return "json";
+    if (kind === "attachment") return "file";
+    if (kind === "plan_document") return "plan";
+    if (["html", "css", "js", "json", "markdown", "chart", "image", "audio", "file", "plan"].indexOf(kind) >= 0) return kind;
+    return "system";
   }
 
-  function renderArtifactGroup(parent, label, key, items, query, selectionType, options) {
-    var matched = items.filter(function (artifact) {
-      return matchesText([artifact.title, artifact.kind, artifact.mimeType, artifact.relativePath, artifact.text].join(" "), query);
-    });
-    if (!matched.length) return 0;
-    var group = createResourceGroup({ key: key, title: label, count: matched.length });
-    group.className += " artifact-root-group";
-    var body = group.treeChildren || group;
-    matched.sort(function (left, right) { return left.title.localeCompare(right.title); }).forEach(function (artifact) {
-      appendTreeItem(body, {
-        title: artifact.title,
-        active: isSelected(options, selectionType, artifact.id),
-        meta: artifact.meta,
-        description: firstLine(artifact.text) || artifact.relativePath || artifact.mimeType,
-        iconHtml: resourceIconSvg(artifact.kind),
-        compact: true,
-        depth: 1,
-        onClick: function () { select(options, selectionType, artifact.id); }
-      }, selectionType === "plan" ? {
-        title: "Удалить план " + artifact.title,
-        icon: "trash",
-        danger: true,
-        onClick: function () { options.onDelete(selectionType, artifact.id); }
-      } : null);
-    });
-    parent.appendChild(group);
-    return matched.length;
+  function groupNode(key, title, count, children, iconKind) {
+    return {
+      key: groupKey(key),
+      groupKey: key,
+      title: title,
+      meta: String(count),
+      tooltip: title + " — " + count,
+      iconKind: iconKind || "folder",
+      expanded: isGroupExpanded(key),
+      children: children
+    };
+  }
+
+  function itemNode(type, id, title, meta, description, kind, deletable) {
+    return {
+      key: itemKey(type, id),
+      itemType: type,
+      itemId: String(id || ""),
+      title: title,
+      meta: meta,
+      tooltip: tooltip(title, meta, description),
+      iconKind: treeIconKind(kind),
+      deletable: !!deletable
+    };
   }
 
   function buildFileTree(items) {
     var root = { dirs: {}, files: [] };
     items.forEach(function (file) {
       var parts = String(file.path || "").split("/").filter(function (part) { return !!part; });
+      if (parts.length > 10) parts = parts.slice(0, 9).concat(parts[parts.length - 1]);
       var node = root;
       while (parts.length > 1) {
         var dir = parts.shift();
@@ -177,24 +104,6 @@
       node.files.push(file);
     });
     return root;
-  }
-
-  function renderFileTreeNode(parent, key, node, appendFile) {
-    Object.keys(node.dirs).sort().forEach(function (dirName) {
-      var dir = node.dirs[dirName];
-      var group = createResourceGroup({
-        key: key + ":dir:" + dirName,
-        title: dirName,
-        count: countTreeFiles(dir)
-      });
-      group.className += " resource-tree-subgroup";
-      var body = group.treeChildren || group;
-      parent.appendChild(group);
-      renderFileTreeNode(body, key + "/" + dirName, dir, appendFile);
-    });
-    node.files.sort(function (left, right) { return left.path.localeCompare(right.path); }).forEach(function (file) {
-      appendFile(parent, file);
-    });
   }
 
   function countTreeFiles(node) {
@@ -208,50 +117,148 @@
     return parts.length ? parts[parts.length - 1] : file.path;
   }
 
-  function fileListIcon(file) {
-    if (file.kind === "css") return "CSS";
-    return isScriptFile(file) ? "JS" : "HTML";
+  function fileTreeNodes(key, node) {
+    var result = [];
+    Object.keys(node.dirs).sort().forEach(function (dirName) {
+      var dir = node.dirs[dirName];
+      var storageKey = key + ":dir:" + dirName;
+      result.push(groupNode(storageKey, dirName, countTreeFiles(dir), fileTreeNodes(key + "/" + dirName, dir), "folder"));
+    });
+    node.files.sort(function (left, right) {
+      return String(left.path || "").localeCompare(String(right.path || ""));
+    }).forEach(function (file) {
+      result.push(itemNode(
+        "file",
+        file.id,
+        fileDisplayName(file),
+        file.kind || "file",
+        [file.path, firstLine(file.content) || "HTML workspace file"].filter(function (part) { return !!part; }).join(" — "),
+        isStyleFile(file) ? "css" : (isScriptFile(file) ? "js" : (isHtmlFile(file) ? "html" : "file")),
+        true
+      ));
+    });
+    return result;
+  }
+
+  function fileGroup(label, key, items, query) {
+    var matched = items.filter(function (file) {
+      return matchesText([file.path, file.kind, file.content].join(" "), query);
+    });
+    if (!matched.length) return null;
+    return groupNode(key, label, matched.length, fileTreeNodes(key, buildFileTree(matched)), "folder");
+  }
+
+  function dataGroup(items, query) {
+    var children = [];
+    items.forEach(function (data) {
+      var binding = data.binding || null;
+      var sourceTool = bindingValue(binding, "ToolId", "toolId", "");
+      var status = bindingValue(binding, "Status", "status", "ready");
+      var lastError = bindingValue(binding, "LastError", "lastError", "");
+      var refreshPolicy = bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual");
+      if (!matchesText([data.name, data.json, sourceTool, status, lastError].join(" "), query)) return;
+      var meta = binding ? sourceTool + " · " + status : "data/*.json · static";
+      var description = binding
+        ? (lastError || (refreshPolicy === "on_preview" ? "Обновляется при открытии" : "Обновляется вручную"))
+        : (firstLine(data.json) || "JSON data source");
+      children.push(itemNode("data", data.id, data.name, meta, description, "json", true));
+    });
+    return children.length ? groupNode("html-data", "Данные", children.length, children, "json") : null;
+  }
+
+  function artifactGroup(label, key, items, query, selectionType) {
+    var matched = items.filter(function (artifact) {
+      return matchesText([artifact.title, artifact.kind, artifact.mimeType, artifact.relativePath, artifact.text].join(" "), query);
+    });
+    if (!matched.length) return null;
+    var children = matched.sort(function (left, right) {
+      return String(left.title || "").localeCompare(String(right.title || ""));
+    }).map(function (artifact) {
+      return itemNode(
+        selectionType,
+        artifact.id,
+        artifact.title,
+        artifact.meta,
+        firstLine(artifact.text) || artifact.relativePath || artifact.mimeType,
+        selectionType === "plan" ? "plan" : artifact.kind,
+        selectionType === "plan"
+      );
+    });
+    return groupNode(key, label, children.length, children, selectionType === "plan" ? "plan" : "folder");
+  }
+
+  function selectedKey(options) {
+    var selected = options.selected || {};
+    if (!selected.type || !selected.id) return "";
+    return itemKey(selected.type, selected.id);
   }
 
   function render(options) {
     options = options || {};
-    var tree = options.root;
-    if (!tree) return 0;
+    var root = options.root;
+    if (!root) return 0;
+    var adapter = window.RNAssistantTreeAdapter;
+    if (!adapter || typeof adapter.mount !== "function") {
+      root.replaceChildren();
+      var error = document.createElement("div");
+      error.className = "rn-tree-status is-error";
+      error.textContent = "TreeAdapter недоступен.";
+      root.appendChild(error);
+      return 0;
+    }
+
     var query = String(options.query || "").trim().toLowerCase();
     var files = options.files || [];
     var dataSources = options.dataSources || [];
     var artifacts = options.artifacts || [];
-    tree.innerHTML = "";
+    var htmlChildren = [];
 
-    var rendered = 0;
-    var htmlRoot = createResourceGroup({ key: "artifacts:html", title: "HTML workspace", count: files.length + dataSources.length });
-    htmlRoot.className += " artifact-root-group";
-    var htmlBody = htmlRoot.treeChildren || htmlRoot;
-    var htmlRendered = 0;
-    htmlRendered += renderFileGroup(htmlBody, "Страницы", "html-pages", files.filter(isHtmlFile), query, options);
-    htmlRendered += renderFileGroup(htmlBody, "Стили", "html-styles", files.filter(isStyleFile), query, options);
-    htmlRendered += renderFileGroup(htmlBody, "Скрипты", "html-scripts", files.filter(isScriptFile), query, options);
-    htmlRendered += renderFileGroup(htmlBody, "Файлы", "html-files", files.filter(function (file) {
-      return !isHtmlFile(file) && !isStyleFile(file) && !isScriptFile(file);
-    }), query, options);
-    htmlRendered += renderDataGroup(htmlBody, dataSources, query, options);
-    if (htmlRendered) {
-      tree.appendChild(htmlRoot);
-      rendered += htmlRendered;
+    [
+      ["Страницы", "html-pages"],
+      ["Стили", "html-styles"],
+      ["Скрипты", "html-scripts"],
+      ["Файлы", "html-files"]
+    ].forEach(function (entry) {
+      var members = files.filter(function (file) { return fileCategory(file) === entry[1]; });
+      var node = fileGroup(entry[0], entry[1], members, query);
+      if (node) htmlChildren.push(node);
+    });
+    var data = dataGroup(dataSources, query);
+    if (data) htmlChildren.push(data);
+
+    var nodes = [];
+    if (htmlChildren.length) {
+      var htmlCount = htmlChildren.reduce(function (sum, node) { return sum + Number(node.meta || 0); }, 0);
+      nodes.push(groupNode("artifacts:html", "HTML workspace", htmlCount, htmlChildren, "html"));
     }
 
-    rendered += renderArtifactGroup(tree, "Планы", "artifact-plans", options.plans || [], query, "plan", options);
-    rendered += renderArtifactGroup(tree, "Созданные", "artifact-created", artifacts.filter(function (artifact) {
-      return ["markdown", "chart"].indexOf(artifact.kind) >= 0;
-    }), query, "artifact", options);
-    rendered += renderArtifactGroup(tree, "Файлы", "artifact-attachments", artifacts.filter(function (artifact) {
-      return ["attachment", "image", "audio", "file"].indexOf(artifact.kind) >= 0;
-    }), query, "artifact", options);
-    rendered += renderArtifactGroup(tree, "Служебные", "artifact-system", artifacts.filter(function (artifact) {
-      return ["plan_document", "task_list", "markdown", "chart", "attachment", "image", "audio", "file", "html_workspace"].indexOf(artifact.kind) < 0;
-    }), query, "artifact", options);
-    if (!rendered) tree.appendChild(createResourceEmptyState(query ? "Ничего не найдено." : "Артефактов пока нет."));
-    return rendered;
+    [
+      artifactGroup("Планы", "artifact-plans", options.plans || [], query, "plan"),
+      artifactGroup("Созданные", "artifact-created", artifacts.filter(function (artifact) {
+        return ["markdown", "chart"].indexOf(artifact.kind) >= 0;
+      }), query, "artifact"),
+      artifactGroup("Файлы", "artifact-attachments", artifacts.filter(function (artifact) {
+        return ["attachment", "image", "audio", "file"].indexOf(artifact.kind) >= 0;
+      }), query, "artifact"),
+      artifactGroup("Служебные", "artifact-system", artifacts.filter(function (artifact) {
+        return ["plan_document", "task_list", "markdown", "chart", "attachment", "image", "audio", "file", "html_workspace"].indexOf(artifact.kind) < 0;
+      }), query, "artifact")
+    ].forEach(function (node) { if (node) nodes.push(node); });
+
+    var mounted = adapter.mount(root, {
+      nodes: nodes,
+      selectedKey: selectedKey(options),
+      emptyText: query ? "Ничего не найдено." : "Артефактов пока нет.",
+      limits: { maxNodes: 1800, maxDepth: 12 },
+      onActivate: function (item) {
+        return typeof options.onSelect === "function" ? options.onSelect(item.type, item.id) : true;
+      },
+      onDelete: function (item) {
+        if (typeof options.onDelete === "function") options.onDelete(item.type, item.id);
+      },
+      onToggle: setGroupExpanded
+    });
+    return mounted.count;
   }
 
   window.RNAssistantHtmlWorkspaceTree = { render: render };
