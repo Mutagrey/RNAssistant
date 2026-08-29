@@ -17,6 +17,7 @@
   min-width: 0;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   padding: 5px 6px;
   border-bottom: 1px solid var(--code-border);
@@ -26,8 +27,13 @@
 .rn-json-modes,
 .rn-json-actions {
   display: flex;
+  flex: 0 0 auto;
   min-width: 0;
   gap: 4px;
+}
+
+.rn-json-actions {
+  margin-left: auto;
 }
 
 .rn-json-mode,
@@ -41,6 +47,7 @@
   background: transparent;
   color: var(--muted);
   font: inherit;
+  white-space: nowrap;
 }
 
 .rn-json-mode:hover,

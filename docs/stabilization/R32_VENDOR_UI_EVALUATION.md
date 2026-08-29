@@ -133,12 +133,13 @@ Tool Result v1 / ResourceRef / typed UI DTO
 1. **До первого vendor switch:** закрыть R36 manifest/license/hash для уже vendored assets. Собственный 9B1 adapter не добавляет vendor и не снимает этот gate.
 2. **9A (done host-neutral):** correlated run projection и direct navigation contract.
 3. **9B1 (done host-neutral):** lossless bounded `JsonAdapter` + raw/pretty/tree/copy tests.
-4. **9B2:** switch всех read-only JSON surfaces и удалить старые pretty/copy paths.
-5. **9B3:** отдельный Web Awesome Tree spike для bounded navigation; при провале
+4. **9B2A (done host-neutral):** diagnostics event/evidence/JSON payload switch; удалён его старый pretty/plain-pre path.
+5. **9B2B:** switch остальных read-only JSON surfaces узкими consumer slices и удалить заменённые pretty/copy paths.
+6. **9B3:** отдельный Web Awesome Tree spike для bounded navigation; при провале
    offline/WebView gates оставить существующее дерево или измерить Wunderbaum.
-6. **9B4:** Diff2Html только для существующего compact-diff consumer, если exact
+7. **9B4:** Diff2Html только для существующего compact-diff consumer, если exact
    unified diff доступен без второго diff algorithm.
-7. **9C:** один chronological run journal; raw/specialized views остаются деталями.
+8. **9C:** один chronological run journal; raw/specialized views остаются деталями.
 
 Общие PDF/image/table/diagram/layout viewers не входят автоматически в R32 и
 подключаются отдельными measured slices после stable diagnostics core.

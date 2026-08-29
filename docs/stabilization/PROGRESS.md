@@ -1,12 +1,29 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9B1 bounded/lossless JSON viewer (done host-neutral)
-Current task: реализованы UI-only allowlisted `ViewerRegistry` и собственный `JsonAdapter`; consumer switch ещё не выполнен.
+Current phase: Phase 9 — 9B2A diagnostics JSON consumer switch (done host-neutral)
+Current task: diagnostics event data/source evidence/JSON CAS payload переключены на общий `JsonAdapter`; non-JSON payload остаётся inert text.
 
-Next step: отдельный 9B2 — переключить diagnostics JSON surfaces на общий adapter и удалить их `prettyJson`/plain-`pre` paths. Остальные consumers не смешивать с первым diagnostics switch; до первого vendor switch закрыть R36.
+Next step: отдельный 9B2B — инвентаризировать и узкими slices переключить read-only Agent/Context/Tools/artifact JSON surfaces; editable inputs и transport serializers не менять. До первого vendor switch закрыть R36.
 Required context: [master Phase 9 / exception](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [R32 diagnostics](R32_DIAGNOSTICS_JSON_VIEWER.md), [trajectory query](../trajectory-query.md), [architecture](../architecture.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 закрыта в частях 9A/9B1; 9B2/9B3/9C и R36 открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: Phase 5B2/R04, остаток Phase 6 (`VbaMutationService`, `VbaVerifier`, journal/result mapping/fault matrix), Phases 7–8 и R30 остаются открытыми и не считаются закрытыми ранней Phase 9. Controller/WebView/COM lifetime, VBE/read-back/package regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 закрыта в частях 9A/9B1/9B2A; 9B2B/9B3/9C и R36 открыты. Read-only R37 adapter для затронутых current-v4 streams удалить/заменить reset после 9C qualification. Product 16.1.0-dev, no release/tag.
+
+Phase 9B2A diagnostics JSON switch (2026-08-29): `app-trajectory.js` больше не
+парсит/пересериализует `DataJson` через локальный `prettyJson` и не складывает JSON
+в plain `<pre>`. Raw/derived event data передаётся adapter как точный bounded string;
+`DataTruncated` становится completeness=`preview`, поэтому обрезанный object остаётся
+raw с ошибкой позиции. Source event ids/sequences, hashes, payload metadata и
+ResourceRef показаны отдельным раскрываемым JSON, не дописываются внутрь payload.
+JSON CAS payload использует тот же viewer; HTML/прочие MIME остаются безопасным
+`textContent` viewer с exact copy и без ложной JSON error. Stale request guards
+остались у diagnostics owner, refresh уничтожает mounted controllers.
+
+Phase 9B2A verification: новый integration UI test 5/5 и JSON adapter 7/7 pass;
+existing completion 8/8, prompt review 5/5 и tools editor 1/1 pass. `node --check`
+для затронутых JS, `git diff --check`, local links и `ValidateVersionFormat` — pass.
+Локальный Chromium fixture с zero-network CSP: light/dark при 1280×720 и responsive
+720×800, toolbar overlap 0, clipped buttons 0, body horizontal overflow 0. Fixture
+и HTTP server удалены после проверки. Это не Windows WebView2/clipboard qualification.
 
 Phase 9B1 bounded/lossless JSON viewer (2026-08-29): добавлены локальные
 `app-viewer-registry.js` и `app-json-viewer.js` с тематическим CSS, без vendor,
@@ -123,7 +140,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 6 | 6A + R33 + 6B VbaReader done host-neutral; remaining slices pending | `e0360f3` (6A); `62010c8` (R33); 6B evidence below | [6A: 58](#phase-6a--pure-vba-text-extraction); [R33: 8](#r33--overlapping-exact-matches); [6B: 60](#phase-6b--typed-vbareader) | deferred | Mutation/verifier/journal/result/fault matrix and full VBA gate open |
 | 7 | pending | — | — | — | Excel vertical slice |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
-| 9 | 9A + 9B1 done host-neutral; 9B2/9B3/9C pending | — | 17 harness + 7 JSON UI pass | not performed | Correlated query and JSON adapter ready; consumer/journal UI remain |
+| 9 | 9A + 9B1 + 9B2A done host-neutral; remainder pending | — | 17 harness + 12 JSON/diagnostics UI pass | not performed | Diagnostics switched; remaining consumers/journal UI open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |

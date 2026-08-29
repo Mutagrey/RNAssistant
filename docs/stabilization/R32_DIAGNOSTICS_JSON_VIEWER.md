@@ -1,7 +1,8 @@
 # R32 — Сквозная диагностика и общий JSON viewer
 
-Статус: требования пользователя от 2026-08-28. **9A и 9B1 реализованы host-neutral
-2026-08-29; consumer switch 9B2, 9B3, 9C и Windows/WebView qualification открыты.** Baseline source review —
+Статус: требования пользователя от 2026-08-28. **9A, 9B1 и diagnostics switch
+9B2A реализованы host-neutral 2026-08-29; остальные consumers 9B2B, 9B3, 9C и
+Windows/WebView qualification открыты.** Baseline source review —
 `85cc3f4`; перенос документации — поверх `b754443`. Реализация и qualification —
 [Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), до release gate Phase 12.
 
@@ -117,7 +118,7 @@ Network/HTML/link features отключаются или кандидат отк
 
 | Существующий consumer | Switch на общий viewer |
 |---|---|
-| `app-trajectory.js` / diagnostics | Event data, requests/responses, arguments/results, bounded CAS payload, VBA journal details |
+| `app-trajectory.js` / diagnostics | **9B2A switched:** exact event/row `DataJson`, separate source evidence и JSON CAS payload используют общий viewer; non-JSON CAS остаётся inert text. VBA before/after diff не является JSON |
 | `app-agent-data.js` | Raw JSON действий/результатов; полезные domain tables/cards сохраняются как отдельное представление |
 | `app-context-inspector.js`, `app-context.js` | Структура request и context; ограничения/redaction сохраняются |
 | `app-tools-actions.js` и tool result panels | JSON manual-run/validation results, без изменения execution semantics |
@@ -137,7 +138,7 @@ pretty/copy/render paths в том же подэтапе. Сериализаци
    второй журнал, durable UI index, отдельный model transport или replay tools.
    Порядок определяется sequence; snapshot/cursor не теряют строки между страницами
    и при новых append. Новый хронологический вид не меняет контракт existing raw query.
-2. **9B — viewer (9B1 done, consumers pending):** общий компонент и migration read-only consumers; targeted UI
+2. **9B — viewer (9B1 + diagnostics 9B2A done; other consumers pending):** общий компонент и migration read-only consumers; targeted UI
    tests и локальная чистка. До journal switch проверить fidelity и bounds отдельно.
 3. **9C — журнал (pending):** подключить раскрываемые строки и direct navigation, сохранить
    raw/специализированные views как доступные детали. Qualification всей цепочки,

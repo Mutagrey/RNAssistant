@@ -16,10 +16,99 @@
     return source[camel] !== undefined ? source[camel] : (source[pascal] !== undefined ? source[pascal] : fallback);
   }
 
-  function prettyJson(text) {
-    if (!text) return "{}";
-    try { return JSON.stringify(typeof text === "string" ? JSON.parse(text) : text, null, 2); }
-    catch (error) { return String(text); }
+  function jsonText(valueToSerialize) {
+    try { return JSON.stringify(valueToSerialize === undefined ? null : valueToSerialize); }
+    catch (error) { return JSON.stringify({ displayError: "Typed projection cannot be serialized." }); }
+  }
+
+  function copyDiagnosticText(text) {
+    if (window.navigator && window.navigator.clipboard && window.navigator.clipboard.writeText) {
+      try {
+        return Promise.resolve(window.navigator.clipboard.writeText(String(text)));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+    return new Promise(function (resolve, reject) {
+      var input = document.createElement("textarea");
+      input.value = String(text);
+      input.setAttribute("aria-hidden", "true");
+      document.body.appendChild(input);
+      input.select();
+      try {
+        if (!document.execCommand("copy")) throw new Error("Clipboard command was rejected.");
+        resolve();
+      } catch (error) {
+        reject(error);
+      } finally {
+        document.body.removeChild(input);
+      }
+    });
+  }
+
+  function mountTrajectoryJson(targetId, text, completeness, mode) {
+    var registry = window.RNAssistantViewerRegistry;
+    if (!registry || !registry.has("json")) throw new Error("JSON viewer is unavailable.");
+    return registry.mount("json", $(targetId), {
+      text: text === null || text === undefined ? "" : String(text),
+      completeness: completeness || "full",
+      mode: mode || "tree",
+      onCopy: copyDiagnosticText
+    });
+  }
+
+  function unmountTrajectoryJson(targetId) {
+    if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount($(targetId));
+  }
+
+  function showEvidence(valueToShow) {
+    var details = $("trajectoryEvidenceDetails");
+    details.open = false;
+    details.classList.remove("hidden");
+    mountTrajectoryJson("trajectoryEvidenceData", jsonText(valueToShow), "full", "tree");
+  }
+
+  function hideEvidence() {
+    var details = $("trajectoryEvidenceDetails");
+    details.open = false;
+    details.classList.add("hidden");
+    unmountTrajectoryJson("trajectoryEvidenceData");
+  }
+
+  function isJsonContentType(contentType) {
+    var mediaType = String(contentType || "").split(";", 1)[0].trim().toLowerCase();
+    return mediaType === "application/json" || /\+json$/.test(mediaType);
+  }
+
+  function showTextPayload(target, text, contentType, truncated) {
+    if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(target);
+    else target.replaceChildren();
+    var root = document.createElement("section");
+    root.className = "trajectory-text-viewer";
+    var toolbar = document.createElement("div");
+    toolbar.className = "trajectory-text-toolbar";
+    var status = document.createElement("span");
+    status.textContent = (contentType || "text/plain") + (truncated ? " · ограниченный preview" : " · полный payload");
+    var copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "secondary";
+    copy.textContent = truncated ? "Копировать preview" : "Копировать всё";
+    copy.addEventListener("click", function () {
+      copy.disabled = true;
+      copyDiagnosticText(text).then(function () {
+        status.textContent = "Скопировано";
+      }, function () {
+        status.textContent = "Не удалось скопировать";
+      }).then(function () { copy.disabled = false; });
+    });
+    var pre = document.createElement("pre");
+    pre.className = "trajectory-text-content";
+    pre.textContent = text;
+    toolbar.appendChild(status);
+    toolbar.appendChild(copy);
+    root.appendChild(toolbar);
+    root.appendChild(pre);
+    target.appendChild(root);
   }
 
   function bytesLabel(bytes) {
@@ -47,7 +136,8 @@
 
   function resetLazyDetail() {
     detailRequestId += 1;
-    $("trajectoryEventPayload").textContent = "";
+    unmountTrajectoryJson("trajectoryEventPayload");
+    $("trajectoryEventPayload").replaceChildren();
     $("trajectoryEventPayload").classList.add("hidden");
     $("trajectoryVbaDiff").replaceChildren();
     $("trajectoryVbaDiff").classList.add("hidden");
@@ -196,9 +286,17 @@
       costUsd === null ? "" : "cost=$" + costUsd,
       "sources=" + sourceSeqs.length + "/" + sourceIds.length
     ].filter(Boolean).join(" · ");
-    $("trajectoryEventData").textContent = prettyJson(value(item, "DataJson", "dataJson", "{}")) +
-      (value(item, "DataTruncated", "dataTruncated", false) ? "\n\n[preview truncated]" : "") +
-      "\n\nsourceEventSeqs: " + JSON.stringify(sourceSeqs) + "\nsourceEventIds: " + JSON.stringify(sourceIds);
+    mountTrajectoryJson("trajectoryEventData", value(item, "DataJson", "dataJson", "{}"),
+      value(item, "DataTruncated", "dataTruncated", false) ? "preview" : "full");
+    showEvidence({
+      sourceEventSeqs: sourceSeqs,
+      sourceEventIds: sourceIds,
+      modelAttemptId: value(item, "ModelAttemptId", "modelAttemptId", null),
+      toolCallId: value(item, "ToolCallId", "toolCallId", null),
+      mutationId: value(item, "MutationId", "mutationId", null),
+      journalRunId: value(item, "JournalRunId", "journalRunId", null),
+      resourceRefs: resourceRefs
+    });
     renderCorrelationActions(item);
   }
 
@@ -219,7 +317,14 @@
       "components=" + value(item, "ComponentCount", "componentCount", 0),
       value(item, "ErrorCode", "errorCode", "")
     ].filter(Boolean).join(" · ");
-    $("trajectoryEventData").textContent = prettyJson(item);
+    mountTrajectoryJson("trajectoryEventData", jsonText(item), "full");
+    showEvidence({
+      sessionId: value(item, "SessionId", "sessionId", null),
+      mutationId: mutationId(item),
+      journalRunId: value(item, "JournalRunId", "journalRunId", null),
+      firstSequence: firstSequence,
+      lastSequence: lastSequence
+    });
     var detailButton = $("loadVbaMutationButton");
     detailButton.classList.remove("hidden");
     detailButton.disabled = false;
@@ -268,9 +373,25 @@
       hash ? "hash=" + hash : "",
       payloadSize === null ? "" : "payload=" + bytesLabel(payloadSize)
     ].filter(Boolean).join(" · ");
-    var data = value(item, "DataJson", "dataJson", "");
-    $("trajectoryEventData").textContent = prettyJson(data) +
-      (value(item, "DataTruncated", "dataTruncated", false) ? "\n\n[preview truncated]" : "");
+    mountTrajectoryJson("trajectoryEventData", value(item, "DataJson", "dataJson", ""),
+      value(item, "DataTruncated", "dataTruncated", false) ? "preview" : "full");
+    showEvidence({
+      schemaVersion: value(item, "SchemaVersion", "schemaVersion", null),
+      eventId: eventId(item),
+      sourceEventSeqs: value(item, "SourceEventSeqs", "sourceEventSeqs", []) || [],
+      sourceEventIds: value(item, "SourceEventIds", "sourceEventIds", []) || [],
+      previousHash: previousHash || null,
+      hash: hash || null,
+      hashAlgorithm: value(item, "HashAlgorithm", "hashAlgorithm", null),
+      dataEncrypted: value(item, "DataEncrypted", "dataEncrypted", false),
+      payload: payloadSize === null ? null : {
+        sha256: value(item, "PayloadSha256", "payloadSha256", null),
+        byteLength: payloadSize,
+        contentType: value(item, "PayloadContentType", "payloadContentType", null),
+        encryption: value(item, "PayloadEncryption", "payloadEncryption", null)
+      },
+      resourceRefs: resourceRefs
+    });
     var payloadButton = $("loadTrajectoryPayloadButton");
     payloadButton.classList.toggle("hidden", payloadSize === null);
     payloadButton.disabled = false;
@@ -377,7 +498,8 @@
       selected = null;
       $("trajectoryEventTitle").textContent = activeView === "raw" ? "Событие не выбрано" : "Строка не выбрана";
       $("trajectoryEventMeta").textContent = "";
-      $("trajectoryEventData").textContent = "";
+      unmountTrajectoryJson("trajectoryEventData");
+      hideEvidence();
       resetLazyDetail();
       renderCorrelationActions({});
     }
@@ -545,7 +667,8 @@
     $("trajectoryWorkspace").classList.add("hidden");
     $("trajectoryEventTitle").textContent = "Запись не выбрана";
     $("trajectoryEventMeta").textContent = "";
-    $("trajectoryEventData").textContent = "";
+    unmountTrajectoryJson("trajectoryEventData");
+    hideEvidence();
     resetLazyDetail();
     renderCorrelationActions({});
   }
@@ -591,13 +714,19 @@
       var response = await send("getChatEventPayload", { chatId: chatId, eventId: selectedId });
       if (requestId !== detailRequestId || !selected || eventId(selected) !== selectedId) return;
       var text = value(response, "Text", "text", "");
-      target.textContent = prettyJson(text) +
-        (value(response, "TextTruncated", "textTruncated", false) ? "\n\n[preview truncated; full payload remains in CAS]" : "");
+      var truncated = value(response, "TextTruncated", "textTruncated", false);
+      var contentType = value(response, "ContentType", "contentType", "");
+      if (isJsonContentType(contentType)) {
+        mountTrajectoryJson("trajectoryEventPayload", text, truncated ? "preview" : "full");
+      } else {
+        showTextPayload(target, text, contentType, truncated);
+      }
       target.classList.remove("hidden");
       button.textContent = "Payload загружен";
     } catch (error) {
       if (requestId !== detailRequestId) return;
-      target.textContent = "Не удалось загрузить payload: " + error.message;
+      unmountTrajectoryJson("trajectoryEventPayload");
+      showTextPayload(target, "Не удалось загрузить payload: " + error.message, "text/plain", false);
       target.classList.remove("hidden");
       button.textContent = "Повторить";
     } finally {

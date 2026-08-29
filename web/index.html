@@ -28,8 +28,8 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capability-inline-20260826-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-ui-20260825-1">
-  <link rel="stylesheet" href="css/app-json-viewer.css?v=json-viewer-20260829-1">
-  <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-ui-20260825-1">
+  <link rel="stylesheet" href="css/app-json-viewer.css?v=json-viewer-20260829-2">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-json-20260829-1">
   <link rel="stylesheet" href="css/app-tools.css?v=skill-references-20260825-1">
   <link rel="stylesheet" href="css/app-vba.css?v=resource-navigation-20260826-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=context-close-20260825-1">
@@ -889,8 +889,12 @@
                       <div class="trajectory-detail-actions"><button class="secondary hidden" id="loadTrajectoryPayloadButton" type="button">Показать payload</button><button class="secondary hidden" id="loadVbaMutationButton" type="button">Показать before / after</button></div>
                     </div>
                     <div class="trajectory-meta" id="trajectoryEventMeta"></div>
-                    <pre class="trajectory-json" id="trajectoryEventData"></pre>
-                    <pre class="trajectory-json trajectory-payload hidden" id="trajectoryEventPayload"></pre>
+                    <div class="trajectory-json-host" id="trajectoryEventData"></div>
+                    <details class="trajectory-evidence hidden" id="trajectoryEvidenceDetails">
+                      <summary>Источник и связи</summary>
+                      <div class="trajectory-json-host trajectory-evidence-json" id="trajectoryEvidenceData"></div>
+                    </details>
+                    <div class="trajectory-payload hidden" id="trajectoryEventPayload"></div>
                     <div class="trajectory-vba-diff hidden" id="trajectoryVbaDiff"></div>
                   </div>
                 </div>
@@ -952,7 +956,7 @@
   <script src="js/app-diagnostics.js?v=diagnostics-ui-20260825-1"></script>
   <script src="js/app-viewer-registry.js?v=viewer-registry-20260829-1"></script>
   <script src="js/app-json-viewer.js?v=json-viewer-20260829-1"></script>
-  <script src="js/app-trajectory.js?v=resource-diagnostics-20260826-1"></script>
+  <script src="js/app-trajectory.js?v=diagnostics-json-20260829-1"></script>
   <script src="js/app-prompts.js?v=prompt-sections-20260825-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
