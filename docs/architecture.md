@@ -38,7 +38,7 @@ automation first needs an ADR for workspace-owned sessions and a signed isolated
 worker. Office processes never become general shell workers. See
 [Local Automation Agent](local-automation-agent.md).
 
-## Qualification boundary (target WQ-A)
+## Qualification boundary (WQ-A1 core)
 
 The planned Qualification Center is an application orchestrator over declarative,
 versioned host packs. Agent tasks use the normal conversation/kernel/tool/domain
@@ -48,8 +48,17 @@ the existing document chat stream/CAS and are projected through `ITrajectoryQuer
 there is no second result store or test executor. The empty-chat card opens the
 runner instead of inserting a prompt. Host-neutral harness evidence remains a
 build artifact and is never executed by VSTO. See [qualification.md](qualification.md)
-and [ADR-0010](decisions/ADR-0010-qualification-evidence-authority.md). This section
-describes the approved target; no Qualification Center runtime is shipped yet.
+and [ADR-0010](decisions/ADR-0010-qualification-evidence-authority.md).
+
+WQ-A1 implements the host-neutral boundary in `RNAssistant.Office/Qualification`:
+strict data-only manifest and coverage parsers, an immutable catalog, a finite runner,
+closed mandatory qualification events over `IEventStore`, CAS-backed large evidence
+and bounded typed bridge DTOs. Automatic pass requires a required assertion with
+typed expected/actual evidence. A durable start barrier precedes every automatic
+step; an open possible effect after replay is blocked and never redispatched. The
+application/controller composition, empty-chat UI, normal conversation adapter and
+host-specific probes remain WQ-A2/A3, so no Qualification Center is reachable in the
+shipped UI yet.
 
 ## Chat, Plan, and Agent
 

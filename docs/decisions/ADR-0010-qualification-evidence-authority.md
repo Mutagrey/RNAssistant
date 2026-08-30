@@ -1,6 +1,6 @@
 # ADR-0010: Qualification evidence belongs to runtime and domain verifiers
 
-Status: accepted for Milestone WQ-A; implementation pending.
+Status: accepted; WQ-A1 host-neutral core implemented, delivery adapters/UI pending.
 
 ## Context
 
@@ -44,8 +44,10 @@ confirmation, HostRuntime или persistence. Отдельный mutable result 
 
 Пользователь получает один управляемый UI для реальных Office сценариев и может
 расширять pack catalog без копирования orchestration. Один source of truth и causal
-correlation сохраняются. Добавление runner/contracts/UI/WQ0 требует отдельных
-подэтапов и Windows проверки; этот ADR сам не квалифицирует COM identity и не
-разрешает production 5B2 switch.
+correlation сохраняются. WQ-A1 реализовал strict contracts, конечный runner,
+mandatory events/CAS evidence и typed bridge DTO, но не подключил controller/UI,
+normal conversation adapter или host probes. WQ-A2/WQ-A3 и Windows проверка остаются
+отдельными подэтапами; этот ADR сам не квалифицирует COM identity и не разрешает
+production 5B2 switch.
 
 Полный контракт: [qualification.md](../qualification.md).

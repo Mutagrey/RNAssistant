@@ -51,6 +51,15 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
   visible `TOOL_PACK_RESTORE_STATE`; a later exact read/admission may establish a new
   accepted snapshot. These events do not mutate the `ChatSession` projection or add a
   second store.
+- `qualification.run.started`, `qualification.step.started`,
+  `qualification.step.completed` and `qualification.run.completed` are WQ-A1
+  application authority records. They pin exact pack id/revision/hash and
+  build/host provenance. Each automatic step-start append is mandatory before its
+  action or verifier; missing completion leaves a blocked possible effect and never
+  authorizes automatic redispatch. Passing assertions require automatic typed
+  expected/actual evidence. Large evidence uses the same event payload CAS and
+  verifies its SHA-256 on replay; no qualification result store or dashboard index
+  is added.
 
 Phase 9D3 exposes current top-level chat events to Office through one narrow
 `IEventStore` adapter over this same `ChatStore`. New port writes select a
@@ -69,6 +78,7 @@ failure, and the causal writer accepts only best-effort Domain Diagnostic kinds.
 | `agent.response.rejected`, `tool_pack.extension.rejected` | Agent | diagnostic | mandatory | event port |
 | `model.response.accepted` | Agent | diagnostic marker | best effort | event port |
 | `tool_pack.extension.accepted` | Agent | authority | mandatory | event port |
+| `qualification.*` | Agent | run/step replay authority | mandatory | event port |
 | run/tool/domain/UI causal observations | Domain Diagnostic | diagnostic | best effort | event port |
 
 Accepted response/call/result authority still lives in the storage-internal

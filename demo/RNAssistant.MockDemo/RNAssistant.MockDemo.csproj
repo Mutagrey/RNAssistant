@@ -59,6 +59,7 @@
       Exclude="..\..\src\RNAssistant.Core\Storage\ProtectedSecretStore.cs;..\..\src\RNAssistant.Core\Storage\SettingsService.cs"
       Link="Core\Storage\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\*.cs" Link="Office\Contracts\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Office\Qualification\*.cs" Link="Office\Qualification\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Excel\*.cs" Link="Office\Domains\Excel\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaReader.cs" Link="Office\Vba\VbaReader.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaDeleteModuleContracts.cs" Link="Office\Vba\VbaDeleteModuleContracts.cs" />

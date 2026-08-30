@@ -2200,6 +2200,10 @@ policy/effect semantics. Текущий PowerShell WQ0 остаётся engineer
 1. **WQ-A0 contract:** strict pack/evidence/safety model, coverage registry и UI flow.
 2. **WQ-A1 core:** host-neutral manifest parser/catalog, finite runner state machine,
    typed bridge DTO, fake probes/verifiers и closed qualification event operations.
+   - [x] Strict data-only schema/coverage, allowlisted finite runner, mandatory
+     start/completion barriers, safe replay/no-retry, CAS evidence и typed DTO
+     реализованы host-neutral без controller/UI/Office switch.
+     [Evidence](WQ_A1_QUALIFICATION_CORE.md).
 3. **WQ-A2 UI:** отдельная empty-chat card и Diagnostics entry, pack list/stepper,
    resume, run-journal/JSON navigation и bounded report; prompt suggestions не являются packs.
 4. **WQ-A3 Excel WQ0:** один identity collector owner, VSTO/native observations и

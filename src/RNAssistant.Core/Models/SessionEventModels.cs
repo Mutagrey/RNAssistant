@@ -30,6 +30,10 @@ namespace RNAssistant.Core.Models
         public const string DomainEffectPrepared = "domain.effect.prepared";
         public const string DomainEffectDispatched = "domain.effect.dispatched";
         public const string DomainEffectVerified = "domain.effect.verified";
+        public const string QualificationRunStarted = "qualification.run.started";
+        public const string QualificationStepStarted = "qualification.step.started";
+        public const string QualificationStepCompleted = "qualification.step.completed";
+        public const string QualificationRunCompleted = "qualification.run.completed";
     }
 
     public static class SessionOperationTypes

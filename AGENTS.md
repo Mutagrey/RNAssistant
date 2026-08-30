@@ -85,6 +85,10 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 - `AssistantController` — orchestration only. Chat/session bridge methods — `AssistantController.Chats.cs`, context — `AssistantController.Context.cs`, reusable behavior — `Services`.
 - Dispatch — `OfficeToolExecutor`; guard/preparation/dispatch/read-back и live reads сериализует `Runtime/HostRuntime` через `DocumentAccessGate`. Reentry — только та же синхронная operation/target, с явным STA transfer; gate не держится во время model/user wait. Нейтральный session port введён в 5B1; direct selection/context/catalog reads используют отдельные operation roots в HostRuntime. Production Excel binding/identity и Windows qualification остаются 5B2. VBA execution/guards/journal/packages — `VbaToolExecutor*`.
 - Новые bridge payload/response формы — typed DTO в `Contracts`, без anonymous response shapes и ad-hoc `JObject` parsing.
+- Qualification core живёт в `Office/Qualification`: manifest/data only, action/verifier
+  IDs проходят allowlist, mandatory step-start пишется до automatic action, а pass
+  принадлежит typed assertion evidence. Не подключай controller/UI или host probe в
+  WQ-A1; WQ-A2 и WQ-A3 остаются отдельными commits.
 - Host-neutral код не добавляй в VSTO/add-ins. Не меняй `*.Designer.cs` и VSTO metadata без необходимости.
 - Не раздувай существующие крупные файлы: новый самостоятельный behavior выноси в тематический файл/service. Partial split допустим как безопасный первый шаг, но не как оправдание нового монолита.
 - Сохраняй C# 7.3 и .NET Framework 4.8 compatibility. Новые `.cs` обязательно добавляй в old-style `.csproj`.

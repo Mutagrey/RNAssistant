@@ -1,29 +1,39 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 10 done host-neutral; Milestone WQ-A Qualification Center contract
-Current task: WQ-A0 docs-only — согласован встроенный Qualification Center с declarative host packs, normal production execution, deterministic verifier authority, existing event/CAS evidence и первым Excel WQ0 pack. Runtime/UI/helper ещё не реализованы.
+Current phase: Phase 10 done host-neutral; Milestone WQ-A Qualification Center
+Current task: WQ-A1 done host-neutral — strict data-only pack/coverage contracts, finite allowlisted runner, verifier-only pass, mandatory qualification events/CAS evidence, safe replay и typed bridge DTO. Controller/UI, production adapters и built-in packs ещё не подключены.
 Execution mode: §16.1 deferred Windows qualification сохраняется. По прямому запросу пользователя перед WQ добавлен release-critical WQ-A: удобный in-app runner вместо ручного основного пути. Он не закрывает COM/WebView/live-provider gates локально; 5B2 production identity/factory switch всё ещё ждёт реальный WQ0.
 
-Next step: отдельный WQ-A1 commit — strict pack manifest/catalog, coverage registry, finite runner, closed qualification events/typed bridge DTO и fake probes/verifiers, без UI/Office switch. Затем WQ-A2 UI и WQ-A3 встроенный Excel WQ0; после реального evidence — production 5B2/7D и [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md). Phase 12 не начинать.
-Required context: [qualification contract](../qualification.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md), [master WQ-A](STABILIZATION_MASTER_PLAN.md#milestone-wq-a--in-app-qualification-center), [WQ runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md), [migration map](MIGRATION_MAP.md).
-Open gates / remaining legacy: mandatory host-neutral route 0–10 is complete, but WQ-A runtime/UI и все Windows gates открыты; R50 design-only. R51 artifact-library, R52 Host Fabric and R53 Local Automation targets are docs-only optional Phase 11 contours and do not expand WQ-A/Phase 12. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO compile, real DocumentSession/COM lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE gate including R41/R42 and WQ-EXCEL for 7B/7C remain open. Phase 8 needs WQ-PACK for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Phase 9/R45–R48 need Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification; R37 remains a read-only historical diagnostics adapter until Windows qualification and explicit retained-data reset/removal. R28/R29 live-provider and R32 UI/clipboard acceptance remain open. Legacy definition/result/host adapters remain only for consumers and removal gates listed in `MIGRATION_MAP.md`; optional direct-handler cleanup does not block Phase 12. Product 16.1.0-dev, no release/tag.
+Next step: отдельный WQ-A2 commit — application/controller composition и Qualification Center UI shell над fake built-in pack: empty-chat card, Diagnostics entry, stepper, durable resume, journal/JSON navigation и bounded report. Не подключать Excel/COM helper до WQ-A3. После реального WQ0 evidence — production 5B2/7D и [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md). Phase 12 не начинать.
+Required context: [qualification contract](../qualification.md), [WQ-A1 evidence](WQ_A1_QUALIFICATION_CORE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md), [master WQ-A](STABILIZATION_MASTER_PLAN.md#milestone-wq-a--in-app-qualification-center), [WQ runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md), [migration map](MIGRATION_MAP.md).
+Open gates / remaining legacy: mandatory host-neutral route 0–10 and WQ-A1 core are complete, but WQ-A2–A5 and all Windows gates remain open; R50 contained only in host-neutral core. No production action/verifier adapters or built-in packs exist yet. R51 Artifact Library, R52 Host Fabric and R53 Local Automation remain docs-only optional Phase 11 contours and do not expand WQ-A/Phase 12. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO compile, real DocumentSession/COM lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE gate including R41/R42 and WQ-EXCEL for 7B/7C remain open. Phase 8 needs WQ-PACK for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Phase 9/R45–R48 need Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification; R37 remains a read-only historical diagnostics adapter until Windows qualification and explicit retained-data reset/removal. R28/R29 live-provider and R32 UI/clipboard acceptance remain open. Legacy definition/result/host adapters remain only for consumers and removal gates listed in `MIGRATION_MAP.md`; optional direct-handler cleanup does not block Phase 12. Product 16.1.0-dev, no release/tag.
 
 Qualification Center requirements (2026-08-31, WQ-A0 docs-only): пользовательский запрос на встроенные расширяемые проверки оформлен в [canonical contract](../qualification.md) и [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md). Empty-chat card должна открывать отдельный wizard, а не вставлять prompt. Packs versioned/data-only, complex agent tasks идут через production runtime, pass принадлежит typed verifier evidence; dedicated qualification chat использует тот же events/CAS и causal journal. Первый pack — Excel WQ0 с in-app VSTO/native observations и narrow independent-client helper. PowerShell остаётся временным engineering fallback. Код/UI/helper не менялись; WQ0/5B2/R04 не закрыты. Docs diff/205 local links/anchors в затронутых документах и pre-commit `ValidateVersionFormat` — pass; build/tests не запускались.
+
+WQ-A1 host-neutral core (2026-08-31): добавлены strict schema v1 pack parser,
+coverage registry/catalog, конечный runner через narrow allowlisted action/verifier
+ports, verifier-only automatic pass, cleanup/cancellation и fail-closed replay без
+auto-retry. Четыре closed qualification event operations — Agent authority/mandatory;
+step-start предшествует action, большие expected/actual используют тот же chat CAS.
+Typed bridge DTO добавлены без controller route/UI. `qualification:` 8/8,
+`storage: typed event port` 1/1, production source inclusion 1/1; Harness Release и
+MockDemo Release compile без errors (только существующие platform warnings).
+ValidateVersionFormat, diff и local links pass. Полный harness, Windows/Office/VSTO,
+WebView/live provider не запускались. WQ-A2/A3, WQ0/5B2/R04 открыты.
+[Evidence](WQ_A1_QUALIFICATION_CORE.md).
 
 Artifact Library target (2026-08-31, отдельный user-requested docs-only contract):
 [canonical spec](../artifact-library.md) различает non-durable draft, committed exact
 resource, immutable original/snapshot, versioned Plan/HTML/authored document и
 derived artifact. После mandatory CAS/link/save application ставит monotonic full
 projection в WebView очередь до первого model transport без ожидания UI ack; failure
-после commit не откатывает resource.
-Зафиксированы pinned message revisions, head/history UX, domain-owned edit/delete,
-append-only removal/GC, inert uploaded HTML, bounded text/Markdown/image/PDF/audio
-viewers и context-on-demand через действующий Resource Gateway. Master Phase 11 и
-R51 обновлены атомарными slices; код/tests/vendor не менялись, Phase 11/WQ-A1 не
-начаты, текущая фаза и next step остаются прежними. `git diff --check` и 256 local
-Markdown links в восьми затронутых документах — pass; build/runtime tests для
-docs-only изменения не запускались.
+после commit не откатывает resource. Зафиксированы pinned message revisions,
+head/history UX, domain-owned edit/delete, append-only removal/GC, inert uploaded
+HTML, bounded text/Markdown/image/PDF/audio viewers и context-on-demand через
+действующий Resource Gateway. Master Phase 11 и R51 обновлены; runtime/UI/vendor не
+менялись и Phase 11 не начата. `git diff --check` и 256 local Markdown links в восьми
+затронутых документах — pass; build/runtime tests для docs-only изменения не запускались.
 
 Host Fabric and Local Automation target (2026-08-31, отдельный user-requested
 docs-only contract): [Host Fabric](../host-fabric.md) фиксирует одно окно для
@@ -618,7 +628,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 8 | 8A–8D done host-neutral; WQ-PACK pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md), [8C](PHASE_8C_TOOL_PACK_EVENTS.md), [8D](PHASE_8D_RESOURCE_DATA_PLANE.md) | 8D: 74 distinct targeted pass; MockDemo compile | not performed | Execution/callable authority, durable reconstruction and four native resource handlers switched; WQ-PACK open |
 | 9 | 9A–9D5 done host-neutral; Windows acceptance pending | through `9bbf088` | 9D5: 99 targeted harness, web 70/70, MockDemo compile | not performed | Diagnostics/viewer, typed persistence ports and immutable RunViewState switched; R37/WQ-UI open |
 | 10 | done host-neutral: 10A–10D | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [10D](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md) | 10D: architecture 4/4; source inclusion 1/1 | not performed | mandatory host-neutral route complete; WQ-A contract next, then WQ0; R49 fixed host-neutral |
-| WQ-A | A0 contract done; A1–A5 pending | [contract](../qualification.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | docs diff/links only | not performed | In-app packs/runner not implemented; WQ0 remains open |
+| WQ-A | A0 + A1 done host-neutral; A2–A5 pending | [contract](../qualification.md), [WQ-A1](WQ_A1_QUALIFICATION_CORE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A1: qualification 8/8; typed event 1/1; source include 1/1; Harness/MockDemo compile | not performed | Core has no controller/UI/production adapters or built-in packs; WQ0 remains open |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
 

@@ -1,6 +1,7 @@
 # Qualification Center и расширяемые test packs
 
-Статус: целевая архитектура Milestone WQ-A. Реализация ещё не начата.
+Статус: WQ-A1 core реализован host-neutral; UI, production adapters, built-in packs и
+Windows/Office qualification остаются WQ-A2–A5.
 
 ## 1. Назначение
 
@@ -57,6 +58,9 @@ Build pipeline -> immutable BuildEvidenceManifest -> Qualification UI
 
 - `QualificationRunner` — application orchestration. Он не реализует model loop,
   tool dispatch, confirmation, document locking, storage или effect classification.
+- WQ-A1 размещает strict manifest/catalog/coverage и конечный runner в
+  `RNAssistant.Office/Qualification`. Runner принимает только narrow allowlisted
+  action/verifier ports; production adapter к conversation/host runtime ещё не подключён.
 - `agentTask` всегда проходит через обычные `ConversationRunService`, `AgentKernel`,
   `ToolRuntime`, `HostRuntime` и production domain handlers. Test mode не расширяет
   callable tools и не отключает confirmation/policy.
@@ -102,6 +106,14 @@ cycle, отсутствующий requirement/coverage ID, unsafe workspace poli
 capability блокируют pack целиком. Manifest получает content hash; run закрепляет
 точные `packId + revision + hash`.
 
+Schema v1 ограничен 100 последовательными steps. `dependsOn` может ссылаться только
+на уже объявленный step: forward reference и cycle не принимаются. `cleanup` образует
+только финальную группу. `userAction`, `assertion`, `agentTask` и остальные kinds имеют
+разные закрытые формы; executable fields, raw tool IDs и неизвестные properties
+отклоняются до catalog publication. Catalog показывает pack с отсутствующим runtime
+requirement как blocked, а coverage registry отдельно сообщает обязательные ID без
+scenario owner.
+
 ### Step kinds
 
 | Kind | Owner | Назначение |
@@ -122,12 +134,30 @@ passed|failed|blocked|cancelled`. После возможного effect авт�
 Повтор создаёт новый attempt с новым ID и ссылкой на предыдущий; старое evidence не
 перезаписывается.
 
+Перед каждым automatic step сохраняется mandatory `step.started`. Только после этого
+runner вызывает action/verifier port. Потеря `step.completed` оставляет open possible
+effect, переводит projection в blocked и запрещает in-place resume/retry. Безопасно
+возобновляются только durable user checkpoint либо граница между закрытыми steps.
+После failure/cancel остальные обычные steps пропускаются, но финальная cleanup group
+выполняется bounded и не меняет исходный terminal outcome.
+Если timeout/cancellation не завершил уже начатую operation, `step.completed` и
+terminal event не фабрикуются, cleanup не запускается параллельно возможному effect,
+а durable open step остаётся blocked без in-place resume.
+
 ## 5. Evidence и хранение
 
 Каждый scenario использует отдельный явно помеченный qualification chat, связанный с
-текущим document session. Новые closed event kinds фиксируют начало/шаг/observation/
-assertion/terminal record в существующем `*.events.jsonl`; большие immutable payloads
-используют тот же CAS. Это сохраняет один durable source и позволяет resume/restart.
+текущим document session. Closed event kinds фиксируют run start, step start, typed
+step completion с observation/assertion evidence и terminal record в существующем
+`*.events.jsonl`; большие immutable payloads используют тот же CAS. Это сохраняет
+один durable source и позволяет resume/restart.
+
+WQ-A1 вводит четыре mandatory authority operations:
+`qualification.run.started`, `qualification.step.started`,
+`qualification.step.completed`, `qualification.run.completed`. Они пишутся через
+closed `IEventStore`; expected/actual свыше inline bound уходят в тот же CAS с проверкой
+SHA-256. Qualification event projection сверяет exact pack/build provenance. Open
+automatic step после replay остаётся blocked и не исполняется повторно.
 
 Qualification projection каждый раз строится из validated stream. Отдельная БД,
 mutable result file, durable dashboard index и dual-write запрещены. Сводка suite
@@ -229,9 +259,10 @@ Coverage registry связывает каждый mandatory invariant/risk/capab
 
 ## 10. Этапы реализации
 
-1. **WQ-A0 — contract (этот документ):** ADR, pack/evidence/safety contracts и scope.
-2. **WQ-A1 — host-neutral core:** strict manifest parser, catalog, coverage registry,
-   runner state machine, typed bridge DTO и fake probes/verifiers; без Office/UI switch.
+1. **WQ-A0 — contract — done:** ADR, pack/evidence/safety contracts и scope.
+2. **WQ-A1 — host-neutral core — done:** strict manifest parser, catalog, coverage
+   registry, runner state machine, typed bridge DTO, closed events и fake
+   probes/verifiers; без Office/UI switch. [Evidence](stabilization/WQ_A1_QUALIFICATION_CORE.md).
 3. **WQ-A2 — UI shell:** карточка нового чата, Qualification Center, stepper, journal/
    JSON navigation, resume и report projection; fake pack tests.
 4. **WQ-A3 — Excel WQ0:** единый identity owner, in-process observation и narrow x64
