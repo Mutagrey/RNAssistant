@@ -19,7 +19,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void NativeResourceListUsesRuntimeForManualAndModelCalls()
+        private static void NativeResourceToolsUseRuntimeForManualAndModelCalls()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
@@ -28,32 +28,65 @@ namespace RNAssistant.Harness
                 session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "First", InlineText = "body" });
                 var tools = executor.GetControllerTools().ToArray();
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Chat, false);
-                var call = new ToolCall("native_read", ResourceToolExecutor.ListToolId, "{\"provider\":\"chat\"}");
-                var policy = runtime.Describe(call);
-                AssertTrue(policy != null && policy.IndependentLocalRead && !policy.MayHaveSideEffects,
-                    "native resource list has source-owned read policy");
-                var record = runtime.ExecuteAsync(new ToolExecutionContext(call, policy, "run", "turn", "step",
-                    DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
-                AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "native resource list succeeds in chat mode");
-                AssertEqual(ToolDispatchEvidence.MayHaveDispatched, record.Evidence.Dispatch, "provider invocation is recorded");
-                AssertEqual(ToolEffectEvidence.None, record.Evidence.Effect, "read success does not manufacture verified effect");
-                AssertContains(record.Result.DataJson, "rna://", "native list retains canonical resource references");
-                var manual = executor.Execute(Command(ResourceToolExecutor.ListToolId, "provider", "chat"), tools,
-                    new AppSettings(), false, true, session);
-                AssertTrue(manual.Success, "manual executor uses migrated read handler");
-                AssertEqual(record.Result.DataJson, manual.DataJson, "manual and kernel paths share one domain implementation");
-                AssertTrue(runtime.Describe(new ToolCall("wrong_case", "COMMON.RESOURCES_LIST", "{}")) == null,
-                    "native dispatch has no case alias");
-                foreach (var arguments in new[] { "{\"limit\":51}", "{\"limit\":\"1\"}", "{\"unknown\":true}" })
+                Func<string, string, ToolExecutionRecord> execute = (id, arguments) =>
                 {
-                    var invalid = new ToolCall("invalid_read", ResourceToolExecutor.ListToolId, arguments);
+                    var call = new ToolCall("native_" + id, id, arguments);
+                    var policy = runtime.Describe(call);
+                    AssertTrue(policy != null && policy.IndependentLocalRead && !policy.MayHaveSideEffects,
+                        id + " has source-owned read policy");
+                    return runtime.ExecuteAsync(new ToolExecutionContext(call, policy, "run", "turn", "step",
+                        DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                };
+
+                var listed = execute(ResourceToolCatalog.ListToolId, "{\"provider\":\"chat\"}");
+                AssertEqual(ToolExecutionOutcome.Ok, listed.Outcome, "native resource list succeeds in chat mode");
+                AssertEqual(ToolDispatchEvidence.MayHaveDispatched, listed.Evidence.Dispatch, "provider invocation is recorded");
+                AssertEqual(ToolEffectEvidence.None, listed.Evidence.Effect, "read success does not manufacture verified effect");
+                var resourceUri = JsonConvert.DeserializeObject<ResourceListPage>(listed.Result.DataJson)
+                    .Items.Single().Reference.Uri;
+                AssertTrue(resourceUri.StartsWith("rna://", StringComparison.Ordinal),
+                    "native list retains canonical resource references");
+
+                var calls = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [ResourceToolCatalog.ListToolId] = "{\"provider\":\"chat\"}",
+                    [ResourceToolCatalog.ResolveToolId] = JsonConvert.SerializeObject(new { uri = resourceUri }),
+                    [ResourceToolCatalog.SearchToolId] = "{\"provider\":\"chat\",\"query\":\"body\"}",
+                    [ResourceToolCatalog.ReadToolId] = JsonConvert.SerializeObject(new
+                    {
+                        uri = resourceUri,
+                        representation = ResourceRepresentations.Text,
+                        maxChars = 128
+                    })
+                };
+                foreach (var item in calls)
+                {
+                    var record = item.Key == ResourceToolCatalog.ListToolId ? listed : execute(item.Key, item.Value);
+                    AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, item.Key + " uses its native handler");
+                    var command = new ToolCommand
+                    {
+                        ToolId = item.Key,
+                        Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(item.Value)
+                    };
+                    var manual = executor.Execute(command, tools, new AppSettings(), false, true, session);
+                    AssertTrue(manual.Success, item.Key + " manual path uses the same native handler");
+                    AssertEqual(record.Result.DataJson, manual.DataJson,
+                        item.Key + " manual and kernel paths share one implementation");
+                    AssertTrue(runtime.Describe(new ToolCall("wrong_case", item.Key.ToUpperInvariant(), "{}")) == null,
+                        item.Key + " has no case alias");
+
+                    var invalid = new ToolCall("invalid_" + item.Key, item.Key, "{\"unknown\":true}");
+                    var policy = runtime.Describe(invalid);
                     var rejected = runtime.ExecuteAsync(new ToolExecutionContext(invalid, policy, "run", "turn", "step",
                         DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
-                    AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome, "native schema rejects invalid arguments");
-                    AssertEqual(ToolDispatchEvidence.NotDispatched, rejected.Evidence.Dispatch, "schema validation precedes provider access");
-                    AssertEqual(ToolEffectEvidence.None, rejected.Evidence.Effect, "rejected read has no effect");
+                    AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome, item.Key + " rejects invalid arguments");
+                    AssertEqual(ToolDispatchEvidence.NotDispatched, rejected.Evidence.Dispatch,
+                        item.Key + " validates schema before provider access");
                 }
-                var invalidManual = executor.Execute(Command(ResourceToolExecutor.ListToolId, "limit", 51), tools,
+                var readRecord = execute(ResourceToolCatalog.ReadToolId, calls[ResourceToolCatalog.ReadToolId]);
+                AssertTrue(readRecord.Result.Resources.Any(reference => reference.Uri == resourceUri),
+                    "native resource read retains the exact ResourceRef in typed result data");
+                var invalidManual = executor.Execute(Command(ResourceToolCatalog.ListToolId, "limit", 51), tools,
                     new AppSettings(), false, true, session);
                 AssertTrue(!invalidManual.Success && invalidManual.ErrorCode == "invalid_arguments",
                     "manual command uses the same native validation boundary");
@@ -69,9 +102,10 @@ namespace RNAssistant.Harness
                 var liveListArguments = "{\"provider\":\"vba\",\"kind\":\"vba-component\"}";
                 using (hostRuntime.BeginDocumentAccess(target))
                 {
-                    var blockedCall = new ToolCall("blocked_live_list", ResourceToolExecutor.ListToolId,
+                    var blockedCall = new ToolCall("blocked_live_list", ResourceToolCatalog.ListToolId,
                         liveListArguments);
-                    var blocked = runtime.ExecuteAsync(new ToolExecutionContext(blockedCall, policy, "run", "turn", "step",
+                    var blockedPolicy = runtime.Describe(blockedCall);
+                    var blocked = runtime.ExecuteAsync(new ToolExecutionContext(blockedCall, blockedPolicy, "run", "turn", "step",
                         DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                     AssertEqual(ToolExecutionOutcome.Error, blocked.Outcome,
                         "new native command cannot borrow document access held on the same thread");
@@ -80,9 +114,10 @@ namespace RNAssistant.Harness
                     AssertEqual(backendCalls, adapter.Executed.Count, "blocked native live list never reaches Office backend");
                 }
 
-                var releasedCall = new ToolCall("released_live_list", ResourceToolExecutor.ListToolId,
+                var releasedCall = new ToolCall("released_live_list", ResourceToolCatalog.ListToolId,
                     liveListArguments);
-                var released = runtime.ExecuteAsync(new ToolExecutionContext(releasedCall, policy, "run", "turn", "step",
+                var releasedPolicy = runtime.Describe(releasedCall);
+                var released = runtime.ExecuteAsync(new ToolExecutionContext(releasedCall, releasedPolicy, "run", "turn", "step",
                     DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(ToolExecutionOutcome.Ok, released.Outcome, "native live list succeeds after document access release");
                 AssertTrue(adapter.Executed.Count > backendCalls, "released native live list reaches the Office backend");
@@ -146,13 +181,26 @@ namespace RNAssistant.Harness
                 "resource list does not expose the current-page cursor");
             AssertContains(firstListJson, "\"nextCursor\"",
                 "resource list exposes only the usable continuation cursor");
-            var crossOperationCursor = new ResourceToolExecutor(pagingGateway).ExecuteControllerTool(
-                Command(
-                    ResourceToolExecutor.ReadToolId,
-                    "uri", firstListPage.Items[0].Reference.Uri,
-                    "representation", ResourceRepresentations.Text,
-                    "cursor", firstListPage.Cursor),
-                pagingSession);
+            var readRegistry = new ToolHandlerRegistry();
+            var readRegistration = ToolPackSnapshot.Capture(
+                ResourceReadToolHandler.Descriptor,
+                ResourceReadToolHandler.Policy,
+                ResourceReadToolHandler.Binding);
+            readRegistry.Register(readRegistration,
+                new ResourceReadToolHandler(pagingGateway, pagingSession, null));
+            var readRuntime = new ToolRuntime(readRegistry, ChatModes.Chat, false, false);
+            var crossCall = new ToolCall("cross_cursor", ResourceToolCatalog.ReadToolId,
+                JsonConvert.SerializeObject(new
+                {
+                    uri = firstListPage.Items[0].Reference.Uri,
+                    representation = ResourceRepresentations.Text,
+                    cursor = firstListPage.Cursor
+                }));
+            var crossPolicy = readRuntime.Describe(crossCall);
+            var crossRecord = readRuntime.ExecuteAsync(new ToolExecutionContext(
+                crossCall, crossPolicy, "run", "turn", "step", DateTime.UtcNow, false, 1),
+                CancellationToken.None).GetAwaiter().GetResult();
+            var crossOperationCursor = ToolResultUiProjection.Create(crossRecord);
             AssertEqual("resource_cursor_invalid", crossOperationCursor.ErrorCode,
                 "list cursor is rejected by resource read");
             AssertTrue(crossOperationCursor.Retryable != true,
@@ -658,7 +706,7 @@ namespace RNAssistant.Harness
                 AssertTrue(renamed.Success, "VBA resource recovery setup renames the live component");
                 var staleComponent = executor.Execute(
                     Command(
-                        ResourceToolExecutor.ReadToolId,
+                        ResourceToolCatalog.ReadToolId,
                         "uri", component.Reference.Uri,
                         "representation", ResourceRepresentations.Source),
                     tools,
@@ -677,7 +725,7 @@ namespace RNAssistant.Harness
                 adapter.RuntimeDocumentKeyValue = "runtime-other-document";
                 var blocked = executor.Execute(
                     Command(
-                        ResourceToolExecutor.ReadToolId,
+                        ResourceToolCatalog.ReadToolId,
                         "uri", document.Reference.Uri,
                         "representation", ResourceRepresentations.Text),
                     tools,
@@ -872,7 +920,7 @@ namespace RNAssistant.Harness
                         AssertTrue(ReferencesArtifact(session, mediaMessages[0], "attachment_historic-image"),
                             "hydrated media retains canonical resource provenance");
                         AssertTrue(messages.Any(message => message != null &&
-                            string.Equals(message.ToolName, ResourceToolExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(message.ToolName, ResourceToolCatalog.ReadToolId, StringComparison.OrdinalIgnoreCase) &&
                             (message.ResourceRefs ?? new List<ResourceRef>()).Any(reference => reference.Uri == resourceUri)),
                             "resource tool result carries the same durable ResourceRef");
                         return Task.FromResult(new LlmCompletionResult { Content = "invalid envelope" });

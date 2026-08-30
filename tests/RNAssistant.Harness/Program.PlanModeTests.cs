@@ -23,7 +23,7 @@ namespace RNAssistant.Harness
                 AssertTrue(selected.Any(item => item.Id == PlanDocumentToolExecutor.CreateToolId), "plan create available");
                 AssertTrue(selected.Any(item => item.Id == TaskListToolExecutor.CreateToolId), "task list available");
                 AssertTrue(selected.Any(item => item.Id == UserQuestionToolExecutor.AskToolId), "questions available");
-                AssertTrue(selected.Any(item => item.Id == ResourceToolExecutor.ReadToolId), "resource read available");
+                AssertTrue(selected.Any(item => item.Id == ResourceToolCatalog.ReadToolId), "resource read available");
                 AssertTrue(selected.All(item => !item.MutatesDocument), "document mutations excluded");
                 AssertTrue(!ConversationRunPolicy.For(ChatModes.Plan).AllowsConfirmation, "Plan cannot confirm mutations");
             });

@@ -11,10 +11,10 @@ namespace RNAssistant.Office.Services
         private static readonly HashSet<string> ChatToolIds = new HashSet<string>(
             new[]
             {
-                ResourceToolExecutor.ListToolId,
-                ResourceToolExecutor.ResolveToolId,
-                ResourceToolExecutor.SearchToolId,
-                ResourceToolExecutor.ReadToolId
+                ResourceToolCatalog.ListToolId,
+                ResourceToolCatalog.ResolveToolId,
+                ResourceToolCatalog.SearchToolId,
+                ResourceToolCatalog.ReadToolId
             },
             StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> PlanLocalToolIds = new HashSet<string>(new[]

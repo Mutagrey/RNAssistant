@@ -42,10 +42,12 @@ model payload, durable registry, or capability activation store.
   mode/host core profiles plus explicit atomic optional extensions, each with a new
   revision and no LRU eviction inside the live model session. Full-request admission
   includes the bounded format-repair reserve and cannot partially publish a read batch.
-- Durable extension events and rematerialization across confirmation, compaction,
-  and crash/replay remain a later Phase 8 slice. Raw schema-read evidence is only
-  live staging input and never replay authority for an admission decision.
-- Resource data, `ResourceRef`, CAS, and cursors are unchanged. Their data-plane ADR
-  remains a later Phase 8 decision.
+- Phase 8C persists accepted/rejected extension events before publication and
+  rematerializes only the exact accepted logical-turn chain across confirmation,
+  compaction, and crash/replay. Raw schema-read evidence is live staging input and
+  never replay authority for an admission decision.
+- Resource data, `ResourceRef`, CAS, and cursors remain a separate data plane under
+  [ADR-0004](ADR-0004-resource-data-plane.md); Phase 8D moves all four resource reads
+  to typed handlers without granting providers or results execution authority.
 - Legacy `ToolDefinition` remains one conversion/execution adapter until its listed
   consumers move to direct typed registrations.

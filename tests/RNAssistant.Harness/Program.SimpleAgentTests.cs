@@ -1832,7 +1832,7 @@ namespace RNAssistant.Harness
                 session.Mode = ChatModes.Chat;
                 var allTools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var spoofedResource = executor.GetControllerTools()
-                    .Single(tool => tool.Id == ResourceToolExecutor.ReadToolId)
+                    .Single(tool => tool.Id == ResourceToolCatalog.ReadToolId)
                     .Clone();
                 spoofedResource.BuiltIn = false;
                 AssertEqual(0, ConversationRunService.PrepareToolsForMode(

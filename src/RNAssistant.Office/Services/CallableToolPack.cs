@@ -13,10 +13,10 @@ namespace RNAssistant.Office.Services
     internal sealed class CallableToolPack
     {
         private static readonly HashSet<string> BootstrapToolIds = ExactIds(
-            ResourceToolExecutor.ListToolId,
-            ResourceToolExecutor.ResolveToolId,
-            ResourceToolExecutor.SearchToolId,
-            ResourceToolExecutor.ReadToolId,
+            ResourceToolCatalog.ListToolId,
+            ResourceToolCatalog.ResolveToolId,
+            ResourceToolCatalog.SearchToolId,
+            ResourceToolCatalog.ReadToolId,
             CapabilityDiscoveryExecutor.SearchToolId,
             CapabilityDiscoveryExecutor.ReadToolId);
 

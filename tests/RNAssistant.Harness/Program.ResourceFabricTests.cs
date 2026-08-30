@@ -86,10 +86,10 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 foreach (var id in new[]
                 {
-                    ResourceToolExecutor.ListToolId,
-                    ResourceToolExecutor.ResolveToolId,
-                    ResourceToolExecutor.SearchToolId,
-                    ResourceToolExecutor.ReadToolId
+                    ResourceToolCatalog.ListToolId,
+                    ResourceToolCatalog.ResolveToolId,
+                    ResourceToolCatalog.SearchToolId,
+                    ResourceToolCatalog.ReadToolId
                 })
                 {
                     AssertTrue(tools.Any(tool => string.Equals(tool.Id, id, StringComparison.Ordinal)), id + " is published");

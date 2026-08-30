@@ -89,7 +89,11 @@
     <Compile Include="Runtime\ToolRuntime.cs" />
     <Compile Include="Runtime\HostRuntime.cs" />
     <Compile Include="Runtime\DocumentAccessGate.cs" />
+    <Compile Include="Tools\ResourceToolHandlerBase.cs" />
     <Compile Include="Tools\ResourceListToolHandler.cs" />
+    <Compile Include="Tools\ResourceResolveToolHandler.cs" />
+    <Compile Include="Tools\ResourceSearchToolHandler.cs" />
+    <Compile Include="Tools\ResourceReadToolHandler.cs" />
     <Compile Include="Domains\Excel\ExcelReadContracts.cs" />
     <Compile Include="Domains\Excel\ExcelReadService.cs" />
     <Compile Include="Domains\Excel\ExcelWriteContracts.cs" />
@@ -210,7 +214,7 @@
     <Compile Include="Tools\ToolAuthoringExecutor.Schemas.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.Validation.cs" />
     <Compile Include="Tools\PromptToolExecutor.cs" />
-    <Compile Include="Tools\ResourceToolExecutor.cs" />
+    <Compile Include="Tools\ResourceToolCatalog.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.DataBinding.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.Diagnostics.cs" />

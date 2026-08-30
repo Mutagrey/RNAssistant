@@ -309,7 +309,7 @@ Phase 1B left the v2 response, retry limits and outcome behavior unchanged. See 
 ## Kernel state model (Phase 3B2 production switch)
 
 `Core/Agent/AgentKernel` accepts generic messages through `IModelProtocol.SendAsync`.
-It does not own prompt composition, compaction, catalog/LRU, media or provider
+It does not own prompt composition, compaction, callable ToolPack/capability lifecycle, media or provider
 metadata. The materialized boundary above remains the current endpoint owner;
 its rename does not change the active v4 wire or retry behavior.
 

@@ -37,7 +37,7 @@ namespace RNAssistant.Harness
                 .Items.Single();
             var read = new ToolCommand
             {
-                ToolId = ResourceToolExecutor.ReadToolId,
+                ToolId = ResourceToolCatalog.ReadToolId,
                 Arguments = { ["uri"] = fileResource.Reference.Uri, ["representation"] = "source" }
             };
             var readResult = ReadResource(

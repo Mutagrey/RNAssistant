@@ -30,7 +30,8 @@ namespace RNAssistant.Office.Services
             if (NativeToolRuntimeAdapter.Owns(context.Call.Name))
             {
                 var record = await _nativeTools.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
-                if (record.Result != null) _results[context.Call.Id] = new ToolResultMaterialization(record.Result);
+                var nativeMaterialization = _nativeTools.TakeMaterialization(record);
+                if (nativeMaterialization != null) _results[context.Call.Id] = nativeMaterialization;
                 return record;
             }
             var pinned = _toolPack.Find(context.Call.Name);

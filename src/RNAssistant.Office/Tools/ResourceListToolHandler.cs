@@ -1,66 +1,31 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
-using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
-using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    // First native tool: domain behavior has no catalog, confirmation or wire logic.
-    internal sealed class ResourceListToolHandler : IToolHandler
+    internal sealed class ResourceListToolHandler : ResourceToolHandlerBase
     {
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
-            ResourceToolExecutor.ListToolId,
+            ResourceToolCatalog.ListToolId,
             "Read-only: Discover providers or list bounded resource metadata from one provider. If multiple providers exist, omit provider once to receive their ids, then select one. Bodies are never returned. Continue only with nextCursor from the same result and the identical provider/kind query.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
         internal static readonly ToolBinding Binding = new ToolBinding("resources.list.v1");
-        private readonly ResourceGatewayService _gateway;
-        private readonly ChatSession _session;
-
-        internal ResourceListToolHandler(ResourceGatewayService gateway, ChatSession session)
+        internal ResourceListToolHandler(ResourceGatewayService gateway, RNAssistant.Core.Models.ChatSession session)
+            : base(gateway, session)
         {
-            _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
-            _session = session;
         }
 
-        public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
+        protected override ToolHandlerResult Execute(ToolHandlerContext context)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (_session == null)
-                return Failure("Resource tools require an active chat session.", "resource_session_required", false);
-            try
-            {
-                // Native model dispatch bypasses OfficeToolExecutor's root scope.
-                // Keep ownership within this synchronous body, never across an await.
-                using (DocumentAccessGate.BeginOperation())
-                {
-                    context.MarkDispatchPossible();
-                    var data = _gateway.List(_session,
-                        ToolArgumentReader.String(context.Arguments, "provider", string.Empty),
-                        ToolArgumentReader.String(context.Arguments, "kind", string.Empty),
-                        ToolArgumentReader.String(context.Arguments, "cursor", string.Empty),
-                        ToolArgumentReader.Int32(context.Arguments, "limit", 20));
-                    return Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("Resources listed.",
-                        JsonConvert.SerializeObject(data, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore })),
-                        ToolEffectEvidence.None));
-                }
-            }
-            catch (KeyNotFoundException ex) { return Failure(ex.Message, "resource_not_found", false); }
-            catch (ResourceRequestException ex) { return Failure(ex.Message, ex.ErrorCode, ex.Retryable); }
-            catch (InvalidOperationException ex) { return Failure(ex.Message, "resource_request_invalid", true); }
-        }
-
-        private static Task<ToolHandlerResult> Failure(string message, string code, bool retryable)
-        {
-            return Task.FromResult(new ToolHandlerResult(RuntimeResult.Error(message,
-                JsonConvert.SerializeObject(new { code, retryable })), ToolEffectEvidence.None));
+            var data = Gateway.List(Session,
+                ToolArgumentReader.String(context.Arguments, "provider", string.Empty),
+                ToolArgumentReader.String(context.Arguments, "kind", string.Empty),
+                ToolArgumentReader.String(context.Arguments, "cursor", string.Empty),
+                ToolArgumentReader.Int32(context.Arguments, "limit", 20));
+            return Completed(RuntimeResult.Ok("Resources listed.", Serialize(data)));
         }
 
         private static string Parameters()
@@ -72,6 +37,5 @@ namespace RNAssistant.Office.Tools
                 "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum metadata rows.\",\"minimum\":1,\"maximum\":50,\"default\":20}" +
                 "},\"required\":[],\"additionalProperties\":false}";
         }
-
     }
 }

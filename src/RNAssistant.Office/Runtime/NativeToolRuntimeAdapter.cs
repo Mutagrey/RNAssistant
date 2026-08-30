@@ -19,6 +19,9 @@ namespace RNAssistant.Office.Runtime
     {
         private readonly ToolRuntime _runtime;
         private readonly bool _trace;
+        private readonly object _projectionSync = new object();
+        private readonly Dictionary<string, IReadOnlyList<ChatAttachment>> _resourceReadAttachments =
+            new Dictionary<string, IReadOnlyList<ChatAttachment>>(StringComparer.Ordinal);
 
         internal NativeToolRuntimeAdapter(ResourceGatewayService gateway, ExcelReadToolAdapter excelReads,
             ExcelWriteToolAdapter excelWrites, HostRuntime hostRuntime, ChatSession session,
@@ -34,9 +37,21 @@ namespace RNAssistant.Office.Runtime
                     !string.Equals(binding.EntryPoint, registration.Binding.EntryPoint, StringComparison.Ordinal))
                     throw new InvalidOperationException("Pinned native binding does not match its handler: " + registration.Descriptor.Id);
                 IToolHandler handler;
-                if (string.Equals(registration.Descriptor.Id, ResourceToolExecutor.ListToolId, StringComparison.Ordinal))
+                if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ListToolId, StringComparison.Ordinal))
                 {
                     handler = new ResourceListToolHandler(gateway, session);
+                }
+                else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ResolveToolId, StringComparison.Ordinal))
+                {
+                    handler = new ResourceResolveToolHandler(gateway, session);
+                }
+                else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal))
+                {
+                    handler = new ResourceSearchToolHandler(gateway, session);
+                }
+                else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal))
+                {
+                    handler = new ResourceReadToolHandler(gateway, session, CaptureResourceReadAttachments);
                 }
                 else if (ExcelReadToolIds.Owns(registration.Descriptor.Id))
                 {
@@ -60,14 +75,23 @@ namespace RNAssistant.Office.Runtime
 
         internal static bool Owns(string toolId)
         {
-            return string.Equals(toolId, ResourceToolExecutor.ListToolId, StringComparison.Ordinal) ||
+            return string.Equals(toolId, ResourceToolCatalog.ListToolId, StringComparison.Ordinal) ||
+                string.Equals(toolId, ResourceToolCatalog.ResolveToolId, StringComparison.Ordinal) ||
+                string.Equals(toolId, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal) ||
+                string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
         {
-            if (string.Equals(toolId, ResourceToolExecutor.ListToolId, StringComparison.Ordinal))
+            if (string.Equals(toolId, ResourceToolCatalog.ListToolId, StringComparison.Ordinal))
                 return ResourceListToolHandler.Binding;
+            if (string.Equals(toolId, ResourceToolCatalog.ResolveToolId, StringComparison.Ordinal))
+                return ResourceResolveToolHandler.Binding;
+            if (string.Equals(toolId, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal))
+                return ResourceSearchToolHandler.Binding;
+            if (string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal))
+                return ResourceReadToolHandler.Binding;
             if (ExcelReadToolIds.Owns(toolId)) return ExcelReadToolHandler.BindingFor(toolId);
             if (ExcelWriteToolIds.Owns(toolId)) return ExcelWriteToolHandler.Binding;
             return null;
@@ -103,7 +127,38 @@ namespace RNAssistant.Office.Runtime
             var context = new ToolExecutionContext(call, policy, identity, identity,
                 string.IsNullOrWhiteSpace(command.RuntimeStepId) ? identity : command.RuntimeStepId,
                 DateTime.UtcNow, confirmed, remainingSteps);
-            return ToolResultUiProjection.Create(ExecuteAsync(context, token).GetAwaiter().GetResult());
+            var record = ExecuteAsync(context, token).GetAwaiter().GetResult();
+            var result = ToolResultUiProjection.Create(record);
+            var materialized = TakeMaterialization(record);
+            if (materialized != null)
+            {
+                result.ModelAttachments = materialized.ModelAttachments;
+                ToolResultUiProjection.IncludeResources(result, materialized);
+            }
+            return result;
+        }
+
+        internal ToolResultMaterialization TakeMaterialization(ToolExecutionRecord record)
+        {
+            if (record == null || record.Result == null) return null;
+            IReadOnlyList<ChatAttachment> attachments = null;
+            lock (_projectionSync)
+            {
+                _resourceReadAttachments.TryGetValue(record.Context.Call.Id, out attachments);
+                _resourceReadAttachments.Remove(record.Context.Call.Id);
+            }
+            return new ToolResultMaterialization(record.Result, attachments);
+        }
+
+        private void CaptureResourceReadAttachments(string callId, IReadOnlyList<ChatAttachment> attachments)
+        {
+            if (string.IsNullOrWhiteSpace(callId) || attachments == null || attachments.Count == 0) return;
+            var captured = attachments.Where(item => item != null).ToArray();
+            if (captured.Length == 0) return;
+            lock (_projectionSync)
+            {
+                _resourceReadAttachments[callId] = Array.AsReadOnly(captured);
+            }
         }
 
         private void Trace(ToolExecutionContext context, string stage, string status)

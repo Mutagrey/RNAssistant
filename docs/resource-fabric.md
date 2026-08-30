@@ -12,7 +12,7 @@ Status: implemented and re-audited. Core contracts, providers, the unified Chat/
 
 ## Domain model
 
-`Resource` is an addressable object. A resource may be live and mutable, such as the active workbook, or backed by immutable revisions, such as an uploaded image or plan.
+`Resource` is addressable data, never execution authority, callable-tool state, or a hidden command. A resource may be live and mutable, such as the active workbook, or backed by immutable revisions, such as an uploaded image or plan. Reading it does not grant a tool, change a `ToolPack`, or bypass domain mutation policy.
 
 `ChatArtifact` is an internal replay projection of immutable content/provenance stored through CAS. It is not a second model transport. Model-facing chat resources always use an exact revision URI; active HTML/plan/checkpoint ids remain internal domain pointers and are projected to that URI before entering a message or prompt. There is deliberately no mutable model-facing head URI whose meaning could change during replay.
 
@@ -49,10 +49,12 @@ Chat and Agent use one buffered structured loop. The policy differs, the transpo
 - Chat receives exactly the four resource discovery/read tools and no mutation tools, confirmation, or skills.
 - Agent keeps the complete mode/session-filtered catalog only as local execution authority. The initial model prompt contains resource and unified capability bootstrap schemas plus a compact exact-id tool/skill catalog.
 - `RUNTIME_CONTEXT.capabilities.items` always contains the complete compact schema-free capability index. `common.capabilities_search` is an optional bounded metadata filter over it. `common.capabilities_read` loads one exact revisioned tool descriptor or complete skill body according to the catalog kind; only complete, untruncated tool-schema evidence matching the current descriptor enters the callable working set.
-- The dynamic working set is an evidence-derived LRU of at most eight schemas with an 8k–20k token budget. Exact tool calls update recency, so replay reconstructs the same eviction. Compaction, truncation, revision drift, or explicit eviction requires another read.
-- A schema or skill body remains loaded only while its exact revision is present in active model context.
+- Tool schemas start from a finite mode/host core. Complete exact-revision reads may stage one atomic optional extension for the next model-step boundary only after the full request fits and its accepted event is durable. Membership is monotonic for the logical turn: execution does not touch it, there is no LRU/partial publication, and replay reconstructs only the ordered accepted turn chain.
+- Skill bodies remain revision-matched context evidence rather than callable-pack membership. Compaction, truncation, or revision change requires another exact read.
 
 The prompt contains compact resource references relevant to the conversation. On a later question such as “что на той картинке?” the model resolves or reads the referenced URI again. Raw media is hydrated only for the next model step and then released; the durable reference remains.
+
+All four public resource operations execute as exact native read-only `ToolRuntime` handlers over the same `ResourceGatewayService` and provider registry. Their descriptor, policy, and binding are source-owned beside the handler. Every call enters a fresh `DocumentAccessGate` operation root; nested live Office/VBA access through `HostRuntime` reenters only that same synchronous document operation. The Core result contains bounded JSON plus exact `ResourceRef` values. For a media read, an Office adapter holds bytes only as request-local materialization until the immediate next model step, then releases them; bytes, CAS paths, and internal artifact ids do not become a second result transport.
 
 Ordinary large tool results follow the same rule. The result envelope keeps a bounded preview and optional `resources:[{uri,revision,relation?,kind?}]`; `relation:"result"` distinguishes the resource containing the full result from other produced/cited resources. When eligible generic result data exceeds its inline budget, up to the shared 2,000,000-character artifact safety bound becomes a CAS-backed `tool_result` resource before the next model dispatch. Resource/schema/skill reads are not rewrapped as untrusted artifacts. Chart payloads become their specialized immutable artifact at the same result boundary, so the next model step receives kind plus exact URI rather than a duplicate chart body. Durable activity also keeps only that pointer; the storage/UI projection rehydrates the chart from CAS instead of storing or creating a duplicate.
 

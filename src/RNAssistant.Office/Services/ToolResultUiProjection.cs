@@ -22,9 +22,12 @@ namespace RNAssistant.Office.Services
             else if (record.Outcome == ToolExecutionOutcome.Ok) result = LegacyResult.Ok(record.Message, data);
             else
             {
-                result = LegacyResult.Fail(record.Message, data, ReadErrorCode(data) ??
+                string errorCode;
+                bool? retryable;
+                ReadErrorMetadata(data, out errorCode, out retryable);
+                result = LegacyResult.Fail(record.Message, data, errorCode ??
                     (record.Context.IsConfirmed && !record.MayHaveDispatched && record.Outcome == ToolExecutionOutcome.Error
-                        ? "pending_tool_catalog_changed" : "execution_interrupted"), false);
+                        ? "pending_tool_catalog_changed" : "execution_interrupted"), retryable ?? false);
                 if (record.Outcome == ToolExecutionOutcome.Unknown) result.Status = "unknown";
                 else if (record.Outcome == ToolExecutionOutcome.NotDispatched) result.Status = "cancelled";
             }
@@ -33,17 +36,22 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private static string ReadErrorCode(string data)
+        private static void ReadErrorMetadata(string data, out string code, out bool? retryable)
         {
-            if (string.IsNullOrWhiteSpace(data)) return null;
+            code = null;
+            retryable = null;
+            if (string.IsNullOrWhiteSpace(data)) return;
             try
             {
                 var root = JsonConvert.DeserializeObject<JObject>(data,
                     new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
-                return root != null && root["code"] != null && root["code"].Type == JTokenType.String
-                    ? (string)root["code"] : null;
+                if (root == null) return;
+                if (root["code"] != null && root["code"].Type == JTokenType.String)
+                    code = (string)root["code"];
+                if (root["retryable"] != null && root["retryable"].Type == JTokenType.Boolean)
+                    retryable = (bool)root["retryable"];
             }
-            catch (JsonException) { return null; }
+            catch (JsonException) { }
         }
 
         internal static void IncludeResources(LegacyResult uiResult, ToolResultMaterialization materialized)

@@ -23,7 +23,6 @@ namespace RNAssistant.Office.Tools
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
         private readonly PromptToolExecutor _promptToolExecutor;
         private readonly ResourceGatewayService _resourceGateway;
-        private readonly ResourceToolExecutor _resourceExecutor;
         private readonly ExcelReadToolAdapter _excelReadAdapter;
         private readonly ExcelWriteToolAdapter _excelWriteAdapter;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
@@ -63,7 +62,6 @@ namespace RNAssistant.Office.Tools
                 loadArtifactBody,
                 readAttachmentText,
                 BeginLiveOfficeRead);
-            _resourceExecutor = new ResourceToolExecutor(_resourceGateway);
             _excelReadAdapter = new ExcelReadToolAdapter(_adapter);
             _excelWriteAdapter = new ExcelWriteToolAdapter(_adapter);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(
@@ -78,7 +76,7 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools, _capabilityDiscoveryExecutor.GetControllerTools(), ControllerExecutorKind.CapabilityDiscovery);
             RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
             RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
-            RegisterControllerTools(controllerTools, _resourceExecutor.GetControllerTools(), ControllerExecutorKind.Resource);
+            RegisterControllerTools(controllerTools, ResourceToolCatalog.GetControllerTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools, _htmlArtifactExecutor.GetControllerTools(), ControllerExecutorKind.HtmlArtifact);
             RegisterControllerTools(controllerTools, _taskListToolExecutor.GetControllerTools(), ControllerExecutorKind.TaskList);
             RegisterControllerTools(controllerTools, _planDocumentToolExecutor.GetControllerTools(), ControllerExecutorKind.PlanDocument);
@@ -700,8 +698,9 @@ namespace RNAssistant.Office.Tools
                     return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
                 case ControllerExecutorKind.Prompt:
                     return _promptToolExecutor.ExecuteControllerTool(command, dryRun);
-                case ControllerExecutorKind.Resource:
-                    return _resourceExecutor.ExecuteControllerTool(command, context.Session);
+                case ControllerExecutorKind.Native:
+                    return ToolResult.Fail("Native tool did not enter its registered handler.", null,
+                        "native_handler_unavailable", false);
                 case ControllerExecutorKind.HtmlArtifact:
                     return _htmlArtifactExecutor.ExecuteControllerTool(command, context.Session, dryRun, cancellationToken);
                 case ControllerExecutorKind.TaskList:
@@ -938,7 +937,7 @@ namespace RNAssistant.Office.Tools
             CapabilityDiscovery,
             ToolAuthoring,
             Prompt,
-            Resource,
+            Native,
             HtmlArtifact,
             TaskList,
             PlanDocument,

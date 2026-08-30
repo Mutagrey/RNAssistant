@@ -2039,9 +2039,9 @@ Excel read/write добавлены через ToolRuntime и DocumentSession, A
 
 ### Выполнить
 
-- [ ] Зафиксировать `Resource = data`.
-- [ ] Сохранить `rna://`, revisions, CAS, cursors.
-- [ ] Заменить оставленную вне AgentKernel реализацию resource capability lifecycle; сохранить проверенную в Phase 3 границу, не менять kernel loop ради ToolPack.
+- [x] 8D: зафиксировать `Resource = data`. [Evidence](PHASE_8D_RESOURCE_DATA_PLANE.md), [ADR-0004](../decisions/ADR-0004-resource-data-plane.md).
+- [x] 8D: сохранить `rna://`, revisions, CAS, cursors.
+- [x] 8D: заменить оставленную вне AgentKernel реализацию resource capability lifecycle; сохранить проверенную в Phase 3 границу, не менять kernel loop ради ToolPack.
 - [x] 8A: ввести immutable `ToolPackSnapshot` за границей AgentKernel. [Evidence](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [ADR-0006](../decisions/ADR-0006-tool-pack-snapshot.md).
 - [x] 8A: pin descriptor/schema + policy + binding/entry point/scope/host/package fingerprint (§7.7); одинаковый ID не разрешает замену implementation в принятом call/confirmation, legacy adapter rechecks до dispatch.
 - [x] 8B: Core Excel/VBA pack передавать полностью.
@@ -2056,10 +2056,10 @@ Excel read/write добавлены через ToolRuntime и DocumentSession, A
 - [x] 8B: если core/extension pack не помещается, fail visibly.
 - [x] 8B: проверять полный request admission до snapshot publication; overflow отклоняет весь extension без удаления уже admitted schemas.
 - [x] 8C: durable extension event повторно материализует pinned schemas при confirmation continuation/compaction/crash replay; raw read evidence не считается admission decision. [Evidence](PHASE_8C_TOOL_PACK_EVENTS.md).
-- [ ] Resource tools оставить read-only.
-- [ ] Сохранить `ResourceRef` и существующие bounded read results (§7.8); не вводить CAS/content_ref transport или новый reader.
-- [ ] Capability discovery и tool authoring разделить.
-- [ ] Добавить ADR-0004.
+- [x] 8D: Resource tools оставить read-only.
+- [x] 8D: сохранить `ResourceRef` и существующие bounded read results (§7.8); не вводить CAS/content_ref transport или новый reader.
+- [x] 8D: Capability discovery и tool authoring разделить.
+- [x] 8D: добавить ADR-0004. [Decision](../decisions/ADR-0004-resource-data-plane.md).
 - [x] 8A: добавить ADR-0006. [Decision](../decisions/ADR-0006-tool-pack-snapshot.md).
 
 ### Definition of Done

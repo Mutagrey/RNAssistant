@@ -102,7 +102,7 @@ namespace RNAssistant.Harness
                     if (saved.LastRun.ExecutionSummary.ReadOk != 1) return;
                     var durable = new ChatStore(FixturePaths.Value).Load(saved.Host, saved.DocumentKey, saved.Id);
                     var activity = durable.Messages.Single(message => message.Activity != null &&
-                        message.Activity.ToolId == ResourceToolExecutor.ListToolId).Activity;
+                        message.Activity.ToolId == ResourceToolCatalog.ListToolId).Activity;
                     AssertEqual(expectedEvidence, JsonConvert.SerializeObject(activity.ExecutionEvidence),
                         "native read evidence is durable at completion and every later materialization save");
                     completedSaves++;
@@ -119,7 +119,7 @@ namespace RNAssistant.Harness
                 foreach (var projection in new[] { session, replay, clone })
                 {
                     var activity = projection.Messages.Single(message => message.Activity != null &&
-                        message.Activity.ToolId == ResourceToolExecutor.ListToolId).Activity;
+                        message.Activity.ToolId == ResourceToolCatalog.ListToolId).Activity;
                     AssertEqual(expectedEvidence, JsonConvert.SerializeObject(activity.ExecutionEvidence),
                         "producer evidence survives session replay and clone without inference");
                 }

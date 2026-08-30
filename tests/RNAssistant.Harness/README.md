@@ -273,6 +273,12 @@ uses schema 16 for durable turn-scoped reconstruction. Tests preserve, review, o
 reset saved older/future markers explicitly. JS review behavior is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
+Phase 8D keeps the four `common.resources_*` schemas stable while switching their
+execution to exact native read-only handlers. Use `tool runtime: native resource tools`,
+`resources:`, the focused media/replay cases, and `harness: production projects include
+all source files` to cover policy, gateway bounds/cursors, `ResourceRef`, request-local
+media materialization, and old-style project inclusion. See [8D evidence](../../docs/stabilization/PHASE_8D_RESOURCE_DATA_PLANE.md).
+
 ## Full suite
 
 Run the complete harness only for broad cross-cutting changes:
