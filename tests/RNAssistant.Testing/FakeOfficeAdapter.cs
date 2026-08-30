@@ -397,7 +397,10 @@ namespace RNAssistant.Harness
             if ((command.ToolId ?? string.Empty).EndsWith(".vba_install_package_internal", StringComparison.OrdinalIgnoreCase))
             {
                 var marker = Argument(command, "marker", string.Empty);
-                foreach (var component in JArray.Parse(Argument(command, "componentsJson", "[]")).OfType<JObject>())
+                var components = JArray.Parse(Argument(command, "componentsJson", "[]")).OfType<JObject>().ToList();
+                var guardError = ValidatePackageInstallGuard(components);
+                if (guardError != null) return guardError;
+                foreach (var component in components)
                 {
                     var code = "' " + marker + "\n" + ((string)component["code"] ?? string.Empty);
                     SetVbaModule(
@@ -1135,6 +1138,60 @@ namespace RNAssistant.Harness
         {
             int parsed;
             return int.TryParse(Argument(command, name, Convert.ToString(fallback)), out parsed) ? parsed : fallback;
+        }
+
+        private ToolResult ValidatePackageInstallGuard(IReadOnlyList<JObject> components)
+        {
+            var items = components ?? new JObject[0];
+            var hasGuard = items.Any(item => item != null && item["expectedBeforeExists"] != null);
+            if (!hasGuard || items.Any(item => item == null || item["expectedBeforeExists"] == null ||
+                item["expectedBeforeOwnershipMarkerPresent"] == null))
+            {
+                return ToolResult.Fail(
+                    "VBA package install guard is incomplete.",
+                    null,
+                    "vba_package_guard_invalid",
+                    false);
+            }
+            foreach (var item in items)
+            {
+                var name = (string)item["name"];
+                FakeVbaModule actual;
+                var actualExists = _vbaModules.TryGetValue(name, out actual);
+                var expectedExists = item.Value<bool>("expectedBeforeExists");
+                if (actualExists != expectedExists)
+                {
+                    return ToolResult.Fail("stale VBA package install", null, "stale_vba_package", false);
+                }
+                if (!expectedExists) continue;
+                var expectedMarkerPresent = item.Value<bool>("expectedBeforeOwnershipMarkerPresent");
+                var actualMarker = PackageMarkerEvidence(actual.Code);
+                if (!string.Equals(actual.Type, (string)item["expectedBeforeType"], StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(
+                        VbaTextCanonicalizer.PackageComparableCodeSha256(actual.Code),
+                        (string)item["expectedBeforeComparableCodeSha256"],
+                        StringComparison.OrdinalIgnoreCase) ||
+                    expectedMarkerPresent != !string.IsNullOrWhiteSpace(actualMarker) ||
+                    expectedMarkerPresent && !string.Equals(
+                        actualMarker,
+                        (string)item["expectedBeforeOwnershipMarker"],
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail("stale VBA package install", null, "stale_vba_package", false);
+                }
+            }
+            return null;
+        }
+
+        private static string PackageMarkerEvidence(string code)
+        {
+            var lines = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n')
+                .Select(line => (line ?? string.Empty).TrimStart())
+                .Where(line => line.StartsWith("' RNAssistantPackage:", StringComparison.OrdinalIgnoreCase) ||
+                    line.StartsWith("' RNAssistantSession:", StringComparison.OrdinalIgnoreCase))
+                .Select(line => line.Substring(1).TrimStart())
+                .ToArray();
+            return lines.Length == 0 ? null : string.Join("\n", lines);
         }
 
         private bool TryDequeueResult(string toolId, out ToolResult result)

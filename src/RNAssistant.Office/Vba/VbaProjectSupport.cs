@@ -11,7 +11,7 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office
 {
-    public static class VbaProjectSupport
+    public static partial class VbaProjectSupport
     {
         private const int StdModuleType = 1;
         private const int ClassModuleType = 2;
@@ -568,6 +568,8 @@ namespace RNAssistant.Office
             }
 
             dynamic vbProject = GetVbaProject(documentObject);
+            var guardError = ValidatePackageInstallGuards(vbProject, payload);
+            if (guardError != null) return guardError;
             var ownerMarker = PackageOwnerMarker(marker);
             foreach (var component in components)
             {

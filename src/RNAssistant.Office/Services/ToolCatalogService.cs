@@ -86,8 +86,16 @@ namespace RNAssistant.Office.Services
                         string.Equals(existing.Executor, "vba", StringComparison.OrdinalIgnoreCase) &&
                         matchedGlobalPackageIds.Add(discovered.Id))
                     {
-                        existing.InstallationStatus = PackageMatches(existing, discovered) ? "installed" : "modified_local";
-                        if (existing.InstallationStatus == "modified_local") existing.Limitations = "Document VBA components differ from the global package.";
+                        existing.InstallationStatus = _toolExecutor.GetVbaInstallationStatus(existing, discovered);
+                        if (existing.InstallationStatus == "modified_local" || existing.InstallationStatus == "partial")
+                        {
+                            existing.Limitations = "Document VBA components differ from the global package.";
+                        }
+                        else if (existing.InstallationStatus == "session_cleanup_required" ||
+                            existing.InstallationStatus == "recovery_required")
+                        {
+                            existing.Limitations = "A temporary or ambiguously owned VBA package remains. Run explicit Uninstall cleanup before execution.";
+                        }
                         continue;
                     }
                     var collisionId = discovered.Id + "#document";
@@ -307,19 +315,6 @@ namespace RNAssistant.Office.Services
                 module = null;
                 return false;
             }
-        }
-
-        private static bool PackageMatches(ToolDefinition global, ToolDefinition document)
-        {
-            var documentComponents = (document.Components ?? new List<VbaToolComponent>()).ToDictionary(component => component.Name, StringComparer.OrdinalIgnoreCase);
-            foreach (var component in global.Components ?? new List<VbaToolComponent>())
-            {
-                VbaToolComponent current;
-                if (!documentComponents.TryGetValue(component.Name, out current) ||
-                    !string.Equals(component.Type, current.Type, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(VbaTextCanonicalizer.PackageCodeSha256(component.Code), VbaTextCanonicalizer.PackageCodeSha256(current.Code), StringComparison.OrdinalIgnoreCase)) return false;
-            }
-            return (global.Components ?? new List<VbaToolComponent>()).Count == documentComponents.Count;
         }
 
         private bool SupportsVbaHost()

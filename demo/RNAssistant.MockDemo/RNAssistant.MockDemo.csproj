@@ -63,6 +63,12 @@
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaDeleteModuleContracts.cs" Link="Office\Vba\VbaDeleteModuleContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationContracts.cs" Link="Office\Vba\VbaMutationContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationJournal.cs" Link="Office\Vba\VbaMutationJournal.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageContracts.cs" Link="Office\Vba\VbaPackageContracts.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageJournal.cs" Link="Office\Vba\VbaPackageJournal.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageService.cs" Link="Office\Vba\VbaPackageService.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageService.Probe.cs" Link="Office\Vba\VbaPackageService.Probe.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageService.Lifecycle.cs" Link="Office\Vba\VbaPackageService.Lifecycle.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageService.Journal.cs" Link="Office\Vba\VbaPackageService.Journal.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaRestoreContracts.cs" Link="Office\Vba\VbaRestoreContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.cs" Link="Office\Vba\VbaMutationService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.ApplyPatch.cs" Link="Office\Vba\VbaMutationService.ApplyPatch.cs" />

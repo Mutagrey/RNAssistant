@@ -133,6 +133,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("backupId")] public string BackupId { get; set; }
         [JsonProperty("packageId")] public string PackageId { get; set; }
         [JsonProperty("packageVersion")] public string PackageVersion { get; set; }
+        [JsonProperty("lifecycleId")] public string LifecycleId { get; set; }
+        [JsonProperty("sessionOnly")] public bool? SessionOnly { get; set; }
         [JsonProperty("componentCount")] public int ComponentCount { get; set; }
         [JsonProperty("componentNames")] public IReadOnlyList<string> ComponentNames { get; set; }
         [JsonProperty("errorCode")] public string ErrorCode { get; set; }
@@ -163,6 +165,8 @@ namespace RNAssistant.Office.Contracts
                 BackupId = row.BackupId,
                 PackageId = row.PackageId,
                 PackageVersion = row.PackageVersion,
+                LifecycleId = row.LifecycleId,
+                SessionOnly = row.SessionOnly,
                 ComponentCount = row.ComponentCount,
                 ComponentNames = row.ComponentNames ?? new List<string>(),
                 ErrorCode = row.ErrorCode,
@@ -188,6 +192,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
         [JsonProperty("packageId")] public string PackageId { get; set; }
         [JsonProperty("packageVersion")] public string PackageVersion { get; set; }
+        [JsonProperty("lifecycleId")] public string LifecycleId { get; set; }
+        [JsonProperty("sessionOnly")] public bool? SessionOnly { get; set; }
+        [JsonProperty("ownershipMarker")] public string OwnershipMarker { get; set; }
         [JsonProperty("errorCode")] public string ErrorCode { get; set; }
         [JsonProperty("message")] public string Message { get; set; }
         [JsonProperty("sourceEventSeqs")] public IReadOnlyList<long> SourceEventSeqs { get; set; }
@@ -212,6 +219,9 @@ namespace RNAssistant.Office.Contracts
                 ToolCallId = detail.ToolCallId,
                 PackageId = detail.PackageId,
                 PackageVersion = detail.PackageVersion,
+                LifecycleId = detail.LifecycleId,
+                SessionOnly = detail.SessionOnly,
+                OwnershipMarker = detail.OwnershipMarker,
                 ErrorCode = detail.ErrorCode,
                 Message = detail.Message,
                 SourceEventSeqs = detail.SourceEventSeqs ?? new List<long>(),

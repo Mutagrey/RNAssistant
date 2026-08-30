@@ -18,6 +18,7 @@ namespace RNAssistant.Office.Tools
         private readonly VbaJournalStore _vbaJournalStore;
         private readonly VbaReader _reader;
         private readonly VbaMutationService _mutationService;
+        private readonly VbaPackageService _packageService;
 
         public VbaToolExecutor(IOfficeApplicationAdapter adapter, VbaJournalStore vbaJournalStore)
         {
@@ -29,6 +30,11 @@ namespace RNAssistant.Office.Tools
                 new VbaMutationJournalStoreAdapter(vbaJournalStore),
                 new VbaMutationReaderAdapter(_reader),
                 new VbaMutationBackendAdapter(adapter, BackendToolId));
+            _packageService = new VbaPackageService(
+                new VbaMutationDocumentContextAdapter(adapter),
+                new VbaPackageJournalStoreAdapter(vbaJournalStore),
+                new VbaMutationReaderAdapter(_reader),
+                new VbaPackageBackendAdapter(adapter, BackendToolId));
         }
 
         internal VbaReader Reader { get { return _reader; } }
@@ -427,7 +433,7 @@ namespace RNAssistant.Office.Tools
                 return journalError;
             }
 
-            return ExecuteJournaledPackageMutation(prepared, () =>
+            return ExecuteJournaledRename(prepared, () =>
             {
                 var rename = new ToolCommand { ToolId = BackendToolId("vba_rename_module_internal") };
                 rename.Arguments["moduleName"] = moduleName;

@@ -1969,7 +1969,7 @@ consumer map и порядок — в [6H evidence](PHASE_6H_VBA_PACKAGE_SCOPE.m
 - [x] 6G host-neutral: полный restore workflow перенесён в typed `VbaMutationService`; executor-owned backup lookup/guard/journal/backend/read-back path и restore-only helpers удалены без второго execution/store path.
 - [x] 6G: confirmation guard связывает exact backup id/module/type/canonical live-source hash и current target existence/source hash; raw CAS hash остаётся storage evidence. Подмена backup, stale target и incompatible component type блокируются до journal/dispatch, а `ok` требует source/type read-back и durable terminal.
 - [x] 6H docs-only: проверены runtime/UI/catalog/recovery consumers; весь существующий package lifecycle и rename оставлены в stable-core Phase 6, dynamic definition authoring не включён. R41 и ordered 6I→6J gates зафиксированы без runtime switch.
-- [ ] 6I: один typed package owner для validate/probe, session install/run/cleanup, persistent install/remove/status, journal/read-back/reconciliation и `ok/error/unknown`; R41 закрыт без automatic recovery mutation.
+- [x] 6I host-neutral: один typed package owner для validate/probe, session install/run/cleanup, persistent install/remove/status, journal/read-back/reconciliation и `ok/error/unknown`; R41 закрыт через marker+journal-aware durable lifecycle без automatic recovery mutation. Exact prepared existence/type/source/marker CAS доходит до shared backend и проверяется до первой install mutation. Windows/VBE qualification остаётся открытой.
 - [ ] 6J: typed rename guard/preparation/backend/verification/recovery owner; executor-owned rename/package journal helpers удалены после switch последнего consumer.
 - [x] R33 host-neutral: exact patch требует единственного стартового смещения, включая перекрытия; отказ до confirmation/write/нового backup/journal проверен отдельно от 6A extraction. Windows/VBE и полный VBA gate остаются открытыми.
 - [x] Добавить host-neutral fault injection/reused regression matrix для typed module pipeline 6D–6G:
@@ -1986,7 +1986,7 @@ consumer map и порядок — в [6H evidence](PHASE_6H_VBA_PACKAGE_SCOPE.m
   - [x] VBE newline normalization (fake normalization only);
   - [x] duplicate target;
   - [x] target not found.
-- [ ] Повторить соответствующую typed fault matrix для package/rename в 6I/6J, включая session install без terminal/cleanup, marker drift и complete-before/complete-intended/mixed multi-component states.
+- [ ] Повторить соответствующую typed fault matrix для package/rename в 6I/6J: package часть 6I host-neutral закрыта, включая session install без terminal/cleanup, probe/preparation и post-prepare CAS races, marker drift/strip, cancellation, backend/read-back/terminal faults и mixed multi-component states; rename complete-before/complete-intended/mixed/collision остаётся 6J.
 - [x] Real Excel/VBE сценарии зафиксированы в [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md#3-финальный-прогон-candidate); исполнение WQ-VBA остаётся открытым.
 
 ### Definition of Done

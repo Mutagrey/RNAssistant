@@ -152,6 +152,19 @@ retains latest-backup pinning across confirmation, missing-target typed creation
 journal/CAS recovery and VBE normalization coverage. See
 [Phase 6G evidence](../../docs/stabilization/PHASE_6G_VBA_RESTORE.md).
 
+## VBA package lifecycle owner (Phase 6I)
+
+`vba: package` covers the typed package owner and R41 boundaries: package validation,
+marker+journal-aware state, one session lifecycle correlation, persistent and
+temporary execution, explicit orphan cleanup, prepare/backend/read-back/terminal
+faults, cancellation, marker drift/strip, probe/preparation and pre-run races,
+post-prepare backend CAS, undeclared catalog components and mixed multi-component
+recovery. The shared COM helper guard is exercised against a fake VBProject; the
+full `vba:` filter retains document discovery, code-only UserForm, macro failure,
+VBE normalization, journal/CAS and rename regressions. These are fake-host ordering
+checks; real VBIDE/Trust Access/crash behavior remains Windows qualification. See
+[Phase 6I evidence](../../docs/stabilization/PHASE_6I_VBA_PACKAGE_LIFECYCLE.md).
+
 ## Stabilization completion guard
 
 ```bash

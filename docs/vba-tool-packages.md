@@ -95,21 +95,23 @@ dynamic tool definitions, новые package функции или pipelines: au
 отдельным Phase 11 contour. `mode=rename` не является package feature и переходит в
 typed mutation owner отдельным 6J.
 
-До 6I открыт R41: session install и cleanup записываются раздельно. Если install
-применён, но terminal или cleanup потерян, matching временный source может остаться
-в документе и быть ошибочно принят marker-insensitive probe за обычный installed
-package. Целевой runtime различает persistent/document-local/session-owned state,
-связывает весь временный lifecycle и блокирует macro execution при unknown/missing
-cleanup. Recovery не повторяет, не удаляет и не перезаписывает VBA автоматически;
-cleanup требует новой policy-authorized journalled операции над точным неизменённым
-session-owned package.
+6I закрывает R41 host-neutral. Session install и cleanup остаются двумя атомарными
+package mutations, но имеют один durable `LifecycleId`; тот же id входит в exact
+`RNAssistantSession` marker вместе с package id/version/hash. Typed probe различает
+`document_local`, persistent `installed`, `session_cleanup_required`, partial,
+modified и `recovery_required`, объединяя live marker/source/type с append-only
+journal. Поэтому потерянный terminal/cleanup блокирует macro и persistent overwrite
+даже если marker повреждён или удалён. Recovery не повторяет, не удаляет и не
+перезаписывает VBA автоматически; cleanup требует новой policy-authorized journalled
+Uninstall над точным неизменённым session-owned package. Старый marker без lifecycle
+распознаётся для явной cleanup, но не получает выдуманную durable correlation.
 
 ## Жизненный цикл
 
 - Run существующего document-local tool вызывает его напрямую.
 - Если глобальный package отсутствует в VBA project, обычный Run временно импортирует его components, вызывает entry function позиционными typed arguments и удаляет временные components в `finally` даже после ошибки.
 - Явный Install делает package постоянным только в macro-enabled документах (`.xlsm/.xlam`, `.docm/.dotm`, `.pptm/.ppam`). Временный install через UI/API запрещён: им управляет runtime.
-- До COM dispatch install/remove пишет один package transaction manifest со всеми CAS-backed before/intended component states. Persistent operations проецируют rollback backups; components получают ownership marker с id/version/hash.
+- До COM dispatch install/remove пишет один package transaction manifest со всеми CAS-backed before/intended component states. Install передаёт exact prepared existence/type/comparable-source/marker state backend-у; missing guard блокируется, а post-prepare drift даёт `stale_vba_package` до первой component mutation. Persistent operations проецируют rollback backups; components получают ownership marker с id/version/hash, а session marker также содержит lifecycle id.
 - Uninstall удаляет только owned и не изменённые components. Existing `MSForm` дополнительно должен быть проверен как blank code-only Designer state. Чужой код, Designer controls, type collision, частичный package или hash drift удалять/перезаписывать автоматически нельзя.
 - Временный запуск не сохраняет книгу сам. Постоянный install изменяет VBA project, но сохранение документа остаётся отдельным действием Office/пользователя.
 - Optimistic concurrency остаётся строгой, но hash не является model-facing аргументом. Каждый public mutation сам читает точное live state, привязывает внутренний guard к chat, document identity и module, сохраняет его через confirmation и повторно сверяет непосредственно перед mutation. Предварительный public read/search не является разрешением и не обязателен. После write/patch/restore выполняется повторное чтение: допустимы только несемантические преобразования VBE (регистр и пробелы вне строк/комментариев, CRLF и финальные пустые строки); фактический read-back hash возвращается в результате. `CodeModule.CountOfLines` не сравнивается с числом строк входной строки, потому что VBIDE может учитывать служебную финальную строку. Семантическое расхождение не возвращается как success, а сохранённый backup остаётся доступен для rollback. Package install/remove использует отдельный package hash, который игнорирует export headers и ownership markers.

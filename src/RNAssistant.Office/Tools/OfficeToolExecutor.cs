@@ -296,14 +296,22 @@ namespace RNAssistant.Office.Tools
             if (dryRun)
             {
                 return _hostRuntime.ExecuteForExpectedDocument(DocumentTarget(session), true, cancellationToken,
-                    () => _vbaExecutor.InstallCustomTool(tool, false, true, session));
+                    () => _vbaExecutor.InstallCustomTool(
+                        tool,
+                        true,
+                        session,
+                        cancellationToken: cancellationToken));
             }
             return ExecuteDirectMutation(
                 session,
                 false,
                 true,
                 cancellationToken,
-                () => _vbaExecutor.InstallCustomTool(tool, false, false, session));
+                () => _vbaExecutor.InstallCustomTool(
+                    tool,
+                    false,
+                    session,
+                    cancellationToken: cancellationToken));
         }
 
         public ToolResult RemoveVbaTool(
@@ -316,12 +324,20 @@ namespace RNAssistant.Office.Tools
                 false,
                 true,
                 cancellationToken,
-                () => _vbaExecutor.RemoveCustomTool(tool, false, session));
+                () => _vbaExecutor.RemoveCustomTool(
+                    tool,
+                    session,
+                    cancellationToken: cancellationToken));
         }
 
         public string GetVbaInstallationStatus(ToolDefinition tool)
         {
             return _vbaExecutor.GetInstallationStatus(tool);
+        }
+
+        internal string GetVbaInstallationStatus(ToolDefinition globalTool, ToolDefinition documentTool)
+        {
+            return _vbaExecutor.GetInstallationStatus(globalTool, documentTool);
         }
 
         private ToolResult ExecuteCommandSafely(ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken)
@@ -527,7 +543,14 @@ namespace RNAssistant.Office.Tools
             if (customTool != null && string.Equals(customTool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return _vbaExecutor.ExecuteCustomTool(customTool, command, context.Settings, dryRun, manualRun, context.Session);
+                return _vbaExecutor.ExecuteCustomTool(
+                    customTool,
+                    command,
+                    context.Settings,
+                    dryRun,
+                    manualRun,
+                    context.Session,
+                    cancellationToken);
             }
 
             if (customTool != null)

@@ -150,6 +150,8 @@ namespace RNAssistant.Core.Models
         public string ModuleName { get; set; }
         public bool BeforeExists { get; set; }
         public string BeforeComponentType { get; set; }
+        public bool? BeforeOwnershipMarkerPresent { get; set; }
+        public string BeforeOwnershipMarker { get; set; }
         public string BeforeCodeSha256 { get; set; }
         public string BeforeComparableCodeSha256 { get; set; }
         public ChatBlobReference BeforeCodeReference { get; set; }
@@ -175,6 +177,8 @@ namespace RNAssistant.Core.Models
         public string PackageVersion { get; set; }
         public bool SessionOnly { get; set; }
         public bool RetainBackups { get; set; }
+        public string LifecycleId { get; set; }
+        public string OwnershipMarker { get; set; }
         public string Host { get; set; }
         public string DocumentKey { get; set; }
         public string RuntimeDocumentKey { get; set; }
@@ -283,6 +287,8 @@ namespace RNAssistant.Core.Models
         public string BackupId { get; set; }
         public string PackageId { get; set; }
         public string PackageVersion { get; set; }
+        public string LifecycleId { get; set; }
+        public bool? SessionOnly { get; set; }
         public int ComponentCount { get; set; }
         public List<string> ComponentNames { get; set; }
         public string ErrorCode { get; set; }
@@ -351,6 +357,9 @@ namespace RNAssistant.Core.Models
         public string ToolCallId { get; set; }
         public string PackageId { get; set; }
         public string PackageVersion { get; set; }
+        public string LifecycleId { get; set; }
+        public bool? SessionOnly { get; set; }
+        public string OwnershipMarker { get; set; }
         public string ErrorCode { get; set; }
         public string Message { get; set; }
         public List<long> SourceEventSeqs { get; set; }

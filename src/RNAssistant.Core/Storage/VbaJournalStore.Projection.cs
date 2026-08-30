@@ -164,6 +164,8 @@ namespace RNAssistant.Core.Storage
                     ComponentType = sourceComponent == null ? null : sourceComponent.BeforeComponentType,
                     PackageId = rename ? null : record.Prepared.PackageId,
                     PackageVersion = rename ? null : record.Prepared.PackageVersion,
+                    LifecycleId = rename ? null : record.Prepared.LifecycleId,
+                    SessionOnly = rename ? (bool?)null : record.Prepared.SessionOnly,
                     ComponentCount = rename ? 1 : components.Count,
                     ComponentNames = components.Select(item => item.ModuleName).Where(item => !string.IsNullOrWhiteSpace(item)).ToList(),
                     ErrorCode = record.Terminal == null ? null : record.Terminal.ErrorCode,
@@ -189,7 +191,7 @@ namespace RNAssistant.Core.Storage
             {
                 row.MutationId, row.Kind, row.Operation, row.Status, row.SessionId, row.RunId, row.TurnId,
                 row.StepId, row.ToolCallId, row.ModuleName, row.ComponentType, row.BackupId,
-                row.PackageId, row.PackageVersion, row.ErrorCode, row.Message,
+                row.PackageId, row.PackageVersion, row.LifecycleId, row.ErrorCode, row.Message,
                 string.Join(" ", row.ComponentNames ?? new List<string>())
             }.Where(item => !string.IsNullOrWhiteSpace(item)).ToArray());
             return terms.All(term => text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
@@ -266,6 +268,9 @@ namespace RNAssistant.Core.Storage
             {
                 detail.PackageId = prepared.PackageId;
                 detail.PackageVersion = prepared.PackageVersion;
+                detail.LifecycleId = prepared.LifecycleId;
+                detail.SessionOnly = prepared.SessionOnly;
+                detail.OwnershipMarker = prepared.OwnershipMarker;
             }
             foreach (var component in prepared.Components ?? new List<VbaPackageMutationComponent>())
             {

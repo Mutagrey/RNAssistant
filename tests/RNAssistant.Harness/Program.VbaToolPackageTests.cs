@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
@@ -9,6 +10,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Harness
 {
@@ -229,11 +231,20 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var journal = new VbaJournalStore(paths);
                 var tool = BuildVbaPackageToolForTest();
+                var packageHash = TextPatternEngine.Sha256(string.Join(
+                    "\n",
+                    tool.Components.OrderBy(component => component.Name, StringComparer.OrdinalIgnoreCase)
+                        .Select(component => component.Name + ":" +
+                            VbaTextCanonicalizer.PackageCodeSha256(component.Code))
+                        .ToArray()));
+                var ownershipMarker = "RNAssistantPackage: id=" + tool.Id + "; version=" +
+                    tool.PackageVersion + "; hash=" + packageHash + ";";
                 var prepared = journal.PreparePackageMutation(new VbaPackageMutationPreparation
                 {
                     Operation = "package_install",
                     PackageId = tool.Id,
                     PackageVersion = tool.PackageVersion,
+                    OwnershipMarker = ownershipMarker,
                     Host = "Excel",
                     DocumentKey = "doc",
                     RuntimeDocumentKey = adapter.RuntimeDocumentKey,
@@ -249,7 +260,7 @@ namespace RNAssistant.Harness
                 });
                 adapter.SetVbaModule(
                     tool.Components[0].Name,
-                    "' RNAssistantPackage: id=" + tool.Id + ";\n" + tool.Components[0].Code,
+                    "' " + ownershipMarker + "\n" + tool.Components[0].Code,
                     tool.Components[0].Type);
                 var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
 
@@ -266,6 +277,735 @@ namespace RNAssistant.Harness
                     "missing component is recognized as before state");
                 AssertEqual(string.Empty, adapter.GetVbaModuleCode(tool.Components[1].Name), "reconciliation does not create the missing component");
             });
+        }
+
+        private static void VbaPackageTerminalLossBlocksOrphanRun()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new VbaJournalStore(paths);
+                var tool = BuildVbaPackageToolForTest();
+                var source = VbaPackageToolAdapter.ToSource(tool);
+                var failing = new FaultingPackageJournal(new VbaPackageJournalStoreAdapter(store))
+                {
+                    FailNextComplete = true
+                };
+                var first = CreatePackageService(adapter, failing);
+
+                var unknown = first.Execute(PackageExecution(source), CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, unknown.Status, "lost terminal is unknown");
+                AssertEqual("vba_package_journal_terminal_failed", unknown.ErrorCode, "lost terminal code");
+                AssertEqual(0, adapter.RanMacros.Count, "macro is not run without durable install terminal");
+                AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "RNAssistantSession:", "session component remains observable");
+                var installRecord = store.ListPackageMutations("Excel", "doc").Single();
+                AssertTrue(installRecord.Terminal == null, "failed terminal is not invented");
+                AssertTrue(!string.IsNullOrWhiteSpace(installRecord.Prepared.LifecycleId), "session lifecycle is durable");
+                AssertContains(installRecord.Prepared.OwnershipMarker, "lifecycle=", "marker carries lifecycle correlation");
+                var toolStore = new ToolStore(paths);
+                toolStore.SaveOne(tool);
+                var catalogExecutor = new OfficeToolExecutor(adapter, store, new SkillStore(paths), toolStore);
+                var catalogStatus = new ToolCatalogService(adapter, catalogExecutor, toolStore)
+                    .GetVisibleTools()
+                    .Single(item => string.Equals(item.Id, tool.Id, StringComparison.OrdinalIgnoreCase))
+                    .InstallationStatus;
+                AssertEqual("session_cleanup_required", catalogStatus, "catalog exposes orphan recovery state");
+
+                var recovered = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+                AssertTrue(recovered.ReconcilePendingMutations() == null, "restart reconciliation records observed state");
+                var blocked = recovered.Execute(PackageExecution(source), CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Error, blocked.Status, "orphan run is blocked after restart");
+                AssertEqual("vba_session_cleanup_required", blocked.ErrorCode, "orphan requires explicit cleanup");
+                AssertEqual(0, adapter.RanMacros.Count, "orphan is never executed");
+                adapter.SetDocumentTitle("Harness.xlsm");
+                var overwriteBlocked = recovered.InstallPersistent(new VbaPackageInstallRequest
+                {
+                    Source = source
+                }, CancellationToken.None);
+                AssertEqual("vba_session_cleanup_required", overwriteBlocked.ErrorCode,
+                    "persistent install cannot overwrite an incomplete session lifecycle");
+                AssertEqual(1, store.ListPackageMutations("Excel", "doc").Count,
+                    "blocked overwrite creates no new mutation");
+
+                var removed = recovered.RemoveOwned(new VbaPackageRemoveRequest
+                {
+                    Source = source,
+                    Correlation = new VbaMutationCorrelation { SessionId = "recovery-session" }
+                }, CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Ok, removed.Status, "explicit recovery cleanup succeeds");
+                AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "orphan entry removed");
+                AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_EchoService"), "orphan dependency removed");
+                var records = store.ListPackageMutations("Excel", "doc");
+                AssertEqual(2, records.Count, "install and explicit cleanup remain separate journal actions");
+                AssertEqual(records[0].Prepared.LifecycleId, records[1].Prepared.LifecycleId,
+                    "install and cleanup share one lifecycle correlation");
+                var lifecycleRows = store.QueryMutations("Excel", "doc", new VbaMutationQueryRequest
+                {
+                    Search = records[0].Prepared.LifecycleId
+                }).Rows;
+                AssertEqual(2, lifecycleRows.Count, "diagnostics can search the complete session lifecycle");
+                AssertTrue(lifecycleRows.All(row => row.SessionOnly == true), "diagnostics identifies session mutations");
+                var detail = store.GetMutationDetail("Excel", "doc", records[0].Prepared.MutationId);
+                AssertEqual(records[0].Prepared.LifecycleId, detail.LifecycleId, "detail exposes lifecycle correlation");
+                AssertContains(detail.OwnershipMarker, "RNAssistantSession:", "detail exposes exact ownership evidence");
+                var rowDto = RNAssistant.Office.Contracts.VbaMutationRowDto.From(lifecycleRows[0]);
+                var detailDto = RNAssistant.Office.Contracts.VbaMutationDetailResponse.From(detail);
+                AssertEqual(detail.LifecycleId, rowDto.LifecycleId, "bridge row preserves lifecycle correlation");
+                AssertEqual(detail.OwnershipMarker, detailDto.OwnershipMarker, "bridge detail preserves ownership evidence");
+            });
+        }
+
+        private static void VbaPackageMarkerDriftBlocksRun()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var tool = BuildVbaPackageToolForTest();
+                var marker = "' RNAssistantSession: id=" + tool.Id + "; version=" + tool.PackageVersion +
+                    "; hash=" + new string('a', 64) + "; lifecycle=wrong;\n";
+                foreach (var component in tool.Components)
+                {
+                    adapter.SetVbaModule(component.Name, marker + component.Code, component.Type);
+                }
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
+                var tools = adapter.GetBuiltInTools().Concat(new[] { tool }).ToList();
+
+                var result = executor.Execute(
+                    Command(tool.Id, "text", "hello", "count", 2, "ratio", 1.5),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+
+                AssertEqual("vba_session_cleanup_required", result.ErrorCode, "marker drift blocks execution");
+                AssertEqual("recovery_required", executor.GetVbaInstallationStatus(tool), "marker drift has explicit status");
+                AssertEqual(0, adapter.RanMacros.Count, "drifted marker is never run");
+                AssertEqual("vba_package_drift", executor.RemoveVbaTool(tool).ErrorCode,
+                    "ambiguous marker cannot be removed automatically");
+                AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "lifecycle=wrong", "ambiguous code is preserved");
+            });
+        }
+
+        private static void VbaPackageJournalBlocksStrippedOrphanMarker()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new VbaJournalStore(paths);
+                var source = VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest());
+                var failing = new FaultingPackageJournal(new VbaPackageJournalStoreAdapter(store))
+                {
+                    FailNextComplete = true
+                };
+                var first = CreatePackageService(adapter, failing);
+                AssertEqual(VbaMutationOutcomeStatus.Unknown,
+                    first.Execute(PackageExecution(source), CancellationToken.None).Status,
+                    "fixture leaves session install without terminal");
+                var recovered = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+                AssertTrue(recovered.ReconcilePendingMutations() == null, "orphan install is reconciled as committed");
+                foreach (var component in source.Components)
+                {
+                    var live = adapter.GetVbaModuleCode(component.Name);
+                    adapter.SetVbaModule(
+                        component.Name,
+                        string.Join("\n", live.Replace("\r\n", "\n").Split('\n').Skip(1).ToArray()),
+                        component.Type);
+                }
+
+                var blocked = recovered.Execute(PackageExecution(source), CancellationToken.None);
+
+                AssertEqual("vba_session_cleanup_required", blocked.ErrorCode,
+                    "durable incomplete lifecycle wins over stripped live marker");
+                AssertEqual(0, adapter.RanMacros.Count, "stripped orphan source is never run");
+                AssertEqual("vba_package_drift",
+                    recovered.RemoveOwned(new VbaPackageRemoveRequest { Source = source }, CancellationToken.None).ErrorCode,
+                    "stripped ownership cannot authorize deletion");
+                AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "<RNAssistantTool>", "unowned code is preserved");
+            });
+        }
+
+        private static void VbaPackageSessionInstallRejectsProbeRace()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new VbaJournalStore(paths);
+                var tool = BuildVbaPackageToolForTest();
+                var source = VbaPackageToolAdapter.ToSource(tool);
+                var readCount = 0;
+                adapter.BeforeExecuteTool = command =>
+                {
+                    if (command == null ||
+                        !command.ToolId.EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase)) return;
+                    readCount += 1;
+                    if (readCount != 3) return;
+                    foreach (var component in tool.Components)
+                    {
+                        adapter.SetVbaModule(component.Name, component.Code, component.Type);
+                    }
+                };
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+
+                var outcome = service.Execute(PackageExecution(source), CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status, "probe race is definite error");
+                AssertEqual("vba_package_state_changed", outcome.ErrorCode, "probe race error code");
+                AssertEqual(0, adapter.RanMacros.Count, "probe race never runs macro");
+                AssertTrue(!adapter.Executed.Any(item => item.ToolId.EndsWith(".vba_install_package_internal", StringComparison.OrdinalIgnoreCase)),
+                    "probe race blocks install dispatch");
+                AssertEqual(0, store.ListPackageMutations("Excel", "doc").Count,
+                    "probe race blocks journal preparation before overwrite intent is accepted");
+                AssertEqual(tool.Components[0].Code, adapter.GetVbaModuleCode(tool.Components[0].Name),
+                    "racing document-local source is preserved");
+            });
+        }
+
+        private static void VbaPackageRechecksBeforeMacro()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new VbaJournalStore(paths);
+                var tool = BuildVbaPackageToolForTest();
+                foreach (var component in tool.Components)
+                {
+                    adapter.SetVbaModule(component.Name, component.Code, component.Type);
+                }
+                var drifted = tool.Components[0].Code.Replace("Echo =", "Echo = \"changed\" &");
+                var readCount = 0;
+                adapter.BeforeExecuteTool = command =>
+                {
+                    if (command == null ||
+                        !command.ToolId.EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase)) return;
+                    readCount += 1;
+                    if (readCount == 3)
+                    {
+                        adapter.SetVbaModule(tool.Components[0].Name, drifted, tool.Components[0].Type);
+                    }
+                };
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+
+                var outcome = service.Execute(
+                    PackageExecution(VbaPackageToolAdapter.ToSource(tool)),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status, "pre-run drift is definite error");
+                AssertEqual("vba_package_drift", outcome.ErrorCode, "pre-run drift error code");
+                AssertEqual(0, adapter.RanMacros.Count, "pre-run drift blocks macro dispatch");
+                AssertEqual(0, store.ListPackageMutations("Excel", "doc").Count,
+                    "document-local execution creates no package mutation record");
+                AssertEqual(drifted, adapter.GetVbaModuleCode(tool.Components[0].Name),
+                    "pre-run drift is preserved for review");
+            });
+        }
+
+        private static void VbaPackageCatalogRejectsExtraComponent()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var tool = BuildVbaPackageToolForTest();
+                var live = VbaPackageToolAdapter.ToSource(tool).Components.ToList();
+                live.Add(new VbaPackageSourceComponent
+                {
+                    Name = "RNA_Unexpected",
+                    Type = "StdModule",
+                    Code = "Option Explicit"
+                });
+                var service = CreatePackageService(
+                    adapter,
+                    new VbaPackageJournalStoreAdapter(new VbaJournalStore(paths)));
+
+                var status = service.ClassifyDocumentSnapshot(
+                    VbaPackageToolAdapter.ToSource(tool),
+                    live);
+
+                AssertEqual("modified_local", status,
+                    "an undeclared document package component is catalog drift");
+            });
+        }
+
+        private static void VbaPackagePrepareFailureBlocksDispatch()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.SetDocumentTitle("Harness.xlsm");
+                var journal = new FaultingPackageJournal(
+                    new VbaPackageJournalStoreAdapter(new VbaJournalStore(paths)))
+                {
+                    FailNextPrepare = true
+                };
+                var service = CreatePackageService(adapter, journal);
+
+                var outcome = service.InstallPersistent(new VbaPackageInstallRequest
+                {
+                    Source = VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())
+                }, CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status, "prepare failure is definite error");
+                AssertEqual("vba_package_journal_prepare_failed", outcome.ErrorCode, "prepare failure code");
+                AssertTrue(!adapter.Executed.Any(item => item.ToolId.EndsWith("vba_install_package_internal")),
+                    "prepare failure blocks backend dispatch");
+            });
+        }
+
+        private static void VbaPackageBackendThrowIsAssessed()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new VbaJournalStore(paths);
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+                adapter.ThrowOnToolId = "excel.vba_install_package_internal";
+
+                var outcome = service.Execute(
+                    PackageExecution(VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status, "throw before mutation is definite error");
+                AssertEqual(0, adapter.RanMacros.Count, "failed install never runs macro");
+                AssertEqual(VbaMutationStatuses.NotApplied, store.ListPackageMutations("Excel", "doc").Single().Terminal.Status,
+                    "before state is durably assessed");
+            });
+        }
+
+        private static void VbaPackageMutateThenThrowCommits()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new VbaJournalStore(paths);
+                var tool = BuildVbaPackageToolForTest();
+                var injected = false;
+                adapter.BeforeExecuteTool = command =>
+                {
+                    if (injected || command == null ||
+                        !string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase)) return;
+                    injected = true;
+                    var marker = Convert.ToString(command.Arguments["marker"]);
+                    foreach (var component in JArray.Parse(Convert.ToString(command.Arguments["componentsJson"])).OfType<JObject>())
+                    {
+                        adapter.SetVbaModule(
+                            (string)component["name"],
+                            "' " + marker + "\n" + (string)component["code"],
+                            (string)component["type"]);
+                    }
+                    adapter.ThrowOnToolId = command.ToolId;
+                };
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+
+                var outcome = service.Execute(
+                    PackageExecution(VbaPackageToolAdapter.ToSource(tool)),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Ok, outcome.Status, "verified intended install wins backend throw");
+                AssertEqual(1, adapter.RanMacros.Count, "verified package runs once");
+                AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "verified package still cleans");
+                AssertEqual(2, store.ListPackageMutations("Excel", "doc").Count, "install and cleanup are journalled");
+            });
+        }
+
+        private static void VbaPackageMarkerOnlyDivergenceIsUnknown()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.SetDocumentTitle("Harness.xlsm");
+                var store = new VbaJournalStore(paths);
+                var tool = BuildVbaPackageToolForTest();
+                foreach (var component in tool.Components)
+                {
+                    adapter.SetVbaModule(component.Name, component.Code, component.Type);
+                }
+                adapter.BeforeExecuteTool = command =>
+                {
+                    if (command == null ||
+                        !string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase)) return;
+                    var foreignMarker = "' RNAssistantPackage: id=foreign; version=1; hash=" +
+                        new string('a', 64) + ";\n";
+                    foreach (var component in tool.Components)
+                    {
+                        adapter.SetVbaModule(component.Name, foreignMarker + component.Code, component.Type);
+                    }
+                    adapter.ThrowOnToolId = command.ToolId;
+                };
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+
+                var outcome = service.InstallPersistent(new VbaPackageInstallRequest
+                {
+                    Source = VbaPackageToolAdapter.ToSource(tool)
+                }, CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
+                    "marker-only divergence is not classified as unchanged before state");
+                AssertEqual("vba_package_mutation_unknown", outcome.ErrorCode,
+                    "marker-only divergence error code");
+                AssertEqual(VbaMutationStatuses.Unknown,
+                    store.ListPackageMutations("Excel", "doc").Single().Terminal.Status,
+                    "marker-only divergence remains explicit durable uncertainty");
+                AssertContains(adapter.GetVbaModuleCode(tool.Components[0].Name), "id=foreign",
+                    "foreign ownership evidence is preserved for review");
+            });
+        }
+
+        private static void VbaPackageCasRejectsPostPrepareDrift()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.SetDocumentTitle("Harness.xlsm");
+                var store = new VbaJournalStore(paths);
+                var tool = BuildVbaPackageToolForTest();
+                foreach (var component in tool.Components)
+                {
+                    adapter.SetVbaModule(component.Name, component.Code, component.Type);
+                }
+                var drifted = "' RNAssistantPackage: id=foreign; version=1; hash=" +
+                    new string('b', 64) + ";\n" + tool.Components[0].Code;
+                adapter.BeforeExecuteTool = command =>
+                {
+                    if (command == null ||
+                        !string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase)) return;
+                    adapter.SetVbaModule(tool.Components[0].Name, drifted, tool.Components[0].Type);
+                };
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+
+                var outcome = service.InstallPersistent(new VbaPackageInstallRequest
+                {
+                    Source = VbaPackageToolAdapter.ToSource(tool)
+                }, CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
+                    "post-prepare drift is durable uncertainty");
+                AssertEqual("vba_package_mutation_unknown", outcome.ErrorCode,
+                    "post-prepare drift outcome code");
+                var terminal = store.ListPackageMutations("Excel", "doc").Single().Terminal;
+                AssertEqual(VbaMutationStatuses.Unknown,
+                    terminal.Status,
+                    "post-prepare drift terminal is unknown");
+                AssertEqual("stale_vba_package", terminal.ErrorCode,
+                    "typed backend reports its compare-and-swap refusal");
+                AssertEqual(drifted, adapter.GetVbaModuleCode(tool.Components[0].Name),
+                    "backend CAS preserves externally changed source");
+            });
+        }
+
+        private static void VbaPackageComInstallGuardRejectsDrift()
+        {
+            var unguardedDocument = new FakeVbaDocumentObject();
+            var unguarded = new JArray(new JObject
+            {
+                ["name"] = "RNA_Unguarded",
+                ["type"] = "StdModule",
+                ["code"] = "Option Explicit"
+            }).ToString();
+            AssertEqual(
+                "vba_package_guard_invalid",
+                VbaProjectSupport.InstallPackage(
+                    unguardedDocument,
+                    unguarded,
+                    "RNAssistantPackage: id=excel.guard; version=1.0.0; hash=test").ErrorCode,
+                "COM helper has no unguarded install compatibility path");
+            AssertEqual(0, unguardedDocument.VBProject.VBComponents.Count,
+                "unguarded install is rejected before mutation");
+
+            var document = new FakeVbaDocumentObject();
+            const string before = "Option Explicit\nPublic Sub BeforeState()\nEnd Sub";
+            const string drifted = "Option Explicit\nPublic Sub ExternalState()\nEnd Sub";
+            const string intended = "Option Explicit\nPublic Sub IntendedState()\nEnd Sub";
+            var component = document.VBProject.VBComponents.Seed("RNA_Guarded", drifted);
+            var componentsJson = new JArray(new JObject
+            {
+                ["name"] = "RNA_Guarded",
+                ["type"] = "StdModule",
+                ["code"] = intended,
+                ["expectedBeforeExists"] = true,
+                ["expectedBeforeType"] = "StdModule",
+                ["expectedBeforeComparableCodeSha256"] = VbaTextCanonicalizer.PackageComparableCodeSha256(before),
+                ["expectedBeforeOwnershipMarkerPresent"] = false,
+                ["expectedBeforeOwnershipMarker"] = null
+            }).ToString();
+
+            var outcome = VbaProjectSupport.InstallPackage(
+                document,
+                componentsJson,
+                "RNAssistantPackage: id=excel.guard; version=1.0.0; hash=test");
+
+            AssertEqual("stale_vba_package", outcome.ErrorCode, "COM helper enforces prepared package state");
+            AssertEqual(drifted, component.CodeModule.Code, "COM helper refuses overwrite before first mutation");
+        }
+
+        private static void VbaPackageReadBackLossIsUnknown()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new VbaJournalStore(paths);
+                var queued = false;
+                adapter.BeforeExecuteTool = command =>
+                {
+                    if (queued || command == null ||
+                        !string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase)) return;
+                    queued = true;
+                    adapter.QueueResult(
+                        "excel.vba_read_module",
+                        ToolResult.Fail("VBA read-back unavailable.", null, "vba_access_error", false));
+                };
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+
+                var outcome = service.Execute(
+                    PackageExecution(VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())),
+                    CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status, "lost read-back is unknown");
+                AssertEqual(0, adapter.RanMacros.Count, "unknown install is not executed");
+                AssertEqual(VbaMutationStatuses.Unknown, store.ListPackageMutations("Excel", "doc").Single().Terminal.Status,
+                    "unknown component state is terminal evidence");
+            });
+        }
+
+        private static void VbaPackageCancellationBeforeDispatch()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.SetDocumentTitle("Harness.xlsm");
+                var store = new VbaJournalStore(paths);
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+                var cancellation = new CancellationTokenSource();
+                cancellation.Cancel();
+                var cancelled = false;
+                try
+                {
+                    service.InstallPersistent(new VbaPackageInstallRequest
+                    {
+                        Source = VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())
+                    }, cancellation.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    cancelled = true;
+                }
+
+                AssertTrue(cancelled, "cancellation is propagated");
+                AssertTrue(!adapter.Executed.Any(item => item.ToolId.EndsWith("vba_install_package_internal")),
+                    "cancel before dispatch does not call backend");
+                AssertEqual(VbaMutationStatuses.NotApplied, store.ListPackageMutations("Excel", "doc").Single().Terminal.Status,
+                    "cancel before dispatch records before state");
+            });
+        }
+
+        private static void VbaPackageCancellationAfterInstallCleans()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new VbaJournalStore(paths);
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+                var cancellation = new CancellationTokenSource();
+                adapter.BeforeExecuteTool = command =>
+                {
+                    if (command != null &&
+                        string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase))
+                    {
+                        cancellation.Cancel();
+                    }
+                };
+                var cancelled = false;
+                try
+                {
+                    service.Execute(
+                        PackageExecution(VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())),
+                        cancellation.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    cancelled = true;
+                }
+
+                AssertTrue(cancelled, "post-install cancellation is propagated after cleanup");
+                AssertEqual(0, adapter.RanMacros.Count, "cancelled lifecycle does not run macro");
+                AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "cancelled lifecycle cleans entry");
+                var records = store.ListPackageMutations("Excel", "doc");
+                AssertEqual(2, records.Count, "cancelled lifecycle records install and cleanup");
+                AssertEqual(records[0].Prepared.LifecycleId, records[1].Prepared.LifecycleId,
+                    "cancelled cleanup retains lifecycle correlation");
+            });
+        }
+
+        private static void VbaPackageCleanupFailureLeavesBlockedOrphan()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new VbaJournalStore(paths);
+                var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
+                var source = VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest());
+                adapter.QueueResult(
+                    "excel.run_macro",
+                    ToolResult.Fail("macro failed", null, "macro_failed", false));
+                adapter.ThrowOnToolId = "excel.vba_remove_package_internal";
+
+                var outcome = service.Execute(PackageExecution(source), CancellationToken.None);
+
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status, "failed cleanup makes lifecycle unknown");
+                AssertEqual("vba_session_cleanup_failed", outcome.ErrorCode, "cleanup failure code");
+                AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "RNAssistantSession:", "failed cleanup leaves observable orphan");
+                AssertEqual(VbaMutationStatuses.NotApplied,
+                    store.ListPackageMutations("Excel", "doc").Last().Terminal.Status,
+                    "cleanup failure records unchanged session state");
+                var blocked = service.Execute(PackageExecution(source), CancellationToken.None);
+                AssertEqual("vba_session_cleanup_required", blocked.ErrorCode, "later run remains blocked");
+
+                var recovery = service.RemoveOwned(new VbaPackageRemoveRequest { Source = source }, CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Ok, recovery.Status, "fresh explicit cleanup recovers orphan");
+                AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "recovery removes orphan");
+            });
+        }
+
+        private static void VbaPackageSourceMarkerIsReserved()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var tool = BuildVbaPackageToolForTest();
+                tool.Components[1].Code = "' RNAssistantPackage: id=spoof; version=1; hash=" +
+                    new string('b', 64) + ";\n" + tool.Components[1].Code;
+                var service = CreatePackageService(
+                    adapter,
+                    new VbaPackageJournalStoreAdapter(new VbaJournalStore(paths)));
+
+                var prepared = service.PreparePackage(VbaPackageToolAdapter.ToSource(tool));
+
+                AssertTrue(!prepared.Success, "source ownership marker is rejected");
+                AssertEqual("vba_package_source_marker_reserved", prepared.Error.ErrorCode, "reserved marker code");
+                AssertTrue(!adapter.Executed.Any(), "reserved marker fails before host reads or writes");
+            });
+        }
+
+        private static VbaPackageService CreatePackageService(
+            FakeOfficeAdapter adapter,
+            IVbaPackageJournal journal)
+        {
+            var reader = new VbaReader(adapter, suffix =>
+                (adapter.HostName ?? string.Empty).ToLowerInvariant() + "." + suffix);
+            return new VbaPackageService(
+                new VbaMutationDocumentContextAdapter(adapter),
+                journal,
+                new VbaMutationReaderAdapter(reader),
+                new VbaPackageBackendAdapter(adapter, suffix =>
+                    (adapter.HostName ?? string.Empty).ToLowerInvariant() + "." + suffix));
+        }
+
+        private static JObject GuardedPackageComponent(
+            string name,
+            string type,
+            string intendedCode,
+            bool beforeExists,
+            string beforeType,
+            string beforeCode)
+        {
+            var marker = beforeExists ? VbaPackageOwnershipMarker.Parse(beforeCode) : null;
+            return new JObject
+            {
+                ["name"] = name,
+                ["type"] = type,
+                ["code"] = intendedCode,
+                ["expectedBeforeExists"] = beforeExists,
+                ["expectedBeforeType"] = beforeExists ? beforeType : null,
+                ["expectedBeforeComparableCodeSha256"] = beforeExists
+                    ? VbaTextCanonicalizer.PackageComparableCodeSha256(beforeCode)
+                    : null,
+                ["expectedBeforeOwnershipMarkerPresent"] = marker != null && marker.Found,
+                ["expectedBeforeOwnershipMarker"] = beforeExists
+                    ? VbaPackageOwnershipMarker.Evidence(beforeCode)
+                    : null
+            };
+        }
+
+        private static VbaPackageExecutionRequest PackageExecution(VbaPackageSourceDefinition source)
+        {
+            return new VbaPackageExecutionRequest
+            {
+                Source = source,
+                Arguments = new JObject
+                {
+                    ["text"] = "hello",
+                    ["count"] = 2,
+                    ["ratio"] = 1.5
+                },
+                Correlation = new VbaMutationCorrelation
+                {
+                    SessionId = "package-session",
+                    RunId = "package-run",
+                    TurnId = "package-turn",
+                    StepId = "package-step",
+                    ToolCallId = "package-call"
+                }
+            };
+        }
+
+        private sealed class FaultingPackageJournal : IVbaPackageJournal
+        {
+            private readonly IVbaPackageJournal _inner;
+
+            public bool FailNextPrepare { get; set; }
+            public bool FailNextComplete { get; set; }
+
+            public FaultingPackageJournal(IVbaPackageJournal inner)
+            {
+                _inner = inner;
+            }
+
+            public VbaPackageMutationPreparation PreparePackageMutation(VbaPackageMutationPreparation preparation)
+            {
+                if (FailNextPrepare)
+                {
+                    FailNextPrepare = false;
+                    throw new IOException("scripted package prepare failure");
+                }
+                return _inner.PreparePackageMutation(preparation);
+            }
+
+            public void CompletePackageMutation(
+                string host,
+                string documentKey,
+                string mutationId,
+                string status,
+                IEnumerable<VbaPackageMutationComponentAssessment> components,
+                string errorCode,
+                string message)
+            {
+                if (FailNextComplete)
+                {
+                    FailNextComplete = false;
+                    throw new IOException("scripted package terminal failure");
+                }
+                _inner.CompletePackageMutation(
+                    host,
+                    documentKey,
+                    mutationId,
+                    status,
+                    components,
+                    errorCode,
+                    message);
+            }
+
+            public IReadOnlyList<VbaPackageMutationRecord> ListOpenPackageMutations(
+                string host,
+                string documentKey)
+            {
+                return _inner.ListOpenPackageMutations(host, documentKey);
+            }
+
+            public IReadOnlyList<VbaPackageMutationRecord> ListPackageMutations(
+                string host,
+                string documentKey)
+            {
+                return _inner.ListPackageMutations(host, documentKey);
+            }
         }
 
         private static void VbaCodeOnlyUserFormPackageRoundTrips()
@@ -309,12 +1049,13 @@ namespace RNAssistant.Harness
             var formCode =
                 "Option Explicit\nPrivate WithEvents btnOK As MSForms.CommandButton\n" +
                 "Private Sub UserForm_Initialize()\nSet btnOK = Me.Controls.Add(\"Forms.CommandButton.1\", \"btnOK\", True)\nEnd Sub";
-            var componentsJson = new JArray(new JObject
-            {
-                ["name"] = "RNA_FormToolForm",
-                ["type"] = "MSForm",
-                ["code"] = formCode
-            }).ToString();
+            var componentsJson = new JArray(GuardedPackageComponent(
+                "RNA_FormToolForm",
+                "MSForm",
+                formCode,
+                false,
+                null,
+                null)).ToString();
             var marker = "RNAssistantPackage: id=excel.form_tool; version=1.0.0; hash=test";
 
             var installed = VbaProjectSupport.InstallPackage(document, componentsJson, marker);
@@ -327,24 +1068,32 @@ namespace RNAssistant.Harness
             AssertContains(form.CodeModule.Code, "Controls.Add", "created form has runtime control source");
 
             var updatedCode = formCode.Replace("btnOK", "btnApply");
-            var updatedJson = new JArray(new JObject
-            {
-                ["name"] = "RNA_FormToolForm",
-                ["type"] = "MSForm",
-                ["code"] = updatedCode
-            }).ToString();
+            var updatedJson = new JArray(GuardedPackageComponent(
+                "RNA_FormToolForm",
+                "MSForm",
+                updatedCode,
+                true,
+                "MSForm",
+                form.CodeModule.Code)).ToString();
             AssertTrue(VbaProjectSupport.InstallPackage(document, updatedJson, marker).Success, "owned blank MSForm updates in place");
             AssertContains(form.CodeModule.Code, "btnApply", "MSForm code-behind update applied");
 
+            var guardedOverwriteJson = new JArray(GuardedPackageComponent(
+                "RNA_FormToolForm",
+                "MSForm",
+                formCode,
+                true,
+                "MSForm",
+                form.CodeModule.Code)).ToString();
             form.Designer.Controls.Count = 1;
-            var blocked = VbaProjectSupport.InstallPackage(document, componentsJson, marker);
+            var blocked = VbaProjectSupport.InstallPackage(document, guardedOverwriteJson, marker);
             AssertEqual("vba_userform_designer_unsupported", blocked.ErrorCode, "Designer controls block package overwrite");
             AssertContains(form.CodeModule.Code, "btnApply", "blocked overwrite preserves live form source");
             form.Designer.Controls.Count = 0;
             form.Designer.Picture = new object();
             AssertEqual(
                 "vba_userform_designer_unsupported",
-                VbaProjectSupport.InstallPackage(document, componentsJson, marker).ErrorCode,
+                VbaProjectSupport.InstallPackage(document, guardedOverwriteJson, marker).ErrorCode,
                 "Designer binary assets block package overwrite");
             form.Designer.Picture = null;
 
@@ -406,12 +1155,13 @@ namespace RNAssistant.Harness
             document.VBProject.VBComponents.AddedModuleWriteTransform = code =>
                 code.Replace("Option Explicit", "option    explicit");
             var source = "Option Explicit\nPublic Sub RunTool()\nEnd Sub";
-            var componentsJson = new JArray(new JObject
-            {
-                ["name"] = "RNA_FormatForm",
-                ["type"] = "MSForm",
-                ["code"] = source
-            }).ToString();
+            var componentsJson = new JArray(GuardedPackageComponent(
+                "RNA_FormatForm",
+                "MSForm",
+                source,
+                false,
+                null,
+                null)).ToString();
             var marker = "RNAssistantPackage: id=excel.format_form; version=1.0.0; hash=test";
 
             var installed = VbaProjectSupport.InstallPackage(document, componentsJson, marker);
