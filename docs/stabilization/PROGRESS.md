@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 6 — 6J typed VBA rename ownership (done host-neutral; Windows qualification open)
-Current task: `Office.Vba.VbaMutationService` владеет rename guard, two-identity preparation, typed backend, source/type read-back, terminal outcome и read-only recovery. R42 закрыт host-neutral; последний executor-owned compound journal path удалён.
+Current phase: Phase 7 — 7A Excel read/write boundary audit (done docs-only; runtime pending)
+Current task: owners/consumers `excel.inspect`, `excel.read_range` и `excel.write_range` сведены в ordered 7B read → 7C verified write → 7D bound production switch. R43/R44 открыты; runtime не менялся.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный Phase 7 — сначала узко сверить consumers/границу `inspect/read_range` и `write_range`, затем переносить Excel read/write без charts/formatting и без production identity switch до WQ0. Phase 6 runtime повторно не менять.
-Required context: [master Phase 7 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-7--excel-readwrite-vertical-slice), [6J evidence](PHASE_6J_VBA_RENAME.md), [architecture](../architecture.md), [migration map](MIGRATION_MAP.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04; full Phase 6 Windows/VBE gate including R41/R42 qualification; Phases 7–8/R30. Controller/WebView/COM lifetime, real VBE/read-back/package/rename regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/Phase 9A–9C UI закрыты host-neutral, но общий Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
+Next step: отдельный 7B — typed read owner/native handlers для полного `excel.inspect` selector family и `excel.read_range`, включая общий HTML bind/refresh route и bounds до COM materialization. `write_range`, production factories/identity и остальные Excel tools не менять.
+Required context: [7A evidence](PHASE_7A_EXCEL_SCOPE.md), [master Phase 7 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-7--excel-readwrite-vertical-slice), [architecture](../architecture.md), [ADR-0005](../decisions/ADR-0005-bound-document-session.md), [migration map](MIGRATION_MAP.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: Phase 5B2/R04; full Phase 6 Windows/VBE gate including R41/R42 qualification; Phase 7B–7D/R43/R44; Phase 8/R30. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/Phase 9A–9C UI закрыты host-neutral, но общий Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -267,7 +267,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 4 | done host-neutral: 4A + 4B | 85cc3f4 (4A); b754443 (4B) | 4B: 127 distinct targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime](PHASE_4A_TOOL_RUNTIME.md), [v1 wire/cleanup](PHASE_4B_TOOL_RESULT_V1.md); domain/Windows gates remain |
 | 5 | 5A + 5B1 done host-neutral; 5B2 read switch done, identity probe ready | 3a6c2aa (5A); a1b3d80 (5B1); 1ea3ce0 (5B2) | [read checks](#phase-5b2--direct-contextcatalog-reads), [probe checks](#phase-5b2--identity-qualification-probe) | not performed | Production binding blocked on identity qualification |
 | 6 | 6A–6J done host-neutral | `e0360f3` (6A); `62010c8` (R33); `dde18cf` (6B); through `cd0bd61` (6G); [6H](PHASE_6H_VBA_PACKAGE_SCOPE.md); [6I](PHASE_6I_VBA_PACKAGE_LIFECYCLE.md); [6J](PHASE_6J_VBA_RENAME.md) | 6I package + 6J rename fault matrices; full VBA regression in linked reports | deferred | Full VBA/Windows gate open; R41/R42 runtime fixed host-neutral |
-| 7 | pending | — | — | — | Excel vertical slice |
+| 7 | 7A scope done docs-only; 7B–7D pending | [7A](PHASE_7A_EXCEL_SCOPE.md) | docs diff/links only | not performed | Ordered typed read → verified write → WQ0-bound production switch; R43/R44 open |
 | 8 | pending | — | — | — | Resource Fabric / ToolPack |
 | 9 | 9A–9C done host-neutral; Windows acceptance pending | through `fba247b` | 9A harness evidence; current web 58/58; 9C UI/DOM evidence | not performed | Correlated query, shared JSON viewer and causal run journal switched; full persistence/Windows acceptance and R37 removal gate open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
@@ -891,6 +891,30 @@ confirmation/cancellation/restart qualification остаётся WQ-VBA.
 Следующий отдельный шаг — Phase 7 Excel read/write; Phase 6 runtime повторно не
 расширять. Product `16.1.0-dev`, release/tag не создавались.
 
+## Phase 7A — Excel boundary and consumer audit
+
+2026-08-30, baseline `d362b48`; docs-only prerequisite. Проверены public catalog,
+`ConversationKernelAdapter`/`OfficeToolExecutor`, manual execution, HTML data
+bind/refresh, `ExcelAdapter`, current neutral DocumentSession contract и fake/demo
+call sites. Runtime, schemas, factories, COM и tests не менялись.
+
+Зафиксирован ordered route: 7B атомарно переключает весь `excel.inspect` selector
+family и `excel.read_range` на typed read owner/native handlers; HTML data использует
+тот же read adapter. 7C отдельно переносит только `excel.write_range` с exact
+before/read-back и typed effect evidence. 7D после WQ0/5B2 подаёт extracted interop
+backend только bound workbook и удаляет compatibility resolver/internal command
+seam. Ни один substep не расширяет scope на другие Excel mutations.
+
+`inspect(kind=charts)` означает только metadata read внутри уже существующего public
+tool; `create_chat_chart`, chart/table mutations и formatting исключены. Range limit
+должен проверяться до COM materialization. Найдены и открыты R43 (unbounded inspect /
+named-range `Value2`) и R44 (HTML direct adapter route). Полная карта и gates —
+[Phase 7A evidence](PHASE_7A_EXCEL_SCOPE.md).
+
+Docs-only gates: `ValidateVersionFormat` и `git diff --check` pass; 130 local links
+в 7 changed Markdown files имеют 0 missing targets. Windows/Office/VSTO и runtime
+harness не запускались. Следующий отдельный шаг — 7B typed reads.
+
 ## Active compatibility adapters
 
 | Adapter | Owner | Consumers | Removal phase |
@@ -926,4 +950,5 @@ model-session/metadata owners не являются compatibility adapters.
 - R40: restore guard теперь связывает exact backup id/type/live-source hash и current target; substitution block проверен host-neutral, Windows confirmation/VBE gate открыт.
 - R41: runtime fixed host-neutral в 6I — durable lifecycle + marker/journal-aware fail-closed state и explicit cleanup regression pass; production Windows/VBE/Trust Access qualification открыта.
 - R42: rename guard/backend теперь связывают source type/hash и оба имени; cancellation/fault/recovery matrix pass host-neutral. Production Windows/VBE/confirmation/cancellation qualification открыта.
+- R43/R44: Phase 7A подтвердил unbounded Excel inspect materialization и отдельный HTML direct-adapter read route; оба открыты до атомарного 7B switch.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).
