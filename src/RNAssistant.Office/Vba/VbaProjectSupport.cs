@@ -322,7 +322,8 @@ namespace RNAssistant.Office
             object documentObject,
             string moduleName,
             string newModuleName,
-            string expectedCodeSha256 = null)
+            string expectedCodeSha256 = null,
+            string expectedComponentType = null)
         {
             if (!VbaToolManifestParser.ValidComponentName(moduleName) ||
                 !VbaToolManifestParser.ValidComponentName(newModuleName))
@@ -360,6 +361,24 @@ namespace RNAssistant.Office
             }
 
             var type = (int)component.Type;
+            var actualComponentType = ComponentTypeName(type);
+            if (!string.IsNullOrWhiteSpace(expectedComponentType) &&
+                !string.Equals(
+                    expectedComponentType,
+                    actualComponentType,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail(
+                    "The VBA component type changed before rename dispatch.",
+                    JsonConvert.SerializeObject(new
+                    {
+                        moduleName = moduleName,
+                        expectedComponentType = expectedComponentType,
+                        actualComponentType = actualComponentType
+                    }),
+                    "stale_vba_module",
+                    true);
+            }
             if (type != StdModuleType && type != ClassModuleType &&
                 (type != MsFormType || !IsCodeOnlyUserForm(component)))
             {
@@ -401,7 +420,7 @@ namespace RNAssistant.Office
                     {
                         previousModuleName = originalName,
                         moduleName = (string)renamed.Name,
-                        componentType = ComponentTypeName(type),
+                        componentType = actualComponentType,
                         lineCount = (int)renamed.CodeModule.CountOfLines,
                         codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(renamed))
                     }));

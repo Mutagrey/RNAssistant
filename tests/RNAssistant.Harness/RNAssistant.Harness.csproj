@@ -62,6 +62,8 @@
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaDeleteModuleContracts.cs" Link="Office\Vba\VbaDeleteModuleContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationContracts.cs" Link="Office\Vba\VbaMutationContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationJournal.cs" Link="Office\Vba\VbaMutationJournal.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaRenameContracts.cs" Link="Office\Vba\VbaRenameContracts.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaRenameJournal.cs" Link="Office\Vba\VbaRenameJournal.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageContracts.cs" Link="Office\Vba\VbaPackageContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageJournal.cs" Link="Office\Vba\VbaPackageJournal.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageService.cs" Link="Office\Vba\VbaPackageService.cs" />
@@ -75,6 +77,8 @@
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.DeleteModule.cs" Link="Office\Vba\VbaMutationService.DeleteModule.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Guards.cs" Link="Office\Vba\VbaMutationService.Guards.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Journal.cs" Link="Office\Vba\VbaMutationService.Journal.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.RenameJournal.cs" Link="Office\Vba\VbaMutationService.RenameJournal.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.RenameModule.cs" Link="Office\Vba\VbaMutationService.RenameModule.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.RestoreBackup.cs" Link="Office\Vba\VbaMutationService.RestoreBackup.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.WholeModuleWrite.cs" Link="Office\Vba\VbaMutationService.WholeModuleWrite.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaWholeModuleWriteContracts.cs" Link="Office\Vba\VbaWholeModuleWriteContracts.cs" />

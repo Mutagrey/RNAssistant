@@ -64,6 +64,20 @@ namespace RNAssistant.Office.Tools
                 "vba_write_failed");
         }
 
+        public VbaMutationActionResult RenameModule(VbaRenameBackendRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            var command = new ToolCommand { ToolId = _backendToolId("vba_rename_module_internal") };
+            command.Arguments["moduleName"] = request.ModuleName;
+            command.Arguments["newModuleName"] = request.NewModuleName;
+            command.Arguments["expectedCodeSha256"] = request.ExpectedCodeSha256;
+            command.Arguments["expectedComponentType"] = request.ExpectedComponentType;
+            return VbaMutationToolResultMapper.FromBackend(
+                _adapter.ExecuteTool(command),
+                "VBA rename returned no result.",
+                "vba_rename_missing_result");
+        }
+
         public VbaMutationActionResult DeleteModule(VbaModuleDeleteRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));

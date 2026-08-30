@@ -361,7 +361,8 @@ namespace RNAssistant.OfficeHosts
                             RequireWorkbook(),
                             ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                             ToolArgumentReader.String(command.Arguments, "newModuleName", string.Empty),
-                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
+                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null),
+                            ToolArgumentReader.String(command.Arguments, "expectedComponentType", null));
                     case "excel.vba_delete_module_internal":
                         return VbaProjectSupport.DeleteModule(
                             RequireWorkbook(),

@@ -1845,7 +1845,12 @@ namespace RNAssistant.Harness
             var designer = component.Designer;
             var hash = VbaTextCanonicalizer.LiveCodeSha256(source);
 
-            var result = VbaProjectSupport.RenameModule(document, "OldModule", "NewModule", hash);
+            var result = VbaProjectSupport.RenameModule(
+                document,
+                "OldModule",
+                "NewModule",
+                hash,
+                "ClassModule");
 
             AssertTrue(result.Success, "COM rename succeeds");
             var renamed = document.VBProject.VBComponents.Cast<FakeVbaComponent>().Single();
@@ -1856,6 +1861,17 @@ namespace RNAssistant.Harness
             AssertEqual(source, renamed.CodeModule.Code, "COM rename preserves source");
             AssertEqual("vba_module_not_found", VbaProjectSupport.ReadModule(document, "OldModule", 1000).ErrorCode,
                 "old name is absent after rename");
+
+            var typeRace = VbaProjectSupport.RenameModule(
+                document,
+                "NewModule",
+                "WrongTypeTarget",
+                hash,
+                "StdModule");
+            AssertEqual("stale_vba_module", typeRace.ErrorCode,
+                "COM rename compare-and-swap rejects source type drift");
+            AssertEqual("NewModule", renamed.Name,
+                "source type mismatch leaves component identity unchanged");
 
             document.VBProject.VBComponents.Seed("Collision", "Sub Existing()\nEnd Sub");
             var collision = VbaProjectSupport.RenameModule(document, "NewModule", "Collision", hash);
@@ -2956,11 +2972,20 @@ namespace RNAssistant.Harness
         private sealed class ScriptedVbaMutationBackend : IVbaMutationBackend
         {
             private readonly Func<VbaModuleWriteRequest, VbaMutationActionResult> _replace;
+            private readonly Func<VbaRenameBackendRequest, VbaMutationActionResult> _rename;
 
             public ScriptedVbaMutationBackend(
                 Func<VbaModuleWriteRequest, VbaMutationActionResult> replace)
+                : this(replace, null)
+            {
+            }
+
+            public ScriptedVbaMutationBackend(
+                Func<VbaModuleWriteRequest, VbaMutationActionResult> replace,
+                Func<VbaRenameBackendRequest, VbaMutationActionResult> rename)
             {
                 _replace = replace;
+                _rename = rename;
             }
 
             public int DispatchCount { get; private set; }
@@ -2979,6 +3004,18 @@ namespace RNAssistant.Harness
                     null,
                     "scripted_create_not_configured",
                     false);
+            }
+
+            public VbaMutationActionResult RenameModule(VbaRenameBackendRequest request)
+            {
+                DispatchCount += 1;
+                return _rename == null
+                    ? VbaMutationActionResult.Error(
+                        "Scripted rename backend is not configured.",
+                        null,
+                        "scripted_rename_not_configured",
+                        false)
+                    : _rename(request);
             }
 
             public VbaMutationActionResult DeleteModule(VbaModuleDeleteRequest request)

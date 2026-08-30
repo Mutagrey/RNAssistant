@@ -34,11 +34,12 @@ inferred from prose. Phases 6E–6G move whole-module write, delete and restore
 guards, dispatch and verification into that same owner. Restore uses a dedicated
 guard that binds the exact backup id/module/type/loaded-source hash together with
 the current target existence/source hash before confirmation; changing either
-side blocks the action before preparation/dispatch. `VbaToolExecutor` remains the
-argument/result adapter and retains only the reconciliation outer loop plus rename
-compound journal until 6J. Package journal/read-back/reconciliation belongs to
-`Office.Vba.VbaPackageService`; CAS bytes, COM dispatch and public result wire remain
-unchanged.
+side blocks the action before preparation/dispatch. Phase 6J moves rename guard,
+two-identity preparation, typed backend action, read-back and recovery into the same
+`Office.Vba.VbaMutationService`; `VbaToolExecutor` remains only the argument/result
+adapter plus serialized reconciliation caller. Package journal/read-back/reconciliation
+belongs to `Office.Vba.VbaPackageService`; CAS bytes, COM dispatch and public result
+wire remain unchanged.
 
 | Representation | Purpose / existing transformation |
 |---|---|
@@ -84,7 +85,17 @@ The typed domain outcome is only `ok`, `error`, or `unknown`. Verified intended 
 
 Common tool results expose `mutationId`, `rollbackBackupId`, and bounded actual-effect evidence, but never the internal journal status. If terminal persistence fails after inspection, the result is non-retryable `unknown` with `terminalRecorded=false`; the prepared record stays open for later read-only reconciliation and the mutation is not replayed merely to write a terminal. Restore is not a special side channel: its typed service reloads and validates the exact guard-bound CAS backup, rechecks current target state/type, journals current source as the new before/rollback state, performs one create-or-replace action, verifies source/type, and appends its own terminal event. Backup substitution, missing guard evidence, stale target, and incompatible existing component type fail before journal/dispatch.
 
-Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope, exact required ownership marker and every component's before/intended existence, type, normalized and VBE-comparable package source hashes, explicit before-marker presence/evidence, and CAS reference. Session records additionally carry one `LifecycleId` shared by install and cleanup. The comparable hash excludes import headers and RNAssistant ownership markers, while verification separately requires the recorded marker state. Install passes the prepared existence/type/comparable-source/marker guard to the shared backend and rejects post-prepare drift before its first component mutation. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hashes and whether it matches before and/or intended state. Mixed, marker-divergent or unreadable component state is `unknown`, never partial success. Package orchestration now belongs to the typed package service; rename temporarily retains the same durable wire until 6J. Common results omit internal journal status and never infer rollback from exception/result prose.
+Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope, exact required ownership marker and every component's before/intended existence, type, normalized and VBE-comparable package source hashes, explicit before-marker presence/evidence, and CAS reference. Session records additionally carry one `LifecycleId` shared by install and cleanup. The comparable hash excludes import headers and RNAssistant ownership markers, while verification separately requires the recorded marker state. Install passes the prepared existence/type/comparable-source/marker guard to the shared backend and rejects post-prepare drift before its first component mutation. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hashes and whether it matches before and/or intended state. Mixed, marker-divergent or unreadable component state is `unknown`, never partial success. Package orchestration belongs to the typed package service. Rename deliberately keeps this existing two-component durable wire through a narrow `IVbaRenameJournal` adapter over the same store, while its domain API and owner are rename-specific; no second journal, generic transaction layer or dual-write exists. Common results omit internal journal status and never infer rollback from exception/result prose.
+
+Rename guard preparation resolves and binds the exact source/destination names,
+source live hash, source component type and code-only UserForm state before
+confirmation. Execution re-reads both identities, persists the two-name preparation,
+and passes source hash/type CAS evidence to the host backend before one rename
+dispatch. `ok` requires old-name absence plus new-name source/type match and a durable
+terminal. Complete before state is a definite error; both names present, both absent,
+divergent type/source or unreadable state is non-retryable `unknown`. Terminal loss
+leaves the preparation open; the next safe access only classifies complete-before,
+complete-intended or mixed state and never repeats rename.
 
 R41 is fixed host-neutral in 6I. A completed session install and later cleanup are
 correlated by durable lifecycle id, and probe combines live ownership/source/type

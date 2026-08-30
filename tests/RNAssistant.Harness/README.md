@@ -165,6 +165,19 @@ VBE normalization, journal/CAS and rename regressions. These are fake-host order
 checks; real VBIDE/Trust Access/crash behavior remains Windows qualification. See
 [Phase 6I evidence](../../docs/stabilization/PHASE_6I_VBA_PACKAGE_LIFECYCLE.md).
 
+## VBA rename owner (Phase 6J)
+
+`vba: rename` covers the direct typed owner, both-name/source-type confirmation
+guard, prepare/backend/read-back/terminal faults, cancellation boundaries,
+post-prepare collision and read-only recovery of complete-before,
+complete-intended and mixed states. `vba: write rename is strict and atomic` keeps
+the public schema/result/journal projection regression, while `vba: COM rename`
+checks component identity plus source hash/type CAS in the shared host helper. The
+full `vba:` slice retains module/package/VBE and serialized reconciliation coverage.
+These are fake-host checks; real VBIDE/Trust Access/confirmation/cancellation remain
+Windows qualification. See
+[Phase 6J evidence](../../docs/stabilization/PHASE_6J_VBA_RENAME.md).
+
 ## Stabilization completion guard
 
 ```bash

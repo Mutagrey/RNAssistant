@@ -366,7 +366,8 @@ namespace RNAssistant.OfficeHosts
                             RequirePresentation(),
                             ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                             ToolArgumentReader.String(command.Arguments, "newModuleName", string.Empty),
-                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
+                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null),
+                            ToolArgumentReader.String(command.Arguments, "expectedComponentType", null));
                     case "powerpoint.vba_delete_module_internal":
                         return VbaProjectSupport.DeleteModule(
                             RequirePresentation(),

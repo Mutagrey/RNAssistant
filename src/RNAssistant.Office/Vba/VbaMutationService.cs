@@ -10,6 +10,7 @@ namespace RNAssistant.Office.Vba
         private readonly IVbaMutationDocumentContext _document;
         private readonly IVbaMutationJournal _journal;
         private readonly IVbaMutationBackend _backend;
+        private readonly IVbaRenameJournal _renameJournal;
         private readonly IVbaMutationReader _reader;
         private readonly VbaVerifier _verifier;
         private readonly object _observationsSync = new object();
@@ -21,11 +22,22 @@ namespace RNAssistant.Office.Vba
             IVbaMutationJournal journal,
             IVbaMutationReader reader,
             IVbaMutationBackend backend)
+            : this(document, journal, reader, backend, null)
+        {
+        }
+
+        internal VbaMutationService(
+            IVbaMutationDocumentContext document,
+            IVbaMutationJournal journal,
+            IVbaMutationReader reader,
+            IVbaMutationBackend backend,
+            IVbaRenameJournal renameJournal)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
             _journal = journal ?? throw new ArgumentNullException(nameof(journal));
             _reader = reader ?? throw new ArgumentNullException(nameof(reader));
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+            _renameJournal = renameJournal;
             _verifier = new VbaVerifier(reader, RecordObservation, RemoveObservation);
         }
 

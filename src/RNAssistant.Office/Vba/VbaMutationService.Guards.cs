@@ -249,6 +249,8 @@ namespace RNAssistant.Office.Vba
         public string RequestedModuleName { get; set; }
         public bool ModuleExists { get; set; }
         public string CodeSha256 { get; set; }
+        public string ComponentType { get; set; }
+        public bool? CodeOnlyUserForm { get; set; }
         public string TargetModuleName { get; set; }
         public string RequestedTargetModuleName { get; set; }
         public bool TargetModuleExists { get; set; }

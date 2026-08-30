@@ -457,6 +457,21 @@ namespace RNAssistant.Harness
                 {
                     return ToolResult.Fail("VBA rename destination already exists: " + newModuleName, null, "vba_module_exists", true);
                 }
+                var expectedComponentType = Argument(command, "expectedComponentType", null);
+                if (!string.IsNullOrWhiteSpace(expectedComponentType) &&
+                    !string.Equals(expectedComponentType, existing.Type, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ToolResult.Fail(
+                        "stale VBA backend rename type",
+                        JsonConvert.SerializeObject(new
+                        {
+                            moduleName = moduleName,
+                            expectedComponentType = expectedComponentType,
+                            actualComponentType = existing.Type
+                        }),
+                        "stale_vba_module",
+                        true);
+                }
                 var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
                 var actualCodeSha256 = VbaTextCanonicalizer.LiveCodeSha256(existing.Code);
                 if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&

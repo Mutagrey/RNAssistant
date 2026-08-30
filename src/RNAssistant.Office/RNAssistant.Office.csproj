@@ -104,6 +104,8 @@
     <Compile Include="Vba\VbaDeleteModuleContracts.cs" />
     <Compile Include="Vba\VbaMutationContracts.cs" />
     <Compile Include="Vba\VbaMutationJournal.cs" />
+    <Compile Include="Vba\VbaRenameContracts.cs" />
+    <Compile Include="Vba\VbaRenameJournal.cs" />
     <Compile Include="Vba\VbaPackageContracts.cs" />
     <Compile Include="Vba\VbaPackageJournal.cs" />
     <Compile Include="Vba\VbaPackageService.cs" />
@@ -117,6 +119,8 @@
     <Compile Include="Vba\VbaMutationService.DeleteModule.cs" />
     <Compile Include="Vba\VbaMutationService.Guards.cs" />
     <Compile Include="Vba\VbaMutationService.Journal.cs" />
+    <Compile Include="Vba\VbaMutationService.RenameJournal.cs" />
+    <Compile Include="Vba\VbaMutationService.RenameModule.cs" />
     <Compile Include="Vba\VbaMutationService.RestoreBackup.cs" />
     <Compile Include="Vba\VbaMutationService.WholeModuleWrite.cs" />
     <Compile Include="Vba\VbaWholeModuleWriteContracts.cs" />
