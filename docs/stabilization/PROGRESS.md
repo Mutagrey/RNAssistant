@@ -1,13 +1,23 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 10 in progress; 10A + 10B1 + 10B2 done host-neutral
-Current task: Phase 10B2 перенёс оба `VbaProjectSupport` partials из Office/Vba в единственного `OfficeHosts.Vba` owner, обновил namespace/projects/host+harness consumers и удалил временное architecture-test exclusion. COM/VBE algorithms не менялись. Скрытая internal marker dependency стала explicit read-only public Office.Vba contract без friend assembly; R49 fixed host-neutral.
+Current phase: Phase 10 in progress; 10A–10C1 done host-neutral
+Current task: Phase 10C1 перенёс byte-identical `AssistantRuntime.cs` из Office/Runtime в root Office application-façade path, обновил единственный production project include и добавил physical-owner assertion. Namespace, pane/controller lifecycle, disposal, factories и consumers не менялись; harness source link для UI façade отсутствовал и не добавлялся.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный первый Phase 10C invariant — только `git mv` `Office/Runtime/AssistantRuntime.cs` в root application-façade path `Office/AssistantRuntime.cs` и old-style project/harness path updates. Namespace, lifecycle/composition behavior, factories, `ProjectRead`, 5B2/7D и другие Runtime files не менять. Resource projection cleanup выполняется следующим отдельным commit.
-Required context: [10A audit](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2 evidence](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [master Phase 10](STABILIZATION_MASTER_PLAN.md#phase-10--physical-cleanup-и-architecture-tests), [architecture](../architecture.md), [migration map](MIGRATION_MAP.md), [risk register](RISK_REGISTER.md), [harness filters](../../tests/RNAssistant.Harness/README.md), repository `AGENTS.md`.
-Open gates / remaining legacy: R49 fixed host-neutral; production OfficeHosts/VSTO compile, WQ0 и real Windows/VBE remain open. `AssistantRuntime` physical move и resource-only `ProjectRead` projection остаются двумя отдельными 10C invariants. Phase 9/R45–R48 fixed host-neutral, но Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification remains open. R37 read-only historical diagnostics adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/clipboard acceptance открыт. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 10C2 — только четыре calls в `ResourceToolCatalog.GetControllerTools`: перенести exact descriptor/policy/schema projection из `LegacyToolDefinitionAdapter.ProjectRead` в действующий `ControllerToolDefinition`, затем удалить только `ProjectRead`. Native resource handlers, ToolPack authority/revision, execution bindings, mode policy, model wire и прочие legacy adapter methods не менять.
+Required context: [10A audit](PHASE_10A_BOUNDARY_AUDIT.md), [10C1 evidence](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [master Phase 10](STABILIZATION_MASTER_PLAN.md#phase-10--physical-cleanup-и-architecture-tests), [architecture](../architecture.md), [resource fabric](../resource-fabric.md), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md), repository `AGENTS.md`.
+Open gates / remaining legacy: application façade move done host-neutral; resource-only `ProjectRead` remains the last 10C cleanup. R49 fixed host-neutral; production OfficeHosts/VSTO compile, WQ0 и real Windows/VBE remain open. Phase 9/R45–R48 fixed host-neutral, но Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification remains open. R37 read-only historical diagnostics adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/clipboard acceptance открыт. Product 16.1.0-dev, no release/tag.
+
+Phase 10C1 application façade move (2026-08-31): byte-identical
+`AssistantRuntime.cs` moved with `git mv` from `Office/Runtime` to root `Office`;
+the production old-style include switched and a physical-owner assertion prevents
+return to document/tool Runtime. Namespace, controller/pane lifecycle, disposal,
+factories and all consumers are unchanged. Harness intentionally uses a controller
+stub and had no façade source-link to rewrite. Architecture 4/4 and production source
+inclusion 1/1 pass; real Office/VSTO/WebView lifetime remains a Windows gate. Next
+atomic change is only the resource projection half 10C2.
+[Evidence](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md).
 
 Phase 10B2 VBA host backend move (2026-08-31): both `VbaProjectSupport` partials
 moved with `git mv` from `Office/Vba` to `OfficeHosts/Vba`; namespace, old-style
@@ -18,8 +28,9 @@ The move exposed a source-linked-harness blind spot: internal
 an explicit public read-only Office.Vba parser contract with private constructor;
 no duplicate parser or broad friend assembly was added. Connected COM 47/47,
 UserForm helper 1/1, exact package guard 1/1, architecture 4/4 and source inclusion
-1/1 pass. R49 fixed host-neutral; Windows OfficeHosts/VSTO/VBE remains open. Next
-atomic change is the application-façade half of 10C. [Evidence](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md).
+1/1 pass. R49 fixed host-neutral; Windows OfficeHosts/VSTO/VBE remains open. The
+application-façade half was later completed in 10C1.
+[Evidence](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md).
 
 Phase 10B1 host document identity move (2026-08-31): `DocumentIdentity.cs` moved
 with `git mv` from `Office/Runtime` to `OfficeHosts/Identity`; namespace, both
@@ -65,8 +76,8 @@ Phase 8A immutable execution snapshot, 8B callable lifecycle/admission, 8C durab
 reconstruction и 8D resource data-plane cutover завершены host-neutral; 9D1 audit,
 9D2 same-process fail-stop reload/reconciliation, 9D3 typed event
 classification/`IEventStore`, 9D4 minimal `IConversationStore` и 9D5 immutable
-`RunViewState` завершены host-neutral; 10A audit и 10B1/10B2 host moves также
-завершены, следующий dependency-safe этап — application-façade half Phase 10C.
+`RunViewState` завершены host-neutral; 10A audit, 10B1/10B2 host moves и 10C1 façade
+move также завершены, следующий dependency-safe этап — resource projection 10C2.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
 
@@ -540,7 +551,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 7 | 7A–7C done host-neutral; 7D pending WQ0/5B2 | [7A](PHASE_7A_EXCEL_SCOPE.md); [7B](PHASE_7B_EXCEL_READ.md); [7C](PHASE_7C_EXCEL_WRITE.md) | 7C: 15 distinct focused cases; MockDemo compile | not performed | Typed reads and verified write_range switched; WQ-EXCEL and bound production backend open |
 | 8 | 8A–8D done host-neutral; WQ-PACK pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md), [8C](PHASE_8C_TOOL_PACK_EVENTS.md), [8D](PHASE_8D_RESOURCE_DATA_PLANE.md) | 8D: 74 distinct targeted pass; MockDemo compile | not performed | Execution/callable authority, durable reconstruction and four native resource handlers switched; WQ-PACK open |
 | 9 | 9A–9D5 done host-neutral; Windows acceptance pending | through `9bbf088` | 9D5: 99 targeted harness, web 70/70, MockDemo compile | not performed | Diagnostics/viewer, typed persistence ports and immutable RunViewState switched; R37/WQ-UI open |
-| 10 | in progress: 10A + 10B1 + 10B2 done host-neutral | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md) | 10B2: connected COM 47/47; UserForm 1/1; package guard 1/1; architecture 4/4; source inclusion 1/1 | not performed | Two separate 10C invariants + 10D remain; R49 fixed host-neutral |
+| 10 | in progress: 10A–10C1 done host-neutral | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md) | 10C1: architecture 4/4; source inclusion 1/1 | not performed | 10C2 resource projection + 10D remain; R49 fixed host-neutral |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
 

@@ -237,6 +237,11 @@ namespace RNAssistant.Harness
             var officeRoot = Path.Combine(root, "src", "RNAssistant.Office");
             var hostsRoot = Path.Combine(root, "src", "RNAssistant.OfficeHosts");
 
+            AssertTrue(
+                File.Exists(Path.Combine(officeRoot, "AssistantRuntime.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Runtime", "AssistantRuntime.cs")),
+                "application lifetime facade must live at the Office root, outside document/tool Runtime");
+
             AssertNoForbiddenDependencies(root,
                 SourceFiles(Path.Combine(coreRoot, "Agent")),
                 new[] { "RNAssistant.Office", "Microsoft.Office", "Microsoft.Web.WebView2", "System.Windows.Forms" },

@@ -2167,7 +2167,9 @@ bounded rendering и реальные WebView/clipboard проверки на Wi
 - [x] 10A host-neutral audit: inventory production files/namespaces/project includes и live consumers; добавить шесть forbidden-dependency checks, исправить superseded canonical path и разбить physical cleanup на exact atomic groups. Folder/namespace mismatch сам по себе не является основанием для rename. [Evidence](PHASE_10A_BOUNDARY_AUDIT.md).
 - [x] 10B1: `git mv` host identity helper из Office Runtime в OfficeHosts с namespace/project/harness updates; algorithms/identity semantics не менять. [Evidence](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md).
 - [x] 10B2: отдельно `git mv` `VbaProjectSupport*.cs` в OfficeHosts/Vba, обновить namespace/project/harness/host consumers; domain services, guards, journal и backend logic не менять. Скрытая assembly-access dependency оформлена как explicit read-only Office.Vba contract без friend assembly/duplicate parser. [Evidence](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md).
-- [ ] 10C: вынести application façade `AssistantRuntime.cs` из document/tool Runtime folder и удалить live resource-only `LegacyToolDefinitionAdapter.ProjectRead` projection через действующий controller definition owner. Эти два cleanup invariants фиксировать отдельными commits.
+- [ ] 10C: вынести application façade и удалить live resource-only projection двумя отдельными commits.
+  - [x] 10C1: `git mv` `AssistantRuntime.cs` из document/tool Runtime folder в root Office façade; namespace/lifecycle/consumers не менять. [Evidence](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md).
+  - [ ] 10C2: перенести четыре resource read projections из `LegacyToolDefinitionAdapter.ProjectRead` в действующий `ControllerToolDefinition`, сохранить exact descriptor/policy/schema и удалить только заменённый method; execution/ToolPack/model wire не менять.
 - [ ] 10D: финально сверить canonical docs/AGENTS, migration statuses, production project includes и architecture suite; не закрывать Windows gates локальными checks.
 
 ### Definition of Done
