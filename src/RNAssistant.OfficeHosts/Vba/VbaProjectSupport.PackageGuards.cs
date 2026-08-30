@@ -6,7 +6,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Vba;
 
-namespace RNAssistant.Office
+namespace RNAssistant.OfficeHosts.Vba
 {
     public static partial class VbaProjectSupport
     {

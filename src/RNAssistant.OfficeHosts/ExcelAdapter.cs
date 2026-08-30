@@ -13,6 +13,7 @@ using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Tools;
 using RNAssistant.OfficeHosts.Identity;
+using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {

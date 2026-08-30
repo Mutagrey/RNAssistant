@@ -11,6 +11,7 @@ using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
 using RNAssistant.OfficeHosts.Identity;
+using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {

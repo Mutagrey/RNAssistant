@@ -59,7 +59,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Excel\*.cs" Link="Office\Domains\Excel\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Diagnostics\RuntimeLog.cs" Link="Office\Diagnostics\RuntimeLog.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\*.cs" Link="Office\Agent\%(Filename)%(Extension)" />
-    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaProjectSupport.cs" Link="Office\Vba\VbaProjectSupport.cs" />
+    <Compile Include="..\..\src\RNAssistant.OfficeHosts\Vba\VbaProjectSupport.cs" Link="OfficeHosts\Vba\VbaProjectSupport.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaReader.cs" Link="Office\Vba\VbaReader.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaDeleteModuleContracts.cs" Link="Office\Vba\VbaDeleteModuleContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationContracts.cs" Link="Office\Vba\VbaMutationContracts.cs" />
@@ -72,7 +72,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageService.Probe.cs" Link="Office\Vba\VbaPackageService.Probe.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageService.Lifecycle.cs" Link="Office\Vba\VbaPackageService.Lifecycle.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaPackageService.Journal.cs" Link="Office\Vba\VbaPackageService.Journal.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaProjectSupport.PackageGuards.cs" Link="Office\Vba\VbaProjectSupport.PackageGuards.cs" />
+    <Compile Include="..\..\src\RNAssistant.OfficeHosts\Vba\VbaProjectSupport.PackageGuards.cs" Link="OfficeHosts\Vba\VbaProjectSupport.PackageGuards.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaRestoreContracts.cs" Link="Office\Vba\VbaRestoreContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.cs" Link="Office\Vba\VbaMutationService.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.ApplyPatch.cs" Link="Office\Vba\VbaMutationService.ApplyPatch.cs" />

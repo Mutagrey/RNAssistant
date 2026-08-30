@@ -388,8 +388,12 @@ namespace RNAssistant.Office.Vba
         }
     }
 
-    internal sealed class VbaPackageOwnershipMarker
+    public sealed class VbaPackageOwnershipMarker
     {
+        private VbaPackageOwnershipMarker()
+        {
+        }
+
         public bool Found { get; private set; }
         public bool Valid { get; private set; }
         public string Kind { get; private set; }

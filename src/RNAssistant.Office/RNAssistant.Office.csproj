@@ -115,7 +115,6 @@
     <Compile Include="Runtime\UiThreadOfficeApplicationAdapter.cs" />
     <Compile Include="Contracts\IOfficeApplicationAdapter.cs" />
     <Compile Include="Contracts\IOfficeDocumentSession.cs" />
-    <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Vba\VbaReader.cs" />
     <Compile Include="Vba\VbaDeleteModuleContracts.cs" />
     <Compile Include="Vba\VbaMutationContracts.cs" />
@@ -128,7 +127,6 @@
     <Compile Include="Vba\VbaPackageService.Probe.cs" />
     <Compile Include="Vba\VbaPackageService.Lifecycle.cs" />
     <Compile Include="Vba\VbaPackageService.Journal.cs" />
-    <Compile Include="Vba\VbaProjectSupport.PackageGuards.cs" />
     <Compile Include="Vba\VbaRestoreContracts.cs" />
     <Compile Include="Vba\VbaMutationService.cs" />
     <Compile Include="Vba\VbaMutationService.ApplyPatch.cs" />

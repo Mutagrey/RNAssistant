@@ -11,6 +11,7 @@ using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.Vba;
+using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.Harness
 {

@@ -18,6 +18,7 @@ using RNAssistant.Office.Vba;
 using RNAssistant.Office.WebView;
 using RNAssistant.Desktop;
 using RNAssistant.OfficeHosts;
+using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.Harness
 {

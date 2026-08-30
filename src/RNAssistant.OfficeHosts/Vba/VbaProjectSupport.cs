@@ -9,7 +9,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
-namespace RNAssistant.Office
+namespace RNAssistant.OfficeHosts.Vba
 {
     public static partial class VbaProjectSupport
     {

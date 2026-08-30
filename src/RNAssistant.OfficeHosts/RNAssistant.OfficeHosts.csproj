@@ -103,6 +103,8 @@
     <Compile Include="Targets\OfficeComAdapterProvider.cs" />
     <Compile Include="Targets\OfficeTargetEnumerator.cs" />
     <Compile Include="Targets\OfficeTargetDescriptor.cs" />
+    <Compile Include="Vba\VbaProjectSupport.cs" />
+    <Compile Include="Vba\VbaProjectSupport.PackageGuards.cs" />
     <Compile Include="WordAdapter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

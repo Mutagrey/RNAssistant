@@ -278,10 +278,23 @@ namespace RNAssistant.Harness
                 "OfficeHosts may compose the application facade but must not depend on WebView types");
 
             AssertNoForbiddenDependencies(root,
-                SourceFiles(officeRoot).Where(path =>
-                    !Path.GetFileName(path).StartsWith("VbaProjectSupport", StringComparison.Ordinal)),
+                SourceFiles(officeRoot),
                 new[] { "VbaProjectSupport.", "DocumentIdentity." },
                 "host-specific helpers must not be consumed by the Office assembly");
+
+            var markerContract = typeof(RNAssistant.Office.Vba.VbaPackageOwnershipMarker);
+            AssertTrue(
+                markerContract.IsPublic &&
+                markerContract.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static) != null,
+                "OfficeHosts VBA guard must use an explicit public Office.Vba marker contract");
+            AssertTrue(
+                !SourceFiles(officeRoot).Any(path =>
+                {
+                    var source = File.ReadAllText(path);
+                    return source.IndexOf("InternalsVisibleTo", StringComparison.Ordinal) >= 0 &&
+                        source.IndexOf("RNAssistant.OfficeHosts", StringComparison.Ordinal) >= 0;
+                }),
+                "Office must not grant broad friend-assembly access to OfficeHosts");
 
             var uiFiles = SourceFiles(Path.Combine(officeRoot, "WebView"))
                 .Concat(Directory.GetFiles(Path.Combine(root, "web"), "*.js", SearchOption.AllDirectories))
