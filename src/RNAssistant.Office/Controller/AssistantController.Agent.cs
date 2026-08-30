@@ -211,8 +211,6 @@ namespace RNAssistant.Office
 
                 runLease.Dispose();
                 var response = ChatState(session);
-                response.ExecutionSummary = session.LastRun == null || session.LastRun.ExecutionSummary == null
-                    ? null : session.LastRun.ExecutionSummary.Clone();
                 RunCausalTrace.Projected("ChatStateResponse");
                 return response;
             }

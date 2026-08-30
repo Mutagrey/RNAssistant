@@ -118,7 +118,7 @@ function findButton(root, prefix) {
   const metrics = root.querySelectorAll(".rn-run-journal-metric");
   assert.equal(metrics[1].textContent, "3Проблемы");
   assert.equal(metrics[2].textContent, "2Уникальные tool calls");
-  console.log("PASS run journal: chronological typed rows and execution summary render without inference");
+  console.log("PASS run journal: chronological typed rows and run view evidence render without inference");
 
   findButton(root, "Проблемы").click();
   assert.equal(filter, "problems");
@@ -188,7 +188,7 @@ function findButton(root, prefix) {
   assert.match(trajectory, /refreshTrajectory\(false, true\)/);
   assert.match(trajectory, /window\.openRunJournal = openRunJournal/);
   assert.match(activity, /Открыть журнал запуска/);
-  assert.match(agent, /appendAgentExecutionSummary\(body, executionSummary, agentRunId\(items, finalMessage\)\)/);
+  assert.match(agent, /appendAgentRunViewState\(body, runViewState, agentRunId\(items, finalMessage\)\)/);
   assert.equal(/JSON\.parse|fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   console.log("PASS run journal: integration defaults to bounded run-causal and exposes direct failed-activity navigation");
   console.log("OK 6/6");

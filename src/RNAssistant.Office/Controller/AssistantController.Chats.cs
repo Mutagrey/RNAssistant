@@ -553,6 +553,8 @@ namespace RNAssistant.Office
             var activeId = session.Id;
             return new ChatStateResponse
             {
+                SessionRevision = session == null ? 0 : session.Revision,
+                RunViewState = RunViewStateProjector.Create(session),
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
@@ -586,6 +588,7 @@ namespace RNAssistant.Office
                 return;
             }
 
+            RunViewStateProjector.StampCurrentRun(session);
             _conversationStore.Save(session);
             _chatSessions.NotifySaved(session);
         }

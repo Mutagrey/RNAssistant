@@ -8,6 +8,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.Runtime;
@@ -124,8 +125,7 @@ namespace RNAssistant.Office.Services
                 ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                 ResponseStatus = summary.Reason == "provider_refused" ? AgentResponseStatuses.Refused
                     : summary.Lifecycle == RunLifecycle.Completed ? status : null,
-                RunStatus = status,
-                ExecutionSummary = RunExecutionSummary.FromRuntime(summary)
+                RunViewState = RunViewStateProjector.Create(_session)
             };
         }
 

@@ -60,6 +60,10 @@ function activeChatSummary() {
   })[0] || null;
 }
 
+function chatSummaryRunViewState(chat) {
+  return window.RNAssistantRunViewState.fromChatSummary(chat);
+}
+
 function formatChatMessageCount(count) {
   count = Math.max(0, Number(count) || 0);
   var mod100 = count % 100;
@@ -111,8 +115,7 @@ function restoreChatDraft(chatIdValue) {
 
 function applyChatStateForChat(response, expectedChatId) {
   if (!expectedChatId || state.activeChatId === expectedChatId) {
-    applyChatState(response);
-    return true;
+    return applyChatState(response);
   }
   applyChatCatalogState(response);
   return false;
@@ -161,13 +164,18 @@ function applyLibraryCatalogState(response) {
 }
 
 function applyChatState(response) {
-  state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   response = response || {};
   var previousChatId = state.activeChatId || "";
   var hasResponseChatId = response.activeChatId !== undefined || response.ActiveChatId !== undefined;
   var nextChatId = hasResponseChatId
     ? (response.activeChatId || response.ActiveChatId || "")
     : previousChatId;
+  var incomingRevision = window.RNAssistantRunViewState.sessionRevision(response);
+  if (!window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, nextChatId, incomingRevision)) {
+    applyRevisionedChatSummaryState(response);
+    return false;
+  }
+  state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   var chatChanged = previousChatId !== nextChatId;
   if (chatChanged) {
     captureChatDraft(previousChatId);
@@ -176,6 +184,8 @@ function applyChatState(response) {
     resetMessageEditState();
   }
   state.activeChatId = nextChatId;
+  state.activeRunViewState = window.RNAssistantRunViewState.normalize(
+    response.runViewState !== undefined ? response.runViewState : response.RunViewState);
   if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
     state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
   }
@@ -186,7 +196,8 @@ function applyChatState(response) {
     state.activeChatReasoning = !!(response.activeChatReasoning || response.ActiveChatReasoning);
   }
   if (response.chats !== undefined || response.Chats !== undefined) {
-    state.chats = response.chats || response.Chats || [];
+    state.chats = window.RNAssistantRunViewState.mergeCatalog(
+      state.chats, response.chats || response.Chats || [], state.chatProjectionRevisions);
   }
   if (response.documents !== undefined || response.Documents !== undefined) {
     state.documents = response.documents || response.Documents || [];
@@ -247,13 +258,24 @@ function applyChatState(response) {
   if (chatChanged && typeof restoreActiveChatRun === "function") {
     restoreActiveChatRun();
   }
+  return true;
+}
+
+function applyRevisionedChatSummaryState(response) {
+  response = response || {};
+  if (response.chats === undefined && response.Chats === undefined) return;
+  state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
+  state.chats = window.RNAssistantRunViewState.mergeCatalog(
+    state.chats, response.chats || response.Chats || [], state.chatProjectionRevisions, true);
+  renderChatSessions();
 }
 
 function applyChatCatalogState(response) {
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   response = response || {};
   if (response.chats !== undefined || response.Chats !== undefined) {
-    state.chats = response.chats || response.Chats || [];
+    state.chats = window.RNAssistantRunViewState.mergeCatalog(
+      state.chats, response.chats || response.Chats || [], state.chatProjectionRevisions, true);
   }
   if (response.documents !== undefined || response.Documents !== undefined) {
     state.documents = response.documents || response.Documents || [];
@@ -463,8 +485,9 @@ function renderChatTreeRow(chat) {
     button.title = storageTooltip;
   }
   var run = state.chatRuns[id] || state.activeSends[id];
-  var persistedRunStatus = String(chat.RunStatus || chat.runStatus || "").toLowerCase();
-  var hasActiveRun = !!run || persistedRunStatus === "running" || persistedRunStatus === "cancelling";
+  var persistedRun = chatSummaryRunViewState(chat);
+  var persistedRunStatus = persistedRun ? persistedRun.lifecycle : "";
+  var hasActiveRun = !!run || persistedRunStatus === "running";
   if (hasActiveRun) {
     row.classList.add("has-active-run");
   }
@@ -476,7 +499,9 @@ function renderChatTreeRow(chat) {
   if (hasActiveRun) {
     var status = document.createElement("span");
     status.className = "chat-row-status";
-    status.title = persistedRunStatus === "cancelling" ? "Запрос останавливается" : "Запрос выполняется";
+    status.title = state.activeSends[id] && state.activeSends[id].canceling
+      ? "Запрос останавливается"
+      : "Запрос выполняется";
     status.setAttribute("aria-label", status.title);
     var spinner = document.createElement("span");
     spinner.className = "chat-run-spinner";

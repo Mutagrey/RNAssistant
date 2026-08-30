@@ -12,6 +12,7 @@ using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
@@ -631,7 +632,7 @@ namespace RNAssistant.Harness
                     "new runtime RunId restores logical-turn IDs, including compacted-away schema discovery");
                 var last = service.ConfirmAsync("pending_context", confirmed, session,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
-                AssertEqual(1, last.ExecutionSummary.WriteOk, "confirmed fixture skill writes through kernel");
+                AssertEqual(1, last.RunViewState.UnverifiedWrites, "confirmed legacy fixture write is not called verified");
                 AssertEqual(3, requests.Count, "one model step after confirmation");
                 var continuation = requests[2];
                 AssertTrue(continuation.CallContext.IsComplete, "confirmation context is complete");
@@ -1155,13 +1156,14 @@ namespace RNAssistant.Harness
                 var cancelled = service.ExecuteAsync(ChatModes.Agent, "Создай лист.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
-                AssertEqual("cancelled", cancelled.RunStatus, "kernel owns cancellation lifecycle");
+                AssertEqual(RunViewLifecycles.Cancelled, cancelled.RunViewState.Lifecycle, "kernel owns cancellation lifecycle");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no automatic write retry");
-                AssertEqual("unknown", session.LastRun.ExecutionSummary.ExecutionHealth, "cancellation cannot erase unknown");
+                AssertEqual(RunViewHealth.Unknown, RunViewStateProjector.Create(session).ExecutionHealth,
+                    "cancellation cannot erase unknown");
                 AssertKernelReplay(session);
                 var activity = session.Messages.Last(message => message.Activity != null && message.Activity.Kind == "tool");
                 AssertEqual("tool_effect_uncertain", activity.Activity.ErrorCode, "real executor classifies thrown mutation as uncertain");
-                AssertEqual(1, activity.ExecutionSummary.WriteUnknown, "visible activity retains uncertainty before controller handling");
+                AssertEqual(1, activity.RunViewState.UnknownEffects, "visible activity retains uncertainty before controller handling");
             });
         }
 

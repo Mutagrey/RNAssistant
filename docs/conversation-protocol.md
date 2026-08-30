@@ -148,7 +148,7 @@ Each accepted message persists `ToolCallId` and immutable `AcceptedCallOrigin { 
 
 Write, external, confirmation-required and unclassified calls are singleton. Independent local reads may be batched and execute sequentially. Effective safety comes from local authority, not tool-name guesses or model claims. The executor still validates policy/arguments and applies execution defaults.
 
-Empty calls mean only that the model ended its loop. Since Phase 3B2 the kernel's `RunSummary` owns lifecycle and execution health; `RunExecutionSummary` is a compatibility projection, not a second accumulator. The kernel ends an empty-call response as `completed`, independently of errors/unknown effects. Provider-native refusal is a separate ModelProtocol result classified as `failed / provider_refused`; the compatibility response projects `refused`, including when the provider also supplied content. Model-authored refusal or question text remains ordinary `message` text. `common.questions_ask`, confirmation and technical failures retain typed runtime control signals; text never sets those outcomes. Full projection normalization remains Phase 9.
+Empty calls mean only that the model ended its loop. Since Phase 3B2 the kernel's `RunSummary` owns lifecycle and execution counts; Phase 9D5 projects the UI through immutable `RunViewState` plus source-owned effect evidence. The kernel ends an empty-call response as `completed`, independently of errors/unknown effects. Provider-native refusal is a separate ModelProtocol result classified as `failed / provider_refused`; retained accepted-history metadata may say `refused`, but the UI lifecycle comes from `RunViewState`. Model-authored refusal or question text remains ordinary `message` text. `common.questions_ask`, confirmation and technical failures retain typed runtime control signals; text never sets those outcomes.
 
 Accepted history is marked protocol `4`: ID-less v4 JSON call envelopes plus mandatory runtime metadata, native history with matching runtime IDs/canonical names, or plain final text. A dedicated history reader reconstructs accepted calls from metadata; the wire reader never reads IDs. Both service entries and controller preparation check full history, not a truncated prompt window. Unmarked/v2/v3, incomplete v4 or ambiguous mappings block dispatch and require an explicit new chat/reset. Confirmation validates the complete accepted-turn seed before consuming pending state or executing the tool; old pending actions can still be cancelled. No stream is converted, truncated, relabeled or deleted automatically.
 
@@ -341,21 +341,23 @@ Missing/duplicate results, altered pending arguments or missing evidence fail
 closed. A pending run without kernel evidence cannot resume: cancel it or start
 a new chat. No backfill or fallback loop exists.
 
-## Legacy effect mapping and UI projections
+## Effect mapping and UI projection
 
 `ToolRuntime` classifies each native invocation from a captured typed policy and
 handler-supplied dispatch/effect facts. `LegacyToolOutcomeAdapter` remains only for
 unmigrated results; their absent effect evidence is `Unreported`, never fabricated
 verification. Only the kernel aggregates records. `ChatActivity.ExecutionEvidence`
 preserves compact native facts through existing event operations and clone; a
-present incomplete evidence/policy object fails deserialization. Full UI and
-persistence normalization remain Phase 9.
+present incomplete evidence/policy object fails deserialization.
 
-`RunExecutionSummary` contains `ExecutionHealth` (`clean`, `errors`, `unknown`) and
-`ReadOk`, `ReadError`, `WriteOk`, `WriteError`, `WriteUnknown` invocation counts.
-Any uncertain write wins over errors; otherwise any read/write error wins over
-clean. Pending confirmation is not an outcome. Rejected model attempts do not add
-tool errors; protocol exhaustion still fails the lifecycle.
+`RunViewState` is the only application/bridge/UI outcome projection. It carries
+the kernel lifecycle, narrative, successful reads and failed calls, while
+`VerifiedWrites`/`NoChangeWrites` come only from source-owned effect evidence.
+Successful legacy mutations without that evidence are `UnverifiedWrites` and add
+an `UnknownEffect`; they cannot render as verified or clean. Any unknown wins over
+errors; otherwise any failed call wins over clean. Pending confirmation is exposed
+only while lifecycle is `awaiting_confirmation`. Rejected model attempts do not
+add tool failures; protocol exhaustion still fails the lifecycle.
 
 The legacy adapter conservatively maps mutation `partial_failure`, `unknown`,
 `interrupted_unknown`, `tool_effect_uncertain` and missing results to unknown.
@@ -369,15 +371,19 @@ model-result writer/readers, not the still-needed VBA/domain preparation paths.
 `WriteOk`, policy verification requirements or model wording.
 
 A new user turn starts fresh counts. Confirmation retains the logical turn's
-summary and counts its execution once. Known execution evidence is saved before
+summary and counts its execution once; effect projection follows that stable
+`TurnId` when the continuation receives a new runtime `RunId`. Kernel execution records are saved before
 optional result/media/context preparation. Preparation failure can stop the run,
-but cannot turn a known write into an unknown effect or repeat the write.
+but cannot rewrite or repeat that invocation; effect verification remains whatever
+the source evidence proves.
 
-For new runs, `ChatRunRecord.ExecutionSummary` is derived from `KernelState` and
-is not persisted alongside it. Visible tool/final/diagnostic message snapshots
-and the existing `executionSummary` bridge shape remain projections; UI does not
-compute effects from narrative. Old flat records remain readable for inspection,
-not for confirmation execution. Unknown/errors retain the existing independent
+Visible run messages and replayed headers retain the same immutable `RunViewState`.
+Full bridge responses carry the canonical session revision; static UI rejects a
+late per-chat projection instead of replacing newer history/outcome. The old
+`RunExecutionSummary` type, fields, getter and JS readers are removed. Unknown old
+JSON fields are ignored and grant no authority; a run without current
+`KernelState` requires explicit new-chat/reset. UI never computes effects from
+narrative or retained `ResponseStatus`. Unknown/errors retain an independent
 warning, and a clean no-write answer does not certify applied changes.
 
 See [event durability/recovery](session-events.md),

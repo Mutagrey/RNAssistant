@@ -8,6 +8,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
 using LegacyResult = RNAssistant.Core.Models.ToolResult;
@@ -51,7 +52,6 @@ namespace RNAssistant.Office.Services
                     if (!_session.Messages.Contains(activity)) _session.Messages.Add(activity);
                     activity.Activity = AgentTranscript.CreateRunningToolActivity(command, fact.StepId, _stepMessage);
                     activity.RunId = run.RunId;
-                    activity.ExecutionSummary = run.ExecutionSummary;
                     break;
                 case AgentRunEventKind.ToolCompleted:
                     activity = ProjectToolCompletion(fact);
@@ -81,6 +81,7 @@ namespace RNAssistant.Office.Services
             // revision between kernel appends. The private cursor guards this port;
             // The conversation store guards against other sessions/processes with
             // the canonical backend revision CAS behind its adapter.
+            RunViewStateProjector.StampCurrentRun(_session);
             _conversations.Save(_session);
             if (_saved != null) _saved(_session);
         }
@@ -105,7 +106,6 @@ namespace RNAssistant.Office.Services
             AgentTranscript.CompleteToolActivityMessage(_session, activity, command, result, record.Context.StepId, _stepMessage);
             activity.Activity.ExecutionEvidence = record.Evidence;
             activity.Activity.RunId = _session.LastRun.RunId;
-            activity.ExecutionSummary = _session.LastRun.ExecutionSummary;
             return activity;
         }
 
@@ -150,7 +150,6 @@ namespace RNAssistant.Office.Services
             AgentTranscript.CompleteToolActivityMessage(_session, activity, command, uiResult, record.Context.StepId, _stepMessage);
             activity.Activity.ExecutionEvidence = record.Evidence;
             activity.Activity.RunId = _session.LastRun.RunId;
-            activity.ExecutionSummary = _session.LastRun.ExecutionSummary;
             _projectedResults.Add(AgentTranscript.DescribeResult(command, uiResult));
         }
 
@@ -199,7 +198,6 @@ namespace RNAssistant.Office.Services
             };
             var message = AgentTranscript.CreateAssistantMessage(summary.AssistantMessage,
                 diagnostic != null || _lastModel == null ? null : _lastModel.Completion, diagnostic, responseStatus);
-            message.ExecutionSummary = RunExecutionSummary.FromRuntime(summary);
             _session.Messages.Add(message);
         }
 

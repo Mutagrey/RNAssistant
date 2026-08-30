@@ -29,7 +29,6 @@ namespace RNAssistant.Office.Services
         private string _aliasReconciledDocumentPath;
         private bool _aliasReconciliationPending;
         internal Func<string, ChatRunSnapshot> RunStateProvider { get; set; }
-        internal Func<string, ChatRunSnapshot> RunStatusProvider { get; set; }
         internal Func<IReadOnlyList<ChatSession>> RunSessionsProvider { get; set; }
         internal Func<string, bool> RunOwnershipProvider { get; set; }
         internal Func<ChatSession, IDisposable> RunRecoveryLeaseProvider { get; set; }
@@ -145,7 +144,6 @@ namespace RNAssistant.Office.Services
                     session.Messages.Add(new ChatMessage
                     {
                         Role = "assistant",
-                        ExecutionSummary = run.ExecutionSummary,
                         RunId = run.RunId,
                         Content = effectMayBeUnknown
                             ? "Предыдущий запуск был прерван. Результат выполнявшегося действия неизвестен; проверьте документ перед ручным повтором."
@@ -165,6 +163,7 @@ namespace RNAssistant.Office.Services
                     });
                     try
                     {
+                        RunViewStateProjector.StampCurrentRun(session);
                         _conversations.Save(session);
                     }
                     catch (ChatConcurrencyException)
@@ -635,9 +634,6 @@ namespace RNAssistant.Office.Services
         private ChatSessionSummary ToSummary(ChatSessionHeader header)
         {
             var id = header.Id;
-            var run = RunStatusProvider == null
-                ? (RunStateProvider == null ? null : RunStateProvider(id))
-                : RunStatusProvider(id);
             return new ChatSessionSummary
             {
                 Id = id,
@@ -657,10 +653,7 @@ namespace RNAssistant.Office.Services
                 UpdatedUtc = header.UpdatedUtc,
                 MessageCount = header.MessageCount,
                 IsCurrentDocument = IsCurrentDocument(header.Host, header.DocumentKey),
-                RunId = run == null ? header.RunId : run.RunId,
-                RunStatus = run == null ? header.RunStatus : run.Status,
-                RunPhase = run == null ? header.RunPhase : run.Phase,
-                RunStartedUtc = run == null ? header.RunStartedUtc : (DateTime?)run.StartedUtc,
+                RunViewState = header.RunViewState,
                 JsonlByteLength = header.JsonlByteLength,
                 CasBlobCount = header.CasBlobCount,
                 CasLogicalByteLength = header.CasLogicalByteLength,

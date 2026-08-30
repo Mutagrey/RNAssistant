@@ -196,6 +196,40 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void RunViewConsumersUseTypedProjection()
+        {
+            AssertEqual(typeof(RNAssistant.Core.Models.RunViewState),
+                typeof(RNAssistant.Office.Services.ChatTurnResult).GetProperty("RunViewState").PropertyType,
+                "application result exposes one typed run projection");
+            AssertEqual(typeof(RNAssistant.Core.Models.RunViewState),
+                typeof(RNAssistant.Office.Contracts.ChatStateResponse).GetProperty("RunViewState").PropertyType,
+                "bridge exposes the same typed run projection");
+            AssertEqual(typeof(long),
+                typeof(RNAssistant.Office.Contracts.ChatStateResponse).GetProperty("SessionRevision").PropertyType,
+                "bridge projection carries its durable ordering revision");
+            AssertEqual(typeof(RNAssistant.Core.Models.RunViewState),
+                typeof(RNAssistant.Core.Models.ChatSessionSummary).GetProperty("RunViewState").PropertyType,
+                "chat catalog uses the same projection");
+
+            foreach (var type in new[]
+            {
+                typeof(RNAssistant.Office.Services.ChatTurnResult),
+                typeof(RNAssistant.Office.Contracts.ChatStateResponse),
+                typeof(RNAssistant.Office.Contracts.SendChatResponse),
+                typeof(RNAssistant.Core.Models.ChatSessionSummary)
+            })
+            {
+                AssertTrue(type.GetProperty("ExecutionSummary") == null && type.GetProperty("RunStatus") == null,
+                    "active application/bridge/UI DTO has no flat run projection: " + type.FullName);
+            }
+            AssertTrue(typeof(RNAssistant.Office.Contracts.ChatStateResponse).GetProperty("ResponseStatus") == null &&
+                typeof(RNAssistant.Office.Contracts.SendChatResponse).GetProperty("ResponseStatus") == null,
+                "model response status is not a UI bridge lifecycle");
+            AssertTrue(typeof(RNAssistant.Core.Models.ChatMessage).Assembly.GetType(
+                "RNAssistant.Core.Models.RunExecutionSummary", false) == null,
+                "the replaced flat projection type is physically removed");
+        }
+
         private static bool IsGeneratedProjectPath(string path)
         {
             var normalized = Path.GetFullPath(path)

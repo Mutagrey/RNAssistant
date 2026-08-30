@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9A–9C UI и 9D1–9D4 persistence done host-neutral; 9D5 remains
-Current task: Phase 9D4 закрыл R47 host-neutral. Один минимальный `IConversationStore` adapter над прежним `ChatStore` переключил session/controller/kernel aggregate consumers. Artifact/CAS/event internals остались у существующих owners; broad public conversation API internalized без snapshot/dual-write.
+Current phase: Phase 9 done host-neutral; следующий отдельный этап — Phase 10
+Current task: Phase 9D5 закрыл R48 host-neutral. Один immutable `RunViewState` из `KernelState` и source-owned effect evidence переключил application result, bridge, chat catalog и static UI. Session revisions блокируют late projection overwrite; flat `RunExecutionSummary` и model-status UI paths удалены.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный Phase 9D5 — ввести один immutable typed `RunViewState` из `KernelState`/source-owned effect evidence, атомарно переключить bridge/UI и удалить flat projection adapter только после replay equality и stale/multi-window ordering coverage. Persistence ports/stream/CAS, 9D4 adapter и Phase 10 не менять попутно. 7D по-прежнему не начинать без WQ0/5B2.
-Required context: [9D1 audit](PHASE_9D1_PERSISTENCE_AUDIT.md), [9D2 evidence](PHASE_9D2_RUNSTORE_RECOVERY.md), [9D3 evidence](PHASE_9D3_TYPED_EVENT_STORE.md), [9D4 evidence](PHASE_9D4_CONVERSATION_STORE.md), [master Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [session events](../session-events.md), [migration map](MIGRATION_MAP.md), [risk register](RISK_REGISTER.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: R45/R46/R47 fixed host-neutral, but Windows controller/WebView persistence qualification remains open. Full Phase 9 still requires immutable `RunViewState`, replay equality, stale/multi-window verification and flat UI projection removal in 9D5. R37 read-only historical adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/reload/confirmation/live-append acceptance открыт. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 10A — сверить фактические physical/namespace boundaries и существующие architecture checks, составить точные `git mv` groups и удалить только забытые legacy branches уже переключённого core scope. Moves не смешивать с behavior changes; optional Phase 11 contours и заблокированные 5B2/7D paths не трогать.
+Required context: [9D5 evidence](PHASE_9D5_RUN_VIEW_STATE.md), [master Phase 10](STABILIZATION_MASTER_PLAN.md#phase-10--physical-cleanup-и-architecture-tests), [architecture](../architecture.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), [risk register](RISK_REGISTER.md), [harness filters](../../tests/RNAssistant.Harness/README.md), repository `AGENTS.md`.
+Open gates / remaining legacy: Phase 9/R45–R48 fixed host-neutral, but Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification remains open. R37 read-only historical diagnostics adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/clipboard acceptance открыт. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -24,10 +24,36 @@ Excel reads и verified `write_range` завершены host-neutral; 7D ждё
 Phase 8A immutable execution snapshot, 8B callable lifecycle/admission, 8C durable
 reconstruction и 8D resource data-plane cutover завершены host-neutral; 9D1 audit,
 9D2 same-process fail-stop reload/reconciliation, 9D3 typed event
-classification/`IEventStore` и 9D4 minimal `IConversationStore` завершены,
-следующий dependency-safe slice — отдельный 9D5 immutable `RunViewState`.
+classification/`IEventStore`, 9D4 minimal `IConversationStore` и 9D5 immutable
+`RunViewState` завершены host-neutral; следующий dependency-safe этап — отдельный
+Phase 10 physical/boundary audit и cleanup.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
+
+Phase 9D5 immutable run view projection (2026-08-30): один Core
+`RunViewStateProjector` строит immutable UI state из authoritative `KernelState` и
+source-owned `ToolExecutionEvidence`. Narrative, lifecycle, health, successful
+reads, verified change/no-change, unverified writes, failed calls, unknown effects
+и exact pending confirmation больше не собираются в JS из model status/prose и
+разрозненных Activity полей. Legacy successful mutation без verification остаётся
+unverified+unknown; несовместимая evidence не может завысить verified count.
+
+Application result, Init/ChatState/SendChat bridge, chat headers/catalog и Agent/
+message/approval UI switched atomically. Full responses несут session revision;
+per-chat UI guard отвергает late detail и не даёт stale catalog заменить более
+новый summary, а existing event revision CAS остаётся cross-window write authority.
+Все switched JS/CSS получили один cache key, поэтому WebView не смешивает новый
+bridge с cached flat-status readers.
+`RunExecutionSummary`, getter projection, message/run/bridge fields, current catalog
+overlay и model-status UI branches удалены; старые JSON fields только игнорируются,
+без hidden migration/fallback. Stream/CAS/schema/ports не менялись.
+
+99 distinct targeted harness cases и 70/70 web cases pass; MockDemo actual-controller
+compile — 0 errors / 3 existing CA1416 PDF warnings. `ValidateVersionFormat`, diff
+check и 249 local links in 11 changed Markdown files — pass.
+[Evidence](PHASE_9D5_RUN_VIEW_STATE.md).
+Windows controller/WebView/reload/confirmation/live-append/clipboard/multi-window
+qualification открыт; Phase 9 имеет статус только done host-neutral.
 
 Phase 9D4 conversation projection boundary (2026-08-30): один
 `ChatConversationStoreAdapter` реализует минимальный `IConversationStore` над тем же
@@ -1124,7 +1150,6 @@ harness не запускались. Следующий отдельный ша�
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
 | Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | 4B wire switched; handler migrations 6–7 / optional 11 remove mapping; R23 remains |
-| RunExecutionSummary projection / old flat read records | Application / Persistence / UI | Messages, ChatRunRecord getter, clones, bridge, static UI | Phase 9: полная projection; старые pending не исполняются и не backfill |
 | LegacyToolDefinitionAdapter | ToolRuntime | Current catalog/schema/authoring, legacy execution, source policy projection | Phase 8 typed catalog/ToolPack; domain switches 6–7 / optional authoring 11; central name list removed in 4A |
 | LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Handler switches 6–7 / optional 11; no old-history reader |
 | ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 typed UI projection; manual/domain consumers 6–7 / optional 11 |
@@ -1142,7 +1167,7 @@ model-session/metadata owners не являются compatibility adapters.
 ## Open P0/P1 risks
 
 - R01: false completion воспроизведён в 1A; guard 1C закрывает host-neutral safety assertions, production qualification ещё не выполнена.
-- R02 и R07 contained host-neutral, но live-provider/Windows VBE gates открыты; R03–R06 остаются открыты. R08/R09 получили typed module outcome, terminal persistence и cancellation coverage в 6D; delete/restore switched через 6F/6G, package lifecycle/CAS/fault matrix — через 6I, rename — через 6J. Windows reconciliation/COM gates ещё открыты. R10 UI mitigated host-neutral через 9C, Windows acceptance открыт. R11 minimal replay covered в 3B2, full Phase 9/Windows matrix остаётся.
+- R02 и R07 contained host-neutral, но live-provider/Windows VBE gates открыты; R03–R06 остаются открыты. R08/R09 получили typed module outcome, terminal persistence и cancellation coverage в 6D; delete/restore switched через 6F/6G, package lifecycle/CAS/fault matrix — через 6I, rename — через 6J. Windows reconciliation/COM gates ещё открыты. R10/R11/R48 закрыты host-neutral через Phase 9; real Windows/WebView/restart/multi-window acceptance остаётся.
 - R04: operation gate проверен host-neutral в 5B1; production bound Excel/common identity и Windows wrong-target scenarios — 5B2.
 - R16: Assembly/ClickOnce и Windows x64 + Office x64 + VS 2022 qualification не выполнены.
 - R19: PowerShell release workflow требует проверки на release workstation.

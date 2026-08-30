@@ -1,7 +1,7 @@
 var agentApproval = window.RNAssistantAgentApproval.create({
   state: state,
   currentActiveSend: function () { return typeof currentActiveSend === "function" ? currentActiveSend() : null; },
-  primaryText: function (activity) { return activityPrimaryText(activity); },
+  primaryText: function (pending) { return pending.toolName || "Действие"; },
   cancel: function (pendingId) { return cancelAgentTool(pendingId); },
   confirm: function (pendingId) { return confirmAgentTool(pendingId); }
 });
@@ -283,28 +283,24 @@ function appendCollapsedAgentStep(parent, step, isCurrent, finished) {
   parent.appendChild(details);
 }
 
-function agentRunSummaryTitle(status, elapsed, executionSummary) {
+function agentRunSummaryTitle(status, elapsed, runViewState) {
   var title;
-  if (executionSummary && executionSummary.executionHealth === "unknown") {
+  if (runViewState && runViewState.executionHealth === "unknown") {
     title = "Результат изменений не определён";
-  } else if (executionSummary && executionSummary.executionHealth === "errors") {
+  } else if (runViewState && runViewState.executionHealth === "errors") {
     title = "Выполнение содержит ошибки";
-  } else if (status === "completed" && executionSummary && !executionSummary.writeOk) {
+  } else if (runViewState && runViewState.lifecycle === "awaiting_user") {
+    title = "Ожидает ответа";
+  } else if (runViewState && runViewState.lifecycle === "awaiting_confirmation") {
+    title = "Ожидает подтверждения";
+  } else if (status === "completed" && runViewState && !runViewState.verifiedWrites) {
     title = "Ответ получен";
   } else if (status === "failed") {
     title = "Прервано";
   } else if (status === "cancelled") {
     title = "Отменено";
   } else if (status === "waiting") {
-    title = "Ожидает подтверждения";
-  } else if (status === "awaiting_user") {
-    title = "Ожидает ответа";
-  } else if (status === "blocked") {
-    title = "Заблокировано";
-  } else if (status === "refused") {
-    title = "Отказ";
-  } else if (status === "planned") {
-    title = "План готов";
+    title = "Ожидание";
   } else if (status === "unknown") {
     title = "Результат не подтверждён runtime";
   } else {
@@ -318,11 +314,7 @@ function appendAgentRunSummaryState(summary, status) {
     running: "",
     waiting: "!",
     failed: "×",
-    cancelled: "–",
-    awaiting_user: "?",
-    blocked: "!",
-    refused: "×",
-    planned: "✓"
+    cancelled: "–"
   };
   if (!Object.prototype.hasOwnProperty.call(labels, status)) return;
   var mark = document.createElement("span");
@@ -341,7 +333,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   var actionCount = agentToolCallCount(timeline);
   var title = document.createElement("span");
   title.className = "agent-run-history-title";
-  title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed, stats.executionSummary);
+  title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed, stats.runViewState);
   summary.appendChild(title);
   appendAgentRunSummaryState(summary, stats.status);
   var caret = document.createElement("span");
@@ -418,26 +410,30 @@ function appendAgentRunOutcome(parent, activity, overview) {
   parent.appendChild(outcome);
 }
 
-function appendAgentExecutionSummary(parent, summary, runId) {
-  var health = summary ? summary.executionHealth : "unknown";
+function appendAgentRunViewState(parent, runViewState, runId) {
+  var health = runViewState ? runViewState.executionHealth : "unknown";
   var note = document.createElement("div");
-  note.className = "message-outcome " + (health === "clean" ? "status-unknown" : "status-blocked");
+  note.className = "message-outcome " + (health === "clean" ? "status-unknown" : "status-warning");
   note.setAttribute("data-runtime-health", health);
   note.setAttribute("role", health === "clean" ? "status" : "alert");
-  if (!summary) {
-    note.textContent = "Для этого run нет runtime summary. Результат изменений не подтверждён.";
+  if (!runViewState) {
+    note.textContent = "Для этого run нет typed runtime state. Результат изменений не подтверждён.";
   } else if (health === "unknown") {
     note.textContent = "Результат изменений не определён. Требуется проверка фактического состояния.";
   } else if (health === "errors") {
     note.textContent = "Выполнение содержит ошибки. Нельзя считать все изменения применёнными.";
-  } else if (!summary.writeOk) {
+  } else if (!runViewState.verifiedWrites) {
     note.textContent = "Ответ модели. Подтверждённых изменений нет.";
   } else {
     note.textContent = "Runtime: ошибки выполнения не зарегистрированы.";
   }
-  if (summary && (summary.writeOk || summary.writeError || summary.writeUnknown)) {
-    note.textContent += " Действия с изменениями: успешно — " + summary.writeOk +
-      ", ошибка — " + summary.writeError + ", результат неизвестен — " + summary.writeUnknown + ".";
+  if (runViewState && (runViewState.verifiedWrites || runViewState.noChangeWrites ||
+      runViewState.unverifiedWrites || runViewState.failedCalls || runViewState.unknownEffects)) {
+    note.textContent += " Runtime evidence: изменения — " + runViewState.verifiedWrites +
+      ", без изменения — " + runViewState.noChangeWrites +
+      ", без проверки — " + runViewState.unverifiedWrites +
+      ", ошибки вызовов — " + runViewState.failedCalls +
+      ", неизвестный эффект — " + runViewState.unknownEffects + ".";
   }
   parent.appendChild(note);
   if (runId) {
@@ -474,9 +470,8 @@ function renderAgentRunArticle(run) {
   var timeline = collectVisibleAgentTimelineItems(items);
   var timingItems = timeline.slice();
   if (finalMessage) timingItems.push(finalMessage);
-  var terminalStatus = finalMessage ? messageResponseStatus(finalMessage.message) : "";
-  var executionSummary = agentRunExecutionSummary(items, finalMessage);
-  var stats = agentRunStats(timingItems, !!finalMessage && !run.live, terminalStatus, executionSummary);
+  var runViewState = agentRunViewState(items, finalMessage);
+  var stats = agentRunStats(timingItems, !!finalMessage && !run.live, runViewState);
   var steps = groupAgentRunSteps(timeline);
   var node = document.createElement("article");
   node.className = "message assistant agent-run status-" + stats.status + (run.live ? " live" : "");
@@ -499,7 +494,7 @@ function renderAgentRunArticle(run) {
     }
   }
   // This warning is outside collapsed trace and never derived from the model's prose.
-  if (!run.live) appendAgentExecutionSummary(body, executionSummary, agentRunId(items, finalMessage));
+  if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage));
   if (finalMessage) {
     var finalSection = document.createElement("section");
     finalSection.className = "agent-final-step";

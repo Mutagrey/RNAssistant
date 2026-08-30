@@ -257,8 +257,6 @@ namespace RNAssistant.Office
             {
                 Role = "assistant",
                 Content = cancelled ? "Запрос отменён." : "Запрос завершился технической ошибкой.",
-                ExecutionSummary = session.LastRun == null || session.LastRun.ExecutionSummary == null
-                    ? null : session.LastRun.ExecutionSummary.Clone(),
                 Activity = new ChatActivity
                 {
                     Kind = "diagnostic",
@@ -369,7 +367,6 @@ namespace RNAssistant.Office
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     Status = "running",
                     Phase = "starting",
-                    ExecutionSummary = new RunExecutionSummary(),
                     CurrentAction = "Preparing request.",
                     DocumentRuntimeKey = executionMode != ChatModes.Chat ? documentRuntimeKey : null,
                     IterationsUsed = 0,
@@ -623,10 +620,9 @@ namespace RNAssistant.Office
             var activeId = session.Id;
             return new SendChatResponse
             {
+                SessionRevision = session == null ? 0 : session.Revision,
+                RunViewState = RunViewStateProjector.Create(session),
                 Message = completion == null ? string.Empty : completion.AssistantText,
-                ResponseStatus = completion == null ? null : completion.ResponseStatus,
-                ExecutionSummary = session == null || session.LastRun == null || session.LastRun.ExecutionSummary == null
-                    ? null : session.LastRun.ExecutionSummary.Clone(),
                 ToolResults = completion == null
                     ? (IReadOnlyList<object>)new object[0]
                     : completion.ToolResults ?? new object[0],

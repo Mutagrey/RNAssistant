@@ -5,8 +5,7 @@ function beginChatNavigation() {
 
 function applyChatNavigationState(response, version) {
   if (version !== state.chatNavigationVersion) return false;
-  applyChatState(response);
-  return true;
+  return applyChatState(response);
 }
 
 async function createChat() {
@@ -287,10 +286,18 @@ function applyInitState(init) {
   state.htmlWorkspace = init.htmlWorkspace || init.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
   state.htmlWorkspaceDirty = false;
   state.activeChatId = nextChatId;
+  state.chatProjectionRevisions = {};
+  window.RNAssistantRunViewState.accept(
+    state.chatProjectionRevisions,
+    nextChatId,
+    window.RNAssistantRunViewState.sessionRevision(init));
+  state.activeRunViewState = window.RNAssistantRunViewState.normalize(
+    init.runViewState !== undefined ? init.runViewState : init.RunViewState);
   state.activeChatModel = init.activeChatModel || "";
   state.activeChatMode = init.activeChatMode || init.ActiveChatMode || "agent";
   state.activeChatReasoning = !!(init.activeChatReasoning || init.ActiveChatReasoning);
-  state.chats = init.chats || [];
+  state.chats = window.RNAssistantRunViewState.mergeCatalog(
+    [], init.chats || init.Chats || [], state.chatProjectionRevisions);
   state.documents = init.documents || init.Documents || [];
   state.messages = init.messages || [];
   state.artifacts = init.artifacts || init.Artifacts || [];
@@ -340,6 +347,8 @@ function applyBridgeUnavailableState(error) {
   state.chats = [];
   state.documents = [];
   state.activeChatId = "";
+  state.activeRunViewState = null;
+  state.chatProjectionRevisions = {};
   state.activeChatReasoning = false;
   state.messages = [];
   state.liveActivity = null;
@@ -392,8 +401,11 @@ function chatNavigationSignature(payload) {
   return JSON.stringify({
     activeChatId: payload.activeChatId || payload.ActiveChatId || "",
     chats: chats.map(function (chat) {
+      var runView = window.RNAssistantRunViewState.fromChatSummary(chat);
       return [
         chatId(chat), chatTitle(chat), chatMessageCount(chat),
+        window.RNAssistantRunViewState.chatRevision(chat),
+        runView ? runView.lifecycle : "", runView ? runView.executionHealth : "",
         chat.DocumentKey || chat.documentKey || "", chat.UpdatedUtc || chat.updatedUtc || "",
         chatJsonlByteLength(chat), chatCasBlobCount(chat), chatCasLogicalByteLength(chat),
         chatCasStoredByteLength(chat), chatCasMissingBlobCount(chat),

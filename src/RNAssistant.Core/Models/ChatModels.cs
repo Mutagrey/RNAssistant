@@ -65,34 +65,6 @@ namespace RNAssistant.Core.Models
         }
     }
 
-    // Runtime evidence, independent of conversation-response status and model text.
-    public sealed class RunExecutionSummary
-    {
-        public string ExecutionHealth { get; set; } = "clean";
-        public int ReadOk { get; set; }
-        public int ReadError { get; set; }
-        public int WriteOk { get; set; }
-        public int WriteError { get; set; }
-        public int WriteUnknown { get; set; }
-
-        public static RunExecutionSummary FromRuntime(RNAssistant.Core.Agent.RunSummary summary)
-        {
-            if (summary == null) return null;
-            var counts = summary.ToolCounts;
-            return new RunExecutionSummary
-            {
-                ExecutionHealth = summary.ExecutionHealth.ToString().ToLowerInvariant(),
-                ReadOk = counts.ReadOk, ReadError = counts.ReadError, WriteOk = counts.WriteOk,
-                WriteError = counts.WriteError, WriteUnknown = counts.WriteUnknown
-            };
-        }
-
-        public RunExecutionSummary Clone()
-        {
-            return (RunExecutionSummary)MemberwiseClone();
-        }
-    }
-
     // Correlates one accepted runtime call with its position in an immutable raw
     // model attempt. A kernel step alone is insufficient when protocol repair ran.
     public sealed class AcceptedToolCallOrigin
@@ -129,7 +101,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public string ResponseStatus { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public RunExecutionSummary ExecutionSummary { get; set; }
+        public RunViewState RunViewState { get; set; }
         public string ToolCallId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public AcceptedToolCallOrigin AcceptedCallOrigin { get; set; }
@@ -340,15 +312,6 @@ namespace RNAssistant.Core.Models
         public string Status { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public RNAssistant.Core.Persistence.AgentRunState KernelState { get; set; }
-        private RunExecutionSummary _legacyExecutionSummary;
-        public RunExecutionSummary ExecutionSummary
-        {
-            get { return KernelState == null ? _legacyExecutionSummary : RunExecutionSummary.FromRuntime(KernelState.Summary); }
-            set { _legacyExecutionSummary = value; }
-        }
-        // Old records can be inspected/reset. New runs persist only typed kernel
-        // state; the flat bridge/message shape is a disposable projection.
-        public bool ShouldSerializeExecutionSummary() { return KernelState == null && _legacyExecutionSummary != null; }
         public string Phase { get; set; }
         public string CurrentAction { get; set; }
         public string DocumentRuntimeKey { get; set; }
@@ -380,6 +343,7 @@ namespace RNAssistant.Core.Models
         public string RunStatus { get; set; }
         public string RunPhase { get; set; }
         public DateTime? RunStartedUtc { get; set; }
+        public RunViewState RunViewState { get; set; }
         public long JsonlByteLength { get; set; }
         public int CasBlobCount { get; set; }
         public long CasLogicalByteLength { get; set; }
@@ -408,10 +372,7 @@ namespace RNAssistant.Core.Models
         public DateTime UpdatedUtc { get; set; }
         public int MessageCount { get; set; }
         public bool IsCurrentDocument { get; set; }
-        public string RunId { get; set; }
-        public string RunStatus { get; set; }
-        public string RunPhase { get; set; }
-        public DateTime? RunStartedUtc { get; set; }
+        public RunViewState RunViewState { get; set; }
         public long JsonlByteLength { get; set; }
         public int CasBlobCount { get; set; }
         public long CasLogicalByteLength { get; set; }

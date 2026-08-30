@@ -573,10 +573,10 @@ namespace RNAssistant.Harness
                         new AppSettings { AutoConfirmToolActions = true }, tools, null).GetAwaiter().GetResult();
                     AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "conversion failure never retries execution");
                     AssertEqual(2, modelCalls, "conversion failure never triggers model repair");
-                    var summary = JObject.FromObject(result)["ExecutionSummary"];
-                    AssertEqual(item.Status == ToolResultStatus.Ok ? 1 : 0, (int)summary["WriteOk"], "known success count survives conversion failure");
-                    AssertEqual(item.Status == ToolResultStatus.Error ? 1 : 0, (int)summary["WriteError"], "known error count survives conversion failure");
-                    AssertEqual(item.Status == ToolResultStatus.Unknown ? 1 : 0, (int)summary["WriteUnknown"], "conversion failure creates no extra unknown effect");
+                    var view = JObject.FromObject(result)["RunViewState"];
+                    AssertEqual(item.Status == ToolResultStatus.Ok ? 1 : 0, (int)view["UnverifiedWrites"], "legacy success is preserved without fabricated verification");
+                    AssertEqual(item.Status == ToolResultStatus.Error ? 1 : 0, (int)view["FailedCalls"], "known error count survives conversion failure");
+                    AssertEqual(item.Status == ToolResultStatus.Error ? 0 : 1, (int)view["UnknownEffects"], "conversion failure creates no extra unknown effect");
                     var message = session.Messages.Single(entry => entry.ProtocolMessage && entry.Role != "assistant" &&
                         entry.ToolName == "excel.add_sheet");
                     ToolResultWireReadResult wire;

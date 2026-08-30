@@ -1,46 +1,30 @@
 (function () {
   "use strict";
 
-  function pendingConfirmation(activity) {
-    if (!activity) return null;
-    if (activityPendingId(activity) && activityStatus(activity) === "waiting") return activity;
-    var children = activityChildren(activity);
-    for (var index = children.length - 1; index >= 0; index -= 1) {
-      var child = pendingConfirmation(children[index]);
-      if (child) return child;
-    }
-    return null;
-  }
-
   function create(options) {
     options = options || {};
     var state = options.state;
 
-    function pendingActivity() {
+    function pendingState() {
       if (options.currentActiveSend()) return null;
-      var live = state.liveAgentRun || [];
-      for (var liveIndex = live.length - 1; liveIndex >= 0; liveIndex -= 1) {
-        var liveMatch = pendingConfirmation(live[liveIndex]);
-        if (liveMatch) return liveMatch;
-      }
-      for (var messageIndex = state.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-        var match = pendingConfirmation(messageActivity(state.messages[messageIndex]));
-        if (match) return match;
-      }
-      return null;
+      var viewState = state.activeRunViewState || null;
+      return viewState && viewState.lifecycle === "awaiting_confirmation" && viewState.pendingConfirmation
+        ? { viewState: viewState, pending: viewState.pendingConfirmation }
+        : null;
     }
 
     function renderDock() {
       var dock = $("agentApprovalDock");
       if (!dock) return;
-      var activity = pendingActivity();
-      if (!activity) {
+      var pendingStateValue = pendingState();
+      if (!pendingStateValue) {
         dock.replaceChildren();
         dock.classList.add("hidden");
         return;
       }
 
-      var pendingId = activityPendingId(activity);
+      var pending = pendingStateValue.pending;
+      var pendingId = pending.pendingId;
       var panel = document.createElement("section");
       panel.className = "agent-approval-panel";
       panel.setAttribute("aria-label", "Подтверждение действия агента");
@@ -55,13 +39,13 @@
       copy.className = "agent-approval-copy";
       var title = document.createElement("div");
       title.className = "agent-approval-title";
-      title.textContent = options.primaryText(activity);
+      title.textContent = options.primaryText(pending);
       copy.appendChild(title);
       var meta = document.createElement("div");
       meta.className = "agent-approval-meta";
       meta.textContent = "Нужно подтверждение";
       copy.appendChild(meta);
-      var reason = activityResultMessage(activity);
+      var reason = pendingStateValue.viewState.currentAction || pendingStateValue.viewState.narrative;
       if (reason) {
         var reasonNode = document.createElement("div");
         reasonNode.className = "agent-approval-reason";
@@ -80,7 +64,13 @@
       dock.classList.remove("hidden");
     }
 
-    return { pendingActivity: pendingActivity, renderDock: renderDock };
+    return {
+      pendingActivity: function () {
+        var result = pendingState();
+        return result ? result.pending : null;
+      },
+      renderDock: renderDock
+    };
   }
 
   window.RNAssistantAgentApproval = { create: create };

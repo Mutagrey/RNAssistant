@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
@@ -169,6 +170,10 @@ namespace RNAssistant.Core.Storage
             int casMissingBlobCount;
             ReadCasStorageUsage(blobs ?? _blobs, out casStoredByteLength, out casMissingBlobCount);
             var run = _lastRun;
+            var runViewState = run == null ? null : _messages.Items
+                .Where(item => item.Active && string.Equals(item.RunId, run.RunId, StringComparison.Ordinal))
+                .Select(item => item.RunViewState)
+                .LastOrDefault(item => item != null) ?? RunViewStateProjector.Create(run, new ChatMessage[0]);
             var casReferenceIssueCount = SaturatingAdd(
                 _invalidCasReferenceCount,
                 _conflictingCasReferences.Count);
@@ -196,6 +201,7 @@ namespace RNAssistant.Core.Storage
                 RunStatus = run == null ? null : run.Status,
                 RunPhase = run == null ? null : run.Phase,
                 RunStartedUtc = run == null ? (DateTime?)null : run.StartedUtc,
+                RunViewState = runViewState,
                 JsonlByteLength = jsonlByteLength,
                 CasBlobCount = _casReferences.Count,
                 CasLogicalByteLength = _casLogicalByteLength,
@@ -548,6 +554,8 @@ namespace RNAssistant.Core.Storage
         private sealed class HeaderMessage : HeaderReplayItem
         {
             public bool ProtocolMessage { get; set; }
+            public string RunId { get; set; }
+            public RunViewState RunViewState { get; set; }
 
             public static HeaderMessage FromToken(JObject value)
             {
@@ -555,6 +563,11 @@ namespace RNAssistant.Core.Storage
                 {
                     Id = StringValue(value == null ? null : value["Id"]),
                     ProtocolMessage = value != null && BooleanValue(value["ProtocolMessage"]),
+                    RunId = StringValue(value == null ? null : value["RunId"]),
+                    RunViewState = value == null || value["RunViewState"] == null ||
+                        value["RunViewState"].Type == JTokenType.Null
+                            ? null
+                            : value["RunViewState"].ToObject<RunViewState>(),
                     Active = true
                 };
             }
@@ -572,7 +585,14 @@ namespace RNAssistant.Core.Storage
 
             public HeaderMessage Clone()
             {
-                return new HeaderMessage { Id = Id, ProtocolMessage = ProtocolMessage, Active = Active };
+                return new HeaderMessage
+                {
+                    Id = Id,
+                    ProtocolMessage = ProtocolMessage,
+                    RunId = RunId,
+                    RunViewState = RunViewState,
+                    Active = Active
+                };
             }
         }
 

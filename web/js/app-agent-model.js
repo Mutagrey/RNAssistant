@@ -17,20 +17,8 @@ function activityStatusFromPhase(phase) {
   return "running";
 }
 
-function conversationResponseStatus(value) {
-  value = String(value || "").toLowerCase();
-  return value === "completed" || value === "awaiting_user" || value === "blocked" ||
-    value === "refused" || value === "planned" ? value : "";
-}
-
-function conversationOutcomeLabel(status) {
-  status = conversationResponseStatus(status);
-  if (status === "awaiting_user") return "Ожидает ответа";
-  if (status === "blocked") return "Заблокировано";
-  if (status === "refused") return "Отказ";
-  if (status === "planned") return "План готов";
-  if (status === "completed") return "Готово";
-  return "";
+function conversationOutcomeLabel(runViewState) {
+  return window.RNAssistantRunViewState.outcomeLabel(runViewState);
 }
 
 function normalizeProgressActivity(progress) {
@@ -273,30 +261,17 @@ function agentRunElapsedText(items) {
   return formatElapsedTime(Math.max.apply(Math, dates) - Math.min.apply(Math, dates));
 }
 
-function messageExecutionSummary(message) {
-  var summary = activityValue(message, "ExecutionSummary", "executionSummary", null);
-  if (!summary) return null;
-  var health = activityValue(summary, "ExecutionHealth", "executionHealth", "");
-  if (health !== "clean" && health !== "errors" && health !== "unknown") return null;
-  var result = { executionHealth: health };
-  var fields = ["ReadOk", "ReadError", "WriteOk", "WriteError", "WriteUnknown"];
-  for (var i = 0; i < fields.length; i += 1) {
-    var field = fields[i];
-    var key = field.charAt(0).toLowerCase() + field.slice(1);
-    var count = activityValue(summary, field, key, 0);
-    if (!Number.isSafeInteger(count) || count < 0) return null;
-    result[key] = count;
-  }
-  return result;
+function messageRunViewState(message) {
+  return window.RNAssistantRunViewState.fromMessage(message);
 }
 
-function agentRunExecutionSummary(items, finalMessage) {
-  if (finalMessage) return messageExecutionSummary(finalMessage.message);
-  // An interrupted/recovered boundary without evidence must not inherit an older clean snapshot.
-  return items && items.length ? messageExecutionSummary(items[items.length - 1].message) : null;
+function agentRunViewState(items, finalMessage) {
+  if (finalMessage) return messageRunViewState(finalMessage.message);
+  // A missing boundary must not inherit an older clean projection.
+  return items && items.length ? messageRunViewState(items[items.length - 1].message) : null;
 }
 
-function agentRunStats(items, finished, terminalStatus, executionSummary) {
+function agentRunStats(items, finished, runViewState) {
   var counts = { total: 0 };
   var activities = collectRunActivities(items || []);
   activities.forEach(function (activity) {
@@ -305,18 +280,15 @@ function agentRunStats(items, finished, terminalStatus, executionSummary) {
   var current = currentRunActivity(activities, !!finished);
   var elapsed = agentRunElapsedText(items || []);
 
-  var declaredStatus = conversationResponseStatus(terminalStatus);
-  var lifecycleStatus = finished ? (declaredStatus || "unknown") : (current ? activityStatus(current) : "completed");
-  var status = lifecycleStatus;
-  if (executionSummary && executionSummary.executionHealth === "unknown") status = "unknown";
-  else if (executionSummary && executionSummary.executionHealth === "errors") status = "failed";
-  else if (arguments.length > 3 && !executionSummary && finished) status = "unknown";
+  var lifecycleStatus = runViewState ? runViewState.lifecycle :
+    (finished ? "unknown" : (current ? activityStatus(current) : "running"));
+  var status = window.RNAssistantRunViewState.displayStatus(runViewState, lifecycleStatus);
   return {
     current: current,
     counts: counts,
     elapsed: elapsed,
     lifecycleStatus: lifecycleStatus,
-    executionSummary: executionSummary,
+    runViewState: runViewState,
     status: status
   };
 }
@@ -333,7 +305,7 @@ function canCollectAgentRunAt(index) {
     return false;
   }
   // A final-only answer still needs the runtime evidence note, even without tools.
-  if (isAgentRunFinalMessage(message)) return !!messageExecutionSummary(message) || !!messageResponseStatus(message);
+  if (isAgentRunFinalMessage(message)) return !!messageRunViewState(message);
   if (!messageActivity(message)) return false;
   var runId = messageRunId(message);
   if (!runId) {

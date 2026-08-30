@@ -2082,7 +2082,7 @@ acceptance предыдущего подэтапа.
 
 ### Выполнить
 
-- [ ] Ввести или нормализовать:
+- [x] Ввести или нормализовать:
   - [x] `IRunStore` (9D1 подтвердил минимальный port/adapter Phase 3, ordered append/cursor и replay coverage; контракт сохраняется без второго run store);
   - [x] `IConversationStore` (9D4: один минимальный port/adapter над прежним `ChatStore`);
   - [x] `IEventStore` (9D3: один closed typed port/adapter над существующим `ChatStore`).
@@ -2092,28 +2092,28 @@ acceptance предыдущего подэтапа.
 - [x] Разделение является typed classification в существующем chat stream, не вторым durable run store; domain journals сохраняют свою recovery authority. Ports не получают независимые writable snapshots и не выполняют двойную запись одного outcome.
 - [x] Accepted model/tool events остаются canonical: accepted response/calls/results — storage-internal `session.commit`, accepted ToolPack extension — mandatory Agent authority; best-effort accepted trace marker authority не получает.
 - [x] Rejected model attempts остаются mandatory Agent diagnostics и не входят в replay/history.
-- [ ] Расширить минимальное replay coverage Phase 3 до полной persistence/UI матрицы; replay должен восстанавливать тот же `RunSummary`.
-- [ ] UI получает typed `RunViewState`.
-- [ ] Отдельно отображать:
-  - [ ] model message;
-  - [ ] lifecycle;
-  - [ ] execution health;
-  - [ ] verified writes;
-  - [ ] failed calls;
-  - [ ] unknown effects;
-  - [ ] pending confirmation.
-- [ ] Удалить UI logic, основанную на model status/message.
-- [ ] Проверить stale projection и multi-window updates.
-- [ ] Не переписывать CAS/event framework целиком.
-- [ ] Не вводить второй durable source of truth.
-- [ ] Сохранить ordered durability: referenced CAS payload durable до ссылающегося event; accepted call/start до effect, result evidence до следующего model step. Mandatory append failure до dispatch запрещает effect; после возможного dispatch — остановка и reload/reconciliation, без fabricated terminal и auto retry.
-- [ ] Проверить result-append failure после write, restart при незавершённом tool start, CAS failure и конфликт revision при queued stream chunks. Optional trace не заменяет mandatory run/tool events; replay не выполняет tools и не пересчитывает прошлое по новой policy.
+- [x] Расширить минимальное replay coverage Phase 3 до полной host-neutral persistence/UI матрицы; replay восстанавливает тот же `RunSummary` и `RunViewState`. Реальный Windows/WebView gate остаётся в Milestone WQ.
+- [x] UI получает typed `RunViewState`.
+- [x] Отдельно отображать:
+  - [x] model message;
+  - [x] lifecycle;
+  - [x] execution health;
+  - [x] verified writes;
+  - [x] failed calls;
+  - [x] unknown effects;
+  - [x] pending confirmation.
+- [x] Удалить UI logic, основанную на model status/message.
+- [x] Проверить stale projection и multi-window updates host-neutral: per-chat UI revisions не допускают поздний detail/catalog overwrite, existing stream revision CAS блокирует stale writers; Windows multi-window acceptance остаётся открытым.
+- [x] Не переписывать CAS/event framework целиком.
+- [x] Не вводить второй durable source of truth.
+- [x] Сохранить ordered durability: referenced CAS payload durable до ссылающегося event; accepted call/start до effect, result evidence до следующего model step. Mandatory append failure до dispatch запрещает effect; после возможного dispatch — остановка и reload/reconciliation, без fabricated terminal и auto retry.
+- [x] Проверить result-append failure после write, restart при незавершённом tool start, CAS failure и конфликт revision при queued stream chunks. Optional trace не заменяет mandatory run/tool events; replay не выполняет tools и не пересчитывает прошлое по новой policy.
 - [x] 9D1 docs-only: сверены store/event writers, replay/recovery, projection consumers и существующее fault coverage. Один chat stream/CAS и `IRunStore` сохраняются; подтверждён пробел same-process reconciliation R45 и отсутствие typed event/conversation/UI ports. [Evidence](PHASE_9D1_PERSISTENCE_AUDIT.md).
 - [x] 9D2 host-neutral: Agent start/confirmation после `RunStoreException` освобождают run ownership, отбрасывают изменённую in-memory projection и через один `ChatSessionService` reload/reconcile exact stream. Pre-dispatch confirmation сохраняет durable pending; open dispatch становится unknown один раз; fabricated terminal, append retry и tool replay отсутствуют. [Evidence](PHASE_9D2_RUNSTORE_RECOVERY.md).
 - [x] 9D3 host-neutral: closed descriptors классифицируют все current top-level chat events по lane/authority/durability/write scope; один `IEventStore` adapter сохраняет прежний stream/CAS/wire. Active Office writers/readers switched atomically, storage lifecycle остаётся internal, arbitrary string append удалён. [Evidence](PHASE_9D3_TYPED_EVENT_STORE.md).
 - [x] 9D4 host-neutral: минимальный `IConversationStore` и один adapter над прежним `ChatStore` атомарно переключили session/controller/kernel projection consumers. Artifact/CAS/event internals остались у существующих owners; broad conversation API internalized без writable snapshot/dual-write. [Evidence](PHASE_9D4_CONVERSATION_STORE.md).
-- [ ] 9D5: ввести immutable `RunViewState`, переключить bridge/UI и закрыть replay equality, stale projection и multi-window ordering до удаления flat projection adapter.
-- [ ] R32: реализовать [сквозной журнал и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md) отдельными подэтапами: 9A — truth/query, 9B — viewer и read-only consumers, 9C — journal UI/qualification. Phases 4–8 этим требованием не расширяются.
+- [x] 9D5 host-neutral: один immutable `RunViewState` из `KernelState` и source-owned effect evidence переключил application result, bridge, chat catalog и UI; session revision закрывает late projection ordering, flat `RunExecutionSummary` и model-status UI branches удалены. Replay/confirmation/recovery/stale checks pass; Windows WebView/multi-window acceptance открыта. [Evidence](PHASE_9D5_RUN_VIEW_STATE.md).
+- [x] R32: реализовать [сквозной журнал и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md) отдельными подэтапами: 9A — truth/query, 9B — viewer и read-only consumers, 9C — journal UI/qualification. Phases 4–8 этим требованием не расширяются.
   - [x] 9A host-neutral: chronological `run-causal` projection сохраняет exact source/origin/call/mutation evidence и явные terminal gaps; accepted-call writer классифицируется по `AcceptedCallOrigin`, без второго store или history rewrite. 9B/9C и Windows qualification остаются открытыми.
   - [x] 9B1 host-neutral: allowlisted UI-only `ViewerRegistry` + собственный bounded/lossless JSON token adapter с lazy DOM и exact raw/node copy; vendors и existing consumer paths не переключались. 9B2/9B3/9C и Windows qualification остаются открытыми.
   - [x] 9B2A host-neutral: diagnostics event/row data, separate source evidence и JSON CAS payload switched на общий adapter; non-JSON payload остаётся inert text, старый diagnostics `prettyJson`/plain-pre path удалён. Остальные consumers, 9B3/9C и Windows qualification открыты.

@@ -484,9 +484,13 @@ namespace RNAssistant.Harness
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("ok", response["payload"]["message"].Value<string>(), "chat response message");
-            AssertEqual(AgentResponseStatuses.Completed,
-                response["payload"]["responseStatus"].Value<string>(),
-                "chat response carries explicit terminal status");
+            AssertTrue(response["payload"]["responseStatus"] == null,
+                "model-authored response status is absent from the UI bridge");
+            AssertEqual(8L, response["payload"]["sessionRevision"].Value<long>(),
+                "chat response carries the durable ordering revision");
+            AssertEqual(RunViewLifecycles.Completed,
+                response["payload"]["runViewState"]["Lifecycle"].Value<string>(),
+                "chat response carries typed runtime lifecycle");
             AssertEqual("common.generated_tool", response["payload"]["tools"][0]["Id"].Value<string>(), "chat response refreshes tool catalog");
             AssertEqual("common.generated_skill", response["payload"]["skills"][0]["Id"].Value<string>(), "chat response refreshes skill catalog");
             AssertEqual("hello", controller.LastChatText, "chat text");

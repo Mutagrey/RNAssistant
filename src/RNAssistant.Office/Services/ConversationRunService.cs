@@ -24,8 +24,7 @@ namespace RNAssistant.Office.Services
         public bool WaitingForConfirmation { get; set; }
         public int ResponseProtocolVersion { get; set; }
         public string ResponseStatus { get; set; }
-        public string RunStatus { get; set; }
-        public RunExecutionSummary ExecutionSummary { get; set; }
+        public RunViewState RunViewState { get; set; }
     }
 
     // Model context remains outside the pure kernel. The same three adapters serve

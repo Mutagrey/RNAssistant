@@ -167,18 +167,19 @@ function appendMessageFooter(node, message, index, activity) {
     usageNode.textContent = message.Failed ? "Не отправлено" : usage;
     meta.appendChild(usageNode);
   }
-  var responseStatus = messageResponseStatus(message);
-  if (responseStatus && responseStatus !== "completed" && responseStatus !== "in_progress") {
+  var runViewState = messageRunViewState(message);
+  if (runViewState && runViewState.lifecycle !== "completed" && runViewState.lifecycle !== "running") {
     var outcome = document.createElement("span");
-    outcome.className = "message-outcome status-" + responseStatus;
-    outcome.textContent = conversationOutcomeLabel(responseStatus);
+    outcome.className = "message-outcome status-" +
+      window.RNAssistantRunViewState.displayStatus(runViewState, runViewState.lifecycle);
+    outcome.textContent = conversationOutcomeLabel(runViewState);
     if (outcome.textContent) meta.appendChild(outcome);
-  } else if (!responseStatus && messageRole(message) === "assistant" &&
+  } else if (!runViewState && messageRole(message) === "assistant" &&
       !messageProtocolMessage(message) && !activity && !message.Pending && !message.Failed && !message.Local &&
-      messageResponseProtocolVersion(message) < 2) {
+      messageContent(message).trim()) {
     var legacyOutcome = document.createElement("span");
     legacyOutcome.className = "message-outcome status-unknown";
-    legacyOutcome.textContent = "Статус неизвестен · старый формат";
+    legacyOutcome.textContent = "Нет typed runtime state · требуется новый запуск";
     meta.appendChild(legacyOutcome);
   }
 
@@ -321,9 +322,8 @@ function renderCompactionArticle(message, activity) {
 
 function renderMessageArticle(message, index) {
   var node = document.createElement("article");
-  var responseStatus = messageResponseStatus(message);
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") +
-    (message.Failed ? " failed" : "") + (responseStatus ? " response-status-" + responseStatus : "");
+    (message.Failed ? " failed" : "");
   var activity = messageActivity(message);
   if (activity) {
     if (activityKind(activity) === "compaction" && activityStatus(activity) === "completed") {

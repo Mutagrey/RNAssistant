@@ -427,8 +427,11 @@ namespace RNAssistant.Office
             }
             return Task.FromResult(new SendChatResponse
             {
+                SessionRevision = 8,
+                RunViewState = new RunViewState("run-bridge", "turn-bridge", "ok",
+                    RunViewLifecycles.Completed, RunViewHealth.Clean, 0, 0, 0, 0, 0, 0,
+                    null, null, "ok", DateTime.UtcNow),
                 Message = "ok",
-                ResponseStatus = AgentResponseStatuses.Completed,
                 Tools = new[] { new ToolDefinition { Id = "common.generated_tool" } },
                 Skills = new[] { new SkillDefinition { Id = "common.generated_skill" } }
             });

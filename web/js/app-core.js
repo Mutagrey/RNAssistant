@@ -33,6 +33,8 @@ var state = {
   failedSend: null,
   activeSends: {},
   chatRuns: {},
+  chatProjectionRevisions: {},
+  activeRunViewState: null,
   liveActivity: null,
   liveAgentRun: null,
   liveStreamContent: null,

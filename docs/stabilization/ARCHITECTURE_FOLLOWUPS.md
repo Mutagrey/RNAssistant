@@ -3,7 +3,8 @@
 Дата фиксации: 2026-08-30.
 
 Статус: backlog, не описание реализованной архитектуры и не разрешение расширять
-текущую фазу. Обязательный ближайший шаг остаётся Phase 9D5 из `PROGRESS.md`.
+текущую фазу. Phase 9D5 завершён host-neutral; обязательный ближайший шаг — отдельный
+Phase 10 из `PROGRESS.md`.
 Изменения ниже выполняются только отдельными подэтапами после указанного gate. Если
 предложение становится обязательным, сначала обновляются master plan/ADR и
 `MIGRATION_MAP.md` с owner, consumers и removal gate.
@@ -29,9 +30,10 @@ store, model wire или UI-owned effect classification.
 
 1. Phase 9D4 завершён host-neutral: минимальный `IConversationStore` использует
    существующий `ChatStore` без второго store/dual-write.
-2. Следующий отдельный Phase 9D5: один immutable `RunViewState` и атомарный switch
-   bridge/JS projection.
-3. Phase 10: physical cleanup и architecture checks обязательного core scope.
+2. Phase 9D5 завершён host-neutral: один immutable `RunViewState` переключил
+   bridge/JS projection; flat/model-status UI path удалён.
+3. Следующий отдельный Phase 10: physical cleanup и architecture checks
+   обязательного core scope.
 4. При доступной Windows: WQ0 -> 5B2 production `DocumentSession` -> 7D bound Excel
    backend; неизвестную COM identity semantics не угадывать.
 5. Milestone WQ и Phase 12 stable core.
@@ -143,8 +145,8 @@ Bridge использует большой string-based operation switch, а sta
   representative serialization/error envelopes.
 
 Code generation, npm/bundler и отдельный network protocol для этого не требуются.
-9D5 не расширять этим refactoring: сначала завершить `RunViewState`, затем выполнять
-bridge catalog отдельным post-stable change после Windows WebView qualification.
+Phase 10 не расширять этим refactoring: bridge catalog остаётся отдельным
+post-stable change после Windows WebView qualification.
 
 ## D. Явный composition root
 

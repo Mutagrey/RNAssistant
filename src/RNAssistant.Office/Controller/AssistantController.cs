@@ -106,7 +106,6 @@ namespace RNAssistant.Office
             _chatSessions = new ChatSessionService(_adapter, _conversationStore, _vbaJournalStore);
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;
-            _chatSessions.RunStatusProvider = _chatRuns.GetStatus;
             _chatSessions.RunSessionsProvider = _chatRuns.Sessions;
             _chatSessions.RunOwnershipProvider = _chatRuns.IsExternallyRunning;
             _chatSessions.RunRecoveryLeaseProvider = session => _chatRuns.Start(
@@ -194,6 +193,8 @@ namespace RNAssistant.Office
             var chatSettings = ResolveChatSettings(session, settings);
             return new InitResponse
             {
+                SessionRevision = session == null ? 0 : session.Revision,
+                RunViewState = RunViewStateProjector.Create(session),
                 AppVersion = ApplicationVersionService.Current,
                 Host = _adapter.HostName,
                 DocumentKey = _adapter.DocumentKey,
@@ -267,6 +268,8 @@ namespace RNAssistant.Office
 
             return new ChatStateResponse
             {
+                SessionRevision = active == null ? 0 : active.Revision,
+                RunViewState = RunViewStateProjector.Create(active),
                 ActiveChatId = activeId,
                 ActiveChatModel = active == null ? string.Empty : active.Model,
                 ActiveChatMode = ChatModes.Normalize(active == null ? null : active.Mode),

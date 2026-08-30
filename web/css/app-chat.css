@@ -761,17 +761,17 @@
   font-weight: 600;
 }
 
-.message-outcome.status-awaiting_user {
+.message-outcome.status-waiting {
   color: #b54708;
 }
 
-.message-outcome.status-blocked,
-.message-outcome.status-refused {
+.message-outcome.status-failed,
+.message-outcome.status-warning {
   color: #b42318;
 }
 
-.message-outcome.status-planned {
-  color: #027a48;
+.message-outcome.status-cancelled {
+  color: var(--muted);
 }
 
 .message-outcome.status-unknown {

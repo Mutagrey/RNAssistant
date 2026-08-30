@@ -46,6 +46,7 @@ namespace RNAssistant.Core.Services
                 RunStatus = run == null ? null : run.Status,
                 RunPhase = run == null ? null : run.Phase,
                 RunStartedUtc = run == null ? (System.DateTime?)null : run.StartedUtc,
+                RunViewState = RunViewStateProjector.Create(session),
                 JsonlByteLength = jsonlByteLength,
                 StorageWarningLevel = ChatStorageUsagePolicy.GetWarningLevel(
                     jsonlByteLength, 0, 0, 0, 0)

@@ -663,9 +663,9 @@ namespace RNAssistant.Harness
 
                 AssertEqual("Лист Report создан.", result.AssistantText, "final response");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "successful write keeps the accepted model status");
-                AssertEqual("completed", result.RunStatus, "successful write completes the current run");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "successful write completes the current run");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "final status enters accepted history");
-                AssertRuntimeExecutionSummary(result, session, "clean", 1, 0, 0);
+                AssertRunViewState(result, session, "unknown", 1, 0, 0);
                 AssertTrue(adapter.HasSheet("Report"), "tool executed");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "one write dispatch");
                 AssertEqual(3, calls.Count, "schema read, execution, and final model turns");
@@ -715,8 +715,8 @@ namespace RNAssistant.Harness
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "failed write is not retried");
                 AssertContains(FlattenSimple(requests.Last()), "\"status\":\"error\"", "the final model request saw the error");
                 AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v4");
-                AssertEqual("completed", result.RunStatus, "loop completion is independent of execution health");
-                AssertRuntimeExecutionSummary(result, session, "errors", 0, 1, 0);
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
+                AssertRunViewState(result, session, "errors", 0, 1, 0);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after write error");
                 AssertEqual("Лист Report создан.", result.AssistantText, "false mutation claim is not filtered");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "false completion enters accepted history");
@@ -776,8 +776,8 @@ namespace RNAssistant.Harness
                 AssertContains(adapter.VbaModuleCode, "\"diverged\"", "fake host state matches neither before nor intended");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.vba_replace_module"), "unknown write is dispatched once");
                 AssertContains(FlattenSimple(requests.Last()), "vba_mutation_unknown", "model receives unknown effect evidence");
-                AssertEqual("completed", result.RunStatus, "loop completion is independent of execution health");
-                AssertRuntimeExecutionSummary(result, session, "unknown", 0, 0, 1);
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
+                AssertRunViewState(result, session, "unknown", 0, 0, 1);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after unknown write");
                 AssertEqual("Модуль Module1 обновлён.", result.AssistantText, "unverified mutation claim survives");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "unknown and completed coexist in history");
@@ -945,7 +945,7 @@ namespace RNAssistant.Harness
                     AssertEqual(adapter.RuntimeDocumentKey, (string)item.Data["DocumentRuntimeId"], "runtime document correlation");
                 }
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.vba_replace_module"), "exactly one write dispatch");
-                AssertEqual("completed", result.RunStatus, "Phase 1B preserves existing outcome; Phase 1C owns the guard");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "runtime lifecycle remains completed");
                 AssertTrue(!FlattenSimple(store.Load(session.Id).Messages).Contains("REJECTED_TRACE_SENTINEL"), "trace never enters accepted history");
             });
         }
@@ -973,24 +973,25 @@ namespace RNAssistant.Harness
                 AssertEqual(0, result.ToolResults.Count, "there is no tool effect evidence");
                 AssertEqual(0, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no requested write was dispatched");
                 AssertTrue(!adapter.HasSheet("Report"), "model text did not create a sheet");
-                AssertEqual("completed", result.RunStatus, "a no-write response may finish the loop");
-                AssertRuntimeExecutionSummary(result, session, "clean", 0, 0, 0);
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "a no-write response may finish the loop");
+                AssertRunViewState(result, session, "clean", 0, 0, 0);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "no-write response carries model completed");
                 AssertEqual("Лист Report создан.", session.Messages.Last().Content, "unsupported mutation claim reaches visible history");
             });
         }
 
-        private static void AssertRuntimeExecutionSummary(
+        private static void AssertRunViewState(
             ChatTurnResult result, ChatSession session, string health, int writeOk, int writeError, int writeUnknown)
         {
-            var summary = JObject.FromObject(result)["ExecutionSummary"] as JObject;
-            AssertTrue(summary != null, "runtime execution summary is required independently of model completed");
-            AssertEqual(health, (string)summary["ExecutionHealth"], "runtime owns execution health");
-            AssertEqual(writeOk, (int)summary["WriteOk"], "confirmed write count");
-            AssertEqual(writeError, (int)summary["WriteError"], "definite write error count");
-            AssertEqual(writeUnknown, (int)summary["WriteUnknown"], "uncertain write count");
-            AssertTrue(JToken.DeepEquals(summary, JObject.FromObject(session.Messages.Last())["ExecutionSummary"]),
-                "visible final message retains runtime summary independently of its text/status");
+            var view = JObject.FromObject(result)["RunViewState"] as JObject;
+            AssertTrue(view != null, "typed run view state is required independently of model completed");
+            AssertEqual(health, (string)view["ExecutionHealth"], "runtime and effect evidence own execution health");
+            AssertEqual(writeOk, (int)view["VerifiedWrites"] + (int)view["NoChangeWrites"] +
+                (int)view["UnverifiedWrites"], "successful write count");
+            AssertEqual(writeError, (int)view["FailedCalls"], "definite failed call count");
+            AssertEqual(writeUnknown + (int)view["UnverifiedWrites"], (int)view["UnknownEffects"], "uncertain effect count");
+            AssertTrue(JToken.DeepEquals(view, JObject.FromObject(session.Messages.Last())["RunViewState"]),
+                "visible final message retains typed runtime projection independently of its narrative");
         }
 
         private static void SimpleAgentPromptIsRequestLocal()
@@ -1156,7 +1157,7 @@ namespace RNAssistant.Harness
                     AssertEqual(terminalCase, terminalResult.AssistantText, "message is preserved without classification or trimming");
                     AssertEqual(AgentResponseStatuses.Completed, terminalResult.ResponseStatus,
                         "runtime projection does not infer a status from wording");
-                    AssertEqual(AgentResponseStatuses.Completed, terminalResult.RunStatus,
+                    AssertEqual(RunViewLifecycles.Completed, terminalResult.RunViewState.Lifecycle,
                         "empty calls end the model loop");
                     AssertEqual(AgentResponseProtocol.CurrentVersion, terminalResult.ResponseProtocolVersion,
                         "final record carries the active protocol version");
@@ -1182,7 +1183,7 @@ namespace RNAssistant.Harness
                     new AppSettings { MaxAgentIterations = 1 },
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                     null).GetAwaiter().GetResult();
-                AssertEqual("failed", limitedResult.RunStatus,
+                AssertEqual(RunViewLifecycles.Failed, limitedResult.RunViewState.Lifecycle,
                     "runtime step limit is not projected as model-declared completion");
                 AssertTrue(string.IsNullOrWhiteSpace(limitedResult.ResponseStatus),
                     "runtime step limit has no synthetic model response status");
@@ -1215,8 +1216,8 @@ namespace RNAssistant.Harness
 
                 AssertEqual(20, requests.Count, "twenty total responses including the initial request");
                 AssertContains(result.AssistantText, "после 20 попыток", "diagnostic counts total protocol responses");
-                AssertEqual("failed", result.RunStatus, "all invalid responses fail the run");
-                AssertRuntimeExecutionSummary(result, session, "clean", 0, 0, 0);
+                AssertEqual(RunViewLifecycles.Failed, result.RunViewState.Lifecycle, "all invalid responses fail the run");
+                AssertRunViewState(result, session, "clean", 0, 0, 0);
                 AssertTrue(string.IsNullOrWhiteSpace(result.ResponseStatus), "no accepted model status after exhausted repair");
                 AssertEqual(0, result.ToolResults.Count, "invalid responses never execute tools");
                 AssertTrue(session.Messages.Last().Activity != null, "diagnostic activity recorded");
@@ -1260,8 +1261,8 @@ namespace RNAssistant.Harness
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual(20, requests.Count, "nineteen protection responses followed by one valid response");
-                AssertEqual("completed", result.RunStatus, "twentieth request can complete the run");
-                AssertRuntimeExecutionSummary(result, session, "clean", 0, 0, 0);
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "twentieth request can complete the run");
+                AssertRunViewState(result, session, "clean", 0, 0, 0);
                 AssertEqual(0, result.ToolResults.Count, "repair attempts do not dispatch tools");
                 var accepted = session.Messages.Where(message => message.Role == "assistant" && !message.ExcludeFromModelContext).ToList();
                 AssertEqual(1, accepted.Count, "only one assistant response enters accepted history");
@@ -1492,20 +1493,20 @@ namespace RNAssistant.Harness
                 var first = service.ExecuteAsync(ChatModes.Agent, "Создай лист и skill.", session, NewContext(adapter),
                     settingsForRun, tools, null, (pendingSession, command, result) => "pending").GetAwaiter().GetResult();
                 AssertTrue(first.WaitingForConfirmation, "real loop stops at confirmation");
-                AssertEqual(initialHealth, first.ExecutionSummary.ExecutionHealth, "pending cannot erase earlier execution evidence");
-                AssertEqual(0, first.ExecutionSummary.WriteOk, "pending mutation is not a successful write");
+                AssertEqual(initialHealth, first.RunViewState.ExecutionHealth, "pending cannot erase earlier execution evidence");
+                AssertEqual(0, first.RunViewState.VerifiedWrites + first.RunViewState.UnverifiedWrites, "pending mutation is not a successful write");
                 session.LastRun.RunId = "continuation";
                 var confirmed = PendingCommand(session);
                 var final = service.ConfirmAsync("pending", confirmed, session,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
-                AssertRuntimeExecutionSummary(final, session, initialHealth, 1,
+                AssertRunViewState(final, session, "unknown", 1,
                     initialHealth == "errors" ? 1 : 0, initialHealth == "unknown" ? 1 : 0);
-                AssertEqual("completed", final.RunStatus, "completed lifecycle does not erase errors or unknown");
+                AssertEqual(RunViewLifecycles.Completed, final.RunViewState.Lifecycle, "completed lifecycle does not erase errors or unknown");
                 var previousFinal = session.Messages.Last();
                 var next = service.ExecuteAsync(ChatModes.Agent, "Ответь без действий.", session, NewContext(adapter),
                     settingsForRun, tools, null).GetAwaiter().GetResult();
-                AssertRuntimeExecutionSummary(next, session, "clean", 0, 0, 0);
-                AssertEqual(initialHealth, previousFinal.ExecutionSummary.ExecutionHealth, "new turn resets counts without rewriting earlier evidence");
+                AssertRunViewState(next, session, "clean", 0, 0, 0);
+                AssertEqual("unknown", previousFinal.RunViewState.ExecutionHealth, "new turn does not rewrite earlier evidence");
             });
         }
 
@@ -1538,8 +1539,8 @@ namespace RNAssistant.Harness
                     (pendingSession, pendingCommand, result) => "pending_1").GetAwaiter().GetResult();
 
                 AssertContains(first.AssistantText, "Создаю", "waiting response returned");
-                AssertEqual("clean", first.ExecutionSummary.ExecutionHealth, "confirmation itself is not a tool error");
-                AssertEqual(0, first.ExecutionSummary.WriteOk, "waiting is not an applied mutation");
+                AssertEqual("clean", first.RunViewState.ExecutionHealth, "confirmation itself is not a tool error");
+                AssertEqual(0, first.RunViewState.VerifiedWrites + first.RunViewState.UnverifiedWrites, "waiting is not an applied mutation");
                 AssertTrue(!session.Messages.Any(message => message.ProtocolMessage &&
                     (message.Content ?? string.Empty).IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) >= 0),
                     "waiting result not replayed");
@@ -1570,7 +1571,7 @@ namespace RNAssistant.Harness
                     new ConversationRunInput(settings, NewContext(adapter), tools), null).GetAwaiter().GetResult();
 
                 AssertEqual("Skill сохранён.", final.AssistantText, "continued final response");
-                AssertRuntimeExecutionSummary(final, session, "clean", 1, 0, 0);
+                AssertRunViewState(final, session, "unknown", 1, 0, 0);
                 AssertEqual(3, session.LastRun.IterationsUsed, "confirmation continuation keeps cumulative iteration budget");
                 AssertEqual(2, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
                 var replay = FlattenSimple(calls[2]);
@@ -1678,10 +1679,10 @@ namespace RNAssistant.Harness
                 var settingsForRun = new AppSettings { ToolResultRole = ToolResultRoles.Tool };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(ChatModes.Agent, "Read twice", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
-                AssertEqual(2, first.ExecutionSummary.ReadOk, "both independent reads execute once");
+                AssertEqual(2, first.RunViewState.SuccessfulReads, "both independent reads execute once");
                 session = AssertKernelReplay(session);
                 var next = service.ExecuteAsync(ChatModes.Agent, "Summarize", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
-                AssertEqual("completed", next.RunStatus, "next turn can replay the persisted batch");
+                AssertEqual(RunViewLifecycles.Completed, next.RunViewState.Lifecycle, "next turn can replay the persisted batch");
                 AssertEqual(3, calls, "one next-turn model request");
             });
         }
@@ -1724,7 +1725,7 @@ namespace RNAssistant.Harness
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 1,
                         ToolResultRole = resultRole, ContextWindowOverrideTokens = 131072 },
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
-                AssertEqual("completed", result.RunStatus, "valid calls complete without repair");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "valid calls complete without repair");
                 AssertEqual(4, requestCount, "two independently accepted writes require no extra model attempt");
                 var accepted = session.Messages.Where(message => message.Role == "assistant" &&
                     message.ToolName == HtmlArtifactToolExecutor.UpsertToolId && message.AcceptedCallOrigin != null).ToList();
@@ -1769,7 +1770,7 @@ namespace RNAssistant.Harness
                     "Restricted request.", agentSession, NewContext(adapter), new AppSettings(),
                     new ToolDefinition[0], (Action<string, string, ChatActivity>)null).GetAwaiter().GetResult();
                 AssertEqual("Запрос отклонён провайдером.", agent.AssistantText, "agent refusal text");
-                AssertEqual("failed", agent.RunStatus, "native refusal is locally classified by kernel");
+                AssertEqual(RunViewLifecycles.Failed, agent.RunViewState.Lifecycle, "native refusal is locally classified by kernel");
                 AssertKernelReplay(agentSession);
                 AssertEqual(AgentResponseStatuses.Refused, agent.ResponseStatus,
                     "provider refusal maps from explicit transport metadata");
@@ -1785,7 +1786,7 @@ namespace RNAssistant.Harness
                     executor.GetControllerTools().ToList(), (Action<string, string, ChatActivity>)null)
                     .GetAwaiter().GetResult();
                 AssertEqual("Запрос отклонён провайдером.", chat.AssistantText, "chat refusal text");
-                AssertEqual("failed", chat.RunStatus, "Chat uses the same runtime failure classification");
+                AssertEqual(RunViewLifecycles.Failed, chat.RunViewState.Lifecycle, "Chat uses the same runtime failure classification");
                 AssertKernelReplay(chatSession);
                 AssertEqual(AgentResponseStatuses.Refused, chat.ResponseStatus,
                     "Chat provider refusal uses the same explicit terminal status");

@@ -327,18 +327,8 @@
   color: #b54708;
 }
 
-.agent-run-history-state.status-failed,
-.agent-run-history-state.status-blocked,
-.agent-run-history-state.status-refused {
+.agent-run-history-state.status-failed {
   color: #d92d20;
-}
-
-.agent-run-history-state.status-awaiting_user {
-  color: #b54708;
-}
-
-.agent-run-history-state.status-planned {
-  color: #027a48;
 }
 
 .agent-run-history-title {

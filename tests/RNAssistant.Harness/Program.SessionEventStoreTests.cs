@@ -69,11 +69,11 @@ namespace RNAssistant.Harness
                         }).GetAwaiter().GetResult();
                 var replay = AssertKernelReplay(session);
                 AssertEqual(RunLifecycle.Completed, replay.LastRun.KernelState.Summary.Lifecycle, "model ending closes loop only");
-                AssertEqual(outcome == "ok" ? "clean" : outcome == "error" ? "errors" : "unknown", result.ExecutionSummary.ExecutionHealth, "health from actual result");
-                AssertEqual(1, result.ExecutionSummary.ReadOk, "schema read counted once");
-                AssertEqual(outcome == "ok" ? 1 : 0, result.ExecutionSummary.WriteOk, "successful effect count");
-                AssertEqual(outcome == "error" ? 1 : 0, result.ExecutionSummary.WriteError, "error effect count");
-                AssertEqual(outcome == "unknown" ? 1 : 0, result.ExecutionSummary.WriteUnknown, "unknown effect count");
+                AssertEqual(outcome == "error" ? "errors" : "unknown", result.RunViewState.ExecutionHealth, "health from actual effect evidence");
+                AssertEqual(1, result.RunViewState.SuccessfulReads, "schema read counted once");
+                AssertEqual(outcome == "ok" ? 1 : 0, result.RunViewState.UnverifiedWrites, "successful legacy write is not called verified");
+                AssertEqual(outcome == "error" ? 1 : 0, result.RunViewState.FailedCalls, "error call count");
+                AssertEqual(outcome == "error" ? 0 : 1, result.RunViewState.UnknownEffects, "unknown effect count");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "single execution, no retry");
                 AssertTrue(replay.LastRun.KernelState.InFlightTool == null, "terminal clears in-flight evidence");
             });
@@ -108,7 +108,7 @@ namespace RNAssistant.Harness
                     null,
                     saved: saved =>
                 {
-                    if (saved.LastRun.ExecutionSummary.ReadOk != 1) return;
+                    if (saved.LastRun.KernelState.Summary.ToolCounts.ReadOk != 1) return;
                     var durable = new ChatStore(FixturePaths.Value).Load(saved.Host, saved.DocumentKey, saved.Id);
                     var activity = durable.Messages.Single(message => message.Activity != null &&
                         message.Activity.ToolId == ResourceToolCatalog.ListToolId).Activity;
@@ -119,8 +119,8 @@ namespace RNAssistant.Harness
                 var result = service.ExecuteAsync(ChatModes.Agent, "List chat resources", session, NewContext(adapter),
                     new AppSettings(), executor.GetControllerTools().ToList(), null).GetAwaiter().GetResult();
 
-                AssertEqual("completed", result.RunStatus, "native resource read finishes normally");
-                AssertEqual(1, result.ExecutionSummary.ReadOk, "native read is counted once");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "native resource read finishes normally");
+                AssertEqual(1, result.RunViewState.SuccessfulReads, "native read is counted once");
                 AssertEqual(2, modelCalls, "native bootstrap read needs no repair or extra schema request");
                 AssertTrue(completedSaves >= 2, "evidence is checked before and after result materialization");
                 var replay = AssertKernelReplay(session);
@@ -144,10 +144,6 @@ namespace RNAssistant.Harness
             AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(loaded), "event replay preserves accepted call IDs and model attempt origins without allocation");
             var runJson = JObject.FromObject(loaded.LastRun);
             AssertTrue(runJson["KernelState"] != null && runJson["ExecutionSummary"] == null, "run stores only typed authority, not a duplicate flat summary");
-            var summary = loaded.LastRun.ExecutionSummary;
-            var originalWriteOk = summary.WriteOk;
-            summary.WriteOk = 999;
-            AssertEqual(originalWriteOk, loaded.LastRun.ExecutionSummary.WriteOk, "bridge DTO cannot mutate immutable runtime evidence");
             var clone = ChatCloneService.CloneSessionSnapshot(loaded);
             AssertEqual(JsonConvert.SerializeObject(loaded.LastRun.KernelState), JsonConvert.SerializeObject(clone.LastRun.KernelState), "session clone retains authority");
             AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(clone), "session clone retains accepted call IDs and origins");
@@ -183,7 +179,7 @@ namespace RNAssistant.Harness
                 service.ExecuteAsync(ChatModes.Agent, "Create a skill", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
                 var pending = AssertKernelReplay(session);
                 AssertEqual(RunLifecycle.AwaitingConfirmation, pending.LastRun.KernelState.Summary.Lifecycle, "pending replay lifecycle");
-                AssertEqual(0, pending.LastRun.ExecutionSummary.WriteOk, "confirmation has not dispatched a mutation");
+                AssertEqual(0, pending.LastRun.KernelState.Summary.ToolCounts.WriteOk, "confirmation has not dispatched a mutation");
                 var stale = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
                 var pendingId = pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId;
                 var command = PendingCommand(pending);
@@ -196,8 +192,8 @@ namespace RNAssistant.Harness
                 pending.LastRun.RunId = "new-process-run";
                 var resumed = service.ConfirmAsync(pendingId, command, pending,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
-                AssertEqual("completed", resumed.RunStatus, "resumed invocation ends through kernel");
-                AssertEqual(1, resumed.ExecutionSummary.WriteOk, "confirmed write counted once");
+                AssertEqual(RunViewLifecycles.Completed, resumed.RunViewState.Lifecycle, "resumed invocation ends through kernel");
+                AssertEqual(1, resumed.RunViewState.UnverifiedWrites, "confirmed legacy write remains unverified");
                 AssertEqual(2, pending.LastRun.ToolStepsUsed, "confirmation replaces reserved step");
                 AssertEqual("new-process-run", pending.LastRun.KernelState.Summary.RunId, "confirmation resumes under the new runtime run");
                 AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(pending), "confirmation preserves the original accepted IDs and origins without allocating again");
@@ -212,7 +208,8 @@ namespace RNAssistant.Harness
                 catch (RunStoreException) { rejected = true; }
                 AssertTrue(rejected, "stale replay cannot claim the continuation cursor or dispatch again");
                 AssertEqual(0, responses.Count, "no extra model call on stale confirmation");
-                AssertEqual(1, new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id).LastRun.ExecutionSummary.WriteOk, "stale attempt cannot overwrite committed summary");
+                AssertEqual(1, new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id)
+                    .LastRun.KernelState.Summary.ToolCounts.WriteOk, "stale attempt cannot overwrite committed summary");
             });
         }
 
@@ -232,9 +229,10 @@ namespace RNAssistant.Harness
                 var result = service.ConfirmAsync(pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId,
                     PendingCommand(pending), pending, new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null,
                     cancellationToken: new CancellationToken(true)).GetAwaiter().GetResult();
-                AssertEqual("cancelled", result.RunStatus, "cancelled confirmation stops without another model request");
+                AssertEqual(RunViewLifecycles.Cancelled, result.RunViewState.Lifecycle, "cancelled confirmation stops without another model request");
                 AssertEqual(1, responses.Count, "no model request after cancellation");
-                AssertEqual(0, result.ExecutionSummary.WriteOk + result.ExecutionSummary.WriteError + result.ExecutionSummary.WriteUnknown, "cancel before dispatch has no effect count");
+                AssertEqual(0, result.RunViewState.VerifiedWrites + result.RunViewState.UnverifiedWrites +
+                    result.RunViewState.FailedCalls + result.RunViewState.UnknownEffects, "cancel before dispatch has no effect count");
                 AssertTrue(!new SkillStore(FixturePaths.Value).Load().Any(skill => skill.Id == "common.replay_test"), "cancelled confirmation never writes");
                 var replay = AssertKernelReplay(pending);
                 AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(replay), "cancelled confirmation keeps accepted IDs and origins");
@@ -269,12 +267,12 @@ namespace RNAssistant.Harness
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null, refreshModelInput: token =>
                     {
                         var durable = new ChatStore(FixturePaths.Value).Load(loaded.Host, loaded.DocumentKey, loaded.Id);
-                        AssertEqual(1, durable.LastRun.ExecutionSummary.WriteOk, "known write saved before model context refresh");
+                        AssertEqual(1, durable.LastRun.KernelState.Summary.ToolCounts.WriteOk, "known write saved before model context refresh");
                         throw new InvalidOperationException("context preparation fault");
                     }).GetAwaiter().GetResult();
-                AssertEqual("failed", result.RunStatus, "local preparation failure stops the kernel");
-                AssertEqual(1, result.ExecutionSummary.WriteOk, "preparation cannot reinterpret a successful mutation");
-                AssertEqual(0, result.ExecutionSummary.WriteUnknown, "known effect stays known");
+                AssertEqual(RunViewLifecycles.Failed, result.RunViewState.Lifecycle, "local preparation failure stops the kernel");
+                AssertEqual(1, result.RunViewState.UnverifiedWrites, "preparation cannot invent verification for a successful legacy mutation");
+                AssertEqual(1, result.RunViewState.UnknownEffects, "unverified legacy effect stays explicit");
                 AssertEqual(1, responses.Count, "failed preparation never reaches another model request");
                 AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(loaded), "preparation failure does not replace confirmed call identity or origin");
                 AssertKernelReplay(loaded);
@@ -304,7 +302,7 @@ namespace RNAssistant.Harness
                     null,
                     saved: saved =>
                 {
-                    if (saved.LastRun.ExecutionSummary.WriteOk != 1) return;
+                    if (saved.LastRun.KernelState.Summary.ToolCounts.WriteOk != 1) return;
                     var accepted = saved.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" &&
                         message.ToolName == "excel.add_sheet");
                     if (!saved.Messages.Any(message =>
@@ -318,8 +316,8 @@ namespace RNAssistant.Harness
                 AssertTrue(interrupted, "fault injected at actual completed-evidence append");
                 new ChatSessionService(adapter, ConversationStore(new ChatStore(paths))).ReconcileInterruptedRuns("replacement");
                 var recovered = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
-                AssertEqual(1, recovered.LastRun.ExecutionSummary.WriteOk, "known terminal survives crash before materialization");
-                AssertEqual(0, recovered.LastRun.ExecutionSummary.WriteUnknown, "projection gap cannot make a known effect unknown");
+                AssertEqual(1, recovered.LastRun.KernelState.Summary.ToolCounts.WriteOk, "known terminal survives crash before materialization");
+                AssertEqual(0, recovered.LastRun.KernelState.Summary.ToolCounts.WriteUnknown, "projection gap cannot make a known effect unknown");
                 AssertEqual(RunLifecycle.Failed, recovered.LastRun.KernelState.Summary.Lifecycle, "interrupted lifecycle failed");
                 AssertTrue(recovered.Messages.Where(message => message.ProtocolMessage).All(message => message.ExcludeFromModelContext),
                     "an incomplete result exchange is not replayed");
@@ -376,7 +374,7 @@ namespace RNAssistant.Harness
                 runLease.Dispose();
                 var recovered = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(RunLifecycle.Failed, recovered.LastRun.KernelState.Summary.Lifecycle, "interrupted runtime is locally failed");
-                AssertEqual(afterDispatch ? 1 : 0, recovered.LastRun.ExecutionSummary.WriteUnknown, "open dispatched boundary remains unknown");
+                AssertEqual(afterDispatch ? 1 : 0, recovered.LastRun.KernelState.Summary.ToolCounts.WriteUnknown, "open dispatched boundary remains unknown");
                 AssertTrue(recovered.LastRun.KernelState.InFlightTool == null, "recovery clears boundary once without replay");
                 var recoveredRevision = recovered.Revision;
                 recovered = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
@@ -446,7 +444,7 @@ namespace RNAssistant.Harness
                 AssertEqual(afterDispatch ? RunLifecycle.Failed : RunLifecycle.AwaitingConfirmation,
                     recovered.LastRun.KernelState.Summary.Lifecycle,
                     "canonical pending is retained before dispatch; open confirmed dispatch is interrupted");
-                AssertEqual(afterDispatch ? 1 : 0, recovered.LastRun.ExecutionSummary.WriteUnknown,
+                AssertEqual(afterDispatch ? 1 : 0, recovered.LastRun.KernelState.Summary.ToolCounts.WriteUnknown,
                     "only an open confirmed dispatch becomes unknown");
                 AssertEqual(!afterDispatch, recovered.LastRun.KernelState.Summary.PendingConfirmation != null,
                     "pre-dispatch failure keeps the durable pending call available");
@@ -873,7 +871,7 @@ namespace RNAssistant.Harness
                     ChatModes.Agent, "Answer.", session, NewContext(adapter), new AppSettings(),
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
                 AssertEqual("Answer.", final.AssistantText, "optional accepted trace failure preserves response");
-                AssertEqual("completed", final.RunStatus, "optional accepted trace failure preserves outcome");
+                AssertEqual(RunViewLifecycles.Completed, final.RunViewState.Lifecycle, "optional accepted trace failure preserves outcome");
                 AssertEqual(1, adapter.Executed.Count(item => item.ToolId == "excel.add_sheet"), "trace failure never retries a write");
             });
         }
@@ -2562,7 +2560,6 @@ namespace RNAssistant.Harness
                     Content = "Нужны дополнительные данные.",
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                     ResponseStatus = AgentResponseStatuses.AwaitingUser,
-                    ExecutionSummary = new RunExecutionSummary { ExecutionHealth = "unknown", WriteUnknown = 1, WriteError = 1 },
                     RunId = "run-2"
                 });
                 session.Messages.Add(new ChatMessage
@@ -2573,7 +2570,6 @@ namespace RNAssistant.Harness
                 });
                 session.LastRun.Status = AgentResponseStatuses.AwaitingUser;
                 session.LastRun.Phase = AgentResponseStatuses.AwaitingUser;
-                session.LastRun.ExecutionSummary = session.Messages.Single(message => message.RunId == "run-2").ExecutionSummary.Clone();
                 store.Save(session);
                 events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(SessionEventTypes.TurnEnded, events.Last().Type, "terminal run closes turn");
@@ -2600,23 +2596,15 @@ namespace RNAssistant.Harness
                     "run response protocol version replays");
                 AssertEqual(AgentResponseStatuses.AwaitingUser, loaded.LastRun.Status,
                     "declared terminal run status replays");
-                AssertEqual("unknown", current.ExecutionSummary.ExecutionHealth, "runtime health survives canonical event replay");
-                AssertEqual(1, loaded.LastRun.ExecutionSummary.WriteError, "run summary counts survive replay");
-                AssertTrue(legacy.ExecutionSummary == null, "legacy history has no fabricated runtime evidence");
-                var clone = ChatCloneService.CloneSessionSnapshot(loaded);
-                var clonedMessage = clone.Messages.Single(item => item.RunId == "run-2");
-                clonedMessage.ExecutionSummary.WriteUnknown = 7;
-                clone.LastRun.ExecutionSummary.WriteError = 8;
-                AssertEqual(1, current.ExecutionSummary.WriteUnknown, "message summary is independently cloned for projection");
-                AssertEqual(1, loaded.LastRun.ExecutionSummary.WriteError, "run summary is independently cloned");
                 var bridge = JObject.FromObject(new ChatStateResponse
                 {
-                    ExecutionSummary = loaded.LastRun.ExecutionSummary,
+                    RunViewState = RunViewStateProjector.Create(loaded),
                     Messages = loaded.Messages
                 });
-                AssertEqual("unknown", (string)bridge["executionSummary"]["ExecutionHealth"], "typed bridge exposes runtime health");
+                AssertTrue(bridge["executionSummary"] == null && bridge["runViewState"] == null,
+                    "a run without KernelState cannot fabricate a typed UI outcome");
                 var modelMessages = new LlmMessageBuilder().Build(new[] { current }, new AppSettings());
-                AssertTrue(!JArray.FromObject(modelMessages.Messages).ToString().Contains("ExecutionSummary"),
+                AssertTrue(!JArray.FromObject(modelMessages.Messages).ToString().Contains("RunViewState"),
                     "UI runtime evidence is not a new model protocol field");
 
                 loaded.LastRun = new ChatRunRecord

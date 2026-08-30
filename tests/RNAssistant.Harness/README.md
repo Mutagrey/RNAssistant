@@ -42,6 +42,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Host document gate / neutral bound session / direct context and catalog reads | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
 | Excel identity candidate probe (no Office execution) | `Program.ParserDesktopTests.cs`; source-linked `RNAssistant.ExcelIdentityProbe` | `excel identity probe:` |
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
+| Immutable run/UI projection and ordering | `Program.RunViewStateTests.cs`, replay/recovery in `Program.SessionEventStoreTests.cs`, boundary check in `Program.ProjectStructureTests.cs`; static UI in `tests/web/run-view-state.test.js` | `run view:`, `kernel replay:`, `kernel recovery:`, `architecture:` |
 | Office model-context owner | `Program.ToolDiscoveryTests.cs`; result/projection coverage in `Program.AgentSafetyTests.cs` | `agent: model session`, `agent: bounds oversized`, `context inspector:`, `protocol context:` |
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
 | Active wire / compatibility probes | `Program.AgentSafetyTests.cs` | `model compatibility:`, `agent: supports selectable`, `model protocol:` |
@@ -202,8 +203,11 @@ node tests/web/completion-guard.test.js
 
 The guard tests extend `Program.AgentSafetyTests.cs` / `Program.SimpleAgentTests.cs`:
 single-result legacy mapping, cumulative error/unknown precedence, kernel confirmation,
-cancelled-summary replay and fresh-turn reset. The existing lifecycle test covers event replay,
-independent clones, typed bridge serialization and exclusion from model transport.
+cancelled-summary replay and fresh-turn reset. Phase 9D5 adds `run view:` replay
+equality, immutable wire, source-evidence separation and explicit pending state;
+`tests/web/run-view-state.test.js` covers strict normalization, per-chat revision
+ordering and integrated stale transcript/outcome rejection. The lifecycle test
+continues to cover event replay and exclusion of UI projection from model transport.
 The Node test loads the real static JS projection/render functions with a minimal
 DOM and stubs only unrelated trace/media helpers. No npm dependencies are needed.
 It verifies warning visibility outside collapsed trace, not browser layout or

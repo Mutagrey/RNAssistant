@@ -571,8 +571,11 @@ namespace RNAssistant.Office.Contracts
 
     public class ChatStateResponse
     {
-        [JsonProperty("executionSummary", NullValueHandling = NullValueHandling.Ignore)]
-        public RunExecutionSummary ExecutionSummary { get; set; }
+        [JsonProperty("sessionRevision")]
+        public long SessionRevision { get; set; }
+
+        [JsonProperty("runViewState", NullValueHandling = NullValueHandling.Ignore)]
+        public RunViewState RunViewState { get; set; }
 
         [JsonProperty("activeChatId")]
         public string ActiveChatId { get; set; }
@@ -622,6 +625,12 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class InitResponse
     {
+        [JsonProperty("sessionRevision")]
+        public long SessionRevision { get; set; }
+
+        [JsonProperty("runViewState", NullValueHandling = NullValueHandling.Ignore)]
+        public RunViewState RunViewState { get; set; }
+
         [JsonProperty("appVersion")]
         public string AppVersion { get; set; }
 
@@ -714,9 +723,6 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("message")]
         public string Message { get; set; }
-
-        [JsonProperty("responseStatus", NullValueHandling = NullValueHandling.Ignore)]
-        public string ResponseStatus { get; set; }
 
         [JsonProperty("toolResults")]
         public IReadOnlyList<object> ToolResults { get; set; }

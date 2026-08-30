@@ -169,18 +169,6 @@ namespace RNAssistant.Office.Services
             return snapshot;
         }
 
-        public ChatRunSnapshot GetStatus(string chatId)
-        {
-            lock (_sync)
-            {
-                ChatRunSnapshot run;
-                if (!_runs.TryGetValue(chatId ?? string.Empty, out run)) return null;
-                var status = ShallowClone(run);
-                status.Session = null;
-                return status;
-            }
-        }
-
         public bool IsRunning(string chatId)
         {
             lock (_sync) return _runs.ContainsKey(chatId ?? string.Empty);

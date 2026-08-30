@@ -113,9 +113,13 @@ are best effort; mandatory pre-dispatch request persistence is unchanged. See
 Phase 3B2 carries immutable `ChatRunRecord.KernelState` through the existing
 `run.updated` operation: `RunSummary`, captured limits and an optional in-flight
 `ToolExecutionContext`. No event envelope/schema bump, side store or durable ID
-index is added. The flat run `ExecutionSummary` is derived on read and omitted
-from new run writes; visible message snapshots and bridge DTOs stay projections.
-Old flat records are readable but cannot seed confirmation execution.
+index is added. Phase 9D5 derives one immutable `RunViewState` from that kernel
+state plus source-owned `ToolExecutionEvidence`, stamps visible run messages and
+replays the same state into headers. Full bridge responses carry the session event
+sequence as their ordering revision. The old flat `ExecutionSummary` type and
+message/run/bridge fields are removed; retained unknown JSON fields are ignored and
+cannot seed UI authority or confirmation execution. A run without current
+`KernelState` requires the explicit new-chat/reset path.
 
 `ConversationKernelAdapter.Store` saves accepted responses and execution boundaries
 before dispatch, and records actual counts before optional result/media/context
@@ -201,7 +205,7 @@ Current history encryption does not cover transient attachment staging, settings
 
 ## Inspection
 
-Settings → Diagnostics → Trajectory queries the same stream through disposable `ITrajectoryQuery`. Raw results use exclusive sequence cursors, newest-first pages, tokenized text search and filters for sequence, event type, run/turn/step, tool call, artifact, status and reconstructed `current`/`shadowed`/`log-only` visibility. Projected `ResponseStatus` participates in the status filter; terminal `blocked` and `refused` outcomes appear in failure diagnostics, while `awaiting_user` remains a non-failure terminal turn. Snapshot-paged derived views correlate model replay, tools, artifact lineage, confirmation pauses, failures/retries and per-turn timing/usage; every row carries its complete source event sequences and ids. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. Selected chat rows can be exported as a bounded ZIP with metadata-only default, optional credential-field redaction, or explicit full decrypted data/CAS; protection keys never enter it. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets or authorization headers. See [trajectory-query.md](trajectory-query.md) and [trajectory-export.md](trajectory-export.md).
+Settings → Diagnostics → Trajectory queries the same stream through disposable `ITrajectoryQuery`. Raw results use exclusive sequence cursors, newest-first pages, tokenized text search and filters for sequence, event type, run/turn/step, tool call, artifact, status and reconstructed `current`/`shadowed`/`log-only` visibility. Retained `ResponseStatus` may be shown as raw accepted-history/provider diagnostic metadata, but it is not the lifecycle/effect source for `RunViewState`. Snapshot-paged derived views correlate model replay, tools, artifact lineage, confirmation pauses, failures/retries and per-turn timing/usage; every row carries its complete source event sequences and ids. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. Selected chat rows can be exported as a bounded ZIP with metadata-only default, optional credential-field redaction, or explicit full decrypted data/CAS; protection keys never enter it. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets or authorization headers. See [trajectory-query.md](trajectory-query.md) and [trajectory-export.md](trajectory-export.md).
 
 The prioritized follow-up work for trajectory queries, HTML branches, CAS lifecycle, and document-scoped VBA recovery is tracked in [trajectory-roadmap.md](trajectory-roadmap.md).
 

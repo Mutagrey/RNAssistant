@@ -85,6 +85,7 @@
     <Compile Include="Models\ResourceModels.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
+    <Compile Include="Models\RunViewState.cs" />
     <Compile Include="Models\CasMaintenanceModels.cs" />
     <Compile Include="Models\SessionEventModels.cs" />
     <Compile Include="Models\TrajectoryModels.cs" />
@@ -146,6 +147,7 @@
     <Compile Include="Services\ChatSessionNormalizer.cs" />
     <Compile Include="Services\ChatResourceUri.cs" />
     <Compile Include="Services\ChatSessionHeaderFactory.cs" />
+    <Compile Include="Services\RunViewStateProjector.cs" />
     <Compile Include="Services\HtmlWorkspaceCopyService.cs" />
     <Compile Include="Services\HtmlWorkspaceHistoryPolicy.cs" />
     <Compile Include="Services\HtmlWorkspaceNavigationService.cs" />
