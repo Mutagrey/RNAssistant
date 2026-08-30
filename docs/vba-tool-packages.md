@@ -85,6 +85,25 @@ End Function
 
 Normalization/hash rules теперь принадлежат `Core.Tools.VbaTextCanonicalizer`, а не manifest parser. `NormalizePackageCode`/`PackageCodeSha256` сохраняют прежнее исключение export headers/ownership markers; `PackageComparableCodeSha256` дополнительно использует прежние VBE-comparable правила. Source/transport и raw CAS bytes не переписываются; [представления текста](vba-mutation-journal.md#text-representations) разделены. 6A не меняет install/run/remove или journal protocol.
 
+## Граница стабилизации package lifecycle
+
+По [аудиту 6H](stabilization/PHASE_6H_VBA_PACKAGE_SCOPE.md) исполнение уже
+существующих global/document-local VBA tools, временный install/run/cleanup,
+persistent install/remove/status и package recovery остаются в stable core. Они
+должны получить одного typed owner в 6I. Это не включает создание/редактирование
+dynamic tool definitions, новые package функции или pipelines: authoring остаётся
+отдельным Phase 11 contour. `mode=rename` не является package feature и переходит в
+typed mutation owner отдельным 6J.
+
+До 6I открыт R41: session install и cleanup записываются раздельно. Если install
+применён, но terminal или cleanup потерян, matching временный source может остаться
+в документе и быть ошибочно принят marker-insensitive probe за обычный installed
+package. Целевой runtime различает persistent/document-local/session-owned state,
+связывает весь временный lifecycle и блокирует macro execution при unknown/missing
+cleanup. Recovery не повторяет, не удаляет и не перезаписывает VBA автоматически;
+cleanup требует новой policy-authorized journalled операции над точным неизменённым
+session-owned package.
+
 ## Жизненный цикл
 
 - Run существующего document-local tool вызывает его напрямую.

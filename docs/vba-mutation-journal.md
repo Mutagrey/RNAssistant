@@ -36,8 +36,8 @@ guard that binds the exact backup id/module/type/loaded-source hash together wit
 the current target existence/source hash before confirmation; changing either
 side blocks the action before preparation/dispatch. `VbaToolExecutor` remains the
 argument/result adapter and retains the reconciliation outer loop and package/rename
-journal until their ordered switches. The journal format, CAS bytes, correlation,
-COM dispatch and public wire are unchanged.
+journal until the 6H-ordered 6I package and 6J rename switches. The journal format,
+CAS bytes, correlation, COM dispatch and public wire are unchanged.
 
 | Representation | Purpose / existing transformation |
 |---|---|
@@ -83,7 +83,16 @@ The typed domain outcome is only `ok`, `error`, or `unknown`. Verified intended 
 
 Common tool results expose `mutationId`, `rollbackBackupId`, and bounded actual-effect evidence, but never the internal journal status. If terminal persistence fails after inspection, the result is non-retryable `unknown` with `terminalRecorded=false`; the prepared record stays open for later read-only reconciliation and the mutation is not replayed merely to write a terminal. Restore is not a special side channel: its typed service reloads and validates the exact guard-bound CAS backup, rechecks current target state/type, journals current source as the new before/rollback state, performs one create-or-replace action, verifies source/type, and appends its own terminal event. Backup substitution, missing guard evidence, stale target, and incompatible existing component type fail before journal/dispatch.
 
-Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope and every component's before/intended existence, type, normalized and VBE-comparable package source hashes, and CAS reference. The comparable hash also excludes import headers and RNAssistant ownership markers. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hashes and whether it matches before and/or intended state. Mixed or unreadable component state is `unknown`, never partial success. Current package/rename orchestration remains executor-owned until later Phase 6 slices, but its common result already omits `packageJournalStatus`/`journalStatus` and no longer infers rollback from exception/result prose.
+Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope and every component's before/intended existence, type, normalized and VBE-comparable package source hashes, and CAS reference. The comparable hash also excludes import headers and RNAssistant ownership markers. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hashes and whether it matches before and/or intended state. Mixed or unreadable component state is `unknown`, never partial success. Current package/rename orchestration remains executor-owned until 6I/6J, but its common result already omits `packageJournalStatus`/`journalStatus` and no longer infers rollback from exception/result prose.
+
+The 6H audit found that a completed session install and its later cleanup are not yet
+one recoverable lifecycle. Once the install terminal exists, a missing cleanup is not
+an open preparation, and a source/type probe that ignores ownership markers can treat the remaining session-owned
+components as ordinarily installed. This is R41, not an accepted recovery state.
+Phase 6I must correlate the temporary lifecycle and preserve marker-aware state; an
+unknown or missing cleanup blocks execution. Read-only reconciliation remains the
+only automatic recovery action. A cleanup, overwrite, retry, or macro run requires a
+new policy-authorized operation and a fresh prepared record.
 
 Phase 1B observes the existing journalled module/rename/package wrappers through
 metadata-only `domain.effect.prepared/dispatched/verified` events in the chat stream.
@@ -96,7 +105,7 @@ outcomes. Read-back, guards, recovery and the journal format are unchanged. See
 
 ## Recovery
 
-On the next safe VBA access for the active document, runtime finds module and package preparations without a terminal record and compares live state with recorded before/intended hashes and types. It appends `committed`, `not_applied`, or `unknown`. Package reconciliation assesses the complete set and retains mixed per-component evidence. Recovery never retries a write, creates/deletes a component, or restores a backup automatically.
+On the next safe VBA access for the active document, runtime finds module and package preparations without a terminal record and compares live state with recorded before/intended hashes and types. It appends `committed`, `not_applied`, or `unknown`. Package reconciliation assesses the complete set and retains mixed per-component evidence. Recovery never retries a write, creates/deletes a component, runs a macro, or restores a backup automatically. Phase 6I additionally has to surface a completed session install without its correlated cleanup as recovery-required rather than silently adopting it.
 
 This differs deliberately from HTML navigation. HTML undo/redo only changes the active id among immutable chat artifacts. VBA undo is an explicit, confirmed restore that creates a new external mutation; there is no automatic VBA redo stack.
 

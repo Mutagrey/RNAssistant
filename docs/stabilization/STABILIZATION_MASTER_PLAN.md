@@ -1924,9 +1924,26 @@ package lifecycle/rename; Windows COM/VBE qualification остаётся WQ-VBA.
 3. whole-module write — 6E done host-neutral; Windows/VBE qualification open.
 4. delete — 6F done host-neutral; Windows/VBE qualification open.
 5. restore — 6G done host-neutral; Windows/VBE qualification open.
-6. package operations / remaining rename ownership — next only after the consumer and stable-core scope decision below.
+6. 6H consumer/scope audit — done docs-only; package lifecycle and rename are both admitted to stable core.
+7. 6I typed package lifecycle, including temporary run/cleanup recovery and existing persistent install/remove.
+8. 6J remaining typed rename ownership and removal of the executor-owned compound journal helpers.
 
-До переноса package operations отдельно проверить, нужен ли весь пользовательский install/run/remove lifecycle первому stable core. Это вопрос scope, а не разрешение пропустить пункт: перенос в Phase 11 возможен только после проверки consumers и явного согласования. Общий package journal/recovery сохраняется для основных mutations: текущий rename использует `ExecuteJournaledPackageMutation`; отсутствие пользовательских packages не делает этот путь мёртвым.
+6H проверил consumers и зафиксировал scope: действующие global/document-local VBA
+tools исполняются через временный install/run/cleanup; Tools UI использует persistent
+install/remove/status; `mode=rename` остаётся public stable-core mutation. Поэтому весь
+текущий package lifecycle переносится в Phase 6 одним domain contour, а не делится
+между stable core и legacy UI. Это не включает dynamic tool definition authoring,
+новые package features или pipelines — они остаются Phase 11. Общий journal/CAS
+authority и существующий `package.mutation.*` wire сохраняются; rename получает
+rename-specific domain API без второго store или generic transaction framework.
+
+6H также выявил R41: session install и cleanup сейчас являются отдельными mutations.
+После применённого install при потерянном terminal/cleanup временные components могут
+остаться, а marker-insensitive probe — принять их за обычный installed package и
+пропустить последующую очистку. 6I обязан связать временный lifecycle, различать
+ownership marker и блокировать run при незавершённой/unknown cleanup. Recovery только
+наблюдает и фиксирует state; automatic replay/remove/overwrite запрещены. Подробный
+consumer map и порядок — в [6H evidence](PHASE_6H_VBA_PACKAGE_SCOPE.md).
 
 ### Выполнить
 
@@ -1951,8 +1968,11 @@ package lifecycle/rename; Windows COM/VBE qualification остаётся WQ-VBA.
 - [x] 6F: только `StdModule`/`ClassModule` допускаются до preparation/dispatch; backend получает live-source compare-and-swap hash, а `ok` требует verified absence и durable terminal.
 - [x] 6G host-neutral: полный restore workflow перенесён в typed `VbaMutationService`; executor-owned backup lookup/guard/journal/backend/read-back path и restore-only helpers удалены без второго execution/store path.
 - [x] 6G: confirmation guard связывает exact backup id/module/type/canonical live-source hash и current target existence/source hash; raw CAS hash остаётся storage evidence. Подмена backup, stale target и incompatible component type блокируются до journal/dispatch, а `ok` требует source/type read-back и durable terminal.
+- [x] 6H docs-only: проверены runtime/UI/catalog/recovery consumers; весь существующий package lifecycle и rename оставлены в stable-core Phase 6, dynamic definition authoring не включён. R41 и ordered 6I→6J gates зафиксированы без runtime switch.
+- [ ] 6I: один typed package owner для validate/probe, session install/run/cleanup, persistent install/remove/status, journal/read-back/reconciliation и `ok/error/unknown`; R41 закрыт без automatic recovery mutation.
+- [ ] 6J: typed rename guard/preparation/backend/verification/recovery owner; executor-owned rename/package journal helpers удалены после switch последнего consumer.
 - [x] R33 host-neutral: exact patch требует единственного стартового смещения, включая перекрытия; отказ до confirmation/write/нового backup/journal проверен отдельно от 6A extraction. Windows/VBE и полный VBA gate остаются открытыми.
-- [x] Добавить host-neutral fault injection/reused regression matrix:
+- [x] Добавить host-neutral fault injection/reused regression matrix для typed module pipeline 6D–6G:
   - [x] before journal prepare;
   - [x] after prepare/before COM;
   - [x] backend/COM boundary throws before mutation;
@@ -1966,6 +1986,7 @@ package lifecycle/rename; Windows COM/VBE qualification остаётся WQ-VBA.
   - [x] VBE newline normalization (fake normalization only);
   - [x] duplicate target;
   - [x] target not found.
+- [ ] Повторить соответствующую typed fault matrix для package/rename в 6I/6J, включая session install без terminal/cleanup, marker drift и complete-before/complete-intended/mixed multi-component states.
 - [x] Real Excel/VBE сценарии зафиксированы в [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md#3-финальный-прогон-candidate); исполнение WQ-VBA остаётся открытым.
 
 ### Definition of Done
@@ -2183,7 +2204,7 @@ Phase 11 — отдельная ветка после stable core, не prerequi
 1. Plan.
 2. HTML.
 3. Skills authoring.
-4. Dynamic tools.
+4. Dynamic tool definition authoring and new package features; existing 6H-admitted VBA execution/lifecycle remains stable-core Phase 6 work.
 5. Pipelines.
 6. Word.
 7. PowerPoint.
