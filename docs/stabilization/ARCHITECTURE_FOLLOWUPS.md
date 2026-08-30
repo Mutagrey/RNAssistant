@@ -3,8 +3,8 @@
 Дата фиксации: 2026-08-30; статус маршрута обновлён 2026-08-31.
 
 Статус: backlog, не описание реализованной архитектуры и не разрешение расширять
-текущую фазу. Phase 10C1 application-façade move и 10C2 resource projection cleanup
-завершены host-neutral; обязательный ближайший шаг — только финальная сверка 10D по `PROGRESS.md`.
+текущую фазу. Phase 10A–10D завершены host-neutral; следующий обязательный этап —
+Windows Milestone WQ, начиная с WQ0 identity probe, по `PROGRESS.md`.
 Изменения ниже выполняются только отдельными подэтапами после указанного gate. Если
 предложение становится обязательным, сначала обновляются master plan/ADR и
 `MIGRATION_MAP.md` с owner, consumers и removal gate.
@@ -35,11 +35,13 @@ store, model wire или UI-owned effect classification.
 3. Phase 10A подтвердил шесть mandatory dependency directions и выделил exact
    move/removal groups; 10B1/10B2 перенесли identity и VBA host helpers без изменения
    runtime algorithms; 10C1 перенёс application façade без lifecycle changes; 10C2
-   перенёс exact resource read projections и удалил `ProjectRead`. Следующий отдельный
-   10D только сводит canonical docs, migration statuses, project includes и checks.
+   перенёс exact resource read projections и удалил `ProjectRead`; 10D сверил
+   canonical docs, migration statuses, project includes и checks.
 4. При доступной Windows: WQ0 -> 5B2 production `DocumentSession` -> 7D bound Excel
    backend; неизвестную COM identity semantics не угадывать.
-5. Milestone WQ и Phase 12 stable core.
+5. Milestone WQ и Phase 12 stable core. Оставшиеся VBA definition/result adapters
+   обслуживают действующий Phase 6 runtime; их optional direct-handler cleanup после
+   5B2 относится к отдельно admitted Phase 11 и не блокирует этот маршрут.
 6. Улучшения ниже — отдельные post-stable minor changes либо соответствующие
    independently admitted Phase 11 contours. Не включать их в 9D5/Phase 10.
 

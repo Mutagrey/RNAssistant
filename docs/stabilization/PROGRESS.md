@@ -1,13 +1,25 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 10 in progress; 10A–10C2 done host-neutral
-Current task: Phase 10C2 перенёс четыре controller-facing resource read projections из legacy execution adapter в `ControllerToolDefinition`, сохранив exact handler descriptor/schema и тот же экземпляр source-owned `ToolPolicy`. `LegacyToolDefinitionAdapter.ProjectRead` удалён; execution, ToolPack, model wire и остальные legacy adapter methods не менялись.
+Current phase: Phase 10 done host-neutral; Milestone WQ pending Windows access
+Current task: Phase 10D финально сверил canonical architecture/AGENTS, migration statuses, production project includes и шесть dependency boundaries. Replaced physical paths и resource `ProjectRead` отсутствуют; оставшиеся adapters имеют действующих consumers и честные 5B2/7D/Phase 11/permanent gates.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный Phase 10D — финально сверить canonical docs и `AGENTS.md`, migration statuses, production old-style project includes и существующую architecture suite. Runtime, optional Phase 11, 5B2/7D и Windows gates не менять и не считать закрытыми локальными checks.
-Required context: [10A audit](PHASE_10A_BOUNDARY_AUDIT.md), [10C2 evidence](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [master Phase 10](STABILIZATION_MASTER_PLAN.md#phase-10--physical-cleanup-и-architecture-tests), [architecture](../architecture.md), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md), repository `AGENTS.md`.
-Open gates / remaining legacy: 10C physical cleanup done host-neutral; только 10D остаётся в обязательном host-neutral Phase 10. R49 fixed host-neutral; production OfficeHosts/VSTO compile, WQ0 и real Windows/VBE remain open. Phase 9/R45–R48 fixed host-neutral, но Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification remains open. R37 read-only historical diagnostics adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain only for listed domain/authoring consumers; resource catalog no longer depends on them. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/clipboard acceptance открыт. Product 16.1.0-dev, no release/tag.
+Next step: при первом доступном Windows x64 + Office x64 + VS 2022 окне выполнить только WQ0 identity probe. По его evidence отдельным commit выбрать production 5B2 identity/factory semantics, затем выполнить 7D и накопленный [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md). До этого Phase 12 не начинать; Phase 11 не является prerequisite.
+Required context: [10D evidence](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md), [WQ runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md), [master WQ](STABILIZATION_MASTER_PLAN.md#milestone-wq--отложенная-windowsoffice-qualification), [migration map](MIGRATION_MAP.md).
+Open gates / remaining legacy: mandatory host-neutral route 0–10 is complete, but no Windows gate is closed. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO compile, real DocumentSession/COM lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE gate including R41/R42 and WQ-EXCEL for 7B/7C remain open. Phase 8 needs WQ-PACK for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Phase 9/R45–R48 need Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification; R37 remains a read-only historical diagnostics adapter until Windows qualification and explicit retained-data reset/removal. R28/R29 live-provider and R32 UI/clipboard acceptance remain open. Legacy definition/result/host adapters remain only for consumers and removal gates listed in `MIGRATION_MAP.md`; optional direct-handler cleanup does not block Phase 12. Product 16.1.0-dev, no release/tag.
+
+Phase 10D final architecture audit (2026-08-31): final inventory is 107 Core,
+173 Office and 15 OfficeHosts C# files. Replaced source paths/aliases are absent;
+all production sources are included by the old-style projects. Forty-nine literal
+source references in canonical architecture instructions resolve. The only current
+`LegacyToolDefinitionAdapter` call sites are `ToolPackSnapshotFactory` for
+`Adapt`/`BindingFor` and `ConversationProtocolContext` for `PolicyFor`; resource files
+have none. The audit corrected stale VBA adapter rows that still named completed
+Phase 8 as a future removal gate: 5B2 owns document binding, while optional direct
+handler/typed-host cleanup is Phase 11 and does not block stable core. Architecture
+4/4 and production source inclusion 1/1 pass. Windows gates remain not performed.
+[Evidence](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md).
 
 Phase 10C2 resource projection cleanup (2026-08-31): four controller-facing
 `common.resources_*` definitions now use `ControllerToolDefinition` and preserve the
@@ -101,8 +113,8 @@ reconstruction и 8D resource data-plane cutover завершены host-neutral
 9D2 same-process fail-stop reload/reconciliation, 9D3 typed event
 classification/`IEventStore`, 9D4 minimal `IConversationStore` и 9D5 immutable
 `RunViewState` завершены host-neutral; 10A audit, 10B1/10B2 host moves и 10C1 façade
-move и resource projection 10C2 также завершены; следующий dependency-safe этап —
-финальная сверка 10D.
+move, resource projection 10C2 и final audit 10D также завершены; следующий этап —
+Windows Milestone WQ, начиная с WQ0.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
 
@@ -576,7 +588,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 7 | 7A–7C done host-neutral; 7D pending WQ0/5B2 | [7A](PHASE_7A_EXCEL_SCOPE.md); [7B](PHASE_7B_EXCEL_READ.md); [7C](PHASE_7C_EXCEL_WRITE.md) | 7C: 15 distinct focused cases; MockDemo compile | not performed | Typed reads and verified write_range switched; WQ-EXCEL and bound production backend open |
 | 8 | 8A–8D done host-neutral; WQ-PACK pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md), [8C](PHASE_8C_TOOL_PACK_EVENTS.md), [8D](PHASE_8D_RESOURCE_DATA_PLANE.md) | 8D: 74 distinct targeted pass; MockDemo compile | not performed | Execution/callable authority, durable reconstruction and four native resource handlers switched; WQ-PACK open |
 | 9 | 9A–9D5 done host-neutral; Windows acceptance pending | through `9bbf088` | 9D5: 99 targeted harness, web 70/70, MockDemo compile | not performed | Diagnostics/viewer, typed persistence ports and immutable RunViewState switched; R37/WQ-UI open |
-| 10 | in progress: 10A–10C2 done host-neutral | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md) | 10C2: resource projection 1/1; hard cutover 1/1; architecture 4/4 | not performed | only 10D final audit remains; R49 fixed host-neutral |
+| 10 | done host-neutral: 10A–10D | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [10D](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md) | 10D: architecture 4/4; source inclusion 1/1 | not performed | mandatory host-neutral route complete; Milestone WQ/WQ0 next, R49 fixed host-neutral |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
@@ -1225,14 +1237,14 @@ harness не запускались. Следующий отдельный ша�
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | 4B wire switched; handler migrations 6–7 / optional 11 remove mapping; R23 remains |
-| LegacyToolDefinitionAdapter | ToolRuntime | Current legacy catalog/schema/authoring and execution consumers listed in `MIGRATION_MAP.md`; resource projection removed | Domain switches 6–7 / optional authoring 11; `ProjectRead` removed in 10C2, no resource dependency |
-| LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Handler switches 6–7 / optional 11; no old-history reader |
-| ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 typed UI projection; manual/domain consumers 6–7 / optional 11 |
+| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | Remaining mandatory 7D where applicable or admitted Phase 11 handler slices; R23 remains |
+| LegacyToolDefinitionAdapter | ToolRuntime | Current legacy catalog/schema/authoring and execution consumers listed in `MIGRATION_MAP.md`; resource projection removed | Actual 5B2/7D or admitted Phase 11 consumer switch; `ProjectRead` removed in 10C2, no resource dependency |
+| LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Remaining mandatory 7D where applicable or admitted Phase 11 handler slices; no old-history reader |
+| ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 runtime state switched; remaining manual/domain presentation consumers leave with 7D or admitted Phase 11 slices |
 | Unbound host identity/access | HostRuntime / host factories | Production adapters, including gated context/catalog reads | 5B2 bound Excel/common lifetime identity + Windows gates; neutral gate не удаляет этот legacy |
-| `VbaMutationDocumentContextAdapter` / `VbaMutationReaderAdapter` / `VbaMutationBackendAdapter` | VBA / Tools | Typed mutation service over current wide host and legacy read/mutation results; backend now serves patch, whole write/rename, delete and restore | Document context switches with 5B2 bound session; read adapter leaves with the legacy `VbaReader` result seam; backend leaves after typed host binding/Phase 8 direct handler switch |
-| `VbaPackageToolAdapter` / `VbaPackageBackendAdapter` | VBA / Tools | Typed package service over current ToolDefinition/host command/result seams | Phase 8 typed catalog/direct handler and typed host binding; one-way mapping only, no domain legacy result/history |
-| `VbaMutationToolResultMapper` | VBA / Tools | Current VBA executor → legacy handler boundary | Remove when VBA handlers register direct typed ToolRuntime outcomes in Phase 8; no model-history reader |
+| `VbaMutationDocumentContextAdapter` / `VbaMutationReaderAdapter` / `VbaMutationBackendAdapter` | VBA / Tools | Typed mutation service over current wide host and legacy read/mutation results; backend serves patch, whole write/rename, delete and restore | Document context: WQ0/5B2. Remaining direct-handler/typed-host cleanup: separate optional Phase 11 slice after 5B2; not a Phase 10/12 blocker |
+| `VbaPackageToolAdapter` / `VbaPackageBackendAdapter` | VBA / Tools | Existing 6I package service over current ToolDefinition/host command/result seams | Separate optional Phase 11 dynamic-tool/package direct-handler slice after 5B2; one-way mapping only, no domain legacy result/history |
+| `VbaMutationToolResultMapper` | VBA / Tools | Current VBA executor → legacy handler boundary | Separate optional Phase 11 direct typed ToolRuntime handler switch after 5B2; no model-history reader; completed Phase 8 is not its removal gate |
 
 `VbaMutationJournalStoreAdapter`, `VbaPackageJournalStoreAdapter` и
 `VbaRenameJournalStoreAdapter` — permanent narrow ports к тому же

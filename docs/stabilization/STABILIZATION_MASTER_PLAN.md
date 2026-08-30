@@ -2148,22 +2148,22 @@ bounded rendering и реальные WebView/clipboard проверки на Wi
 
 ### Выполнить
 
-- [ ] Переместить файлы через `git mv`.
-- [ ] Не смешивать moves с behavior changes.
-- [ ] Обновить namespaces.
-- [ ] Обновить old-style `.csproj`.
-- [ ] Проверить отсутствие забытых legacy branches; удалить оставшиеся после переключения последних consumers, не повторять уже выполненную локальную чистку.
-- [ ] Проверить отсутствие superseded canonical docs; исторические evidence/ADR не считать действующими инструкциями.
-- [ ] Свести и дополнить architecture checks, введённые при switch контуров, без дублирования существующего покрытия:
-  - [ ] Core.Agent не зависит от Office;
-  - [ ] ModelProtocol не зависит от Tools execution;
-  - [ ] VBA не зависит от UI;
-  - [ ] Resources не зависят от AgentKernel;
-  - [ ] OfficeHosts не зависят от WebView;
-  - [ ] UI не зависит от domain executors.
-- [ ] Обновить `ARCHITECTURE.md`.
-- [ ] Обновить `AGENTS.md` под фактическую архитектуру.
-- [ ] Закрыть миграции обязательного core scope в `MIGRATION_MAP.md`; оставшихся optional consumers явно закрепить за Phase 11 с removal gates. Это не разрешает включать неквалифицированные контуры в release Phase 12.
+- [x] Переместить файлы через `git mv`.
+- [x] Не смешивать moves с behavior changes.
+- [x] Обновить namespaces.
+- [x] Обновить old-style `.csproj`.
+- [x] Проверить отсутствие забытых legacy branches; удалить оставшиеся после переключения последних consumers, не повторять уже выполненную локальную чистку.
+- [x] Проверить отсутствие superseded canonical docs; исторические evidence/ADR не считать действующими инструкциями.
+- [x] Свести и дополнить architecture checks, введённые при switch контуров, без дублирования существующего покрытия:
+  - [x] Core.Agent не зависит от Office;
+  - [x] ModelProtocol не зависит от Tools execution;
+  - [x] VBA не зависит от UI;
+  - [x] Resources не зависят от AgentKernel;
+  - [x] OfficeHosts не зависят от WebView;
+  - [x] UI не зависит от domain executors.
+- [x] Обновить `ARCHITECTURE.md`.
+- [x] Обновить `AGENTS.md` под фактическую архитектуру.
+- [x] Закрыть миграции обязательного core scope в `MIGRATION_MAP.md`; оставшихся optional consumers явно закрепить за Phase 11 с removal gates. Это не разрешает включать неквалифицированные контуры в release Phase 12.
 - [x] 10A host-neutral audit: inventory production files/namespaces/project includes и live consumers; добавить шесть forbidden-dependency checks, исправить superseded canonical path и разбить physical cleanup на exact atomic groups. Folder/namespace mismatch сам по себе не является основанием для rename. [Evidence](PHASE_10A_BOUNDARY_AUDIT.md).
 - [x] 10B1: `git mv` host identity helper из Office Runtime в OfficeHosts с namespace/project/harness updates; algorithms/identity semantics не менять. [Evidence](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md).
 - [x] 10B2: отдельно `git mv` `VbaProjectSupport*.cs` в OfficeHosts/Vba, обновить namespace/project/harness/host consumers; domain services, guards, journal и backend logic не менять. Скрытая assembly-access dependency оформлена как explicit read-only Office.Vba contract без friend assembly/duplicate parser. [Evidence](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md).
@@ -2171,7 +2171,7 @@ bounded rendering и реальные WebView/clipboard проверки на Wi
 - [x] 10C: вынести application façade и удалить live resource-only projection двумя отдельными commits.
   - [x] 10C1: `git mv` `AssistantRuntime.cs` из document/tool Runtime folder в root Office façade; namespace/lifecycle/consumers не менять. [Evidence](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md).
   - [x] 10C2: перенести четыре resource read projections из `LegacyToolDefinitionAdapter.ProjectRead` в действующий `ControllerToolDefinition`, сохранить exact descriptor/policy/schema и удалить только заменённый method; execution/ToolPack/model wire не менять. [Evidence](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md).
-- [ ] 10D: финально сверить canonical docs/AGENTS, migration statuses, production project includes и architecture suite; не закрывать Windows gates локальными checks.
+- [x] 10D: финально сверить canonical docs/AGENTS, migration statuses, production project includes и architecture suite; не закрывать Windows gates локальными checks. [Evidence](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md).
 
 ### Definition of Done
 
@@ -2222,7 +2222,7 @@ Phase 11 — отдельная ветка после stable core, не prerequi
 1. Plan.
 2. HTML.
 3. Skills authoring.
-4. Dynamic tool definition authoring and new package features; existing 6H-admitted VBA execution/lifecycle remains stable-core Phase 6 work.
+4. Dynamic tool definition authoring, new package features and optional direct-handler/typed-host removal of the remaining VBA definition/result adapters after 5B2; existing 6H-admitted VBA execution/lifecycle remains stable-core Phase 6 work and does not block Phase 12.
 5. Pipelines.
 6. Word.
 7. PowerPoint.
