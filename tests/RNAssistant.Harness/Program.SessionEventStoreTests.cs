@@ -98,7 +98,15 @@ namespace RNAssistant.Harness
                     modelCalls++;
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
-                var service = new ConversationRunService(adapter, executor, new ChatStore(FixturePaths.Value), completion, null, saved: saved =>
+                var conversationBackend = new ChatStore(FixturePaths.Value);
+                var service = new ConversationRunService(
+                    adapter,
+                    executor,
+                    ConversationStore(conversationBackend),
+                    EventStore(conversationBackend),
+                    completion,
+                    null,
+                    saved: saved =>
                 {
                     if (saved.LastRun.ExecutionSummary.ReadOk != 1) return;
                     var durable = new ChatStore(FixturePaths.Value).Load(saved.Host, saved.DocumentKey, saved.Id);
@@ -286,7 +294,15 @@ namespace RNAssistant.Harness
                 });
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-                var service = new ConversationRunService(adapter, executor, new ChatStore(paths), completion, null, saved: saved =>
+                var conversationBackend = new ChatStore(paths);
+                var service = new ConversationRunService(
+                    adapter,
+                    executor,
+                    ConversationStore(conversationBackend),
+                    EventStore(conversationBackend),
+                    completion,
+                    null,
+                    saved: saved =>
                 {
                     if (saved.LastRun.ExecutionSummary.WriteOk != 1) return;
                     var accepted = saved.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" &&
@@ -300,7 +316,7 @@ namespace RNAssistant.Harness
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult(); }
                 catch (RunStoreException) { interrupted = true; }
                 AssertTrue(interrupted, "fault injected at actual completed-evidence append");
-                new ChatSessionService(adapter, new ChatStore(paths)).ReconcileInterruptedRuns("replacement");
+                new ChatSessionService(adapter, ConversationStore(new ChatStore(paths))).ReconcileInterruptedRuns("replacement");
                 var recovered = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(1, recovered.LastRun.ExecutionSummary.WriteOk, "known terminal survives crash before materialization");
                 AssertEqual(0, recovered.LastRun.ExecutionSummary.WriteUnknown, "projection gap cannot make a known effect unknown");
@@ -448,7 +464,7 @@ namespace RNAssistant.Harness
             AppDataPaths paths,
             ChatRunRegistry registry)
         {
-            var recovery = new ChatSessionService(adapter, new ChatStore(paths));
+            var recovery = new ChatSessionService(adapter, ConversationStore(new ChatStore(paths)));
             recovery.RunOwnershipProvider = registry.IsExternallyRunning;
             recovery.RunRecoveryLeaseProvider = session => registry.Start(
                 session.Id,

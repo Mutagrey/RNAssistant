@@ -2084,7 +2084,7 @@ acceptance предыдущего подэтапа.
 
 - [ ] Ввести или нормализовать:
   - [x] `IRunStore` (9D1 подтвердил минимальный port/adapter Phase 3, ordered append/cursor и replay coverage; контракт сохраняется без второго run store);
-  - [ ] `IConversationStore`;
+  - [x] `IConversationStore` (9D4: один минимальный port/adapter над прежним `ChatStore`);
   - [x] `IEventStore` (9D3: один closed typed port/adapter над существующим `ChatStore`).
 - [x] Разделить:
   - [x] Agent Events;
@@ -2111,7 +2111,7 @@ acceptance предыдущего подэтапа.
 - [x] 9D1 docs-only: сверены store/event writers, replay/recovery, projection consumers и существующее fault coverage. Один chat stream/CAS и `IRunStore` сохраняются; подтверждён пробел same-process reconciliation R45 и отсутствие typed event/conversation/UI ports. [Evidence](PHASE_9D1_PERSISTENCE_AUDIT.md).
 - [x] 9D2 host-neutral: Agent start/confirmation после `RunStoreException` освобождают run ownership, отбрасывают изменённую in-memory projection и через один `ChatSessionService` reload/reconcile exact stream. Pre-dispatch confirmation сохраняет durable pending; open dispatch становится unknown один раз; fabricated terminal, append retry и tool replay отсутствуют. [Evidence](PHASE_9D2_RUNSTORE_RECOVERY.md).
 - [x] 9D3 host-neutral: closed descriptors классифицируют все current top-level chat events по lane/authority/durability/write scope; один `IEventStore` adapter сохраняет прежний stream/CAS/wire. Active Office writers/readers switched atomically, storage lifecycle остаётся internal, arbitrary string append удалён. [Evidence](PHASE_9D3_TYPED_EVENT_STORE.md).
-- [ ] 9D4: ввести минимальный `IConversationStore` над тем же `ChatStore` и атомарно переключить session/controller projection consumers без writable snapshot/dual-write.
+- [x] 9D4 host-neutral: минимальный `IConversationStore` и один adapter над прежним `ChatStore` атомарно переключили session/controller/kernel projection consumers. Artifact/CAS/event internals остались у существующих owners; broad conversation API internalized без writable snapshot/dual-write. [Evidence](PHASE_9D4_CONVERSATION_STORE.md).
 - [ ] 9D5: ввести immutable `RunViewState`, переключить bridge/UI и закрыть replay equality, stale projection и multi-window ordering до удаления flat projection adapter.
 - [ ] R32: реализовать [сквозной журнал и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md) отдельными подэтапами: 9A — truth/query, 9B — viewer и read-only consumers, 9C — journal UI/qualification. Phases 4–8 этим требованием не расширяются.
   - [x] 9A host-neutral: chronological `run-causal` projection сохраняет exact source/origin/call/mutation evidence и явные terminal gaps; accepted-call writer классифицируется по `AcceptedCallOrigin`, без второго store или history rewrite. 9B/9C и Windows qualification остаются открытыми.

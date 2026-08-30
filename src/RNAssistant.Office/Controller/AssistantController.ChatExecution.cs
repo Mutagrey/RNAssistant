@@ -182,7 +182,7 @@ namespace RNAssistant.Office
                 var title = string.Empty;
                 try
                 {
-                    var traceSession = _chatStore.Load(host, documentKey, sessionId);
+                    var traceSession = _conversationStore.Load(host, documentKey, sessionId);
                     title = traceSession == null
                         ? ChatTitleBuilder.BuildFallbackTitle(userText, assistantText)
                         : await ChatTitleBuilder.GenerateLlmTitleAsync(
@@ -388,7 +388,7 @@ namespace RNAssistant.Office
                     {
                         ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
                     }
-                    _chatStore.Save(session);
+                    _conversationStore.Save(session);
                     preparedTurnPersisted = true;
                     causalTrace = RunCausalTrace.Begin(_eventStore, session);
                     RunCausalTrace.Record(new CausalTraceRecord(SessionEventKind.RunStartedObservation)

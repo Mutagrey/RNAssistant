@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 
@@ -11,7 +12,7 @@ namespace RNAssistant.Office.Services
     public sealed class ChatSessionService
     {
         private readonly IOfficeApplicationAdapter _adapter;
-        private readonly ChatStore _chatStore;
+        private readonly IConversationStore _conversations;
         private readonly VbaJournalStore _vbaJournalStore;
         private string _activeSessionId;
         private string _activeHost;
@@ -34,27 +35,30 @@ namespace RNAssistant.Office.Services
         internal Func<ChatSession, IDisposable> RunRecoveryLeaseProvider { get; set; }
         internal Func<IDisposable> MaintenanceLeaseProvider { get; set; }
 
-        public ChatSessionService(IOfficeApplicationAdapter adapter, ChatStore chatStore)
-            : this(adapter, chatStore, null)
+        public ChatSessionService(IOfficeApplicationAdapter adapter, IConversationStore conversations)
+            : this(adapter, conversations, null)
         {
         }
 
-        public ChatSessionService(IOfficeApplicationAdapter adapter, ChatStore chatStore, VbaJournalStore vbaJournalStore)
+        public ChatSessionService(
+            IOfficeApplicationAdapter adapter,
+            IConversationStore conversations,
+            VbaJournalStore vbaJournalStore)
         {
-            _adapter = adapter;
-            _chatStore = chatStore;
+            _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
+            _conversations = conversations ?? throw new ArgumentNullException(nameof(conversations));
             _vbaJournalStore = vbaJournalStore;
         }
 
         public void ReconcileInterruptedRuns(string runtimeId)
         {
-            foreach (var header in _chatStore.ListHeaders())
+            foreach (var header in _conversations.ListHeaders())
             {
                 if (!IsUnfinishedRun(header.RunStatus))
                 {
                     continue;
                 }
-                var session = _chatStore.Load(header.Host, header.DocumentKey, header.Id);
+                var session = _conversations.Load(header.Host, header.DocumentKey, header.Id);
                 ReconcileInterruptedRun(session, runtimeId, true);
             }
         }
@@ -66,7 +70,7 @@ namespace RNAssistant.Office.Services
         {
             if (string.IsNullOrWhiteSpace(sessionId))
                 throw new ArgumentException("Session id is required.", nameof(sessionId));
-            var session = _chatStore.Load(host, documentKey, sessionId) ?? _chatStore.Load(sessionId);
+            var session = _conversations.Load(host, documentKey, sessionId) ?? _conversations.Load(sessionId);
             return ReconcileInterruptedRun(session, null, false, true);
         }
 
@@ -115,14 +119,11 @@ namespace RNAssistant.Office.Services
                 run = session == null ? null : session.LastRun;
                 if (run != null && IsUnfinishedRun(run.Status))
                 {
+                    var storedOpenToolExecution =
+                        _conversations.PrepareInterruptedRunRecovery(session, run.RunId);
                     var effectMayBeUnknown = run.KernelState == null
-                        ? _chatStore.HasOpenToolExecution(session, run.RunId)
+                        ? storedOpenToolExecution
                         : run.KernelState.InFlightTool != null;
-                    _chatStore.CloseOpenSteps(
-                        session,
-                        run.RunId,
-                        "interrupted",
-                        "Runtime stopped before the model step reached a terminal event.");
                     MarkInterruptedActivities(session, run, effectMayBeUnknown);
                     var incompleteProjection = run.KernelState != null && session.Messages.Any(message =>
                         message.ProtocolMessage && message.Role == "assistant" && BelongsToRun(message, run) &&
@@ -164,7 +165,7 @@ namespace RNAssistant.Office.Services
                     });
                     try
                     {
-                        _chatStore.Save(session);
+                        _conversations.Save(session);
                     }
                     catch (ChatConcurrencyException)
                     {
@@ -187,8 +188,8 @@ namespace RNAssistant.Office.Services
         private ChatSession ReloadCanonical(ChatSession session)
         {
             if (session == null) return null;
-            return _chatStore.Load(session.Host, session.DocumentKey, session.Id) ??
-                _chatStore.Load(session.Id);
+            return _conversations.Load(session.Host, session.DocumentKey, session.Id) ??
+                _conversations.Load(session.Id);
         }
 
         private static void MarkInterruptedActivities(ChatSession session, ChatRunRecord run, bool effectMayBeUnknown)
@@ -324,11 +325,11 @@ namespace RNAssistant.Office.Services
                             runtimeKey,
                             title);
                     }
-                    if (_chatStore.IsPersisted(_activeSession))
+                    if (_conversations.IsPersisted(_activeSession))
                     {
                         var activeSessionId = _activeSessionId;
-                        _chatStore.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title, documentPath);
-                        _activeSession = _chatStore.Load(host, documentKey, activeSessionId) ?? _activeSession;
+                        _conversations.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title, documentPath);
+                        _activeSession = _conversations.Load(host, documentKey, activeSessionId) ?? _activeSession;
                     }
                     else if (_activeSession != null)
                     {
@@ -378,14 +379,14 @@ namespace RNAssistant.Office.Services
                 }
                 if (session == null)
                 {
-                    session = _chatStore.Load(host, documentKey, requestedSessionId);
+                    session = _conversations.Load(host, documentKey, requestedSessionId);
                 }
                 if (session == null &&
                     (!allowMissingRequestedFallback ||
                      (string.IsNullOrWhiteSpace(_activeRuntimeDocumentKey) &&
                       string.Equals(requestedSessionId, _activeSessionId, StringComparison.OrdinalIgnoreCase))))
                 {
-                    session = _chatStore.Load(requestedSessionId);
+                    session = _conversations.Load(requestedSessionId);
                 }
                 if (session == null &&
                     _activeSession != null &&
@@ -406,21 +407,21 @@ namespace RNAssistant.Office.Services
                 var running = RunStateProvider == null ? null : RunStateProvider(_activeSessionId);
                 session = running == null
                     ? (_activeSessionPersisted
-                        ? _chatStore.Load(_activeHost, _activeDocumentKey, _activeSessionId)
+                        ? _conversations.Load(_activeHost, _activeDocumentKey, _activeSessionId)
                         : _activeSession)
                     : running.Session;
             }
 
             if (session == null)
             {
-                session = _chatStore.LoadOrCreateActive(host, documentKey, title);
+                session = _conversations.LoadOrCreateActive(host, documentKey, title);
             }
 
             session.Mode = ChatModes.Normalize(session.Mode);
             if (makeActive && migrationDeferred)
             {
                 _activeSession = session;
-                _activeSessionPersisted = _chatStore.IsPersisted(session);
+                _activeSessionPersisted = _conversations.IsPersisted(session);
             }
             else if (makeActive)
             {
@@ -433,7 +434,7 @@ namespace RNAssistant.Office.Services
         public ChatSession CreateChat(string title)
         {
             LoadSession(null);
-            var session = _chatStore.CreateTransient(
+            var session = _conversations.CreateTransient(
                 _adapter.HostName,
                 _adapter.DocumentKey,
                 _adapter.DocumentTitle,
@@ -452,7 +453,7 @@ namespace RNAssistant.Office.Services
                 return CreateChat(title);
             }
 
-            var session = _chatStore.CreateTransient(
+            var session = _conversations.CreateTransient(
                 host.Trim(),
                 documentKey.Trim(),
                 string.IsNullOrWhiteSpace(documentTitle) ? "Document" : documentTitle.Trim(),
@@ -464,19 +465,19 @@ namespace RNAssistant.Office.Services
 
         public ChatSession DeleteAndSelectNext(string sessionId)
         {
-            var current = _chatStore.Load(sessionId);
+            var current = _conversations.Load(sessionId);
             var host = current == null ? _adapter.HostName : current.Host;
             var documentKey = current == null ? _adapter.DocumentKey : current.DocumentKey;
             var documentTitle = current == null ? _adapter.DocumentTitle : current.DocumentTitle;
-            _chatStore.Delete(host, documentKey, sessionId);
-            var nextHeader = _chatStore.ListHeaders(host, documentKey, documentTitle).FirstOrDefault();
-            var next = nextHeader == null ? null : _chatStore.Load(host, documentKey, nextHeader.Id);
+            _conversations.Delete(host, documentKey, sessionId);
+            var nextHeader = _conversations.ListHeaders(host, documentKey, documentTitle).FirstOrDefault();
+            var next = nextHeader == null ? null : _conversations.Load(host, documentKey, nextHeader.Id);
             if (next == null)
             {
-                nextHeader = _chatStore.ListHeaders(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault();
+                nextHeader = _conversations.ListHeaders(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault();
                 next = nextHeader == null
-                    ? _chatStore.CreateTransient(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat")
-                    : _chatStore.Load(_adapter.HostName, _adapter.DocumentKey, nextHeader.Id);
+                    ? _conversations.CreateTransient(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat")
+                    : _conversations.Load(_adapter.HostName, _adapter.DocumentKey, nextHeader.Id);
             }
 
             SetActiveSession(next);
@@ -495,10 +496,10 @@ namespace RNAssistant.Office.Services
             _activeHost = session.Host;
             _activeDocumentKey = session.DocumentKey;
             _activeRuntimeDocumentKey = IsCurrentDocument(session) ? _adapter.RuntimeDocumentKey : null;
-            _activeSessionPersisted = _chatStore.IsPersisted(session);
+            _activeSessionPersisted = _conversations.IsPersisted(session);
             if (_activeSessionPersisted)
             {
-                _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
+                _conversations.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
             }
         }
 
@@ -511,7 +512,7 @@ namespace RNAssistant.Office.Services
             }
             _activeSession = session;
             _activeSessionPersisted = true;
-            _chatStore.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
+            _conversations.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
         }
 
         internal bool TryApplyGeneratedTitle(
@@ -530,7 +531,7 @@ namespace RNAssistant.Office.Services
             {
                 return false;
             }
-            var session = _chatStore.Load(host, documentKey, sessionId) ?? _chatStore.Load(sessionId);
+            var session = _conversations.Load(host, documentKey, sessionId) ?? _conversations.Load(sessionId);
             if (!ChatTitleBuilder.CanReplaceAutoTitle(session, expectedCurrentTitle))
             {
                 return false;
@@ -539,7 +540,7 @@ namespace RNAssistant.Office.Services
             session.Title = generatedTitle.Trim();
             try
             {
-                _chatStore.Save(session);
+                _conversations.Save(session);
             }
             catch (ChatConcurrencyException)
             {
@@ -548,7 +549,7 @@ namespace RNAssistant.Office.Services
             if (string.Equals(_activeSessionId, sessionId, StringComparison.OrdinalIgnoreCase))
             {
                 _activeSession = session;
-                _activeSessionPersisted = _chatStore.IsPersisted(session);
+                _activeSessionPersisted = _conversations.IsPersisted(session);
             }
             return true;
         }
@@ -572,7 +573,7 @@ namespace RNAssistant.Office.Services
 
             if (_activeSessionPersisted)
             {
-                var stored = _chatStore.Load(_activeHost, _activeDocumentKey, _activeSessionId);
+                var stored = _conversations.Load(_activeHost, _activeDocumentKey, _activeSessionId);
                 if (stored == null)
                 {
                     Reset();
@@ -599,7 +600,7 @@ namespace RNAssistant.Office.Services
 
         public IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
         {
-            var summaries = _chatStore.ListHeaders().Select(ToSummary).ToList();
+            var summaries = _conversations.ListHeaders().Select(ToSummary).ToList();
             foreach (var running in RunSessionsProvider == null ? new ChatSession[0] : RunSessionsProvider())
             {
                 var runningId = running.Id;
@@ -714,7 +715,7 @@ namespace RNAssistant.Office.Services
 
             if (!string.IsNullOrWhiteSpace(path) && !string.Equals(session.DocumentPath, path, StringComparison.OrdinalIgnoreCase))
             {
-                var persisted = _chatStore.IsPersisted(session);
+                var persisted = _conversations.IsPersisted(session);
                 if (persisted && IsRunOwned(session.Id))
                 {
                     return;
@@ -725,7 +726,7 @@ namespace RNAssistant.Office.Services
                 {
                     try
                     {
-                        _chatStore.Save(session);
+                        _conversations.Save(session);
                     }
                     catch (ChatConcurrencyException)
                     {
@@ -783,7 +784,7 @@ namespace RNAssistant.Office.Services
                 return true;
             }
 
-            var aliases = _chatStore.ListHeaders()
+            var aliases = _conversations.ListHeaders()
                 .Where(header => header != null &&
                     string.Equals(header.Host, host, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(header.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase) &&
@@ -826,11 +827,11 @@ namespace RNAssistant.Office.Services
                 var preferredActiveId = aliases.SelectMany(alias => alias)
                     .Any(header => string.Equals(header.Id, _activeSessionId, StringComparison.OrdinalIgnoreCase))
                     ? _activeSessionId
-                    : _chatStore.LoadActiveSessionId(host, documentKey);
+                    : _conversations.LoadActiveSessionId(host, documentKey);
                 if (string.IsNullOrWhiteSpace(preferredActiveId))
                 {
                     var newest = aliases[aliases.Count - 1];
-                    preferredActiveId = _chatStore.LoadActiveSessionId(host, newest.Key);
+                    preferredActiveId = _conversations.LoadActiveSessionId(host, newest.Key);
                     if (string.IsNullOrWhiteSpace(preferredActiveId) ||
                         newest.All(header => !string.Equals(header.Id, preferredActiveId, StringComparison.OrdinalIgnoreCase)))
                     {
@@ -846,7 +847,7 @@ namespace RNAssistant.Office.Services
                         continue;
                     }
 
-                    var sourceActiveId = _chatStore.LoadActiveSessionId(host, alias.Key);
+                    var sourceActiveId = _conversations.LoadActiveSessionId(host, alias.Key);
                     foreach (var header in alias.OrderBy(header => header.UpdatedUtc))
                     {
                         if (IsRunOwned(header.Id))
@@ -857,7 +858,7 @@ namespace RNAssistant.Office.Services
 
                         try
                         {
-                            var session = _chatStore.Load(host, alias.Key, header.Id);
+                            var session = _conversations.Load(host, alias.Key, header.Id);
                             if (session == null || !DocumentOpenService.SamePath(
                                 ResolveDocumentPath(session),
                                 documentPath))
@@ -866,7 +867,7 @@ namespace RNAssistant.Office.Services
                                 continue;
                             }
                             session.DocumentPath = documentPath.Trim();
-                            _chatStore.Move(session, host, documentKey, documentTitle);
+                            _conversations.Move(session, host, documentKey, documentTitle);
                         }
                         catch (ChatConcurrencyException)
                         {
@@ -875,7 +876,7 @@ namespace RNAssistant.Office.Services
                         }
                     }
 
-                    var remainingHeaders = _chatStore.ListHeaders(host, alias.Key, string.Empty);
+                    var remainingHeaders = _conversations.ListHeaders(host, alias.Key, string.Empty);
                     if (remainingHeaders.Any(header => DocumentOpenService.SamePath(
                         ResolveDocumentPath(header.DocumentPath, header.DocumentKey),
                         documentPath)))
@@ -889,14 +890,14 @@ namespace RNAssistant.Office.Services
                             StringComparison.OrdinalIgnoreCase)))
                     {
                         var remaining = remainingHeaders.FirstOrDefault();
-                        _chatStore.SaveActiveSessionId(host, alias.Key, remaining == null ? string.Empty : remaining.Id);
+                        _conversations.SaveActiveSessionId(host, alias.Key, remaining == null ? string.Empty : remaining.Id);
                     }
                 }
 
                 if (!string.IsNullOrWhiteSpace(preferredActiveId) &&
-                    _chatStore.Load(host, documentKey, preferredActiveId) != null)
+                    _conversations.Load(host, documentKey, preferredActiveId) != null)
                 {
-                    _chatStore.SaveActiveSessionId(host, documentKey, preferredActiveId);
+                    _conversations.SaveActiveSessionId(host, documentKey, preferredActiveId);
                 }
                 return complete;
             }
@@ -925,7 +926,7 @@ namespace RNAssistant.Office.Services
                 return true;
             }
 
-            return _chatStore.ListHeaders(host, documentKey, string.Empty)
+            return _conversations.ListHeaders(host, documentKey, string.Empty)
                 .Any(header => header != null && IsRunOwned(header.Id));
         }
 

@@ -105,7 +105,7 @@ namespace RNAssistant.Core.Storage
                 StringComparer.OrdinalIgnoreCase);
         }
 
-        public ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle)
+        internal ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle)
         {
             var activeId = LoadActiveSessionId(host, documentKey);
             var session = string.IsNullOrWhiteSpace(activeId) ? null : Load(host, documentKey, activeId);
@@ -123,7 +123,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        public ChatSession Create(string host, string documentKey, string documentTitle, string title)
+        internal ChatSession Create(string host, string documentKey, string documentTitle, string title)
         {
             var session = CreateTransient(host, documentKey, documentTitle, title);
             Save(session);
@@ -131,7 +131,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        public ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title)
+        internal ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title)
         {
             var session = new ChatSession
             {
@@ -145,7 +145,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        public ChatSession Load(string host, string documentKey, string sessionId)
+        internal ChatSession Load(string host, string documentKey, string sessionId)
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return null;
             var session = LoadSession(GetSessionPath(host, documentKey, sessionId), true);
@@ -154,7 +154,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        public ChatSession Load(string sessionId)
+        internal ChatSession Load(string sessionId)
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return null;
             ChatSession selected = null;
@@ -169,7 +169,7 @@ namespace RNAssistant.Core.Storage
             return selected;
         }
 
-        public void Save(ChatSession session)
+        internal void Save(ChatSession session)
         {
             SaveInternal(session, null, false);
         }
@@ -290,7 +290,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public int CloseOpenSteps(ChatSession session, string runId, string status, string error)
+        internal int CloseOpenSteps(ChatSession session, string runId, string status, string error)
         {
             if (session == null || string.IsNullOrWhiteSpace(runId)) return 0;
             lock (PersistenceSync)
@@ -455,7 +455,7 @@ namespace RNAssistant.Core.Storage
                 : _blobs.ReadText(sessionEvent.Payload);
         }
 
-        public bool HasOpenToolExecution(ChatSession session, string runId)
+        internal bool HasOpenToolExecution(ChatSession session, string runId)
         {
             if (session == null || string.IsNullOrWhiteSpace(runId)) return false;
             var events = ReadEvents(session.Host, session.DocumentKey, session.Id);
@@ -537,7 +537,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public ChatSession Move(ChatSession session, string host, string documentKey, string documentTitle)
+        internal ChatSession Move(ChatSession session, string host, string documentKey, string documentTitle)
         {
             if (session == null) return null;
             var oldHost = session.Host;
@@ -606,12 +606,12 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        public void MoveDocument(string oldHost, string oldDocumentKey, string newHost, string newDocumentKey, string documentTitle)
+        internal void MoveDocument(string oldHost, string oldDocumentKey, string newHost, string newDocumentKey, string documentTitle)
         {
             MoveDocument(oldHost, oldDocumentKey, newHost, newDocumentKey, documentTitle, null);
         }
 
-        public void MoveDocument(
+        internal void MoveDocument(
             string oldHost,
             string oldDocumentKey,
             string newHost,
@@ -632,7 +632,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public void ClearMessages(string host, string documentKey, string sessionId)
+        internal void ClearMessages(string host, string documentKey, string sessionId)
         {
             var session = Load(host, documentKey, sessionId);
             if (session == null) return;
@@ -640,7 +640,7 @@ namespace RNAssistant.Core.Storage
             Save(session);
         }
 
-        public bool Delete(string host, string documentKey, string sessionId)
+        internal bool Delete(string host, string documentKey, string sessionId)
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return false;
             var path = GetSessionPath(host, documentKey, sessionId);
@@ -662,7 +662,7 @@ namespace RNAssistant.Core.Storage
             return true;
         }
 
-        public bool DeleteDocument(string host, string documentKey)
+        internal bool DeleteDocument(string host, string documentKey)
         {
             var directory = GetDocumentDirectory(host, documentKey);
             if (!Directory.Exists(directory)) return false;
@@ -679,12 +679,12 @@ namespace RNAssistant.Core.Storage
             return true;
         }
 
-        public bool IsPersisted(ChatSession session)
+        internal bool IsPersisted(ChatSession session)
         {
             return session != null && File.Exists(GetSessionPath(session.Host, session.DocumentKey, session.Id));
         }
 
-        public IReadOnlyList<ChatSession> List()
+        internal IReadOnlyList<ChatSession> List()
         {
             if (!Directory.Exists(_paths.ChatDirectory)) return new List<ChatSession>();
             var sessions = new List<ChatSession>();
@@ -697,7 +697,7 @@ namespace RNAssistant.Core.Storage
             return sessions.OrderByDescending(session => session.UpdatedUtc).ToList();
         }
 
-        public IReadOnlyList<ChatSession> List(string host, string documentKey, string documentTitle)
+        internal IReadOnlyList<ChatSession> List(string host, string documentKey, string documentTitle)
         {
             var directory = GetDocumentDirectory(host, documentKey);
             if (!Directory.Exists(directory)) return new List<ChatSession>();
@@ -713,7 +713,7 @@ namespace RNAssistant.Core.Storage
                 .ToList();
         }
 
-        public IReadOnlyList<ChatSessionHeader> ListHeaders()
+        internal IReadOnlyList<ChatSessionHeader> ListHeaders()
         {
             if (!Directory.Exists(_paths.ChatDirectory)) return new List<ChatSessionHeader>();
             var headers = new List<ChatSessionHeader>();
@@ -726,7 +726,7 @@ namespace RNAssistant.Core.Storage
             return headers.OrderByDescending(header => header.UpdatedUtc).ToList();
         }
 
-        public IReadOnlyList<ChatSessionHeader> ListHeaders(string host, string documentKey, string documentTitle)
+        internal IReadOnlyList<ChatSessionHeader> ListHeaders(string host, string documentKey, string documentTitle)
         {
             var directory = GetDocumentDirectory(host, documentKey);
             if (!Directory.Exists(directory)) return new List<ChatSessionHeader>();
@@ -737,7 +737,7 @@ namespace RNAssistant.Core.Storage
                 .ToList();
         }
 
-        public string LoadActiveSessionId(string host, string documentKey)
+        internal string LoadActiveSessionId(string host, string documentKey)
         {
             var path = GetActivePath(host, documentKey);
             if (!File.Exists(path)) return string.Empty;
@@ -756,7 +756,7 @@ namespace RNAssistant.Core.Storage
             catch (ChatConcurrencyException) { return string.Empty; }
         }
 
-        public void SaveActiveSessionId(string host, string documentKey, string sessionId)
+        internal void SaveActiveSessionId(string host, string documentKey, string sessionId)
         {
             var path = GetActivePath(host, documentKey);
             try

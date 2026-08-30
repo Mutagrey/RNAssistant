@@ -202,7 +202,11 @@ namespace RNAssistant.Office
                     targetIndex = sourceMessages.Count - 1;
                 }
 
-                fork = _chatStore.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, ChatSessionService.BuildForkTitle(source));
+                fork = _conversationStore.CreateTransient(
+                    source.Host,
+                    source.DocumentKey,
+                    source.DocumentTitle,
+                    ChatSessionService.BuildForkTitle(source));
                 fork.ParentSessionId = source.Id;
                 fork.ParentSessionRevision = source.Revision;
                 fork.ForkedThroughMessageId = targetIndex < 0 ? null : sourceMessages[targetIndex].Id;
@@ -477,10 +481,10 @@ namespace RNAssistant.Office
                 // than racing a newly created chat that was not present during enumeration.
                 EnsureNoActiveRuns();
 
-                var sessions = _chatStore.ListHeaders(host, documentKey, string.Empty)
+                var sessions = _conversationStore.ListHeaders(host, documentKey, string.Empty)
                     .OrderBy(session => session.Id, StringComparer.OrdinalIgnoreCase)
                     .ToList();
-                _chatStore.DeleteDocument(host, documentKey);
+                _conversationStore.DeleteDocument(host, documentKey);
                 foreach (var header in sessions)
                 {
                     RemovePendingAgentToolsForSession(header.Id);
@@ -513,8 +517,8 @@ namespace RNAssistant.Office
 
         private ChatSession ReloadReservedSession(ChatSession session)
         {
-            if (session == null || !_chatStore.IsPersisted(session)) return session;
-            return _chatStore.Load(session.Host, session.DocumentKey, session.Id) ?? session;
+            if (session == null || !_conversationStore.IsPersisted(session)) return session;
+            return _conversationStore.Load(session.Host, session.DocumentKey, session.Id) ?? session;
         }
 
         private T WithReservedSession<T>(ChatSession session, Func<ChatSession, T> action)
@@ -576,12 +580,13 @@ namespace RNAssistant.Office
 
         private void SaveSessionChanges(ChatSession session)
         {
-            if (session == null || (!_chatStore.IsPersisted(session) && !HasCompletedExchange(session)))
+            if (session == null ||
+                (!_conversationStore.IsPersisted(session) && !HasCompletedExchange(session)))
             {
                 return;
             }
 
-            _chatStore.Save(session);
+            _conversationStore.Save(session);
             _chatSessions.NotifySaved(session);
         }
 

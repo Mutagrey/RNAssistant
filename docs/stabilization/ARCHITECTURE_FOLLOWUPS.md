@@ -3,7 +3,7 @@
 Дата фиксации: 2026-08-30.
 
 Статус: backlog, не описание реализованной архитектуры и не разрешение расширять
-текущую фазу. Обязательный ближайший шаг остаётся Phase 9D4 из `PROGRESS.md`.
+текущую фазу. Обязательный ближайший шаг остаётся Phase 9D5 из `PROGRESS.md`.
 Изменения ниже выполняются только отдельными подэтапами после указанного gate. Если
 предложение становится обязательным, сначала обновляются master plan/ADR и
 `MIGRATION_MAP.md` с owner, consumers и removal gate.
@@ -27,14 +27,16 @@ store, model wire или UI-owned effect classification.
 
 ## Порядок относительно стабилизации
 
-1. Phase 9D4: минимальный `IConversationStore` над существующим `ChatStore`.
-2. Phase 9D5: один immutable `RunViewState` и атомарный switch bridge/JS projection.
+1. Phase 9D4 завершён host-neutral: минимальный `IConversationStore` использует
+   существующий `ChatStore` без второго store/dual-write.
+2. Следующий отдельный Phase 9D5: один immutable `RunViewState` и атомарный switch
+   bridge/JS projection.
 3. Phase 10: physical cleanup и architecture checks обязательного core scope.
 4. При доступной Windows: WQ0 -> 5B2 production `DocumentSession` -> 7D bound Excel
    backend; неизвестную COM identity semantics не угадывать.
 5. Milestone WQ и Phase 12 stable core.
 6. Улучшения ниже — отдельные post-stable minor changes либо соответствующие
-   independently admitted Phase 11 contours. Не включать их в 9D4/9D5/Phase 10.
+   independently admitted Phase 11 contours. Не включать их в 9D5/Phase 10.
 
 ## Когда нужен protocol или interface
 

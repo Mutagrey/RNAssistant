@@ -165,7 +165,7 @@ namespace RNAssistant.Harness
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
                 var journal = new VbaJournalStore(paths);
-                var service = new ChatSessionService(adapter, store, journal);
+                var service = new ChatSessionService(adapter, ConversationStore(store), journal);
                 var session = service.LoadSession(null);
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "before save" });
                 store.Save(session);
@@ -239,7 +239,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
                 var oldSession = service.LoadSession(null);
                 var oldId = oldSession.Id;
                 oldSession.Messages.Add(new ChatMessage { Role = "user", Content = "old doc" });
@@ -265,7 +265,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
                 var active = service.LoadSession(null);
                 var archived = store.Create("Word", "archived-doc", "Archive.docx", "Archive chat");
 
@@ -285,7 +285,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
                 var draft = service.LoadSession(null);
 
                 adapter.DocumentKeyValue = "other-doc";
@@ -305,7 +305,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
                 var first = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "First");
                 var second = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Second");
                 var removedId = first.Id;
@@ -334,7 +334,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
 
                 var first = service.LoadSession(null);
                 var second = service.CreateChat("Another draft");
@@ -362,13 +362,48 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void DeleteSelectsRemainingProjection()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
+                var first = store.Create(
+                    adapter.HostName,
+                    adapter.DocumentKey,
+                    adapter.DocumentTitle,
+                    "First");
+                var second = store.Create(
+                    adapter.HostName,
+                    adapter.DocumentKey,
+                    adapter.DocumentTitle,
+                    "Second");
+                service.SetActiveSession(second);
+
+                var remaining = service.DeleteAndSelectNext(second.Id);
+
+                AssertEqual(first.Id, remaining.Id, "remaining durable chat selected");
+                AssertTrue(store.Load(second.Id) == null, "deleted chat is absent");
+                AssertEqual(first.Id, store.LoadActiveSessionId(adapter.HostName, adapter.DocumentKey),
+                    "active pointer follows remaining chat");
+
+                var draft = service.DeleteAndSelectNext(first.Id);
+
+                AssertTrue(!store.IsPersisted(draft), "last deletion creates only a transient draft");
+                AssertEqual(0, store.ListHeaders(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count,
+                    "no durable projection remains");
+                AssertEqual(draft.Id, service.GetActiveSession().Id, "transient replacement is active");
+            });
+        }
+
         private static void BackgroundSaveKeepsActiveChat()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
                 var first = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "First");
                 var second = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Second");
                 service.SetActiveSession(second);
@@ -388,7 +423,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
                 var session = service.LoadSession(null);
                 store.Save(session);
                 service.NotifySaved(session);
@@ -427,7 +462,7 @@ namespace RNAssistant.Harness
                 store.SaveActiveSessionId("Excel", "doc", current.Id);
                 store.SaveActiveSessionId("Excel", "forecast-doc", forecast.Id);
 
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
                 AssertEqual(current.Id, service.LoadSession(null).Id, "current document active chat");
                 AssertEqual("current history A", service.GetActiveSession().Messages[0].Content,
                     "current document history is isolated");
@@ -485,7 +520,7 @@ namespace RNAssistant.Harness
                 store.Save(duplicate);
                 var pathOnly = store.Create("Excel", "Excel:Path:C:\\Demo\\Forecast.xlsx", "Forecast.xlsx", "Path-only legacy chat");
 
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
                 service.LoadSession(null);
                 service.LoadSession(legacy.Id);
                 var catalog = (IOfficeDocumentCatalog)adapter;
@@ -524,7 +559,7 @@ namespace RNAssistant.Harness
                 adapter.RuntimeDocumentKeyValue = "Excel:Runtime:unsaved-a";
                 adapter.DocumentPathValue = string.Empty;
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, store);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
                 var first = service.LoadSession(null);
                 first.Messages.Add(new ChatMessage { Role = "user", Content = "first unsaved workbook" });
                 store.Save(first);
@@ -599,7 +634,7 @@ namespace RNAssistant.Harness
                 store.Save(session);
 
                 var registry = new ChatRunRegistry(paths);
-                var service = new ChatSessionService(adapter, store)
+                var service = new ChatSessionService(adapter, ConversationStore(store))
                 {
                     RunOwnershipProvider = registry.IsExternallyRunning,
                     RunRecoveryLeaseProvider = value => registry.Start(value.Id, "recovery", value)
@@ -657,7 +692,7 @@ namespace RNAssistant.Harness
                 store.Save(session);
 
                 var registry = new ChatRunRegistry(paths);
-                var service = new ChatSessionService(adapter, store)
+                var service = new ChatSessionService(adapter, ConversationStore(store))
                 {
                     RunOwnershipProvider = registry.IsExternallyRunning,
                     RunRecoveryLeaseProvider = value => registry.Start(value.Id, "recovery", value)

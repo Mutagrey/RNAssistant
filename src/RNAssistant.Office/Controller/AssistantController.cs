@@ -23,6 +23,7 @@ namespace RNAssistant.Office
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
         private readonly ChatStore _chatStore;
+        private readonly IConversationStore _conversationStore;
         private readonly IEventStore _eventStore;
         private readonly ModelTracePersistenceService _modelTracePersistence;
         private readonly AttachmentStore _attachmentStore;
@@ -68,6 +69,7 @@ namespace RNAssistant.Office
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
+            _conversationStore = new ChatConversationStoreAdapter(_chatStore);
             _eventStore = new ChatEventStoreAdapter(_chatStore);
             _modelTracePersistence = new ModelTracePersistenceService(_eventStore);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
@@ -101,7 +103,7 @@ namespace RNAssistant.Office
                 _paths,
                 () => _settingsService.LoadStorageProtector(),
                 _trajectoryQuery);
-            _chatSessions = new ChatSessionService(_adapter, _chatStore, _vbaJournalStore);
+            _chatSessions = new ChatSessionService(_adapter, _conversationStore, _vbaJournalStore);
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;
             _chatSessions.RunStatusProvider = _chatRuns.GetStatus;
@@ -163,8 +165,14 @@ namespace RNAssistant.Office
             _llmCompletion = completion;
             _attachmentAnalysisService = new AttachmentAnalysisService(completion);
             _contextCompactionService = new ContextCompactionService(completion);
-            _conversationRunService = new ConversationRunService(_adapter, _toolExecutor, _chatStore, completion,
-                _contextCompactionService, saved: _chatSessions.NotifySaved, eventStore: _eventStore);
+            _conversationRunService = new ConversationRunService(
+                _adapter,
+                _toolExecutor,
+                _conversationStore,
+                _eventStore,
+                completion,
+                _contextCompactionService,
+                saved: _chatSessions.NotifySaved);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
@@ -250,8 +258,10 @@ namespace RNAssistant.Office
 
         private ChatStateResponse CreateStoredChatState(string host, string documentKey, string documentTitle)
         {
-            var activeId = _chatStore.LoadActiveSessionId(host, documentKey);
-            var active = string.IsNullOrWhiteSpace(activeId) ? null : _chatStore.Load(host, documentKey, activeId);
+            var activeId = _conversationStore.LoadActiveSessionId(host, documentKey);
+            var active = string.IsNullOrWhiteSpace(activeId)
+                ? null
+                : _conversationStore.Load(host, documentKey, activeId);
             var chats = _chatSessions.GetChatSummaries(activeId)
                 .ToList();
 

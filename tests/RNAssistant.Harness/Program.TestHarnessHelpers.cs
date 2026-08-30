@@ -67,12 +67,25 @@ namespace RNAssistant.Harness
             return new ChatEventStoreAdapter(store);
         }
 
+        private static IConversationStore ConversationStore(ChatStore store)
+        {
+            return new ChatConversationStoreAdapter(store);
+        }
+
         private static ConversationRunService CreateConversationRunService(IOfficeApplicationAdapter adapter,
             OfficeToolExecutor executor, LlmCompletionDelegate completion, ContextCompactionService compaction = null,
             Func<IMaterializedModelProtocol> modelProtocolFactory = null)
         {
             if (FixturePaths.Value == null) throw new InvalidOperationException("Conversation tests require WithTempPaths.");
-            return new ConversationRunService(adapter, executor, new ChatStore(FixturePaths.Value), completion, compaction, modelProtocolFactory);
+            var store = new ChatStore(FixturePaths.Value);
+            return new ConversationRunService(
+                adapter,
+                executor,
+                ConversationStore(store),
+                EventStore(store),
+                completion,
+                compaction,
+                modelProtocolFactory);
         }
 
         private static void WithTempPaths(Action<AppDataPaths> action)

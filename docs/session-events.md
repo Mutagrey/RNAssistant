@@ -84,6 +84,21 @@ The replaced raw `ChatStore` append/read members are storage-internal, so produc
 consumers outside Core cannot bypass the typed port.
 See [Phase 9D3 evidence](stabilization/PHASE_9D3_TYPED_EVENT_STORE.md).
 
+Phase 9D4 exposes the current conversation aggregate to application consumers through
+one minimal `IConversationStore`. `ChatConversationStoreAdapter` delegates to the same
+`ChatStore` instance as the event adapter: `ChatSession` load/save and revision CAS,
+transient creation, header/active projection, move/delete and one interruption-recovery
+intent operation. Session/controller/kernel consumers no longer depend on concrete
+storage. The recovery operation closes the existing storage-owned open step boundary
+and returns retained open-tool evidence; `ChatSessionService` still owns recovery
+policy and the final projection save.
+
+Artifact-body hydration, HTML revision activation, raw event/payload operations,
+projection reducers and CAS health/GC are not exposed by this port. Replaced broad
+conversation methods are Core-internal. No format, replay rule, stream, durable index,
+writable snapshot, fallback or dual-write changes. See
+[Phase 9D4 evidence](stabilization/PHASE_9D4_CONVERSATION_STORE.md).
+
 Phase 1B adds metadata-only causal observations in this same stream: top-level
 `run.started`, `model.response.accepted`, `tool.execution.started/completed`,
 `domain.effect.prepared/dispatched/verified`, `run.summary.created`, and
@@ -104,8 +119,8 @@ Old flat records are readable but cannot seed confirmation execution.
 
 `ConversationKernelAdapter.Store` saves accepted responses and execution boundaries
 before dispatch, and records actual counts before optional result/media/context
-materialization. Its invocation cursor guards kernel appends; `ChatStore.Save`
-uses the current session revision for global CAS. Own causal-trace appends may
+materialization. Its invocation cursor guards kernel appends; `IConversationStore.Save`
+delegates to the canonical `ChatStore` current-session revision CAS. Own causal-trace appends may
 advance that revision without invalidating the kernel cursor. A stale reloaded
 confirmation fails its first save before execution. Mandatory save failure escapes
 as `RunStoreException` with explicitly unpersisted evidence; controller error

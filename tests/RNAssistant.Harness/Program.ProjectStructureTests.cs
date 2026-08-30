@@ -116,6 +116,86 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void OfficeConversationConsumersUseTypedPort()
+        {
+            var root = FindHarnessRepositoryRoot();
+            var officeRoot = Path.Combine(root, "src", "RNAssistant.Office");
+            var allowedConcreteCalls = new[]
+            {
+                ".LoadArtifactBody",
+                ".LoadArtifactBodies",
+                ".TryActivateHtmlWorkspaceRevision"
+            };
+            var offenders = new List<string>();
+            foreach (var path in Directory.GetFiles(officeRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                if (IsGeneratedProjectPath(path)) continue;
+                var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+                foreach (var line in File.ReadAllLines(path))
+                {
+                    if (line.IndexOf("_chatStore.", StringComparison.Ordinal) < 0 ||
+                        allowedConcreteCalls.Any(call => line.IndexOf(call, StringComparison.Ordinal) >= 0))
+                    {
+                        continue;
+                    }
+                    offenders.Add(relative + ": " + line.Trim());
+                }
+            }
+            AssertEqual(0, offenders.Count,
+                "Office conversation consumers must use IConversationStore; concrete ChatStore is reserved for artifact/CAS operations: " +
+                string.Join(", ", offenders.ToArray()));
+
+            AssertEqual(typeof(RNAssistant.Core.Persistence.IConversationStore),
+                typeof(RNAssistant.Office.Services.ChatSessionService)
+                    .GetField("_conversations", BindingFlags.Instance | BindingFlags.NonPublic).FieldType,
+                "chat session service depends on the conversation port");
+
+            var portMethods = typeof(RNAssistant.Core.Persistence.IConversationStore)
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public);
+            AssertEqual(15, portMethods.Length, "conversation port contains only current aggregate operations");
+            foreach (var forbidden in new[]
+            {
+                "LoadArtifactBody",
+                "ReadEvents",
+                "AppendTrace",
+                "CollectCasReferences",
+                "ClearMessages"
+            })
+            {
+                AssertTrue(!portMethods.Any(method => string.Equals(method.Name, forbidden, StringComparison.Ordinal)),
+                    "conversation port excludes storage/artifact internals: " + forbidden);
+            }
+
+            var publicChatStoreMethods = typeof(RNAssistant.Core.Storage.ChatStore)
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .Select(method => method.Name)
+                .ToArray();
+            foreach (var replaced in new[]
+            {
+                "LoadOrCreateActive",
+                "Create",
+                "CreateTransient",
+                "Load",
+                "Save",
+                "IsPersisted",
+                "List",
+                "ListHeaders",
+                "Move",
+                "MoveDocument",
+                "Delete",
+                "DeleteDocument",
+                "ClearMessages",
+                "LoadActiveSessionId",
+                "SaveActiveSessionId",
+                "CloseOpenSteps",
+                "HasOpenToolExecution"
+            })
+            {
+                AssertTrue(!publicChatStoreMethods.Contains(replaced, StringComparer.Ordinal),
+                    "replaced broad ChatStore conversation API is not externally callable: " + replaced);
+            }
+        }
+
         private static bool IsGeneratedProjectPath(string path)
         {
             var normalized = Path.GetFullPath(path)

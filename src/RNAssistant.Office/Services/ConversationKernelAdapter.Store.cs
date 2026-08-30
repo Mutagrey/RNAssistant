@@ -79,8 +79,9 @@ namespace RNAssistant.Office.Services
         {
             // LLM causal trace/progress may advance this same session's global CAS
             // revision between kernel appends. The private cursor guards this port;
-            // ChatStore.Save guards against other sessions/processes with its own CAS.
-            _store.Save(_session);
+            // The conversation store guards against other sessions/processes with
+            // the canonical backend revision CAS behind its adapter.
+            _conversations.Save(_session);
             if (_saved != null) _saved(_session);
         }
 
