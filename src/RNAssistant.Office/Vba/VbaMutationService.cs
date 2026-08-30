@@ -29,8 +29,6 @@ namespace RNAssistant.Office.Vba
             _verifier = new VbaVerifier(reader, RecordObservation, RemoveObservation);
         }
 
-        public VbaVerifier Verifier { get { return _verifier; } }
-
         public VbaMutationOutcome TryReadExistingModule(
             string requestedModuleName,
             out string resolvedModuleName,

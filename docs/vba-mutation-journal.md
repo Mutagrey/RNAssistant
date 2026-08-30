@@ -30,11 +30,14 @@ prepare/dispatch/terminal orchestration to `Office.Vba.VbaMutationService`.
 `Office.Vba.VbaVerifier` owns module write/delete read-back and before/intended
 assessment. Phase 6D replaces the temporary command/result seam with typed
 document/read/backend/journal ports and `Ok/Error/Unknown`; rollback is never
-inferred from prose. Phases 6E–6F move whole-module write and delete guards,
-dispatch and verification into that same owner. `VbaToolExecutor` remains the
-argument/result adapter and retains restore, the reconciliation outer loop and
-package/rename journal until their ordered switches. The journal format, CAS
-bytes, correlation, COM dispatch and public wire are unchanged.
+inferred from prose. Phases 6E–6G move whole-module write, delete and restore
+guards, dispatch and verification into that same owner. Restore uses a dedicated
+guard that binds the exact backup id/module/type/loaded-source hash together with
+the current target existence/source hash before confirmation; changing either
+side blocks the action before preparation/dispatch. `VbaToolExecutor` remains the
+argument/result adapter and retains the reconciliation outer loop and package/rename
+journal until their ordered switches. The journal format, CAS bytes, correlation,
+COM dispatch and public wire are unchanged.
 
 | Representation | Purpose / existing transformation |
 |---|---|
@@ -78,7 +81,7 @@ After the Office operation and read-back, one `mutation.terminal` records:
 
 The typed domain outcome is only `ok`, `error`, or `unknown`. Verified intended state maps to `ok`; verified before/not-applied maps to a definite `error`; unreadable or divergent state maps to non-retryable `unknown`. Existing live components must match the recorded component type as well as the applicable source hash: a create race that leaves identical source under another type is `unknown`, not committed. Delete `ok` requires verified absence after the compare-and-swap backend action; backend success while the component remains is not success. Source read-back verifies the requested text/type state, not VBA compilation or runtime behavior.
 
-Common tool results expose `mutationId`, `rollbackBackupId`, and bounded actual-effect evidence, but never the internal journal status. If terminal persistence fails after inspection, the result is non-retryable `unknown` with `terminalRecorded=false`; the prepared record stays open for later read-only reconciliation and the mutation is not replayed merely to write a terminal. Restore is not a special side channel: it validates the current guard, journals the current source as the new before/rollback state, writes the selected CAS backup, verifies it, and appends its own terminal event.
+Common tool results expose `mutationId`, `rollbackBackupId`, and bounded actual-effect evidence, but never the internal journal status. If terminal persistence fails after inspection, the result is non-retryable `unknown` with `terminalRecorded=false`; the prepared record stays open for later read-only reconciliation and the mutation is not replayed merely to write a terminal. Restore is not a special side channel: its typed service reloads and validates the exact guard-bound CAS backup, rechecks current target state/type, journals current source as the new before/rollback state, performs one create-or-replace action, verifies source/type, and appends its own terminal event. Backup substitution, missing guard evidence, stale target, and incompatible existing component type fail before journal/dispatch.
 
 Package install/remove writes one `package.mutation.prepared` before COM dispatch. It contains package identity, session/persistent scope and every component's before/intended existence, type, normalized and VBE-comparable package source hashes, and CAS reference. The comparable hash also excludes import headers and RNAssistant ownership markers. Persistent operations retain component backup ids; temporary session injection keeps recovery references without exposing long-lived rollback backups. One `package.mutation.terminal` records the overall status plus every component's actual existence/type/hashes and whether it matches before and/or intended state. Mixed or unreadable component state is `unknown`, never partial success. Current package/rename orchestration remains executor-owned until later Phase 6 slices, but its common result already omits `packageJournalStatus`/`journalStatus` and no longer infers rollback from exception/result prose.
 
@@ -102,4 +105,4 @@ This differs deliberately from HTML navigation. HTML undo/redo only changes the 
 - CAS health/reachability and fail-closed garbage collection now include every VBA journal; invalid or incomplete journals block all deletion.
 - Diagnostics now rebuilds one paged module/package history from the validated journal. Its cursor pins the journal sequence snapshot, every row retains its prepared/terminal event ids and sequences, and search never scans CAS bodies.
 - Per-component before/intended-after source is read and verified from CAS only when the operator opens a diff. Terminal actual existence/type/hash and before/intended match assessments remain metadata; live Office source is not silently substituted for durable evidence.
-- Restore is available only when a retained before backup exists. The UI requires an explicit confirmation and then uses the normal guarded restore executor, which records a new prepared/terminal mutation.
+- Restore is available only when a retained before backup exists. The UI requires an explicit confirmation and then uses the normal typed guarded restore workflow, which binds the exact backup and records a new prepared/terminal mutation.

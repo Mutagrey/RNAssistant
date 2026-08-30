@@ -398,6 +398,7 @@ namespace RNAssistant.Harness
                 Test("vba: mutation service owns apply patch", VbaMutationServiceOwnsApplyPatch),
                 Test("vba: whole write service owns workflow", VbaWholeModuleWriteServiceOwnsWorkflow),
                 Test("vba: delete service owns workflow", VbaDeleteModuleServiceOwnsWorkflow),
+                Test("vba: restore service owns workflow", VbaRestoreServiceOwnsWorkflow),
                 Test("vba: mutation prepare failure blocks dispatch", VbaMutationPrepareFailureBlocksDispatch),
                 Test("vba: mutation terminal failure is unknown", VbaMutationTerminalFailureIsUnknown),
                 Test("vba: mutation rollback prose is not evidence", VbaMutationRollbackProseIsNotEvidence),

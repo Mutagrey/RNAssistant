@@ -1895,6 +1895,24 @@ Restore, rename/package, reconciliation outer loop, COM implementation,
 После 6F следующий отдельный slice — restore ownership; Windows COM/VBE
 qualification остаётся WQ-VBA.
 
+### Согласованное продолжение 6G restore ownership (2026-08-30)
+
+После завершения 6F пользователь разрешил следующий отдельный подэтап («Далее»).
+Scope ограничен `common.vba_restore_backup`: выбор backup до confirmation,
+restore-specific guard точного backup id/module/type/live-source hash и текущего
+module existence/source hash, dry-run, prepared journal, typed create-or-replace
+backend action, source/type read-back и terminal outcome переходят в
+`VbaMutationService`. Подмена backup или изменение target после preparation
+блокируются до journal/dispatch (R40). `VbaToolExecutor` оставляет только legacy
+argument/guard serialization/result adapter; старый restore workflow и его
+общие только с restore helpers удаляются без alias/fallback.
+
+Rename/package, reconciliation outer loop, COM implementation, `HostRuntime`,
+factories, protocol/wire и UI не меняются. Journal/CAS остаются единственным
+append-only authority: новый store, snapshot или dual-write не вводится. После 6G
+следующий отдельный шаг начинается с проверки consumers и решения scope для
+package lifecycle/rename; Windows COM/VBE qualification остаётся WQ-VBA.
+
 ### Цель
 
 Стабилизировать наиболее опасный write contour до переноса остальных mutations.
@@ -1905,8 +1923,8 @@ qualification остаётся WQ-VBA.
 2. `vba.apply_patch` — 6C workflow/verifier and 6D typed outcome/fault matrix done host-neutral; Windows/VBE qualification remains open.
 3. whole-module write — 6E done host-neutral; Windows/VBE qualification open.
 4. delete — 6F done host-neutral; Windows/VBE qualification open.
-5. restore — next separate slice.
-6. package operations.
+5. restore — 6G done host-neutral; Windows/VBE qualification open.
+6. package operations / remaining rename ownership — next only after the consumer and stable-core scope decision below.
 
 До переноса package operations отдельно проверить, нужен ли весь пользовательский install/run/remove lifecycle первому stable core. Это вопрос scope, а не разрешение пропустить пункт: перенос в Phase 11 возможен только после проверки consumers и явного согласования. Общий package journal/recovery сохраняется для основных mutations: текущий rename использует `ExecuteJournaledPackageMutation`; отсутствие пользовательских packages не делает этот путь мёртвым.
 
@@ -1931,6 +1949,8 @@ qualification остаётся WQ-VBA.
 - [x] 6E: reconciliation проверяет component type вместе с source hash; same-source/different-type create race даёт non-retryable `unknown`, а existence rejection не создаёт preparation и не dispatches.
 - [x] 6F host-neutral: полный delete workflow перенесён в typed `VbaMutationService`; executor-owned delete guard/journal/backend/read-back path удалён без второго execution/store path.
 - [x] 6F: только `StdModule`/`ClassModule` допускаются до preparation/dispatch; backend получает live-source compare-and-swap hash, а `ok` требует verified absence и durable terminal.
+- [x] 6G host-neutral: полный restore workflow перенесён в typed `VbaMutationService`; executor-owned backup lookup/guard/journal/backend/read-back path и restore-only helpers удалены без второго execution/store path.
+- [x] 6G: confirmation guard связывает exact backup id/module/type/canonical live-source hash и current target existence/source hash; raw CAS hash остаётся storage evidence. Подмена backup, stale target и incompatible component type блокируются до journal/dispatch, а `ok` требует source/type read-back и durable terminal.
 - [x] R33 host-neutral: exact patch требует единственного стартового смещения, включая перекрытия; отказ до confirmation/write/нового backup/journal проверен отдельно от 6A extraction. Windows/VBE и полный VBA gate остаются открытыми.
 - [x] Добавить host-neutral fault injection/reused regression matrix:
   - [x] before journal prepare;

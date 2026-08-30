@@ -18,7 +18,6 @@ namespace RNAssistant.Office.Tools
         private readonly VbaJournalStore _vbaJournalStore;
         private readonly VbaReader _reader;
         private readonly VbaMutationService _mutationService;
-        private readonly VbaVerifier _verifier;
 
         public VbaToolExecutor(IOfficeApplicationAdapter adapter, VbaJournalStore vbaJournalStore)
         {
@@ -30,7 +29,6 @@ namespace RNAssistant.Office.Tools
                 new VbaMutationJournalStoreAdapter(vbaJournalStore),
                 new VbaMutationReaderAdapter(_reader),
                 new VbaMutationBackendAdapter(adapter, BackendToolId));
-            _verifier = _mutationService.Verifier;
         }
 
         internal VbaReader Reader { get { return _reader; } }
@@ -42,7 +40,7 @@ namespace RNAssistant.Office.Tools
                 yield break;
             }
 
-            yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), "Common", "Mutates document: Restore a VBA module from an exact backupId, or restore the latest backup for moduleName when backupId is omitted. Runtime snapshots current state before confirmation.", RestoreBackupSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
+            yield return ControllerToolDefinition.Create(ToolId("vba_restore_backup"), "Common", "Mutates document: Restore a VBA module from an exact backupId, or resolve the latest backup for moduleName when backupId is omitted. Runtime pins the exact backup and current target state before confirmation.", RestoreBackupSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_write_module"), "Common", "Mutates document with two strict branches. Whole-source write requires moduleName+code and uses mode=upsert/createOnly/updateOnly; componentType applies only on creation. Atomic rename requires moduleName+newModuleName+mode=rename and accepts no code/componentType. Runtime guards both names, normalizes a new destination, rejects collisions, journals both identities, and verifies read-back. Rename preserves the component but does not rewrite textual references to its old name.", WriteModuleSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_apply_patch"), "Common", "Mutates document: Apply ordered exact unique source-block replacements to an existing VBA component. There are no line-number, fuzzy, first-match, regex, or implicit insertion modes. Runtime patches one current full-module snapshot in memory, then performs one guarded whole-module write. Exact replacements already satisfied are skipped; an all-no-op patch succeeds without writing. Use common.vba_write_module with complete source when the module is missing.", ApplyPatchSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
             yield return ControllerToolDefinition.Create(ToolId("vba_delete_module"), "Common", "Mutates document: Delete an existing StdModule or ClassModule. Runtime reads it, validates the type, and creates a rollback backup; no separate read call is required. Document modules and UserForms are not deleted.", ModuleNameSchema(), mutatesDocument: true, agentCanRun: true, requiresConfirmation: true, riskLevel: 3);
@@ -76,7 +74,23 @@ namespace RNAssistant.Office.Tools
             }
             if (string.Equals(command.ToolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
             {
-                return RestoreVbaBackup(command, dryRun, session, cancellationToken);
+                var outcome = _mutationService.RestoreBackup(
+                    new VbaRestoreRequest
+                    {
+                        BackupId = ToolArgumentReader.String(
+                            command.Arguments,
+                            "backupId",
+                            string.Empty),
+                        ModuleName = ToolArgumentReader.String(
+                            command.Arguments,
+                            "moduleName",
+                            string.Empty),
+                        DryRun = dryRun,
+                        Guard = ReadRestoreGuard(command),
+                        Correlation = MutationCorrelation(command, session)
+                    },
+                    cancellationToken);
+                return VbaMutationToolResultMapper.ToToolResult(outcome);
             }
 
             if (string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
@@ -214,23 +228,24 @@ namespace RNAssistant.Office.Tools
             }
             if (string.Equals(command.ToolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase))
             {
-                VbaModuleBackup backup;
-                try
+                var preparation = _mutationService.PrepareRestoreGuard(
+                    new VbaRestoreGuardRequest
+                    {
+                        BackupId = ToolArgumentReader.String(
+                            command.Arguments,
+                            "backupId",
+                            string.Empty),
+                        ModuleName = moduleName,
+                        Correlation = MutationCorrelation(command, session)
+                    });
+                if (!preparation.Success)
                 {
-                    backup = _vbaJournalStore.Find(
-                        _adapter.HostName,
-                        _adapter.DocumentKey,
-                        ToolArgumentReader.String(command.Arguments, "backupId", string.Empty),
-                        moduleName);
+                    return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
                 }
-                catch (VbaJournalException ex)
-                {
-                    return ToolResult.Fail(ex.Message, null, "vba_backup_unavailable", false);
-                }
-                if (backup == null) return ToolResult.Fail("VBA backup not found.", null, "vba_backup_not_found", false);
-                command.Arguments["backupId"] = backup.BackupId;
-                command.Arguments["moduleName"] = backup.ModuleName;
-                return PrepareCurrentModuleGuard(command, session, backup.ModuleName, backup.ComponentType);
+                command.Arguments["backupId"] = preparation.BackupId;
+                command.Arguments["moduleName"] = preparation.ModuleName;
+                command.RuntimeGuardJson = JsonConvert.SerializeObject(preparation.Guard);
+                return null;
             }
             return null;
         }
@@ -440,144 +455,6 @@ namespace RNAssistant.Office.Tools
                 RecordObservation(session, newModuleName, CodeSha256(source.Code));
                 return renamed;
             });
-        }
-
-        private ToolResult RestoreVbaBackup(ToolCommand command, bool dryRun, ChatSession session, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var backupId = ToolArgumentReader.String(command.Arguments, "backupId", string.Empty);
-            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            VbaModuleBackup backup;
-            try
-            {
-                backup = _vbaJournalStore.Find(_adapter.HostName, _adapter.DocumentKey, backupId, moduleName);
-            }
-            catch (VbaJournalException ex)
-            {
-                return ToolResult.Fail(ex.Message, null, "vba_backup_unavailable", false);
-            }
-            if (backup == null)
-            {
-                return ToolResult.Fail("VBA backup not found.");
-            }
-
-            if (dryRun)
-            {
-                return ToolResult.Ok(
-                    "Dry run: would restore VBA backup " + backup.BackupId + " to " + backup.ModuleName + ".",
-                    new JObject
-                    {
-                        ["backupId"] = backup.BackupId,
-                        ["moduleName"] = backup.ModuleName,
-                        ["componentType"] = backup.ComponentType,
-                        ["createdUtc"] = backup.CreatedUtc,
-                        ["codeByteLength"] = backup.CodeByteLength,
-                        ["codeSha256"] = backup.CodeSha256
-                    }.ToString(Formatting.None));
-            }
-
-            VbaModuleState current;
-            ToolResult readError;
-            var moduleExists = false;
-            if (_reader.TryReadModule(backup.ModuleName, 1000000, out current, out readError))
-            {
-                moduleExists = true;
-                if (!string.IsNullOrWhiteSpace(backup.ComponentType) &&
-                    !string.Equals(backup.ComponentType, current.ComponentType, StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail(
-                        "VBA restore was blocked because the current component type differs from the backup.",
-                        JsonConvert.SerializeObject(new { moduleName = backup.ModuleName, backupType = backup.ComponentType, currentType = current.ComponentType }),
-                        "vba_restore_component_type_mismatch",
-                        false);
-                }
-            }
-            else if (!VbaReader.IsModuleNotFound(readError))
-            {
-                return ToolResult.Fail(
-                    "VBA restore was blocked because the current module could not be read. " +
-                    (readError == null ? string.Empty : readError.Message),
-                    readError == null ? null : readError.DataJson,
-                    "vba_backup_failed",
-                    false);
-            }
-
-            var guardError = ValidateModuleGuard(command, session, backup.ModuleName, moduleExists, current);
-            if (guardError != null) return guardError;
-            var componentType = string.IsNullOrWhiteSpace(backup.ComponentType)
-                ? (moduleExists ? current.ComponentType : "StdModule")
-                : backup.ComponentType;
-            var preparation = _mutationService.PrepareJournaledMutation(
-                new VbaModuleMutationRequest
-                {
-                    Operation = "restore",
-                    ModuleName = backup.ModuleName,
-                    Before = moduleExists ? current : null,
-                    IntendedAfterExists = true,
-                    IntendedAfterCode = backup.Code,
-                    IntendedComponentType = componentType,
-                    Correlation = MutationCorrelation(command, session)
-                });
-            if (!preparation.Success)
-            {
-                return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
-            }
-
-            var outcome = _mutationService.ExecuteJournaledMutation(
-                preparation.Preparation,
-                delegate
-            {
-                ToolResult result;
-                if (moduleExists)
-                {
-                    result = WriteModule(backup.ModuleName, backup.Code, false, CodeSha256(current.Code));
-                }
-                else
-                {
-                    var create = new ToolCommand { ToolId = BackendToolId("vba_create_module_internal") };
-                    create.Arguments["moduleName"] = backup.ModuleName;
-                    create.Arguments["componentType"] = componentType;
-                    create.Arguments["code"] = backup.Code ?? string.Empty;
-                    result = _adapter.ExecuteTool(create);
-                }
-                var action = VbaMutationToolResultMapper.FromBackend(
-                    result,
-                    "VBA restore write returned no result.",
-                    "vba_restore_failed");
-                if (action.Status != VbaMutationActionStatus.Succeeded)
-                {
-                    return action;
-                }
-
-                return _verifier.VerifyModuleWrite(
-                    backup.ModuleName,
-                    backup.Code,
-                    "VBA backup restored: " + backup.BackupId,
-                    new JObject
-                    {
-                        ["backupId"] = backup.BackupId,
-                        ["moduleName"] = backup.ModuleName,
-                        ["codeSha256"] = CodeSha256(backup.Code),
-                        ["restore"] = action.Data
-                    },
-                    "vba_restore",
-                    componentType,
-                    SessionId(session));
-            }, cancellationToken);
-            return VbaMutationToolResultMapper.ToToolResult(outcome);
-        }
-
-        private ToolResult WriteModule(string moduleName, string code, bool createIfMissing, string expectedCodeSha256)
-        {
-            var write = new ToolCommand { ToolId = BackendToolId("vba_replace_module") };
-            write.Arguments["moduleName"] = moduleName;
-            write.Arguments["code"] = code;
-            write.Arguments["createIfMissing"] = createIfMissing;
-            if (!string.IsNullOrWhiteSpace(expectedCodeSha256))
-            {
-                write.Arguments["expectedCodeSha256"] = expectedCodeSha256;
-            }
-            return _adapter.ExecuteTool(write);
         }
 
         private static IReadOnlyList<VbaPatchOperationRequest> ParsePatchOperations(JArray patch)

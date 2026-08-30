@@ -6,6 +6,12 @@ namespace RNAssistant.Office.Vba
 {
     internal interface IVbaMutationJournal
     {
+        VbaBackupReadResult FindBackup(
+            string host,
+            string documentKey,
+            string backupId,
+            string moduleName);
+
         VbaMutationPreparation PrepareMutation(
             VbaMutationPreparation preparation,
             string beforeCode,
@@ -38,6 +44,35 @@ namespace RNAssistant.Office.Vba
             string intendedAfterCode)
         {
             return _store.PrepareMutation(preparation, beforeCode, intendedAfterCode);
+        }
+
+        public VbaBackupReadResult FindBackup(
+            string host,
+            string documentKey,
+            string backupId,
+            string moduleName)
+        {
+            try
+            {
+                var backup = _store.Find(host, documentKey, backupId, moduleName);
+                return backup == null
+                    ? VbaBackupReadResult.NotFound()
+                    : VbaBackupReadResult.Found(new VbaBackupSnapshot(
+                        backup.BackupId,
+                        backup.ModuleName,
+                        backup.ComponentType,
+                        backup.CodeSha256,
+                        backup.CodeByteLength,
+                        backup.Code,
+                        backup.CreatedUtc));
+            }
+            catch (VbaJournalException ex)
+            {
+                return VbaBackupReadResult.Failure(
+                    ex.Message,
+                    "vba_backup_unavailable",
+                    false);
+            }
         }
 
         public void CompleteMutation(

@@ -13,14 +13,14 @@ namespace RNAssistant.Office.Tools
         {
             return string.Equals(toolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase);
+                string.Equals(toolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase);
         }
 
         private bool IsPreflightMutation(string toolId)
         {
             return IsPublicMutation(toolId) ||
-                string.Equals(toolId, ToolId("office_run_macro"), StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, ToolId("vba_restore_backup"), StringComparison.OrdinalIgnoreCase);
+                string.Equals(toolId, ToolId("office_run_macro"), StringComparison.OrdinalIgnoreCase);
         }
 
         private ToolResult PrepareRenameGuard(
@@ -110,65 +110,6 @@ namespace RNAssistant.Office.Tools
                 sourceHash,
                 normalizedTargetName,
                 requestedTargetName);
-            return null;
-        }
-
-        private ToolResult PrepareCurrentModuleGuard(ToolCommand command, ChatSession session, string moduleName, string expectedComponentType)
-        {
-            VbaModuleState current;
-            ToolResult readError;
-            if (_reader.TryReadModule(moduleName, 1000000, out current, out readError))
-            {
-                if (!string.IsNullOrWhiteSpace(expectedComponentType) &&
-                    !string.Equals(expectedComponentType, current.ComponentType, StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail(
-                        "VBA restore was blocked because the current component type differs from the backup.",
-                        JsonConvert.SerializeObject(new { moduleName = moduleName, backupType = expectedComponentType, currentType = current.ComponentType }),
-                        "vba_restore_component_type_mismatch",
-                        false);
-                }
-                BindGuard(command, session, moduleName, true, CodeSha256(current.Code), moduleName);
-                return null;
-            }
-            if (!VbaReader.IsModuleNotFound(readError)) return readError;
-            BindGuard(command, session, moduleName, false, null, moduleName);
-            return null;
-        }
-
-        private ToolResult ValidateModuleGuard(
-            ToolCommand command,
-            ChatSession session,
-            string moduleName,
-            bool moduleExists,
-            VbaModuleState current)
-        {
-            var guard = ReadGuard(command);
-            if (guard == null || guard.Version != 2 || string.IsNullOrWhiteSpace(guard.ModuleName))
-            {
-                return SnapshotRequired(moduleName);
-            }
-            if (!GuardContextMatches(guard, session, moduleName))
-            {
-                return ToolResult.Fail(
-                    "The prepared VBA action belongs to another document, chat, or module. Retry the same tool in the current document.",
-                    JsonConvert.SerializeObject(new { moduleName = moduleName, retrySameTool = true }),
-                    "vba_snapshot_context_changed",
-                    true);
-            }
-            var actualHash = moduleExists && current != null ? CodeSha256(current.Code) : null;
-            if (guard.ModuleExists != moduleExists ||
-                moduleExists && !string.Equals(guard.CodeSha256, actualHash, StringComparison.OrdinalIgnoreCase))
-            {
-                RemoveObservation(session, moduleName);
-                return StaleSnapshot(
-                    moduleName,
-                    guard.ModuleExists,
-                    guard.CodeSha256,
-                    moduleExists,
-                    actualHash,
-                    "mutation");
-            }
             return null;
         }
 
@@ -268,31 +209,19 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private void BindGuard(
-            ToolCommand command,
-            ChatSession session,
-            string moduleName,
-            bool moduleExists,
-            string hash,
-            string requestedModuleName = null)
+        private static VbaRestoreGuard ReadRestoreGuard(ToolCommand command)
         {
-            if (command == null) return;
-            command.RuntimeGuardJson = JsonConvert.SerializeObject(new VbaMutationGuard
+            if (command == null ||
+                string.IsNullOrWhiteSpace(command.RuntimeGuardJson)) return null;
+            try
             {
-                Version = 2,
-                Host = _adapter.HostName ?? string.Empty,
-                DocumentKey = _adapter.DocumentKey ?? string.Empty,
-                RuntimeDocumentKey = _adapter.RuntimeDocumentKey ?? string.Empty,
-                SessionId = session == null ? string.Empty : session.Id ?? string.Empty,
-                RunId = session == null || session.LastRun == null ? null : session.LastRun.RunId,
-                TurnId = session == null || session.LastRun == null ? null : session.LastRun.TurnId,
-                StepId = command.RuntimeStepId,
-                ToolCallId = command.ToolCallId,
-                ModuleName = moduleName ?? string.Empty,
-                RequestedModuleName = string.IsNullOrWhiteSpace(requestedModuleName) ? moduleName ?? string.Empty : requestedModuleName,
-                ModuleExists = moduleExists,
-                CodeSha256 = moduleExists ? hash ?? string.Empty : string.Empty
-            });
+                return JsonConvert.DeserializeObject<VbaRestoreGuard>(
+                    command.RuntimeGuardJson);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         private void BindRenameGuard(

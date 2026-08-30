@@ -78,6 +78,34 @@ namespace RNAssistant.Office.Tools
                 "VBA delete returned no result.",
                 "vba_delete_failed");
         }
+
+        public VbaMutationActionResult RestoreModule(VbaRestoreBackendRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            ToolCommand command;
+            if (request.ModuleExists)
+            {
+                command = new ToolCommand { ToolId = _backendToolId("vba_replace_module") };
+                command.Arguments["moduleName"] = request.ModuleName;
+                command.Arguments["code"] = request.Code;
+                command.Arguments["createIfMissing"] = false;
+                if (!string.IsNullOrWhiteSpace(request.ExpectedCodeSha256))
+                {
+                    command.Arguments["expectedCodeSha256"] = request.ExpectedCodeSha256;
+                }
+            }
+            else
+            {
+                command = new ToolCommand { ToolId = _backendToolId("vba_create_module_internal") };
+                command.Arguments["moduleName"] = request.ModuleName;
+                command.Arguments["componentType"] = request.ComponentType;
+                command.Arguments["code"] = request.Code;
+            }
+            return VbaMutationToolResultMapper.FromBackend(
+                _adapter.ExecuteTool(command),
+                "VBA restore write returned no result.",
+                "vba_restore_failed");
+        }
     }
 
     internal sealed class VbaMutationReaderAdapter : IVbaMutationReader

@@ -482,6 +482,212 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaRestoreServiceOwnsWorkflow()
+        {
+            WithTempPaths(paths =>
+            {
+                const string moduleName = "Module1";
+                const string currentCode = "Sub Current()\nEnd Sub";
+                const string selectedCode = "Sub Selected()\nEnd Sub";
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = currentCode };
+                var store = new VbaJournalStore(paths);
+                var selected = store.Save(
+                    adapter.HostName,
+                    adapter.DocumentKey,
+                    adapter.DocumentTitle,
+                    moduleName,
+                    "StdModule",
+                    selectedCode);
+                var reader = new VbaReader(
+                    adapter,
+                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
+                var service = new VbaMutationService(
+                    new VbaMutationDocumentContextAdapter(adapter),
+                    new VbaMutationJournalStoreAdapter(store),
+                    new VbaMutationReaderAdapter(reader),
+                    new VbaMutationBackendAdapter(
+                        adapter,
+                        suffix => adapter.HostName.ToLowerInvariant() + "." + suffix));
+                var correlation = new VbaMutationCorrelation
+                {
+                    SessionId = "restore-service",
+                    RunId = "restore-run",
+                    TurnId = "restore-turn",
+                    StepId = "restore-step",
+                    ToolCallId = "restore-call"
+                };
+
+                var unguarded = service.RestoreBackup(
+                    new VbaRestoreRequest
+                    {
+                        BackupId = selected.BackupId,
+                        ModuleName = moduleName,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Error, unguarded.Status,
+                    "typed restore service refuses an unprepared mutation");
+                AssertEqual("vba_internal_snapshot_missing", unguarded.ErrorCode,
+                    "missing restore guard fails with the stable snapshot code");
+                AssertEqual(0, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "unguarded restore creates no journal preparation");
+                AssertEqual(0, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase) ||
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "unguarded restore does not dispatch a backend mutation");
+
+                var preparation = service.PrepareRestoreGuard(
+                    new VbaRestoreGuardRequest
+                    {
+                        BackupId = selected.BackupId,
+                        ModuleName = moduleName,
+                        Correlation = correlation
+                    });
+                AssertTrue(preparation.Success, "typed service prepares the restore guard");
+                AssertEqual(selected.BackupId, preparation.BackupId,
+                    "restore preparation pins the exact backup id");
+                AssertEqual(moduleName, preparation.ModuleName,
+                    "restore preparation pins the backup module name");
+
+                var newer = store.Save(
+                    adapter.HostName,
+                    adapter.DocumentKey,
+                    adapter.DocumentTitle,
+                    moduleName,
+                    "StdModule",
+                    "Sub Newer()\nEnd Sub");
+                var mutationDispatches = adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase) ||
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase));
+                var substituted = service.RestoreBackup(
+                    new VbaRestoreRequest
+                    {
+                        BackupId = newer.BackupId,
+                        ModuleName = moduleName,
+                        Guard = preparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Error, substituted.Status,
+                    "typed restore service rejects a substituted backup after preparation");
+                AssertEqual("vba_restore_backup_changed", substituted.ErrorCode,
+                    "backup substitution has a distinct stable error code");
+                AssertEqual(0, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "backup substitution creates no journal preparation");
+                AssertEqual(mutationDispatches, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase) ||
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "backup substitution does not dispatch a backend mutation");
+
+                var preparedBackupHash = preparation.Guard.BackupLiveCodeSha256;
+                preparation.Guard.BackupLiveCodeSha256 = "tampered-backup-hash";
+                var alteredBackup = service.RestoreBackup(
+                    new VbaRestoreRequest
+                    {
+                        BackupId = preparation.BackupId,
+                        ModuleName = preparation.ModuleName,
+                        Guard = preparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual("vba_restore_backup_changed", alteredBackup.ErrorCode,
+                    "restore guard binds the selected backup live source as well as its id");
+                AssertEqual(0, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "altered backup evidence creates no journal preparation");
+                preparation.Guard.BackupLiveCodeSha256 = preparedBackupHash;
+
+                adapter.VbaModuleCode = "Sub ChangedAfterConfirmation()\nEnd Sub";
+                var staleTarget = service.RestoreBackup(
+                    new VbaRestoreRequest
+                    {
+                        BackupId = preparation.BackupId,
+                        ModuleName = preparation.ModuleName,
+                        Guard = preparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual("stale_vba_module", staleTarget.ErrorCode,
+                    "restore guard rejects target changes after preparation");
+                AssertEqual(0, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "stale restore target creates no journal preparation");
+                adapter.VbaModuleCode = currentCode;
+
+                var dryRun = service.RestoreBackup(
+                    new VbaRestoreRequest
+                    {
+                        BackupId = preparation.BackupId,
+                        ModuleName = preparation.ModuleName,
+                        DryRun = true,
+                        Guard = preparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Ok, dryRun.Status,
+                    "typed restore service owns dry-run validation");
+                AssertEqual(selected.BackupId, (string)dryRun.Data["backupId"],
+                    "restore dry-run identifies the exact selected backup");
+                AssertEqual(0, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "restore dry-run creates no journal preparation");
+                AssertEqual(mutationDispatches, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase) ||
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "restore dry-run does not dispatch a backend mutation");
+
+                var restored = service.RestoreBackup(
+                    new VbaRestoreRequest
+                    {
+                        BackupId = preparation.BackupId,
+                        ModuleName = preparation.ModuleName,
+                        Guard = preparation.Guard,
+                        Correlation = correlation
+                    },
+                    CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Ok, restored.Status,
+                    "typed restore service dispatches and verifies restore");
+                AssertEqual(selectedCode, adapter.VbaModuleCode,
+                    "typed restore backend receives the selected backup source");
+                var replace = adapter.Executed.Single(item =>
+                    item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase));
+                AssertEqual(VbaTextCanonicalizer.LiveCodeSha256(currentCode),
+                    Convert.ToString(replace.Arguments["expectedCodeSha256"]),
+                    "typed restore backend receives the exact current-state compare-and-swap hash");
+                var record = store.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
+                AssertEqual(VbaMutationStatuses.Committed, record.Terminal.Status,
+                    "typed restore workflow owns the terminal journal result");
+                AssertEqual("restore-call", record.Prepared.ToolCallId,
+                    "typed restore journal keeps accepted-call correlation");
+
+                var incompatible = store.Save(
+                    adapter.HostName,
+                    adapter.DocumentKey,
+                    adapter.DocumentTitle,
+                    moduleName,
+                    "ClassModule",
+                    "Option Explicit\nPublic Value As String");
+                mutationDispatches = adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase) ||
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase));
+                var incompatiblePreparation = service.PrepareRestoreGuard(
+                    new VbaRestoreGuardRequest
+                    {
+                        BackupId = incompatible.BackupId,
+                        ModuleName = moduleName,
+                        Correlation = correlation
+                    });
+                AssertTrue(!incompatiblePreparation.Success,
+                    "restore preparation blocks an incompatible existing component type");
+                AssertEqual("vba_restore_component_type_mismatch",
+                    incompatiblePreparation.Error.ErrorCode,
+                    "component-type mismatch keeps its stable error code");
+                AssertEqual(1, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                    "component-type refusal creates no journal preparation");
+                AssertEqual(mutationDispatches, adapter.Executed.Count(item =>
+                    item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase) ||
+                    item.ToolId.EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase)),
+                    "component-type refusal does not dispatch a backend mutation");
+            });
+        }
+
         private static void VbaMutationPrepareFailureBlocksDispatch()
         {
             WithTempPaths(paths =>
@@ -2784,6 +2990,16 @@ namespace RNAssistant.Harness
                     "scripted_delete_not_configured",
                     false);
             }
+
+            public VbaMutationActionResult RestoreModule(VbaRestoreBackendRequest request)
+            {
+                DispatchCount += 1;
+                return VbaMutationActionResult.Error(
+                    "Scripted restore backend is not configured.",
+                    null,
+                    "scripted_restore_not_configured",
+                    false);
+            }
         }
 
         private sealed class FaultingVbaMutationJournal : IVbaMutationJournal
@@ -2797,6 +3013,39 @@ namespace RNAssistant.Harness
 
             public bool FailPrepare { get; set; }
             public bool FailComplete { get; set; }
+
+            public VbaBackupReadResult FindBackup(
+                string host,
+                string documentKey,
+                string backupId,
+                string moduleName)
+            {
+                try
+                {
+                    var backup = _store.Find(
+                        host,
+                        documentKey,
+                        backupId,
+                        moduleName);
+                    return backup == null
+                        ? VbaBackupReadResult.NotFound()
+                        : VbaBackupReadResult.Found(new VbaBackupSnapshot(
+                            backup.BackupId,
+                            backup.ModuleName,
+                            backup.ComponentType,
+                            backup.CodeSha256,
+                            backup.CodeByteLength,
+                            backup.Code,
+                            backup.CreatedUtc));
+                }
+                catch (VbaJournalException ex)
+                {
+                    return VbaBackupReadResult.Failure(
+                        ex.Message,
+                        "vba_backup_unavailable",
+                        false);
+                }
+            }
 
             public VbaMutationPreparation PrepareMutation(
                 VbaMutationPreparation preparation,

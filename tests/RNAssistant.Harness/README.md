@@ -141,6 +141,17 @@ journal/dispatch. The full `vba:` filter retains stale confirmation, document
 identity, backend success without deletion, rollback backup and COM policy cases.
 See [Phase 6F evidence](../../docs/stabilization/PHASE_6F_VBA_DELETE.md).
 
+## VBA restore owner (Phase 6G)
+
+`vba: restore service owns workflow` checks the direct typed owner: a prepared
+guard is mandatory and binds the exact backup id/live-source hash plus current target state;
+backup substitution, altered backup evidence, stale target and incompatible type
+stop before persistence/dispatch. It also covers dry-run, compare-and-swap replace,
+verified source/type and durable accepted-call correlation. The full `vba:` slice
+retains latest-backup pinning across confirmation, missing-target typed creation,
+journal/CAS recovery and VBE normalization coverage. See
+[Phase 6G evidence](../../docs/stabilization/PHASE_6G_VBA_RESTORE.md).
+
 ## Stabilization completion guard
 
 ```bash

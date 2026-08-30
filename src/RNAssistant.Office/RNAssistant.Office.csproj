@@ -104,11 +104,13 @@
     <Compile Include="Vba\VbaDeleteModuleContracts.cs" />
     <Compile Include="Vba\VbaMutationContracts.cs" />
     <Compile Include="Vba\VbaMutationJournal.cs" />
+    <Compile Include="Vba\VbaRestoreContracts.cs" />
     <Compile Include="Vba\VbaMutationService.cs" />
     <Compile Include="Vba\VbaMutationService.ApplyPatch.cs" />
     <Compile Include="Vba\VbaMutationService.DeleteModule.cs" />
     <Compile Include="Vba\VbaMutationService.Guards.cs" />
     <Compile Include="Vba\VbaMutationService.Journal.cs" />
+    <Compile Include="Vba\VbaMutationService.RestoreBackup.cs" />
     <Compile Include="Vba\VbaMutationService.WholeModuleWrite.cs" />
     <Compile Include="Vba\VbaWholeModuleWriteContracts.cs" />
     <Compile Include="Vba\VbaVerifier.cs" />
