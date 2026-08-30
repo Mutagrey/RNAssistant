@@ -17,16 +17,20 @@ Do not copy an x86 native DLL into an x64 Office deployment or vice versa.
 
 ## Portable layout
 
-Run from a Visual Studio Developer PowerShell after building:
+From the repository root, build and publish both architectures:
 
-```powershell
-.\tools\Publish-NativePortable.ps1 -Configuration Release -Architecture x64 -Destination C:\Temp\RNAssistant
+```cmd
+build-local.cmd
 ```
+
+Use `build-local.cmd x64` or `build-local.cmd x86` for one architecture. Output
+is written under `artifacts\portable\Release`. The x86 package does not contain
+the x64-only native PDF rendering binaries.
 
 Expected layout:
 
 ```text
-C:\Temp\RNAssistant\
+artifacts\portable\Release\x64\
   RNAssistant.NativeHostCli.dll
   RNAssistant.Core.dll
   RNAssistant.Office.dll

@@ -2,12 +2,25 @@
 
 Current target: 16.1.0
 Current phase: Phase 10 in progress; 10A–10C1 done host-neutral
-Current task: Phase 10C1 перенёс byte-identical `AssistantRuntime.cs` из Office/Runtime в root Office application-façade path, обновил единственный production project include и добавил physical-owner assertion. Namespace, pane/controller lifecycle, disposal, factories и consumers не менялись; harness source link для UI façade отсутствовал и не добавлялся.
+Current task: по явному решению пользователя добавлен отдельный tooling-only Windows local-build entrypoint перед WQ: default `Release` Native portable x64+x86 через declarative MSBuild. Runtime/COM/VSTO, product version и qualification status не менялись.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
 Next step: отдельный Phase 10C2 — только четыре calls в `ResourceToolCatalog.GetControllerTools`: перенести exact descriptor/policy/schema projection из `LegacyToolDefinitionAdapter.ProjectRead` в действующий `ControllerToolDefinition`, затем удалить только `ProjectRead`. Native resource handlers, ToolPack authority/revision, execution bindings, mode policy, model wire и прочие legacy adapter methods не менять.
 Required context: [10A audit](PHASE_10A_BOUNDARY_AUDIT.md), [10C1 evidence](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [master Phase 10](STABILIZATION_MASTER_PLAN.md#phase-10--physical-cleanup-и-architecture-tests), [architecture](../architecture.md), [resource fabric](../resource-fabric.md), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md), repository `AGENTS.md`.
 Open gates / remaining legacy: application façade move done host-neutral; resource-only `ProjectRead` remains the last 10C cleanup. R49 fixed host-neutral; production OfficeHosts/VSTO compile, WQ0 и real Windows/VBE remain open. Phase 9/R45–R48 fixed host-neutral, но Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification remains open. R37 read-only historical diagnostics adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/clipboard acceptance открыт. Product 16.1.0-dev, no release/tag.
+
+Phase 10 local Windows build entrypoint (2026-08-31): root `build-local.cmd`
+находит штатный VS 2022 MSBuild через `vswhere`; без аргументов последовательно
+собирает managed dependencies один раз, NativeHostCli x64/Win32 и публикует оба
+portable каталога. `x64`, `x86`, `desktop`, `all`, `doctor` остаются явными
+вариантами; configuration фиксирована в `Release`. Packaging перенесён в
+declarative MSBuild tasks без PowerShell, install/sign/register/network/process
+termination и без удаления destination. Три заменённых native publish `.ps1`
+удалены; четыре прежних PowerShell wrapper `.cmd` больше не меняют execution
+policy. x86 output явно предупреждает об отсутствии x64-only PDF native runtime.
+На этой машине выполнены только XML/static/diff/version checks; Windows MSBuild/C++/CLI,
+Office PIA, portable contents и запуск не проверялись и остаются Windows gate.
+Следующий шаг не изменён: 10C2 resource projection cleanup.
 
 Phase 10C1 application façade move (2026-08-31): byte-identical
 `AssistantRuntime.cs` moved with `git mv` from `Office/Runtime` to root `Office`;

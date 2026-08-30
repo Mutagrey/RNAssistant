@@ -41,17 +41,32 @@ affinity is fail-open and any Win32 error is written to `logs\native-host.log`;
 this is defense in depth, not DRM or protection from privileged capture
 software.
 
-1. Build `RNAssistant.NativeHostCli`, `RNAssistant.Core`, `RNAssistant.Office`
-   and `RNAssistant.OfficeHosts` in Visual Studio 2022 using the same bitness as
-   Office.
-2. Publish the portable folder:
+Build and publish both x64 and x86 portable folders from a normal Command Prompt:
 
-```powershell
-.\tools\Publish-NativePortable.ps1 -Configuration Release -Architecture x64 -Destination C:\Temp\RNAssistant
+```cmd
+build-local.cmd
 ```
 
-3. Package/import the VBA and Ribbon sources from `wrappers\native`; see
-   `wrappers\native\README.md`.
+Useful variants:
+
+```cmd
+build-local.cmd x64
+build-local.cmd x86
+build-local.cmd desktop
+build-local.cmd all
+build-local.cmd doctor
+```
+
+The command uses Visual Studio `MSBuild.exe` directly. It does not install or
+register add-ins, change PowerShell policy, create certificates, access the
+network or terminate Office. Outputs are written to
+`artifacts\portable\Release\x64` and `artifacts\portable\Release\x86`; the build
+log is `artifacts\build-local.log`. Close Office before replacing a portable
+folder because the native DLL remains loaded in the Office process.
+
+The x86 output intentionally omits the x64-only native PDF rendering binaries.
+The complete supported target remains Office x64. Package/import the VBA and
+Ribbon sources from `wrappers\native`; see `wrappers\native\README.md`.
 
 ## Windows Desktop Quick Start
 
@@ -150,9 +165,12 @@ Product version changes and annotated tags belong only to qualified release mile
 ClickOnce/VSTO manifest signing is disabled in the repository because certificate thumbprints are machine-local. If the Visual Studio Signing page is disabled, run the local helper in Windows PowerShell:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force
 .\tools\New-LocalClickOnceCertificate.ps1
 ```
+
+Run the helper only when the organization permits local PowerShell scripts. It
+does not change execution policy; if policy blocks it, certificate provisioning
+must be handled by administrators.
 
 The script creates a CurrentUser code-signing certificate and writes ignored `Directory.Build.local.props` with `SignManifests=true` and `ManifestCertificateThumbprint`.
 By default it also imports the public certificate to CurrentUser `Root` and `TrustedPublisher`, so local signed manifests are trusted without recreating the VSTO projects.

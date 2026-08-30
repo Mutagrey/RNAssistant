@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Publish" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <Architecture Condition="'$(Architecture)' == ''">x64</Architecture>
+    <RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</RepoRoot>
+    <NativePlatform Condition="'$(Architecture)' == 'x64'">x64</NativePlatform>
+    <NativePlatform Condition="'$(Architecture)' == 'x86'">Win32</NativePlatform>
+    <Destination>$(RepoRoot)artifacts\portable\$(Configuration)\$(Architecture)\</Destination>
+    <NativeOutput>$(RepoRoot)artifacts\$(Configuration)\$(NativePlatform)\</NativeOutput>
+    <CoreOutput>$(RepoRoot)src\RNAssistant.Core\bin\$(Configuration)\</CoreOutput>
+    <OfficeOutput>$(RepoRoot)src\RNAssistant.Office\bin\$(Configuration)\</OfficeOutput>
+    <HostsOutput>$(RepoRoot)src\RNAssistant.OfficeHosts\bin\$(Configuration)\</HostsOutput>
+    <WebViewPackage>$(RepoRoot)packages\Microsoft.Web.WebView2.1.0.2903.40\</WebViewPackage>
+  </PropertyGroup>
+
+  <Target Name="Publish">
+    <Error Condition="'$(Configuration)' != 'Release'" Text="Native portable publishing supports Release only." />
+    <Error Condition="'$(Architecture)' != 'x64' and '$(Architecture)' != 'x86'" Text="Architecture must be x64 or x86." />
+
+    <ItemGroup>
+      <RequiredFile Include="$(NativeOutput)RNAssistant.NativeHostCli.dll" />
+      <RequiredFile Include="$(CoreOutput)RNAssistant.Core.dll" />
+      <RequiredFile Include="$(OfficeOutput)RNAssistant.Office.dll" />
+      <RequiredFile Include="$(HostsOutput)RNAssistant.OfficeHosts.dll" />
+      <RequiredFile Include="$(OfficeOutput)Newtonsoft.Json.dll" />
+      <RequiredFile Include="$(OfficeOutput)Microsoft.Web.WebView2.Core.dll" />
+      <RequiredFile Include="$(OfficeOutput)Microsoft.Web.WebView2.WinForms.dll" />
+      <RequiredFile Include="$(WebViewPackage)build\native\$(Architecture)\WebView2Loader.dll" />
+      <RequiredFile Include="$(OfficeOutput)Microsoft.Bcl.HashCode.dll" />
+      <RequiredFile Include="$(OfficeOutput)System.Buffers.dll" />
+      <RequiredFile Include="$(OfficeOutput)System.Memory.dll" />
+      <RequiredFile Include="$(OfficeOutput)System.Numerics.Vectors.dll" />
+      <RequiredFile Include="$(OfficeOutput)System.Runtime.CompilerServices.Unsafe.dll" />
+      <RequiredFile Include="$(OfficeOutput)UglyToad.PdfPig.dll" />
+      <RequiredFile Include="$(OfficeOutput)UglyToad.PdfPig.Core.dll" />
+      <RequiredFile Include="$(OfficeOutput)UglyToad.PdfPig.DocumentLayoutAnalysis.dll" />
+      <RequiredFile Include="$(OfficeOutput)UglyToad.PdfPig.Fonts.dll" />
+      <RequiredFile Include="$(OfficeOutput)UglyToad.PdfPig.Tokenization.dll" />
+      <RequiredFile Include="$(OfficeOutput)UglyToad.PdfPig.Tokens.dll" />
+      <RequiredFile Include="$(OfficeOutput)PDFtoImage.dll" />
+      <RequiredFile Include="$(OfficeOutput)SkiaSharp.dll" />
+      <RequiredFile Include="$(RepoRoot)vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll" Condition="'$(Architecture)' == 'x64'" />
+      <RequiredFile Include="$(RepoRoot)vendor\pdf-rendering\runtimes\win-x64\native\libSkiaSharp.dll" Condition="'$(Architecture)' == 'x64'" />
+
+      <InteropFile Include="$(HostsOutput)Microsoft.Office.Interop.*.dll" />
+      <InteropFile Include="$(HostsOutput)Office.dll" Condition="Exists('$(HostsOutput)Office.dll')" />
+      <WebFile Include="$(RepoRoot)web\**\*" />
+
+      <AddInSource Include="$(RepoRoot)wrappers\native\excel\**\*"><TargetRoot>excel\</TargetRoot></AddInSource>
+      <AddInSource Include="$(RepoRoot)wrappers\native\word\**\*"><TargetRoot>word\</TargetRoot></AddInSource>
+      <AddInSource Include="$(RepoRoot)wrappers\native\powerpoint\**\*"><TargetRoot>powerpoint\</TargetRoot></AddInSource>
+      <AddInSource Include="$(RepoRoot)wrappers\native\outlook\**\*"><TargetRoot>outlook\</TargetRoot></AddInSource>
+      <AddInSource Include="$(RepoRoot)wrappers\native\ribbon\**\*"><TargetRoot>ribbon\</TargetRoot></AddInSource>
+
+      <PortableDoc Include="$(RepoRoot)wrappers\native\README.md" />
+      <PortableDoc Include="$(RepoRoot)wrappers\native\Outlook2013_Setup.md" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(Destination);$(Destination)web;$(Destination)addins\sources;$(Destination)docs;$(Destination)logs" />
+    <Copy SourceFiles="@(RequiredFile)" DestinationFolder="$(Destination)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(InteropFile)" DestinationFolder="$(Destination)" SkipUnchangedFiles="true" Condition="'@(InteropFile)' != ''" />
+    <Copy SourceFiles="@(WebFile)" DestinationFiles="@(WebFile->'$(Destination)web\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(AddInSource)" DestinationFiles="@(AddInSource->'$(Destination)addins\sources\%(TargetRoot)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PortableDoc)" DestinationFolder="$(Destination)docs" SkipUnchangedFiles="true" />
+    <WriteLinesToFile File="$(Destination)panel-owner-mode.txt" Lines="OwnerWindow" Encoding="ASCII" Overwrite="false" Condition="!Exists('$(Destination)panel-owner-mode.txt')" />
+
+    <Warning Condition="'$(Architecture)' == 'x86'" Text="x86 portable output does not include native PDF rendering binaries; the supported complete target remains Office x64." />
+    <Message Importance="High" Text="Native portable output: $(Destination)" />
+  </Target>
+</Project>

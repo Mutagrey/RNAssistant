@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="NativeBoth" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</RepoRoot>
+    <ManagedProject>$(RepoRoot)src\RNAssistant.OfficeHosts\RNAssistant.OfficeHosts.csproj</ManagedProject>
+    <NativeProject>$(RepoRoot)src\RNAssistant.NativeHostCli\RNAssistant.NativeHostCli.vcxproj</NativeProject>
+    <DesktopProject>$(RepoRoot)src\RNAssistant.Desktop\RNAssistant.Desktop.csproj</DesktopProject>
+    <PublisherProject>$(MSBuildThisFileDirectory)RNAssistant.NativePortable.proj</PublisherProject>
+  </PropertyGroup>
+
+  <Target Name="Doctor">
+    <Error Condition="'$(Configuration)' != 'Release'" Text="Local build entry point supports Release only." />
+    <Error Condition="!Exists('$(ManagedProject)')" Text="Managed project not found: $(ManagedProject)" />
+    <Error Condition="!Exists('$(NativeProject)')" Text="Native project not found: $(NativeProject)" />
+    <Error Condition="!Exists('$(DesktopProject)')" Text="Desktop project not found: $(DesktopProject)" />
+    <Error Condition="!Exists('$(PublisherProject)')" Text="Publisher project not found: $(PublisherProject)" />
+    <Error Condition="!Exists('$(RepoRoot)packages\Microsoft.Web.WebView2.1.0.2903.40\build\native\x64\WebView2Loader.dll')" Text="Vendored x64 WebView2Loader.dll not found." />
+    <Error Condition="!Exists('$(RepoRoot)packages\Microsoft.Web.WebView2.1.0.2903.40\build\native\x86\WebView2Loader.dll')" Text="Vendored x86 WebView2Loader.dll not found." />
+    <Error Condition="!Exists('$(RepoRoot)vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll')" Text="Vendored x64 PDF runtime not found." />
+    <Message Importance="High" Text="Inputs found. Native compilation also requires Visual Studio 2022 C++/CLI v143, .NET Framework 4.8 targeting pack, Windows SDK and installed Office PIAs." />
+  </Target>
+
+  <Target Name="BuildManaged" DependsOnTargets="Doctor">
+    <Message Importance="High" Text="Building managed Native Host dependencies (Release|AnyCPU)..." />
+    <MSBuild Projects="$(ManagedProject)" Targets="Build"
+             Properties="Configuration=$(Configuration);Platform=AnyCPU"
+             BuildInParallel="false" />
+  </Target>
+
+  <Target Name="NativeX64" DependsOnTargets="BuildManaged">
+    <Message Importance="High" Text="Building Native Host (Release|x64)..." />
+    <MSBuild Projects="$(NativeProject)" Targets="Build"
+             Properties="Configuration=$(Configuration);Platform=x64;SolutionDir=$(RepoRoot)"
+             BuildInParallel="false" />
+    <MSBuild Projects="$(PublisherProject)" Targets="Publish"
+             Properties="Configuration=$(Configuration);Architecture=x64"
+             BuildInParallel="false" />
+  </Target>
+
+  <Target Name="NativeX86" DependsOnTargets="BuildManaged">
+    <Message Importance="High" Text="Building Native Host (Release|Win32)..." />
+    <MSBuild Projects="$(NativeProject)" Targets="Build"
+             Properties="Configuration=$(Configuration);Platform=Win32;SolutionDir=$(RepoRoot)"
+             BuildInParallel="false" />
+    <MSBuild Projects="$(PublisherProject)" Targets="Publish"
+             Properties="Configuration=$(Configuration);Architecture=x86"
+             BuildInParallel="false" />
+  </Target>
+
+  <Target Name="NativeBoth" DependsOnTargets="NativeX64;NativeX86" />
+
+  <Target Name="Desktop" DependsOnTargets="Doctor">
+    <Message Importance="High" Text="Building Desktop (Release|x64)..." />
+    <MSBuild Projects="$(DesktopProject)" Targets="Build"
+             Properties="Configuration=$(Configuration);Platform=x64"
+             BuildInParallel="false" />
+    <Message Importance="High" Text="Desktop output: $(RepoRoot)src\RNAssistant.Desktop\bin\x64\$(Configuration)" />
+  </Target>
+
+  <Target Name="All" DependsOnTargets="NativeBoth;Desktop" />
+</Project>

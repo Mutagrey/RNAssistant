@@ -1,4 +1,4 @@
 @echo off
 setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\Install-LocalAddIns.ps1" -Unregister %*
+powershell.exe -NoProfile -File "%~dp0tools\Install-LocalAddIns.ps1" -Unregister %*
 exit /b %ERRORLEVEL%
