@@ -1,6 +1,6 @@
 # RNAssistant architecture
 
-> [Resource Fabric](resource-fabric.md) is the shipped and re-audited architecture for artifact access and conversation execution. Resource access is unified at the runtime boundary while domain editors remain intentionally specialized. [Artifact Library and Viewers](artifact-library.md) defines the target user-visible draft/commit lifecycle, immutable versus versioned resources, viewers and Phase 11 mutation UX without adding a second transport or store.
+> [Resource Fabric](resource-fabric.md) is the shipped and re-audited architecture for artifact access and conversation execution. Resource access is unified at the runtime boundary while domain editors remain intentionally specialized. [Artifact Library and Viewers](artifact-library.md) defines the target user-visible draft/commit lifecycle, immutable versus versioned resources, viewers and Phase 11 mutation UX without adding a second transport or store. [Host Fabric](host-fabric.md) and the [Local Automation Agent](local-automation-agent.md) define deferred cross-host and local-computer contours; neither is part of the current stable-core route.
 
 ## Product
 
@@ -21,6 +21,22 @@ static WebView UI
 - `RNAssistant.Office` owns host-neutral orchestration, session services, prompt assembly, transcripts, and tool execution. It cannot contain host-specific COM interop.
 - `RNAssistant.OfficeHosts` and `RNAssistant.*AddIn` own host adapters and Office wiring only. Host document identity is owned by `RNAssistant.OfficeHosts/Identity/DocumentIdentity.cs`, while the dynamic COM/VBE backend is owned by `RNAssistant.OfficeHosts/Vba/VbaProjectSupport*.cs`; host-neutral Office code cannot consume either helper.
 - `web` is static HTML/CSS/JS with no build pipeline.
+
+## Deferred host and local automation boundaries
+
+One RNAssistant window may eventually select targets owned by other Office
+processes, but COM and execution remain in the owning host endpoint. The registry
+contains only ephemeral descriptors/leases; an accepted run is pinned to one exact
+host/document session and cannot follow focus mid-run. A signed broker is the
+preferred enterprise profile; a same-user Office-only rendezvous may remove the
+standalone RNAssistant EXE but cannot bypass application-control policy. See
+[Host Fabric](host-fabric.md).
+
+Browser, arbitrary filesystem mutation and process/shell execution are separate
+optional capabilities, not an automatic expansion of Agent mode. Non-document
+automation first needs an ADR for workspace-owned sessions and a signed isolated
+worker. Office processes never become general shell workers. See
+[Local Automation Agent](local-automation-agent.md).
 
 ## Qualification boundary (target WQ-A)
 

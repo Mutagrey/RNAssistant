@@ -2297,7 +2297,23 @@ transport или execution authority.
 8. Word.
 9. PowerPoint.
 10. Outlook.
-11. Browser.
+11. Host Fabric: cross-process endpoint registry/routing, exact run target pinning,
+    unified picker and optional Office-hosted launcher profiles. COM stays in the
+    owning add-in process; no silent ROT fallback or application-control bypass. See
+    [Host Fabric](../host-fabric.md).
+12. Browser as a separately permissioned session/package; HTML preview WebView is
+    not reused as browser authority.
+13. Local Automation LA0/LA1: ADR for workspace-owned sessions and policy, then
+    bounded read-only file/folder resources.
+14. Local Automation LA2: guarded file mutations, conflicts/recovery and
+    Recycle-Bin-first deletion.
+15. Local Automation LA4: typed non-shell process execution in a signed isolated
+    worker, unavailable in Office-hosted execution by default.
+16. Local Automation LA5: optional raw shell/PTY as a separate high-risk,
+    deny-by-default capability with per-call confirmation.
+17. Local Automation LA6: opening applications and desktop/computer control with
+    foreground target pinning and action evidence. See
+    [Local Automation Agent](../local-automation-agent.md).
 
 ### Правило допуска
 
@@ -2311,6 +2327,12 @@ transport или execution authority.
 - не требует нового model-owned status;
 - не добавляет hidden fallback;
 - не меняет Resource Fabric execution semantics.
+
+Host Fabric additionally proves that the UI-selected target and immutable run target
+are separate, all COM executes at the owner endpoint, and endpoint loss cannot fall
+back to another Office instance. Local Automation requires a prior session-ownership
+ADR, explicit grants and an isolated worker before any mutation/process tool is
+published; lack of permission cannot be worked around through Office.
 
 Для HTML/Plan whole-content mutations отдельно проверить сохранение точного payload и revision lineage, отсутствие тихой обрезки и восстановление предыдущей revision. Валидный model envelope не является проверкой синтаксиса/работоспособности содержимого; UI/результат не обещает такую проверку без отдельного domain evidence. R29/R28 не считаются закрытыми самим включением optional contour.
 
