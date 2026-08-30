@@ -318,6 +318,9 @@ namespace RNAssistant.Harness
                 var paths = FixturePaths.Value;
                 var store = new ChatStore(paths);
                 var session = NewSession(adapter);
+                var registry = new ChatRunRegistry(paths);
+                var recovery = CreateTargetedRunRecovery(adapter, paths, registry);
+                var runLease = registry.Start(session.Id, "controller-start", session);
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
@@ -350,15 +353,107 @@ namespace RNAssistant.Harness
                 AssertTrue(failure != null, "mandatory store failure escapes without retry");
                 AssertEqual(afterDispatch ? 1 : 0, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no dispatch before accepted append / no retry after effect");
                 AssertEqual(afterDispatch ? 1 : 0, failure.UnpersistedSummary.ToolCounts.WriteOk, "unpersisted effect is not passed off as durable evidence");
-                var recovery = new ChatSessionService(adapter, new ChatStore(paths));
-                recovery.ReconcileInterruptedRuns("replacement-runtime");
-                var recovered = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
+                var owned = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(RunLifecycle.Running, owned.LastRun.KernelState.Summary.Lifecycle,
+                    "recovery cannot mutate canonical state while controller owns the run");
+                runLease.Dispose();
+                var recovered = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(RunLifecycle.Failed, recovered.LastRun.KernelState.Summary.Lifecycle, "interrupted runtime is locally failed");
                 AssertEqual(afterDispatch ? 1 : 0, recovered.LastRun.ExecutionSummary.WriteUnknown, "open dispatched boundary remains unknown");
                 AssertTrue(recovered.LastRun.KernelState.InFlightTool == null, "recovery clears boundary once without replay");
-                recovery.ReconcileInterruptedRuns("replacement-runtime");
+                var recoveredRevision = recovered.Revision;
+                recovered = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(recoveredRevision, recovered.Revision, "same-process recovery is idempotent");
                 AssertKernelReplay(recovered);
             });
+        }
+
+        private static void KernelConfirmationStoreFailureStopsAndRecovers(bool afterDispatch)
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var paths = FixturePaths.Value;
+                var store = new ChatStore(paths);
+                var session = NewSession(adapter);
+                var settings = new AppSettings { AutoConfirmToolActions = false };
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var responses = KernelConfirmationResponses();
+                var service = CreateConversationRunService(adapter, executor,
+                    (appSettings, messages, options, stream, token) =>
+                        Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
+                service.ExecuteAsync(ChatModes.Agent, "Create skill", session, NewContext(adapter),
+                    settings, tools, null).GetAwaiter().GetResult();
+                var pending = AssertKernelReplay(session);
+                var pendingId = pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId;
+                var command = PendingCommand(pending);
+                pending.LastRun.RunId = "confirmation-fault-run";
+
+                var registry = new ChatRunRegistry(paths);
+                var recovery = CreateTargetedRunRecovery(adapter, paths, registry);
+                var runLease = registry.Start(pending.Id, "controller-confirmation", pending);
+                Action injectConcurrentCommit = () =>
+                {
+                    var other = store.Load(pending.Host, pending.DocumentKey, pending.Id);
+                    other.Title = afterDispatch ? "confirmation dispatch conflict" : "confirmation claim conflict";
+                    store.Save(other);
+                };
+                if (!afterDispatch) injectConcurrentCommit();
+
+                RunStoreException failure = null;
+                try
+                {
+                    service.ConfirmAsync(pendingId, command, pending,
+                        new ConversationRunInput(settings, NewContext(adapter), tools),
+                        (phase, message, activity) =>
+                        {
+                            if (afterDispatch && phase == "tool_running") injectConcurrentCommit();
+                        }).GetAwaiter().GetResult();
+                }
+                catch (RunStoreException ex)
+                {
+                    failure = ex;
+                }
+
+                AssertTrue(failure != null, "confirmation store failure escapes without retry");
+                AssertEqual(afterDispatch ? 1 : 0, failure.UnpersistedSummary.ToolCounts.WriteOk,
+                    "confirmation failure keeps possible effect explicitly unpersisted");
+                AssertEqual(afterDispatch, new SkillStore(paths).Load().Any(skill => skill.Id == "common.replay_test"),
+                    "confirmed write executes exactly on the post-dispatch failure path");
+
+                var owned = recovery.ReloadAndReconcileInterruptedRun(pending.Host, pending.DocumentKey, pending.Id);
+                AssertEqual(afterDispatch ? RunLifecycle.Running : RunLifecycle.AwaitingConfirmation,
+                    owned.LastRun.KernelState.Summary.Lifecycle,
+                    "targeted recovery waits for controller ownership release");
+                runLease.Dispose();
+                var recovered = recovery.ReloadAndReconcileInterruptedRun(pending.Host, pending.DocumentKey, pending.Id);
+                AssertEqual(afterDispatch ? RunLifecycle.Failed : RunLifecycle.AwaitingConfirmation,
+                    recovered.LastRun.KernelState.Summary.Lifecycle,
+                    "canonical pending is retained before dispatch; open confirmed dispatch is interrupted");
+                AssertEqual(afterDispatch ? 1 : 0, recovered.LastRun.ExecutionSummary.WriteUnknown,
+                    "only an open confirmed dispatch becomes unknown");
+                AssertEqual(!afterDispatch, recovered.LastRun.KernelState.Summary.PendingConfirmation != null,
+                    "pre-dispatch failure keeps the durable pending call available");
+                var recoveredRevision = recovered.Revision;
+                recovered = recovery.ReloadAndReconcileInterruptedRun(pending.Host, pending.DocumentKey, pending.Id);
+                AssertEqual(recoveredRevision, recovered.Revision, "confirmation recovery is idempotent");
+                AssertEqual(afterDispatch, new SkillStore(paths).Load().Any(skill => skill.Id == "common.replay_test"),
+                    "canonical reload never replays the confirmed tool");
+                AssertKernelReplay(recovered);
+            });
+        }
+
+        private static ChatSessionService CreateTargetedRunRecovery(
+            FakeOfficeAdapter adapter,
+            AppDataPaths paths,
+            ChatRunRegistry registry)
+        {
+            var recovery = new ChatSessionService(adapter, new ChatStore(paths));
+            recovery.RunOwnershipProvider = registry.IsExternallyRunning;
+            recovery.RunRecoveryLeaseProvider = session => registry.Start(
+                session.Id,
+                "recover_" + Guid.NewGuid().ToString("N"),
+                session);
+            return recovery;
         }
 
         private static void JsonlByteOffsetsAreExact()

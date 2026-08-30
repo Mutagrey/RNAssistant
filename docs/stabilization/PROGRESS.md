@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9A–9C UI и 9D1 persistence audit done host-neutral; 9D2–9D5 remain
-Current task: Phase 9D1 сверил один canonical chat stream/CAS, действующий `IRunStore`, все active Office event writers, replay/recovery и fault tests. Existing pre-dispatch barriers, no-retry и restart recovery сохранены. Зафиксирован R45: после `RunStoreException` same-process controller освобождает run, но single-chat reload/reconciliation до следующего restart отсутствует. Typed `IEventStore`, `IConversationStore` и единый `RunViewState` ещё не введены.
+Current phase: Phase 9 — 9A–9C UI и 9D1–9D2 persistence done host-neutral; 9D3–9D5 remain
+Current task: Phase 9D2 закрыл R45 host-neutral. Agent start и confirmation при `RunStoreException` освобождают run lease, не сохраняют `UnpersistedSummary`, reload-ят exact canonical stream и вызывают один `ChatSessionService` reconciliation owner. Pre-dispatch pending остаётся доступным; open possible dispatch становится unknown один раз; tool/append не повторяются.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный Phase 9D2 — закрыть R45: после mandatory append failure controller должен сначала освободить run ownership, затем single-chat reload/reconcile canonical state без сохранения `UnpersistedSummary`, fabricated terminal, append retry или tool replay. Покрыть start/confirmation до dispatch и после possible dispatch. 9D3–9D5 и Phase 10 в этот commit не включать. 7D по-прежнему не начинать без WQ0/5B2.
-Required context: [9D1 audit](PHASE_9D1_PERSISTENCE_AUDIT.md), [master Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [session events](../session-events.md), [3B2 evidence](PHASE_3B2_KERNEL_CUTOVER.md), [9C evidence](PHASE_9C_RUN_JOURNAL_UI.md), [migration map](MIGRATION_MAP.md), [risk register](RISK_REGISTER.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: R45 and full Phase 9 persistence/fault matrix remain open; typed event classification/`IEventStore`, `IConversationStore`, `RunViewState`, stale/multi-window verification and flat UI projection removal are 9D3–9D5. R37 read-only historical adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/reload/confirmation/live-append acceptance открыт. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 9D3 — ввести closed typed classification existing chat events и один narrow `IEventStore` над тем же `ChatStore`; атомарно переключить active Office writers/readers и удалить их arbitrary string append dependency. Authority/diagnostic и mandatory/best-effort задаёт source owner; новый файл/store/schema/dual-write запрещены. 9D4–9D5 и Phase 10 не смешивать. 7D по-прежнему не начинать без WQ0/5B2.
+Required context: [9D1 audit](PHASE_9D1_PERSISTENCE_AUDIT.md), [9D2 evidence](PHASE_9D2_RUNSTORE_RECOVERY.md), [master Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [session events](../session-events.md), [trajectory query](../trajectory-query.md), [migration map](MIGRATION_MAP.md), [risk register](RISK_REGISTER.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: R45 fixed host-neutral, but Windows controller/WebView qualification remains open. Full Phase 9 still requires typed event classification/`IEventStore`, `IConversationStore`, `RunViewState`, stale/multi-window verification and flat UI projection removal in 9D3–9D5. R37 read-only historical adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/reload/confirmation/live-append acceptance открыт. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -22,11 +22,28 @@ mutation slices выполнены отдельными host-neutral changes; 6H
 6I package runtime/R41 и 6J rename/R42 выполнены host-neutral; 7A audit и 7B typed
 Excel reads и verified `write_range` завершены host-neutral; 7D ждёт WQ0/5B2, а
 Phase 8A immutable execution snapshot, 8B callable lifecycle/admission, 8C durable
-reconstruction и 8D resource data-plane cutover завершены host-neutral; 9D1
-persistence/fault-matrix audit завершён, следующий dependency-safe slice — 9D2
-same-process fail-stop reload/reconciliation.
+reconstruction и 8D resource data-plane cutover завершены host-neutral; 9D1 audit и
+9D2 same-process fail-stop reload/reconciliation завершены, следующий
+dependency-safe slice — 9D3 typed event classification/`IEventStore`.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
+
+Phase 9D2 same-process run-store recovery (2026-08-30): оба Agent controller path
+теперь отдельно ловят `RunStoreException`, закрывают stale causal scope, освобождают
+`ChatRunLease` и только затем вызывают targeted reload/reconciliation на общем
+`ChatSessionService`. Сам service reload-ит exact stream, повторно берёт recovery
+lease, под ним заменяет active cache canonical projection и не читает/не сохраняет
+`UnpersistedSummary`. Durable confirmation до failed
+claim остаётся pending; open possible dispatch становится unknown; saved terminal
+остаётся known. Recovery CAS conflict не retry-ится, а повторный вызов idempotent.
+
+Fault matrix start/confirmation × before/after dispatch — 4/4 pass; existing startup
+unknown/saved-boundary recovery — 2/2; production source inclusion — 1/1, итого 7
+distinct targeted cases. MockDemo actual-controller compile: 0 errors / 3 existing
+CA1416 PDF warnings; version format и 177 local links в 7 changed Markdown files —
+pass. Старые escape-only catch filters удалены, второй recovery/store не добавлен.
+[Evidence](PHASE_9D2_RUNSTORE_RECOVERY.md). Windows controller/WebView
+qualification открыт.
 
 Phase 9D1 persistence audit (2026-08-30): targeted source/call-site review подтвердил,
 что один `*.events.jsonl` + CAS остаётся единственной chat authority, а действующий

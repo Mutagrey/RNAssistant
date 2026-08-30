@@ -164,7 +164,18 @@ namespace RNAssistant.Office
                     RunCausalTrace.Summary(session);
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
                 }
-                catch (Exception ex) when (!(ex is RunStoreException))
+                catch (RunStoreException)
+                {
+                    _toolCatalog.InvalidateDocumentVbaTools();
+                    if (causalTrace != null)
+                    {
+                        causalTrace.Dispose();
+                        causalTrace = null;
+                    }
+                    RecoverAfterRunStoreFailure(runLease, session, sessionId);
+                    throw;
+                }
+                catch (Exception ex)
                 {
                     _toolCatalog.InvalidateDocumentVbaTools();
                     if (!ChatHistoryEditService.HasResultForLatestToolCall(

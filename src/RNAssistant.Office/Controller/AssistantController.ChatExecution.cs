@@ -544,7 +544,17 @@ namespace RNAssistant.Office
                         if (executionMode != ChatModes.Chat) _toolCatalog.InvalidateDocumentVbaTools();
                     }
                 }
-                catch (Exception ex) when (!(ex is RunStoreException))
+                catch (RunStoreException)
+                {
+                    if (causalTrace != null)
+                    {
+                        causalTrace.Dispose();
+                        causalTrace = null;
+                    }
+                    RecoverAfterRunStoreFailure(runLease, session, sessionId);
+                    throw;
+                }
+                catch (Exception ex)
                 {
                     PersistTokenEstimateCalibration(settings);
                     CloseRunningActivities(session, firstRunMessageIndex, ex is OperationCanceledException);

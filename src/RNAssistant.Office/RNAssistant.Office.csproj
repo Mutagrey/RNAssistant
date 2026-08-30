@@ -70,6 +70,7 @@
     <Compile Include="Controller\AssistantController.Compatibility.cs" />
     <Compile Include="Controller\AssistantController.Agent.cs" />
     <Compile Include="Controller\AssistantController.ChatExecution.cs" />
+    <Compile Include="Controller\AssistantController.RunStoreRecovery.cs" />
     <Compile Include="Controller\AssistantController.Chats.cs" />
     <Compile Include="Controller\AssistantController.Context.cs" />
     <Compile Include="Controller\AssistantController.ContextInspector.cs" />

@@ -54,50 +54,67 @@ namespace RNAssistant.Office.Services
                 {
                     continue;
                 }
-                if (RunOwnershipProvider != null)
-                {
-                    if (RunOwnershipProvider(header.Id)) continue;
-                }
-                else if (string.Equals(header.RunRuntimeId, runtimeId, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
                 var session = _chatStore.Load(header.Host, header.DocumentKey, header.Id);
-                var run = session == null ? null : session.LastRun;
-                if (run == null || !IsUnfinishedRun(run.Status))
+                ReconcileInterruptedRun(session, runtimeId, true);
+            }
+        }
+
+        internal ChatSession ReloadAndReconcileInterruptedRun(
+            string host,
+            string documentKey,
+            string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId))
+                throw new ArgumentException("Session id is required.", nameof(sessionId));
+            var session = _chatStore.Load(host, documentKey, sessionId) ?? _chatStore.Load(sessionId);
+            return ReconcileInterruptedRun(session, null, false, true);
+        }
+
+        private ChatSession ReconcileInterruptedRun(
+            ChatSession session,
+            string runtimeId,
+            bool skipSameRuntimeWithoutOwnershipProvider,
+            bool refreshActiveProjection = false)
+        {
+            if (session == null) return null;
+            var run = session.LastRun;
+            if ((run == null || !IsUnfinishedRun(run.Status)) && !refreshActiveProjection) return session;
+            if (RunOwnershipProvider != null)
+            {
+                if (RunOwnershipProvider(session.Id)) return session;
+            }
+            else if (run != null && IsUnfinishedRun(run.Status) &&
+                skipSameRuntimeWithoutOwnershipProvider &&
+                string.Equals(run.RuntimeId, runtimeId, StringComparison.Ordinal))
+            {
+                return session;
+            }
+
+            IDisposable recoveryLease = null;
+            try
+            {
+                if (RunRecoveryLeaseProvider != null)
                 {
-                    continue;
+                    try
+                    {
+                        recoveryLease = RunRecoveryLeaseProvider(session);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        return ReloadCanonical(session);
+                    }
+                    if (recoveryLease == null) return ReloadCanonical(session);
+                }
+                else if (RunOwnershipProvider != null && RunOwnershipProvider(session.Id))
+                {
+                    return session;
                 }
 
-                IDisposable recoveryLease = null;
-                try
+                // Ownership may have changed between the initial load and lease acquisition.
+                session = ReloadCanonical(session);
+                run = session == null ? null : session.LastRun;
+                if (run != null && IsUnfinishedRun(run.Status))
                 {
-                    if (RunRecoveryLeaseProvider != null)
-                    {
-                        try
-                        {
-                            recoveryLease = RunRecoveryLeaseProvider(session);
-                        }
-                        catch (InvalidOperationException)
-                        {
-                            continue;
-                        }
-                        if (recoveryLease == null) continue;
-                    }
-                    else if (RunOwnershipProvider != null && RunOwnershipProvider(header.Id))
-                    {
-                        continue;
-                    }
-
-                    // Ownership may have changed between the initial scan and lease acquisition.
-                    session = _chatStore.Load(header.Host, header.DocumentKey, header.Id);
-                    run = session == null ? null : session.LastRun;
-                    if (run == null || !IsUnfinishedRun(run.Status))
-                    {
-                        continue;
-                    }
-
                     var effectMayBeUnknown = run.KernelState == null
                         ? _chatStore.HasOpenToolExecution(session, run.RunId)
                         : run.KernelState.InFlightTool != null;
@@ -151,14 +168,27 @@ namespace RNAssistant.Office.Services
                     }
                     catch (ChatConcurrencyException)
                     {
-                        // Another writer updated this chat before recovery acquired canonical state.
+                        // Another writer updated this chat. Do not retry this append;
+                        // use its latest canonical projection instead.
+                        session = ReloadCanonical(session);
                     }
                 }
-                finally
-                {
-                    if (recoveryLease != null) recoveryLease.Dispose();
-                }
+                // Keep cache replacement inside the recovery lease so a new run
+                // cannot race a stale or unpersisted projection into active state.
+                if (refreshActiveProjection && session != null) NotifySaved(session);
+                return session;
             }
+            finally
+            {
+                if (recoveryLease != null) recoveryLease.Dispose();
+            }
+        }
+
+        private ChatSession ReloadCanonical(ChatSession session)
+        {
+            if (session == null) return null;
+            return _chatStore.Load(session.Host, session.DocumentKey, session.Id) ??
+                _chatStore.Load(session.Id);
         }
 
         private static void MarkInterruptedActivities(ChatSession session, ChatRunRecord run, bool effectMayBeUnknown)

@@ -77,7 +77,14 @@ uses the current session revision for global CAS. Own causal-trace appends may
 advance that revision without invalidating the kernel cursor. A stale reloaded
 confirmation fails its first save before execution. Mandatory save failure escapes
 as `RunStoreException` with explicitly unpersisted evidence; controller error
-handling must not retry saving that in-memory projection. Reload first.
+handling never retries or saves that in-memory projection. Agent start and
+confirmation release their run ownership, reload the exact persisted session and
+invoke the same single-chat reconciliation used by startup recovery. A durable
+pending confirmation remains pending when its claim failed before dispatch; an open
+possible write becomes unknown. Active cache replacement uses the canonical
+projection while the recovery lease is still held. Recovery append conflict is not
+retried, and failure of immediate recovery preserves the original exception for the
+caller while startup recovery remains the fallback.
 
 Recovery never replays a tool. An in-flight possible write becomes unknown; an
 in-flight read becomes an error. Already persisted terminal counts remain known,

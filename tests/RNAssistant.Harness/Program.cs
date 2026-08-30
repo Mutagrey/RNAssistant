@@ -160,6 +160,8 @@ namespace RNAssistant.Harness
                 Test("kernel replay: known unprojected effect survives recovery", KernelRecoveryPreservesKnownUnprojectedEffect),
                 Test("kernel replay: failed append prevents dispatch", () => KernelStoreFailureStopsAndRecovers(false)),
                 Test("kernel replay: interrupted write remains unknown", () => KernelStoreFailureStopsAndRecovers(true)),
+                Test("kernel recovery: failed confirmation reloads pending", () => KernelConfirmationStoreFailureStopsAndRecovers(false)),
+                Test("kernel recovery: interrupted confirmed write becomes unknown", () => KernelConfirmationStoreFailureStopsAndRecovers(true)),
                 Test("protocol context: immutable complete snapshots", ProtocolContextSnapshotsAreIndependent),
                 Test("protocol context: reconstructs full accepted turn", ProtocolContextSeedsFullAcceptedTurn),
                 Test("protocol context: incomplete confirmation fails closed", ProtocolContextRejectsIncompleteContinuation),
