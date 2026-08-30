@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "WQ-A2.shell",
+      "owner": "Qualification.Application.UI",
+      "hosts": ["*"],
+      "suites": ["quick"],
+      "mandatory": true
+    }
+  ]
+}

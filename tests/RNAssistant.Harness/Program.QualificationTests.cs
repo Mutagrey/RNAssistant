@@ -4,11 +4,15 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Qualification;
+using RNAssistant.Office.Services;
+using RNAssistant.Office.WebView;
+using RNAssistant.Office;
 
 namespace RNAssistant.Harness
 {
@@ -50,6 +54,9 @@ namespace RNAssistant.Harness
                 new[] { "fake.capability" }));
             RuntimeThrows<ArgumentException>(() => catalog.MissingCoverage("Excel", "unknown"));
             RuntimeThrows<QualificationManifestException>(() => QualificationManifestParser.ParseRunStatus("5"));
+            AssertEqual("awaiting_user", QualificationManifestParser.RunStatusName(QualificationRunStatus.AwaitingUser),
+                "run status wire uses the canonical underscore form");
+            RuntimeThrows<QualificationManifestException>(() => QualificationManifestParser.ParseRunStatus("awaitinguser"));
             RuntimeThrows<QualificationManifestException>(() => new QualificationPackCatalog(registry,
                 new[] { pack, pack }));
             var unknown = parser.Parse(QualificationPackJson(DefaultQualificationSteps(), "\"UNKNOWN\""));
@@ -326,6 +333,116 @@ namespace RNAssistant.Harness
                 "bridge bounds large inline evidence");
             AssertEqual(run.Steps[1].CompletedEventId, dto.Steps[1].CompletedEventId,
                 "bridge preserves causal event identity");
+            AssertTrue(dto.ReportTruncated, "bounded bridge report declares evidence truncation");
+
+            var manyAssertions = "[" +
+                "{\"id\":\"probe\",\"kind\":\"hostProbe\",\"action\":\"fake.capture\"}," +
+                string.Join(",", Enumerable.Range(1, 5).Select(index =>
+                    "{\"id\":\"verify" + index + "\",\"kind\":\"assertion\",\"assertion\":\"fake.same\",\"dependsOn\":[\"probe\"]}")) +
+                "]";
+            var aggregatePack = ParseQualificationPack(manyAssertions);
+            var aggregateRunner = new QualificationRunner(new FakeQualificationActions(), verifier,
+                new MemoryQualificationJournal());
+            var aggregateRun = aggregateRunner.Start(aggregatePack, QualificationContext());
+            await aggregateRunner.AdvanceAsync(aggregateRun, null, CancellationToken.None);
+            var aggregate = QualificationRunDto.From(aggregateRun);
+            var evidenceChars = aggregate.Steps.Sum(step =>
+                (step.ExpectedJson == null ? 0 : step.ExpectedJson.Length) +
+                (step.ActualJson == null ? 0 : step.ActualJson.Length));
+            AssertTrue(evidenceChars <= 262144 && aggregate.ReportTruncated,
+                "bridge enforces one aggregate report evidence budget");
+
+            var emptyEvidence = new QualificationStepSnapshot(ParseQualificationPack().Steps[0])
+            {
+                ExpectedJson = string.Empty,
+                ActualJson = string.Empty
+            };
+            var emptyEvidenceDto = QualificationStepResultDto.From(emptyEvidence);
+            AssertEqual(string.Empty, emptyEvidenceDto.ExpectedJson,
+                "bridge preserves an empty expected value without a false truncation marker");
+            AssertTrue(!emptyEvidenceDto.ExpectedTruncated && !emptyEvidenceDto.ActualTruncated,
+                "empty bridge evidence is not reported as truncated");
+        }
+
+        private static void QualificationBuiltInShellPersistsAndResumes()
+        {
+            var catalog = QualificationBuiltInCatalog.Load();
+            var packs = catalog.List("Excel", "quick", new[] { QualificationApplicationService.ShellCapability });
+            AssertEqual(1, packs.Count, "one WQ-A2 shell pack is embedded");
+            AssertEqual("common.ui-shell", packs[0].Pack.Id, "embedded shell pack id");
+            AssertTrue(packs[0].Available, "shell capability admits the embedded pack");
+            AssertEqual(0, catalog.MissingCoverage("Excel", "quick").Count,
+                "embedded shell pack covers mandatory WQ-A2 shell coverage");
+
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "qualification-shell", "Qualification.xlsx",
+                    "Qualification shell");
+                var service = new QualificationApplicationService(EventStore(store));
+                AssertTrue(!service.IsQualificationChat(session), "ordinary chat has no qualification marker");
+                var run = service.StartAsync(session, "common.ui-shell", null, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(QualificationRunStatus.AwaitingUser, run.Status,
+                    "embedded shell pauses at the explicit user checkpoint");
+                AssertTrue(service.HasOpenRun(session), "open shell run is discovered from durable events");
+
+                var reloaded = store.Load(session.Id);
+                var restarted = new QualificationApplicationService(EventStore(store));
+                var restored = restarted.GetLatest(reloaded);
+                AssertEqual(run.RunId, restored.RunId, "restart discovers the latest run without a second index");
+                AssertEqual(QualificationRunStatus.AwaitingUser, restored.Status,
+                    "restart restores the safe manual boundary");
+                var completed = restarted.AdvanceAsync(reloaded, restored.RunId,
+                    new QualificationManualInput
+                    {
+                        StepId = "acknowledge",
+                        Acknowledged = true
+                    }, false, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(QualificationRunStatus.Passed, completed.Status,
+                    "typed verifier passes only after reading persisted preflight and manual evidence");
+                AssertTrue(completed.HasDurableTerminal && !restarted.HasOpenRun(reloaded),
+                    "terminal state is durable and no longer resumable");
+                AssertEqual("unavailable", completed.Context.BuildCommit,
+                    "shell report does not fabricate unavailable build provenance");
+
+                var finalReload = store.Load(session.Id);
+                var replayed = new QualificationApplicationService(EventStore(store)).GetLatest(finalReload);
+                AssertEqual(QualificationRunStatus.Passed, replayed.Status,
+                    "terminal shell result replays after service restart");
+                AssertEqual(10, new QualificationEventJournal(EventStore(store), finalReload)
+                    .Read(replayed.RunId).Count, "shell run owns exact start/step/terminal boundaries");
+            });
+        }
+
+        private static void QualificationUiBridgeRoutesTypedPayloads()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var catalogJson = bridge.HandleMessageAsync(
+                "{\"id\":\"q1\",\"type\":\"getQualificationCatalog\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-q\",\"suite\":\"quick\"}}")
+                .GetAwaiter().GetResult();
+            AssertTrue(JObject.Parse(catalogJson)["ok"].Value<bool>(), "qualification catalog bridge response ok");
+            AssertEqual("quick", controller.LastQualificationSuite, "qualification suite remains typed");
+
+            var startJson = bridge.HandleMessageAsync(
+                "{\"id\":\"q2\",\"type\":\"startQualification\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-q\",\"packId\":\"common.ui-shell\"}}")
+                .GetAwaiter().GetResult();
+            AssertTrue(JObject.Parse(startJson)["ok"].Value<bool>(), "qualification start bridge response ok");
+            AssertEqual("common.ui-shell", controller.LastQualificationPackId, "qualification pack id remains typed");
+
+            var advanceJson = bridge.HandleMessageAsync(
+                "{\"id\":\"q3\",\"type\":\"advanceQualification\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"qualification-chat\",\"runId\":\"qualification-run\"," +
+                "\"stepId\":\"acknowledge\",\"acknowledged\":true,\"cancel\":false}}")
+                .GetAwaiter().GetResult();
+            AssertTrue(JObject.Parse(advanceJson)["ok"].Value<bool>(), "qualification advance bridge response ok");
+            AssertEqual("acknowledge", controller.LastQualificationStepId, "manual step id remains typed");
+            AssertTrue(controller.LastQualificationAcknowledged && !controller.LastQualificationCancel,
+                "manual acknowledgement and cancel flags are not inferred");
         }
 
         private static QualificationPack ParseQualificationPack(string steps = null)

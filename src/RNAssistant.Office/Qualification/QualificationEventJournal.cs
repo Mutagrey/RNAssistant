@@ -187,6 +187,32 @@ namespace RNAssistant.Office.Qualification
             return Array.AsReadOnly(result.ToArray());
         }
 
+        public string FindLatestRunId()
+        {
+            var item = _events.Read(_session, SessionEventReadMode.RequireComplete)
+                .Where(value => value != null &&
+                    string.Equals(value.Type, SessionEventTypes.QualificationRunStarted, StringComparison.Ordinal))
+                .OrderByDescending(value => value.Sequence)
+                .FirstOrDefault();
+            if (item == null) return null;
+            var root = item.Data as JObject;
+            if (root == null)
+                throw new InvalidOperationException("A durable qualification start event has no object data.");
+            QualificationJson.EnsureOnly(root, EventFields, "Qualification event");
+            QualificationRunEventData data;
+            try { data = root.ToObject<QualificationRunEventData>(); }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException("A durable qualification start event is malformed.", ex);
+            }
+            if (!string.Equals(item.RunId, data.RunId, StringComparison.Ordinal) ||
+                !string.Equals(item.TurnId, data.RunId, StringComparison.Ordinal) ||
+                item.StepId != null || data.StepId != null)
+                throw new InvalidOperationException("Qualification start event correlation does not match its data.");
+            Validate(QualificationRunEventKind.RunStarted, data);
+            return data.RunId;
+        }
+
         private static void Validate(QualificationRunEventKind kind, QualificationRunEventData data)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));

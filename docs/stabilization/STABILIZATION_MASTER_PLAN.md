@@ -2206,6 +2206,10 @@ policy/effect semantics. Текущий PowerShell WQ0 остаётся engineer
      [Evidence](WQ_A1_QUALIFICATION_CORE.md).
 3. **WQ-A2 UI:** отдельная empty-chat card и Diagnostics entry, pack list/stepper,
    resume, run-journal/JSON navigation и bounded report; prompt suggestions не являются packs.
+   - [x] Typed application/controller/bridge composition, dedicated qualification
+     chat, durable resume, UI shell и exact allowlisted read-only `common.ui-shell`
+     реализованы host-neutral; Office/model/full-suite claims не делаются.
+     [Evidence](WQ_A2_QUALIFICATION_CENTER.md).
 4. **WQ-A3 Excel WQ0:** один identity collector owner, VSTO/native observations и
    narrow same-build x64 helper для независимых client leases; реальная Windows проверка.
 5. **WQ-A4 suites:** common/provider/storage/UI и по одному host pack, versioned

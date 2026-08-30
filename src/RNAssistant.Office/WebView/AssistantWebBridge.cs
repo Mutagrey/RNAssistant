@@ -83,6 +83,35 @@ namespace RNAssistant.Office.WebView
                         var chatEventPayload = Payload<ChatEventPayloadRequest>(payload);
                         responsePayload = _controller.GetChatEventPayload(chatEventPayload.ChatId, chatEventPayload.EventId);
                         break;
+                    case "getQualificationCatalog":
+                        var qualificationCatalog = Payload<QualificationCatalogPayload>(payload);
+                        responsePayload = _controller.GetQualificationCatalog(
+                            qualificationCatalog.ChatId, qualificationCatalog.Suite);
+                        break;
+                    case "getQualificationRun":
+                        var qualificationRun = Payload<QualificationRunPayload>(payload);
+                        responsePayload = _controller.GetQualificationRun(
+                            qualificationRun.ChatId, qualificationRun.RunId);
+                        break;
+                    case "startQualification":
+                        var qualificationStart = Payload<QualificationStartPayload>(payload);
+                        responsePayload = await _controller.StartQualificationAsync(
+                            qualificationStart.ChatId,
+                            qualificationStart.PackId,
+                            qualificationStart.PreviousRunId,
+                            cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "advanceQualification":
+                        var qualificationAdvance = Payload<QualificationAdvancePayload>(payload);
+                        responsePayload = await _controller.AdvanceQualificationAsync(
+                            qualificationAdvance.ChatId,
+                            qualificationAdvance.RunId,
+                            qualificationAdvance.StepId,
+                            qualificationAdvance.Acknowledged,
+                            qualificationAdvance.Cancel,
+                            qualificationAdvance.Note,
+                            cancellationToken).ConfigureAwait(false);
+                        break;
                     case "createChat":
                         var createChat = Payload<CreateChatPayload>(payload);
                         responsePayload = _controller.CreateChat(createChat.Title);

@@ -11,6 +11,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
+using RNAssistant.Office.Qualification;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -38,6 +39,7 @@ namespace RNAssistant.Office
         private readonly ToolCatalogService _toolCatalog;
         private readonly SkillCatalogService _skillCatalog;
         private readonly ChatSessionService _chatSessions;
+        private readonly QualificationApplicationService _qualification;
         private readonly ChatHistoryEditService _chatHistoryEditService;
         private readonly ConversationRunService _conversationRunService;
         private readonly ContextCompactionService _contextCompactionService;
@@ -104,6 +106,7 @@ namespace RNAssistant.Office
                 () => _settingsService.LoadStorageProtector(),
                 _trajectoryQuery);
             _chatSessions = new ChatSessionService(_adapter, _conversationStore, _vbaJournalStore);
+            _qualification = new QualificationApplicationService(_eventStore);
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;
             _chatSessions.RunSessionsProvider = _chatRuns.Sessions;

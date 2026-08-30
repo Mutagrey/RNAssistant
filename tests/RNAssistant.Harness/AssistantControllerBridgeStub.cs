@@ -53,6 +53,12 @@ namespace RNAssistant.Office
         public IReadOnlyList<string> LastTrajectoryEventTypes { get; private set; }
         public string LastTrajectoryExportRedaction { get; private set; }
         public bool LastTrajectoryExportCas { get; private set; }
+        public string LastQualificationPackId { get; private set; }
+        public string LastQualificationRunId { get; private set; }
+        public string LastQualificationStepId { get; private set; }
+        public string LastQualificationSuite { get; private set; }
+        public bool LastQualificationAcknowledged { get; private set; }
+        public bool LastQualificationCancel { get; private set; }
 
         public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
         public ChatStateResponse ListChats() { return ChatState(); }
@@ -92,6 +98,46 @@ namespace RNAssistant.Office
         public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
         {
             return new ChatEventPayloadResponse { ChatId = chatId, EventId = eventId, Text = "{}", ContentType = "application/json" };
+        }
+        public QualificationCatalogResponse GetQualificationCatalog(string chatId, string suite)
+        {
+            LastChatId = chatId;
+            LastQualificationSuite = suite;
+            return new QualificationCatalogResponse
+            {
+                SchemaVersion = 1,
+                Host = "Excel",
+                Suite = suite,
+                Packs = new QualificationPackDto[0],
+                MissingCoverage = new string[0]
+            };
+        }
+        public QualificationSessionResponse GetQualificationRun(string chatId, string runId)
+        {
+            LastChatId = chatId;
+            LastQualificationRunId = runId;
+            return QualificationState(chatId, runId);
+        }
+        public Task<QualificationSessionResponse> StartQualificationAsync(
+            string chatId, string packId, string previousRunId, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastChatId = chatId;
+            LastQualificationPackId = packId;
+            LastQualificationRunId = previousRunId;
+            return Task.FromResult(QualificationState("qualification-chat", "qualification-run"));
+        }
+        public Task<QualificationSessionResponse> AdvanceQualificationAsync(
+            string chatId, string runId, string stepId, bool acknowledged, bool cancel, string note,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastChatId = chatId;
+            LastQualificationRunId = runId;
+            LastQualificationStepId = stepId;
+            LastQualificationAcknowledged = acknowledged;
+            LastQualificationCancel = cancel;
+            return Task.FromResult(QualificationState(chatId, runId));
         }
         public ChatStateResponse CreateChat(string title) { return ChatState(title); }
         public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
@@ -481,6 +527,24 @@ namespace RNAssistant.Office
                 Chats = new ChatSessionSummary[0],
                 Context = new DocumentContext(),
                 Messages = new ChatMessage[0]
+            };
+        }
+
+        private static QualificationSessionResponse QualificationState(string chatId, string runId)
+        {
+            return new QualificationSessionResponse
+            {
+                SchemaVersion = 1,
+                Chat = ChatState(null, chatId),
+                Run = string.IsNullOrWhiteSpace(runId) ? null : new QualificationRunDto
+                {
+                    RunId = runId,
+                    PackId = "common.ui-shell",
+                    Status = "awaiting_user",
+                    CurrentStepId = "acknowledge",
+                    CanResume = true,
+                    Steps = new QualificationStepResultDto[0]
+                }
             };
         }
     }

@@ -307,6 +307,7 @@ namespace RNAssistant.Office
             try
             {
                 session = ReloadReservedSession(session);
+                EnsureNotQualificationChat(session);
                 settings = ResolveChatSettings(session, settings);
                 settings.EnsureAgentPromptsReviewed();
                 ConversationProtocolContext.EnsureCurrentHistory(session);

@@ -1,7 +1,8 @@
 # Qualification Center и расширяемые test packs
 
-Статус: WQ-A1 core реализован host-neutral; UI, production adapters, built-in packs и
-Windows/Office qualification остаются WQ-A2–A5.
+Статус: WQ-A2 UI shell реализован host-neutral; production agent/host adapters,
+Excel WQ0, full suites, immutable build evidence и Windows/Office qualification
+остаются WQ-A3–A5.
 
 ## 1. Назначение
 
@@ -38,6 +39,13 @@ Harness проверяет pure/host-neutral contracts до сборки кан�
 6. связанный causal run journal и общий JSON viewer;
 7. экспорт bounded redacted report.
 
+WQ-A2 поставляет только встроенный read-only quick pack
+`common.ui-shell`. Он проверяет UI/bridge/runner/event round-trip с явным
+manual checkpoint и typed verifier, но не квалифицирует Office, COM,
+live provider, model loop и document tools. Full/release suites и host packs появятся
+только в WQ-A3/A4. Exact immutable build commit остаётся `unavailable` до
+BuildEvidenceManifest в WQ-A5; UI не фабрикует его из working tree.
+
 Wizard может просить переключить книгу, выполнить Save As, закрыть/открыть документ,
 подтвердить tool call, перезапустить add-in или визуально проверить layout. Команды,
 helper processes и correlation выполняются приложением; пользователь работает только
@@ -46,12 +54,12 @@ helper processes и correlation выполняются приложением; �
 ## 3. Архитектурная граница
 
 ```text
-Qualification UI -> typed bridge -> QualificationRunner
-                                      |-> PackCatalog + CoverageRegistry
-                                      |-> normal ConversationRunService / AgentKernel
-                                      |-> allowlisted HostProbe / FaultHook / Verifier
-                                      |-> IEventStore + existing chat JSONL/CAS
-                                      `-> ITrajectoryQuery / report export
+Qualification UI -> typed bridge -> QualificationApplicationService -> QualificationRunner
+                                                                      |-> PackCatalog + CoverageRegistry
+                                                                      |-> normal ConversationRunService / AgentKernel
+                                                                      |-> allowlisted HostProbe / FaultHook / Verifier
+                                                                      |-> IEventStore + existing chat JSONL/CAS
+                                                                      `-> ITrajectoryQuery / report export
 
 Build pipeline -> immutable BuildEvidenceManifest -> Qualification UI
 ```
@@ -60,7 +68,11 @@ Build pipeline -> immutable BuildEvidenceManifest -> Qualification UI
   tool dispatch, confirmation, document locking, storage или effect classification.
 - WQ-A1 размещает strict manifest/catalog/coverage и конечный runner в
   `RNAssistant.Office/Qualification`. Runner принимает только narrow allowlisted
-  action/verifier ports; production adapter к conversation/host runtime ещё не подключён.
+  action/verifier ports.
+- WQ-A2 добавляет `QualificationApplicationService`, typed controller/bridge routes,
+  встроенный exact allowlisted shell pack и один UI. Application service каждый
+  раз восстанавливает run из validated chat events; production adapter к
+  conversation/host runtime и host probes ещё не подключены.
 - `agentTask` всегда проходит через обычные `ConversationRunService`, `AgentKernel`,
   `ToolRuntime`, `HostRuntime` и production domain handlers. Test mode не расширяет
   callable tools и не отключает confirmation/policy.
@@ -164,6 +176,13 @@ mutable result file, durable dashboard index и dual-write запрещены. �
 остаётся UI projection; экспорт — одноразовый bounded bundle через существующие
 trajectory/report primitives.
 
+WQ-A2 создаёт отдельный qualification chat в том же document session.
+Обычный `sendChat`/edit turn в нём запрещён; после restart latest run
+находится по durable `qualification.run.started`, без второго index. Bridge
+ограничивает expected/actual до 64 Ki characters на field и 256 Ki characters
+на весь report preview, с явным `reportTruncated`; полное evidence остаётся
+в event stream/CAS.
+
 Terminal assertion содержит:
 
 - build commit/version/channel и pack revision/hash;
@@ -263,8 +282,10 @@ Coverage registry связывает каждый mandatory invariant/risk/capab
 2. **WQ-A1 — host-neutral core — done:** strict manifest parser, catalog, coverage
    registry, runner state machine, typed bridge DTO, closed events и fake
    probes/verifiers; без Office/UI switch. [Evidence](stabilization/WQ_A1_QUALIFICATION_CORE.md).
-3. **WQ-A2 — UI shell:** карточка нового чата, Qualification Center, stepper, journal/
-   JSON navigation, resume и report projection; fake pack tests.
+3. **WQ-A2 — UI shell — done host-neutral:** карточка нового чата,
+   Diagnostics entry, Qualification Center, stepper, durable resume, exact journal/
+   shared JSON navigation и bounded report над read-only `common.ui-shell`.
+   [Evidence](stabilization/WQ_A2_QUALIFICATION_CENTER.md).
 4. **WQ-A3 — Excel WQ0:** единый identity owner, in-process observation и narrow x64
    helper; удалить duplicate diagnostic decoder после switch; Windows qualification.
 5. **WQ-A4 — suites:** common/provider/storage/UI, затем один host pack за раз;

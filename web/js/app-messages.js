@@ -115,6 +115,8 @@ function promptSuggestionButton(text) {
 }
 
 function renderChatEmptyState() {
+  var qualificationRun = typeof window.activeQualificationRun === "function"
+    ? window.activeQualificationRun() : null;
   var empty = document.createElement("div");
   empty.className = "chat-empty";
 
@@ -125,26 +127,41 @@ function renderChatEmptyState() {
 
   var title = document.createElement("div");
   title.className = "chat-empty-title";
-  title.textContent = state.bridgeUnavailable ? "Откройте панель из Office" : "Готов к работе с документом";
+  title.textContent = state.bridgeUnavailable ? "Откройте панель из Office" :
+    (qualificationRun ? "Qualification run · " + String(qualificationRun.status || qualificationRun.Status || "") :
+      "Готов к работе с документом");
   empty.appendChild(title);
 
   var text = document.createElement("div");
   text.className = "chat-empty-text";
   text.textContent = state.bridgeUnavailable
     ? "Статический UI загружен, но WebView bridge RNAssistant недоступен. Чаты, контекст и инструменты заработают внутри add-in."
-    : "Выберите контекст или задайте вопрос по текущему Office-файлу.";
+    : (qualificationRun
+      ? "Этот чат хранит только qualification events. Продолжите или изучите evidence во встроенном центре проверок."
+      : "Выберите контекст или задайте вопрос по текущему Office-файлу.");
   empty.appendChild(text);
 
   if (state.bridgeUnavailable) {
     return empty;
   }
 
-  var suggestions = document.createElement("div");
-  suggestions.className = "chat-empty-suggestions";
-  suggestions.appendChild(promptSuggestionButton("Суммируй текущий документ"));
-  suggestions.appendChild(promptSuggestionButton("Найди риски и слабые места"));
-  suggestions.appendChild(promptSuggestionButton("Подготовь план правок"));
-  empty.appendChild(suggestions);
+  if (!qualificationRun) {
+    var suggestions = document.createElement("div");
+    suggestions.className = "chat-empty-suggestions";
+    suggestions.appendChild(promptSuggestionButton("Суммируй текущий документ"));
+    suggestions.appendChild(promptSuggestionButton("Найди риски и слабые места"));
+    suggestions.appendChild(promptSuggestionButton("Подготовь план правок"));
+    empty.appendChild(suggestions);
+  }
+
+  var qualification = document.createElement("button");
+  qualification.type = "button";
+  qualification.className = "chat-empty-qualification";
+  qualification.textContent = qualificationRun ? "Продолжить проверку" : "Проверить RNAssistant";
+  qualification.addEventListener("click", function () {
+    if (typeof window.openQualificationCenter === "function") window.openQualificationCenter();
+  });
+  empty.appendChild(qualification);
 
   return empty;
 }

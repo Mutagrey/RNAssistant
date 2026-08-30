@@ -410,7 +410,18 @@ namespace RNAssistant.Office.Qualification
 
         internal static string RunStatusName(QualificationRunStatus status)
         {
-            return status.ToString().ToLowerInvariant();
+            switch (status)
+            {
+                case QualificationRunStatus.Ready: return "ready";
+                case QualificationRunStatus.Running: return "running";
+                case QualificationRunStatus.AwaitingUser: return "awaiting_user";
+                case QualificationRunStatus.Verifying: return "verifying";
+                case QualificationRunStatus.Passed: return "passed";
+                case QualificationRunStatus.Failed: return "failed";
+                case QualificationRunStatus.Blocked: return "blocked";
+                case QualificationRunStatus.Cancelled: return "cancelled";
+                default: throw new ArgumentOutOfRangeException(nameof(status));
+            }
         }
 
         internal static QualificationRunStatus ParseRunStatus(string value)

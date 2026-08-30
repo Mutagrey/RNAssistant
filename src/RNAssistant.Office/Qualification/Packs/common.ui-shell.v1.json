@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "common.ui-shell",
+  "revision": "1",
+  "title": "Qualification Center shell",
+  "description": "Проверяет встроенный экран, finite runner, обязательные события, ручной checkpoint и typed verifier. Office, модель и document tools этот пакет не проверяет.",
+  "hosts": ["*"],
+  "suite": "quick",
+  "workspacePolicy": "read-only",
+  "requirements": ["qualification.shell.v1"],
+  "coverage": ["WQ-A2.shell"],
+  "steps": [
+    {
+      "id": "preflight",
+      "kind": "precondition",
+      "title": "Проверить встроенный runtime",
+      "action": "qualification.shell.preflight",
+      "timeoutSeconds": 10
+    },
+    {
+      "id": "acknowledge",
+      "kind": "userAction",
+      "title": "Подтвердить ручной checkpoint",
+      "instructionKey": "qualification.shell.acknowledge",
+      "dependsOn": ["preflight"],
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить durable evidence",
+      "assertion": "qualification.shell.roundtrip",
+      "dependsOn": ["acknowledge"],
+      "timeoutSeconds": 10
+    },
+    {
+      "id": "cleanup",
+      "kind": "cleanup",
+      "title": "Закрыть shell-проверку",
+      "action": "qualification.shell.cleanup",
+      "dependsOn": ["verify"],
+      "timeoutSeconds": 10
+    }
+  ]
+}

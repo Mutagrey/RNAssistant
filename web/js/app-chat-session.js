@@ -314,6 +314,9 @@ function applyInitState(init) {
   renderContext(true);
   renderChatSessions();
   renderMessages();
+  if (typeof refreshActiveQualificationState === "function") {
+    refreshActiveQualificationState();
+  }
   renderContextMeter();
   if (typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();

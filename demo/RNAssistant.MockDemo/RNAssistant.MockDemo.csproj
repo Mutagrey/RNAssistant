@@ -107,6 +107,14 @@
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="Testing\FakeOfficeAdapter.ExcelWrite.cs" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\coverage.v1.json"
+                      Link="Office\Qualification\Packs\coverage.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.coverage.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\common.ui-shell.v1.json"
+                      Link="Office\Qualification\Packs\common.ui-shell.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.common.ui-shell.v1.json" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="..\..\vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll"
           Link="pdfium.dll"
           CopyToOutputDirectory="PreserveNewest" />

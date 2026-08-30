@@ -38,7 +38,7 @@ automation first needs an ADR for workspace-owned sessions and a signed isolated
 worker. Office processes never become general shell workers. See
 [Local Automation Agent](local-automation-agent.md).
 
-## Qualification boundary (WQ-A1 core)
+## Qualification boundary (WQ-A2 UI shell)
 
 The planned Qualification Center is an application orchestrator over declarative,
 versioned host packs. Agent tasks use the normal conversation/kernel/tool/domain
@@ -56,9 +56,13 @@ closed mandatory qualification events over `IEventStore`, CAS-backed large evide
 and bounded typed bridge DTOs. Automatic pass requires a required assertion with
 typed expected/actual evidence. A durable start barrier precedes every automatic
 step; an open possible effect after replay is blocked and never redispatched. The
-application/controller composition, empty-chat UI, normal conversation adapter and
-host-specific probes remain WQ-A2/A3, so no Qualification Center is reachable in the
-shipped UI yet.
+WQ-A2 application service, controller routes and WebView shell expose one embedded
+read-only `common.ui-shell` pack from both empty chat and Diagnostics. Each run owns a
+dedicated document chat, replays from the same validated event stream after restart,
+rejects ordinary conversation turns and navigates to the existing exact run journal
+and shared JSON viewer. UI status cannot override the typed runner result. The shell
+does not exercise Office, COM, the model loop or document tools; production
+conversation/host adapters and host-specific probes remain WQ-A3/A4.
 
 ## Chat, Plan, and Agent
 

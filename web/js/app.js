@@ -55,6 +55,7 @@ document.addEventListener("DOMContentLoaded", function () {
   bindLogActions();
   bindDiagnosticsActions();
   bindTrajectoryActions();
+  bindQualificationActions();
   bindToolActions();
   bindSkillActions();
   if (typeof initializeSplitPanes === "function") {

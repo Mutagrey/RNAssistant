@@ -108,4 +108,12 @@
     <Compile Include="..\..\src\RNAssistant.Desktop\OfficeTargetRegistry.cs" Link="Desktop\OfficeTargetRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Targets\OfficeTargetDescriptor.cs" Link="OfficeHosts\Targets\OfficeTargetDescriptor.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\coverage.v1.json"
+                      Link="Office\Qualification\Packs\coverage.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.coverage.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\common.ui-shell.v1.json"
+                      Link="Office\Qualification\Packs\common.ui-shell.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.common.ui-shell.v1.json" />
+  </ItemGroup>
 </Project>

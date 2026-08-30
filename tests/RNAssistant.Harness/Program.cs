@@ -61,6 +61,8 @@ namespace RNAssistant.Harness
                 Test("qualification: durable replay resumes only safe boundary", QualificationRunnerRestoresOnlySafeBoundary),
                 Test("qualification: event stream and CAS evidence", QualificationEventsUseCanonicalStreamAndCas),
                 Test("qualification: typed bridge projection is bounded", QualificationBridgeProjectionIsBounded),
+                Test("qualification: built-in shell persists and resumes", QualificationBuiltInShellPersistsAndResumes),
+                Test("qualification: typed UI bridge routes", QualificationUiBridgeRoutesTypedPayloads),
                 Test("conversation: extracts streamed message JSON", ConversationStreamExtractorHandlesChunkedJson),
                 Test("conversation: streams message and thinking", ConversationStreamsMessageAndThinking),
                 Test("conversation: streams provider reasoning", ConversationStreamsProviderReasoning),

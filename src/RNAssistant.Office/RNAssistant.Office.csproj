@@ -79,11 +79,13 @@
     <Compile Include="Controller\AssistantController.HtmlWorkspace.cs" />
     <Compile Include="Controller\AssistantController.Lifecycle.cs" />
     <Compile Include="Controller\AssistantController.QuickActions.cs" />
+    <Compile Include="Controller\AssistantController.Qualification.cs" />
     <Compile Include="Controller\AssistantController.Settings.cs" />
     <Compile Include="Controller\AssistantController.Tools.cs" />
     <Compile Include="Controller\AssistantController.Vba.cs" />
     <Compile Include="Diagnostics\RuntimeLog.cs" />
     <Compile Include="Qualification\QualificationCatalog.cs" />
+    <Compile Include="Qualification\QualificationBuiltInCatalog.cs" />
     <Compile Include="Qualification\QualificationContracts.cs" />
     <Compile Include="Qualification\QualificationEventJournal.cs" />
     <Compile Include="Qualification\QualificationManifest.cs" />
@@ -195,6 +197,7 @@
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\ChatRunRegistry.cs" />
+    <Compile Include="Services\QualificationApplicationService.cs" />
     <Compile Include="Services\ModelTracePersistenceService.cs" />
     <Compile Include="Services\RunCausalTrace.cs" />
     <Compile Include="Services\SessionTraceWriteQueue.cs" />
@@ -239,6 +242,14 @@
     <Compile Include="WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="WebView\WebViewSecurityPolicy.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Qualification\Packs\coverage.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.coverage.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\common.ui-shell.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.common.ui-shell.v1.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

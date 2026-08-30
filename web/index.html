@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-viewer-20260829-2">
   <link rel="stylesheet" href="css/app-trajectory.css?v=run-journal-20260829-1">
   <link rel="stylesheet" href="css/app-run-journal.css?v=run-journal-20260829-1">
+  <link rel="stylesheet" href="css/app-qualification.css?v=qualification-center-20260831-1">
   <link rel="stylesheet" href="css/app-tools.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-vba.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-viewer-20260829-1">
@@ -829,6 +830,15 @@
               </div>
 
               <div class="diagnostics-tab-panel diagnostics-overview active" data-diagnostics-panel="overview">
+                <section class="model-compatibility-panel qualification-diagnostics-card" aria-labelledby="qualificationDiagnosticsTitle">
+                  <div class="model-compatibility-head">
+                    <div>
+                      <h3 id="qualificationDiagnosticsTitle">Qualification Center</h3>
+                      <p>Versioned in-app проверки с durable evidence. Сейчас доступен только безопасный shell-пак; Office и модель он не квалифицирует.</p>
+                    </div>
+                    <button class="accent-soft" id="openQualificationCenterButton" type="button">Открыть центр проверок</button>
+                  </div>
+                </section>
                 <div class="diagnostics-concepts" aria-label="Различие событий и траектории">
                   <div><strong>События JSONL</strong><span>Неизменяемый источник истины: точные записи session stream с hash chain.</span></div>
                   <div><strong>Журнал запуска</strong><span>Один причинный поток из проверенных событий: запрос, попытки модели, tools, эффекты и явные пробелы evidence.</span></div>
@@ -936,6 +946,47 @@
     </main>
   </div>
 
+  <div class="qualification-overlay hidden" id="qualificationCenterOverlay" aria-hidden="true">
+    <section class="qualification-dialog" id="qualificationCenterDialog" role="dialog" aria-modal="true" aria-labelledby="qualificationCenterTitle">
+      <header class="qualification-head">
+        <div>
+          <span class="qualification-kicker">Встроенная квалификация</span>
+          <h2 id="qualificationCenterTitle">Qualification Center</h2>
+          <p>Результат вычисляет только typed verifier; экран показывает записанное состояние без собственной оценки.</p>
+        </div>
+        <button class="icon-button secondary" id="closeQualificationCenterButton" type="button" aria-label="Закрыть Qualification Center">×</button>
+      </header>
+      <div class="qualification-status" id="qualificationCenterStatus" role="status" aria-live="polite"></div>
+      <div class="qualification-layout">
+        <aside class="qualification-packs" aria-label="Наборы проверок">
+          <div class="qualification-section-title">Пакеты</div>
+          <div id="qualificationPackList"></div>
+        </aside>
+        <main class="qualification-run">
+          <div class="qualification-run-head">
+            <div>
+              <h3 id="qualificationRunTitle">Выберите пакет</h3>
+              <p id="qualificationRunDescription"></p>
+            </div>
+            <span class="qualification-run-status" id="qualificationRunStatus">Готов</span>
+          </div>
+          <div class="qualification-provenance" id="qualificationProvenance"></div>
+          <div class="qualification-user-instruction hidden" id="qualificationUserInstruction"></div>
+          <div class="qualification-steps" id="qualificationSteps"></div>
+          <div class="qualification-actions">
+            <button class="accent-soft" id="startQualificationButton" type="button">Запустить</button>
+            <button class="accent-soft hidden" id="continueQualificationButton" type="button">Подтвердить и продолжить</button>
+            <button class="secondary hidden" id="cancelQualificationButton" type="button">Отменить запуск</button>
+            <button class="secondary hidden" id="repeatQualificationButton" type="button">Повторить</button>
+            <button class="secondary hidden" id="openQualificationJournalButton" type="button">Открыть журнал</button>
+            <button class="secondary hidden" id="copyQualificationReportButton" type="button">Копировать отчёт</button>
+          </div>
+          <div class="qualification-report-status" id="qualificationReportStatus" aria-live="polite"></div>
+        </main>
+      </div>
+    </section>
+  </div>
+
   <script src="js/vendor/purify.min.js"></script>
   <script src="js/vendor/marked.min.js"></script>
   <script src="js/vendor/katex.min.js"></script>
@@ -963,6 +1014,7 @@
   <script src="js/app-json-viewer.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-run-journal.js?v=run-journal-20260829-1"></script>
   <script src="js/app-trajectory.js?v=run-journal-20260829-1"></script>
+  <script src="js/app-qualification.js?v=qualification-center-20260831-1"></script>
   <script src="js/app-prompts.js?v=prompt-sections-20260825-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>

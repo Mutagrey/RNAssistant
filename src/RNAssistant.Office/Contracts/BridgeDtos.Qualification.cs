@@ -17,6 +17,11 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("previousRunId")] public string PreviousRunId { get; set; }
     }
 
+    public sealed class QualificationRunPayload : ChatPayload
+    {
+        [JsonProperty("runId")] public string RunId { get; set; }
+    }
+
     public sealed class QualificationAdvancePayload : ChatPayload
     {
         [JsonProperty("runId")] public string RunId { get; set; }
@@ -33,6 +38,13 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("suite")] public string Suite { get; set; }
         [JsonProperty("packs")] public IReadOnlyList<QualificationPackDto> Packs { get; set; }
         [JsonProperty("missingCoverage")] public IReadOnlyList<string> MissingCoverage { get; set; }
+    }
+
+    public sealed class QualificationSessionResponse
+    {
+        [JsonProperty("schemaVersion")] public int SchemaVersion { get; set; }
+        [JsonProperty("chat")] public ChatStateResponse Chat { get; set; }
+        [JsonProperty("run")] public QualificationRunDto Run { get; set; }
     }
 
     public sealed class QualificationPackDto
@@ -96,6 +108,8 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class QualificationRunDto
     {
+        private const int MaximumReportEvidence = 262144;
+
         [JsonProperty("runId")] public string RunId { get; set; }
         [JsonProperty("previousRunId")] public string PreviousRunId { get; set; }
         [JsonProperty("packId")] public string PackId { get; set; }
@@ -116,11 +130,18 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("startedSequence")] public long? StartedSequence { get; set; }
         [JsonProperty("completedEventId")] public string CompletedEventId { get; set; }
         [JsonProperty("completedSequence")] public long? CompletedSequence { get; set; }
+        [JsonProperty("reportTruncated")] public bool ReportTruncated { get; set; }
         [JsonProperty("steps")] public IReadOnlyList<QualificationStepResultDto> Steps { get; set; }
 
         public static QualificationRunDto From(QualificationRunState run)
         {
             if (run == null) return null;
+            var remainingEvidence = MaximumReportEvidence;
+            var steps = new List<QualificationStepResultDto>();
+            foreach (var step in run.Steps)
+            {
+                steps.Add(QualificationStepResultDto.From(step, ref remainingEvidence));
+            }
             return new QualificationRunDto
             {
                 RunId = run.RunId,
@@ -144,7 +165,8 @@ namespace RNAssistant.Office.Contracts
                 StartedSequence = run.StartedSequence,
                 CompletedEventId = run.CompletedEventId,
                 CompletedSequence = run.CompletedSequence,
-                Steps = Array.AsReadOnly(run.Steps.Select(QualificationStepResultDto.From).ToArray())
+                ReportTruncated = steps.Any(step => step.ExpectedTruncated || step.ActualTruncated),
+                Steps = Array.AsReadOnly(steps.ToArray())
             };
         }
     }
@@ -172,7 +194,15 @@ namespace RNAssistant.Office.Contracts
 
         public static QualificationStepResultDto From(QualificationStepSnapshot step)
         {
+            var remaining = MaximumInlineEvidence * 2;
+            return From(step, ref remaining);
+        }
+
+        internal static QualificationStepResultDto From(QualificationStepSnapshot step, ref int remainingEvidence)
+        {
             if (step == null) return null;
+            var expected = Bound(step.ExpectedJson, ref remainingEvidence);
+            var actual = Bound(step.ActualJson, ref remainingEvidence);
             return new QualificationStepResultDto
             {
                 StepId = step.StepId,
@@ -182,10 +212,10 @@ namespace RNAssistant.Office.Contracts
                 AttemptId = step.AttemptId,
                 Code = step.Code,
                 Message = step.Message,
-                ExpectedJson = Bound(step.ExpectedJson),
-                ExpectedTruncated = IsTruncated(step.ExpectedJson),
-                ActualJson = Bound(step.ActualJson),
-                ActualTruncated = IsTruncated(step.ActualJson),
+                ExpectedJson = expected,
+                ExpectedTruncated = IsTruncated(step.ExpectedJson, expected),
+                ActualJson = actual,
+                ActualTruncated = IsTruncated(step.ActualJson, actual),
                 DomainEffect = step.DomainEffect,
                 StartedEventId = step.StartedEventId,
                 StartedSequence = step.StartedSequence,
@@ -194,17 +224,22 @@ namespace RNAssistant.Office.Contracts
             };
         }
 
-        private static bool IsTruncated(string value)
+        private static bool IsTruncated(string value, string bounded)
         {
-            return value != null && value.Length > MaximumInlineEvidence;
+            return value != null && (bounded == null || value.Length > bounded.Length);
         }
 
-        private static string Bound(string value)
+        private static string Bound(string value, ref int remainingEvidence)
         {
-            if (!IsTruncated(value)) return value;
-            var length = MaximumInlineEvidence;
-            if (char.IsHighSurrogate(value[length - 1]) && char.IsLowSurrogate(value[length])) length--;
-            return value.Substring(0, length);
+            if (value == null) return null;
+            if (value.Length == 0) return string.Empty;
+            var length = Math.Min(value.Length, Math.Min(MaximumInlineEvidence,
+                Math.Max(0, remainingEvidence)));
+            if (length == 0) return null;
+            if (length < value.Length && char.IsHighSurrogate(value[length - 1]) &&
+                char.IsLowSurrogate(value[length])) length--;
+            remainingEvidence -= length;
+            return length == value.Length ? value : value.Substring(0, length);
         }
     }
 }
