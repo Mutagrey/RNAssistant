@@ -4,7 +4,7 @@
 
 Статус: backlog, не описание реализованной архитектуры и не разрешение расширять
 текущую фазу. Phase 10A–10D завершены host-neutral; следующий обязательный этап —
-Windows Milestone WQ, начиная с WQ0 identity probe, по `PROGRESS.md`.
+Milestone WQ-A Qualification Center, затем Windows WQ начиная с WQ0, по `PROGRESS.md`.
 Изменения ниже выполняются только отдельными подэтапами после указанного gate. Если
 предложение становится обязательным, сначала обновляются master plan/ADR и
 `MIGRATION_MAP.md` с owner, consumers и removal gate.
@@ -37,12 +37,14 @@ store, model wire или UI-owned effect classification.
    runtime algorithms; 10C1 перенёс application façade без lifecycle changes; 10C2
    перенёс exact resource read projections и удалил `ProjectRead`; 10D сверил
    canonical docs, migration statuses, project includes и checks.
-4. При доступной Windows: WQ0 -> 5B2 production `DocumentSession` -> 7D bound Excel
-   backend; неизвестную COM identity semantics не угадывать.
-5. Milestone WQ и Phase 12 stable core. Оставшиеся VBA definition/result adapters
+4. WQ-A создаёт data-only packs, production-path runner и встроенный WQ0 без второго
+   executor/store; [qualification contract](../qualification.md) обязателен.
+5. При доступной Windows: in-app WQ0 -> 5B2 production `DocumentSession` -> 7D bound
+   Excel backend; неизвестную COM identity semantics не угадывать.
+6. Milestone WQ и Phase 12 stable core. Оставшиеся VBA definition/result adapters
    обслуживают действующий Phase 6 runtime; их optional direct-handler cleanup после
    5B2 относится к отдельно admitted Phase 11 и не блокирует этот маршрут.
-6. Улучшения ниже — отдельные post-stable minor changes либо соответствующие
+7. Улучшения ниже — отдельные post-stable minor changes либо соответствующие
    independently admitted Phase 11 contours. Не включать их в 9D5/Phase 10.
 
 ## Когда нужен protocol или interface

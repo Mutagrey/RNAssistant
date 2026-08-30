@@ -18,10 +18,15 @@ host-neutral миграции. Он не заменяет targeted tests под�
 `BLOCKED` не считается pass. После изменения production inputs создаётся новый build;
 старое evidence применяется только к неизменившимся контурам.
 
+По согласованному [Milestone WQ-A](STABILIZATION_MASTER_PLAN.md#milestone-wq-a--in-app-qualification-center)
+основной пользовательский путь будет встроен в [Qualification Center](../qualification.md):
+pack wizard, automatic assertions и report без ручных scripts. Пока WQ-A3 не реализован,
+команды ниже остаются engineering fallback и не считаются встроенным UI evidence.
+
 ## 2. WQ0 — blocking identity probe для 5B2
 
-Выполняется при первом доступном коротком Windows окне, до production identity/factory
-switch. Команды и формат наблюдений заданы в
+Выполняется до production identity/factory switch. Целевой путь — встроенный pack
+`excel.wq0.identity` WQ-A3; до его реализации команды и формат наблюдений заданы в
 [Excel identity probe README](../../tests/RNAssistant.ExcelIdentityProbe/README.md).
 
 Проверить:

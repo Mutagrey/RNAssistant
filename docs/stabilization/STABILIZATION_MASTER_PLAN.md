@@ -1477,7 +1477,8 @@ gate, а не требование постоянно прогонять всю 
 
 После host-neutral реализации обязательных контуров создаётся воспроизводимый
 `16.1.0-dev` qualification candidate. Он не называется stable, beta или RC. Единый
-Milestone WQ после Phase 10 проверяет накопленные Windows/Office/WebView gates и
+Milestone WQ-A после Phase 10 создаёт встроенный qualification runner; следующий
+Milestone WQ проверяет накопленные Windows/Office/WebView gates и
 маршрутизирует дефекты владельцам контуров по causal diagnostics. Исправление каждого
 дефекта выполняется отдельным change с targeted regression и повтором только
 затронутых Windows scenarios. Phase 12 начинается лишь после WQ.
@@ -2179,6 +2180,56 @@ bounded rendering и реальные WebView/clipboard проверки на Wi
 
 ---
 
+## Milestone WQ-A — In-app Qualification Center
+
+### Цель
+
+По прямому запросу пользователя заменить ручное выполнение qualification scripts
+встроенным расширяемым wizard-ом с host-specific packs, production-path agent tasks,
+deterministic assertions и causal evidence. Канонический контракт:
+[Qualification Center](../qualification.md), решение об authority —
+[ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md).
+
+WQ-A — release-critical test tooling перед реальным WQ, а не новая Office feature.
+Он не выбирает COM identity, не закрывает Windows gates и не меняет production tool
+policy/effect semantics. Текущий PowerShell WQ0 остаётся engineering fallback до
+готовности встроенного pack; duplicate identity decoder удаляется при switch owner.
+
+### Подэтапы
+
+1. **WQ-A0 contract:** strict pack/evidence/safety model, coverage registry и UI flow.
+2. **WQ-A1 core:** host-neutral manifest parser/catalog, finite runner state machine,
+   typed bridge DTO, fake probes/verifiers и closed qualification event operations.
+3. **WQ-A2 UI:** отдельная empty-chat card и Diagnostics entry, pack list/stepper,
+   resume, run-journal/JSON navigation и bounded report; prompt suggestions не являются packs.
+4. **WQ-A3 Excel WQ0:** один identity collector owner, VSTO/native observations и
+   narrow same-build x64 helper для независимых client leases; реальная Windows проверка.
+5. **WQ-A4 suites:** common/provider/storage/UI и по одному host pack, versioned
+   fixtures, deterministic final-state verifiers и coverage gates.
+6. **WQ-A5 release integration:** immutable BuildEvidenceManifest и complete release suite.
+
+### Обязательные ограничения
+
+- Нет второго model loop, tool executor, confirmation path, document gate, result
+  classifier, durable store/index или UI-owned pass.
+- Manifest — data only: без scripts/command lines/URLs/CLR/JS types/raw tool IDs.
+- Mutations только в runner-owned или явно подтверждённой disposable copy; bound
+  identity проверяется перед effect, `unknown`/missing/blocked не становятся pass.
+- VSTO не запускает harness/MSBuild/Node/shell; exact build evidence импортируется
+  через immutable provenance manifest.
+- Новый tool/capability/event/UI projection получает coverage owner и happy/failure/
+  effect assertions; absent capability помечается N/A, а не pass.
+
+### Definition of Done
+
+Пользователь может из UI выбрать pack текущего host, пройти сложные agent/manual/fault/
+restart steps и экспортировать correlated expected/actual report. Automatic pass
+происходит только из typed verifier evidence. WQ0 pack собирает независимые Excel
+identity/lifetime observations без PowerShell; Windows evidence всё равно обязательно
+до production 5B2. Реализация идёт отдельными commits WQ-A1–A5.
+
+---
+
 ## Milestone WQ — отложенная Windows/Office qualification
 
 ### Цель
@@ -2190,16 +2241,18 @@ evidence и карта владельцев заданы в
 
 ### Порядок
 
-1. При первом доступном коротком Windows окне отдельно выполнить WQ0 identity probe
-   для 5B2. Зафиксировать наблюдения, затем отдельным подэтапом выбрать production
-   identity/factory semantics и повторить его host-neutral проверки.
-2. После Phase 10 собрать один versioned `16.1.0-dev` candidate из известного commit;
-   полный host-neutral harness и architecture tests должны быть зелёными.
-3. Выполнить runbook по контурам: baseline/controller, DocumentSession, VBA, Excel,
-   Resource/ToolPack, persistence/UI/WebView и сквозные fault/restart scenarios.
-4. Для каждого failure сохранить causal export/source IDs, expected/actual и назначить
+1. Завершить WQ-A1–A3: runner/UI и встроенный `excel.wq0.identity`; manual probe
+   остаётся только engineering fallback при дефекте самого runner-а.
+2. На первом Windows candidate выполнить WQ0 для 5B2. Зафиксировать observations,
+   затем отдельным подэтапом выбрать production identity/factory semantics и повторить
+   его host-neutral проверки.
+3. Собрать один versioned `16.1.0-dev` candidate из известного commit; полный
+   host-neutral harness, architecture tests и compatible BuildEvidenceManifest зелёные.
+4. Выполнить packs/runbook по контурам: baseline/controller, DocumentSession, VBA,
+   Excel, Resource/ToolPack, persistence/UI/WebView и сквозные fault/restart scenarios.
+5. Для каждого failure сохранить causal export/source IDs, expected/actual и назначить
    owner Phase 5–9 либо cross-cutting gate. Не исправлять разные контуры одним commit.
-5. После исправления повторить targeted local regression и только затронутый Windows
+6. После исправления повторить targeted local regression и только затронутый Windows
    scenario; полный smoke повторить перед выходом из WQ.
 
 ### Definition of Done
@@ -2622,6 +2675,8 @@ Persistence / UI
     ↓
 Physical cleanup
     ↓
+In-app Qualification Center
+    ↓
 Release qualification
     ↓
 16.1.0
@@ -2629,7 +2684,7 @@ Release qualification
 Optional contours — отдельные последующие milestones
 ```
 
-Основной маршрут: Phases 0–10 host-neutral → Milestone WQ → Phase 12 → stable core. Phase 11 не блокирует этот маршрут; исключение для отдельно согласованного post-beta milestone описано в Phase 11.
+Основной маршрут: Phases 0–10 host-neutral → Milestone WQ-A → Milestone WQ → Phase 12 → stable core. Phase 11 не блокирует этот маршрут; исключение для отдельно согласованного post-beta milestone описано в Phase 11.
 
 Основная проверка каждого архитектурного решения:
 

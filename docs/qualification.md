@@ -1,0 +1,246 @@
+# Qualification Center и расширяемые test packs
+
+Статус: целевая архитектура Milestone WQ-A. Реализация ещё не начата.
+
+## 1. Назначение
+
+Qualification Center даёт пользователю один встроенный экран для проверки
+RNAssistant на реальном Office host без ручного запуска PowerShell. Он объединяет:
+
+- сведения о host-neutral harness, привязанные к exact build/commit;
+- реальные agent tasks через обычный conversation runtime;
+- host/COM probes и безопасные fault hooks;
+- пошаговые действия пользователя в Office;
+- детерминированные assertions по document state и typed runtime evidence;
+- causal journal, JSON evidence и экспортируемый итоговый report.
+
+Центр не заменяет быстрый `RNAssistant.Harness` и не исполняет его внутри VSTO.
+Harness проверяет pure/host-neutral contracts до сборки кандидата. Встроенные packs
+проверяют production wiring, Office, WebView, live provider и сквозные задачи.
+Общий coverage registry показывает оба вида evidence и не объявляет полный pass,
+если обязательный контур отсутствует, заблокирован или относится к другому build.
+
+## 2. Пользовательский путь
+
+В пустом новом чате появляется отдельная карточка **«Проверить RNAssistant»**. Она
+открывает Qualification Center, не вставляет текст в composer. Второй вход находится
+в Diagnostics.
+
+Экран показывает:
+
+1. текущий host, Office/WebView/build provenance и доступные capabilities;
+2. наборы `Быстрая проверка`, `Полная проверка`, `Release candidate` и packs текущего host;
+3. preconditions и требование использовать созданный runner-ом либо явно выбранный
+   disposable document;
+4. один текущий шаг с кнопками `Начать`, `Проверить`, `Далее`, `Повторить`, `Остановить`;
+5. expected/actual, automatic/manual evidence strength и `PASS/FAIL/BLOCKED/NOT_RUN`;
+6. связанный causal run journal и общий JSON viewer;
+7. экспорт bounded redacted report.
+
+Wizard может просить переключить книгу, выполнить Save As, закрыть/открыть документ,
+подтвердить tool call, перезапустить add-in или визуально проверить layout. Команды,
+helper processes и correlation выполняются приложением; пользователь работает только
+с UI и Office.
+
+## 3. Архитектурная граница
+
+```text
+Qualification UI -> typed bridge -> QualificationRunner
+                                      |-> PackCatalog + CoverageRegistry
+                                      |-> normal ConversationRunService / AgentKernel
+                                      |-> allowlisted HostProbe / FaultHook / Verifier
+                                      |-> IEventStore + existing chat JSONL/CAS
+                                      `-> ITrajectoryQuery / report export
+
+Build pipeline -> immutable BuildEvidenceManifest -> Qualification UI
+```
+
+- `QualificationRunner` — application orchestration. Он не реализует model loop,
+  tool dispatch, confirmation, document locking, storage или effect classification.
+- `agentTask` всегда проходит через обычные `ConversationRunService`, `AgentKernel`,
+  `ToolRuntime`, `HostRuntime` и production domain handlers. Test mode не расширяет
+  callable tools и не отключает confirmation/policy.
+- Host probes и fault hooks имеют узкие typed IDs и реализации в host owner. Manifest
+  не содержит CLR type, command line, JavaScript, PowerShell или произвольный tool ID.
+- Assertions читают source-owned typed outcome, read-back snapshot, session events и
+  host observation. Текст модели не является доказательством pass.
+- UI только управляет сценарием и отображает уже рассчитанный result. Он не выводит
+  effect из narrative, tool name, CSS state или тайминга.
+
+Решение зафиксировано в
+[ADR-0010](decisions/ADR-0010-qualification-evidence-authority.md).
+
+## 4. Packs и manifest
+
+Built-in packs поставляются как versioned read-only JSON manifests. Первый schema
+не поддерживает пользовательский executable code. Новые step/assertion kinds
+добавляются через код, review и tests.
+
+Минимальная форма:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "excel.wq0.identity",
+  "revision": "1",
+  "title": "Excel document identity",
+  "hosts": ["Excel"],
+  "suite": "release",
+  "workspacePolicy": "explicit-disposable-copy",
+  "requirements": ["windows-x64", "office-x64", "independent-client-helper"],
+  "coverage": ["R04", "WQ0", "WQ-SESSION.identity"],
+  "steps": [
+    { "id": "baseline", "kind": "hostProbe", "action": "excel.identity.capture" },
+    { "id": "switch", "kind": "userAction", "instructionKey": "excel.switch-active" },
+    { "id": "same-target", "kind": "assertion", "assertion": "excel.identity.same-target" }
+  ]
+}
+```
+
+Обязательные поля проходят strict validation: неизвестное поле/kind, duplicate step,
+cycle, отсутствующий requirement/coverage ID, unsafe workspace policy или недоступная
+capability блокируют pack целиком. Manifest получает content hash; run закрепляет
+точные `packId + revision + hash`.
+
+### Step kinds
+
+| Kind | Owner | Назначение |
+|---|---|---|
+| `precondition` | Runner/host | build, host, bitness, capability, document safety |
+| `fixture` | allowlisted fixture owner | создать disposable input без пользовательских данных |
+| `agentTask` | normal conversation runtime | полноценная задача модели через production path |
+| `hostProbe` | host capability | read-only COM/WebView/provider observation |
+| `userAction` | UI | явное действие в Office с checkpoint до продолжения |
+| `confirmation` | normal confirmation UI | проверить pause/resume/cancel без обхода policy |
+| `restart` | application host | сохранить resume evidence и проверить replay |
+| `fault` | qualification-only allowlist | точечная ошибка на заявленной boundary |
+| `assertion` | source/domain verifier | детерминированный expected/actual result |
+| `cleanup` | fixture owner | закрыть runner-owned resources; не скрывать failure |
+
+Runner — конечный state machine: `ready -> running -> awaiting_user -> verifying ->
+passed|failed|blocked|cancelled`. После возможного effect автоматический retry запрещён.
+Повтор создаёт новый attempt с новым ID и ссылкой на предыдущий; старое evidence не
+перезаписывается.
+
+## 5. Evidence и хранение
+
+Каждый scenario использует отдельный явно помеченный qualification chat, связанный с
+текущим document session. Новые closed event kinds фиксируют начало/шаг/observation/
+assertion/terminal record в существующем `*.events.jsonl`; большие immutable payloads
+используют тот же CAS. Это сохраняет один durable source и позволяет resume/restart.
+
+Qualification projection каждый раз строится из validated stream. Отдельная БД,
+mutable result file, durable dashboard index и dual-write запрещены. Сводка suite
+остаётся UI projection; экспорт — одноразовый bounded bundle через существующие
+trajectory/report primitives.
+
+Terminal assertion содержит:
+
+- build commit/version/channel и pack revision/hash;
+- host/Office/WebView/bitness и capability snapshot;
+- document/runtime identity без secrets;
+- step/attempt IDs и source event sequences/IDs;
+- expected, actual и evidence strength (`automatic` или `manual`);
+- domain effect (`verified_change`, `verified_no_change`, `error`, `unknown`), если применимо;
+- probe/fault-hook result и cleanup result;
+- redaction/truncation state.
+
+`BLOCKED`, missing evidence и `unknown` не становятся pass. Manual visual checks
+остаются явно manual и не подменяют automatic assertions другой boundary.
+
+BuildEvidenceManifest создаётся сборочным/release contour после host-neutral checks и
+включает exact commit, configuration, checks, timestamps и file hashes. Приложение
+только показывает и проверяет подпись/provenance этого manifest; оно не запускает
+`dotnet`, MSBuild, Node или shell из VSTO.
+
+## 6. Safety
+
+- Mutating packs работают только с runner-created document либо после отдельного
+  подтверждения disposable copy. Target marker и bound identity проверяются перед
+  каждым effect.
+- Никакого автоматического backup/rollback как доказательства безопасности. Runner
+  проверяет final state и закрывает созданный документ без сохранения либо удаляет
+  только файл с собственным ownership token.
+- Confirmation, document gate, singleton-call policy, effect read-back и unknown
+  semantics остаются production-owned.
+- Fault hooks доступны только qualification build/flag, перечислены в allowlist,
+  имеют одну boundary и не принимают произвольный payload/code/path.
+- Packs не загружаются с URL и не исполняют пользовательские scripts. Будущие custom
+  packs могут комбинировать только существующие safe step/assertion IDs.
+- Reports по умолчанию metadata-redacted; document text, prompts, paths и CAS bodies
+  включаются только явно.
+
+## 7. Первый pack: встроенный Excel WQ0
+
+`excel.wq0.identity` становится эталоном runner-а. Пользователь выбирает disposable
+книги и нажимает кнопки wizard-а. Pack собирает:
+
+- VSTO proxy текущей книги на owner STA;
+- две независимые x64 client leases через узкий same-build qualification helper;
+- desktop/native owner observation;
+- active switch, Save As, close/reopen, second window и attach/detach checkpoints;
+- different books и same-name books в разных Excel processes;
+- release/cleanup и отсутствие document mutation.
+
+Helper не является generic process runner: один versioned request/response contract,
+one-time local channel, explicit HWND/target, no network, no shell и bounded output.
+Identity decoder/lease имеют одного owner; существующий PowerShell probe остаётся
+engineering fallback до switch, затем duplicate reader удаляется.
+
+Pass требует согласованного `(process id, process start, OXID, OID)` для одной live
+книги, различия разных lifetimes/targets и полный cleanup. `IPID`, path, HWND,
+IUnknown address и generated GUID не принимаются как shared identity. Результат WQ0
+разрешает отдельный production 5B2 design/switch, но сам его не закрывает.
+
+## 8. Начальный catalog полноценных задач
+
+| Pack family | Что проверяет |
+|---|---|
+| `common.quick` | новый chat, режимы, live model, resources, tool discovery, confirmation/cancel, run journal |
+| `provider.live` | strict response, refusal, streaming, repair/reset, long payload, runtime call IDs, batch safety |
+| `storage.recovery` | mandatory append barriers, CAS, restart/replay, multi-window revision, export |
+| `excel.wq0.identity` | общий live workbook identity и lifetime до 5B2 |
+| `excel.read-write` | inspect/read, scalar/formula/table write, no-op/error/unknown и exact read-back |
+| `excel.complex-task` | resources -> analysis -> multi-step edits -> confirmation -> verified workbook result |
+| `vba.lifecycle` | list/read/patch/write/rename/delete/restore/package, recovery и Trust Access failures |
+| `ui.webview` | new-chat runner, keyboard/focus/DPI, confirmation, JSON/raw copy, reload/live append |
+| `cross.full-run` | одна сложная задача через model, ToolPack, document effect, events, trajectory и restart |
+| `<host>.capabilities` | только реально зарегистрированные Word/PowerPoint/Outlook families; absent capability = N/A, не pass |
+
+Каждая complex task поставляется с versioned fixture и deterministic final-state
+verifier. Можно менять prompt wording и модели, сохраняя invariant assertions.
+Нестабильное качество модели оценивается серией запусков и отдельными метриками;
+один удачный ответ не закрывает runtime gate.
+
+## 9. Coverage и расширение
+
+Coverage registry связывает каждый mandatory invariant/risk/capability с:
+
+- owner layer и host;
+- harness test либо qualification scenario/assertion;
+- обязательностью для quick/full/release suites;
+- последним exact build evidence;
+- Windows/manual требованиями.
+
+Новый model-facing tool, host capability, event kind или UI projection не считается
+покрытым, пока registry не содержит проверку happy path, failure и effect/unknown там,
+где возможна mutation. Architecture test запрещает неизвестные coverage IDs и
+обязательные capabilities без scenario owner.
+
+## 10. Этапы реализации
+
+1. **WQ-A0 — contract (этот документ):** ADR, pack/evidence/safety contracts и scope.
+2. **WQ-A1 — host-neutral core:** strict manifest parser, catalog, coverage registry,
+   runner state machine, typed bridge DTO и fake probes/verifiers; без Office/UI switch.
+3. **WQ-A2 — UI shell:** карточка нового чата, Qualification Center, stepper, journal/
+   JSON navigation, resume и report projection; fake pack tests.
+4. **WQ-A3 — Excel WQ0:** единый identity owner, in-process observation и narrow x64
+   helper; удалить duplicate diagnostic decoder после switch; Windows qualification.
+5. **WQ-A4 — suites:** common/provider/storage/UI, затем один host pack за раз;
+   fixtures, deterministic verifiers и coverage gates.
+6. **WQ-A5 — release integration:** immutable BuildEvidenceManifest и release suite;
+   Phase 12 получает только complete/compatible evidence.
+
+Каждый этап — отдельный commit. Host-neutral tests не закрывают Windows gates; один
+pack/host failure исправляется у его owner и повторяет только затронутый scenario,
+затем общий smoke перед release.

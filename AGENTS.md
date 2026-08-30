@@ -24,7 +24,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 - `RNAssistant.OfficeHosts` и `RNAssistant.*AddIn`: host adapters, ribbon, VSTO и Office COM.
 - `web`: static WebView2 UI без npm/bundler. Feature logic остаётся в тематических `app-*.js`; `app.js` — только boot/shared rendering.
 - `tools` и `%AppData%/RNAssistant/tools`: пользовательские tools; executor logic живёт в `RNAssistant.Office/Tools`.
-- Folder и namespace не обязаны совпадать механически: root `RNAssistant.Office` остаётся у публичного application façade и host ports, а тематическая папка задаёт owner. Не делай массовый namespace rename. Phase 10B1/10B2 перенесли host-specific helpers в OfficeHosts, 10C1 перенёс `AssistantRuntime.cs` в root Office façade, а 10C2 перенёс четыре resource read projections в `ControllerToolDefinition`; возвращать старые paths, aliases, linked duplicates или `LegacyToolDefinitionAdapter.ProjectRead` запрещено. Phase 10 закрыт host-neutral; следующий обязательный этап — Windows Milestone WQ, начиная с WQ0 identity probe до production 5B2/7D switch.
+- Folder и namespace не обязаны совпадать механически: root `RNAssistant.Office` остаётся у публичного application façade и host ports, а тематическая папка задаёт owner. Не делай массовый namespace rename. Phase 10B1/10B2 перенесли host-specific helpers в OfficeHosts, 10C1 перенёс `AssistantRuntime.cs` в root Office façade, а 10C2 перенёс четыре resource read projections в `ControllerToolDefinition`; возвращать старые paths, aliases, linked duplicates или `LegacyToolDefinitionAdapter.ProjectRead` запрещено. Phase 10 закрыт host-neutral; по прямому запросу пользователя перед Windows WQ добавляется Milestone WQ-A Qualification Center. Он не закрывает WQ0/5B2 локальными checks: первый реальный pack — WQ0 identity, затем production 5B2/7D switch.
 
 ## Перед изменениями
 
@@ -35,6 +35,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 - Chat/Agent loop, progressive tools, JSON contract: `docs/conversation-protocol.md`;
 - session events, CAS и recovery: `docs/session-events.md`;
 - trajectory/exports/GC: `docs/trajectory-query.md`, `docs/trajectory-export.md`, `docs/cas-maintenance.md`;
+- in-app qualification, packs, evidence и safety: `docs/qualification.md`;
 - VBA mutations/packages/UserForms: `docs/vba-mutation-journal.md`, `docs/vba-tool-packages.md`, `docs/vba-userforms.md`;
 - быстрые и таргетированные тесты: `tests/RNAssistant.Harness/README.md`.
 - versioning/release: `docs/operations/VERSIONING.md`, `docs/operations/RELEASE_PROCESS.md`.

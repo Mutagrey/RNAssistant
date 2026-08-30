@@ -22,6 +22,19 @@ static WebView UI
 - `RNAssistant.OfficeHosts` and `RNAssistant.*AddIn` own host adapters and Office wiring only. Host document identity is owned by `RNAssistant.OfficeHosts/Identity/DocumentIdentity.cs`, while the dynamic COM/VBE backend is owned by `RNAssistant.OfficeHosts/Vba/VbaProjectSupport*.cs`; host-neutral Office code cannot consume either helper.
 - `web` is static HTML/CSS/JS with no build pipeline.
 
+## Qualification boundary (target WQ-A)
+
+The planned Qualification Center is an application orchestrator over declarative,
+versioned host packs. Agent tasks use the normal conversation/kernel/tool/domain
+path; allowlisted host probes and deterministic verifiers supply evidence. Model
+text and UI presentation cannot declare pass. Runs append closed typed operations to
+the existing document chat stream/CAS and are projected through `ITrajectoryQuery`;
+there is no second result store or test executor. The empty-chat card opens the
+runner instead of inserting a prompt. Host-neutral harness evidence remains a
+build artifact and is never executed by VSTO. See [qualification.md](qualification.md)
+and [ADR-0010](decisions/ADR-0010-qualification-evidence-authority.md). This section
+describes the approved target; no Qualification Center runtime is shipped yet.
+
 ## Chat, Plan, and Agent
 
 There are three persisted modes and one structured execution service.
