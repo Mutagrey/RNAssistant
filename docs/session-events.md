@@ -52,6 +52,38 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
   accepted snapshot. These events do not mutate the `ChatSession` projection or add a
   second store.
 
+Phase 9D3 exposes current top-level chat events to Office through one narrow
+`IEventStore` adapter over this same `ChatStore`. New port writes select a
+`SessionEventKind`; its closed canonical descriptor fixes four independent facts:
+Agent or Domain Diagnostic lane, authority or diagnostic meaning, mandatory or
+best-effort durability, and Office-port or storage-internal write ownership.
+Neither a raw event type string nor a tool name can choose these properties.
+The model-trace adapter rejects an unknown source type instead of relabelling it as a
+failure, and the causal writer accepts only best-effort Domain Diagnostic kinds.
+
+| Event group | Lane | Meaning | Durability | Writer |
+|---|---|---|---|---|
+| `session.*`, `turn.*`, `step.*` | Agent | authority | mandatory | `ChatStore` internal only |
+| `llm.request` | Agent | authority | mandatory | event port |
+| `llm.response`, `llm.failure`, `assistant.chunk` | Agent | diagnostic | mandatory | event port |
+| `agent.response.rejected`, `tool_pack.extension.rejected` | Agent | diagnostic | mandatory | event port |
+| `model.response.accepted` | Agent | diagnostic marker | best effort | event port |
+| `tool_pack.extension.accepted` | Agent | authority | mandatory | event port |
+| run/tool/domain/UI causal observations | Domain Diagnostic | diagnostic | best effort | event port |
+
+Accepted response/call/result authority still lives in the storage-internal
+`session.commit`; `model.response.accepted` cannot replace it. Mandatory diagnostics
+remain mandatory because they close or preserve the current transport/publication
+boundary, not because they prove a tool effect. Storage-internal descriptors are not
+appendable through `IEventStore`. Historical unknown event types remain readable
+through validated stream reads, but cannot be manufactured by active Office writers.
+External payload hydration additionally requires the selected chat and rejects an
+event envelope with another `SessionId`. The adapter does not change JSONL schema,
+type strings, correlation, CAS payloads, hashing, revision CAS or lifecycle adjacency.
+The replaced raw `ChatStore` append/read members are storage-internal, so production
+consumers outside Core cannot bypass the typed port.
+See [Phase 9D3 evidence](stabilization/PHASE_9D3_TYPED_EVENT_STORE.md).
+
 Phase 1B adds metadata-only causal observations in this same stream: top-level
 `run.started`, `model.response.accepted`, `tool.execution.started/completed`,
 `domain.effect.prepared/dispatched/verified`, `run.summary.created`, and

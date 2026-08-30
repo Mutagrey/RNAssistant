@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 
@@ -123,7 +124,7 @@ namespace RNAssistant.Office.Vba
             string sourceHash,
             CancellationToken cancellationToken)
         {
-            TraceRenameMutation(prepared, "domain.effect.prepared", null);
+            TraceRenameMutation(prepared, SessionEventKind.DomainEffectPrepared, null);
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -137,7 +138,7 @@ namespace RNAssistant.Office.Vba
             VbaMutationActionResult actionResult;
             try
             {
-                TraceRenameMutation(prepared, "domain.effect.dispatched", null);
+                TraceRenameMutation(prepared, SessionEventKind.DomainEffectDispatched, null);
                 actionResult = action == null ? null : action();
             }
             catch (OperationCanceledException ex)
@@ -175,7 +176,7 @@ namespace RNAssistant.Office.Vba
                 assessment.Message =
                     "The backend explicitly reported rollback and both component identities match the recorded before state.";
             }
-            TraceRenameMutation(prepared, "domain.effect.verified", assessment.Status);
+            TraceRenameMutation(prepared, SessionEventKind.DomainEffectVerified, assessment.Status);
             try
             {
                 _renameJournal.CompleteRename(
@@ -270,7 +271,7 @@ namespace RNAssistant.Office.Vba
             VbaPackageMutationPreparation prepared)
         {
             var assessment = InspectRenameMutation(prepared);
-            TraceRenameMutation(prepared, "domain.effect.verified", assessment.Status);
+            TraceRenameMutation(prepared, SessionEventKind.DomainEffectVerified, assessment.Status);
             try
             {
                 _renameJournal.CompleteRename(
@@ -470,13 +471,12 @@ namespace RNAssistant.Office.Vba
 
         private static void TraceRenameMutation(
             VbaPackageMutationPreparation prepared,
-            string stage,
+            SessionEventKind kind,
             string status)
         {
             if (prepared == null) return;
-            RunCausalTrace.Record(new CausalTraceRecord
+            RunCausalTrace.Record(new CausalTraceRecord(kind)
             {
-                Stage = stage,
                 StepId = prepared.StepId,
                 ToolCallId = prepared.ToolCallId,
                 DocumentRuntimeId = prepared.RuntimeDocumentKey,

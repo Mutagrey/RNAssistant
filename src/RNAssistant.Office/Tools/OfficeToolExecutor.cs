@@ -5,6 +5,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
@@ -167,7 +168,7 @@ namespace RNAssistant.Office.Tools
                 maxExecutionSteps,
                 skillCatalog);
             var initialSteps = context.RemainingSteps;
-            TraceExecution(command, "tool.execution.started", null, null);
+            TraceExecution(command, SessionEventKind.ToolExecutionStartedObservation, null, null);
             try
             {
                 // Native handlers own their exact document scope. Wrapping them here
@@ -180,23 +181,26 @@ namespace RNAssistant.Office.Tools
                         cancellationToken,
                         () => ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken));
                 if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
-                TraceExecution(command, "tool.execution.completed",
+                TraceExecution(command, SessionEventKind.ToolExecutionCompletedObservation,
                     result == null ? "missing_result" : result.Status, result == null ? null : result.ErrorCode);
                 return result;
             }
             catch (Exception ex)
             {
-                TraceExecution(command, "tool.execution.completed",
+                TraceExecution(command, SessionEventKind.ToolExecutionCompletedObservation,
                     ex is OperationCanceledException ? "cancelled" : "threw", null);
                 throw;
             }
         }
 
-        private static void TraceExecution(ToolCommand command, string stage, string status, string code)
+        private static void TraceExecution(
+            ToolCommand command,
+            SessionEventKind kind,
+            string status,
+            string code)
         {
-            RunCausalTrace.Record(new CausalTraceRecord
+            RunCausalTrace.Record(new CausalTraceRecord(kind)
             {
-                Stage = stage,
                 StepId = command == null ? null : command.RuntimeStepId,
                 ToolCallId = command == null ? null : command.ToolCallId,
                 ToolId = command == null ? null : command.ToolId,

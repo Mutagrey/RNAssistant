@@ -2085,13 +2085,13 @@ acceptance предыдущего подэтапа.
 - [ ] Ввести или нормализовать:
   - [x] `IRunStore` (9D1 подтвердил минимальный port/adapter Phase 3, ordered append/cursor и replay coverage; контракт сохраняется без второго run store);
   - [ ] `IConversationStore`;
-  - [ ] `IEventStore`.
-- [ ] Разделить:
-  - [ ] Agent Events;
-  - [ ] Domain Diagnostic Events.
-- [ ] Разделение является typed classification в существующем chat stream, не вторым durable run store; domain journals сохраняют свою recovery authority. Ports не получают независимые writable snapshots и не выполняют двойную запись одного outcome.
-- [ ] Accepted model/tool events остаются canonical.
-- [ ] Rejected model attempts остаются diagnostics.
+  - [x] `IEventStore` (9D3: один closed typed port/adapter над существующим `ChatStore`).
+- [x] Разделить:
+  - [x] Agent Events;
+  - [x] Domain Diagnostic Events.
+- [x] Разделение является typed classification в существующем chat stream, не вторым durable run store; domain journals сохраняют свою recovery authority. Ports не получают независимые writable snapshots и не выполняют двойную запись одного outcome.
+- [x] Accepted model/tool events остаются canonical: accepted response/calls/results — storage-internal `session.commit`, accepted ToolPack extension — mandatory Agent authority; best-effort accepted trace marker authority не получает.
+- [x] Rejected model attempts остаются mandatory Agent diagnostics и не входят в replay/history.
 - [ ] Расширить минимальное replay coverage Phase 3 до полной persistence/UI матрицы; replay должен восстанавливать тот же `RunSummary`.
 - [ ] UI получает typed `RunViewState`.
 - [ ] Отдельно отображать:
@@ -2110,7 +2110,7 @@ acceptance предыдущего подэтапа.
 - [ ] Проверить result-append failure после write, restart при незавершённом tool start, CAS failure и конфликт revision при queued stream chunks. Optional trace не заменяет mandatory run/tool events; replay не выполняет tools и не пересчитывает прошлое по новой policy.
 - [x] 9D1 docs-only: сверены store/event writers, replay/recovery, projection consumers и существующее fault coverage. Один chat stream/CAS и `IRunStore` сохраняются; подтверждён пробел same-process reconciliation R45 и отсутствие typed event/conversation/UI ports. [Evidence](PHASE_9D1_PERSISTENCE_AUDIT.md).
 - [x] 9D2 host-neutral: Agent start/confirmation после `RunStoreException` освобождают run ownership, отбрасывают изменённую in-memory projection и через один `ChatSessionService` reload/reconcile exact stream. Pre-dispatch confirmation сохраняет durable pending; open dispatch становится unknown один раз; fabricated terminal, append retry и tool replay отсутствуют. [Evidence](PHASE_9D2_RUNSTORE_RECOVERY.md).
-- [ ] 9D3: ввести closed typed event classification + один `IEventStore` над существующим stream; authority/diagnostic и mandatory/best-effort задаёт source owner, arbitrary string append у Office consumers удаляется.
+- [x] 9D3 host-neutral: closed descriptors классифицируют все current top-level chat events по lane/authority/durability/write scope; один `IEventStore` adapter сохраняет прежний stream/CAS/wire. Active Office writers/readers switched atomically, storage lifecycle остаётся internal, arbitrary string append удалён. [Evidence](PHASE_9D3_TYPED_EVENT_STORE.md).
 - [ ] 9D4: ввести минимальный `IConversationStore` над тем же `ChatStore` и атомарно переключить session/controller projection consumers без writable snapshot/dual-write.
 - [ ] 9D5: ввести immutable `RunViewState`, переключить bridge/UI и закрыть replay equality, stale projection и multi-window ordering до удаления flat projection adapter.
 - [ ] R32: реализовать [сквозной журнал и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md) отдельными подэтапами: 9A — truth/query, 9B — viewer и read-only consumers, 9C — journal UI/qualification. Phases 4–8 этим требованием не расширяются.

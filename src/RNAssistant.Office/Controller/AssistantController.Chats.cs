@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
@@ -23,7 +24,7 @@ namespace RNAssistant.Office
         {
             request = request ?? new ChatTrajectoryRequest();
             var session = LoadSession(request.ChatId);
-            var events = _chatStore.ReadEvents(session.Host, session.DocumentKey, session.Id);
+            var events = _eventStore.Read(session, SessionEventReadMode.Validated);
             if (!string.IsNullOrWhiteSpace(request.View) && !TrajectoryViews.IsSupported(request.View))
             {
                 throw new InvalidOperationException("Unsupported trajectory view: " + request.View + ".");
@@ -68,7 +69,7 @@ namespace RNAssistant.Office
         {
             request = request ?? new ChatTrajectoryExportRequest();
             var session = LoadAddressedSession(request.ChatId);
-            var events = _chatStore.ReadCompleteEvents(session.Host, session.DocumentKey, session.Id);
+            var events = _eventStore.Read(session, SessionEventReadMode.RequireComplete);
             var result = _trajectoryExportService.Export(
                 session.Host,
                 session.DocumentKey,
@@ -82,11 +83,11 @@ namespace RNAssistant.Office
         {
             if (string.IsNullOrWhiteSpace(eventId)) throw new InvalidOperationException("eventId is required.");
             var session = LoadSession(chatId);
-            var sessionEvent = _chatStore.ReadEvents(session.Host, session.DocumentKey, session.Id)
+            var sessionEvent = _eventStore.Read(session, SessionEventReadMode.Validated)
                 .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.OrdinalIgnoreCase));
             if (sessionEvent == null) throw new InvalidOperationException("Session event was not found.");
             if (sessionEvent.Payload == null) throw new InvalidOperationException("Session event has no external payload.");
-            var text = _chatStore.ReadEventPayload(sessionEvent);
+            var text = _eventStore.ReadPayload(session, sessionEvent);
             if (text == null) throw new InvalidOperationException("Session event payload is missing or corrupted.");
             var truncated = text.Length > MaxTrajectoryPayloadPreviewChars;
             return new ChatEventPayloadResponse

@@ -519,7 +519,7 @@ namespace RNAssistant.Harness
                     adapter,
                     null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
-                    store,
+                    EventStore(store),
                     ChatModes.Agent,
                     "Load both optional schemas.",
                     session,
@@ -591,7 +591,7 @@ namespace RNAssistant.Harness
                     adapter,
                     null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
-                    new ChatStore(FixturePaths.Value),
+                    EventStore(new ChatStore(FixturePaths.Value)),
                     ChatModes.Agent,
                     "Continue after rejected admission.",
                     reconstructedSession,
@@ -653,7 +653,7 @@ namespace RNAssistant.Harness
                 var admission = loaded.PreparePending((tools, state) => true);
                 AssertTrue(admission.Admitted,
                     "seed schema is admitted before compaction");
-                new ToolPackAdmissionJournal(store, session).Append(admission, "after-schema-read");
+                new ToolPackAdmissionJournal(EventStore(store), session).Append(admission, "after-schema-read");
                 loaded.Publish(admission);
                 AssertTrue(loaded.Tools.Any(tool => tool.Id == optional.Id), "seed schema is callable before compaction");
 
@@ -677,7 +677,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Earlier work summarized.\"}" });
                 };
                 using (var modelSession = ConversationModelSession.CreateAsync(adapter, new ContextCompactionService(completion),
-                    new AttachmentAnalysisService(completion), store, ChatModes.Agent, "Continue.", session, NewContext(adapter),
+                    new AttachmentAnalysisService(completion), EventStore(store), ChatModes.Agent, "Continue.", session, NewContext(adapter),
                     settings, catalog, null, null, true, null, CancellationToken.None).GetAwaiter().GetResult())
                 {
                     var request = modelSession.CreateRequest("after_compaction",
@@ -739,7 +739,8 @@ namespace RNAssistant.Harness
                 var admission = live.PreparePending((tools, state) => true);
                 AssertTrue(!live.Tools.Any(tool => tool.Id == optional.Id),
                     "accepted evaluation remains unpublished before the event append");
-                var durableEvent = new ToolPackAdmissionJournal(store, session).Append(admission, "durable-next-step");
+                var durableEvent = new ToolPackAdmissionJournal(EventStore(store), session)
+                    .Append(admission, "durable-next-step");
                 live.Publish(admission);
                 AssertEqual(SessionEventTypes.ToolPackExtensionAccepted, durableEvent.Type,
                     "accepted extension has a dedicated event type");
@@ -760,7 +761,8 @@ namespace RNAssistant.Harness
                 secondEvidence.RunId = session.LastRun.RunId;
                 AssertTrue(live.StageReadResult(secondEvidence), "second exact delta stages independently");
                 var secondAdmission = live.PreparePending((tools, state) => true);
-                new ToolPackAdmissionJournal(store, session).Append(secondAdmission, "durable-next-step-2");
+                new ToolPackAdmissionJournal(EventStore(store), session)
+                    .Append(secondAdmission, "durable-next-step-2");
                 live.Publish(secondAdmission);
 
                 var unpersisted = NewSession(adapter);
@@ -772,7 +774,7 @@ namespace RNAssistant.Harness
                 AssertTrue(blocked.StageReadResult(unpersistedEvidence), "append-failure fixture stages exact evidence");
                 var blockedAdmission = blocked.PreparePending((tools, state) => true);
                 RuntimeThrows<ChatConcurrencyException>(() =>
-                    new ToolPackAdmissionJournal(new ChatStore(FixturePaths.Value), unpersisted)
+                    new ToolPackAdmissionJournal(EventStore(new ChatStore(FixturePaths.Value)), unpersisted)
                         .Append(blockedAdmission, "blocked-step"));
                 AssertTrue(!blocked.Tools.Any(tool => tool.Id == optional.Id),
                     "failed event append cannot publish callable authority");
@@ -782,7 +784,8 @@ namespace RNAssistant.Harness
                 reloaded.LastRun.RunId = "durable-confirmation-run";
                 using (var reconstructed = ConversationModelSession.CreateAsync(adapter, null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
-                    new ChatStore(FixturePaths.Value), ChatModes.Agent, "Continue after confirmation.", reloaded,
+                    EventStore(new ChatStore(FixturePaths.Value)), ChatModes.Agent,
+                    "Continue after confirmation.", reloaded,
                     NewContext(adapter), settings, catalog, null, null, true, null,
                     CancellationToken.None).GetAwaiter().GetResult())
                 {
@@ -795,7 +798,7 @@ namespace RNAssistant.Harness
                 reloaded.LastRun.TurnId = "next-turn";
                 using (var nextTurn = ConversationModelSession.CreateAsync(adapter, null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
-                    new ChatStore(FixturePaths.Value), ChatModes.Agent, "Start another turn.", reloaded,
+                    EventStore(new ChatStore(FixturePaths.Value)), ChatModes.Agent, "Start another turn.", reloaded,
                     NewContext(adapter), settings, catalog, null, null, false, null,
                     CancellationToken.None).GetAwaiter().GetResult())
                 {
@@ -810,7 +813,7 @@ namespace RNAssistant.Harness
                 changedCatalog.Single(tool => tool.Id == optional.Id).Description = "Changed after admission";
                 using (var changed = ConversationModelSession.CreateAsync(adapter, null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
-                    new ChatStore(FixturePaths.Value), ChatModes.Agent, "Continue with drift.", reloaded,
+                    EventStore(new ChatStore(FixturePaths.Value)), ChatModes.Agent, "Continue with drift.", reloaded,
                     NewContext(adapter), settings, changedCatalog, null, null, true, null,
                     CancellationToken.None).GetAwaiter().GetResult())
                 {
@@ -824,18 +827,18 @@ namespace RNAssistant.Harness
                 store.Save(reloaded);
                 var rebase = CallableToolPack.Create(ChatModes.Agent, adapter.HostName,
                     reloaded.LastRun.RunId, changedCatalog,
-                    new ToolPackAdmissionJournal(store, reloaded).ReadAccepted());
+                    new ToolPackAdmissionJournal(EventStore(store), reloaded).ReadAccepted());
                 var rebaseEvidence = ReadSchemaEvidence(executor, changedCatalog, secondOptional.Id, "rebase-read");
                 rebaseEvidence.RunId = reloaded.LastRun.RunId;
                 AssertTrue(rebase.StageReadResult(rebaseEvidence), "fresh exact evidence can stage after drift");
                 var rebaseAdmission = rebase.PreparePending((tools, state) => true);
                 AssertEqual(ToolPackSnapshotFactory.Capture(ChatModes.Agent, adapter.HostName, rebase.Tools).Revision,
                     rebaseAdmission.PreviousRevision, "fresh admission rebases from the current deterministic core");
-                new ToolPackAdmissionJournal(store, reloaded).Append(rebaseAdmission, "rebase-step");
+                new ToolPackAdmissionJournal(EventStore(store), reloaded).Append(rebaseAdmission, "rebase-step");
                 rebase.Publish(rebaseAdmission);
                 using (var rebased = ConversationModelSession.CreateAsync(adapter, null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
-                    new ChatStore(FixturePaths.Value), ChatModes.Agent, "Continue after rebase.", reloaded,
+                    EventStore(new ChatStore(FixturePaths.Value)), ChatModes.Agent, "Continue after rebase.", reloaded,
                     NewContext(adapter), settings, changedCatalog, null, null, true, null,
                     CancellationToken.None).GetAwaiter().GetResult())
                 {

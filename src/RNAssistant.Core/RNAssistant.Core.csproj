@@ -104,6 +104,7 @@
     <Compile Include="Tools\Contracts\ToolResult.cs" />
     <Compile Include="Tools\IToolRuntime.cs" />
     <Compile Include="Persistence\IRunStore.cs" />
+    <Compile Include="Persistence\IEventStore.cs" />
     <Compile Include="Persistence\AgentRunState.cs" />
     <Compile Include="ModelProtocol\AgentModelProtocol.cs" />
     <Compile Include="ModelProtocol\ModelProtocolContracts.cs" />
@@ -158,6 +159,7 @@
     <Compile Include="Storage\CasBlobCodec.cs" />
     <Compile Include="Storage\ChatHeaderReducer.cs" />
     <Compile Include="Storage\ChatStore.cs" />
+    <Compile Include="Storage\ChatEventStoreAdapter.cs" />
     <Compile Include="Storage\ChatStore.Artifacts.cs" />
     <Compile Include="Storage\ChatStore.Caching.cs" />
     <Compile Include="Storage\ChatStore.EventLog.cs" />

@@ -390,8 +390,11 @@ namespace RNAssistant.Office
                     }
                     _chatStore.Save(session);
                     preparedTurnPersisted = true;
-                    causalTrace = RunCausalTrace.Begin(_chatStore, session);
-                    RunCausalTrace.Record(new CausalTraceRecord { Stage = "run.started", Status = "running" });
+                    causalTrace = RunCausalTrace.Begin(_eventStore, session);
+                    RunCausalTrace.Record(new CausalTraceRecord(SessionEventKind.RunStartedObservation)
+                    {
+                        Status = "running"
+                    });
                     _chatSessions.NotifySaved(session);
                     if (commitUserAttachments && appendedUserMessage != null)
                     {

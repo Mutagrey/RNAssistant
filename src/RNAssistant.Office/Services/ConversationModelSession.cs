@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Storage;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
@@ -35,19 +35,19 @@ namespace RNAssistant.Office.Services
 
         private ConversationModelSession(IOfficeApplicationAdapter adapter,
             ContextCompactionService contextCompactionService, AttachmentAnalysisService attachmentAnalysisService,
-            ChatStore store, ChatSession session)
+            IEventStore eventStore, ChatSession session)
         {
             _adapter = adapter;
             _contextCompactionService = contextCompactionService;
             _attachmentAnalysisService = attachmentAnalysisService;
-            _toolPackJournal = new ToolPackAdmissionJournal(store, session);
+            _toolPackJournal = new ToolPackAdmissionJournal(eventStore, session);
         }
 
         internal static async Task<ConversationModelSession> CreateAsync(
             IOfficeApplicationAdapter adapter,
             ContextCompactionService contextCompactionService,
             AttachmentAnalysisService attachmentAnalysisService,
-            ChatStore store,
+            IEventStore eventStore,
             string mode,
             string text,
             ChatSession session,
@@ -60,7 +60,8 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
-            var owner = new ConversationModelSession(adapter, contextCompactionService, attachmentAnalysisService, store, session)
+            var owner = new ConversationModelSession(adapter, contextCompactionService, attachmentAnalysisService,
+                eventStore, session)
             {
                 _mode = mode,
                 _userText = text,

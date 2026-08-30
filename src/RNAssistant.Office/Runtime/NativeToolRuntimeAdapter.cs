@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -101,16 +102,17 @@ namespace RNAssistant.Office.Runtime
 
         public async Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken)
         {
-            Trace(context, "tool.execution.started", null);
+            Trace(context, SessionEventKind.ToolExecutionStartedObservation, null);
             try
             {
                 var record = await _runtime.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
-                Trace(context, "tool.execution.completed", record.Outcome.ToString());
+                Trace(context, SessionEventKind.ToolExecutionCompletedObservation, record.Outcome.ToString());
                 return record;
             }
             catch (Exception ex)
             {
-                Trace(context, "tool.execution.completed", ex is OperationCanceledException ? "cancelled" : "threw");
+                Trace(context, SessionEventKind.ToolExecutionCompletedObservation,
+                    ex is OperationCanceledException ? "cancelled" : "threw");
                 throw;
             }
         }
@@ -161,12 +163,12 @@ namespace RNAssistant.Office.Runtime
             }
         }
 
-        private void Trace(ToolExecutionContext context, string stage, string status)
+        private void Trace(ToolExecutionContext context, SessionEventKind kind, string status)
         {
             if (!_trace) return;
-            RunCausalTrace.Record(new CausalTraceRecord
+            RunCausalTrace.Record(new CausalTraceRecord(kind)
             {
-                Stage = stage, StepId = context.StepId, ToolCallId = context.Call.Id,
+                StepId = context.StepId, ToolCallId = context.Call.Id,
                 ToolId = context.Call.Name, Status = status, Boundary = "tool_runtime"
             });
         }

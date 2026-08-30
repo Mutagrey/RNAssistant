@@ -819,7 +819,7 @@ namespace RNAssistant.Harness
                     }.ToString(Formatting.None),
                     "{\"message\":\"Done.\",\"tool_calls\":[]}"
                 }));
-                var trace = new ModelTracePersistenceService(store);
+                var trace = new ModelTracePersistenceService(EventStore(store));
                 var requestCount = 0;
                 var rawByAttempt = new Dictionary<string, string>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -844,7 +844,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = content });
                 };
                 ChatTurnResult result;
-                using (RunCausalTrace.Begin(store, session))
+                using (RunCausalTrace.Begin(EventStore(store), session))
                 {
                     result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                         ChatModes.Agent, "Update Module1.", session, NewContext(adapter),

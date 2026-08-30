@@ -49,7 +49,7 @@ namespace RNAssistant.Office.Services
             // accounted. Fresh catalog, document context and media stay outside Core.
             if (_confirmedCommand != null && _refresh != null)
                 UseInput(await _refresh(cancellationToken).ConfigureAwait(false));
-            _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments, _store,
+            _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments, _eventStore,
                 _policy.Mode, _text, _session, _input.Context, _input.Settings, _catalog, _skills,
                 _input.Attachments, _confirmedCommand != null, _progress, cancellationToken).ConfigureAwait(false);
         }

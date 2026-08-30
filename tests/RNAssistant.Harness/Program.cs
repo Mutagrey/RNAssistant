@@ -40,6 +40,7 @@ namespace RNAssistant.Harness
             {
                 Test("harness: native async execution", HarnessRunsNativeAsync),
                 Test("harness: production projects include all source files", ProductionProjectsIncludeAllSourceFiles),
+                Test("architecture: Office event consumers use typed port", OfficeEventConsumersUseTypedPort),
                 Test("harness: versioning ordinary builds and commits need no bump", VersioningOrdinaryBuildsNeedNoBump),
                 Test("harness: versioning source archives build without Git", VersioningSourceArchivesBuildWithoutGit),
                 Test("harness: versioning rejects malformed metadata", VersioningRejectsMalformedMetadata),
@@ -282,6 +283,7 @@ namespace RNAssistant.Harness
                 Test("storage: streaming queue is ordered", StreamingTraceQueueIsOrdered),
                 Test("storage: streaming queue drains before terminal", StreamingTraceQueueDrainsBeforeTerminal),
                 Test("storage: event log is canonical", SessionEventLogIsCanonical),
+                Test("storage: typed event port preserves classified wire", TypedEventPortPreservesClassifiedWire),
                 Test("storage: accepted call operation ignores result role", AcceptedCallOperationIgnoresResultRole),
                 Test("storage: natural list changes omit reorder", NaturalListChangesOmitReorder),
                 Test("storage: headers use artifact metadata", ChatHeadersUseArtifactMetadata),

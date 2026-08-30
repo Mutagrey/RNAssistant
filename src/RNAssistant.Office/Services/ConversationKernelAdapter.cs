@@ -42,6 +42,7 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _executor;
         private readonly ChatStore _store;
+        private readonly IEventStore _eventStore;
         private readonly IMaterializedModelProtocol _protocol;
         private readonly ContextCompactionService _compaction;
         private readonly AttachmentAnalysisService _attachments;
@@ -72,7 +73,7 @@ namespace RNAssistant.Office.Services
         private string _stepMessage;
 
         internal ConversationKernelAdapter(IOfficeApplicationAdapter adapter, OfficeToolExecutor executor,
-            ChatStore store, IMaterializedModelProtocol protocol, ContextCompactionService compaction,
+            ChatStore store, IEventStore eventStore, IMaterializedModelProtocol protocol, ContextCompactionService compaction,
             AttachmentAnalysisService attachments, Action<ChatSession> saved, string mode, string text,
             ChatSession session, ConversationRunInput input, Action<string, string, ChatActivity> progress,
             ConversationRunService.PendingToolRegistrar registrar, CancellationToken cancellationToken,
@@ -81,6 +82,7 @@ namespace RNAssistant.Office.Services
             _adapter = adapter;
             _executor = executor;
             _store = store;
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _protocol = protocol;
             _compaction = compaction;
             _attachments = attachments;

@@ -61,6 +61,61 @@ namespace RNAssistant.Harness
             throw new InvalidOperationException("RNAssistant repository root was not found.");
         }
 
+        private static void OfficeEventConsumersUseTypedPort()
+        {
+            var root = FindHarnessRepositoryRoot();
+            var officeRoot = Path.Combine(root, "src", "RNAssistant.Office");
+            var forbiddenMembers = new[]
+            {
+                ".AppendTrace(",
+                ".AppendTraceBytes(",
+                ".ReadEvents(",
+                ".ReadCompleteEvents(",
+                ".ReadEventPayload("
+            };
+            var offenders = new List<string>();
+            foreach (var path in Directory.GetFiles(officeRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                if (IsGeneratedProjectPath(path)) continue;
+                var source = File.ReadAllText(path);
+                foreach (var member in forbiddenMembers)
+                {
+                    if (source.IndexOf(member, StringComparison.Ordinal) >= 0)
+                    {
+                        offenders.Add(Path.GetRelativePath(root, path).Replace('\\', '/') + ": " + member);
+                    }
+                }
+            }
+            AssertEqual(0, offenders.Count,
+                "Office event consumers must use IEventStore instead of broad ChatStore event members: " +
+                string.Join(", ", offenders.ToArray()));
+
+            var causal = File.ReadAllText(Path.Combine(officeRoot, "Services", "RunCausalTrace.cs"));
+            AssertContains(causal, "public CausalTraceRecord(SessionEventKind kind)",
+                "causal records require a closed event kind at construction");
+            AssertContains(causal, "descriptor.Lane != SessionEventLane.DomainDiagnostic",
+                "causal records cannot claim Agent authority");
+            AssertTrue(causal.IndexOf("public string Stage { get; set; }", StringComparison.Ordinal) < 0,
+                "causal records cannot inject an arbitrary persisted event type");
+
+            var publicChatStoreMethods = typeof(RNAssistant.Core.Storage.ChatStore)
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .Select(method => method.Name)
+                .ToArray();
+            foreach (var broadMember in new[]
+            {
+                "AppendTrace",
+                "AppendTraceBytes",
+                "ReadEvents",
+                "ReadCompleteEvents",
+                "ReadEventPayload"
+            })
+            {
+                AssertTrue(!publicChatStoreMethods.Contains(broadMember, StringComparer.Ordinal),
+                    "replaced broad ChatStore event API is not externally callable: " + broadMember);
+            }
+        }
+
         private static bool IsGeneratedProjectPath(string path)
         {
             var normalized = Path.GetFullPath(path)

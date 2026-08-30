@@ -1,7 +1,8 @@
 using System;
 using System.Threading;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Storage;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Office.Diagnostics;
 
 namespace RNAssistant.Office.Services
@@ -11,17 +12,17 @@ namespace RNAssistant.Office.Services
     {
         private static readonly AsyncLocal<RunCausalTrace> Current = new AsyncLocal<RunCausalTrace>();
         private readonly RunCausalTrace _previous;
-        private readonly ChatStore _store;
+        private readonly IEventStore _events;
         private readonly ChatSession _session;
         private readonly string _runId;
         private readonly string _turnId;
         private readonly string _documentRuntimeId;
         private int _disposed;
 
-        private RunCausalTrace(ChatStore store, ChatSession session)
+        private RunCausalTrace(IEventStore eventStore, ChatSession session)
         {
             _previous = Current.Value;
-            _store = store;
+            _events = eventStore;
             _session = session;
             var run = session == null ? null : session.LastRun;
             _runId = run == null ? null : run.RunId;
@@ -29,9 +30,9 @@ namespace RNAssistant.Office.Services
             _documentRuntimeId = run == null ? null : run.DocumentRuntimeKey;
         }
 
-        public static RunCausalTrace Begin(ChatStore store, ChatSession session)
+        public static RunCausalTrace Begin(IEventStore eventStore, ChatSession session)
         {
-            var scope = new RunCausalTrace(store, session);
+            var scope = new RunCausalTrace(eventStore, session);
             Current.Value = scope;
             return scope;
         }
@@ -40,15 +41,19 @@ namespace RNAssistant.Office.Services
         {
             var scope = Current.Value;
             if (scope == null || Volatile.Read(ref scope._disposed) != 0 || record == null ||
-                scope._store == null || scope._session == null || string.IsNullOrWhiteSpace(scope._runId)) return;
+                record.Kind == SessionEventKind.Unknown || scope._events == null || scope._session == null ||
+                string.IsNullOrWhiteSpace(scope._runId)) return;
             record.SessionId = scope._session.Id;
             record.RunId = scope._runId;
             record.TurnId = scope._turnId;
             if (string.IsNullOrWhiteSpace(record.DocumentRuntimeId)) record.DocumentRuntimeId = scope._documentRuntimeId;
             try
             {
-                scope._store.AppendTrace(scope._session, record.Stage, record, null, null,
-                    scope._runId, scope._turnId, record.StepId);
+                scope._events.Append(scope._session, new SessionEventWrite(
+                    SessionEventDescriptors.For(record.Kind),
+                    record,
+                    null,
+                    new SessionEventCorrelation(scope._runId, scope._turnId, record.StepId)));
             }
             catch (Exception)
             {
@@ -60,9 +65,8 @@ namespace RNAssistant.Office.Services
 
         public static void Summary(ChatSession session)
         {
-            Record(new CausalTraceRecord
+            Record(new CausalTraceRecord(SessionEventKind.RunSummaryCreated)
             {
-                Stage = "run.summary.created",
                 Status = session == null || session.LastRun == null ? null : session.LastRun.Status,
                 Boundary = "legacy_run_record"
             });
@@ -70,7 +74,7 @@ namespace RNAssistant.Office.Services
 
         public static void Projected(string dto)
         {
-            Record(new CausalTraceRecord { Stage = "ui.projected", Boundary = dto });
+            Record(new CausalTraceRecord(SessionEventKind.UiProjected) { Boundary = dto });
         }
 
         public void Dispose()
@@ -82,7 +86,30 @@ namespace RNAssistant.Office.Services
 
     internal sealed class CausalTraceRecord
     {
-        public string Stage { get; set; }
+        public CausalTraceRecord(SessionEventKind kind)
+        {
+            var descriptor = SessionEventDescriptors.For(kind);
+            if (descriptor.Lane != SessionEventLane.DomainDiagnostic ||
+                descriptor.Authority != SessionEventAuthority.Diagnostic ||
+                descriptor.Durability != SessionEventDurability.BestEffort)
+            {
+                throw new ArgumentOutOfRangeException(nameof(kind), kind,
+                    "Causal trace accepts only best-effort Domain Diagnostic events.");
+            }
+            Kind = kind;
+        }
+
+        [JsonIgnore]
+        public SessionEventKind Kind { get; private set; }
+        public string Stage
+        {
+            get
+            {
+                return Kind == SessionEventKind.Unknown
+                    ? null
+                    : SessionEventDescriptors.For(Kind).Type;
+            }
+        }
         public string SessionId { get; set; }
         public string RunId { get; set; }
         public string TurnId { get; set; }

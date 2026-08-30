@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 
@@ -191,7 +192,7 @@ namespace RNAssistant.Office.Vba
             Func<VbaMutationActionResult> action,
             CancellationToken cancellationToken)
         {
-            TracePackageMutation(prepared, "domain.effect.prepared", null);
+            TracePackageMutation(prepared, SessionEventKind.DomainEffectPrepared, null);
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -205,7 +206,7 @@ namespace RNAssistant.Office.Vba
             VbaMutationActionResult actionResult;
             try
             {
-                TracePackageMutation(prepared, "domain.effect.dispatched", null);
+                TracePackageMutation(prepared, SessionEventKind.DomainEffectDispatched, null);
                 actionResult = action == null ? null : action();
             }
             catch (OperationCanceledException ex)
@@ -233,7 +234,7 @@ namespace RNAssistant.Office.Vba
             }
 
             var assessment = InspectPackageMutation(prepared);
-            TracePackageMutation(prepared, "domain.effect.verified", assessment.Status);
+            TracePackageMutation(prepared, SessionEventKind.DomainEffectVerified, assessment.Status);
             try
             {
                 _journal.CompletePackageMutation(
@@ -291,7 +292,7 @@ namespace RNAssistant.Office.Vba
         private void CompletePackageCancellationBeforeDispatch(VbaPackageMutationPreparation prepared)
         {
             var assessment = InspectPackageMutation(prepared);
-            TracePackageMutation(prepared, "domain.effect.verified", assessment.Status);
+            TracePackageMutation(prepared, SessionEventKind.DomainEffectVerified, assessment.Status);
             try
             {
                 _journal.CompletePackageMutation(
@@ -488,13 +489,12 @@ namespace RNAssistant.Office.Vba
 
         private static void TracePackageMutation(
             VbaPackageMutationPreparation prepared,
-            string stage,
+            SessionEventKind kind,
             string status)
         {
             if (prepared == null) return;
-            RunCausalTrace.Record(new CausalTraceRecord
+            RunCausalTrace.Record(new CausalTraceRecord(kind)
             {
-                Stage = stage,
                 StepId = prepared.StepId,
                 ToolCallId = prepared.ToolCallId,
                 DocumentRuntimeId = prepared.RuntimeDocumentKey,

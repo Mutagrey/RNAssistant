@@ -1,23 +1,23 @@
 using System;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Storage;
+using RNAssistant.Core.Persistence;
 
 namespace RNAssistant.Office.Services
 {
     internal sealed class ModelTracePersistenceService
     {
-        private readonly ChatStore _chatStore;
+        private readonly IEventStore _eventStore;
         private readonly SessionTraceWriteQueue _queue;
 
-        public ModelTracePersistenceService(ChatStore chatStore)
-            : this(chatStore, new SessionTraceWriteQueue())
+        public ModelTracePersistenceService(IEventStore eventStore)
+            : this(eventStore, new SessionTraceWriteQueue())
         {
         }
 
-        internal ModelTracePersistenceService(ChatStore chatStore, SessionTraceWriteQueue queue)
+        internal ModelTracePersistenceService(IEventStore eventStore, SessionTraceWriteQueue queue)
         {
-            _chatStore = chatStore ?? throw new ArgumentNullException("chatStore");
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _queue = queue ?? throw new ArgumentNullException("queue");
         }
 
@@ -46,10 +46,10 @@ namespace RNAssistant.Office.Services
         private void Persist(ChatSession session, LlmRequestOptions options, LlmTraceRecord record,
             string runId, string turnId, string documentRuntimeId)
         {
-            var type = EventType(record.Type);
+            var descriptor = Descriptor(record.Type);
             var data = new
             {
-                Stage = Stage(record.Type),
+                Stage = Stage(descriptor.Kind),
                 SessionId = session.Id,
                 RunId = runId,
                 TurnId = turnId,
@@ -80,33 +80,17 @@ namespace RNAssistant.Office.Services
                 record.Completed,
                 record.ChunkEncoding
             };
-            Action append;
-            if (record.PayloadUtf8Bytes == null)
-            {
-                append = () => _chatStore.AppendTrace(
-                    session,
-                    type,
-                    data,
-                    record.PayloadJson,
-                    record.PayloadContentType,
-                    runId,
-                    turnId,
-                    record.RequestId);
-            }
-            else
-            {
-                append = () => _chatStore.AppendTraceBytes(
-                    session,
-                    type,
-                    data,
-                    record.PayloadUtf8Bytes,
-                    record.PayloadContentType,
-                    runId,
-                    turnId,
-                    record.RequestId);
-            }
+            var payload = record.PayloadUtf8Bytes == null
+                ? SessionEventPayload.FromText(record.PayloadJson, record.PayloadContentType)
+                : SessionEventPayload.FromBytes(record.PayloadUtf8Bytes, record.PayloadContentType);
+            var write = new SessionEventWrite(
+                descriptor,
+                data,
+                payload,
+                new SessionEventCorrelation(runId, turnId, record.RequestId));
+            Action append = () => _eventStore.Append(session, write);
 
-            if (string.Equals(type, SessionEventTypes.AssistantChunk, StringComparison.Ordinal))
+            if (descriptor.Kind == SessionEventKind.ModelStreamChunk)
             {
                 _queue.Enqueue(session.Id, append);
                 return;
@@ -114,21 +98,28 @@ namespace RNAssistant.Office.Services
             _queue.EnqueueAndDrain(session.Id, append);
         }
 
-        private static string EventType(string type)
+        private static SessionEventDescriptor Descriptor(string type)
         {
-            if (string.Equals(type, "request", StringComparison.OrdinalIgnoreCase)) return SessionEventTypes.LlmRequest;
-            if (string.Equals(type, "response", StringComparison.OrdinalIgnoreCase)) return SessionEventTypes.LlmResponse;
-            if (string.Equals(type, "chunk", StringComparison.OrdinalIgnoreCase)) return SessionEventTypes.AssistantChunk;
-            if (string.Equals(type, "rejected", StringComparison.OrdinalIgnoreCase)) return SessionEventTypes.AgentResponseRejected;
-            if (string.Equals(type, "accepted", StringComparison.OrdinalIgnoreCase)) return "model.response.accepted";
-            return SessionEventTypes.LlmFailure;
+            if (string.Equals(type, "request", StringComparison.OrdinalIgnoreCase))
+                return SessionEventDescriptors.For(SessionEventKind.ModelRequestPrepared);
+            if (string.Equals(type, "response", StringComparison.OrdinalIgnoreCase))
+                return SessionEventDescriptors.For(SessionEventKind.ModelResponseReceived);
+            if (string.Equals(type, "chunk", StringComparison.OrdinalIgnoreCase))
+                return SessionEventDescriptors.For(SessionEventKind.ModelStreamChunk);
+            if (string.Equals(type, "rejected", StringComparison.OrdinalIgnoreCase))
+                return SessionEventDescriptors.For(SessionEventKind.ModelAttemptRejected);
+            if (string.Equals(type, "accepted", StringComparison.OrdinalIgnoreCase))
+                return SessionEventDescriptors.For(SessionEventKind.ModelResponseAccepted);
+            if (string.Equals(type, "failure", StringComparison.OrdinalIgnoreCase))
+                return SessionEventDescriptors.For(SessionEventKind.ModelFailure);
+            throw new InvalidOperationException("Unsupported model trace type: " + (type ?? "<null>") + ".");
         }
 
-        private static string Stage(string type)
+        private static string Stage(SessionEventKind kind)
         {
-            if (string.Equals(type, "request", StringComparison.OrdinalIgnoreCase)) return "model.request.prepared";
-            if (string.Equals(type, "rejected", StringComparison.OrdinalIgnoreCase)) return "model.attempt.rejected";
-            if (string.Equals(type, "accepted", StringComparison.OrdinalIgnoreCase)) return "model.response.accepted";
+            if (kind == SessionEventKind.ModelRequestPrepared) return "model.request.prepared";
+            if (kind == SessionEventKind.ModelAttemptRejected) return "model.attempt.rejected";
+            if (kind == SessionEventKind.ModelResponseAccepted) return SessionEventTypes.ModelResponseAccepted;
             return null;
         }
     }

@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -52,7 +53,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 });
                 ChatTurnResult result;
-                using (RunCausalTrace.Begin(store, session))
+                using (RunCausalTrace.Begin(EventStore(store), session))
                     result = service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter),
                         new AppSettings { AutoConfirmToolActions = true }, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
                         (phase, text, activity) =>
@@ -741,9 +742,9 @@ namespace RNAssistant.Harness
                 }).ToList();
                 Task.WhenAll(sessions.Select(session => Task.Run(async () =>
                 {
-                    using (RunCausalTrace.Begin(store, session))
+                    using (RunCausalTrace.Begin(EventStore(store), session))
                     {
-                        RunCausalTrace.Record(new CausalTraceRecord { Stage = "run.started" });
+                        RunCausalTrace.Record(new CausalTraceRecord(SessionEventKind.RunStartedObservation));
                         await Task.Yield();
                         RunCausalTrace.Summary(session);
                         RunCausalTrace.Projected("test_projection");
@@ -762,7 +763,7 @@ namespace RNAssistant.Harness
                 }
                 var gate = new TaskCompletionSource<bool>();
                 Task late;
-                using (RunCausalTrace.Begin(store, sessions[0]))
+                using (RunCausalTrace.Begin(EventStore(store), sessions[0]))
                 {
                     late = Task.Run(async () => { await gate.Task; RunCausalTrace.Projected("late_child"); });
                 }
@@ -798,7 +799,7 @@ namespace RNAssistant.Harness
                 };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = false };
-                using (RunCausalTrace.Begin(store, session))
+                using (RunCausalTrace.Begin(EventStore(store), session))
                 {
                     AssertEqual("waiting_confirmation", executor.Execute(command, tools, settings, false, false, session).Status,
                         "first run pauses before mutation");
@@ -806,7 +807,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count, "confirmation pause has no mutation");
                 session.LastRun.RunId = "after-confirm";
                 store.Save(session);
-                using (RunCausalTrace.Begin(store, session))
+                using (RunCausalTrace.Begin(EventStore(store), session))
                 {
                     AssertTrue(executor.Execute(command, tools, settings, false, true, session).Success, "confirmed call executes");
                 }
@@ -835,7 +836,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
                 var session = NewSession(adapter); // Deliberately not persisted: optional appends must fail harmlessly.
                 session.LastRun = new ChatRunRecord { RunId = "unsaved-run", TurnId = "unsaved-turn" };
-                using (RunCausalTrace.Begin(store, session))
+                using (RunCausalTrace.Begin(EventStore(store), session))
                 {
                     var result = executor.Execute(new ToolCommand
                     {
@@ -876,7 +877,7 @@ namespace RNAssistant.Harness
                 };
                 store.Save(session);
 
-                var service = new ModelTracePersistenceService(store, new SessionTraceWriteQueue(4));
+                var service = new ModelTracePersistenceService(EventStore(store), new SessionTraceWriteQueue(4));
                 var options = new LlmRequestOptions { TraceSession = session, TracePurpose = "agent" };
                 service.Configure(options);
                 var requestRecord = new LlmTraceRecord
@@ -988,6 +989,119 @@ namespace RNAssistant.Harness
                         AssertTrue(JObject.FromObject(replayed)["ExecutionEvidence"] == null,
                             "successful historical activity without evidence is not assigned a verified effect");
                 }
+            });
+        }
+
+        private static void TypedEventPortPreservesClassifiedWire()
+        {
+            WithTempPaths(paths =>
+            {
+                var descriptors = SessionEventDescriptors.All;
+                AssertEqual(Enum.GetValues(typeof(SessionEventKind)).Length - 1, descriptors.Count,
+                    "closed catalog covers every non-unknown event kind");
+                AssertEqual(descriptors.Count, descriptors.Select(item => item.Kind).Distinct().Count(),
+                    "event kinds are unique");
+                AssertEqual(descriptors.Count, descriptors.Select(item => item.Type).Distinct().Count(),
+                    "persisted event types are unique");
+                var declaredTypes = typeof(SessionEventTypes)
+                    .GetFields(BindingFlags.Public | BindingFlags.Static)
+                    .Where(field => field.IsLiteral && !field.IsInitOnly && field.FieldType == typeof(string))
+                    .Select(field => (string)field.GetRawConstantValue())
+                    .ToArray();
+                AssertEqual(declaredTypes.Length, descriptors.Count,
+                    "closed catalog has neither missing nor extra persisted event types");
+                AssertTrue(declaredTypes.All(type => descriptors.Any(item => item.Type == type)),
+                    "closed catalog classifies every persisted session event type");
+
+                var storageDescriptor = SessionEventDescriptors.For(SessionEventKind.SessionCommit);
+                AssertEqual(SessionEventWriteScope.StorageInternal, storageDescriptor.WriteScope,
+                    "session projection commits remain owned by ChatStore");
+                RuntimeThrows<InvalidOperationException>(() => new SessionEventWrite(
+                    storageDescriptor, new { }, null, null));
+
+                var requestDescriptor = SessionEventDescriptors.For(SessionEventKind.ModelRequestPrepared);
+                AssertEqual(SessionEventLane.Agent, requestDescriptor.Lane, "materialized request is an Agent event");
+                AssertEqual(SessionEventAuthority.Authority, requestDescriptor.Authority,
+                    "materialized request is pre-dispatch authority");
+                AssertEqual(SessionEventDurability.Mandatory, requestDescriptor.Durability,
+                    "materialized request append is mandatory");
+                AssertEqual(SessionEventWriteScope.EventPort, requestDescriptor.WriteScope,
+                    "Office source owner may append only declared event-port kinds");
+
+                var rejectedDescriptor = SessionEventDescriptors.For(SessionEventKind.ModelAttemptRejected);
+                AssertEqual(SessionEventAuthority.Diagnostic, rejectedDescriptor.Authority,
+                    "rejected model attempt grants no authority");
+                AssertEqual(SessionEventDurability.Mandatory, rejectedDescriptor.Durability,
+                    "rejected attempt remains a required diagnostic boundary");
+
+                var acceptedMarker = SessionEventDescriptors.For(SessionEventKind.ModelResponseAccepted);
+                AssertEqual(SessionEventAuthority.Diagnostic, acceptedMarker.Authority,
+                    "accepted trace marker does not replace accepted run history");
+                AssertEqual(SessionEventDurability.BestEffort, acceptedMarker.Durability,
+                    "accepted trace marker remains optional after protocol acceptance");
+
+                var acceptedPack = SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionAccepted);
+                AssertEqual(SessionEventAuthority.Authority, acceptedPack.Authority,
+                    "accepted ToolPack extension is reconstruction authority");
+                AssertEqual(SessionEventDurability.Mandatory, acceptedPack.Durability,
+                    "ToolPack publication requires the durable event");
+                var rejectedPack = SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionRejected);
+                AssertEqual(SessionEventAuthority.Diagnostic, rejectedPack.Authority,
+                    "rejected ToolPack extension grants no callable authority");
+
+                var causalDescriptor = SessionEventDescriptors.For(SessionEventKind.DomainEffectVerified);
+                AssertEqual(SessionEventLane.DomainDiagnostic, causalDescriptor.Lane,
+                    "domain effect observation is separate from Agent authority");
+                AssertEqual(SessionEventAuthority.Diagnostic, causalDescriptor.Authority,
+                    "domain journal remains the effect authority");
+                AssertEqual(SessionEventDurability.BestEffort, causalDescriptor.Durability,
+                    "causal observation cannot change the domain outcome");
+                RuntimeThrows<ArgumentOutOfRangeException>(() =>
+                    new CausalTraceRecord(SessionEventKind.ModelRequestPrepared));
+
+                SessionEventDescriptor roundTripDescriptor;
+                AssertTrue(SessionEventDescriptors.TryForType(SessionEventTypes.DomainEffectVerified,
+                    out roundTripDescriptor) && ReferenceEquals(causalDescriptor, roundTripDescriptor),
+                    "persisted wire type resolves to the canonical descriptor");
+                RuntimeThrows<ArgumentOutOfRangeException>(() =>
+                    SessionEventDescriptors.For((SessionEventKind)999));
+
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "typed-event-port", "Typed.docx", "Typed events");
+                var eventStore = EventStore(store);
+                var traceOptions = new LlmRequestOptions { TraceSession = session };
+                new ModelTracePersistenceService(eventStore).Configure(traceOptions);
+                RuntimeThrows<InvalidOperationException>(() => traceOptions.TraceSink(new LlmTraceRecord
+                {
+                    Type = "unexpected",
+                    RequestId = "unexpected-trace"
+                }));
+                var request = eventStore.Append(session, new SessionEventWrite(
+                    requestDescriptor,
+                    new { Stage = "model.request.prepared", RequestId = "transport-1", Purpose = "agent" },
+                    SessionEventPayload.FromText("{\"request\":true}", "application/json"),
+                    new SessionEventCorrelation("run-1", "turn-1", "transport-1")));
+                AssertEqual(SessionEventTypes.LlmRequest, request.Type, "adapter preserves the existing request type");
+                AssertEqual("transport-1", request.StepId, "adapter preserves correlation");
+                AssertEqual("{\"request\":true}", eventStore.ReadPayload(session, request),
+                    "adapter preserves exact payload through existing CAS");
+                var otherSession = store.Create("Word", "typed-event-port-other", "Other.docx", "Other chat");
+                RuntimeThrows<InvalidOperationException>(() => eventStore.ReadPayload(otherSession, request));
+
+                var diagnostic = eventStore.Append(session, new SessionEventWrite(
+                    causalDescriptor,
+                    new { Stage = SessionEventTypes.DomainEffectVerified, Status = "verified" },
+                    null,
+                    new SessionEventCorrelation("run-1", "turn-1", "step-1")));
+                AssertEqual(SessionEventTypes.DomainEffectVerified, diagnostic.Type,
+                    "typed diagnostic keeps its existing wire type");
+                var historical = store.AppendTrace(session, "legacy.unknown", new { Marker = "retained" },
+                    null, null, "run-1", "turn-1", "step-legacy");
+                var complete = eventStore.Read(session, SessionEventReadMode.RequireComplete);
+                AssertTrue(complete.Any(item => item.EventId == request.EventId) &&
+                    complete.Any(item => item.EventId == diagnostic.EventId) &&
+                    complete.Any(item => item.EventId == historical.EventId),
+                    "one adapter reads the same canonical stream it appends");
             });
         }
 

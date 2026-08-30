@@ -174,7 +174,7 @@ namespace RNAssistant.Core.Storage
             SaveInternal(session, null, false);
         }
 
-        public SessionEvent AppendTrace(
+        internal SessionEvent AppendTrace(
             ChatSession session,
             string type,
             object data,
@@ -195,7 +195,7 @@ namespace RNAssistant.Core.Storage
                 stepId);
         }
 
-        public SessionEvent AppendTraceBytes(
+        internal SessionEvent AppendTraceBytes(
             ChatSession session,
             string type,
             object data,
@@ -347,7 +347,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public IReadOnlyList<SessionEvent> ReadEvents(string host, string documentKey, string sessionId)
+        internal IReadOnlyList<SessionEvent> ReadEvents(string host, string documentKey, string sessionId)
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return new List<SessionEvent>();
             var path = GetSessionPath(host, documentKey, sessionId);
@@ -361,7 +361,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public IReadOnlyList<SessionEvent> ReadCompleteEvents(string host, string documentKey, string sessionId)
+        internal IReadOnlyList<SessionEvent> ReadCompleteEvents(string host, string documentKey, string sessionId)
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return new List<SessionEvent>();
             var path = GetSessionPath(host, documentKey, sessionId);
@@ -448,7 +448,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public string ReadEventPayload(SessionEvent sessionEvent)
+        internal string ReadEventPayload(SessionEvent sessionEvent)
         {
             return sessionEvent == null || sessionEvent.Payload == null
                 ? null

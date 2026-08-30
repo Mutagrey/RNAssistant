@@ -87,8 +87,11 @@ namespace RNAssistant.Office
                 };
                 // Kernel.Resume claims the durable pending state before execution.
                 // Do not persist a second, controller-owned running transition.
-                causalTrace = RunCausalTrace.Begin(_chatStore, session);
-                RunCausalTrace.Record(new CausalTraceRecord { Stage = "run.started", Status = "running" });
+                causalTrace = RunCausalTrace.Begin(_eventStore, session);
+                RunCausalTrace.Record(new CausalTraceRecord(SessionEventKind.RunStartedObservation)
+                {
+                    Status = "running"
+                });
                 _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
 
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;

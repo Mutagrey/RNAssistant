@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 9 — 9A–9C UI и 9D1–9D2 persistence done host-neutral; 9D3–9D5 remain
-Current task: Phase 9D2 закрыл R45 host-neutral. Agent start и confirmation при `RunStoreException` освобождают run lease, не сохраняют `UnpersistedSummary`, reload-ят exact canonical stream и вызывают один `ChatSessionService` reconciliation owner. Pre-dispatch pending остаётся доступным; open possible dispatch становится unknown один раз; tool/append не повторяются.
+Current phase: Phase 9 — 9A–9C UI и 9D1–9D3 persistence done host-neutral; 9D4–9D5 remain
+Current task: Phase 9D3 закрыл R46 host-neutral. Все current top-level chat events имеют closed descriptor с lane/authority/durability/write scope; один `IEventStore` adapter использует прежний `ChatStore`. Active Office model/ToolPack/causal/diagnostics consumers switched atomically, storage lifecycle остался internal, arbitrary string append удалён.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный Phase 9D3 — ввести closed typed classification existing chat events и один narrow `IEventStore` над тем же `ChatStore`; атомарно переключить active Office writers/readers и удалить их arbitrary string append dependency. Authority/diagnostic и mandatory/best-effort задаёт source owner; новый файл/store/schema/dual-write запрещены. 9D4–9D5 и Phase 10 не смешивать. 7D по-прежнему не начинать без WQ0/5B2.
-Required context: [9D1 audit](PHASE_9D1_PERSISTENCE_AUDIT.md), [9D2 evidence](PHASE_9D2_RUNSTORE_RECOVERY.md), [master Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [session events](../session-events.md), [trajectory query](../trajectory-query.md), [migration map](MIGRATION_MAP.md), [risk register](RISK_REGISTER.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: R45 fixed host-neutral, but Windows controller/WebView qualification remains open. Full Phase 9 still requires typed event classification/`IEventStore`, `IConversationStore`, `RunViewState`, stale/multi-window verification and flat UI projection removal in 9D3–9D5. R37 read-only historical adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/reload/confirmation/live-append acceptance открыт. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 9D4 — определить минимальный `IConversationStore` над тем же `ChatStore` и атомарно переключить session/controller load/save/projection consumers. Writable snapshot, второй store, dual-write, CAS/storage-internal API и 9D5 UI projection в port не переносить. 9D5 и Phase 10 не смешивать. 7D по-прежнему не начинать без WQ0/5B2.
+Required context: [9D1 audit](PHASE_9D1_PERSISTENCE_AUDIT.md), [9D2 evidence](PHASE_9D2_RUNSTORE_RECOVERY.md), [9D3 evidence](PHASE_9D3_TYPED_EVENT_STORE.md), [master Phase 9](STABILIZATION_MASTER_PLAN.md#phase-9--persistence-и-ui-projection), [session events](../session-events.md), [migration map](MIGRATION_MAP.md), [risk register](RISK_REGISTER.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: R45/R46 fixed host-neutral, but Windows controller/WebView persistence qualification remains open. Full Phase 9 still requires `IConversationStore`, immutable `RunViewState`, replay equality, stale/multi-window verification and flat UI projection removal in 9D4–9D5. R37 read-only historical adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/reload/confirmation/live-append acceptance открыт. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -22,11 +22,34 @@ mutation slices выполнены отдельными host-neutral changes; 6H
 6I package runtime/R41 и 6J rename/R42 выполнены host-neutral; 7A audit и 7B typed
 Excel reads и verified `write_range` завершены host-neutral; 7D ждёт WQ0/5B2, а
 Phase 8A immutable execution snapshot, 8B callable lifecycle/admission, 8C durable
-reconstruction и 8D resource data-plane cutover завершены host-neutral; 9D1 audit и
-9D2 same-process fail-stop reload/reconciliation завершены, следующий
-dependency-safe slice — 9D3 typed event classification/`IEventStore`.
+reconstruction и 8D resource data-plane cutover завершены host-neutral; 9D1 audit,
+9D2 same-process fail-stop reload/reconciliation и 9D3 typed event
+classification/`IEventStore` завершены, следующий dependency-safe slice — 9D4
+minimal `IConversationStore`.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
+
+Phase 9D3 typed event store (2026-08-30): closed `SessionEventKind` catalog теперь
+классифицирует каждый current top-level chat event по Agent/Domain Diagnostic lane,
+authority/diagnostic meaning, mandatory/best-effort durability и storage-internal/
+event-port write scope. Один `ChatEventStoreAdapter` делегирует прежнему `ChatStore`;
+JSONL/CAS/schema/type strings/correlation/lifecycle не менялись. `session.*`,
+`turn.*`, `step.*` нельзя append-ить через port. Materialized request и accepted
+ToolPack extension — mandatory authority; rejected attempts и current transport
+terminal/chunk evidence — mandatory diagnostics; accepted trace marker и causal
+observations — best effort. Accepted response/calls/results остаются canonical
+`session.commit`.
+
+Все active Office model trace, ToolPack, causal trace и controller diagnostics
+writers/readers переключены вместе. Direct `AppendTrace*`, broad event reads и
+writable arbitrary causal `Stage` в Office удалены; replaced raw `ChatStore` event
+API internalized. Core storage/recovery и
+`ITrajectoryQuery` сохранили свои владельцы. 24 distinct targeted cases pass;
+MockDemo actual-controller compile — 0 errors / 3 existing CA1416 PDF warnings.
+`ValidateVersionFormat`, diff check и 208 local links в 9 changed Markdown files —
+pass.
+[Evidence](PHASE_9D3_TYPED_EVENT_STORE.md). Windows controller/WebView persistence
+qualification открыт; 9D4 conversation port и 9D5 UI projection не начаты.
 
 Phase 9D2 same-process run-store recovery (2026-08-30): оба Agent controller path
 теперь отдельно ловят `RunStoreException`, закрывают stale causal scope, освобождают

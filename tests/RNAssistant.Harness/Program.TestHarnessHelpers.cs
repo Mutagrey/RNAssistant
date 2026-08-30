@@ -9,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
@@ -60,6 +61,11 @@ namespace RNAssistant.Harness
         }
 
         private static readonly AsyncLocal<AppDataPaths> FixturePaths = new AsyncLocal<AppDataPaths>();
+
+        private static IEventStore EventStore(ChatStore store)
+        {
+            return new ChatEventStoreAdapter(store);
+        }
 
         private static ConversationRunService CreateConversationRunService(IOfficeApplicationAdapter adapter,
             OfficeToolExecutor executor, LlmCompletionDelegate completion, ContextCompactionService compaction = null,

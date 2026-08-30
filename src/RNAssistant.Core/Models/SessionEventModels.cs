@@ -19,8 +19,17 @@ namespace RNAssistant.Core.Models
         public const string LlmResponse = "llm.response";
         public const string LlmFailure = "llm.failure";
         public const string AgentResponseRejected = "agent.response.rejected";
+        public const string ModelResponseAccepted = "model.response.accepted";
         public const string ToolPackExtensionAccepted = "tool_pack.extension.accepted";
         public const string ToolPackExtensionRejected = "tool_pack.extension.rejected";
+        public const string RunStartedObservation = "run.started";
+        public const string RunSummaryCreated = "run.summary.created";
+        public const string UiProjected = "ui.projected";
+        public const string ToolExecutionStartedObservation = "tool.execution.started";
+        public const string ToolExecutionCompletedObservation = "tool.execution.completed";
+        public const string DomainEffectPrepared = "domain.effect.prepared";
+        public const string DomainEffectDispatched = "domain.effect.dispatched";
+        public const string DomainEffectVerified = "domain.effect.verified";
     }
 
     public static class SessionOperationTypes

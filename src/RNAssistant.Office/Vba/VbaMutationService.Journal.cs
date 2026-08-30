@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 
@@ -88,7 +89,7 @@ namespace RNAssistant.Office.Vba
                     false);
             }
 
-            TraceMutation(prepared, "domain.effect.prepared", null);
+            TraceMutation(prepared, SessionEventKind.DomainEffectPrepared, null);
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -102,7 +103,7 @@ namespace RNAssistant.Office.Vba
             VbaMutationActionResult actionResult;
             try
             {
-                TraceMutation(prepared, "domain.effect.dispatched", null);
+                TraceMutation(prepared, SessionEventKind.DomainEffectDispatched, null);
                 actionResult = action == null ? null : action();
             }
             catch (OperationCanceledException ex)
@@ -149,7 +150,7 @@ namespace RNAssistant.Office.Vba
                 }
             }
 
-            TraceMutation(prepared, "domain.effect.verified", assessment.Status);
+            TraceMutation(prepared, SessionEventKind.DomainEffectVerified, assessment.Status);
             try
             {
                 _journal.CompleteMutation(
@@ -256,7 +257,7 @@ namespace RNAssistant.Office.Vba
         private void CompleteCancelledBeforeDispatch(VbaMutationPreparation prepared)
         {
             var assessment = _verifier.InspectMutation(prepared);
-            TraceMutation(prepared, "domain.effect.verified", assessment.Status);
+            TraceMutation(prepared, SessionEventKind.DomainEffectVerified, assessment.Status);
             try
             {
                 _journal.CompleteMutation(
@@ -309,13 +310,12 @@ namespace RNAssistant.Office.Vba
 
         private static void TraceMutation(
             VbaMutationPreparation prepared,
-            string stage,
+            SessionEventKind kind,
             string status)
         {
             if (prepared == null) return;
-            RunCausalTrace.Record(new CausalTraceRecord
+            RunCausalTrace.Record(new CausalTraceRecord(kind)
             {
-                Stage = stage,
                 StepId = prepared.StepId,
                 ToolCallId = prepared.ToolCallId,
                 DocumentRuntimeId = prepared.RuntimeDocumentKey,

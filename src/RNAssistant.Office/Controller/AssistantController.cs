@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
@@ -22,6 +23,7 @@ namespace RNAssistant.Office
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
         private readonly ChatStore _chatStore;
+        private readonly IEventStore _eventStore;
         private readonly ModelTracePersistenceService _modelTracePersistence;
         private readonly AttachmentStore _attachmentStore;
         private readonly ChatResourceIngestionService _chatResourceIngestion;
@@ -66,7 +68,8 @@ namespace RNAssistant.Office
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
-            _modelTracePersistence = new ModelTracePersistenceService(_chatStore);
+            _eventStore = new ChatEventStoreAdapter(_chatStore);
+            _modelTracePersistence = new ModelTracePersistenceService(_eventStore);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore);
             _toolStore = new ToolStore(_paths);
@@ -160,7 +163,8 @@ namespace RNAssistant.Office
             _llmCompletion = completion;
             _attachmentAnalysisService = new AttachmentAnalysisService(completion);
             _contextCompactionService = new ContextCompactionService(completion);
-            _conversationRunService = new ConversationRunService(_adapter, _toolExecutor, _chatStore, completion, _contextCompactionService, saved: _chatSessions.NotifySaved);
+            _conversationRunService = new ConversationRunService(_adapter, _toolExecutor, _chatStore, completion,
+                _contextCompactionService, saved: _chatSessions.NotifySaved, eventStore: _eventStore);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Storage;
+using RNAssistant.Core.Persistence;
 
 namespace RNAssistant.Office.Services
 {
@@ -11,12 +11,12 @@ namespace RNAssistant.Office.Services
     // callable membership. Raw tool-result messages are deliberately not read here.
     internal sealed class ToolPackAdmissionJournal
     {
-        private readonly ChatStore _store;
+        private readonly IEventStore _events;
         private readonly ChatSession _session;
 
-        public ToolPackAdmissionJournal(ChatStore store, ChatSession session)
+        public ToolPackAdmissionJournal(IEventStore eventStore, ChatSession session)
         {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
+            _events = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _session = session ?? throw new ArgumentNullException(nameof(session));
         }
 
@@ -25,9 +25,10 @@ namespace RNAssistant.Office.Services
             var turnId = CurrentTurnId();
             if (string.IsNullOrWhiteSpace(turnId) || _session.Revision <= 0)
                 return new ToolPackExtensionEventData[0];
-            var events = _store.ReadEvents(_session.Host, _session.DocumentKey, _session.Id)
+            var accepted = SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionAccepted);
+            var events = _events.Read(_session, SessionEventReadMode.Validated)
                 .Where(item => item != null &&
-                    string.Equals(item.Type, SessionEventTypes.ToolPackExtensionAccepted, StringComparison.Ordinal) &&
+                    string.Equals(item.Type, accepted.Type, StringComparison.Ordinal) &&
                     string.Equals(item.TurnId, turnId, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(item => item.Sequence)
                 .ToList();
@@ -59,11 +60,14 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("A durable tool-pack admission requires an active run and turn.");
             }
-            var type = admission.Admitted
-                ? SessionEventTypes.ToolPackExtensionAccepted
-                : SessionEventTypes.ToolPackExtensionRejected;
-            return _store.AppendTrace(_session, type, admission.EventData, null, null,
-                run.RunId, CurrentTurnId(), stepId);
+            var descriptor = SessionEventDescriptors.For(admission.Admitted
+                ? SessionEventKind.ToolPackExtensionAccepted
+                : SessionEventKind.ToolPackExtensionRejected);
+            return _events.Append(_session, new SessionEventWrite(
+                descriptor,
+                admission.EventData,
+                null,
+                new SessionEventCorrelation(run.RunId, CurrentTurnId(), stepId)));
         }
 
         private string CurrentTurnId()

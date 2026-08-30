@@ -10,6 +10,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
@@ -37,6 +38,7 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly ChatStore _chatStore;
+        private readonly IEventStore _eventStore;
         private readonly Func<IMaterializedModelProtocol> _modelProtocolFactory;
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
@@ -48,11 +50,13 @@ namespace RNAssistant.Office.Services
 
         internal ConversationRunService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor,
             ChatStore chatStore, LlmCompletionDelegate completeAsync, ContextCompactionService contextCompactionService,
-            Func<IMaterializedModelProtocol> modelProtocolFactory = null, Action<ChatSession> saved = null)
+            Func<IMaterializedModelProtocol> modelProtocolFactory = null, Action<ChatSession> saved = null,
+            IEventStore eventStore = null)
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
             _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
+            _eventStore = eventStore ?? new ChatEventStoreAdapter(_chatStore);
             _modelProtocolFactory = modelProtocolFactory ?? (() => new ModelProtocolClient(completeAsync));
             _contextCompactionService = contextCompactionService;
             _attachmentAnalysisService = new AttachmentAnalysisService(completeAsync);
@@ -130,7 +134,7 @@ namespace RNAssistant.Office.Services
             PendingToolRegistrar registrar, CancellationToken cancellationToken, ToolCommand confirmedCommand = null,
             Func<CancellationToken, Task<ConversationRunInput>> refresh = null, long revision = 0)
         {
-            return new ConversationKernelAdapter(_adapter, _toolExecutor, _chatStore, _modelProtocolFactory(),
+            return new ConversationKernelAdapter(_adapter, _toolExecutor, _chatStore, _eventStore, _modelProtocolFactory(),
                 _contextCompactionService, _attachmentAnalysisService, _saved, mode, text, session, input,
                 progress, registrar, cancellationToken, confirmedCommand, refresh, revision);
         }
