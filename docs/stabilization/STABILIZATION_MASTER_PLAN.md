@@ -2083,7 +2083,7 @@ acceptance предыдущего подэтапа.
 ### Выполнить
 
 - [ ] Ввести или нормализовать:
-  - [ ] `IRunStore` (минимальный port/adapter уже подключён в Phase 3; сохранить его контракт и replay coverage);
+  - [x] `IRunStore` (9D1 подтвердил минимальный port/adapter Phase 3, ordered append/cursor и replay coverage; контракт сохраняется без второго run store);
   - [ ] `IConversationStore`;
   - [ ] `IEventStore`.
 - [ ] Разделить:
@@ -2108,6 +2108,11 @@ acceptance предыдущего подэтапа.
 - [ ] Не вводить второй durable source of truth.
 - [ ] Сохранить ordered durability: referenced CAS payload durable до ссылающегося event; accepted call/start до effect, result evidence до следующего model step. Mandatory append failure до dispatch запрещает effect; после возможного dispatch — остановка и reload/reconciliation, без fabricated terminal и auto retry.
 - [ ] Проверить result-append failure после write, restart при незавершённом tool start, CAS failure и конфликт revision при queued stream chunks. Optional trace не заменяет mandatory run/tool events; replay не выполняет tools и не пересчитывает прошлое по новой policy.
+- [x] 9D1 docs-only: сверены store/event writers, replay/recovery, projection consumers и существующее fault coverage. Один chat stream/CAS и `IRunStore` сохраняются; подтверждён пробел same-process reconciliation R45 и отсутствие typed event/conversation/UI ports. [Evidence](PHASE_9D1_PERSISTENCE_AUDIT.md).
+- [ ] 9D2: после `RunStoreException` освободить run ownership, отбросить изменённую in-memory projection, reload canonical stream и выполнить idempotent single-chat reconciliation без fabricated terminal, append retry или tool replay.
+- [ ] 9D3: ввести closed typed event classification + один `IEventStore` над существующим stream; authority/diagnostic и mandatory/best-effort задаёт source owner, arbitrary string append у Office consumers удаляется.
+- [ ] 9D4: ввести минимальный `IConversationStore` над тем же `ChatStore` и атомарно переключить session/controller projection consumers без writable snapshot/dual-write.
+- [ ] 9D5: ввести immutable `RunViewState`, переключить bridge/UI и закрыть replay equality, stale projection и multi-window ordering до удаления flat projection adapter.
 - [ ] R32: реализовать [сквозной журнал и общий JSON viewer](R32_DIAGNOSTICS_JSON_VIEWER.md) отдельными подэтапами: 9A — truth/query, 9B — viewer и read-only consumers, 9C — journal UI/qualification. Phases 4–8 этим требованием не расширяются.
   - [x] 9A host-neutral: chronological `run-causal` projection сохраняет exact source/origin/call/mutation evidence и явные terminal gaps; accepted-call writer классифицируется по `AcceptedCallOrigin`, без второго store или history rewrite. 9B/9C и Windows qualification остаются открытыми.
   - [x] 9B1 host-neutral: allowlisted UI-only `ViewerRegistry` + собственный bounded/lossless JSON token adapter с lazy DOM и exact raw/node copy; vendors и existing consumer paths не переключались. 9B2/9B3/9C и Windows qualification остаются открытыми.
