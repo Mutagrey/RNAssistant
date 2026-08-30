@@ -37,7 +37,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
 | Tool Result v1 / strict JSON | `Program.ToolResultWireTests.cs`; projection checks in `Program.ToolRuntimeTests.cs` | `tool result wire:`, `tool result materialization:` |
 | Native ToolRuntime / typed contracts and effect evidence | `Program.ToolRuntimeTests.cs`; native read in `Program.ResourceGatewayTests.cs` | `tool runtime:` |
-| Immutable ToolPack run authority / descriptor-policy-binding-package fingerprints | `Program.ToolDiscoveryTests.cs`; confirmation and policy regressions in `Program.SimpleAgentTests.cs` and `Program.AgentSafetyTests.cs` | `tool pack:`, `agent: confirmation`, `protocol context: batch safety uses local authority` |
+| Immutable ToolPack authority / finite core / atomic callable admission | `Program.ToolDiscoveryTests.cs`; confirmation and policy regressions in `Program.SimpleAgentTests.cs` and `Program.AgentSafetyTests.cs` | `tool pack:`, `agent: confirmation`, `protocol context: batch safety uses local authority` |
 | Typed Excel reads/writes / native, HTML, bounds and effect evidence | `Program.ExcelReadTests.cs`, `Program.ExcelWriteTests.cs`; paired Agent regression in `Program.AgentSafetyTests.cs`; host access in `Program.ParserDesktopTests.cs` | `excel read:`, `excel write:`, `protocol context: loop tracks only accepted calls`, `tools: html workspace updates session`, `host runtime:` |
 | Host document gate / neutral bound session / direct context and catalog reads | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
 | Excel identity candidate probe (no Office execution) | `Program.ParserDesktopTests.cs`; source-linked `RNAssistant.ExcelIdentityProbe` | `excel identity probe:` |
@@ -267,8 +267,9 @@ The existing typed-settings bridge test uses the controller stub, not production
 controller execution. `node tests/web/prompt-review.test.js` verifies actual form
 serialization and action handlers with minimal DOM/transport substitutes, including
 cancel/failure/reset and Plan preservation; it does not verify WebView layout.
-R29 introduced v4/schema 13; Phase 4B tests current Tool Result v1/schema 14,
-including preservation/review/reset of saved schema 13. JS review behavior is unchanged.
+R29 introduced v4/schema 13; Phase 4B introduced Tool Result v1/schema 14; Phase 8B
+uses schema 15 for atomic callable-pack admission and no-eviction guidance. Tests preserve,
+review, or reset saved schema 14 and older markers explicitly. JS review behavior is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
 ## Full suite

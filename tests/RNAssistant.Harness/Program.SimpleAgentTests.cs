@@ -669,9 +669,9 @@ namespace RNAssistant.Harness
                 AssertTrue(adapter.HasSheet("Report"), "tool executed");
                 AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "one write dispatch");
                 AssertEqual(3, calls.Count, "schema read, execution, and final model turns");
-                AssertTrue(FlattenSimple(calls[0]).IndexOf(
-                    "\"function\":{\"name\":\"excel.add_sheet\"", StringComparison.Ordinal) < 0,
-                    "domain schema is absent before discovery");
+                AssertContains(FlattenSimple(calls[0]),
+                    "\"function\":{\"name\":\"excel.add_sheet\"",
+                    "Excel core schema is complete before optional discovery");
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "schema evidence reaches model");
                 var finalRequest = FlattenSimple(calls[2]);
                 AssertContains(finalRequest, "TOOL_RESULT", "tool result label");
@@ -1337,10 +1337,10 @@ namespace RNAssistant.Harness
                     .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
                     .Select(token => (string)token)
                     .ToList();
-                AssertTrue(!callableNames.Contains("common.vba_apply_patch", StringComparer.OrdinalIgnoreCase) &&
-                    !callableNames.Contains("common.vba_write_module", StringComparer.OrdinalIgnoreCase) &&
-                    !callableNames.Contains("common.vba_delete_module", StringComparer.OrdinalIgnoreCase),
-                    "VBA mutation schemas are not eagerly injected");
+                AssertTrue(callableNames.Contains("common.vba_apply_patch", StringComparer.OrdinalIgnoreCase) &&
+                    callableNames.Contains("common.vba_write_module", StringComparer.OrdinalIgnoreCase) &&
+                    callableNames.Contains("common.vba_delete_module", StringComparer.OrdinalIgnoreCase),
+                    "public VBA mutation schemas are complete in the VBA core");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_create_module\"", StringComparison.Ordinal) < 0,
                     "redundant create alias is hidden from the model");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_replace_text\"", StringComparison.Ordinal) < 0,
@@ -1360,8 +1360,8 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "\"id\":\"common.office_run_macro\"", "host-neutral arbitrary macro execution is discoverable by exact id");
                 AssertTrue(prompt.IndexOf("\"id\":\"excel.run_macro\"", StringComparison.Ordinal) < 0,
                     "host macro backend is hidden from the compact catalog");
-                AssertTrue(!callableNames.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase),
-                    "macro schema remains progressive rather than eagerly injected");
+                AssertTrue(callableNames.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase),
+                    "public macro schema is complete in the VBA core");
             });
         }
 

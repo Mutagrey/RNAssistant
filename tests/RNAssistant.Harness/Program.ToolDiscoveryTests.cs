@@ -87,6 +87,8 @@ namespace RNAssistant.Harness
                 AssertEqual(true, (bool)data["loaded"], "exact schema is load evidence");
                 AssertEqual(true, (bool)data["complete"], "exact schema is complete");
                 AssertEqual(false, (bool)data["truncated"], "exact schema is not truncated");
+                AssertEqual("already_callable_or_next_model_step", (string)data["admission"],
+                    "schema evidence does not claim callable publication");
                 AssertEqual("excel.add_sheet", (string)data.SelectToken("descriptor.function.name"),
                     "exact descriptor names the tool");
                 AssertTrue(data.SelectToken("descriptor.function.parameters") is JObject,
@@ -178,16 +180,17 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ProgressiveAgentRequiresExactToolRead()
+        private static void OptionalAgentToolRequiresExactAdmission()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                const string optionalId = "common.html_workspace_upsert";
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Добавляю сразу.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
-                    LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Добавляю после загрузки схемы.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Progressive\"}}]}",
-                    "{\"message\":\"Лист создан.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Создаю сразу.\",\"tool_calls\":[{\"name\":\"common.html_workspace_upsert\",\"arguments\":{\"resourceType\":\"file\",\"name\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
+                    LoadToolSchemaResponse(optionalId),
+                    "{\"message\":\"Создаю после admission.\",\"tool_calls\":[{\"name\":\"common.html_workspace_upsert\",\"arguments\":{\"resourceType\":\"file\",\"name\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
+                    "{\"message\":\"HTML создан.\",\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var options = new List<LlmRequestOptions>();
@@ -201,41 +204,45 @@ namespace RNAssistant.Harness
                 {
                     AgentResponseMode = AgentResponseModes.JsonSchema,
                     MaxAgentFormatRetries = 2,
+                    ContextWindowOverrideTokens = 65536,
                     AutoConfirmToolActions = true
                 };
                 var catalog = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Создай лист Progressive.",
-                    NewSession(adapter),
+                    "Создай progressive.html.",
+                    session,
                     NewContext(adapter),
                     settings,
                     catalog,
                     null).GetAwaiter().GetResult();
 
-                AssertEqual("Лист создан.", result.AssistantText, "progressive run completes");
-                AssertTrue(adapter.HasSheet("Progressive"), "loaded domain tool executes once");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"),
-                    "unloaded attempt never executes");
+                AssertEqual("HTML создан.", result.AssistantText, "optional tool run completes");
+                AssertTrue(session.HtmlWorkspace != null && session.HtmlWorkspace.Files.Any(file =>
+                    file != null && string.Equals(file.Path, "progressive.html", StringComparison.OrdinalIgnoreCase)),
+                    "admitted optional tool executes once");
                 AssertEqual(4, requests.Count, "unloaded repair, schema read, execution, and final requests");
                 var initialCallableNames = JObject.Parse(options[0].ResponseSchemaJson)
                     .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
                     .Select(token => (string)token)
                     .ToList();
-                AssertTrue(!initialCallableNames.Contains("excel.add_sheet", StringComparer.OrdinalIgnoreCase),
+                AssertTrue(!initialCallableNames.Contains(optionalId, StringComparer.OrdinalIgnoreCase),
                     "initial strict response schema omits unloaded tool as a callable name");
                 var loadedCallableNames = JObject.Parse(options[2].ResponseSchemaJson)
                     .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
                     .Select(token => (string)token)
                     .ToList();
-                AssertTrue(loadedCallableNames.Contains("excel.add_sheet", StringComparer.OrdinalIgnoreCase),
+                AssertTrue(loadedCallableNames.Contains(optionalId, StringComparer.OrdinalIgnoreCase),
                     "strict response schema includes exact loaded tool as a callable name");
-                AssertContains(FlattenSimple(requests[1]), "Tool schema is not loaded: excel.add_sheet",
+                AssertContains(FlattenSimple(requests[1]), "Tool schema is not loaded: " + optionalId,
                     "local parser distinguishes an unloaded known tool during repair");
                 AssertContains(FlattenSimple(requests[1]), "common.capabilities_read",
                     "repair names the exact schema-loading action");
                 AssertContains(FlattenSimple(requests[2]), "\"kind\":\"tool-schema\"",
                     "complete schema evidence reaches the next model step");
+                AssertContains(FlattenSimple(requests[2]), "TOOL_PACK_STATE",
+                    "atomic admission is visible before the optional call");
             });
         }
 
@@ -356,17 +363,17 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ProgressiveToolWorkingSetEvictsAndReplaysDeterministically()
+        private static void CallableToolPackDefinesCoreAndAdmitsAtomically()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var dynamicTools = Enumerable.Range(1, ProgressiveToolWorkingSet.MaximumDynamicSchemas + 1)
+                var optionalTools = Enumerable.Range(1, 3)
                     .Select(index => new ToolDefinition
                     {
-                        Id = "excel.dynamic_" + index,
+                        Id = "fixture.dynamic_" + index,
                         Host = "Excel",
                         Name = "Dynamic " + index,
-                        Description = "Test dynamic schema " + index,
+                        Description = "Test optional schema " + index,
                         ArgumentSchemaJson = EmptyFormalToolSchema,
                         BuiltIn = true,
                         Enabled = true,
@@ -374,123 +381,215 @@ namespace RNAssistant.Harness
                     })
                     .ToList();
                 var catalog = ConversationRunService.PrepareToolsForRun(
-                    executor.GetControllerTools().Concat(dynamicTools));
-                var workingSet = ProgressiveToolWorkingSet.Create(
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).Concat(optionalTools));
+                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                const string runId = "run-tool-pack";
+                var toolPack = CallableToolPack.Create(
                     ChatModes.Agent,
-                    catalog,
-                    new AppSettings());
-                var evidence = new List<ChatMessage>();
+                    adapter.HostName,
+                    runId,
+                    catalog);
 
-                for (var index = 1; index <= ProgressiveToolWorkingSet.MaximumDynamicSchemas; index++)
+                foreach (var id in adapter.GetBuiltInTools().Select(tool => tool.Id))
+                    AssertTrue(toolPack.Tools.Any(tool => tool.Id == id), "Excel core includes exact built-in " + id);
+                foreach (var id in new[]
                 {
-                    var message = ReadSchemaEvidence(executor, catalog, "excel.dynamic_" + index, "read_" + index);
-                    evidence.Add(message);
-                    IReadOnlyList<string> evicted;
-                    AssertTrue(workingSet.ObserveReadResult(message, out evicted), "schema evidence " + index + " loads");
-                    AssertEqual(0, evicted.Count, "working set has capacity for schema " + index);
-                }
+                    "common.vba_restore_backup", "common.vba_write_module", "common.vba_apply_patch",
+                    "common.vba_delete_module", "common.office_run_macro"
+                })
+                    AssertTrue(toolPack.Tools.Any(tool => tool.Id == id), "VBA core includes exact public tool " + id);
+                AssertTrue(!toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_1"),
+                    "optional catalog schema is not injected into the core");
+                AssertEqual("excel-vba-core", (string)toolPack.CapabilityContext(null)["profile"],
+                    "mode and host choose one deterministic profile");
 
-                var touch = AgentJsonProtocol.CreateToolCallMessage(
-                    new AgentToolCall
-                    {
-                        Id = "touch_dynamic_1",
-                        Name = "excel.dynamic_1",
-                        Arguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
-                    },
-                    "Using loaded schema.",
-                    null,
-                    ToolResultRoles.User,
-                    FixtureCallOrigin("touch-dynamic-step"));
-                evidence.Add(touch);
-                workingSet.Touch("excel.dynamic_1");
+                var first = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_1", "read_1");
+                var second = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_2", "read_2");
+                first.RunId = runId;
+                second.RunId = runId;
+                AssertTrue(toolPack.StageReadResult(first), "first exact schema is staged");
+                AssertTrue(toolPack.StageReadResult(second), "second exact schema is staged in the same batch");
+                var originalRevision = toolPack.Revision;
+                var admitted = toolPack.CommitPending((tools, state) =>
+                {
+                    AssertTrue(tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
+                        tools.Any(tool => tool.Id == "fixture.dynamic_2"),
+                        "admission evaluates the complete candidate batch");
+                    AssertContains(state.Content, "\"admitted\":true", "candidate state is evaluated before publication");
+                    return true;
+                });
+                AssertTrue(admitted.Admitted, "candidate batch is admitted atomically");
+                AssertTrue(admitted.Revision != originalRevision, "admission creates a new callable snapshot revision");
+                AssertEqual(admitted.Revision, toolPack.Revision, "published revision matches the admitted candidate");
+                AssertTrue(toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
+                    toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_2"),
+                    "both schemas are published together");
+                AssertContains(admitted.StateMessage.Content, "No schema was evicted", "admission reports no eviction");
 
-                var ninthId = "excel.dynamic_" + (ProgressiveToolWorkingSet.MaximumDynamicSchemas + 1);
-                var ninth = ReadSchemaEvidence(executor, catalog, ninthId, "read_last");
-                evidence.Add(ninth);
-                IReadOnlyList<string> removed;
-                AssertTrue(workingSet.ObserveReadResult(ninth, out removed), "new schema loads at capacity");
-                AssertEqual(1, removed.Count, "one least-recent schema is evicted");
-                AssertEqual("excel.dynamic_2", removed[0], "recently used schema survives LRU eviction");
-                AssertTrue(workingSet.Tools.Any(tool => tool.Id == "excel.dynamic_1"), "touched schema remains active");
-                AssertTrue(!workingSet.Tools.Any(tool => tool.Id == "excel.dynamic_2"), "least-recent schema is inactive");
-                AssertTrue(workingSet.Tools.Any(tool => tool.Id == ninthId), "new schema is active");
+                var third = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_3", "read_3");
+                third.RunId = runId;
+                AssertTrue(toolPack.StageReadResult(third), "third schema is staged");
+                var retainedRevision = toolPack.Revision;
+                var rejected = toolPack.CommitPending((tools, state) => false);
+                AssertTrue(!rejected.Admitted, "overflow rejects the whole extension");
+                AssertEqual(retainedRevision, toolPack.Revision, "rejection does not publish a revision");
+                AssertTrue(!toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_3"),
+                    "rejected schema is never partially published");
+                AssertTrue(toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
+                    toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_2"),
+                    "rejection never removes admitted schemas");
+                AssertContains(rejected.StateMessage.Content, "tool_pack_budget_exceeded",
+                    "visible state identifies admission failure");
 
-                var replayed = ProgressiveToolWorkingSet.Create(
+                var recreated = CallableToolPack.Create(
                     ChatModes.Agent,
-                    catalog,
-                    new AppSettings(),
-                    evidence);
-                AssertTrue(replayed.Tools.Any(tool => tool.Id == "excel.dynamic_1"),
-                    "tool-call evidence restores LRU recency");
-                AssertTrue(!replayed.Tools.Any(tool => tool.Id == "excel.dynamic_2"),
-                    "replay produces the same eviction");
-                AssertTrue(replayed.Tools.Any(tool => tool.Id == ninthId),
-                    "replay restores latest exact schema");
+                    adapter.HostName,
+                    runId,
+                    catalog);
+                AssertTrue(!recreated.Tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
+                    !recreated.Tools.Any(tool => tool.Id == "fixture.dynamic_2"),
+                    "a recreated pack cannot infer an admission decision from raw read evidence");
+                third.RunId = "other-run";
+                AssertTrue(!recreated.StageReadResult(third),
+                    "live evidence from another run cannot stage an extension");
 
                 var revisedCatalog = catalog.Select(tool => tool.Clone()).ToList();
-                revisedCatalog.Single(tool => tool.Id == ninthId).Description = "Changed revision";
-                var revisionMismatch = ProgressiveToolWorkingSet.Create(
+                revisedCatalog.Single(tool => tool.Id == "fixture.dynamic_2").Description = "Changed revision";
+                var revisionMismatch = CallableToolPack.Create(
                     ChatModes.Agent,
-                    revisedCatalog,
-                    new AppSettings(),
-                    new[] { ninth });
-                AssertTrue(!revisionMismatch.Tools.Any(tool => tool.Id == ninthId),
-                    "stale schema evidence cannot load a changed revision");
+                    adapter.HostName,
+                    runId,
+                    revisedCatalog);
+                AssertTrue(!revisionMismatch.StageReadResult(second),
+                    "stale schema evidence cannot stage a changed descriptor");
 
-                ToolResultWireReadResult exact;
-                string error;
-                AssertTrue(ToolResultHistoryReader.TryRead(ninth, out exact, out error), "seed evidence has a strict current result: " + error);
-                var readCommand = new ToolCommand { ToolCallId = "read_evidence", ToolId = CapabilityDiscoveryExecutor.ReadToolId };
-                Action<ChatMessage, string> assertUnavailable = (message, reason) =>
+                var planPack = CallableToolPack.Create(ChatModes.Plan, adapter.HostName, runId, catalog);
+                AssertTrue(!planPack.Tools.Any(tool => tool.Id == "excel.read_range"),
+                    "Plan does not inherit the Agent Excel core");
+                AssertTrue(planPack.Tools.Any(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId),
+                    "Plan keeps exact capability discovery in its bootstrap core");
+            });
+        }
+
+        private static void ConversationModelSessionRejectsToolPackOverflowAtomically()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var longDescription = new string('x', 15000);
+                var optionalTools = Enumerable.Range(1, 2).Select(index => new ToolDefinition
                 {
-                    var restored = ProgressiveToolWorkingSet.Create(ChatModes.Agent, catalog, new AppSettings(), new[] { message });
-                    AssertTrue(!restored.Tools.Any(tool => tool.Id == ninthId), reason + " cannot replay a schema");
-                    IReadOnlyList<string> evicted;
-                    AssertTrue(!restored.ObserveReadResult(message, out evicted), reason + " cannot load a live schema");
-                    AssertEqual(0, evicted.Count, reason + " does not disturb authority");
+                    Id = "fixture.large_" + index,
+                    Host = "Excel",
+                    Name = "Large " + index,
+                    Description = "Optional budget fixture.",
+                    ArgumentSchemaJson = new JObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new JObject
+                        {
+                            ["value"] = new JObject { ["type"] = "string", ["description"] = longDescription }
+                        },
+                        ["required"] = new JArray(),
+                        ["additionalProperties"] = false
+                    }.ToString(Newtonsoft.Json.Formatting.None),
+                    BuiltIn = true,
+                    Enabled = true,
+                    AgentCanRun = true
+                }).ToArray();
+                var catalog = ConversationRunService.PrepareToolsForRun(
+                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId)
+                        .Concat(optionalTools));
+                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                var settings = new AppSettings
+                {
+                    AgentResponseMode = AgentResponseModes.JsonSchema,
+                    ContextWindowOverrideTokens = 16000,
+                    MaxTokens = 512
                 };
-                foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "overflow-run", TurnId = "overflow-turn" };
+                using (var modelSession = ConversationModelSession.CreateAsync(
+                    adapter,
+                    null,
+                    new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    ChatModes.Agent,
+                    "Load both optional schemas.",
+                    session,
+                    NewContext(adapter),
+                    settings,
+                    catalog,
+                    null,
+                    null,
+                    false,
+                    null,
+                    CancellationToken.None).GetAwaiter().GetResult())
                 {
-                    var current = AgentJsonProtocol.CreateToolResultMessage(readCommand, exact.Result, role);
-                    AssertTrue(ProgressiveToolWorkingSet.Create(ChatModes.Agent, catalog, new AppSettings(), new[] { current })
-                        .Tools.Any(tool => tool.Id == ninthId), role + " restores complete current schema evidence");
-                    assertUnavailable(AgentJsonProtocol.CreateToolResultMessage(readCommand,
-                        TerminalToolResult.Error("Read failed", exact.Result.DataJson), role), role + " error result");
-                    assertUnavailable(AgentJsonProtocol.CreateToolResultMessage(readCommand,
-                        TerminalToolResult.Unknown("Read uncertain", exact.Result.DataJson), role), role + " unknown result");
-                    foreach (var invalidate in new Action<ChatMessage>[]
+                    foreach (var tool in optionalTools)
                     {
-                        message => message.ToolResultProtocolVersion = 0,
-                        message => message.ToolCallId = "wrong_id",
-                        message => message.ToolName = "wrong_name",
-                        message => message.ToolResultRole = "system",
-                        message => message.Content = message.Content.Replace("\"status\":\"ok\"", "\"ok\":true"),
-                        message => message.Content = message.Content.Replace("\"status\":\"ok\"", "\"status\":\"ok\",\"retryable\":false"),
-                        message => message.Content = "not a tool result"
-                    })
-                    {
-                        var malformed = AgentJsonProtocol.CreateToolResultMessage(readCommand, exact.Result, role);
-                        invalidate(malformed);
-                        assertUnavailable(malformed, role + " malformed result history");
+                        var callId = "read_" + tool.Id;
+                        modelSession.AppendToolCall(new AgentToolCall
+                        {
+                            Id = callId,
+                            Name = CapabilityDiscoveryExecutor.ReadToolId,
+                            Arguments = new Dictionary<string, object> { { "id", tool.Id } }
+                        }, string.Empty, null, FixtureCallOrigin("overflow-step"));
+                        var command = Command(CapabilityDiscoveryExecutor.ReadToolId, "id", tool.Id);
+                        command.ToolCallId = callId;
+                        var result = executor.Execute(command, catalog, settings, false, false);
+                        AssertTrue(result.Success, "large schema read succeeds before admission");
+                        modelSession.AppendToolResult(command, new ConversationModelSession.PreparedToolResult(
+                            LegacyToolResultAdapter.Materialize(result, ToolExecutionOutcome.Ok), null));
                     }
+
+                    modelSession.EndResponse();
+                    var request = modelSession.CreateRequest("after-overflow",
+                        new ModelProtocolCallContext(new string[0]));
+                    AssertTrue(optionalTools.All(candidate => request.RunnableCatalog.Any(tool => tool.Id == candidate.Id)),
+                        "overflow keeps the dynamic registry available for discovery");
+                    AssertTrue(optionalTools.All(candidate => !request.CallableTools.Any(tool => tool.Id == candidate.Id)),
+                        "overflow publishes none of the requested schemas");
+                    var state = request.AcceptedMessages.Last(message =>
+                        (message.Content ?? string.Empty).StartsWith("TOOL_PACK_STATE:", StringComparison.Ordinal));
+                    AssertContains(state.Content, "\"admitted\":false", "runtime rejects the candidate before publication");
+                    AssertContains(state.Content, "tool_pack_budget_exceeded", "overflow is visible to the model");
+                    AssertContains(state.Content, "\"requestedSchemas\":null",
+                        "rejection does not repeat an unbounded list of exact ids");
+                    AssertContains(state.Content, "\"requestedSchemaCount\":2",
+                        "compact rejection retains the requested batch size");
+                    var estimated = ModelContextBudget.EstimateMessagesTokens(request.AcceptedMessages, settings) +
+                        ModelContextBudget.EstimateRequestOptionsTokens(request.Options, settings) +
+                        ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
+                    AssertTrue(estimated <= ModelContextBudget.InputBudgetTokens(settings),
+                        "rejected state and retained pack still fit with repair overhead");
                 }
-                foreach (var invalidate in new Action<JObject>[]
+
+                var reconstructionSettings = new AppSettings
                 {
-                    data => data["loaded"] = "true",
-                    data => data["loaded"] = false,
-                    data => data["complete"] = false,
-                    data => data["truncated"] = true,
-                    data => data.Remove("complete"),
-                    data => data["id"] = ninthId.ToUpperInvariant(),
-                    data => data["revision"] = "other_revision",
-                    data => data["descriptor"] = new JObject()
-                })
+                    AgentResponseMode = AgentResponseModes.JsonSchema,
+                    ContextWindowOverrideTokens = 131072,
+                    MaxTokens = 512
+                };
+                using (var reconstructed = ConversationModelSession.CreateAsync(
+                    adapter,
+                    null,
+                    new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    ChatModes.Agent,
+                    "Continue after rejected admission.",
+                    session,
+                    NewContext(adapter),
+                    reconstructionSettings,
+                    catalog,
+                    null,
+                    null,
+                    false,
+                    null,
+                    CancellationToken.None).GetAwaiter().GetResult())
                 {
-                    var data = JObject.Parse(exact.Result.DataJson);
-                    invalidate(data);
-                    assertUnavailable(AgentJsonProtocol.CreateToolResultMessage(readCommand,
-                        TerminalToolResult.Ok("Tool schema loaded", data.ToString(Newtonsoft.Json.Formatting.None))),
-                        "incomplete or mismatched evidence payload");
+                    var request = reconstructed.CreateRequest("after-reconstruction",
+                        new ModelProtocolCallContext(new string[0]));
+                    AssertTrue(optionalTools.All(candidate =>
+                            !request.CallableTools.Any(tool => tool.Id == candidate.Id)),
+                        "raw rejected read evidence cannot become callable after reconstruction");
                 }
             });
         }
@@ -499,23 +598,40 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                var optional = new ToolDefinition
+                {
+                    Id = "fixture.compaction_tool",
+                    Host = "Excel",
+                    Name = "Compaction fixture",
+                    Description = "Optional schema requires fresh admission after session reconstruction.",
+                    ArgumentSchemaJson = EmptyFormalToolSchema,
+                    BuiltIn = true,
+                    Enabled = true,
+                    AgentCanRun = true
+                };
                 var catalog = ConversationRunService.PrepareToolsForRun(
-                    adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.add_sheet")
-                        .Concat(executor.GetControllerTools().Where(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId)));
+                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId)
+                        .Concat(new[] { optional }));
                 CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
                 var settings = new AppSettings { ContextWindowOverrideTokens = 16384, MaxTokens = 1024, AutoCompressContext = true };
                 var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "compaction-run", TurnId = "compaction-turn" };
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Inspect the tool before continuing." });
                 session.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
                 {
                     Id = "read_before_compaction",
                     Name = CapabilityDiscoveryExecutor.ReadToolId,
-                    Arguments = new Dictionary<string, object> { { "id", "excel.add_sheet" } }
+                    Arguments = new Dictionary<string, object> { { "id", optional.Id } }
                 }, string.Empty, null, ToolResultRoles.User, FixtureCallOrigin("before-compaction-step")));
-                var evidence = ReadSchemaEvidence(executor, catalog, "excel.add_sheet", "read_before_compaction");
+                var evidence = ReadSchemaEvidence(executor, catalog, optional.Id, "read_before_compaction");
+                evidence.RunId = session.LastRun.RunId;
                 session.Messages.Add(evidence);
-                var loaded = ProgressiveToolWorkingSet.Create(ChatModes.Agent, catalog, settings, session.Messages);
-                AssertTrue(loaded.Tools.Any(tool => tool.Id == "excel.add_sheet"), "seed schema is callable before compaction");
+                var loaded = CallableToolPack.Create(ChatModes.Agent, adapter.HostName,
+                    session.LastRun.RunId, catalog);
+                AssertTrue(loaded.StageReadResult(evidence), "live exact evidence stages before compaction");
+                AssertTrue(loaded.CommitPending((tools, state) => true).Admitted,
+                    "seed schema is admitted before compaction");
+                AssertTrue(loaded.Tools.Any(tool => tool.Id == optional.Id), "seed schema is callable before compaction");
 
                 // Many small messages overflow the prompt but leave a complete prefix
                 // within the compactor's bounded source budget, including the schema pair.
@@ -543,8 +659,8 @@ namespace RNAssistant.Harness
                     var request = modelSession.CreateRequest("after_compaction",
                         new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]));
                     AssertEqual(1, compactions, "over-budget preparation compacts once and recomposes");
-                    AssertTrue(request.RunnableCatalog.Any(tool => tool.Id == "excel.add_sheet"), "local execution catalog is preserved");
-                    AssertTrue(!request.CallableTools.Any(tool => tool.Id == "excel.add_sheet"), "compacted schema requires a fresh exact read");
+                    AssertTrue(request.RunnableCatalog.Any(tool => tool.Id == optional.Id), "local execution catalog is preserved");
+                    AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id), "compacted optional schema requires a fresh exact read");
                     AssertContains(FlattenSimple(request.AcceptedMessages), "Earlier work summarized.", "request uses the new checkpoint");
                     AssertTrue(!request.AcceptedMessages.Any(message => message.Id == evidence.Id), "old schema evidence is absent from the request");
                     AssertTrue(ModelContextBudget.EstimateMessagesTokens(request.AcceptedMessages, settings) <= ModelContextBudget.InputBudgetTokens(settings),

@@ -32,8 +32,8 @@ namespace RNAssistant.Office.Services
                     break;
                 case AgentRunEventKind.ResponseAccepted:
                     _stepMessage = fact.Response.Message;
-                    // Persist the entire accepted batch before any dispatch. LRU touch
-                    // still happens per execution, not eagerly for the rest of the batch.
+                    // Persist the entire accepted batch before any dispatch. Callable
+                    // pack membership changes only at the next model-step boundary.
                     for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
                         _modelSession.AppendToolCall(new AgentToolCall
                             { Id = fact.Response.ToolCalls[index].Id, Name = fact.Response.ToolCalls[index].Name,
@@ -46,7 +46,6 @@ namespace RNAssistant.Office.Services
                     run.Phase = "executing";
                     var context = fact.ToolContext;
                     var command = Command(context.Call, context.StepId, context.IsConfirmed);
-                    if (_modelSession != null) _modelSession.TouchTool(context.Call.Name);
                     activity = FindActivity(context.Call.Id) ?? AgentTranscript.CreateRunningToolMessage(
                         _session, command, fact.StepId, _stepMessage);
                     if (!_session.Messages.Contains(activity)) _session.Messages.Add(activity);

@@ -250,7 +250,7 @@ namespace RNAssistant.Office.Tools
             if (compact.Length > MaximumDescriptorCharacters)
             {
                 return ToolResult.Fail(
-                    "Tool descriptor exceeds the progressive working-set limit: " + tool.Id,
+                    "Tool descriptor exceeds the callable-pack descriptor limit: " + tool.Id,
                     JsonConvert.SerializeObject(new
                     {
                         id = tool.Id,
@@ -260,7 +260,7 @@ namespace RNAssistant.Office.Tools
                     "tool_schema_too_large",
                     false);
             }
-            return ToolResult.Ok("Tool schema loaded: " + tool.Id, new JObject
+            return ToolResult.Ok("Tool schema returned for callable-state evaluation: " + tool.Id, new JObject
             {
                 ["kind"] = "tool-schema",
                 ["id"] = tool.Id,
@@ -268,6 +268,7 @@ namespace RNAssistant.Office.Tools
                 ["loaded"] = true,
                 ["complete"] = true,
                 ["truncated"] = false,
+                ["admission"] = "already_callable_or_next_model_step",
                 ["descriptor"] = descriptor
             }.ToString(Formatting.None));
         }

@@ -6,6 +6,7 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -94,13 +95,13 @@ namespace RNAssistant.Office.Services
             var enabledSkills = policy.SelectSkills(skills);
             CapabilityDiscoveryExecutor.ThrowOnCollision(runnableCatalog, enabledSkills);
             CapabilityDiscoveryExecutor.BindReadSchema(runnableCatalog, enabledSkills);
-            var workingSet = ProgressiveToolWorkingSet.Create(
+            var toolPack = CallableToolPack.Create(
                 mode,
-                runnableCatalog,
-                settings,
-                ContextCompactionService.BuildActiveWindow(previewSession));
-            var runnableTools = workingSet.Tools;
-            var capabilityCatalog = workingSet.CapabilityContext(enabledSkills);
+                _adapter == null ? string.Empty : _adapter.HostName,
+                null,
+                runnableCatalog);
+            var runnableTools = toolPack.Tools;
+            var capabilityCatalog = toolPack.CapabilityContext(enabledSkills);
 
             var relaxed = false;
             List<ChatMessage> messages;
@@ -122,8 +123,10 @@ namespace RNAssistant.Office.Services
                 runnableTools,
                 previewSession,
                 null);
+            var repairReserveTokens = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
             var usedTokens = EstimateMessagesTokens(messages) +
-                EstimateRequestOptionsTokens(options);
+                EstimateRequestOptionsTokens(options) +
+                repairReserveTokens;
             var inputLimit = ModelContextBudget.InputBudgetTokens(settings);
             var contextWindow = Math.Max(4096, ModelContextBudget.ContextWindowTokens(settings));
             var safety = ModelContextBudget.SafetyReserveTokens(contextWindow);
@@ -142,7 +145,8 @@ namespace RNAssistant.Office.Services
                 capabilityCatalog,
                 attachments,
                 draftText,
-                usedTokens);
+                usedTokens,
+                repairReserveTokens);
             var lastUsage = (session.Messages ?? new List<ChatMessage>())
                 .Where(item => item != null && item.PromptTokens.HasValue)
                 .OrderByDescending(item => item.CreatedUtc)
@@ -187,7 +191,7 @@ namespace RNAssistant.Office.Services
                 LastPromptUtc = lastUsage == null ? null : (DateTime?)lastUsage.CreatedUtc,
                 LastRunId = lastUsage == null ? string.Empty : lastUsage.RunId ?? string.Empty,
                 Notice = relaxed || usedTokens > inputLimit
-                    ? "Оценочный состав превышает лимит. Перед реальным запросом потребуется сжатие контекста. " + estimateNotice
+                    ? "Оценочный состав с обязательными schemas/reserves превышает лимит. Runtime попробует допустимое сжатие истории, а если этого недостаточно — остановит основной запрос; сократите историю или выберите модель с большим контекстом. " + estimateNotice
                     : estimateNotice + " Снимок обновляется только вручную.",
                 Sections = sections,
                 GeneratedUtc = DateTime.UtcNow
@@ -245,7 +249,8 @@ namespace RNAssistant.Office.Services
             JObject capabilityCatalog,
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
-            int usedTokens)
+            int usedTokens,
+            int repairReserveTokens)
         {
             var sections = new List<PromptContextSectionDto>();
             var current = messages == null || messages.Count == 0 ? null : messages[messages.Count - 1];
@@ -337,6 +342,25 @@ namespace RNAssistant.Office.Services
                             "response-schema", "schema", options.ResponseSchemaName ?? "response schema", string.Empty,
                             EstimateTextTokens(schema), schema)
                     }.Where(item => item != null).ToList(), optionsTokens)
+                });
+            }
+
+            if (repairReserveTokens > 0)
+            {
+                sections.Add(new PromptContextSectionDto
+                {
+                    Id = "format_repair_reserve",
+                    Title = "Резерв FORMAT_REPAIR",
+                    Tokens = repairReserveTokens,
+                    Count = 1,
+                    Detail = "Худший ограниченный parser error для следующей разрешённой попытки",
+                    Included = true,
+                    Items = new List<PromptContextItemDto>
+                    {
+                        Item("format-repair-reserve", "reserve", "FORMAT_REPAIR reserve", string.Empty,
+                            repairReserveTokens,
+                            "Не отправляется в первом запросе; место сохраняется для одной bounded repair-инструкции.")
+                    }
                 });
             }
 

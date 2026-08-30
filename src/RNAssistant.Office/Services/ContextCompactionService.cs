@@ -209,7 +209,7 @@ namespace RNAssistant.Office.Services
                         "For relevant work, call common.capabilities_read with the exact skill id again unless the replay tail below contains a successful, " +
                         "non-truncated data.loaded=true skill result for the catalog's current revision; re-read any needed reference chunk. " +
                         "TOOL_SCHEMA_NOTICE: Tool schemas present only in compacted earlier context are unavailable. Use common.capabilities_read with the exact tool id again; " +
-                        "only exact current-revision schema evidence in the replay tail may restore a non-bootstrap tool.",
+                        "raw schema evidence in the replay tail does not restore a prior admission decision; wait for a new TOOL_PACK_STATE admitted=true before use.",
                     ResourceRefs = CollectCheckpointResourceRefs(session, checkpoint)
                 }
             };

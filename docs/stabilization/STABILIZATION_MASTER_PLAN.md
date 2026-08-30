@@ -678,7 +678,7 @@ Tool registry остаётся динамическим, но набор callabl
 
 Snapshot фиксирует содержимое descriptor/schema, policy и binding/package fingerprint, а не только список tool IDs. Подмена handler под тем же именем не меняет уже принятый call: runtime использует pinned definition либо явно отклоняет несовпадение до dispatch; запрет/отзыв execution permissions проверяется заново. Confirmation проверяет тот же fingerprint. Расширение snapshot допускается только на границе step, не посередине batch.
 
-Полный core pack — конечный явно перечисленный набор, не весь dynamic catalog. Compact catalog остаётся discovery index, а `callable set` — только материализованные exact schemas текущего snapshot. Admission проверяет весь request budget, включая schema, history/media, output reserve и repair overhead, до изменения snapshot. Не поместившаяся optional extension отклоняется без partial publication и без удаления уже загруженных schemas. На compaction активные tool schemas заново материализуются из pinned snapshot в пределах budget; краткое summary не заменяет схему. Skill bodies сохраняют свой отдельный revision/read-evidence contract. Это целевой переход Phase 8; прежний bounded LRU не отключается заранее.
+Полный core pack — конечный явно перечисленный набор, не весь dynamic catalog. Compact catalog остаётся discovery index, а `callable set` — только материализованные exact schemas текущего snapshot. Admission проверяет весь request budget, включая schema, history/media, output reserve и repair overhead, до изменения snapshot. Не поместившаяся optional extension отклоняется без partial publication и без удаления уже загруженных schemas. На compaction активные tool schemas заново материализуются из pinned snapshot в пределах budget; краткое summary не заменяет схему. Skill bodies сохраняют свой отдельный revision/read-evidence contract. 8B удаляет прежний bounded LRU только вместе с finite core и атомарным admission; durable extension event и rematerialization остаются отдельным 8C.
 
 ## 7.8. Resource v1
 
@@ -2044,17 +2044,18 @@ Excel read/write добавлены через ToolRuntime и DocumentSession, A
 - [ ] Заменить оставленную вне AgentKernel реализацию resource capability lifecycle; сохранить проверенную в Phase 3 границу, не менять kernel loop ради ToolPack.
 - [x] 8A: ввести immutable `ToolPackSnapshot` за границей AgentKernel. [Evidence](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [ADR-0006](../decisions/ADR-0006-tool-pack-snapshot.md).
 - [x] 8A: pin descriptor/schema + policy + binding/entry point/scope/host/package fingerprint (§7.7); одинаковый ID не разрешает замену implementation в принятом call/confirmation, legacy adapter rechecks до dispatch.
-- [ ] Core Excel/VBA pack передавать полностью.
-- [ ] Отключить LRU eviction в stabilized runtime.
+- [x] 8B: Core Excel/VBA pack передавать полностью.
+- [x] 8B: отключить LRU eviction в stabilized runtime.
 - [ ] Optional schema loading делать monotonic:
-  - [ ] explicit request;
-  - [ ] new snapshot revision;
+  - [x] 8B: explicit request;
+  - [x] 8B: new snapshot revision;
   - [ ] event;
-  - [ ] no eviction.
-- [ ] Global dynamic registry сохранить.
-- [ ] Новые dynamic tools активировать в следующем run либо через явный snapshot extension.
-- [ ] Если pack не помещается, fail visibly.
-- [ ] Проверять admission до snapshot publication; compaction повторно материализует pinned schemas. Проверить overflow без partial extension, изменение handler/policy при том же ID и сохранение schema evidence после compaction.
+  - [x] 8B: no eviction.
+- [x] 8B: Global dynamic registry сохранить.
+- [x] 8B: новые dynamic tools активировать в следующем run либо exact catalog member через явный snapshot extension.
+- [x] 8B: если core/extension pack не помещается, fail visibly.
+- [x] 8B: проверять полный request admission до snapshot publication; overflow отклоняет весь extension без удаления уже admitted schemas.
+- [ ] 8C: durable extension event повторно материализует pinned schemas при confirmation continuation/compaction/crash replay; raw read evidence не считается admission decision.
 - [ ] Resource tools оставить read-only.
 - [ ] Сохранить `ResourceRef` и существующие bounded read results (§7.8); не вводить CAS/content_ref transport или новый reader.
 - [ ] Capability discovery и tool authoring разделить.

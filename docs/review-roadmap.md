@@ -3,7 +3,7 @@
 The agent runtime now has one direct flow:
 
 ```text
-request + full tool catalog + compact skill catalog
+request + finite core/admitted tool schemas + compact capability catalog
     -> model JSON
         -> zero or more sequential local tools
             -> one TOOL_RESULT JSON per call id
@@ -25,7 +25,7 @@ Future changes should prefer extending the editable prompt, skill text, native-l
 
 Known trade-offs of this simpler design:
 
-- bootstrap schemas stay fixed, while the complete compact exact-id capability catalog scales with the installed catalog and is never silently truncated; prompt-budget validation fails visibly if it cannot fit. Domain schemas enter an 8-entry, token-bounded LRU only after `common.capabilities_read`, while skill bodies enter context through the same exact-id reader;
+- the finite mode/host core stays fixed, while the complete compact exact-id capability catalog scales with the installed catalog and is never silently truncated; prompt-budget validation fails visibly if it cannot fit. Optional exact tool reads are admitted atomically for the next model step only when the complete request fits, then remain callable in the live model session without LRU eviction. Until durable admission events arrive in 8C, reconstruction requires a fresh read/admission. Skill bodies enter context through the same exact-id reader but retain their separate evidence contract;
 - independent multi-tool calls reduce model round trips, but result-dependent calls still require another model turn;
 - strict tool schemas improve selection and validation, but their descriptions, defaults, enums, and required fields must stay synchronized with executor behavior;
 - the selected endpoint should support the configured `json_object` or `json_schema` format and result role; repeated malformed responses stop after the configured 1–20 correction attempts;

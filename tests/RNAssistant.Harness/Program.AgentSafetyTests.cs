@@ -1088,6 +1088,12 @@ namespace RNAssistant.Harness
 
         private static async Task ModelProtocolStopsBeforeOversizedRequest()
         {
+            AssertEqual(0, ModelProtocolClient.EstimateFormatRepairOverheadTokens(
+                new AppSettings { MaxAgentFormatRetries = 1 }),
+                "single allowed response reserves no unreachable repair message");
+            AssertTrue(ModelProtocolClient.EstimateFormatRepairOverheadTokens(
+                    new AppSettings { MaxAgentFormatRetries = 2 }) > 0,
+                "a configured repair response reserves its bounded worst-case message");
             var request = NewProtocolRequest();
             request.Settings.ContextWindowOverrideTokens = 4096;
             request.AcceptedMessages = new[] { new ChatMessage { Role = "user", Content = new string('x', 100000) } };
@@ -1170,6 +1176,8 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "Do not include `id`; runtime assigns call IDs", "all modes reserve call identity for runtime");
             AssertTrue(settings.AgentToolsPrompt.StartsWith("# Agent tool policy", StringComparison.Ordinal), "tool prompt is separate Markdown");
             AssertContains(settings.AgentToolsPrompt, "unclassified calls are singleton", "tool prompt describes conservative batching");
+            AssertContains(settings.AgentToolsPrompt, "TOOL_PACK_STATE", "tool prompt requires explicit optional admission");
+            AssertContains(settings.AgentToolsPrompt, "without LRU eviction", "tool prompt preserves admitted schemas for the run");
             AssertContains(settings.AgentToolsPrompt, "exact `resources` URI with `relation=result`", "tool prompt explains externalized results");
             AssertTrue(settings.AgentSkillsPrompt.StartsWith("# Agent skill policy", StringComparison.Ordinal), "skill prompt is separate Markdown");
             AssertContains(settings.AgentSkillsPrompt, "metadata only", "skill catalog is explicitly not loaded guidance");
@@ -1744,7 +1752,7 @@ namespace RNAssistant.Harness
                 };
                 var settings = new AppSettings
                 {
-                    ContextWindowOverrideTokens = 12000,
+                    ContextWindowOverrideTokens = 14000,
                     MaxTokens = 512
                 };
                 var tools = adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.inspect")

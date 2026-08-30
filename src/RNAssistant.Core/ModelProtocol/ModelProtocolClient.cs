@@ -12,6 +12,7 @@ namespace RNAssistant.Core.ModelProtocol
 {
     public sealed class ModelProtocolClient : IMaterializedModelProtocol
     {
+        private const int MaximumFormatRepairErrorCharacters = 2048;
         private readonly LlmCompletionDelegate _completeAsync;
         private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
         private bool _useJsonObject;
@@ -171,9 +172,14 @@ namespace RNAssistant.Core.ModelProtocol
 
         private static ChatMessage CreateFormatRepairMessage(string error, int attempt, int maxAttempts)
         {
+            var boundedError = string.IsNullOrWhiteSpace(error)
+                ? "Invalid Agent JSON response."
+                : error.Trim();
+            if (boundedError.Length > MaximumFormatRepairErrorCharacters)
+                boundedError = boundedError.Substring(0, MaximumFormatRepairErrorCharacters) + "...[truncated]";
             var root = new JObject
             {
-                ["error"] = string.IsNullOrWhiteSpace(error) ? "Invalid Agent JSON response." : error.Trim(),
+                ["error"] = boundedError,
                 ["attempt"] = attempt,
                 ["max_attempts"] = maxAttempts,
                 ["instruction"] =
@@ -183,10 +189,24 @@ namespace RNAssistant.Core.ModelProtocol
                     "Every call contains only an exact name and object arguments. Do not include id; runtime assigns call IDs. " +
                     "Write, external, confirmation-required and unclassified calls must be singleton; batch only independent local reads. " +
                     "Follow the error action exactly. " +
-                    "If a known tool schema is not loaded, replace the rejected call with common.capabilities_read for that exact id, " +
-                    "wait for its successful complete tool-schema result, and call the loaded tool only in a later response."
+                    "If a known tool schema is not loaded, replace the rejected call with common.capabilities_read for that exact id. " +
+                    "Wait for its successful complete tool-schema result and TOOL_PACK_STATE with admitted=true, then call the tool only in a later response."
             };
             return new ChatMessage { Role = "user", Content = "FORMAT_REPAIR:\n" + root.ToString(Formatting.None), ProtocolMessage = true };
+        }
+
+        public static int EstimateFormatRepairOverheadTokens(AppSettings settings)
+        {
+            var configured = settings == null || settings.MaxAgentFormatRetries <= 0
+                ? AppSettings.DefaultMaxAgentFormatRetries
+                : settings.MaxAgentFormatRetries;
+            var attempts = Math.Max(1, Math.Min(AppSettings.MaximumAgentFormatRetries, configured));
+            if (attempts <= 1) return 0;
+            // Three-byte BMP characters are the maximum UTF-8 cost per valid
+            // UTF-16 code unit; include the truncation suffix used at the bound.
+            var maximumError = new string('\u4e00', MaximumFormatRepairErrorCharacters) + "...[truncated]";
+            return ModelContextBudget.EstimateMessageTokens(
+                CreateFormatRepairMessage(maximumError, attempts, attempts), settings);
         }
 
         private static void TraceRejected(LlmRequestOptions options, LlmCompletionResult completion, string error, int attempt)

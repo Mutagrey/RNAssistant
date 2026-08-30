@@ -38,8 +38,13 @@ model payload, durable registry, or capability activation store.
 - Dynamic registries may change for a later run without rewriting an active run.
 - Descriptor-only capability evidence and executable registration revisions remain
   distinct: loading a schema does not grant or replace local execution authority.
-- Phase 8A does not change callable membership. The current progressive LRU and its
-  compaction behavior remain until the separate monotonic-admission cutover.
+- Phase 8B now keeps callable membership in a separate `CallableToolPack`: finite
+  mode/host core profiles plus explicit atomic optional extensions, each with a new
+  revision and no LRU eviction inside the live model session. Full-request admission
+  includes the bounded format-repair reserve and cannot partially publish a read batch.
+- Durable extension events and rematerialization across confirmation, compaction,
+  and crash/replay remain a later Phase 8 slice. Raw schema-read evidence is only
+  live staging input and never replay authority for an admission decision.
 - Resource data, `ResourceRef`, CAS, and cursors are unchanged. Their data-plane ADR
   remains a later Phase 8 decision.
 - Legacy `ToolDefinition` remains one conversion/execution adapter until its listed

@@ -21,7 +21,6 @@ namespace RNAssistant.Office.Services
         private readonly ConversationPromptComposer _promptComposer = new ConversationPromptComposer();
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
-        private readonly List<string> _evictedSchemas = new List<string>();
         private string _mode;
         private string _userText;
         private ChatSession _session;
@@ -29,9 +28,8 @@ namespace RNAssistant.Office.Services
         private IReadOnlyList<ToolDefinition> _runnableCatalog;
         private Action<string, string, ChatActivity> _progress;
         private List<ChatMessage> _messages;
-        private ProgressiveToolWorkingSet _workingSet;
+        private CallableToolPack _toolPack;
         private LlmRunCache _runCache;
-        private bool _workingSetChanged;
 
         private ConversationModelSession(IOfficeApplicationAdapter adapter,
             ContextCompactionService contextCompactionService, AttachmentAnalysisService attachmentAnalysisService)
@@ -74,7 +72,7 @@ namespace RNAssistant.Office.Services
 
         internal ModelProtocolRequest CreateRequest(string stepId, ModelProtocolCallContext callContext)
         {
-            var activeTools = _workingSet.Tools;
+            var activeTools = _toolPack.Tools;
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, _session, _runCache);
             options.TraceStepId = stepId;
             return new ModelProtocolRequest
@@ -96,13 +94,11 @@ namespace RNAssistant.Office.Services
             _messages.Add(accepted);
         }
 
-        internal void TouchTool(string id) { _workingSet.Touch(id); }
-
         internal void AppendConfirmedResult(ToolCommand command, ToolResultMaterialization result)
         {
-            // Keep the existing confirmation replay behavior: materialization has
-            // already reconstructed the working set from the full accepted window.
-            var accepted = CreateBoundedToolResultMessage(command, result, _messages, _session, _settings);
+            // Until Phase 8C persists admission events, a confirmation continuation
+            // starts from the finite core and optional schemas require a fresh read.
+            var accepted = CreateBoundedToolResultMessage(command, result);
             _session.Messages.Add(accepted);
             _messages.Add(accepted);
         }
@@ -151,16 +147,11 @@ namespace RNAssistant.Office.Services
         internal void AppendToolResult(ToolCommand command, PreparedToolResult prepared)
         {
             var result = prepared.Result;
-            var accepted = CreateBoundedToolResultMessage(command, result, _messages, _session, _settings);
+            var accepted = CreateBoundedToolResultMessage(command, result);
             accepted.RunId = _session.LastRun == null ? null : _session.LastRun.RunId;
             AppendPairedResult(_session.Messages, accepted);
             AppendPairedResult(_messages, accepted);
-            IReadOnlyList<string> evicted;
-            if (_workingSet.ObserveReadResult(accepted, out evicted))
-            {
-                _workingSetChanged = true;
-                _evictedSchemas.AddRange(evicted ?? new string[0]);
-            }
+            _toolPack.StageReadResult(accepted);
             if (prepared.Media != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
             {
                 _session.Messages.Add(prepared.Media);
@@ -180,9 +171,8 @@ namespace RNAssistant.Office.Services
 
         internal void EndResponse()
         {
-            if (_workingSetChanged) _messages.Add(_workingSet.BuildStateMessage(_evictedSchemas));
-            _workingSetChanged = false;
-            _evictedSchemas.Clear();
+            var admission = _toolPack.CommitPending(CanPublishToolPack);
+            if (admission != null && admission.StateMessage != null) _messages.Add(admission.StateMessage);
         }
 
         internal static void ReleasePreviousMedia(ChatSession session)
@@ -242,18 +232,18 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
-            var workingSet = ProgressiveToolWorkingSet.Create(
+            var toolPack = CallableToolPack.Create(
                 mode,
-                runnableCatalog,
-                settings,
-                ContextCompactionService.BuildActiveWindow(session));
+                _adapter == null ? string.Empty : _adapter.HostName,
+                session == null || session.LastRun == null ? null : session.LastRun.RunId,
+                runnableCatalog);
             try
             {
                 _messages = _promptComposer.BuildMessages(
                     mode,
                     text,
                     _adapter,
-                    workingSet.Tools,
+                    toolPack.Tools,
                     skills,
                     context,
                     settings,
@@ -261,8 +251,9 @@ namespace RNAssistant.Office.Services
                     attachments,
                     replayCurrentUserInHistory,
                     0,
-                    workingSet.CapabilityContext(skills));
-                _workingSet = workingSet;
+                    toolPack.CapabilityContext(skills));
+                EnsureToolPackFits(_messages, toolPack, true);
+                _toolPack = toolPack;
             }
             catch (PromptBudgetExceededException ex) when (
                 ex.CanCompact && settings.AutoCompressContext && _contextCompactionService != null)
@@ -270,16 +261,16 @@ namespace RNAssistant.Office.Services
                 var checkpoint = await _contextCompactionService.EnsureWithinBudgetAsync(
                     session, settings, string.Empty, true, progress, cancellationToken).ConfigureAwait(false);
                 if (checkpoint == null) throw;
-                workingSet = ProgressiveToolWorkingSet.Create(
+                toolPack = CallableToolPack.Create(
                     mode,
-                    runnableCatalog,
-                    settings,
-                    ContextCompactionService.BuildActiveWindow(session));
+                    _adapter == null ? string.Empty : _adapter.HostName,
+                    session == null || session.LastRun == null ? null : session.LastRun.RunId,
+                    runnableCatalog);
                 _messages = _promptComposer.BuildMessages(
                     mode,
                     text,
                     _adapter,
-                    workingSet.Tools,
+                    toolPack.Tools,
                     skills,
                     context,
                     settings,
@@ -287,41 +278,75 @@ namespace RNAssistant.Office.Services
                     attachments,
                     replayCurrentUserInHistory,
                     0,
-                    workingSet.CapabilityContext(skills));
-                _workingSet = workingSet;
+                    toolPack.CapabilityContext(skills));
+                EnsureToolPackFits(_messages, toolPack, false);
+                _toolPack = toolPack;
             }
         }
 
-        private static ChatMessage CreateBoundedToolResultMessage(
+        private ChatMessage CreateBoundedToolResultMessage(
             ToolCommand command,
-            ToolResultMaterialization result,
-            IReadOnlyList<ChatMessage> messages,
-            ChatSession session,
-            AppSettings settings)
+            ToolResultMaterialization result)
         {
-            var inputBudget = ModelContextBudget.InputBudgetTokens(settings);
-            var used = ModelContextBudget.EstimateMessagesTokens(messages, settings);
+            var inputBudget = ModelContextBudget.InputBudgetTokens(_settings);
+            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, _toolPack.Tools, _session, null);
+            var used = ModelContextBudget.EstimateMessagesTokens(_messages, _settings) +
+                ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
+                ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings);
             var availableForData = Math.Max(0, inputBudget - used - ToolResultEnvelopeReserveTokens);
             var toolId = command == null ? null : command.ToolId;
             var maxDataTokens = string.Equals(toolId, CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase)
                     ? availableForData
                     : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
             AgentJsonProtocol.FailClosedOversizedCapabilityEvidence(
-                command, result, maxDataTokens, settings);
+                command, result, maxDataTokens, _settings);
             var artifact = ToolResultResourceService.ExternalizeIfNeeded(
-                session,
+                _session,
                 command,
                 result,
                 maxDataTokens,
-                settings);
+                _settings);
             var message = AgentJsonProtocol.CreateToolResultMessage(
-                command, result, maxDataTokens, settings.ToolResultRole, settings);
+                command, result, maxDataTokens, _settings.ToolResultRole, _settings);
             message.ResourceRefs = AgentTranscript.CloneResourceRefs(result == null ? null : result.Result.Resources);
             if (artifact != null && !string.Equals(
                 artifact.Kind,
                 ChatArtifactKinds.Chart,
                 StringComparison.OrdinalIgnoreCase)) artifact.SourceMessageId = message.Id;
             return message;
+        }
+
+        private bool CanPublishToolPack(IReadOnlyList<ToolDefinition> candidateTools, ChatMessage stateMessage)
+        {
+            var candidateMessages = new List<ChatMessage>(_messages);
+            if (stateMessage != null) candidateMessages.Add(stateMessage);
+            return EstimatedRequestTokens(candidateMessages, candidateTools) <=
+                ModelContextBudget.InputBudgetTokens(_settings);
+        }
+
+        private void EnsureToolPackFits(
+            IReadOnlyList<ChatMessage> messages,
+            CallableToolPack toolPack,
+            bool canCompact)
+        {
+            var estimated = EstimatedRequestTokens(messages, toolPack.Tools);
+            var budget = ModelContextBudget.InputBudgetTokens(_settings);
+            if (estimated <= budget) return;
+            throw new PromptBudgetExceededException(
+                "Callable tool pack cannot be published: the complete request plus format-repair reserve uses ≈" +
+                estimated + " tokens at an input limit of " + budget +
+                ". Start a new chat, use a larger-context model, or reduce optional schemas.",
+                canCompact);
+        }
+
+        private int EstimatedRequestTokens(
+            IReadOnlyList<ChatMessage> messages,
+            IReadOnlyList<ToolDefinition> tools)
+        {
+            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools, _session, null);
+            return ModelContextBudget.EstimateMessagesTokens(messages, _settings) +
+                ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
+                ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings);
         }
 
         private async Task<ChatMessage> BuildArtifactMediaMessageAsync(

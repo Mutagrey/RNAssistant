@@ -60,8 +60,9 @@ VS 2022 WQ-PACK remains mandatory.
 
 ## Remaining Phase 8 work
 
-The next slice owns deterministic core membership, budget admission before
-publication, monotonic explicit schema loading, and removal of LRU eviction. It must
-preserve this execution snapshot and cannot change `AgentKernel`. Compaction
-rematerialization, extension events, the remaining resource native handlers,
-Resource-data ADR, and Windows WQ-PACK stay open until their ordered slices.
+Phase 8B has since delivered deterministic core membership, full-budget atomic
+admission, monotonic explicit loading, and removal of LRU eviction while preserving
+this execution snapshot; see [8B evidence](PHASE_8B_CALLABLE_TOOL_PACK.md).
+Confirmation/compaction/crash rematerialization, durable extension events, the
+remaining resource native handlers, Resource-data ADR, and Windows WQ-PACK stay
+open until their ordered slices.

@@ -89,8 +89,10 @@ namespace RNAssistant.Harness
             AssertTrue(result.Sections.Any(section => section.Id == "skill_instructions"), "separate skill prompt cost is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "capabilities"),
                 "compact exact-id capability catalog is visible without eager schemas");
-            AssertTrue(!result.Sections.Any(section => section.Id == "tools"),
-                "unread domain schemas are absent from the active working set");
+            AssertTrue(result.Sections.Any(section => section.Id == "tools"),
+                "deterministic Excel core schemas are visible in the callable pack");
+            AssertTrue(result.Sections.Any(section => section.Id == "format_repair_reserve" && section.Tokens > 0),
+                "inspector exposes the same bounded repair reserve used by admission");
             var capabilities = result.Sections.Single(section => section.Id == "capabilities");
             AssertTrue(capabilities.Items.Any(item => item.Kind == "tool"), "tool ids are visible in the unified catalog");
             AssertTrue(capabilities.Items.Any(item => item.Kind == "skill"), "skill ids are visible in the unified catalog");
