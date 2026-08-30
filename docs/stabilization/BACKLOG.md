@@ -1,7 +1,10 @@
 # Stabilization backlog
 
 Новые product features заморожены. Следующая фаза начинается отдельным изменением
-после Definition of Done предыдущей на основном маршруте 0–10 → 12, согласно [master plan](STABILIZATION_MASTER_PLAN.md). Phase 11 — отдельная ветка после stable core, не prerequisite release qualification.
+после Definition of Done предыдущей на основном маршруте 0–10 → 12, кроме явно
+зафиксированного в master §16.1 режима dependency-safe deferred qualification:
+Windows-blocked gate остаётся открыт, а независимый обязательный slice идёт дальше.
+Phase 11 — отдельная ветка после stable core, не prerequisite release qualification.
 
 | Phase | Работа | Условие начала / проверки |
 |---|---|---|
@@ -31,7 +34,7 @@
 | 6F | Delete ownership | done host-neutral: existing-target/observation guard, type refusal, journal, compare-and-swap backend and verified absence moved to typed domain service; executor delete workflow/helpers removed. [Evidence](PHASE_6F_VBA_DELETE.md). Windows/COM/VBE gate open |
 | 6G | Restore ownership | done host-neutral: exact backup selection plus backup/current-state guard, dry-run, journal, typed create-or-replace and source/type verification moved to typed domain service; executor restore workflow/helpers removed. [Evidence](PHASE_6G_VBA_RESTORE.md). Windows/COM/VBE gate open |
 | 6H / 6I / 6J | Package/rename scope and ownership | done host-neutral: 6H audit; 6I typed package lifecycle/R41; 6J typed rename guard/backend/read-back/recovery and final executor compound-path removal. Dynamic definition authoring stays Phase 11; raw CAS stays separate from comparable text; Windows/VBE gate remains open. [6I](PHASE_6I_VBA_PACKAGE_LIFECYCLE.md), [6J](PHASE_6J_VBA_RENAME.md) |
-| 7 | Excel read/write vertical slice | 7A scope/consumers done docs-only; 7B typed reads done host-neutral; next 7C verified write, then 7D WQ0-bound backend. [7B evidence](PHASE_7B_EXCEL_READ.md) |
+| 7 | Excel read/write vertical slice | 7A scope, 7B typed reads and 7C verified `write_range` done host-neutral. 7D bound backend remains blocked by WQ0/5B2; Windows WQ-EXCEL remains mandatory. [7B](PHASE_7B_EXCEL_READ.md), [7C](PHASE_7C_EXCEL_WRITE.md) |
 | 8 | Resource read plane / immutable ToolPack | Заменить внешний lifecycle без переделки kernel; bounded pinned schema/policy/binding, compaction materialization, atomic admission; no LRU eviction и no CAS transport (R30) |
 | UI security / R35 | Обновить уязвимый existing DOMPurify без начала Phase 9 | done host-neutral: `3.1.6 → 3.4.14`, exact npm provenance/SHA-256/licenses; Markdown boundary/CSP не менялись, Windows WebView gate открыт |
 | 9 | Persistence / UI projection | Расширить minimal replay Phase 3: один event authority, mandatory durable barriers/result-append faults, typed verification projection; replay не принимает execution decisions |

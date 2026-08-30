@@ -92,10 +92,16 @@
     <Compile Include="Tools\ResourceListToolHandler.cs" />
     <Compile Include="Domains\Excel\ExcelReadContracts.cs" />
     <Compile Include="Domains\Excel\ExcelReadService.cs" />
+    <Compile Include="Domains\Excel\ExcelWriteContracts.cs" />
+    <Compile Include="Domains\Excel\ExcelWriteService.cs" />
     <Compile Include="Tools\ExcelReadCompatibilityBackend.cs" />
     <Compile Include="Tools\ExcelReadToolAdapter.cs" />
     <Compile Include="Tools\ExcelReadToolHandler.cs" />
     <Compile Include="Tools\ExcelReadToolIds.cs" />
+    <Compile Include="Tools\ExcelWriteCompatibilityBackend.cs" />
+    <Compile Include="Tools\ExcelWriteToolAdapter.cs" />
+    <Compile Include="Tools\ExcelWriteToolHandler.cs" />
+    <Compile Include="Tools\ExcelWriteToolIds.cs" />
     <Compile Include="Runtime\DispatchedOfficeApplicationAdapter.cs" />
     <Compile Include="Agent\AgentTranscript.cs" />
     <Compile Include="Runtime\DocumentIdentity.cs" />

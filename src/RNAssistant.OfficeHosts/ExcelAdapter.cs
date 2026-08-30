@@ -15,7 +15,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
+    public sealed partial class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
     {
         private const int MaxContextPreviewCells = 2000;
 
@@ -316,14 +316,16 @@ namespace RNAssistant.OfficeHosts
                         return InspectWorkbookBackend(command);
                     case ExcelReadToolIds.ReadRangeBackend:
                         return ReadRangeBackend(command);
+                    case ExcelWriteToolIds.ReadBackend:
+                        return ReadWriteRangeBackend(command);
+                    case ExcelWriteToolIds.ApplyBackend:
+                        return ApplyWriteRangeBackend(command);
                     case "excel.find_cells":
                         return FindCells(command);
                     case "excel.replace_cells":
                         return ReplaceCells(command);
                     case "excel.create_chat_chart":
                         return CreateChatChart(command);
-                    case "excel.write_range":
-                        return WriteRangeByKind(command);
                     case "excel.add_table":
                         return AddTable(command);
                     case "excel.upsert_chart":
@@ -373,6 +375,10 @@ namespace RNAssistant.OfficeHosts
                 }
             }
             catch (ExcelReadHostException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+            }
+            catch (ExcelWriteHostException ex)
             {
                 return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
             }
@@ -947,90 +953,6 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok(
                 "Chat chart artifact created: " + artifact.Title,
                 JsonConvert.SerializeObject(artifact));
-        }
-
-        private ToolResult WriteRange(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
-            object value;
-            if (command.Arguments == null || !command.Arguments.TryGetValue("value", out value))
-            {
-                return ToolResult.Fail("value is required when kind is value.");
-            }
-            sheet.Range[address].Value2 = value;
-            return ToolResult.Ok("Wrote value to " + sheet.Name + "!" + address);
-        }
-
-        private ToolResult WriteRangeByKind(ToolCommand command)
-        {
-            var kind = ToolArgumentReader.String(command.Arguments, "kind", "value").Trim().ToLowerInvariant();
-            if (kind == "formula") return SetFormula(command);
-            if (kind == "table")
-            {
-                if (!command.Arguments.ContainsKey("values")) return ToolResult.Fail("values is required when kind is table.");
-                return WriteTable(command);
-            }
-            return kind == "value"
-                ? WriteRange(command)
-                : ToolResult.Fail("kind must be value, formula, or table.");
-        }
-
-        private ToolResult WriteTable(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var startAddress = ToolArgumentReader.String(command.Arguments, "address", "A1");
-            var valuesJson = ToolArgumentReader.String(command.Arguments, "values", "[]");
-            var values = JArray.Parse(valuesJson);
-            if (values.Count == 0)
-            {
-                return ToolResult.Fail("No table values provided.");
-            }
-
-            var rows = values.Count;
-            var columns = 0;
-            foreach (var rowToken in values)
-            {
-                var row = rowToken as JArray;
-                if (row == null)
-                {
-                    return ToolResult.Fail("Table values must be a 2D JSON array.");
-                }
-                columns = Math.Max(columns, row.Count);
-            }
-            if (columns == 0)
-            {
-                return ToolResult.Fail("No table columns provided.");
-            }
-
-            var data = new object[rows, columns];
-            for (var r = 0; r < rows; r++)
-            {
-                var row = (JArray)values[r];
-                for (var c = 0; c < columns; c++)
-                {
-                    data[r, c] = c < row.Count ? ToCellValue(row[c]) : null;
-                }
-            }
-
-            var start = sheet.Range[startAddress];
-            var target = start.Resize[rows, columns];
-            target.Value2 = data;
-            return ToolResult.Ok("Wrote table to " + sheet.Name + "!" + target.Address[false, false], JsonConvert.SerializeObject(new { sheet = sheet.Name, range = target.Address[false, false], rows = rows, columns = columns }));
-        }
-
-        private ToolResult SetFormula(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
-            var formula = ToolArgumentReader.String(command.Arguments, "formula", string.Empty);
-            if (string.IsNullOrWhiteSpace(formula))
-            {
-                return ToolResult.Fail("formula is required.");
-            }
-
-            sheet.Range[address].Formula = formula;
-            return ToolResult.Ok("Formula set in " + sheet.Name + "!" + address);
         }
 
         private ToolResult AddTable(ToolCommand command)

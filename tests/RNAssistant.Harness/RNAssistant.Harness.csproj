@@ -38,6 +38,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="FakeOfficeAdapter.cs" />
+    <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="FakeOfficeAdapter.ExcelWrite.cs" />
     <Compile Include="..\RNAssistant.ExcelIdentityProbe\ComIdentitySample.cs" Link="ExcelIdentityProbe\ComIdentitySample.cs" />
     <Compile Include="..\RNAssistant.ExcelIdentityProbe\ComIdentityLease.cs" Link="ExcelIdentityProbe\ComIdentityLease.cs" />
     <Compile Include="..\RNAssistant.ExcelIdentityProbe\ExcelProbeTarget.cs" Link="ExcelIdentityProbe\ExcelProbeTarget.cs" />

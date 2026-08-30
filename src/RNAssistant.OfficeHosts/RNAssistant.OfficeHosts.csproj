@@ -93,6 +93,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ExcelAdapter.cs" />
+    <Compile Include="ExcelAdapter.WriteRange.cs" />
     <Compile Include="InProcessPanelSession.cs" />
     <Compile Include="OutlookAdapter.cs" />
     <Compile Include="PowerPointAdapter.cs" />

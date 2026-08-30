@@ -2007,9 +2007,9 @@ consumer map и порядок — в [6H evidence](PHASE_6H_VBA_PACKAGE_SCOPE.m
 - [x] 7B: перенести `excel.inspect` и `excel.read_range` в один typed read owner и native `ToolRuntime` handlers. Все текущие `inspect` selectors переключаются атомарно; chart/table metadata не разрешает перенос mutation tools. [Evidence](PHASE_7B_EXCEL_READ.md).
 - [x] 7B: HTML bind/refresh использует тот же read adapter под уже взятым document access; прямой `_adapter.ExecuteTool` для switched public IDs удалить.
 - [x] 7B: сохранить 100000-cell limit до `Value2`/`Formula` materialization, добавить bounded inspect collections и запретить unbounded named-range `Value2`.
-- [ ] 7C: перенести только `excel.write_range` в typed write owner/native handler; прочие Excel mutations остаются legacy.
-- [ ] 7C: добавить exact before/read-back verification и различать `VerifiedNoChange`, `VerifiedChange`, definite pre-dispatch `error` и non-retryable post-dispatch `unknown`.
-- [ ] 7C: сохранить deterministic null-padding ragged tables и применить size limits до COM matrix allocation/assignment.
+- [x] 7C: перенести только `excel.write_range` в typed write owner/native handler; прочие Excel mutations остаются legacy. [Evidence](PHASE_7C_EXCEL_WRITE.md).
+- [x] 7C: добавить exact before/read-back verification и различать `VerifiedNoChange`, `VerifiedChange`, definite pre-dispatch `error` и non-retryable post-dispatch `unknown`.
+- [x] 7C: сохранить deterministic null-padding ragged tables и применить size limits до COM matrix allocation/assignment.
 - [ ] 7D после WQ0/5B2: extracted interop backend получает только bound `ExcelDocumentSession.BoundDocumentObject`; удалить internal compatibility backend и `ActiveWorkbook`/descriptor execution fallback.
 - [ ] Добавить host-neutral tests:
   - [x] все `inspect` selectors и общий Agent/manual/HTML read owner;
@@ -2020,9 +2020,9 @@ consumer map и порядок — в [6H evidence](PHASE_6H_VBA_PACKAGE_SCOPE.m
   - [ ] protected sheet;
   - [x] closed workbook (host-neutral bound-session refusal; real Excel remains WQ);
   - [x] switched active workbook (host-neutral exact-target refusal; real Excel remains WQ);
-  - [ ] write error before dispatch;
-  - [ ] verified no-op/change;
-  - [ ] unverified final state.
+  - [x] write error before dispatch;
+  - [x] verified no-op/change;
+  - [x] unverified final state.
 - [ ] Не переносить `find_cells`, `create_chat_chart`, `replace_cells`, table/chart mutations, formatting, sheet management или clear/sort/filter до отдельного этапа.
 
 ### Definition of Done

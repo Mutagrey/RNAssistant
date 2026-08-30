@@ -12,7 +12,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
     {
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public string VbaModuleType = "StdModule";
@@ -21,6 +21,7 @@ namespace RNAssistant.Harness
         public string ThrowOnToolId { get; set; }
         public Action<ToolCommand> BeforeExecuteTool { get; set; }
         public Func<string, string> VbaWriteTransform { get; set; }
+        public bool ExcelWriteThrowAfterMutation { get; set; }
         public int VbaReportedLineCountOffset { get; set; }
         public string DocumentKeyValue { get; set; }
         public string RuntimeDocumentKeyValue { get; set; }
@@ -266,8 +267,9 @@ namespace RNAssistant.Harness
             }
 
             var cell = ParseAddress(address);
-            string value;
-            return sheet.Cells.TryGetValue(CellKey(cell.Row, cell.Column), out value) ? value : string.Empty;
+            object value;
+            return sheet.Cells.TryGetValue(CellKey(cell.Row, cell.Column), out value)
+                ? Convert.ToString(value) : string.Empty;
         }
 
         public int ChartCount(string sheetName)
@@ -586,19 +588,20 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("added sheet " + name, JsonConvert.SerializeObject(new { sheet = name }));
             }
 
-            if (string.Equals(command.ToolId, "excel.write_range", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, ExcelWriteToolIds.ReadBackend, StringComparison.OrdinalIgnoreCase))
             {
-                var sheetName = Argument(command, "sheet", "Sheet1");
-                var startAddress = Argument(command, "address", "A1");
-                var kind = Argument(command, "kind", command.Arguments.ContainsKey("values") ? "table" : "value");
-                object raw = string.Equals(kind, "formula", StringComparison.OrdinalIgnoreCase)
-                    ? (command.Arguments.ContainsKey("formula") ? command.Arguments["formula"] : null)
-                    : string.Equals(kind, "table", StringComparison.OrdinalIgnoreCase)
-                        ? (command.Arguments.ContainsKey("values") ? command.Arguments["values"] : null)
-                        : (command.Arguments.ContainsKey("value") ? command.Arguments["value"] : null);
-                var values = ReadMatrix(raw);
-                WriteMatrix(sheetName, startAddress, values);
-                return ToolResult.Ok("wrote " + values.Count + " row(s) to " + sheetName, JsonConvert.SerializeObject(new { sheet = sheetName, startAddress = startAddress, values = values }));
+                return ExecuteExcelWriteReadBackend(command);
+            }
+
+            if (string.Equals(command.ToolId, ExcelWriteToolIds.ApplyBackend, StringComparison.OrdinalIgnoreCase))
+            {
+                return ExecuteExcelWriteApplyBackend(command);
+            }
+
+            if (string.Equals(command.ToolId, ExcelWriteToolIds.WriteRange, StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("Public excel.write_range is owned by ToolRuntime.", null,
+                    "excel_public_write_moved", false);
             }
 
             if (string.Equals(command.ToolId, ExcelReadToolIds.ReadRangeBackend, StringComparison.OrdinalIgnoreCase))
@@ -619,9 +622,10 @@ namespace RNAssistant.Harness
                 {
                     foreach (var cell in sheet.Value.Cells)
                     {
-                        if (cell.Value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                        var text = Convert.ToString(cell.Value) ?? string.Empty;
+                        if (text.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            matches.Add(new { sheet = sheet.Key, address = cell.Key, value = cell.Value });
+                            matches.Add(new { sheet = sheet.Key, address = cell.Key, value = text });
                         }
                     }
                 }
@@ -636,7 +640,8 @@ namespace RNAssistant.Harness
                 {
                     foreach (var address in sheet.Cells.Keys.ToList())
                     {
-                        sheet.Cells[address] = (sheet.Cells[address] ?? string.Empty).Replace(find, replacement);
+                        sheet.Cells[address] = (Convert.ToString(sheet.Cells[address]) ?? string.Empty)
+                            .Replace(find, replacement);
                     }
                 }
                 return ToolResult.Ok("replaced cells");
@@ -1055,6 +1060,7 @@ namespace RNAssistant.Harness
                 for (var c = 0; c < values[r].Count; c++)
                 {
                     sheet.Cells[CellKey(start.Row + r, start.Column + c)] = values[r][c] ?? string.Empty;
+                    sheet.FormulaCells.Remove(CellKey(start.Row + r, start.Column + c));
                 }
             }
         }
@@ -1067,7 +1073,9 @@ namespace RNAssistant.Harness
             {
                 for (var column = bounds.Start.Column; column <= bounds.End.Column; column++)
                 {
-                    sheet.Cells.Remove(CellKey(row, column));
+                    var key = CellKey(row, column);
+                    sheet.Cells.Remove(key);
+                    sheet.FormulaCells.Remove(key);
                 }
             }
         }
@@ -1082,57 +1090,12 @@ namespace RNAssistant.Harness
                 var line = new List<string>();
                 for (var column = bounds.Start.Column; column <= bounds.End.Column; column++)
                 {
-                    string value;
-                    line.Add(sheet.Cells.TryGetValue(CellKey(row, column), out value) ? value : string.Empty);
+                    object value;
+                    line.Add(sheet.Cells.TryGetValue(CellKey(row, column), out value)
+                        ? Convert.ToString(value) : string.Empty);
                 }
 
                 values.Add(line);
-            }
-
-            return values;
-        }
-
-        private static List<List<string>> ReadMatrix(object raw)
-        {
-            var values = new List<List<string>>();
-            if (raw == null)
-            {
-                return values;
-            }
-
-            JToken token;
-            if (raw is JToken)
-            {
-                token = (JToken)raw;
-            }
-            else
-            {
-                var text = Convert.ToString(raw);
-                if (string.IsNullOrWhiteSpace(text)) token = new JArray();
-                else
-                {
-                    try { token = JToken.Parse(text); }
-                    catch (JsonException) { token = new JValue(text); }
-                }
-            }
-
-            var rows = token as JArray;
-            if (rows == null)
-            {
-                values.Add(new List<string> { Convert.ToString(token) });
-                return values;
-            }
-
-            foreach (var rowToken in rows)
-            {
-                var rowArray = rowToken as JArray;
-                if (rowArray == null)
-                {
-                    values.Add(new List<string> { Convert.ToString(rowToken) });
-                    continue;
-                }
-
-                values.Add(rowArray.Select(cell => Convert.ToString(cell)).ToList());
             }
 
             return values;
@@ -1515,13 +1478,15 @@ namespace RNAssistant.Harness
         private sealed class FakeSheet
         {
             public string Name { get; set; }
-            public Dictionary<string, string> Cells { get; private set; }
+            public Dictionary<string, object> Cells { get; private set; }
+            public HashSet<string> FormulaCells { get; private set; }
             public List<FakeChart> Charts { get; private set; }
             public List<string> Tables { get; private set; }
 
             public FakeSheet()
             {
-                Cells = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                Cells = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                FormulaCells = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 Charts = new List<FakeChart>();
                 Tables = new List<string>();
             }

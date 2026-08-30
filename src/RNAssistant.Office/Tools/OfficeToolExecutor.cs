@@ -25,6 +25,7 @@ namespace RNAssistant.Office.Tools
         private readonly ResourceGatewayService _resourceGateway;
         private readonly ResourceToolExecutor _resourceExecutor;
         private readonly ExcelReadToolAdapter _excelReadAdapter;
+        private readonly ExcelWriteToolAdapter _excelWriteAdapter;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
         private readonly TaskListToolExecutor _taskListToolExecutor;
         private readonly PlanDocumentToolExecutor _planDocumentToolExecutor;
@@ -64,6 +65,7 @@ namespace RNAssistant.Office.Tools
                 BeginLiveOfficeRead);
             _resourceExecutor = new ResourceToolExecutor(_resourceGateway);
             _excelReadAdapter = new ExcelReadToolAdapter(_adapter);
+            _excelWriteAdapter = new ExcelWriteToolAdapter(_adapter);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(
                 _adapter, _adapterTools, BeginLiveOfficeRead, ExecuteOfficeDataSourceUnderCurrentAccess);
             _taskListToolExecutor = new TaskListToolExecutor();
@@ -99,7 +101,7 @@ namespace RNAssistant.Office.Tools
         internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolDefinition> catalog,
             AppSettings settings, string mode, bool trace = true)
         {
-            return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _hostRuntime,
+            return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _excelWriteAdapter, _hostRuntime,
                 session, catalog, settings, mode, trace);
         }
 
@@ -411,6 +413,15 @@ namespace RNAssistant.Office.Tools
 
             if (NativeToolRuntimeAdapter.Owns(command.ToolId))
             {
+                if (dryRun && ExcelWriteToolIds.Owns(command.ToolId))
+                {
+                    var validation = ValidateCommandArguments(command, tool);
+                    if (validation != null) return validation;
+                    if (!context.TryConsumeStep())
+                        return ToolResult.Fail("Tool execution budget exceeded.", null, "tool_step_limit_exceeded", false);
+                    return ToolResult.Ok("Dry run: would execute " + command.ToolId,
+                        JsonConvert.SerializeObject(command.Arguments));
+                }
                 var remainingSteps = context.RemainingSteps;
                 if (!context.TryConsumeStep())
                     return ToolResult.Fail("Tool execution budget exceeded.", null, "tool_step_limit_exceeded", false);
@@ -760,6 +771,7 @@ namespace RNAssistant.Office.Tools
                 (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
                  _controllerExecutors.ContainsKey(id) ||
                  ExcelReadToolIds.IsInternal(id) ||
+                 ExcelWriteToolIds.IsInternal(id) ||
                  _vbaExecutor.IsInternalToolId(id));
         }
 

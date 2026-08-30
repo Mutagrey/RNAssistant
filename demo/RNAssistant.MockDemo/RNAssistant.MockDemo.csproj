@@ -103,6 +103,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="Testing\FakeOfficeAdapter.cs" />
+    <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="Testing\FakeOfficeAdapter.ExcelWrite.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll"

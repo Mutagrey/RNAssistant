@@ -345,7 +345,9 @@ namespace RNAssistant.Harness
                 AssertEqual(1, gateEntries, "HTML binding enters the shared live-document read gate");
                 AssertEqual(1, gateExits, "HTML binding releases the shared live-document read gate");
 
-                adapter.ExecuteTool(Command("excel.write_range", "kind", "value", "sheet", "Data", "address", "B2", "value", "999"));
+                var write = executor.Execute(Command("excel.write_range", "kind", "value", "sheet", "Data",
+                    "address", "B2", "value", "999"), tools, new AppSettings(), false, false, boundSession);
+                AssertTrue(write.Success, "HTML refresh fixture writes through the typed Excel owner");
                 var historyBeforeRefresh = boundSession.HtmlWorkspace.History.Count;
                 var refresh = new ToolCommand { ToolId = HtmlArtifactToolExecutor.RefreshDataToolId };
                 refresh.Arguments["name"] = "sales";

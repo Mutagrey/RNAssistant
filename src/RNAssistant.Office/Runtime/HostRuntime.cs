@@ -119,8 +119,20 @@ namespace RNAssistant.Office.Runtime
 
         internal T ReadDocument<T>(OfficeDocumentExecutionExpectation target, CancellationToken cancellationToken, Func<T> action)
         {
-            // UI/context/catalog reads are independent roots, including callbacks
-            // reentered on an STA already executing another document operation.
+            return ExecuteDocumentOperation(target, cancellationToken, action);
+        }
+
+        internal T ExecuteDocumentMutation<T>(OfficeDocumentExecutionExpectation target,
+            CancellationToken cancellationToken, Func<T> action)
+        {
+            return ExecuteDocumentOperation(target, cancellationToken, action);
+        }
+
+        private T ExecuteDocumentOperation<T>(OfficeDocumentExecutionExpectation target,
+            CancellationToken cancellationToken, Func<T> action)
+        {
+            // Direct reads and typed mutations are independent roots, including
+            // callbacks reentered on an STA already executing another operation.
             using (DocumentAccessGate.BeginOperation())
             {
                 var provider = _adapter as IOfficeDocumentSessionProvider;

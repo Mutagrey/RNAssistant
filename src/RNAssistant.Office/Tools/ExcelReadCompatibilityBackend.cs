@@ -5,7 +5,7 @@ using RNAssistant.Office.Domains.Excel;
 
 namespace RNAssistant.Office.Tools
 {
-    // Temporary 7B/7C seam. The typed owner is host-neutral; the legacy host
+    // Temporary 7B seam. The typed owner is host-neutral; the legacy host
     // adapter exposes only internal backend commands until the bound 7D backend.
     internal sealed class ExcelReadCompatibilityBackend : IExcelReadBackend
     {

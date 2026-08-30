@@ -57,8 +57,6 @@ namespace RNAssistant.Harness
                 AssertEqual("excel_public_read_moved",
                     adapter.ExecuteTool(Command(ExcelReadToolIds.Inspect, "kind", "sheets")).ErrorCode,
                     "host adapter cannot execute the moved public id");
-                AssertTrue(!NativeToolRuntimeAdapter.Owns("excel.write_range"),
-                    "write_range remains outside 7B native ownership");
                 AssertTrue(executor.IsProtectedToolId(ExcelReadToolIds.InspectBackend) &&
                     executor.IsProtectedToolId(ExcelReadToolIds.ReadRangeBackend),
                     "temporary backend ids are reserved from authored-tool collisions");

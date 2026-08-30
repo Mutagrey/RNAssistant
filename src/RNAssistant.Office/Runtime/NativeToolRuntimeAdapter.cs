@@ -21,7 +21,7 @@ namespace RNAssistant.Office.Runtime
         private readonly bool _trace;
 
         internal NativeToolRuntimeAdapter(ResourceGatewayService gateway, ExcelReadToolAdapter excelReads,
-            HostRuntime hostRuntime, ChatSession session,
+            ExcelWriteToolAdapter excelWrites, HostRuntime hostRuntime, ChatSession session,
             IEnumerable<ToolDefinition> catalog, AppSettings settings, string mode, bool trace = true)
         {
             var registry = new ToolHandlerRegistry();
@@ -36,11 +36,17 @@ namespace RNAssistant.Office.Runtime
                     binding = ResourceListToolHandler.Binding;
                     handler = new ResourceListToolHandler(gateway, session);
                 }
-                else
+                else if (ExcelReadToolIds.Owns(definition.Id))
                 {
                     if (excelReads == null || hostRuntime == null) continue;
                     binding = ExcelReadToolHandler.BindingFor(definition.Id);
                     handler = new ExcelReadToolHandler(definition.Id, excelReads, hostRuntime, session);
+                }
+                else
+                {
+                    if (excelWrites == null || hostRuntime == null) continue;
+                    binding = ExcelWriteToolHandler.Binding;
+                    handler = new ExcelWriteToolHandler(excelWrites, hostRuntime, session);
                 }
                 var revision = binding.HandlerId + ":" +
                     ConversationRunService.ToolExecutionFingerprint(tools, definition.Id);
@@ -55,7 +61,7 @@ namespace RNAssistant.Office.Runtime
         internal static bool Owns(string toolId)
         {
             return string.Equals(toolId, ResourceToolExecutor.ListToolId, StringComparison.Ordinal) ||
-                ExcelReadToolIds.Owns(toolId);
+                ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId);
         }
 
         private static bool Runnable(ToolDefinition definition)
