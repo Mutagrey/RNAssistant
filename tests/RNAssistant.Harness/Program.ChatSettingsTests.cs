@@ -161,7 +161,7 @@ namespace RNAssistant.Harness
                 reviewed.EnsureAgentPromptsReviewed();
                 AssertEqual(oldVersion, loaded.AgentPromptSchemaVersion, "save stages review on a copy, not the caller's draft");
                 AssertTrue(prompts(legacy).SequenceEqual(prompts(reviewed)), "explicit review preserves custom text");
-                AssertEqual(15, reviewed.AgentPromptSchemaVersion, "explicit review persists schema 15 for callable ToolPack admission");
+                AssertEqual(16, reviewed.AgentPromptSchemaVersion, "explicit review persists schema 16 for durable ToolPack replay");
                 AssertTrue(File.ReadAllText(paths.SettingsFile).IndexOf("reviewAgentPrompts", StringComparison.OrdinalIgnoreCase) < 0,
                     "review command is transient, not a sticky settings flag");
 
@@ -173,7 +173,7 @@ namespace RNAssistant.Harness
                 service.Save(reset, null, null, true);
                 var defaults = service.Load();
                 defaults.EnsureAgentPromptsReviewed();
-                AssertEqual(15, defaults.AgentPromptSchemaVersion, "explicit reset persists schema 15");
+                AssertEqual(16, defaults.AgentPromptSchemaVersion, "explicit reset persists schema 16");
                 foreach (var instruction in new[] { defaults.SystemPrompt, defaults.ChatSystemPrompt, defaults.PlanSystemPrompt })
                 {
                     AssertContains(instruction, "conversation-response-v4", "explicit reset installs actual v4 defaults");

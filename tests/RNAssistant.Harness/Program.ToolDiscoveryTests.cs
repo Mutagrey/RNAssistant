@@ -8,6 +8,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
@@ -410,7 +411,7 @@ namespace RNAssistant.Harness
                 AssertTrue(toolPack.StageReadResult(first), "first exact schema is staged");
                 AssertTrue(toolPack.StageReadResult(second), "second exact schema is staged in the same batch");
                 var originalRevision = toolPack.Revision;
-                var admitted = toolPack.CommitPending((tools, state) =>
+                var admitted = toolPack.PreparePending((tools, state) =>
                 {
                     AssertTrue(tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
                         tools.Any(tool => tool.Id == "fixture.dynamic_2"),
@@ -419,6 +420,9 @@ namespace RNAssistant.Harness
                     return true;
                 });
                 AssertTrue(admitted.Admitted, "candidate batch is admitted atomically");
+                AssertEqual(originalRevision, toolPack.Revision,
+                    "evaluated admission is not published before its durable barrier");
+                toolPack.Publish(admitted);
                 AssertTrue(admitted.Revision != originalRevision, "admission creates a new callable snapshot revision");
                 AssertEqual(admitted.Revision, toolPack.Revision, "published revision matches the admitted candidate");
                 AssertTrue(toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_1") &&
@@ -430,8 +434,9 @@ namespace RNAssistant.Harness
                 third.RunId = runId;
                 AssertTrue(toolPack.StageReadResult(third), "third schema is staged");
                 var retainedRevision = toolPack.Revision;
-                var rejected = toolPack.CommitPending((tools, state) => false);
+                var rejected = toolPack.PreparePending((tools, state) => false);
                 AssertTrue(!rejected.Admitted, "overflow rejects the whole extension");
+                toolPack.Publish(rejected);
                 AssertEqual(retainedRevision, toolPack.Revision, "rejection does not publish a revision");
                 AssertTrue(!toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_3"),
                     "rejected schema is never partially published");
@@ -508,10 +513,13 @@ namespace RNAssistant.Harness
                 };
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "overflow-run", TurnId = "overflow-turn" };
+                var store = new ChatStore(FixturePaths.Value);
+                store.Save(session);
                 using (var modelSession = ConversationModelSession.CreateAsync(
                     adapter,
                     null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    store,
                     ChatModes.Agent,
                     "Load both optional schemas.",
                     session,
@@ -541,7 +549,8 @@ namespace RNAssistant.Harness
                             LegacyToolResultAdapter.Materialize(result, ToolExecutionOutcome.Ok), null));
                     }
 
-                    modelSession.EndResponse();
+                    store.Save(session);
+                    modelSession.EndResponse("after-overflow");
                     var request = modelSession.CreateRequest("after-overflow",
                         new ModelProtocolCallContext(new string[0]));
                     AssertTrue(optionalTools.All(candidate => request.RunnableCatalog.Any(tool => tool.Id == candidate.Id)),
@@ -563,19 +572,29 @@ namespace RNAssistant.Harness
                         "rejected state and retained pack still fit with repair overhead");
                 }
 
+                var rejectedEvents = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                    .Where(item => item.Type == SessionEventTypes.ToolPackExtensionRejected).ToList();
+                AssertEqual(1, rejectedEvents.Count, "rejected admission is a durable typed event");
+                var rejectedData = rejectedEvents[0].Data.ToObject<ToolPackExtensionEventData>();
+                AssertTrue(!rejectedData.Admitted && rejectedData.RequestedSchemas.Count == 2,
+                    "rejected event keeps exact bounded diagnostic refs but grants no authority");
+
                 var reconstructionSettings = new AppSettings
                 {
                     AgentResponseMode = AgentResponseModes.JsonSchema,
                     ContextWindowOverrideTokens = 131072,
                     MaxTokens = 512
                 };
+                var reconstructedSession = new ChatStore(FixturePaths.Value).Load(
+                    session.Host, session.DocumentKey, session.Id);
                 using (var reconstructed = ConversationModelSession.CreateAsync(
                     adapter,
                     null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    new ChatStore(FixturePaths.Value),
                     ChatModes.Agent,
                     "Continue after rejected admission.",
-                    session,
+                    reconstructedSession,
                     NewContext(adapter),
                     reconstructionSettings,
                     catalog,
@@ -626,11 +645,16 @@ namespace RNAssistant.Harness
                 var evidence = ReadSchemaEvidence(executor, catalog, optional.Id, "read_before_compaction");
                 evidence.RunId = session.LastRun.RunId;
                 session.Messages.Add(evidence);
+                var store = new ChatStore(FixturePaths.Value);
+                store.Save(session);
                 var loaded = CallableToolPack.Create(ChatModes.Agent, adapter.HostName,
                     session.LastRun.RunId, catalog);
                 AssertTrue(loaded.StageReadResult(evidence), "live exact evidence stages before compaction");
-                AssertTrue(loaded.CommitPending((tools, state) => true).Admitted,
+                var admission = loaded.PreparePending((tools, state) => true);
+                AssertTrue(admission.Admitted,
                     "seed schema is admitted before compaction");
+                new ToolPackAdmissionJournal(store, session).Append(admission, "after-schema-read");
+                loaded.Publish(admission);
                 AssertTrue(loaded.Tools.Any(tool => tool.Id == optional.Id), "seed schema is callable before compaction");
 
                 // Many small messages overflow the prompt but leave a complete prefix
@@ -653,19 +677,175 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Earlier work summarized.\"}" });
                 };
                 using (var modelSession = ConversationModelSession.CreateAsync(adapter, new ContextCompactionService(completion),
-                    new AttachmentAnalysisService(completion), ChatModes.Agent, "Continue.", session, NewContext(adapter),
+                    new AttachmentAnalysisService(completion), store, ChatModes.Agent, "Continue.", session, NewContext(adapter),
                     settings, catalog, null, null, true, null, CancellationToken.None).GetAwaiter().GetResult())
                 {
                     var request = modelSession.CreateRequest("after_compaction",
                         new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]));
                     AssertEqual(1, compactions, "over-budget preparation compacts once and recomposes");
                     AssertTrue(request.RunnableCatalog.Any(tool => tool.Id == optional.Id), "local execution catalog is preserved");
-                    AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id), "compacted optional schema requires a fresh exact read");
+                    AssertTrue(request.CallableTools.Any(tool => tool.Id == optional.Id),
+                        "compaction rematerializes the exact durable optional schema");
                     AssertContains(FlattenSimple(request.AcceptedMessages), "Earlier work summarized.", "request uses the new checkpoint");
                     AssertTrue(!request.AcceptedMessages.Any(message => message.Id == evidence.Id), "old schema evidence is absent from the request");
                     AssertTrue(ModelContextBudget.EstimateMessagesTokens(request.AcceptedMessages, settings) <= ModelContextBudget.InputBudgetTokens(settings),
                         "recomposed request fits the input budget");
                     AssertTrue(originalMessages.SequenceEqual(session.Messages.Take(originalMessages.Length)), "compaction keeps the original transcript");
+                }
+            });
+        }
+
+        private static void ToolPackAdmissionReplaysByLogicalTurn()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var optional = new ToolDefinition
+                {
+                    Id = "fixture.durable_tool",
+                    Host = "Excel",
+                    Name = "Durable fixture",
+                    Description = "Optional schema restored only from a typed event.",
+                    ArgumentSchemaJson = EmptyFormalToolSchema,
+                    BuiltIn = true,
+                    Enabled = true,
+                    AgentCanRun = true
+                };
+                var secondOptional = new ToolDefinition
+                {
+                    Id = "fixture.durable_tool_2",
+                    Host = "Excel",
+                    Name = "Second durable fixture",
+                    Description = "Second delta in the durable chain.",
+                    ArgumentSchemaJson = EmptyFormalToolSchema,
+                    BuiltIn = true,
+                    Enabled = true,
+                    AgentCanRun = true
+                };
+                var catalog = ConversationRunService.PrepareToolsForRun(
+                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId)
+                        .Concat(new[] { optional, secondOptional }));
+                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "durable-run-1", TurnId = "durable-turn" };
+                var evidence = ReadSchemaEvidence(executor, catalog, optional.Id, "durable-read");
+                evidence.RunId = session.LastRun.RunId;
+                session.Messages.Add(evidence);
+                var store = new ChatStore(FixturePaths.Value);
+                store.Save(session);
+
+                var live = CallableToolPack.Create(ChatModes.Agent, adapter.HostName,
+                    session.LastRun.RunId, catalog);
+                AssertTrue(live.StageReadResult(evidence), "exact current-run evidence stages the durable fixture");
+                var admission = live.PreparePending((tools, state) => true);
+                AssertTrue(!live.Tools.Any(tool => tool.Id == optional.Id),
+                    "accepted evaluation remains unpublished before the event append");
+                var durableEvent = new ToolPackAdmissionJournal(store, session).Append(admission, "durable-next-step");
+                live.Publish(admission);
+                AssertEqual(SessionEventTypes.ToolPackExtensionAccepted, durableEvent.Type,
+                    "accepted extension has a dedicated event type");
+                AssertEqual("durable-turn", durableEvent.TurnId, "event is scoped by the stable logical turn");
+                var durableData = durableEvent.Data.ToObject<ToolPackExtensionEventData>();
+                AssertEqual(ToolPackExtensionEventData.CurrentContractVersion, durableData.ContractVersion,
+                    "accepted extension persists the typed event contract version");
+                AssertEqual(admission.PreviousRevision, durableData.PreviousSnapshotRevision,
+                    "accepted extension pins the exact prior callable revision");
+                AssertEqual(admission.Revision, durableData.SnapshotRevision,
+                    "accepted extension pins the exact resulting callable revision");
+                AssertEqual(optional.Id, durableData.RequestedSchemas.Single().Id,
+                    "accepted extension persists only the exact requested delta");
+                AssertEqual(CapabilityDiscoveryExecutor.Revision(optional),
+                    durableData.RequestedSchemas.Single().Revision,
+                    "accepted extension pins the requested descriptor revision");
+                var secondEvidence = ReadSchemaEvidence(executor, catalog, secondOptional.Id, "durable-read-2");
+                secondEvidence.RunId = session.LastRun.RunId;
+                AssertTrue(live.StageReadResult(secondEvidence), "second exact delta stages independently");
+                var secondAdmission = live.PreparePending((tools, state) => true);
+                new ToolPackAdmissionJournal(store, session).Append(secondAdmission, "durable-next-step-2");
+                live.Publish(secondAdmission);
+
+                var unpersisted = NewSession(adapter);
+                unpersisted.LastRun = new ChatRunRecord { RunId = "append-failure-run", TurnId = "append-failure-turn" };
+                var unpersistedEvidence = ReadSchemaEvidence(executor, catalog, optional.Id, "append-failure-read");
+                unpersistedEvidence.RunId = unpersisted.LastRun.RunId;
+                var blocked = CallableToolPack.Create(ChatModes.Agent, adapter.HostName,
+                    unpersisted.LastRun.RunId, catalog);
+                AssertTrue(blocked.StageReadResult(unpersistedEvidence), "append-failure fixture stages exact evidence");
+                var blockedAdmission = blocked.PreparePending((tools, state) => true);
+                RuntimeThrows<ChatConcurrencyException>(() =>
+                    new ToolPackAdmissionJournal(new ChatStore(FixturePaths.Value), unpersisted)
+                        .Append(blockedAdmission, "blocked-step"));
+                AssertTrue(!blocked.Tools.Any(tool => tool.Id == optional.Id),
+                    "failed event append cannot publish callable authority");
+
+                var settings = new AppSettings { ContextWindowOverrideTokens = 131072, MaxTokens = 512 };
+                var reloaded = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
+                reloaded.LastRun.RunId = "durable-confirmation-run";
+                using (var reconstructed = ConversationModelSession.CreateAsync(adapter, null,
+                    new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    new ChatStore(FixturePaths.Value), ChatModes.Agent, "Continue after confirmation.", reloaded,
+                    NewContext(adapter), settings, catalog, null, null, true, null,
+                    CancellationToken.None).GetAwaiter().GetResult())
+                {
+                    AssertTrue(reconstructed.CreateRequest("confirmation-step", new ModelProtocolCallContext(new string[0]))
+                            .CallableTools.Count(tool => tool.Id == optional.Id || tool.Id == secondOptional.Id) == 2,
+                        "crash/reload and a new runtime run id restore the accepted delta chain by logical turn");
+                }
+
+                reloaded.LastRun.RunId = "next-run";
+                reloaded.LastRun.TurnId = "next-turn";
+                using (var nextTurn = ConversationModelSession.CreateAsync(adapter, null,
+                    new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    new ChatStore(FixturePaths.Value), ChatModes.Agent, "Start another turn.", reloaded,
+                    NewContext(adapter), settings, catalog, null, null, false, null,
+                    CancellationToken.None).GetAwaiter().GetResult())
+                {
+                    AssertTrue(!nextTurn.CreateRequest("next-step", new ModelProtocolCallContext(new string[0]))
+                            .CallableTools.Any(tool => tool.Id == optional.Id || tool.Id == secondOptional.Id),
+                        "raw schema history cannot cross a turn without a matching admission event");
+                }
+
+                reloaded.LastRun.RunId = "changed-run";
+                reloaded.LastRun.TurnId = "durable-turn";
+                var changedCatalog = catalog.Select(tool => tool.Clone()).ToList();
+                changedCatalog.Single(tool => tool.Id == optional.Id).Description = "Changed after admission";
+                using (var changed = ConversationModelSession.CreateAsync(adapter, null,
+                    new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    new ChatStore(FixturePaths.Value), ChatModes.Agent, "Continue with drift.", reloaded,
+                    NewContext(adapter), settings, changedCatalog, null, null, true, null,
+                    CancellationToken.None).GetAwaiter().GetResult())
+                {
+                    var request = changed.CreateRequest("changed-step", new ModelProtocolCallContext(new string[0]));
+                    AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id),
+                        "changed pinned schema fails closed to the deterministic core");
+                    AssertContains(FlattenSimple(request.AcceptedMessages), "TOOL_PACK_RESTORE_STATE",
+                        "schema drift is visible without blocking a confirmed terminal result");
+                }
+
+                store.Save(reloaded);
+                var rebase = CallableToolPack.Create(ChatModes.Agent, adapter.HostName,
+                    reloaded.LastRun.RunId, changedCatalog,
+                    new ToolPackAdmissionJournal(store, reloaded).ReadAccepted());
+                var rebaseEvidence = ReadSchemaEvidence(executor, changedCatalog, secondOptional.Id, "rebase-read");
+                rebaseEvidence.RunId = reloaded.LastRun.RunId;
+                AssertTrue(rebase.StageReadResult(rebaseEvidence), "fresh exact evidence can stage after drift");
+                var rebaseAdmission = rebase.PreparePending((tools, state) => true);
+                AssertEqual(ToolPackSnapshotFactory.Capture(ChatModes.Agent, adapter.HostName, rebase.Tools).Revision,
+                    rebaseAdmission.PreviousRevision, "fresh admission rebases from the current deterministic core");
+                new ToolPackAdmissionJournal(store, reloaded).Append(rebaseAdmission, "rebase-step");
+                rebase.Publish(rebaseAdmission);
+                using (var rebased = ConversationModelSession.CreateAsync(adapter, null,
+                    new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    new ChatStore(FixturePaths.Value), ChatModes.Agent, "Continue after rebase.", reloaded,
+                    NewContext(adapter), settings, changedCatalog, null, null, true, null,
+                    CancellationToken.None).GetAwaiter().GetResult())
+                {
+                    var request = rebased.CreateRequest("rebased-step", new ModelProtocolCallContext(new string[0]));
+                    AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id) &&
+                        request.CallableTools.Any(tool => tool.Id == secondOptional.Id),
+                        "a later accepted core rebase replaces the broken chain without resurrecting drifted schemas");
+                    AssertTrue(FlattenSimple(request.AcceptedMessages).IndexOf(
+                        "TOOL_PACK_RESTORE_STATE", StringComparison.Ordinal) < 0,
+                        "a valid accepted rebase clears the prior reconstruction warning");
                 }
             });
         }

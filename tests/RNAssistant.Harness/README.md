@@ -268,8 +268,9 @@ controller execution. `node tests/web/prompt-review.test.js` verifies actual for
 serialization and action handlers with minimal DOM/transport substitutes, including
 cancel/failure/reset and Plan preservation; it does not verify WebView layout.
 R29 introduced v4/schema 13; Phase 4B introduced Tool Result v1/schema 14; Phase 8B
-uses schema 15 for atomic callable-pack admission and no-eviction guidance. Tests preserve,
-review, or reset saved schema 14 and older markers explicitly. JS review behavior is unchanged.
+uses schema 15 for atomic callable-pack admission and no-eviction guidance; Phase 8C
+uses schema 16 for durable turn-scoped reconstruction. Tests preserve, review, or
+reset saved older/future markers explicitly. JS review behavior is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
 ## Full suite

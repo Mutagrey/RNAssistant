@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -18,6 +19,8 @@ namespace RNAssistant.Core.Models
         public const string LlmResponse = "llm.response";
         public const string LlmFailure = "llm.failure";
         public const string AgentResponseRejected = "agent.response.rejected";
+        public const string ToolPackExtensionAccepted = "tool_pack.extension.accepted";
+        public const string ToolPackExtensionRejected = "tool_pack.extension.rejected";
     }
 
     public static class SessionOperationTypes
@@ -88,6 +91,34 @@ namespace RNAssistant.Core.Models
     {
         public string Type { get; set; }
         public JObject Data { get; set; }
+    }
+
+    public sealed class ToolPackSchemaRevision
+    {
+        public string Id { get; set; }
+        public string Revision { get; set; }
+    }
+
+    public sealed class ToolPackExtensionEventData
+    {
+        public const int CurrentContractVersion = 1;
+
+        public int ContractVersion { get; set; }
+        public string Mode { get; set; }
+        public string Host { get; set; }
+        public string Profile { get; set; }
+        public string CatalogRevision { get; set; }
+        public string PreviousSnapshotRevision { get; set; }
+        public string SnapshotRevision { get; set; }
+        public bool Admitted { get; set; }
+        public string Code { get; set; }
+        public List<ToolPackSchemaRevision> RequestedSchemas { get; set; }
+
+        public ToolPackExtensionEventData()
+        {
+            ContractVersion = CurrentContractVersion;
+            RequestedSchemas = new List<ToolPackSchemaRevision>();
+        }
     }
 
     public sealed class ChatBlobReference

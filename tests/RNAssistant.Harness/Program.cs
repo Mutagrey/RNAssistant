@@ -186,6 +186,7 @@ namespace RNAssistant.Harness
                 Test("tool pack: optional schema requires exact admission", OptionalAgentToolRequiresExactAdmission),
                 Test("tool pack: core and atomic monotonic admission", CallableToolPackDefinesCoreAndAdmitsAtomically),
                 Test("tool pack: overflow rejects extension atomically", ConversationModelSessionRejectsToolPackOverflowAtomically),
+                Test("tool pack: durable admission replays by logical turn", ToolPackAdmissionReplaysByLogicalTurn),
                 Test("agent: model session rebuilds authority after compaction", ConversationModelSessionRebuildsAuthorityAfterCompaction),
                 Test("agent: characterization write ok preserves final status", SimpleAgentExecutesToolAndReceivesJsonResult),
                 Test("agent: characterization completed after write error", SimpleAgentCharacterizesCompletedAfterWriteError),

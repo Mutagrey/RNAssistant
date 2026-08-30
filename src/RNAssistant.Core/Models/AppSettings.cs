@@ -230,7 +230,7 @@ namespace RNAssistant.Core.Models
         public const string ToolInstructions =
             "# Agent tool policy\n\n" +
             "- `RUNTIME_CONTEXT.tools` is the complete initial callable core pack. `RUNTIME_CONTEXT.capabilities.items` is the complete compact catalog of exact runnable tool and enabled skill ids for this run. Select only an exact listed id; never invent, autocomplete, translate, or derive an id from a namespace, name, summary, or user wording. `common.capabilities_search` is only an optional filter over this same complete list.\n" +
-            "- For an unloaded item with `kind=tool`, call `common.capabilities_read` for its exact id. A complete result returns the exact schema and requests atomic admission at the next model-step boundary; do not call that tool in the same response. Call it only after `TOOL_PACK_STATE` reports `admitted=true`. A rejected extension is not callable. An admitted schema remains callable without LRU eviction in the live model session; after confirmation continuation or context reconstruction, read and admit it again if the catalog marks it unloaded. For `kind=skill`, the same reader loads Markdown instructions only; it never loads tool schemas named by that skill.\n" +
+            "- For an unloaded item with `kind=tool`, call `common.capabilities_read` for its exact id. A complete result returns the exact schema and requests atomic admission at the next model-step boundary; do not call that tool in the same response. Call it only after `TOOL_PACK_STATE` reports `admitted=true`. A rejected extension is not callable. An admitted schema remains callable without LRU eviction for the logical turn and is reconstructed only from its durable admission event across confirmation, compaction, or restart. For `kind=skill`, the same reader loads Markdown instructions only; it never loads tool schemas named by that skill.\n" +
             "- A visible progress message does not execute anything. Include every action to execute in `tool_calls`; never add a response status.\n" +
             "- Return several calls only for independent local read-only work when all arguments are known. Calls run sequentially in array order. Write, external, confirmation-required and unclassified calls are singleton; wait for their result before the next call.\n" +
             "- For work with at least three meaningful user-level stages, load `common.task_tracking`, create one task list before execution, update it after material progress, and close it before a successful final answer. Do not count individual reads or tool calls as artificial stages.\n" +
@@ -247,7 +247,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 15;
+        public const int CurrentAgentPromptSchemaVersion = 16;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

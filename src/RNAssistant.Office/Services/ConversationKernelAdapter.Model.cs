@@ -17,7 +17,10 @@ namespace RNAssistant.Office.Services
             if (_preparationFailure != null) return _preparationFailure;
             try { await EnsureModelSessionAsync(cancellationToken).ConfigureAwait(false); }
             catch (PromptBudgetExceededException ex) { return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, ex.Message); }
-            _modelSession.EndResponse();
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, ex.Message); }
+            try { _modelSession.EndResponse(request.StepId); }
+            catch (Exception ex) { return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, ex.Message); }
             try
             {
                 _lastModel = await _protocol.GetResponseAsync(
@@ -46,7 +49,7 @@ namespace RNAssistant.Office.Services
             // accounted. Fresh catalog, document context and media stay outside Core.
             if (_confirmedCommand != null && _refresh != null)
                 UseInput(await _refresh(cancellationToken).ConfigureAwait(false));
-            _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments,
+            _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments, _store,
                 _policy.Mode, _text, _session, _input.Context, _input.Settings, _catalog, _skills,
                 _input.Attachments, _confirmedCommand != null, _progress, cancellationToken).ConfigureAwait(false);
         }

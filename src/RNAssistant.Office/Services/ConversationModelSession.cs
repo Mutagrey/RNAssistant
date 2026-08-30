@@ -8,6 +8,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
@@ -21,6 +22,7 @@ namespace RNAssistant.Office.Services
         private readonly ConversationPromptComposer _promptComposer = new ConversationPromptComposer();
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
+        private readonly ToolPackAdmissionJournal _toolPackJournal;
         private string _mode;
         private string _userText;
         private ChatSession _session;
@@ -32,17 +34,20 @@ namespace RNAssistant.Office.Services
         private LlmRunCache _runCache;
 
         private ConversationModelSession(IOfficeApplicationAdapter adapter,
-            ContextCompactionService contextCompactionService, AttachmentAnalysisService attachmentAnalysisService)
+            ContextCompactionService contextCompactionService, AttachmentAnalysisService attachmentAnalysisService,
+            ChatStore store, ChatSession session)
         {
             _adapter = adapter;
             _contextCompactionService = contextCompactionService;
             _attachmentAnalysisService = attachmentAnalysisService;
+            _toolPackJournal = new ToolPackAdmissionJournal(store, session);
         }
 
         internal static async Task<ConversationModelSession> CreateAsync(
             IOfficeApplicationAdapter adapter,
             ContextCompactionService contextCompactionService,
             AttachmentAnalysisService attachmentAnalysisService,
+            ChatStore store,
             string mode,
             string text,
             ChatSession session,
@@ -55,7 +60,7 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
-            var owner = new ConversationModelSession(adapter, contextCompactionService, attachmentAnalysisService)
+            var owner = new ConversationModelSession(adapter, contextCompactionService, attachmentAnalysisService, store, session)
             {
                 _mode = mode,
                 _userText = text,
@@ -96,8 +101,8 @@ namespace RNAssistant.Office.Services
 
         internal void AppendConfirmedResult(ToolCommand command, ToolResultMaterialization result)
         {
-            // Until Phase 8C persists admission events, a confirmation continuation
-            // starts from the finite core and optional schemas require a fresh read.
+            // The callable pack was reconstructed from the durable turn event before
+            // this confirmed result is projected into the next model request.
             var accepted = CreateBoundedToolResultMessage(command, result);
             _session.Messages.Add(accepted);
             _messages.Add(accepted);
@@ -169,10 +174,15 @@ namespace RNAssistant.Office.Services
             else messages.Insert(callIndex + 1, result);
         }
 
-        internal void EndResponse()
+        internal void EndResponse(string nextStepId)
         {
-            var admission = _toolPack.CommitPending(CanPublishToolPack);
-            if (admission != null && admission.StateMessage != null) _messages.Add(admission.StateMessage);
+            var admission = _toolPack.PreparePending(CanPublishToolPack);
+            if (admission == null) return;
+            // Persistence is the publication barrier. An append failure leaves the
+            // live pack unchanged and prevents the next request from being sent.
+            _toolPackJournal.Append(admission, nextStepId);
+            _toolPack.Publish(admission);
+            if (admission.StateMessage != null) _messages.Add(admission.StateMessage);
         }
 
         internal static void ReleasePreviousMedia(ChatSession session)
@@ -232,11 +242,13 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
+            var restoredAdmissions = _toolPackJournal.ReadAccepted();
             var toolPack = CallableToolPack.Create(
                 mode,
                 _adapter == null ? string.Empty : _adapter.HostName,
                 session == null || session.LastRun == null ? null : session.LastRun.RunId,
-                runnableCatalog);
+                runnableCatalog,
+                restoredAdmissions);
             try
             {
                 _messages = _promptComposer.BuildMessages(
@@ -252,6 +264,7 @@ namespace RNAssistant.Office.Services
                     replayCurrentUserInHistory,
                     0,
                     toolPack.CapabilityContext(skills));
+                AppendRestorationState(_messages, toolPack);
                 EnsureToolPackFits(_messages, toolPack, true);
                 _toolPack = toolPack;
             }
@@ -265,7 +278,8 @@ namespace RNAssistant.Office.Services
                     mode,
                     _adapter == null ? string.Empty : _adapter.HostName,
                     session == null || session.LastRun == null ? null : session.LastRun.RunId,
-                    runnableCatalog);
+                    runnableCatalog,
+                    restoredAdmissions);
                 _messages = _promptComposer.BuildMessages(
                     mode,
                     text,
@@ -279,9 +293,16 @@ namespace RNAssistant.Office.Services
                     replayCurrentUserInHistory,
                     0,
                     toolPack.CapabilityContext(skills));
+                AppendRestorationState(_messages, toolPack);
                 EnsureToolPackFits(_messages, toolPack, false);
                 _toolPack = toolPack;
             }
+        }
+
+        private static void AppendRestorationState(ICollection<ChatMessage> messages, CallableToolPack toolPack)
+        {
+            var state = toolPack == null ? null : toolPack.RestorationStateMessage;
+            if (state != null) messages.Add(state);
         }
 
         private ChatMessage CreateBoundedToolResultMessage(

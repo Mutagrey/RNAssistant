@@ -208,8 +208,9 @@ namespace RNAssistant.Office.Services
                         "\n\nSKILL_CONTEXT_NOTICE: Skill bodies or reference chunks present only in compacted earlier context are unavailable. " +
                         "For relevant work, call common.capabilities_read with the exact skill id again unless the replay tail below contains a successful, " +
                         "non-truncated data.loaded=true skill result for the catalog's current revision; re-read any needed reference chunk. " +
-                        "TOOL_SCHEMA_NOTICE: Tool schemas present only in compacted earlier context are unavailable. Use common.capabilities_read with the exact tool id again; " +
-                        "raw schema evidence in the replay tail does not restore a prior admission decision; wait for a new TOOL_PACK_STATE admitted=true before use.",
+                        "TOOL_SCHEMA_NOTICE: The runtime rematerializes schemas from the latest valid durable admission event for this logical turn. " +
+                        "Raw schema evidence in the replay tail is never admission authority. If a catalog item is still marked unloaded, call common.capabilities_read " +
+                        "with its exact tool id and wait for a new TOOL_PACK_STATE admitted=true before use.",
                     ResourceRefs = CollectCheckpointResourceRefs(session, checkpoint)
                 }
             };

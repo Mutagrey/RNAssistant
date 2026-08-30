@@ -37,6 +37,20 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
 - `assistant.chunk` records ordered provider SSE data frames in bounded JSON-array batches (up to roughly 64 KiB or one second while frames arrive). The event stores first frame index, count, completion marker, and a CAS payload. Batches enter one bounded ordered queue per session (up to 16 pending writes), so the SSE reader normally does not wait for `Flush(true)`; saturation applies backpressure instead of allowing unbounded memory growth.
 - `llm.failure` records endpoint/status/failure metadata and any bounded provider error body.
 - `agent.response.rejected` keeps malformed Agent output for diagnosis without adding it to model replay or visible chat history.
+- `tool_pack.extension.accepted` / `tool_pack.extension.rejected` are typed
+  `ToolPackExtensionEventData` v1 records at the next model-step boundary. They carry
+  mode/host/profile, catalog and before/after snapshot revisions, and exact requested
+  schema revisions. The append is mandatory and precedes live callable publication;
+  failure sends no next model request and grants no authority. Reconstruction replays
+  the ordered accepted chain for the same logical `TurnId`, validates every exact ref
+  and before/after revision against the current filtered catalog, and rematerializes
+  each extension atomically. A broken chain resets to core until a later accepted event
+  explicitly rebases from the current core revision.
+  `RunId` may change across confirmation. Rejected events and raw tool-result history
+  remain diagnostics, never replay authority. Drift leaves deterministic core plus a
+  visible `TOOL_PACK_RESTORE_STATE`; a later exact read/admission may establish a new
+  accepted snapshot. These events do not mutate the `ChatSession` projection or add a
+  second store.
 
 Phase 1B adds metadata-only causal observations in this same stream: top-level
 `run.started`, `model.response.accepted`, `tool.execution.started/completed`,

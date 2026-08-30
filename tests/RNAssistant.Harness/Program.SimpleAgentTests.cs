@@ -1578,6 +1578,14 @@ namespace RNAssistant.Harness
                 AssertEqual(2, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1,
                     "schema evidence and confirmed result replayed");
                 AssertContains(replay, "\"status\":\"ok\"", "confirmed result replayed");
+                const string runtimeMarker = "RUNTIME_CONTEXT:\n";
+                var runtimeMessage = calls[2].First(message => (message.Content ?? string.Empty)
+                    .IndexOf(runtimeMarker, StringComparison.Ordinal) >= 0);
+                var runtimeContext = JObject.Parse(runtimeMessage.Content.Substring(
+                    runtimeMessage.Content.IndexOf(runtimeMarker, StringComparison.Ordinal) + runtimeMarker.Length));
+                AssertTrue(((JArray)runtimeContext["capabilities"]["optionalSchemas"])
+                        .OfType<JObject>().Any(item => (string)item["id"] == "common.skills_upsert"),
+                    "confirmation rematerializes the durable optional schema");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "no stale waiting result");
                 var replayMessages = calls[2].ToList();
                 var userIndex = replayMessages.FindIndex(message => message.Role == "user" && !message.ProtocolMessage &&
@@ -1628,6 +1636,9 @@ namespace RNAssistant.Harness
                 var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "\"status\":\"error\"", "confirmed failure replayed");
                 AssertContains(replay, "pending_tool_catalog_changed", "fingerprint failure is replayed without dispatch");
+                AssertContains(replay, "TOOL_PACK_RESTORE_STATE",
+                    "changed admitted schema fails closed visibly without hiding the terminal result");
+                AssertContains(replay, "tool_pack_schema_changed", "restore diagnostic identifies descriptor drift");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");
             });
         }

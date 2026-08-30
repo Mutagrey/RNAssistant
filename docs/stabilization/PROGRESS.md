@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 8 — 8A immutable execution snapshot + 8B callable ToolPack (done host-neutral; compaction/event/resource slices pending)
-Current task: `CallableToolPack` выбирает конечный exact mode/host core (весь Excel/VBA profile), а optional exact reads публикует одной новой revision только на границе model step после проверки полного request budget с repair reserve. LRU/touch/partial publication удалены; immutable execution `ToolPackSnapshot` 8A и AgentKernel не менялись.
+Current phase: Phase 8 — 8A immutable execution snapshot + 8B callable pack + 8C durable reconstruction (done host-neutral; resource slices pending)
+Current task: accepted/rejected optional admission записывается typed event в canonical chat stream до publication. Ordered accepted chain того же logical `TurnId` атомарно rematerializes exact requested refs по before/after revisions при confirmation/compaction/restart; raw/rejected evidence не даёт authority, drift/broken chain явно оставляет finite core до accepted rebase. LRU/touch/partial publication отсутствуют; immutable execution `ToolPackSnapshot` 8A и AgentKernel не менялись.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный Phase 8C — записывать accepted/rejected optional extension как durable typed event и повторно материализовать pinned callable schemas при confirmation continuation/compaction/crash replay; remaining resource-handler/R30 changes не смешивать. 7D по-прежнему не начинать без WQ0/5B2; AgentKernel и production factories/identity не менять.
-Required context: [8B evidence](PHASE_8B_CALLABLE_TOOL_PACK.md), [8A evidence](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [ADR-0006](../decisions/ADR-0006-tool-pack-snapshot.md), [master Phase 8](STABILIZATION_MASTER_PLAN.md#phase-8--resource-fabric-и-toolpack), [architecture](../architecture.md), [conversation protocol](../conversation-protocol.md), [session events](../session-events.md), [migration map](MIGRATION_MAP.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 8C+ owns durable extension events, rematerialization across confirmation/compaction/crash and remaining resource handlers/R30; WQ-PACK remains open. Until 8C, reconstruction fails closed to the finite core and requires a fresh exact read/admission; raw read evidence is not replay authority. Legacy `ToolDefinition` execution adapter remains for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Excel read/write internal compatibility commands and current target resolver remain until 7D after WQ0/5B2. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/Phase 9A–9C UI закрыты host-neutral, но общий Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 8D — сверить и переключить remaining resource capability lifecycle/handlers, закрыть host-neutral R30/`Resource = data` и недостающий ADR-0004 без нового CAS transport или изменений AgentKernel. 7D по-прежнему не начинать без WQ0/5B2; production factories/identity не менять.
+Required context: [8C evidence](PHASE_8C_TOOL_PACK_EVENTS.md), [8B evidence](PHASE_8B_CALLABLE_TOOL_PACK.md), [8A evidence](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [ADR-0006](../decisions/ADR-0006-tool-pack-snapshot.md), [master Phase 8](STABILIZATION_MASTER_PLAN.md#phase-8--resource-fabric-и-toolpack), [resource fabric](../resource-fabric.md), [architecture](../architecture.md), [conversation protocol](../conversation-protocol.md), [session events](../session-events.md), [migration map](MIGRATION_MAP.md), [R30](RISK_REGISTER.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: Phase 8D+ owns remaining resource lifecycle/handlers, R30 closure and ADR-0004; WQ-PACK remains open. 8C reconstruction is host-neutral only: real provider, Windows restart/confirmation/compaction and controller delivery remain unqualified. Legacy `ToolDefinition` execution adapter remains for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Excel read/write internal compatibility commands and current target resolver remain until 7D after WQ0/5B2. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/Phase 9A–9C UI закрыты host-neutral, но общий Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -21,8 +21,9 @@ identity probe остаётся prerequisite production factory switch. Непр
 mutation slices выполнены отдельными host-neutral changes; 6H зафиксировал scope,
 6I package runtime/R41 и 6J rename/R42 выполнены host-neutral; 7A audit и 7B typed
 Excel reads и verified `write_range` завершены host-neutral; 7D ждёт WQ0/5B2, а
-Phase 8A immutable execution snapshot и 8B callable lifecycle/admission завершены
-host-neutral; следующий dependency-safe slice — отдельный 8C compaction/event replay.
+Phase 8A immutable execution snapshot, 8B callable lifecycle/admission и 8C durable
+reconstruction завершены host-neutral; следующий dependency-safe slice — отдельный
+8D resource lifecycle/handlers/R30.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
 
@@ -71,6 +72,27 @@ existing CA1416 identity-probe warnings; MockDemo actual-controller compile: 0 e
 `ValidateVersionFormat`, `git diff --check` и 214 local links в 14 changed Markdown
 files — pass. Product `16.1.0-dev`; tag/release/push не выполнялись. Полная
 [evidence](PHASE_8B_CALLABLE_TOOL_PACK.md); Windows WQ-PACK открыт.
+
+Phase 8C durable ToolPack reconstruction (2026-08-30): `ToolPackAdmissionJournal`
+пишет `tool_pack.extension.accepted/rejected` в тот же hash-chained chat event stream
+до изменения callable membership. Accepted v1 data pin-ит exact requested ID/revision
+delta и before/after snapshot revisions; rejected record остаётся diagnostic-only.
+Reconstruction проигрывает ordered accepted chain exact logical `TurnId`, поэтому переживает
+новый runtime `RunId`, confirmation, compaction и restart, но не переносится в новый
+user turn. Raw `TOOL_RESULT` никогда не становится authority. Exact descriptor/profile
+drift/broken chain атомарно оставляет core до accepted core rebase и добавляет видимый `TOOL_PACK_RESTORE_STATE`, не скрывая
+уже известный confirmed terminal result; новый exact read может создать свежий event.
+Append failure не публикует pack и не отправляет следующий model request. Prompt schema
+16 заменяет временное re-read-after-reconstruction указание; schema15/custom text не
+переписываются без explicit review/reset. AgentKernel, execution snapshot, tool result/
+ResourceRef wire, compaction algorithm и resource handlers не менялись. [Evidence](PHASE_8C_TOOL_PACK_EVENTS.md).
+Targeted host-neutral verification: 50 distinct cases (Agent 34, ToolPack 6,
+settings 5, canonical event log/HMAC/encrypted history/shared trace stream 4,
+production includes 1) — pass. Harness compile: 0 errors / 4 existing CA1416
+identity-probe warnings; MockDemo actual-controller compile: 0 errors / 3 existing
+CA1416 PDF warnings. Full harness и Office/VSTO не запускались. Final
+`ValidateVersionFormat`, `git diff --check` и 230 local links в 15 changed Markdown
+files — pass. Product `16.1.0-dev`; tag/release/push не выполнялись.
 
 Phase 7B typed Excel reads (2026-08-30): host-neutral `ExcelReadService`
 владеет canonical inspect/range outcomes, profile и second-bound validation.
@@ -346,7 +368,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 5 | 5A + 5B1 done host-neutral; 5B2 read switch done, identity probe ready | 3a6c2aa (5A); a1b3d80 (5B1); 1ea3ce0 (5B2) | [read checks](#phase-5b2--direct-contextcatalog-reads), [probe checks](#phase-5b2--identity-qualification-probe) | not performed | Production binding blocked on identity qualification |
 | 6 | 6A–6J done host-neutral | `e0360f3` (6A); `62010c8` (R33); `dde18cf` (6B); through `cd0bd61` (6G); [6H](PHASE_6H_VBA_PACKAGE_SCOPE.md); [6I](PHASE_6I_VBA_PACKAGE_LIFECYCLE.md); [6J](PHASE_6J_VBA_RENAME.md) | 6I package + 6J rename fault matrices; full VBA regression in linked reports | deferred | Full VBA/Windows gate open; R41/R42 runtime fixed host-neutral |
 | 7 | 7A–7C done host-neutral; 7D pending WQ0/5B2 | [7A](PHASE_7A_EXCEL_SCOPE.md); [7B](PHASE_7B_EXCEL_READ.md); [7C](PHASE_7C_EXCEL_WRITE.md) | 7C: 15 distinct focused cases; MockDemo compile | not performed | Typed reads and verified write_range switched; WQ-EXCEL and bound production backend open |
-| 8 | 8A–8B done host-neutral; 8C+ pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md) | 8B: 92 distinct targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | Execution authority plus finite core/atomic no-eviction admission switched; event/reconstruction/resource plane and WQ-PACK open |
+| 8 | 8A–8C done host-neutral; 8D+ pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md), [8C](PHASE_8C_TOOL_PACK_EVENTS.md) | 8C: 50 distinct targeted pass; MockDemo compile | not performed | Execution authority, finite core/atomic admission and durable turn reconstruction switched; resource plane and WQ-PACK open |
 | 9 | 9A–9C done host-neutral; Windows acceptance pending | through `fba247b` | 9A harness evidence; current web 58/58; 9C UI/DOM evidence | not performed | Correlated query, shared JSON viewer and causal run journal switched; full persistence/Windows acceptance and R37 removal gate open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
@@ -1022,7 +1044,7 @@ model-session/metadata owners не являются compatibility adapters.
 - R19: PowerShell release workflow требует проверки на release workstation.
 - R22: compact catalog harness failure воспроизведён до изменений 1B; owner ToolPack/Tests, Phase 8.
 - R26: full-history preflight, current v4 writer/confirmation, runtime IDs/origins и singleton enforcement проверены host-neutral; 4A заменил temporary name registry source-owned typed policy. Production controller ordering/Office qualification остаются открыты.
-- R27: explicit review/reset проверены на current v4/schema15; custom text schema14 и остальных прежних/future markers сохраняется до явного review/reset. Production controller/WebView/DPAPI validation открыта.
+- R27: explicit review/reset проверены на current v4/schema16; custom text schema15 и остальных прежних/future markers сохраняется до явного review/reset. Production controller/WebView/DPAPI validation открыта.
 - R29: runtime-owned IDs введены отдельным v4 switch; полного исходного incident trace нет, Windows/live-provider qualification остаётся открыта. Evidence и ограничения — [R29_RUNTIME_CALL_IDS](R29_RUNTIME_CALL_IDS.md).
 - R33: overlapping exact-match ambiguity исправлена host-neutral; 2 regression tests red→green, 8 targeted pass. Реальная Windows/VBE regression остаётся открытой.
 - R40: restore guard теперь связывает exact backup id/type/live-source hash и current target; substitution block проверен host-neutral, Windows confirmation/VBE gate открыт.

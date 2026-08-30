@@ -2046,20 +2046,21 @@ Excel read/write добавлены через ToolRuntime и DocumentSession, A
 - [x] 8A: pin descriptor/schema + policy + binding/entry point/scope/host/package fingerprint (§7.7); одинаковый ID не разрешает замену implementation в принятом call/confirmation, legacy adapter rechecks до dispatch.
 - [x] 8B: Core Excel/VBA pack передавать полностью.
 - [x] 8B: отключить LRU eviction в stabilized runtime.
-- [ ] Optional schema loading делать monotonic:
+- [x] Optional schema loading делать monotonic:
   - [x] 8B: explicit request;
   - [x] 8B: new snapshot revision;
-  - [ ] event;
+  - [x] 8C: durable event before publication;
   - [x] 8B: no eviction.
 - [x] 8B: Global dynamic registry сохранить.
 - [x] 8B: новые dynamic tools активировать в следующем run либо exact catalog member через явный snapshot extension.
 - [x] 8B: если core/extension pack не помещается, fail visibly.
 - [x] 8B: проверять полный request admission до snapshot publication; overflow отклоняет весь extension без удаления уже admitted schemas.
-- [ ] 8C: durable extension event повторно материализует pinned schemas при confirmation continuation/compaction/crash replay; raw read evidence не считается admission decision.
+- [x] 8C: durable extension event повторно материализует pinned schemas при confirmation continuation/compaction/crash replay; raw read evidence не считается admission decision. [Evidence](PHASE_8C_TOOL_PACK_EVENTS.md).
 - [ ] Resource tools оставить read-only.
 - [ ] Сохранить `ResourceRef` и существующие bounded read results (§7.8); не вводить CAS/content_ref transport или новый reader.
 - [ ] Capability discovery и tool authoring разделить.
-- [ ] Добавить ADR-0004 и ADR-0006.
+- [ ] Добавить ADR-0004.
+- [x] 8A: добавить ADR-0006. [Decision](../decisions/ADR-0006-tool-pack-snapshot.md).
 
 ### Definition of Done
 

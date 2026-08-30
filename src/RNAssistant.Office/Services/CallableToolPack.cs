@@ -54,6 +54,7 @@ namespace RNAssistant.Office.Services
         private readonly HashSet<string> _optionalSet = new HashSet<string>(StringComparer.Ordinal);
         private readonly List<string> _pendingIds = new List<string>();
         private readonly HashSet<string> _pendingSet = new HashSet<string>(StringComparer.Ordinal);
+        private string _restorationFailureCode;
 
         private CallableToolPack(
             string mode,
@@ -78,9 +79,13 @@ namespace RNAssistant.Office.Services
             string mode,
             string host,
             string runId,
-            IReadOnlyList<ToolDefinition> catalog)
+            IReadOnlyList<ToolDefinition> catalog,
+            IReadOnlyList<ToolPackExtensionEventData> restoredAdmissions = null)
         {
-            return new CallableToolPack(mode, host, runId, catalog);
+            var pack = new CallableToolPack(mode, host, runId, catalog);
+            if (restoredAdmissions != null && restoredAdmissions.Count > 0)
+                pack.Restore(restoredAdmissions);
+            return pack;
         }
 
         public IReadOnlyList<ToolDefinition> Tools
@@ -103,6 +108,26 @@ namespace RNAssistant.Office.Services
             get { return SnapshotRevision(Tools); }
         }
 
+        public ChatMessage RestorationStateMessage
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(_restorationFailureCode)) return null;
+                return new ChatMessage
+                {
+                    Role = "user",
+                    ProtocolMessage = true,
+                    Content = "TOOL_PACK_RESTORE_STATE:\n" + new JObject
+                    {
+                        ["restored"] = false,
+                        ["code"] = _restorationFailureCode,
+                        ["snapshotRevision"] = Revision,
+                        ["instruction"] = "The prior optional callable snapshot could not be reproduced exactly, so only the deterministic core is callable. Raw schema history grants no authority. Read and admit any still-needed optional schema again."
+                    }.ToString(Formatting.None)
+                };
+            }
+        }
+
         public JObject CapabilityContext(IEnumerable<SkillDefinition> skills)
         {
             if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return null;
@@ -115,6 +140,9 @@ namespace RNAssistant.Office.Services
             result["extensionBoundary"] = "next_model_step";
             result["admissionPolicy"] = "atomic_full_request_budget";
             result["evictionPolicy"] = "none_until_run_end";
+            result["reconstructionPolicy"] = "durable_turn_event";
+            if (!string.IsNullOrWhiteSpace(_restorationFailureCode))
+                result["reconstructionStatus"] = "invalidated_to_core";
             return result;
         }
 
@@ -122,8 +150,8 @@ namespace RNAssistant.Office.Services
         {
             if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return false;
             // Raw read evidence proves only that a descriptor was returned. It is
-            // not replay authority for a prior admission decision. Until Phase 8C
-            // persists that decision, accept evidence only from this live run.
+            // never replay authority for a prior admission decision; only a typed
+            // durable extension event can reconstruct model-visible membership.
             if (message == null || string.IsNullOrWhiteSpace(_runId) ||
                 !string.Equals(message.RunId, _runId, StringComparison.Ordinal)) return false;
             string id;
@@ -133,7 +161,7 @@ namespace RNAssistant.Office.Services
             return true;
         }
 
-        public ToolPackAdmission CommitPending(
+        public ToolPackAdmission PreparePending(
             Func<IReadOnlyList<ToolDefinition>, ChatMessage, bool> canPublish)
         {
             if (_pendingIds.Count == 0) return null;
@@ -147,16 +175,8 @@ namespace RNAssistant.Office.Services
                 requested, true, null, previousRevision, candidateRevision, candidateIds);
             var admitted = canPublish != null && canPublish(candidateTools, acceptedMessage);
 
-            _pendingIds.Clear();
-            _pendingSet.Clear();
-            if (admitted)
-            {
-                foreach (var id in requested)
-                {
-                    if (_optionalSet.Add(id)) _optionalIds.Add(id);
-                }
-                return new ToolPackAdmission(true, requested, previousRevision, candidateRevision, acceptedMessage);
-            }
+            if (admitted) return Admission(true, requested, previousRevision,
+                candidateRevision, acceptedMessage, null);
 
             var rejectedMessage = BuildStateMessage(
                 requested,
@@ -165,7 +185,140 @@ namespace RNAssistant.Office.Services
                 previousRevision,
                 previousRevision,
                 _optionalIds);
-            return new ToolPackAdmission(false, requested, previousRevision, previousRevision, rejectedMessage);
+            return Admission(false, requested, previousRevision,
+                previousRevision, rejectedMessage, "tool_pack_budget_exceeded");
+        }
+
+        public void Publish(ToolPackAdmission admission)
+        {
+            if (admission == null) return;
+            if (!string.Equals(Revision, admission.PreviousRevision, StringComparison.Ordinal) ||
+                !_pendingIds.SequenceEqual(admission.RequestedIds, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException("Tool-pack admission no longer matches the pending extension.");
+            }
+
+            if (admission.Admitted)
+            {
+                var candidateRevision = SnapshotRevision(ToolsFor(_optionalIds.Concat(admission.RequestedIds)));
+                if (!string.Equals(candidateRevision, admission.Revision, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Durable tool-pack admission does not match the pending candidate.");
+                }
+                foreach (var id in admission.RequestedIds)
+                {
+                    if (_optionalSet.Add(id)) _optionalIds.Add(id);
+                }
+            }
+            _pendingIds.Clear();
+            _pendingSet.Clear();
+        }
+
+        private ToolPackAdmission Admission(
+            bool admitted,
+            IReadOnlyList<string> requestedIds,
+            string previousRevision,
+            string revision,
+            ChatMessage stateMessage,
+            string code)
+        {
+            return new ToolPackAdmission(
+                admitted,
+                requestedIds,
+                previousRevision,
+                revision,
+                stateMessage,
+                new ToolPackExtensionEventData
+                {
+                    Mode = _mode,
+                    Host = _host,
+                    Profile = ProfileId(),
+                    CatalogRevision = CapabilityDiscoveryExecutor.ToolCatalogRevision(_catalog),
+                    PreviousSnapshotRevision = previousRevision,
+                    SnapshotRevision = revision,
+                    Admitted = admitted,
+                    Code = code,
+                    RequestedSchemas = SchemaRevisionRecords(requestedIds)
+                });
+        }
+
+        private void Restore(IEnumerable<ToolPackExtensionEventData> admissions)
+        {
+            var coreRevision = Revision;
+            foreach (var admission in admissions ?? new ToolPackExtensionEventData[0])
+            {
+                if (!ValidAdmissionEnvelope(admission))
+                {
+                    ResetRestoration("tool_pack_admission_invalid");
+                    continue;
+                }
+
+                if (!string.Equals(admission.PreviousSnapshotRevision, Revision, StringComparison.Ordinal))
+                {
+                    if (!string.Equals(admission.PreviousSnapshotRevision, coreRevision, StringComparison.Ordinal))
+                    {
+                        ResetRestoration("tool_pack_chain_broken");
+                        continue;
+                    }
+                    ResetRestoration(null);
+                }
+
+                var requested = new List<string>();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                var valid = true;
+                foreach (var reference in admission.RequestedSchemas ?? new List<ToolPackSchemaRevision>())
+                {
+                    ToolDefinition tool;
+                    if (reference == null || string.IsNullOrWhiteSpace(reference.Id) ||
+                        !seen.Add(reference.Id) || _coreIds.Contains(reference.Id) ||
+                        _optionalSet.Contains(reference.Id) ||
+                        !_catalogById.TryGetValue(reference.Id, out tool) ||
+                        !string.Equals(reference.Revision, CapabilityDiscoveryExecutor.Revision(tool), StringComparison.Ordinal))
+                    {
+                        valid = false;
+                        break;
+                    }
+                    requested.Add(reference.Id);
+                }
+                if (!valid || requested.Count == 0)
+                {
+                    ResetRestoration("tool_pack_schema_changed");
+                    continue;
+                }
+
+                var restoredRevision = SnapshotRevision(ToolsFor(_optionalIds.Concat(requested)));
+                if (!string.Equals(restoredRevision, admission.SnapshotRevision, StringComparison.Ordinal))
+                {
+                    ResetRestoration("tool_pack_snapshot_changed");
+                    continue;
+                }
+                foreach (var id in requested)
+                {
+                    _optionalSet.Add(id);
+                    _optionalIds.Add(id);
+                }
+                _restorationFailureCode = null;
+            }
+        }
+
+        private void ResetRestoration(string code)
+        {
+            _optionalIds.Clear();
+            _optionalSet.Clear();
+            _restorationFailureCode = code;
+        }
+
+        private bool ValidAdmissionEnvelope(ToolPackExtensionEventData admission)
+        {
+            return admission != null &&
+                admission.ContractVersion == ToolPackExtensionEventData.CurrentContractVersion &&
+                admission.Admitted &&
+                string.Equals(admission.Mode, _mode, StringComparison.Ordinal) &&
+                string.Equals(admission.Host ?? string.Empty, _host, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(admission.Profile, ProfileId(), StringComparison.Ordinal) &&
+                !string.IsNullOrWhiteSpace(admission.PreviousSnapshotRevision) &&
+                !string.IsNullOrWhiteSpace(admission.SnapshotRevision) &&
+                admission.RequestedSchemas != null;
         }
 
         private IReadOnlyList<ToolDefinition> ToolsFor(IEnumerable<string> optionalIds)
@@ -205,7 +358,7 @@ namespace RNAssistant.Office.Services
                         ? (JToken)SchemaRefs(optionalIds)
                         : JValue.CreateNull(),
                     ["instruction"] = admitted
-                        ? "The requested exact schemas are callable from this model step and remain callable in this live model session. No schema was evicted. After confirmation continuation or context reconstruction, read and admit an optional schema again until durable admission events are available."
+                        ? "The requested exact schemas are callable from this model step and remain callable for this logical turn. No schema was evicted. Confirmation, compaction, and restart reconstruct this exact admitted snapshot from the durable runtime event."
                         : "The requested schemas were not added because the complete next request would exceed its input budget. Existing schemas remain callable and no schema was evicted. Do not call a rejected tool unless a later exact read is admitted."
                 }.ToString(Formatting.None)
             };
@@ -221,6 +374,19 @@ namespace RNAssistant.Office.Services
                     ["id"] = id,
                     ["revision"] = CapabilityDiscoveryExecutor.Revision(_catalogById[id])
                 }));
+        }
+
+        private List<ToolPackSchemaRevision> SchemaRevisionRecords(IEnumerable<string> ids)
+        {
+            return (ids ?? new string[0])
+                .Where(id => _catalogById.ContainsKey(id))
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .Select(id => new ToolPackSchemaRevision
+                {
+                    Id = id,
+                    Revision = CapabilityDiscoveryExecutor.Revision(_catalogById[id])
+                })
+                .ToList();
         }
 
         private string SnapshotRevision(IReadOnlyList<ToolDefinition> tools)
@@ -307,15 +473,18 @@ namespace RNAssistant.Office.Services
         public string PreviousRevision { get; private set; }
         public string Revision { get; private set; }
         public ChatMessage StateMessage { get; private set; }
+        public ToolPackExtensionEventData EventData { get; private set; }
 
         public ToolPackAdmission(bool admitted, IReadOnlyList<string> requestedIds,
-            string previousRevision, string revision, ChatMessage stateMessage)
+            string previousRevision, string revision, ChatMessage stateMessage,
+            ToolPackExtensionEventData eventData)
         {
             Admitted = admitted;
             RequestedIds = requestedIds ?? new string[0];
             PreviousRevision = previousRevision ?? string.Empty;
             Revision = revision ?? string.Empty;
             StateMessage = stateMessage;
+            EventData = eventData;
         }
     }
 }
