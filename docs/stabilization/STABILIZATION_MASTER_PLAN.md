@@ -2165,7 +2165,7 @@ bounded rendering и реальные WebView/clipboard проверки на Wi
 - [ ] Обновить `AGENTS.md` под фактическую архитектуру.
 - [ ] Закрыть миграции обязательного core scope в `MIGRATION_MAP.md`; оставшихся optional consumers явно закрепить за Phase 11 с removal gates. Это не разрешает включать неквалифицированные контуры в release Phase 12.
 - [x] 10A host-neutral audit: inventory production files/namespaces/project includes и live consumers; добавить шесть forbidden-dependency checks, исправить superseded canonical path и разбить physical cleanup на exact atomic groups. Folder/namespace mismatch сам по себе не является основанием для rename. [Evidence](PHASE_10A_BOUNDARY_AUDIT.md).
-- [ ] 10B1: `git mv` host identity helper из Office Runtime в OfficeHosts с namespace/project/harness updates; algorithms/identity semantics не менять.
+- [x] 10B1: `git mv` host identity helper из Office Runtime в OfficeHosts с namespace/project/harness updates; algorithms/identity semantics не менять. [Evidence](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md).
 - [ ] 10B2: отдельно `git mv` `VbaProjectSupport*.cs` в OfficeHosts/Vba, обновить namespace/project/harness/host consumers; domain services, guards, journal и backend logic не менять.
 - [ ] 10C: вынести application façade `AssistantRuntime.cs` из document/tool Runtime folder и удалить live resource-only `LegacyToolDefinitionAdapter.ProjectRead` projection через действующий controller definition owner. Эти два cleanup invariants фиксировать отдельными commits.
 - [ ] 10D: финально сверить canonical docs/AGENTS, migration statuses, production project includes и architecture suite; не закрывать Windows gates локальными checks.

@@ -19,7 +19,7 @@ static WebView UI
 
 - `RNAssistant.Core` cannot reference Office, VSTO, WinForms, or WebView2.
 - `RNAssistant.Office` owns host-neutral orchestration, session services, prompt assembly, transcripts, and tool execution. It cannot contain host-specific COM interop.
-- `RNAssistant.OfficeHosts` and `RNAssistant.*AddIn` own host adapters and Office wiring only.
+- `RNAssistant.OfficeHosts` and `RNAssistant.*AddIn` own host adapters and Office wiring only. Host document identity is owned by `RNAssistant.OfficeHosts/Identity/DocumentIdentity.cs`; host-neutral Office code cannot consume it.
 - `web` is static HTML/CSS/JS with no build pipeline.
 
 ## Chat, Plan, and Agent

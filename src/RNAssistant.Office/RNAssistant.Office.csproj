@@ -109,7 +109,6 @@
     <Compile Include="Tools\ExcelWriteToolIds.cs" />
     <Compile Include="Runtime\DispatchedOfficeApplicationAdapter.cs" />
     <Compile Include="Agent\AgentTranscript.cs" />
-    <Compile Include="Runtime\DocumentIdentity.cs" />
     <Compile Include="Runtime\OfficeStaDispatcher.cs" />
     <Compile Include="Runtime\OfficeDocumentExecutionGuard.cs" />
     <Compile Include="Runtime\OfficeUiDispatcher.cs" />

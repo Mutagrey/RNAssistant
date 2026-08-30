@@ -279,10 +279,9 @@ namespace RNAssistant.Harness
 
             AssertNoForbiddenDependencies(root,
                 SourceFiles(officeRoot).Where(path =>
-                    !Path.GetFileName(path).StartsWith("VbaProjectSupport", StringComparison.Ordinal) &&
-                    !string.Equals(Path.GetFileName(path), "DocumentIdentity.cs", StringComparison.Ordinal)),
+                    !Path.GetFileName(path).StartsWith("VbaProjectSupport", StringComparison.Ordinal)),
                 new[] { "VbaProjectSupport.", "DocumentIdentity." },
-                "transitional host-specific helpers must not gain Office consumers before their Phase 10B move");
+                "host-specific helpers must not be consumed by the Office assembly");
 
             var uiFiles = SourceFiles(Path.Combine(officeRoot, "WebView"))
                 .Concat(Directory.GetFiles(Path.Combine(root, "web"), "*.js", SearchOption.AllDirectories))

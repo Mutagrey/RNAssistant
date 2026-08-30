@@ -24,7 +24,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 - `RNAssistant.OfficeHosts` и `RNAssistant.*AddIn`: host adapters, ribbon, VSTO и Office COM.
 - `web`: static WebView2 UI без npm/bundler. Feature logic остаётся в тематических `app-*.js`; `app.js` — только boot/shared rendering.
 - `tools` и `%AppData%/RNAssistant/tools`: пользовательские tools; executor logic живёт в `RNAssistant.Office/Tools`.
-- Folder и namespace не обязаны совпадать механически: root `RNAssistant.Office` остаётся у публичного application façade и host ports, а тематическая папка задаёт owner. Не делай массовый namespace rename. Phase 10A выявил только три host-specific physical exceptions в `RNAssistant.Office`: `Runtime/DocumentIdentity.cs` и `Vba/VbaProjectSupport*.cs`; до их отдельного `git mv` в Phase 10B новые consumers/COM-зависимости там запрещены.
+- Folder и namespace не обязаны совпадать механически: root `RNAssistant.Office` остаётся у публичного application façade и host ports, а тематическая папка задаёт owner. Не делай массовый namespace rename. Phase 10B1 перенёс `DocumentIdentity.cs` в `RNAssistant.OfficeHosts/Identity`; в `RNAssistant.Office` остались только две подтверждённые host-specific physical exceptions `Vba/VbaProjectSupport*.cs`. До отдельного 10B2 новые consumers/COM-зависимости для них запрещены.
 
 ## Перед изменениями
 

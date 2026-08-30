@@ -2,7 +2,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace RNAssistant.Office
+namespace RNAssistant.OfficeHosts.Identity
 {
     public static class DocumentIdentity
     {

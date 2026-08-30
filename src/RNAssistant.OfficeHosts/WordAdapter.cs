@@ -9,6 +9,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
+using RNAssistant.OfficeHosts.Identity;
 
 namespace RNAssistant.OfficeHosts
 {

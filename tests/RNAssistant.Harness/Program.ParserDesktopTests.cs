@@ -19,6 +19,7 @@ using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
 using RNAssistant.Desktop;
 using RNAssistant.OfficeHosts;
+using RNAssistant.OfficeHosts.Identity;
 
 namespace RNAssistant.Harness
 {

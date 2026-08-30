@@ -1,19 +1,30 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 10 in progress; 10A boundary audit done host-neutral
-Current task: Phase 10A зафиксировал actual physical/namespace boundaries, шесть mandatory dependency checks и exact atomic move/removal groups. Массовый namespace rename и преждевременное удаление live resource catalog projection запрещены; R49 открыт для трёх host-specific files в Office assembly.
+Current phase: Phase 10 in progress; 10A + 10B1 done host-neutral
+Current task: Phase 10B1 перенёс `DocumentIdentity.cs` из Office Runtime в единственного `OfficeHosts.Identity` owner, обновил namespace/projects/consumers и запретил обратных Office consumers architecture-test. Identity algorithm, factories и WQ0 semantics не менялись; R49 остаётся открыт только для двух `VbaProjectSupport` partials.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный Phase 10B1 — только `git mv` `DocumentIdentity.cs` из Office Runtime в OfficeHosts/Identity, namespace/project/harness/consumer updates и targeted identity/architecture checks. Identity algorithms, factories, WQ0 semantics, 5B2/7D и VBA files не менять.
-Required context: [10A evidence](PHASE_10A_BOUNDARY_AUDIT.md), [master Phase 10](STABILIZATION_MASTER_PLAN.md#phase-10--physical-cleanup-и-architecture-tests), [architecture](../architecture.md), [migration map](MIGRATION_MAP.md), [risk register](RISK_REGISTER.md), [harness filters](../../tests/RNAssistant.Harness/README.md), repository `AGENTS.md`.
-Open gates / remaining legacy: R49 host physical ownership открыт до 10B1/10B2; resource-only `ProjectRead` projection остаётся live до отдельного 10C cleanup. Phase 9/R45–R48 fixed host-neutral, но Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification remains open. R37 read-only historical diagnostics adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/clipboard acceptance открыт. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 10B2 — только `git mv` `VbaProjectSupport.cs` и `VbaProjectSupport.PackageGuards.cs` из Office/Vba в OfficeHosts/Vba, namespace/project/harness/host-consumer updates и targeted VBA/architecture checks. Domain services, mutation/journal/guard contracts, backend algorithms, 5B2/7D и `AssistantRuntime`/`ProjectRead` не менять.
+Required context: [10A audit](PHASE_10A_BOUNDARY_AUDIT.md), [10B1 evidence](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [master Phase 10](STABILIZATION_MASTER_PLAN.md#phase-10--physical-cleanup-и-architecture-tests), [architecture](../architecture.md), [migration map](MIGRATION_MAP.md), [risk register](RISK_REGISTER.md), [harness filters](../../tests/RNAssistant.Harness/README.md), repository `AGENTS.md`.
+Open gates / remaining legacy: R49 host physical ownership открыт только для двух `VbaProjectSupport` partials до 10B2; `DocumentIdentity` physical move done host-neutral, но production OfficeHosts compile/WQ0 остаётся Windows-gate. Resource-only `ProjectRead` projection остаётся live до отдельного 10C cleanup. Phase 9/R45–R48 fixed host-neutral, но Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification remains open. R37 read-only historical diagnostics adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/clipboard acceptance открыт. Product 16.1.0-dev, no release/tag.
+
+Phase 10B1 host document identity move (2026-08-31): `DocumentIdentity.cs` moved
+with `git mv` from `Office/Runtime` to `OfficeHosts/Identity`; namespace, both
+old-style projects, three host adapters and source-linked harness consumer switched.
+The algorithm differs only by namespace. Old source/include, alias and Office
+consumer are absent; the boundary-test now rejects any future Office dependency.
+Documents/identity 4/4, architecture 4/4 and production source inclusion 1/1 pass.
+OfficeHosts/VSTO/real Office were not validated on this machine; WQ0 and Windows
+compile remain open. R49 now covers only the two `VbaProjectSupport` partials;
+next atomic step is 10B2. [Evidence](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md).
 
 Phase 10A physical/dependency audit (2026-08-31): inventory 107 Core, 176 Office
 и 12 OfficeHosts C# files. Folder/namespace mismatches 0/27/5 не трактуются как
 автоматические defects: root Office namespace остаётся у façade/host ports. Реальный
-R49 scope — только `DocumentIdentity.cs` и два `VbaProjectSupport` partials, у которых
-нет Office service/tool/domain consumers. `AssistantRuntime` и resource-only
+R49 scope на момент аудита — `DocumentIdentity.cs` и два `VbaProjectSupport`
+partials без Office service/tool/domain consumers; первый файл позднее перенесён в
+10B1, два partials остаются для 10B2. `AssistantRuntime` и resource-only
 `ProjectRead` зафиксированы отдельными 10C cleanup invariants; projection сейчас
 live и не удалена.
 
@@ -41,8 +52,8 @@ Phase 8A immutable execution snapshot, 8B callable lifecycle/admission, 8C durab
 reconstruction и 8D resource data-plane cutover завершены host-neutral; 9D1 audit,
 9D2 same-process fail-stop reload/reconciliation, 9D3 typed event
 classification/`IEventStore`, 9D4 minimal `IConversationStore` и 9D5 immutable
-`RunViewState` завершены host-neutral; 10A physical/dependency audit также завершён,
-следующий dependency-safe этап — отдельный 10B1 host identity file move.
+`RunViewState` завершены host-neutral; 10A audit и 10B1 host identity move также
+завершены, следующий dependency-safe этап — отдельный 10B2 VBA host-helper move.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
 
@@ -516,7 +527,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 7 | 7A–7C done host-neutral; 7D pending WQ0/5B2 | [7A](PHASE_7A_EXCEL_SCOPE.md); [7B](PHASE_7B_EXCEL_READ.md); [7C](PHASE_7C_EXCEL_WRITE.md) | 7C: 15 distinct focused cases; MockDemo compile | not performed | Typed reads and verified write_range switched; WQ-EXCEL and bound production backend open |
 | 8 | 8A–8D done host-neutral; WQ-PACK pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md), [8C](PHASE_8C_TOOL_PACK_EVENTS.md), [8D](PHASE_8D_RESOURCE_DATA_PLANE.md) | 8D: 74 distinct targeted pass; MockDemo compile | not performed | Execution/callable authority, durable reconstruction and four native resource handlers switched; WQ-PACK open |
 | 9 | 9A–9D5 done host-neutral; Windows acceptance pending | through `9bbf088` | 9D5: 99 targeted harness, web 70/70, MockDemo compile | not performed | Diagnostics/viewer, typed persistence ports and immutable RunViewState switched; R37/WQ-UI open |
-| 10 | in progress: 10A done host-neutral | [10A](PHASE_10A_BOUNDARY_AUDIT.md) | architecture 4/4; production source inclusion 1/1 | not performed | Exact groups 10B1/10B2/10C/10D remain; R49 open |
+| 10 | in progress: 10A + 10B1 done host-neutral | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md) | 10B1: documents/identity 4/4; architecture 4/4; source inclusion 1/1 | not performed | Exact groups 10B2/10C/10D remain; R49 open only for `VbaProjectSupport*` |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
