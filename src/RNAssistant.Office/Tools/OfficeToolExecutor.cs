@@ -98,11 +98,18 @@ namespace RNAssistant.Office.Tools
 
         internal ResourceGatewayService ResourceGateway { get { return _resourceGateway; } }
 
-        internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolDefinition> catalog,
+        internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, ToolPackSnapshot snapshot,
             AppSettings settings, string mode, bool trace = true)
         {
             return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _excelWriteAdapter, _hostRuntime,
-                session, catalog, settings, mode, trace);
+                session, snapshot, settings, mode, trace);
+        }
+
+        internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolDefinition> catalog,
+            AppSettings settings, string mode, bool trace = true)
+        {
+            return CreateNativeRuntime(session,
+                ToolPackSnapshotFactory.Capture(mode, _adapter.HostName, catalog), settings, mode, trace);
         }
 
         internal List<ToolDefinition> AvailableConversationToolsForSession(

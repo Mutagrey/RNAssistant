@@ -126,9 +126,9 @@ namespace RNAssistant.Harness
         {
             var expectedHostCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
-                { "Excel", 16 },
-                { "Word", 10 },
-                { "PowerPoint", 10 },
+                { "Excel", 15 },
+                { "Word", 9 },
+                { "PowerPoint", 9 },
                 { "Outlook", 5 }
             };
             foreach (var pair in expectedHostCounts)

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -235,6 +236,123 @@ namespace RNAssistant.Harness
                     "repair names the exact schema-loading action");
                 AssertContains(FlattenSimple(requests[2]), "\"kind\":\"tool-schema\"",
                     "complete schema evidence reaches the next model step");
+            });
+        }
+
+        private static void ToolPackSnapshotPinsCompleteContracts()
+        {
+            const string schema = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}";
+            var descriptor = new ToolDescriptor("fixture.snapshot", "Snapshot fixture", schema);
+            var policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, true,
+                new[] { "agent" }, 1);
+            var binding = new ToolBinding("fixture.handler.v1", "Run", "document", "Excel");
+            var package = new ToolPackageMetadata("1.2.3", "/fixture/tool", "source-v1",
+                "[{\"name\":\"Module1\"}]", "installed");
+            var registration = ToolPackSnapshot.Capture(descriptor, policy, binding, package);
+            var snapshot = new ToolPackSnapshot("fixture-pack", "agent", "Excel", new[] { registration });
+
+            AssertEqual(1, snapshot.Registrations.Count, "snapshot retains one exact registration");
+            AssertEqual(registration.Revision, snapshot.Find("fixture.snapshot").Revision,
+                "snapshot retains the captured registration revision");
+            AssertTrue(snapshot.Find("FIXTURE.SNAPSHOT") == null,
+                "execution lookup remains exact and case-sensitive");
+            AssertEqual("document", snapshot.Find("fixture.snapshot").Binding.Scope,
+                "execution scope is part of the pinned binding");
+            AssertEqual("Excel", snapshot.Find("fixture.snapshot").Binding.Host,
+                "execution host is part of the pinned binding");
+            AssertTrue(snapshot.Describe("fixture.snapshot").Policy.Matches(policy),
+                "snapshot exposes the captured typed policy");
+
+            var reorderedSchema = "{\"required\":[],\"properties\":{\"value\":{\"type\":\"string\"}},\"type\":\"object\",\"additionalProperties\":false}";
+            AssertEqual(registration.Revision, ToolPackSnapshot.Capture(
+                new ToolDescriptor("fixture.snapshot", "Snapshot fixture", reorderedSchema),
+                policy, binding, package).Revision,
+                "object property order does not create a false contract revision");
+            AssertTrue(registration.Revision != ToolPackSnapshot.Capture(
+                new ToolDescriptor("fixture.snapshot", "Changed description", schema),
+                policy, binding, package).Revision,
+                "descriptor text is pinned");
+            AssertTrue(registration.Revision != ToolPackSnapshot.Capture(
+                descriptor,
+                new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent" }, 1),
+                binding, package).Revision,
+                "policy is pinned");
+            AssertTrue(registration.Revision != ToolPackSnapshot.Capture(
+                descriptor, policy, new ToolBinding("fixture.handler.v2", "Run", "document", "Excel"), package).Revision,
+                "handler binding is pinned");
+            AssertTrue(registration.Revision != ToolPackSnapshot.Capture(
+                descriptor, policy, new ToolBinding("fixture.handler.v1", "Run", "session", "Excel"), package).Revision,
+                "execution scope is pinned");
+            AssertTrue(registration.Revision != ToolPackSnapshot.Capture(
+                descriptor, policy, new ToolBinding("fixture.handler.v1", "Run", "document", "Word"), package).Revision,
+                "execution host is pinned");
+            AssertTrue(registration.Revision != ToolPackSnapshot.Capture(
+                descriptor, policy, binding, new ToolPackageMetadata("1.2.3", "/fixture/tool", "source-v2",
+                    "[{\"name\":\"Module1\"}]", "installed")).Revision,
+                "package implementation is pinned without exposing its source in the revision");
+
+            var same = new ToolPackSnapshot("fixture-pack", "agent", "Excel", new[] { registration });
+            AssertEqual(snapshot.Revision, same.Revision, "pack revision is deterministic");
+            RuntimeThrows<InvalidOperationException>(() => new ToolPackSnapshot(
+                "fixture-pack", "agent", "Excel",
+                new[] { new ToolRegistration(descriptor, policy, binding, "forged", package) }));
+            RuntimeThrows<InvalidOperationException>(() => new ToolPackSnapshot(
+                "fixture-pack", "agent", "Excel",
+                new[]
+                {
+                    registration,
+                    ToolPackSnapshot.Capture(new ToolDescriptor("FIXTURE.SNAPSHOT", "Duplicate", schema),
+                        policy, binding, package)
+                }));
+        }
+
+        private static void ToolPackRuntimeUsesCapturedAuthority()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var catalog = ConversationRunService.PrepareToolsForRun(
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()));
+                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                var snapshot = ToolPackSnapshotFactory.Capture("agent", adapter.HostName, catalog);
+                var inspect = snapshot.Find(ExcelReadToolIds.Inspect);
+                AssertTrue(inspect != null, "runnable snapshot contains the native Excel read");
+                AssertEqual(ExcelReadToolHandler.InspectBinding.HandlerId, inspect.Binding.HandlerId,
+                    "snapshot captures the native handler identity");
+                AssertEqual(ToolPackSnapshotFactory.ExecutionFingerprint(catalog, ExcelReadToolIds.Inspect),
+                    inspect.Revision, "compatibility fingerprint delegates to the snapshot contract");
+
+                var session = NewSession(adapter);
+                var runtime = executor.CreateNativeRuntime(session, snapshot, new AppSettings(), "agent", false);
+                var described = runtime.Describe(new ToolCall("snapshot_call", ExcelReadToolIds.Inspect,
+                    "{\"kind\":\"sheets\"}"));
+                AssertTrue(described != null && described.Matches(snapshot.Describe(ExcelReadToolIds.Inspect)),
+                    "native runtime registers the exact captured authority");
+
+                var originalPackRevision = snapshot.Revision;
+                var definition = catalog.Single(tool => tool.Id == ExcelReadToolIds.Inspect);
+                definition.Description += " changed after capture";
+                AssertEqual(originalPackRevision, snapshot.Revision,
+                    "mutating the legacy source catalog cannot rewrite an existing snapshot");
+                var replaced = ToolPackSnapshotFactory.Capture("agent", adapter.HostName, catalog);
+                AssertTrue(replaced.Revision != originalPackRevision,
+                    "a later run observes the replaced descriptor as a new snapshot");
+                AssertTrue(replaced.Find(ExcelReadToolIds.Inspect).Revision != inspect.Revision,
+                    "same tool id cannot hide a replaced descriptor");
+
+                definition.Description = definition.Description.Replace(" changed after capture", string.Empty);
+                definition.UseWhen = "A changed selection hint";
+                AssertTrue(ToolPackSnapshotFactory.Capture("agent", adapter.HostName, catalog)
+                        .Find(ExcelReadToolIds.Inspect).Revision != inspect.Revision,
+                    "the complete model-visible descriptor is pinned");
+
+                var legacy = catalog.Single(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId);
+                var beforeBinding = ToolPackSnapshotFactory.ExecutionFingerprint(catalog, legacy.Id);
+                AssertEqual(string.Empty,
+                    ToolPackSnapshotFactory.ExecutionFingerprint(catalog.Concat(new[] { legacy.Clone() }), legacy.Id),
+                    "a duplicate current registration fails the pre-dispatch fingerprint closed");
+                legacy.EntryPoint = "replacement-entry";
+                AssertTrue(beforeBinding != ToolPackSnapshotFactory.ExecutionFingerprint(catalog, legacy.Id),
+                    "same tool id cannot hide a replaced legacy binding");
             });
         }
 

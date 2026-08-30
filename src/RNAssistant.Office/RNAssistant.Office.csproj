@@ -171,6 +171,7 @@
     <Compile Include="Services\AgentJsonProtocol.cs" />
     <Compile Include="Services\ConversationPromptComposer.cs" />
     <Compile Include="Services\ProgressiveToolWorkingSet.cs" />
+    <Compile Include="Services\ToolPackSnapshotFactory.cs" />
     <Compile Include="Services\ApplicationVersionService.cs" />
     <Compile Include="Services\ContextCompactionService.cs" />
     <Compile Include="Services\PromptBudgetComposer.cs" />

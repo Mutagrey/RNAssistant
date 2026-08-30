@@ -440,7 +440,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, adapter.Executed.Count, "local tool does not enter Office adapter");
 
                 var blocked = executor.Execute(
-                    Command("excel.read_range", "sheet", "Data", "range", "A1:B2"),
+                    Command("excel.read_range", "sheet", "Data", "address", "A1:B2"),
                     tools,
                     new AppSettings(),
                     false,
@@ -1547,7 +1547,7 @@ namespace RNAssistant.Harness
                 AssertEqual(skillCallId, session.Messages.Last(message => message.Activity != null).Activity.ToolCallId,
                     "pending activity keeps tool call id");
                 var pendingActivity = session.Messages.Last(message => message.Activity != null).Activity;
-                var expectedCatalogFingerprint = ConversationRunService.ToolExecutionFingerprint(
+                var expectedCatalogFingerprint = ToolPackSnapshotFactory.ExecutionFingerprint(
                     ConversationRunService.PrepareToolsForRun(tools),
                     "common.skills_upsert");
                 AssertEqual(expectedCatalogFingerprint, pendingActivity.ConfirmationCatalogSha256,
@@ -1558,7 +1558,7 @@ namespace RNAssistant.Harness
                         "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
                 AssertTrue(!string.Equals(
                         expectedCatalogFingerprint,
-                        ConversationRunService.ToolExecutionFingerprint(
+                        ToolPackSnapshotFactory.ExecutionFingerprint(
                             ConversationRunService.PrepareToolsForRun(changedTools),
                             "common.skills_upsert"),
                         StringComparison.OrdinalIgnoreCase),

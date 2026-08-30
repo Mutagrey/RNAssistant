@@ -79,12 +79,25 @@ namespace RNAssistant.Core.Tools
     {
         public string HandlerId { get; private set; }
         public string EntryPoint { get; private set; }
+        public string Scope { get; private set; }
+        public string Host { get; private set; }
 
-        public ToolBinding(string handlerId, string entryPoint = null)
+        public ToolBinding(string handlerId, string entryPoint = null, string scope = null, string host = null)
         {
             if (string.IsNullOrWhiteSpace(handlerId)) throw new ArgumentException("Handler identity is required.", nameof(handlerId));
             HandlerId = handlerId;
             EntryPoint = entryPoint;
+            Scope = scope;
+            Host = host;
+        }
+
+        public bool Matches(ToolBinding other)
+        {
+            return other != null &&
+                string.Equals(HandlerId, other.HandlerId, StringComparison.Ordinal) &&
+                string.Equals(EntryPoint, other.EntryPoint, StringComparison.Ordinal) &&
+                string.Equals(Scope, other.Scope, StringComparison.Ordinal) &&
+                string.Equals(Host, other.Host, StringComparison.Ordinal);
         }
     }
 

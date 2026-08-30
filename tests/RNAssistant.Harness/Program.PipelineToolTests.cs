@@ -61,7 +61,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
                 AssertTrue(!HasTool(new ToolCatalogService(adapter, executor, store).GetVisibleTools(), pipeline.Id), "manual catalog excludes pipelines");
                 AssertTrue(!HasTool(ConversationRunService.PrepareToolsForRun(new[] { pipeline }), pipeline.Id), "injected model catalog excludes pipelines");
-                AssertEqual(string.Empty, ConversationRunService.ToolExecutionFingerprint(new[] { pipeline }, pipeline.Id), "no resumable pipeline fingerprint");
+                AssertEqual(string.Empty, ToolPackSnapshotFactory.ExecutionFingerprint(new[] { pipeline }, pipeline.Id), "no resumable pipeline fingerprint");
                 var read = executor.Execute(Command(CapabilityDiscoveryExecutor.ReadToolId, "id", pipeline.Id),
                     new[] { pipeline }, new AppSettings(), false, true);
                 AssertTrue(!read.Success, "direct capability read cannot advertise an injected pipeline");

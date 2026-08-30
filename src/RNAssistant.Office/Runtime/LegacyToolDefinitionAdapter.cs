@@ -27,15 +27,33 @@ namespace RNAssistant.Office.Runtime
                 Math.Max(safety.RiskLevel, declared == null ? 0 : declared.RiskLevel));
         }
 
-        internal static ToolRegistration Adapt(ToolDefinition definition, string revision,
-            ToolBinding binding = null, string mode = "agent")
+        internal static ToolBinding BindingFor(ToolDefinition definition)
         {
             if (definition == null) throw new ArgumentNullException(nameof(definition));
-            return new ToolRegistration(
-                new ToolDescriptor(definition.Id, definition.Description, definition.ArgumentSchemaJson),
+            return new ToolBinding(
+                "legacy.office." + (definition.Executor ?? "unknown") +
+                    (definition.BuiltIn ? ".builtin" : ".custom"),
+                definition.EntryPoint,
+                definition.Scope,
+                definition.Host);
+        }
+
+        internal static ToolRegistration Adapt(ToolDefinition definition,
+            ToolBinding binding = null, string mode = "agent", string descriptorDescription = null)
+        {
+            if (definition == null) throw new ArgumentNullException(nameof(definition));
+            var selectedBinding = binding ?? BindingFor(definition);
+            var capturedBinding = new ToolBinding(
+                selectedBinding.HandlerId,
+                selectedBinding.EntryPoint,
+                definition.Scope,
+                definition.Host);
+            return ToolPackSnapshot.Capture(
+                new ToolDescriptor(definition.Id,
+                    descriptorDescription ?? definition.Description,
+                    definition.ArgumentSchemaJson),
                 PolicyFor(definition, mode),
-                binding ?? new ToolBinding("legacy.office." + (definition.Executor ?? "unknown"), definition.EntryPoint),
-                revision,
+                capturedBinding,
                 new ToolPackageMetadata(definition.PackageVersion, definition.StoragePath, definition.Code,
                     JsonConvert.SerializeObject(definition.Components ?? new List<VbaToolComponent>()), definition.InstallationStatus));
         }

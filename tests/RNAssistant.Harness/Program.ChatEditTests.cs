@@ -214,7 +214,7 @@ namespace RNAssistant.Harness
                         captured = new List<ChatMessage>(messages ?? new ChatMessage[0]);
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"status\":\"completed\",\"message\":\"Обновленный ответ.\",\"tool_calls\":[]}",
+                            Content = "{\"message\":\"Обновленный ответ.\",\"tool_calls\":[]}",
                             PromptTokens = 10,
                             CompletionTokens = 2,
                             TotalTokens = 12

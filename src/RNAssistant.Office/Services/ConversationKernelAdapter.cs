@@ -61,6 +61,7 @@ namespace RNAssistant.Office.Services
         private readonly List<object> _projectedResults = new List<object>();
         private ConversationRunInput _input;
         private List<ToolDefinition> _catalog;
+        private ToolPackSnapshot _toolPack;
         private IReadOnlyList<SkillDefinition> _skills;
         private ConversationModelSession _modelSession;
         private ModelProtocolResult _lastModel;
@@ -105,7 +106,8 @@ namespace RNAssistant.Office.Services
             CapabilityDiscoveryExecutor.ThrowOnCollision(_catalog, _skills);
             _catalog = _policy.SelectTools(_executor.AvailableConversationToolsForSession(_catalog, _session));
             CapabilityDiscoveryExecutor.BindReadSchema(_catalog, _skills);
-            _nativeTools = _executor.CreateNativeRuntime(_session, _catalog, _input.Settings, _policy.Mode);
+            _toolPack = ToolPackSnapshotFactory.Capture(_policy.Mode, _adapter.HostName, _catalog);
+            _nativeTools = _executor.CreateNativeRuntime(_session, _toolPack, _input.Settings, _policy.Mode);
         }
 
         internal ChatTurnResult Result(RunSummary summary)

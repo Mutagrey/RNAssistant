@@ -35,7 +35,7 @@ Phase 11 — отдельная ветка после stable core, не prerequi
 | 6G | Restore ownership | done host-neutral: exact backup selection plus backup/current-state guard, dry-run, journal, typed create-or-replace and source/type verification moved to typed domain service; executor restore workflow/helpers removed. [Evidence](PHASE_6G_VBA_RESTORE.md). Windows/COM/VBE gate open |
 | 6H / 6I / 6J | Package/rename scope and ownership | done host-neutral: 6H audit; 6I typed package lifecycle/R41; 6J typed rename guard/backend/read-back/recovery and final executor compound-path removal. Dynamic definition authoring stays Phase 11; raw CAS stays separate from comparable text; Windows/VBE gate remains open. [6I](PHASE_6I_VBA_PACKAGE_LIFECYCLE.md), [6J](PHASE_6J_VBA_RENAME.md) |
 | 7 | Excel read/write vertical slice | 7A scope, 7B typed reads and 7C verified `write_range` done host-neutral. 7D bound backend remains blocked by WQ0/5B2; Windows WQ-EXCEL remains mandatory. [7B](PHASE_7B_EXCEL_READ.md), [7C](PHASE_7C_EXCEL_WRITE.md) |
-| 8 | Resource read plane / immutable ToolPack | Заменить внешний lifecycle без переделки kernel; bounded pinned schema/policy/binding, compaction materialization, atomic admission; no LRU eviction и no CAS transport (R30) |
+| 8 | Resource read plane / immutable ToolPack | **8A done host-neutral:** immutable run snapshot pins descriptor/schema, policy, binding/scope/host and package fingerprint; native/legacy policy paths use one authority. **8B+:** deterministic core, atomic monotonic admission/no eviction, compaction/events and remaining resource handlers without kernel/CAS transport changes. [Evidence](PHASE_8A_TOOL_PACK_SNAPSHOT.md) |
 | UI security / R35 | Обновить уязвимый existing DOMPurify без начала Phase 9 | done host-neutral: `3.1.6 → 3.4.14`, exact npm provenance/SHA-256/licenses; Markdown boundary/CSP не менялись, Windows WebView gate открыт |
 | 9 | Persistence / UI projection | Расширить minimal replay Phase 3: один event authority, mandatory durable barriers/result-append faults, typed verification projection; replay не принимает execution decisions |
 | 9A–9C / R32 | Сквозной журнал запуска и общий JSON viewer | **9A/9B/9C UI done host-neutral.** Correlated query → общий lossless bounded viewer → раскрываемый latest/exact run journal с direct Agent/error navigation. [Evidence 9C](PHASE_9C_RUN_JOURNAL_UI.md). Full Windows/WebView/reload/confirmation/live-append acceptance открыт; Diff2Html не admitted без source-owned unified diff |
@@ -53,9 +53,9 @@ R20 закрыт в 2B: `MaxAgentFormatRetries=20` допускает ровно
 включая первую. Provider failures и один schema fallback имеют отдельные бюджеты.
 R21: на Windows проверить production controller trace wiring, COM boundaries и
 реальную WebView delivery; `ui.projected` сейчас фиксирует только построение DTO.
-R22: тест `tools: compact catalog rejects removed aliases` ожидает 16 Excel tools,
-получает 15; одинаково падает на baseline `a24feb1` и после 1B. Проверить catalog и
-ожидание в Phase 8, не менять tool catalog в ModelProtocol commit.
+R22 закрыт в 8A: audited public catalogs содержат Excel 15, Word 9, PowerPoint 9 и
+Outlook 5 tools; stale count expectations исправлены без изменения catalog. Тест
+одновременно сохраняет explicit rejection удалённых aliases.
 R23: typed runtime/result введены в Phase 4; legacy domain mapping снимается при
 handler switches Phases 6–7/11; counts mutating invocations не означают число изменённых объектов или
 независимую проверку read-back. Полная lifecycle/projection миграция — Phases 3/9.

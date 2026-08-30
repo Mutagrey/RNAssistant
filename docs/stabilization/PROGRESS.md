@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 7 — 7C verified Excel write (done host-neutral; 7D/Windows qualification pending)
-Current task: `excel.write_range` переключён на typed owner + exact native handler с одним before/apply/read-back scope. Только exact verified no-change/change даёт `ok`; pre-dispatch refusal остаётся `error`, post-dispatch uncertainty — non-retryable `unknown`. Public host write path удалён; другие Excel mutations не менялись.
+Current phase: Phase 8 — 8A immutable ToolPack run authority (done host-neutral; lifecycle/resource slices pending)
+Current task: после mode/document/schema filtering один `ToolPackSnapshot` фиксирует descriptor/schema, typed policy, handler/entry point/scope/host и package fingerprint. Native registry исполняет captured registrations; legacy adapter сверяет тот же revision перед dispatch. LRU/callable membership и Resource plane этим slice не менялись.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: 7D не начинать без WQ0/5B2. В режиме deferred qualification следующий независимый change — узкий Phase 8 ToolPack/resource-lifecycle audit и ordered slice; AgentKernel, 7D backend, production factories/identity и остальные Excel mutations не смешивать.
-Required context: [7C evidence](PHASE_7C_EXCEL_WRITE.md), [7A scope](PHASE_7A_EXCEL_SCOPE.md), [master Phases 7–8 / deferred qualification](STABILIZATION_MASTER_PLAN.md#phase-7--excel-readwrite-vertical-slice), [architecture](../architecture.md), [conversation protocol](../conversation-protocol.md), [resource fabric](../resource-fabric.md), [migration map](MIGRATION_MAP.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
-Open gates / remaining legacy: Phase 5B2/R04 and therefore Phase 7D; full Phase 6 Windows/VBE gate including R41/R42 qualification; WQ-EXCEL for 7B/7C; Phase 8/R30. Excel read/write internal compatibility commands and current target resolver remain until 7D after WQ0/5B2. R03/R23 are contained host-neutral for admitted VBA and `excel.write_range`, but other legacy mutations and Windows delivery remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/Phase 9A–9C UI закрыты host-neutral, но общий Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 8B — определить конечный core pack и атомарно заменить `ProgressiveToolWorkingSet` на bounded monotonic admission без LRU eviction; compaction/event/resource handler changes не смешивать. 7D по-прежнему не начинать без WQ0/5B2; AgentKernel и production factories/identity не менять.
+Required context: [8A evidence](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [ADR-0006](../decisions/ADR-0006-tool-pack-snapshot.md), [master Phase 8](STABILIZATION_MASTER_PLAN.md#phase-8--resource-fabric-и-toolpack), [architecture](../architecture.md), [conversation protocol](../conversation-protocol.md), [resource fabric](../resource-fabric.md), [migration map](MIGRATION_MAP.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [harness filters](../../tests/RNAssistant.Harness/README.md).
+Open gates / remaining legacy: Phase 8B+ still owns deterministic core membership, admission/no-eviction, compaction rematerialization/events and remaining resource handlers/R30; WQ-PACK remains open. `ProgressiveToolWorkingSet`, capability evidence replay and legacy `ToolDefinition` execution adapter remain explicit temporary consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Excel read/write internal compatibility commands and current target resolver remain until 7D after WQ0/5B2. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32/Phase 9A–9C UI закрыты host-neutral, но общий Windows/reload/confirmation/live-append acceptance открыт. Diff2Html требует будущего source-owned unified-diff contract. Другие trees и Web Awesome/virtual-host switch не включены. Read-only R37 adapter сохраняется до Windows qualification и explicit retained-data reset/removal decision. Product 16.1.0-dev, no release/tag.
 
 Deferred Windows qualification mode (2026-08-29, docs-only decision): пользователь
 разрешил не ждать регулярных Windows прогонов между dependency-safe подэтапами
@@ -21,9 +21,28 @@ identity probe остаётся prerequisite production factory switch. Непр
 mutation slices выполнены отдельными host-neutral changes; 6H зафиксировал scope,
 6I package runtime/R41 и 6J rename/R42 выполнены host-neutral; 7A audit и 7B typed
 Excel reads и verified `write_range` завершены host-neutral; 7D ждёт WQ0/5B2, а
-следующий dependency-safe slice начинается отдельно в Phase 8.
+Phase 8A immutable execution snapshot завершён host-neutral; следующий
+dependency-safe slice — отдельный 8B callable lifecycle/admission.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
+
+Phase 8A immutable ToolPack snapshot (2026-08-30): после окончательного run
+filtering один typed `ToolPackSnapshot` копирует и проверяет registration каждого
+runnable id. Registration revision включает canonical descriptor/schema, полный
+`ToolPolicy`, handler/entry point/scope/host и hash package implementation; pack revision
+дополнительно связывает mode, host и ordered membership. Native runtime регистрирует
+эту authority напрямую, legacy `Describe` читает её же и перед dispatch повторно
+сверяет compatibility definition. Drift возвращает `tool_registration_changed` без
+effect; confirmation rebuild сравнивает новый revision с persisted accepted policy.
+
+Старый ad-hoc fingerprint helper удалён. R22 закрыт актуальными counts Excel 15,
+Word 9, PowerPoint 9, Outlook 5. Два stale fixtures приведены к уже действующим
+`read_range.address` и status-free v4 без product change. 90 distinct host-neutral
+cases pass; MockDemo: 0 errors / 3 existing CA1416 warnings; version format, diff и
+194 local links в 10 changed Markdown files — pass. Current LRU, core-pack
+selection, atomic admission, compaction/events и remaining resource handlers не
+переключались; это 8B+. [Evidence](PHASE_8A_TOOL_PACK_SNAPSHOT.md),
+[decision](../decisions/ADR-0006-tool-pack-snapshot.md).
 
 Phase 7B typed Excel reads (2026-08-30): host-neutral `ExcelReadService`
 владеет canonical inspect/range outcomes, profile и second-bound validation.
@@ -299,7 +318,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 5 | 5A + 5B1 done host-neutral; 5B2 read switch done, identity probe ready | 3a6c2aa (5A); a1b3d80 (5B1); 1ea3ce0 (5B2) | [read checks](#phase-5b2--direct-contextcatalog-reads), [probe checks](#phase-5b2--identity-qualification-probe) | not performed | Production binding blocked on identity qualification |
 | 6 | 6A–6J done host-neutral | `e0360f3` (6A); `62010c8` (R33); `dde18cf` (6B); through `cd0bd61` (6G); [6H](PHASE_6H_VBA_PACKAGE_SCOPE.md); [6I](PHASE_6I_VBA_PACKAGE_LIFECYCLE.md); [6J](PHASE_6J_VBA_RENAME.md) | 6I package + 6J rename fault matrices; full VBA regression in linked reports | deferred | Full VBA/Windows gate open; R41/R42 runtime fixed host-neutral |
 | 7 | 7A–7C done host-neutral; 7D pending WQ0/5B2 | [7A](PHASE_7A_EXCEL_SCOPE.md); [7B](PHASE_7B_EXCEL_READ.md); [7C](PHASE_7C_EXCEL_WRITE.md) | 7C: 15 distinct focused cases; MockDemo compile | not performed | Typed reads and verified write_range switched; WQ-EXCEL and bound production backend open |
-| 8 | pending | — | — | — | Resource Fabric / ToolPack |
+| 8 | 8A done host-neutral; 8B+ pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md) | 90 distinct targeted; MockDemo compile | not performed | Immutable execution authority switched; LRU/admission/compaction/resource plane and WQ-PACK open |
 | 9 | 9A–9C done host-neutral; Windows acceptance pending | through `fba247b` | 9A harness evidence; current web 58/58; 9C UI/DOM evidence | not performed | Correlated query, shared JSON viewer and causal run journal switched; full persistence/Windows acceptance and R37 removal gate open |
 | 10 | pending | — | — | — | Physical cleanup / architecture tests |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |

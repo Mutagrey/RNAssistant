@@ -18,10 +18,7 @@ namespace RNAssistant.Office.Services
         public ToolPolicySnapshot Describe(ToolCall call)
         {
             if (NativeToolRuntimeAdapter.Owns(call.Name)) return _nativeTools.Describe(call);
-            var tool = _catalog.SingleOrDefault(item => string.Equals(item.Id, call.Name, StringComparison.Ordinal));
-            if (tool == null) return null;
-            return new ToolPolicySnapshot(tool.Id, ConversationRunService.ToolExecutionFingerprint(_catalog, tool.Id),
-                LegacyToolDefinitionAdapter.PolicyFor(tool, _policy.Mode));
+            return _toolPack.Describe(call.Name);
         }
 
         public async Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken)
@@ -36,6 +33,11 @@ namespace RNAssistant.Office.Services
                 if (record.Result != null) _results[context.Call.Id] = new ToolResultMaterialization(record.Result);
                 return record;
             }
+            var pinned = _toolPack.Find(context.Call.Name);
+            var currentRevision = ToolPackSnapshotFactory.ExecutionFingerprint(
+                _catalog, context.Call.Name, _policy.Mode);
+            if (pinned == null || !string.Equals(pinned.Revision, currentRevision, StringComparison.Ordinal))
+                return RegistrationChanged(context);
             var command = Command(context.Call, context.StepId, context.IsConfirmed);
             var result = _executor.Execute(command, _catalog, _input.Settings, false, context.IsConfirmed,
                 _session, context.RemainingToolSteps, _skills, cancellationToken);
@@ -78,6 +80,17 @@ namespace RNAssistant.Office.Services
                 pendingId: outcome == ToolExecutionOutcome.AwaitingConfirmation ? result.PendingId : null,
                 awaitingUser: awaitingUser, toolStepsConsumed: Math.Max(1, result.ToolStepsConsumed),
                 documentRuntimeId: _session.LastRun.DocumentRuntimeKey, result: materialized == null ? null : materialized.Result);
+        }
+
+        private ToolExecutionRecord RegistrationChanged(ToolExecutionContext context)
+        {
+            const string message = "The pinned tool registration changed before dispatch.";
+            var data = new JObject { ["code"] = "tool_registration_changed" }.ToString(Formatting.None);
+            var terminal = RNAssistant.Core.Tools.Contracts.ToolResult.Error(message, data);
+            _results[context.Call.Id] = new ToolResultMaterialization(terminal);
+            _uiResults[context.Call.Id] = ToolResult.Fail(message, data, "tool_registration_changed", false);
+            return new ToolExecutionRecord(context, ToolExecutionOutcome.Error, DateTime.UtcNow,
+                message, mayHaveDispatched: false, result: terminal);
         }
 
         private ToolCommand Command(ToolCall call, string stepId, bool confirmed)

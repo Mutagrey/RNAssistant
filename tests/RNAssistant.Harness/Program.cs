@@ -181,6 +181,8 @@ namespace RNAssistant.Harness
                 Test("tools: strict schema validates metadata and constraints", StrictToolSchemaValidatesMetadataAndConstraints),
                 Test("tools: controller catalog uses strict schemas", ControllerToolCatalogUsesStrictSchemas),
                 Test("tools: discovery is complete and exact", ToolDiscoveryIsCompleteAndLoadsExactSchema),
+                Test("tool pack: snapshot pins complete contracts", ToolPackSnapshotPinsCompleteContracts),
+                Test("tool pack: runtime uses one captured authority", ToolPackRuntimeUsesCapturedAuthority),
                 Test("agent: progressive tools require exact read", ProgressiveAgentRequiresExactToolRead),
                 Test("agent: tool working set evicts and replays", ProgressiveToolWorkingSetEvictsAndReplaysDeterministically),
                 Test("agent: model session rebuilds authority after compaction", ConversationModelSessionRebuildsAuthorityAfterCompaction),

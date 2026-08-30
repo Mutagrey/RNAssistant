@@ -470,10 +470,10 @@ namespace RNAssistant.Harness
             var forged = JsonConvert.DeserializeObject<ToolDefinition>("{\"Id\":\"external.fake\",\"BuiltIn\":true,\"RuntimePolicy\":{\"Effect\":\"Read\",\"IndependentLocalRead\":true}}");
             AssertEqual(0, ConversationProtocolContext.BatchSafeReadIds(new[] { forged }).Length,
                 "serialized authority cannot forge independent local read permission");
-            var originalFingerprint = ConversationRunService.ToolExecutionFingerprint(new[] { read }, read.Id);
+            var originalFingerprint = ToolPackSnapshotFactory.ExecutionFingerprint(new[] { read }, read.Id);
             var changedPolicy = read.Clone();
             changedPolicy.RuntimePolicy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent" });
-            AssertTrue(originalFingerprint != ConversationRunService.ToolExecutionFingerprint(new[] { changedPolicy }, changedPolicy.Id),
+            AssertTrue(originalFingerprint != ToolPackSnapshotFactory.ExecutionFingerprint(new[] { changedPolicy }, changedPolicy.Id),
                 "captured authority revision includes the typed policy");
             foreach (var kind in new[] { "document", "local", "confirmation", "not_agent", "disabled", "custom", "vba", "pipeline" })
             {

@@ -22,35 +22,35 @@ namespace RNAssistant.Office.Runtime
 
         internal NativeToolRuntimeAdapter(ResourceGatewayService gateway, ExcelReadToolAdapter excelReads,
             ExcelWriteToolAdapter excelWrites, HostRuntime hostRuntime, ChatSession session,
-            IEnumerable<ToolDefinition> catalog, AppSettings settings, string mode, bool trace = true)
+            ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
         {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
-            var tools = (catalog ?? new ToolDefinition[0]).ToArray();
-            foreach (var definition in tools.Where(tool => tool != null && Owns(tool.Id)))
+            foreach (var registration in snapshot.Registrations.Where(item => Owns(item.Descriptor.Id)))
             {
-                if (!Runnable(definition)) continue;
-                ToolBinding binding;
+                var binding = BindingFor(registration.Descriptor.Id);
+                if (binding == null ||
+                    !string.Equals(binding.HandlerId, registration.Binding.HandlerId, StringComparison.Ordinal) ||
+                    !string.Equals(binding.EntryPoint, registration.Binding.EntryPoint, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Pinned native binding does not match its handler: " + registration.Descriptor.Id);
                 IToolHandler handler;
-                if (string.Equals(definition.Id, ResourceToolExecutor.ListToolId, StringComparison.Ordinal))
+                if (string.Equals(registration.Descriptor.Id, ResourceToolExecutor.ListToolId, StringComparison.Ordinal))
                 {
-                    binding = ResourceListToolHandler.Binding;
                     handler = new ResourceListToolHandler(gateway, session);
                 }
-                else if (ExcelReadToolIds.Owns(definition.Id))
+                else if (ExcelReadToolIds.Owns(registration.Descriptor.Id))
                 {
-                    if (excelReads == null || hostRuntime == null) continue;
-                    binding = ExcelReadToolHandler.BindingFor(definition.Id);
-                    handler = new ExcelReadToolHandler(definition.Id, excelReads, hostRuntime, session);
+                    if (excelReads == null || hostRuntime == null)
+                        throw new InvalidOperationException("Excel read handler dependencies are unavailable.");
+                    handler = new ExcelReadToolHandler(registration.Descriptor.Id, excelReads, hostRuntime, session);
                 }
                 else
                 {
-                    if (excelWrites == null || hostRuntime == null) continue;
-                    binding = ExcelWriteToolHandler.Binding;
+                    if (excelWrites == null || hostRuntime == null)
+                        throw new InvalidOperationException("Excel write handler dependencies are unavailable.");
                     handler = new ExcelWriteToolHandler(excelWrites, hostRuntime, session);
                 }
-                var revision = binding.HandlerId + ":" +
-                    ConversationRunService.ToolExecutionFingerprint(tools, definition.Id);
-                registry.Register(LegacyToolDefinitionAdapter.Adapt(definition, revision, binding, mode), handler);
+                registry.Register(registration, handler);
             }
             var policy = ConversationRunPolicy.For(mode);
             _runtime = new ToolRuntime(registry, policy.Mode,
@@ -64,13 +64,13 @@ namespace RNAssistant.Office.Runtime
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId);
         }
 
-        private static bool Runnable(ToolDefinition definition)
+        internal static ToolBinding BindingFor(string toolId)
         {
-            return definition != null && definition.Enabled && definition.BuiltIn &&
-                string.Equals(definition.Executor, "builtin", StringComparison.Ordinal) &&
-                (string.IsNullOrWhiteSpace(definition.CapabilityStatus) ||
-                 string.Equals(definition.CapabilityStatus, "available", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(definition.CapabilityStatus, "partial", StringComparison.OrdinalIgnoreCase));
+            if (string.Equals(toolId, ResourceToolExecutor.ListToolId, StringComparison.Ordinal))
+                return ResourceListToolHandler.Binding;
+            if (ExcelReadToolIds.Owns(toolId)) return ExcelReadToolHandler.BindingFor(toolId);
+            if (ExcelWriteToolIds.Owns(toolId)) return ExcelWriteToolHandler.Binding;
+            return null;
         }
 
         public ToolPolicySnapshot Describe(ToolCall call) { return _runtime.Describe(call); }

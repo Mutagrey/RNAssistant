@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -175,64 +173,6 @@ namespace RNAssistant.Office.Services
             IEnumerable<ToolDefinition> tools)
         {
             return ConversationRunPolicy.For(mode).SelectTools(PrepareToolsForRun(tools));
-        }
-
-        internal static string ToolExecutionFingerprint(IEnumerable<ToolDefinition> tools, string rootToolId)
-        {
-            var catalog = (tools ?? new ToolDefinition[0])
-                .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
-                .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-            ToolDefinition root;
-            if (!catalog.TryGetValue(rootToolId ?? string.Empty, out root) ||
-                string.Equals(root.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) return string.Empty;
-            var selected = new[] { root };
-
-            var canonical = selected
-                .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
-                .Select(tool => new
-                {
-                    tool.Id,
-                    tool.BuiltIn,
-                    tool.Scope,
-                    tool.ArgumentSchemaJson,
-                    tool.Executor,
-                    codeSha256 = Sha256Text(tool.Code),
-                    tool.EntryPoint,
-                    argumentOrder = tool.ArgumentOrder ?? new List<string>(),
-                    components = (tool.Components ?? new List<VbaToolComponent>())
-                        .Where(component => component != null)
-                        .Select(component => new
-                        {
-                            component.Name,
-                            component.Type,
-                            codeSha256 = Sha256Text(component.Code)
-                        }),
-                    tool.Enabled,
-                    tool.AgentCanRun,
-                    tool.MutatesDocument,
-                    tool.MutatesLocalState,
-                    tool.RequiresConfirmation,
-                    tool.RiskLevel,
-                    tool.CapabilityStatus
-                })
-                .ToList();
-            var json = JsonConvert.SerializeObject(canonical, Formatting.None);
-            // Preserve unmigrated fingerprints, but pin source-owned policy for
-            // migrated contracts as well as the legacy schema/binding fields.
-            if (root.RuntimePolicy != null)
-                json += "\npolicy:" + JsonConvert.SerializeObject(root.RuntimePolicy, Formatting.None);
-            return Sha256Text(json);
-        }
-
-        private static string Sha256Text(string value)
-        {
-            using (var sha = SHA256.Create())
-            {
-                return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty)))
-                    .Replace("-", string.Empty)
-                    .ToLowerInvariant();
-            }
         }
 
         private static bool ValidToolId(string id)

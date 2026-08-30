@@ -2042,8 +2042,8 @@ Excel read/write добавлены через ToolRuntime и DocumentSession, A
 - [ ] Зафиксировать `Resource = data`.
 - [ ] Сохранить `rna://`, revisions, CAS, cursors.
 - [ ] Заменить оставленную вне AgentKernel реализацию resource capability lifecycle; сохранить проверенную в Phase 3 границу, не менять kernel loop ради ToolPack.
-- [ ] Ввести `ToolPackSnapshot`.
-- [ ] Pin descriptor/schema + policy + binding/package fingerprint (§7.7); одинаковый ID не разрешает замену implementation в принятом call/confirmation.
+- [x] 8A: ввести immutable `ToolPackSnapshot` за границей AgentKernel. [Evidence](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [ADR-0006](../decisions/ADR-0006-tool-pack-snapshot.md).
+- [x] 8A: pin descriptor/schema + policy + binding/entry point/scope/host/package fingerprint (§7.7); одинаковый ID не разрешает замену implementation в принятом call/confirmation, legacy adapter rechecks до dispatch.
 - [ ] Core Excel/VBA pack передавать полностью.
 - [ ] Отключить LRU eviction в stabilized runtime.
 - [ ] Optional schema loading делать monotonic:
