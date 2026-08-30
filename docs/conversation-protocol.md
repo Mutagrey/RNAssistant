@@ -85,6 +85,14 @@ The skill entries in the unified capability catalog are metadata only: a listed 
 
 A custom skill package may contain up to 64 direct UTF-8 `references/*.md` files. Their paths, byte sizes, and content revisions are listed by the core read without bodies and are included in the package revision. The model reads only a needed reference through the same tool using exact `referencePath`; optional zero-based `offset` and `maxChars` produce bounded chunks with `nextOffset`. A reference chunk is ordinary context evidence but never loads the core skill. `common.skills_upsert` writes one reference when both `referencePath` and `referenceMarkdown` are supplied; `common.skills_delete` removes one when `referencePath` is supplied. Core and reference mutations are separate confirmed calls, and each reference mutation changes the package revision. Several clearly relevant skills may be read independently. There is no router or activation state.
 
+Installed skills are capability-library entities rather than chat artifacts. An
+uploaded Markdown/package remains untrusted resource content and cannot appear in
+the capability catalog until an explicit validated install. Agent authoring changes
+the catalog only at a later run boundary; the accepted step keeps its immutable
+catalog. Phase 11 package history, tombstone, restore/import and Library UX are
+defined in [Skill Library](skills.md) without changing the exact
+`common.capabilities_read` model transport.
+
 Tools use a native-like description:
 
 ```json

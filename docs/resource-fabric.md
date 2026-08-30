@@ -26,7 +26,13 @@ Canonical URIs use `rna://<provider>/<escaped-segments>`. They never expose loca
 
 `ResourceRef` intentionally contains identity only. Contextual relations belong to the owning message/tool envelope or to descriptor lineage (`Parent`/`Related`); for example, a tool envelope marks the full externalized value with `relation:"result"`. This avoids creating different identities for the same revision. A separate `ETag` field is unnecessary: for live reads, `Revision` is the observed content hash used by cursors and guards.
 
-`Tool` is an executable capability, not a resource. `Skill` is versioned instruction content and may reference resources and tools. Domain mutations remain typed tools because safety, confirmation, and compare-and-swap rules differ by domain.
+`Tool` is an executable capability, not a resource. An installed `Skill` is trusted
+global/host-scoped instruction content, not a `ChatArtifact`; it may name resources
+and tools but is loaded only through exact capability read. An uploaded `SKILL.md`
+remains an untrusted immutable chat resource until explicit installation creates a
+separate skill package revision. See [Skill Library](skills.md). Domain mutations
+remain typed tools because safety, confirmation, and compare-and-swap rules differ
+by domain.
 
 ## Providers
 
@@ -89,7 +95,7 @@ Live Office/VBA resources are bound to the chat's document identity and carry co
 
 ## Domain projections and UI
 
-Resource access is unified at the model/runtime boundary, not forced into one generic editor. The Artifacts view renders chat-owned attachments, plans, immutable chart snapshots, and HTML workspace revisions; VBA stays a live document view with its own editor and journaled mutations. Message resource cards resolve exact revisions. Paste, drop, and paperclip are the normal attachment path. A future explicit `@artifact` composer affordance may insert an exact URI for disambiguation, but it is not a separate transport and is not required for later access.
+Resource access is unified at the model/runtime boundary, not forced into one generic editor. The Artifacts view renders chat-owned attachments, plans, immutable chart snapshots, and HTML workspace revisions; VBA stays a live document view with its own editor and journaled mutations. Installed skills stay in Library and are not duplicated into Artifacts; a skill mutation may expose only a UI link to that Library entity. Message resource cards resolve exact revisions. Paste, drop, and paperclip are the normal attachment path. A future explicit `@artifact` composer affordance may insert an exact URI for disambiguation, but it is not a separate transport and is not required for later access.
 
 The library distinguishes immutable originals/snapshots, versioned domain
 documents/aggregates and derived resources. Uploaded TXT/Markdown/HTML remains an

@@ -72,8 +72,17 @@ An upload is not converted automatically. In particular:
 - `Import into HTML workspace` creates a separate versioned workspace with
   explicit source provenance;
 - `Create editable copy` of uploaded text creates a separate authored document;
+- uploaded `SKILL.md` or a skill archive remains an untrusted immutable artifact;
+  explicit confirmed `Install as skill` creates a separate global/host-scoped
+  Library package revision with source provenance;
 - reusable OCR/transcription is a derived resource, while query-specific helper
   analysis remains evidence for that model step only.
+
+Installed skills are intentionally excluded from the Artifact Library. They are
+trusted capability packages shared across chats and belong to `Library → Skills`;
+chat deletion must not delete them and skill deletion must not rewrite chat history.
+Agent skill mutations may render a UI-only link to the Library item, not an artifact
+card or second model transport. See [Skill Library](skills.md).
 
 ## Library and revision display
 

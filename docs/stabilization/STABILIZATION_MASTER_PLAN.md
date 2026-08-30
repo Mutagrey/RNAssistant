@@ -2295,7 +2295,11 @@ transport или execution authority.
    audio are separate measured slices with MIME/security/vendor/worker/lifetime and
    Windows WebView gates. ViewerRegistry remains UI-only and cannot read bridge/CAS
    or network itself.
-5. Skills authoring.
+5. Skills authoring: installed skills remain global/host-scoped Library capability
+   packages, not chat artifacts. Add immutable custom package history, exact
+   version/revision UX, restore-as-new-head, tombstone, guarded editor conflicts and
+   explicit artifact import/export; preserve exact `common.capabilities_read` and
+   later-run catalog refresh. See [Skill Library](../skills.md).
 6. Dynamic tool definition authoring, new package features and optional direct-handler/typed-host removal of the remaining VBA definition/result adapters after 5B2; existing 6H-admitted VBA execution/lifecycle remains stable-core Phase 6 work and does not block Phase 12.
 7. Pipelines.
 8. Word.
@@ -2349,6 +2353,13 @@ resources; message cards остаются pinned к exact revision; immutable up
 Удаление append-only и не переписывает JSONL; физический blob удаляет только
 fail-closed reachability GC. Uploaded HTML показывается inert source и исполняется
 только после explicit import в HTML workspace.
+
+Skills authoring separately proves that uploaded skill-shaped content remains
+untrusted until explicit confirmed install; custom core/references form one package
+revision; restore/delete replay from an append-only skill journal; built-ins and
+tool ids cannot be shadowed; UI-selected Office host does not override the Host
+Fabric execution target's skill catalog. Skill history is not stored in document
+chat streams and cannot introduce a second skill-body model transport.
 
 Если добавление контура требует изменения AgentKernel, сначала создаётся ADR и доказывается недостаточность текущего контракта.
 
