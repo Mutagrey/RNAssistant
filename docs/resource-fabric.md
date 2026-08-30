@@ -4,7 +4,7 @@ Status: implemented and re-audited. Core contracts, providers, the unified Chat/
 
 ## Goals
 
-- A pasted, dropped, or attached file immediately becomes a chat-owned resource. No separate “В запрос” action is required.
+- A pasted, dropped, or attached file immediately becomes a chat-scoped resource draft; Send promotes it to a durable chat-owned resource before model dispatch. No separate “В запрос” action is required.
 - Model context keeps compact references and a bounded working set, never every artifact body.
 - Chat can use read-only resources; Agent uses the same reads plus policy-approved mutations.
 - A multimodal primary model reads supported media directly. A helper model is used only when the primary model lacks that modality or when durable derived text is explicitly useful.
@@ -68,6 +68,15 @@ Paste, drag-and-drop, and the paperclip all call the same chat-scoped ingestion 
 4. Route supported media directly to a multimodal primary model for the current turn.
 5. If the primary model cannot consume the modality, call a bounded helper with only the current request and selected media.
 
+Drafts are not artifacts, are not listed in model context, and may appear outside
+the composer only in a separately labelled non-durable Drafts group. After CAS,
+message/artifact linking and the mandatory chat save succeed, application must
+queue a monotonic `sessionRevision` projection containing the committed turn and
+artifact heads before the first model transport call. Model execution does not wait
+for WebView acknowledgement; missed delivery recovers by chat reload. Model failure
+after this boundary never rolls the committed resource back to a draft. The full
+user-visible lifecycle is defined in [Artifact Library and Viewers](artifact-library.md).
+
 Helper output is query-specific evidence for that model step. It is not silently treated as a complete durable description. Reusable OCR/transcription may be stored as a derived artifact revision with explicit provenance: source URI, extractor/model, parameters, timestamp, and content hash.
 
 ## Context and storage
@@ -81,6 +90,14 @@ Live Office/VBA resources are bound to the chat's document identity and carry co
 ## Domain projections and UI
 
 Resource access is unified at the model/runtime boundary, not forced into one generic editor. The Artifacts view renders chat-owned attachments, plans, immutable chart snapshots, and HTML workspace revisions; VBA stays a live document view with its own editor and journaled mutations. Message resource cards resolve exact revisions. Paste, drop, and paperclip are the normal attachment path. A future explicit `@artifact` composer affordance may insert an exact URI for disambiguation, but it is not a separate transport and is not required for later access.
+
+The library distinguishes immutable originals/snapshots, versioned domain
+documents/aggregates and derived resources. Uploaded TXT/Markdown/HTML remains an
+immutable original; extension alone never enables editing or execution. Immutable
+items display `Original`, while Plan/HTML/authored documents expose exact revision
+history. Specialized viewer, edit, restore and delete behavior is canonical in
+[Artifact Library and Viewers](artifact-library.md); UI viewers consume bounded
+gateway representations and never read CAS or grant execution authority.
 
 HTML data bindings intentionally persist an approved typed read-only `toolId + arguments` contract, document identity, transform, and last-good JSON. A generic resource URI cannot represent parameterized reads such as an Excel range without recreating a tool contract inside the URI. Bind and refresh therefore revalidate the current tool schema and execute inside the shared document gate; failure retains the last-good value. Charts are immutable data snapshots with a human-readable source locator as provenance, not live bindings; current data requires regeneration or an explicit HTML binding.
 

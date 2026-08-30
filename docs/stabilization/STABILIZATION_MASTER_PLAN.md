@@ -2270,17 +2270,34 @@ false-positive mutation success или неизвестного target/effect. �
 
 Phase 11 — отдельная ветка после stable core, не prerequisite Phase 12. Каждый контур переносится отдельной minor feature. Более ранний post-beta milestone допустим только по отдельному явному решению, со своими gates и без автоматического расширения scope первого stable.
 
+Целевой пользовательский контракт библиотеки ресурсов, viewers, revision history,
+edit/delete и попадания в model context зафиксирован в
+[Artifact Library and Viewers](../artifact-library.md). Он сохраняет действующий
+Resource Fabric: drafts не являются artifacts, committed resources используют
+только exact `ResourceRef`, а UI projection/viewers не становятся вторым store,
+transport или execution authority.
+
 Порядок:
 
-1. Plan.
-2. HTML.
-3. Skills authoring.
-4. Dynamic tool definition authoring, new package features and optional direct-handler/typed-host removal of the remaining VBA definition/result adapters after 5B2; existing 6H-admitted VBA execution/lifecycle remains stable-core Phase 6 work and does not block Phase 12.
-5. Pipelines.
-6. Word.
-7. PowerPoint.
-8. Outlook.
-9. Browser.
+1. Artifact lifecycle/library foundation: separate draft/committed states,
+   queue revision-guarded post-commit projection before first model transport, exact
+   head/history presentation and cleanup of current kind/label drift. No new
+   resource transport or generic editor.
+2. Plan: Markdown preview/source, guarded exact whole-content revisions, history,
+   restore-as-new-head, explicit delete and ready-plan handoff by pinned URI.
+3. HTML: whole-workspace revisions/branches, inert upload import, source/preview,
+   bindings, recovery and export without silent payload truncation.
+4. Typed artifact viewers: bounded text/source and Markdown first; image, PDF and
+   audio are separate measured slices with MIME/security/vendor/worker/lifetime and
+   Windows WebView gates. ViewerRegistry remains UI-only and cannot read bridge/CAS
+   or network itself.
+5. Skills authoring.
+6. Dynamic tool definition authoring, new package features and optional direct-handler/typed-host removal of the remaining VBA definition/result adapters after 5B2; existing 6H-admitted VBA execution/lifecycle remains stable-core Phase 6 work and does not block Phase 12.
+7. Pipelines.
+8. Word.
+9. PowerPoint.
+10. Outlook.
+11. Browser.
 
 ### Правило допуска
 
@@ -2296,6 +2313,16 @@ Phase 11 — отдельная ветка после stable core, не prerequi
 - не меняет Resource Fabric execution semantics.
 
 Для HTML/Plan whole-content mutations отдельно проверить сохранение точного payload и revision lineage, отсутствие тихой обрезки и восстановление предыдущей revision. Валидный model envelope не является проверкой синтаксиса/работоспособности содержимого; UI/результат не обещает такую проверку без отдельного domain evidence. R29/R28 не считаются закрытыми самим включением optional contour.
+
+Artifact foundation отдельно доказывает: draft отсутствует в durable projection и
+context; CAS/message/artifact save завершается и monotonic UI projection ставится в
+очередь до первого fake model transport call без ожидания WebView acknowledgement;
+provider failure после commit сохраняет user turn и
+resources; message cards остаются pinned к exact revision; immutable uploads не
+получают in-place mutation по расширению; stale projection не заменяет новую.
+Удаление append-only и не переписывает JSONL; физический blob удаляет только
+fail-closed reachability GC. Uploaded HTML показывается inert source и исполняется
+только после explicit import в HTML workspace.
 
 Если добавление контура требует изменения AgentKernel, сначала создаётся ADR и доказывается недостаточность текущего контракта.
 

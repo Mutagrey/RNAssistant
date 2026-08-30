@@ -1,6 +1,6 @@
 # RNAssistant architecture
 
-> [Resource Fabric](resource-fabric.md) is the shipped and re-audited architecture for artifact access and conversation execution. Resource access is unified at the runtime boundary while domain editors remain intentionally specialized.
+> [Resource Fabric](resource-fabric.md) is the shipped and re-audited architecture for artifact access and conversation execution. Resource access is unified at the runtime boundary while domain editors remain intentionally specialized. [Artifact Library and Viewers](artifact-library.md) defines the target user-visible draft/commit lifecycle, immutable versus versioned resources, viewers and Phase 11 mutation UX without adding a second transport or store.
 
 ## Product
 

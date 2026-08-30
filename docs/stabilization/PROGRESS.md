@@ -7,9 +7,23 @@ Execution mode: §16.1 deferred Windows qualification сохраняется. П
 
 Next step: отдельный WQ-A1 commit — strict pack manifest/catalog, coverage registry, finite runner, closed qualification events/typed bridge DTO и fake probes/verifiers, без UI/Office switch. Затем WQ-A2 UI и WQ-A3 встроенный Excel WQ0; после реального evidence — production 5B2/7D и [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md). Phase 12 не начинать.
 Required context: [qualification contract](../qualification.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md), [master WQ-A](STABILIZATION_MASTER_PLAN.md#milestone-wq-a--in-app-qualification-center), [WQ runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md), [migration map](MIGRATION_MAP.md).
-Open gates / remaining legacy: mandatory host-neutral route 0–10 is complete, but WQ-A runtime/UI и все Windows gates открыты; R50 design-only. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO compile, real DocumentSession/COM lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE gate including R41/R42 and WQ-EXCEL for 7B/7C remain open. Phase 8 needs WQ-PACK for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Phase 9/R45–R48 need Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification; R37 remains a read-only historical diagnostics adapter until Windows qualification and explicit retained-data reset/removal. R28/R29 live-provider and R32 UI/clipboard acceptance remain open. Legacy definition/result/host adapters remain only for consumers and removal gates listed in `MIGRATION_MAP.md`; optional direct-handler cleanup does not block Phase 12. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: mandatory host-neutral route 0–10 is complete, but WQ-A runtime/UI и все Windows gates открыты; R50 design-only. R51 artifact-library target is docs-only and remains optional Phase 11, without expanding WQ-A/Phase 12. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO compile, real DocumentSession/COM lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE gate including R41/R42 and WQ-EXCEL for 7B/7C remain open. Phase 8 needs WQ-PACK for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Phase 9/R45–R48 need Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification; R37 remains a read-only historical diagnostics adapter until Windows qualification and explicit retained-data reset/removal. R28/R29 live-provider and R32 UI/clipboard acceptance remain open. Legacy definition/result/host adapters remain only for consumers and removal gates listed in `MIGRATION_MAP.md`; optional direct-handler cleanup does not block Phase 12. Product 16.1.0-dev, no release/tag.
 
 Qualification Center requirements (2026-08-31, WQ-A0 docs-only): пользовательский запрос на встроенные расширяемые проверки оформлен в [canonical contract](../qualification.md) и [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md). Empty-chat card должна открывать отдельный wizard, а не вставлять prompt. Packs versioned/data-only, complex agent tasks идут через production runtime, pass принадлежит typed verifier evidence; dedicated qualification chat использует тот же events/CAS и causal journal. Первый pack — Excel WQ0 с in-app VSTO/native observations и narrow independent-client helper. PowerShell остаётся временным engineering fallback. Код/UI/helper не менялись; WQ0/5B2/R04 не закрыты. Docs diff/205 local links/anchors в затронутых документах и pre-commit `ValidateVersionFormat` — pass; build/tests не запускались.
+
+Artifact Library target (2026-08-31, отдельный user-requested docs-only contract):
+[canonical spec](../artifact-library.md) различает non-durable draft, committed exact
+resource, immutable original/snapshot, versioned Plan/HTML/authored document и
+derived artifact. После mandatory CAS/link/save application ставит monotonic full
+projection в WebView очередь до первого model transport без ожидания UI ack; failure
+после commit не откатывает resource.
+Зафиксированы pinned message revisions, head/history UX, domain-owned edit/delete,
+append-only removal/GC, inert uploaded HTML, bounded text/Markdown/image/PDF/audio
+viewers и context-on-demand через действующий Resource Gateway. Master Phase 11 и
+R51 обновлены атомарными slices; код/tests/vendor не менялись, Phase 11/WQ-A1 не
+начаты, текущая фаза и next step остаются прежними. `git diff --check` и 256 local
+Markdown links в восьми затронутых документах — pass; build/runtime tests для
+docs-only изменения не запускались.
 
 Phase 10D final architecture audit (2026-08-31): final inventory is 107 Core,
 173 Office and 15 OfficeHosts C# files. Replaced source paths/aliases are absent;

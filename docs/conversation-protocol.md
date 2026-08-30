@@ -69,6 +69,16 @@ The resource index is a bounded working-set manifest, not a body store. `common.
 
 Paste, drop, and paperclip use one chat-scoped staging action. `sendChat` accepts only the resulting `resourceDraftIds`; before any model request, runtime promotes their bytes into CAS, creates immutable artifact revisions, links them to the user message, and persists that state. Existing resources are never eagerly injected through a separate selection field: their canonical URIs remain in the bounded working set and the model reads the needed representation through `common.resources_*`.
 
+A resource draft is not durable history or model context. After the mandatory
+pre-dispatch save, application must queue the committed message and artifact heads
+under the new `sessionRevision` before the first model transport call. UI applies
+this through the existing per-chat monotonic revision guard, while model execution
+does not wait for a WebView acknowledgement. Local pending messages, progress text
+and generated titles are not commit evidence. Delivery failure is recovered by chat
+reload and cannot undo the durable turn. Format-specific viewing,
+immutable/versioned classification and removal rules are defined in
+[Artifact Library and Viewers](artifact-library.md).
+
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again.
 
 The skill entries in the unified capability catalog are metadata only: a listed name/summary does not load or replace the skill Markdown. When the user names a skill or a catalog summary clearly matches the task, the model calls `common.capabilities_read` with that exact id before skill-governed work. Its core `TOOL_RESULT.data` contains `kind:"skill"`, `id`, metadata, the human-authored `version`, package `revision`, `format:"markdown"`, the complete `bodyMarkdown`, explicit `loaded:true`, `complete:true`, `truncated:false`, and adjacent `capabilityUse` evidence stating that tool schemas named by the Markdown were not loaded by the skill read. Each such tool still requires its own exact schema read unless already callable. A revision is loaded only while that exact top-level evidence remains in active model context. If complete tool-schema or skill-core evidence does not fit the remaining context, transport changes the result to `status:error` with `data.code:capability_evidence_context_too_large`, `loaded:false`, and `truncated:true`; it never reports a successful load whose evidence was removed. Compaction or a revision mismatch requires another core read; an unchanged oversized read is not retried.
