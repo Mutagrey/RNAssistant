@@ -114,6 +114,11 @@ namespace RNAssistant.Office.Runtime
 
         internal T ReadDocument<T>(OfficeDocumentExecutionExpectation target, Func<T> action)
         {
+            return ReadDocument(target, CancellationToken.None, action);
+        }
+
+        internal T ReadDocument<T>(OfficeDocumentExecutionExpectation target, CancellationToken cancellationToken, Func<T> action)
+        {
             // UI/context/catalog reads are independent roots, including callbacks
             // reentered on an STA already executing another document operation.
             using (DocumentAccessGate.BeginOperation())
@@ -129,9 +134,9 @@ namespace RNAssistant.Office.Runtime
                     };
                 }
                 var access = CaptureAccess(target);
-                using (EnterAccess(access, CancellationToken.None))
+                using (EnterAccess(access, cancellationToken))
                 {
-                    return ExecuteGuarded<T>(access, target, CancellationToken.None, action);
+                    return ExecuteGuarded<T>(access, target, cancellationToken, action);
                 }
             }
         }

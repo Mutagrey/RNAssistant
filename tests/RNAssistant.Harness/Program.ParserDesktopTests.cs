@@ -12,6 +12,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -120,7 +121,7 @@ namespace RNAssistant.Harness
             }))
             {
                 AssertEqual("Excel", dispatched.HostName, "host name");
-                var result = dispatched.ExecuteTool(new ToolCommand { ToolId = "excel.read_range" });
+                var result = dispatched.ExecuteTool(ExcelBackendReadCommand());
                 AssertTrue(result.Success, "tool success");
                 AssertEqual(1, adapter.Executed.Count, "executed count");
             }
@@ -131,7 +132,9 @@ namespace RNAssistant.Harness
             foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
             {
                 var guardedAdapter = FakeOfficeAdapter.ForHost(host);
-                var toolId = guardedAdapter.GetBuiltInTools().First().Id;
+                var toolId = string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
+                    ? ExcelReadToolIds.ReadRangeBackend
+                    : guardedAdapter.GetBuiltInTools().First().Id;
                 using (var dispatched = new DispatchedOfficeApplicationAdapter(delegate { return guardedAdapter; }))
                 {
                     var originalDocumentKey = dispatched.DocumentKey;
@@ -140,7 +143,8 @@ namespace RNAssistant.Harness
                         host, originalDocumentKey, originalRuntimeKey))
                     {
                         guardedAdapter.RuntimeDocumentKeyValue = originalRuntimeKey + "-new-proxy";
-                        var sameDocument = dispatched.ExecuteTool(new ToolCommand { ToolId = toolId });
+                        var sameDocument = dispatched.ExecuteTool(string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
+                            ? ExcelBackendReadCommand() : new ToolCommand { ToolId = toolId });
                         AssertTrue(sameDocument.Success,
                             host + " guard accepts a stable document key when COM runtime identity changes");
                     }
@@ -150,7 +154,8 @@ namespace RNAssistant.Harness
                         host, originalDocumentKey, originalRuntimeKey))
                     {
                         guardedAdapter.DocumentKeyValue = originalDocumentKey + "-saved";
-                        var migratedDocument = dispatched.ExecuteTool(new ToolCommand { ToolId = toolId });
+                        var migratedDocument = dispatched.ExecuteTool(string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
+                            ? ExcelBackendReadCommand() : new ToolCommand { ToolId = toolId });
                         AssertTrue(migratedDocument.Success,
                             host + " guard accepts the same runtime document after identity migration");
                     }
@@ -160,7 +165,8 @@ namespace RNAssistant.Harness
                     {
                         guardedAdapter.DocumentKeyValue += "-other";
                         guardedAdapter.RuntimeDocumentKeyValue += "-other";
-                        var blocked = dispatched.ExecuteTool(new ToolCommand { ToolId = toolId });
+                        var blocked = dispatched.ExecuteTool(string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
+                            ? ExcelBackendReadCommand() : new ToolCommand { ToolId = toolId });
                         AssertEqual("active_document_changed", blocked.ErrorCode,
                             host + " guard blocks a different Office document");
                         var readBlocked = false;
@@ -182,6 +188,13 @@ namespace RNAssistant.Harness
                     }
                 }
             }
+        }
+
+        private static ToolCommand ExcelBackendReadCommand()
+        {
+            return Command(ExcelReadToolIds.ReadRangeBackend,
+                "sheet", "Data", "address", "A1", "content", "values",
+                "maxCells", ExcelReadService.MaxReadCells);
         }
 
         private static void HostRuntimeCancelsQueuedMutationAndReleasesAccess()

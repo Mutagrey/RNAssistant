@@ -20,20 +20,31 @@ namespace RNAssistant.Office.Runtime
         private readonly ToolRuntime _runtime;
         private readonly bool _trace;
 
-        internal NativeToolRuntimeAdapter(ResourceGatewayService gateway, ChatSession session,
+        internal NativeToolRuntimeAdapter(ResourceGatewayService gateway, ExcelReadToolAdapter excelReads,
+            HostRuntime hostRuntime, ChatSession session,
             IEnumerable<ToolDefinition> catalog, AppSettings settings, string mode, bool trace = true)
         {
             var registry = new ToolHandlerRegistry();
             var tools = (catalog ?? new ToolDefinition[0]).ToArray();
-            var definition = tools.SingleOrDefault(tool => tool != null && Owns(tool.Id));
-            if (definition != null && definition.Enabled && definition.BuiltIn &&
-                string.Equals(definition.Executor, "builtin", StringComparison.Ordinal) &&
-                (string.IsNullOrWhiteSpace(definition.CapabilityStatus) || definition.CapabilityStatus == "available" || definition.CapabilityStatus == "partial"))
+            foreach (var definition in tools.Where(tool => tool != null && Owns(tool.Id)))
             {
-                var revision = ResourceListToolHandler.Binding.HandlerId + ":" +
+                if (!Runnable(definition)) continue;
+                ToolBinding binding;
+                IToolHandler handler;
+                if (string.Equals(definition.Id, ResourceToolExecutor.ListToolId, StringComparison.Ordinal))
+                {
+                    binding = ResourceListToolHandler.Binding;
+                    handler = new ResourceListToolHandler(gateway, session);
+                }
+                else
+                {
+                    if (excelReads == null || hostRuntime == null) continue;
+                    binding = ExcelReadToolHandler.BindingFor(definition.Id);
+                    handler = new ExcelReadToolHandler(definition.Id, excelReads, hostRuntime, session);
+                }
+                var revision = binding.HandlerId + ":" +
                     ConversationRunService.ToolExecutionFingerprint(tools, definition.Id);
-                registry.Register(LegacyToolDefinitionAdapter.Adapt(definition, revision, ResourceListToolHandler.Binding, mode),
-                    new ResourceListToolHandler(gateway, session));
+                registry.Register(LegacyToolDefinitionAdapter.Adapt(definition, revision, binding, mode), handler);
             }
             var policy = ConversationRunPolicy.For(mode);
             _runtime = new ToolRuntime(registry, policy.Mode,
@@ -43,7 +54,17 @@ namespace RNAssistant.Office.Runtime
 
         internal static bool Owns(string toolId)
         {
-            return string.Equals(toolId, ResourceToolExecutor.ListToolId, StringComparison.Ordinal);
+            return string.Equals(toolId, ResourceToolExecutor.ListToolId, StringComparison.Ordinal) ||
+                ExcelReadToolIds.Owns(toolId);
+        }
+
+        private static bool Runnable(ToolDefinition definition)
+        {
+            return definition != null && definition.Enabled && definition.BuiltIn &&
+                string.Equals(definition.Executor, "builtin", StringComparison.Ordinal) &&
+                (string.IsNullOrWhiteSpace(definition.CapabilityStatus) ||
+                 string.Equals(definition.CapabilityStatus, "available", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(definition.CapabilityStatus, "partial", StringComparison.OrdinalIgnoreCase));
         }
 
         public ToolPolicySnapshot Describe(ToolCall call) { return _runtime.Describe(call); }

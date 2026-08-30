@@ -2004,22 +2004,22 @@ consumer map и порядок — в [6H evidence](PHASE_6H_VBA_PACKAGE_SCOPE.m
 ### Выполнить
 
 - [x] 7A docs-only: сверить owners/consumers и зафиксировать ordered read → write → bound-production switch без скрытого fallback. [Evidence](PHASE_7A_EXCEL_SCOPE.md).
-- [ ] 7B: перенести `excel.inspect` и `excel.read_range` в один typed read owner и native `ToolRuntime` handlers. Все текущие `inspect` selectors переключаются атомарно; chart/table metadata не разрешает перенос mutation tools.
-- [ ] 7B: HTML bind/refresh использует тот же read adapter под уже взятым document access; прямой `_adapter.ExecuteTool` для switched public IDs удалить.
-- [ ] 7B: сохранить 100000-cell limit до `Value2`/`Formula` materialization, добавить bounded inspect collections и запретить unbounded named-range `Value2`.
+- [x] 7B: перенести `excel.inspect` и `excel.read_range` в один typed read owner и native `ToolRuntime` handlers. Все текущие `inspect` selectors переключаются атомарно; chart/table metadata не разрешает перенос mutation tools. [Evidence](PHASE_7B_EXCEL_READ.md).
+- [x] 7B: HTML bind/refresh использует тот же read adapter под уже взятым document access; прямой `_adapter.ExecuteTool` для switched public IDs удалить.
+- [x] 7B: сохранить 100000-cell limit до `Value2`/`Formula` materialization, добавить bounded inspect collections и запретить unbounded named-range `Value2`.
 - [ ] 7C: перенести только `excel.write_range` в typed write owner/native handler; прочие Excel mutations остаются legacy.
 - [ ] 7C: добавить exact before/read-back verification и различать `VerifiedNoChange`, `VerifiedChange`, definite pre-dispatch `error` и non-retryable post-dispatch `unknown`.
 - [ ] 7C: сохранить deterministic null-padding ragged tables и применить size limits до COM matrix allocation/assignment.
 - [ ] 7D после WQ0/5B2: extracted interop backend получает только bound `ExcelDocumentSession.BoundDocumentObject`; удалить internal compatibility backend и `ActiveWorkbook`/descriptor execution fallback.
 - [ ] Добавить host-neutral tests:
-  - [ ] все `inspect` selectors и общий Agent/manual/HTML read owner;
-  - [ ] values;
-  - [ ] formulas;
-  - [ ] empty range;
-  - [ ] oversized range до materialization;
+  - [x] все `inspect` selectors и общий Agent/manual/HTML read owner;
+  - [x] values;
+  - [x] formulas;
+  - [x] empty range;
+  - [x] oversized range до materialization;
   - [ ] protected sheet;
-  - [ ] closed workbook;
-  - [ ] switched active workbook;
+  - [x] closed workbook (host-neutral bound-session refusal; real Excel remains WQ);
+  - [x] switched active workbook (host-neutral exact-target refusal; real Excel remains WQ);
   - [ ] write error before dispatch;
   - [ ] verified no-op/change;
   - [ ] unverified final state.

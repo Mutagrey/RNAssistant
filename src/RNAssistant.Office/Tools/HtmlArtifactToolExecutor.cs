@@ -30,14 +30,16 @@ namespace RNAssistant.Office.Tools
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly Dictionary<string, ToolDefinition> _dataSourceTools;
         private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
+        private readonly Func<ToolCommand, CancellationToken, ToolResult> _executeOfficeDataSource;
+        private readonly ExcelReadToolAdapter _standaloneExcelRead;
 
         public HtmlArtifactToolExecutor()
-            : this(null, null, null)
+            : this(null, null, null, null)
         {
         }
 
         public HtmlArtifactToolExecutor(IOfficeApplicationAdapter adapter, IEnumerable<ToolDefinition> adapterTools)
-            : this(adapter, adapterTools, null)
+            : this(adapter, adapterTools, null, null)
         {
         }
 
@@ -45,9 +47,20 @@ namespace RNAssistant.Office.Tools
             IOfficeApplicationAdapter adapter,
             IEnumerable<ToolDefinition> adapterTools,
             Func<ChatSession, IDisposable> beginLiveOfficeRead)
+            : this(adapter, adapterTools, beginLiveOfficeRead, null)
+        {
+        }
+
+        internal HtmlArtifactToolExecutor(
+            IOfficeApplicationAdapter adapter,
+            IEnumerable<ToolDefinition> adapterTools,
+            Func<ChatSession, IDisposable> beginLiveOfficeRead,
+            Func<ToolCommand, CancellationToken, ToolResult> executeOfficeDataSource)
         {
             _adapter = adapter;
             _beginLiveOfficeRead = beginLiveOfficeRead;
+            _executeOfficeDataSource = executeOfficeDataSource;
+            _standaloneExcelRead = adapter == null ? null : new ExcelReadToolAdapter(adapter);
             _dataSourceTools = (adapterTools ?? new ToolDefinition[0])
                 .Where(IsEligibleDataSourceTool)
                 .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)

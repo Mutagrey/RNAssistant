@@ -37,6 +37,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |
 | Tool Result v1 / strict JSON | `Program.ToolResultWireTests.cs`; projection checks in `Program.ToolRuntimeTests.cs` | `tool result wire:`, `tool result materialization:` |
 | Native ToolRuntime / typed contracts and effect evidence | `Program.ToolRuntimeTests.cs`; native read in `Program.ResourceGatewayTests.cs` | `tool runtime:` |
+| Typed Excel reads / native, HTML and bounds | `Program.ExcelReadTests.cs`; paired Agent regression in `Program.AgentSafetyTests.cs`; host access in `Program.ParserDesktopTests.cs` | `excel read:`, `protocol context: loop tracks only accepted calls`, `tools: html workspace updates session`, `host runtime:` |
 | Host document gate / neutral bound session / direct context and catalog reads | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
 | Excel identity candidate probe (no Office execution) | `Program.ParserDesktopTests.cs`; source-linked `RNAssistant.ExcelIdentityProbe` | `excel identity probe:` |
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
@@ -114,6 +115,18 @@ coverage under `IMaterializedModelProtocol`; no second parser/retry loop is adde
 MockDemo compilation includes the actual controller; the harness's controller
 remains a stub. [Phase 3B2 evidence](../../docs/stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
 separates that compile/source review from the unperformed Windows delivery gate.
+
+## Typed Excel read owner (Phase 7B)
+
+`excel read:` covers exact native registration, Agent/manual routing, bound-session
+owner-STA dispatch, every inspect selector, values/formulas/profile, explicit empty
+cells, host-before-materialization range bounds, domain snapshot validation,
+closed/switched target refusals and the shared HTML bind/refresh route. The fake host
+implements only the two internal compatibility commands; a public read reaching it
+fails, so dual execution is observable. These tests do not compile or execute real
+Excel Interop. Protected sheets, large live workbooks, actual COM errors and
+desktop/VSTO/native composition remain WQ-EXCEL/7D gates. See
+[Phase 7B evidence](../../docs/stabilization/PHASE_7B_EXCEL_READ.md).
 
 ## Typed VBA mutation outcome (Phase 6D)
 

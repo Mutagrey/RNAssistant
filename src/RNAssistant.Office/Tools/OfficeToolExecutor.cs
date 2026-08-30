@@ -24,6 +24,7 @@ namespace RNAssistant.Office.Tools
         private readonly PromptToolExecutor _promptToolExecutor;
         private readonly ResourceGatewayService _resourceGateway;
         private readonly ResourceToolExecutor _resourceExecutor;
+        private readonly ExcelReadToolAdapter _excelReadAdapter;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
         private readonly TaskListToolExecutor _taskListToolExecutor;
         private readonly PlanDocumentToolExecutor _planDocumentToolExecutor;
@@ -62,7 +63,9 @@ namespace RNAssistant.Office.Tools
                 readAttachmentText,
                 BeginLiveOfficeRead);
             _resourceExecutor = new ResourceToolExecutor(_resourceGateway);
-            _htmlArtifactExecutor = new HtmlArtifactToolExecutor(_adapter, _adapterTools, BeginLiveOfficeRead);
+            _excelReadAdapter = new ExcelReadToolAdapter(_adapter);
+            _htmlArtifactExecutor = new HtmlArtifactToolExecutor(
+                _adapter, _adapterTools, BeginLiveOfficeRead, ExecuteOfficeDataSourceUnderCurrentAccess);
             _taskListToolExecutor = new TaskListToolExecutor();
             _planDocumentToolExecutor = new PlanDocumentToolExecutor();
             _userQuestionToolExecutor = new UserQuestionToolExecutor();
@@ -96,7 +99,8 @@ namespace RNAssistant.Office.Tools
         internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolDefinition> catalog,
             AppSettings settings, string mode, bool trace = true)
         {
-            return new NativeToolRuntimeAdapter(_resourceGateway, session, catalog, settings, mode, trace);
+            return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _hostRuntime,
+                session, catalog, settings, mode, trace);
         }
 
         internal List<ToolDefinition> AvailableConversationToolsForSession(
@@ -159,11 +163,15 @@ namespace RNAssistant.Office.Tools
             TraceExecution(command, "tool.execution.started", null, null);
             try
             {
-                var result = _hostRuntime.ExecuteForExpectedDocument(
-                    DocumentTarget(session),
-                    RequiresOfficeDocument(command, context.Tools),
-                    cancellationToken,
-                    () => ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken));
+                // Native handlers own their exact document scope. Wrapping them here
+                // would create a second operation root and defeat synchronous reentry.
+                var result = command != null && NativeToolRuntimeAdapter.Owns(command.ToolId)
+                    ? ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken)
+                    : _hostRuntime.ExecuteForExpectedDocument(
+                        DocumentTarget(session),
+                        RequiresOfficeDocument(command, context.Tools),
+                        cancellationToken,
+                        () => ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken));
                 if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
                 TraceExecution(command, "tool.execution.completed",
                     result == null ? "missing_result" : result.Status, result == null ? null : result.ErrorCode);
@@ -626,6 +634,16 @@ namespace RNAssistant.Office.Tools
             }
         }
 
+        private ToolResult ExecuteOfficeDataSourceUnderCurrentAccess(
+            ToolCommand command,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (command != null && ExcelReadToolIds.Owns(command.ToolId))
+                return _excelReadAdapter.ExecuteLegacy(command, cancellationToken);
+            return _adapter.ExecuteTool(command) ?? ToolResult.Fail("Office data source returned no result.");
+        }
+
         private static ToolResult MutationLockFailure(HostRuntime.MutationLockException exception)
         {
             return ToolResult.Fail(
@@ -741,6 +759,7 @@ namespace RNAssistant.Office.Tools
             return !string.IsNullOrWhiteSpace(id) &&
                 (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
                  _controllerExecutors.ContainsKey(id) ||
+                 ExcelReadToolIds.IsInternal(id) ||
                  _vbaExecutor.IsInternalToolId(id));
         }
 

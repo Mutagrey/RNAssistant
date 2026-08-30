@@ -7,6 +7,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
@@ -98,6 +99,7 @@ namespace RNAssistant.Harness
         public int WordCommentCount { get { return _wordComments.Count; } }
         public int SlideCount { get { return _slides.Count; } }
         public int DocumentSnapshotReadCount { get; private set; }
+        public int ExcelReadMaterializationCount { get; private set; }
 
         public OfficeContext GetOfficeContext()
         {
@@ -274,6 +276,12 @@ namespace RNAssistant.Harness
             return _sheets.TryGetValue(string.IsNullOrWhiteSpace(sheetName) ? "Sheet1" : sheetName, out sheet)
                 ? sheet.Charts.Count
                 : 0;
+        }
+
+        public void SeedExcelSheets(int count)
+        {
+            for (var index = 1; index <= Math.Max(0, count); index++)
+                EnsureSheet("Bound " + index);
         }
 
         public ToolResult ExecuteTool(ToolCommand command)
@@ -593,18 +601,14 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("wrote " + values.Count + " row(s) to " + sheetName, JsonConvert.SerializeObject(new { sheet = sheetName, startAddress = startAddress, values = values }));
             }
 
-            if (string.Equals(command.ToolId, "excel.read_range", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, ExcelReadToolIds.ReadRangeBackend, StringComparison.OrdinalIgnoreCase))
             {
-                var sheetName = Argument(command, "sheet", "Sheet1");
-                var range = Argument(command, "address", "A1:B10");
-                var values = ReadRange(sheetName, range);
-                if (string.Equals(Argument(command, "content", "values"), "profile", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Ok("profiled range " + sheetName + "!" + range, BuildWorkbookSummary());
-                }
-                return string.Equals(Argument(command, "content", "values"), "formulas", StringComparison.OrdinalIgnoreCase)
-                    ? ToolResult.Ok("read formulas " + sheetName + "!" + range, JsonConvert.SerializeObject(new { sheet = sheetName, range = range, formulas = values }))
-                    : ToolResult.Ok("read range " + sheetName + "!" + range, JsonConvert.SerializeObject(new { sheet = sheetName, range = range, values = values }));
+                return ExecuteExcelReadRangeBackend(command);
+            }
+
+            if (string.Equals(command.ToolId, ExcelReadToolIds.ReadRange, StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("Public excel.read_range is owned by ToolRuntime.", null, "excel_public_read_moved", false);
             }
 
             if (string.Equals(command.ToolId, "excel.find_cells", StringComparison.OrdinalIgnoreCase))
@@ -674,38 +678,14 @@ namespace RNAssistant.Harness
                 return ToolResult.Ok("added chart " + created.Title, JsonConvert.SerializeObject(created));
             }
 
-            if (string.Equals(command.ToolId, "excel.inspect", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command.ToolId, ExcelReadToolIds.InspectBackend, StringComparison.OrdinalIgnoreCase))
             {
-                var kind = Argument(command, "kind", "workbook");
-                if (string.Equals(kind, "sheets", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Ok("listed " + _sheets.Count + " sheet(s)", JsonConvert.SerializeObject(_sheets.Keys.ToArray()));
-                }
-                if (string.Equals(kind, "charts", StringComparison.OrdinalIgnoreCase))
-                {
-                    var chartName = Argument(command, "chartName", string.Empty);
-                    if (!string.IsNullOrWhiteSpace(chartName))
-                    {
-                        FakeSheet chartSheet;
-                        FakeChart chart;
-                        return TryFindChart(Argument(command, "sheet", string.Empty), chartName, out chartSheet, out chart)
-                            ? ToolResult.Ok("read chart " + chart.Name, JsonConvert.SerializeObject(new { sheet = chartSheet.Name, name = chart.Name, title = chart.Title, sourceRange = chart.SourceRange, chartType = chart.ChartType }))
-                            : ToolResult.Fail("Chart not found: " + chartName);
-                    }
-                    var charts = _sheets.SelectMany(pair => pair.Value.Charts.Select(c => new { sheet = pair.Key, name = c.Name })).ToArray();
-                    return ToolResult.Ok("listed " + charts.Length + " chart(s)", JsonConvert.SerializeObject(charts));
-                }
-                if (string.Equals(kind, "tables", StringComparison.OrdinalIgnoreCase))
-                {
-                    var tables = _sheets.SelectMany(pair => pair.Value.Tables.Select(t => new { sheet = pair.Key, name = t })).ToArray();
-                    return ToolResult.Ok("listed " + tables.Length + " table(s)", JsonConvert.SerializeObject(tables));
-                }
-                if (string.Equals(kind, "names", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(kind, "shapes", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Ok("listed " + kind, "[]");
-                }
-                return ToolResult.Ok("workbook summary", BuildWorkbookSummary());
+                return ExecuteExcelInspectBackend(command);
+            }
+
+            if (string.Equals(command.ToolId, ExcelReadToolIds.Inspect, StringComparison.OrdinalIgnoreCase))
+            {
+                return ToolResult.Fail("Public excel.inspect is owned by ToolRuntime.", null, "excel_public_read_moved", false);
             }
 
             if (string.Equals(command.ToolId, "excel.delete_chart", StringComparison.OrdinalIgnoreCase))
@@ -763,6 +743,121 @@ namespace RNAssistant.Harness
             }
 
             return null;
+        }
+
+        private ToolResult ExecuteExcelReadRangeBackend(ToolCommand command)
+        {
+            var sheetName = Argument(command, "sheet", "Sheet1");
+            var content = Argument(command, "content", "values").ToLowerInvariant();
+            var range = Argument(command, "address", string.Empty);
+            if (string.IsNullOrWhiteSpace(range)) range = content == "profile" ? "A1:B4" : "A1";
+            var maxCells = ArgumentInt(command, "maxCells", ExcelReadService.MaxReadCells);
+            if (maxCells < 1 || maxCells > ExcelReadService.MaxReadCells)
+                return ToolResult.Fail("invalid range bound", null, "excel_range_bound_invalid", false);
+            var bounds = ParseRange(range);
+            var rows = bounds.End.Row - bounds.Start.Row + 1;
+            var columns = bounds.End.Column - bounds.Start.Column + 1;
+            var cellCount = rows <= 0 || columns <= 0 ? 0 : (long)rows * columns;
+            if (cellCount > maxCells)
+            {
+                return ToolResult.Fail("range is too large", JsonConvert.SerializeObject(new
+                {
+                    address = range, cellCount = cellCount, maxCells = maxCells
+                }), "excel_range_too_large", true);
+            }
+            ExcelReadMaterializationCount++;
+            var matrix = ReadRange(sheetName, range)
+                .Select(row => row.Cast<object>().ToList()).ToList();
+            var snapshot = new ExcelRangeSnapshot
+            {
+                Sheet = sheetName,
+                Address = range,
+                Rows = rows,
+                Columns = columns,
+                CellCount = cellCount
+            };
+            if (content == "values" || content == "profile") snapshot.Values = matrix;
+            if (content == "formulas" || content == "profile") snapshot.Formulas = matrix
+                .Select(row => row.ToList()).ToList();
+            return ToolResult.Ok("fake Excel range backend", JsonConvert.SerializeObject(snapshot));
+        }
+
+        private ToolResult ExecuteExcelInspectBackend(ToolCommand command)
+        {
+            var kind = Argument(command, "kind", "workbook").ToLowerInvariant();
+            var maxItems = ArgumentInt(command, "maxItems", ExcelReadService.MaxInspectItems);
+            if (maxItems < 1 || maxItems > ExcelReadService.MaxInspectItems)
+                return ToolResult.Fail("invalid inspection bound", null, "excel_inspect_bound_invalid", false);
+            var sheetFilter = Argument(command, "sheet", string.Empty);
+            var sheets = _sheets.Values.Where(sheet => string.IsNullOrWhiteSpace(sheetFilter) ||
+                string.Equals(sheet.Name, sheetFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+            var snapshot = new ExcelInspectSnapshot { Kind = kind };
+            if (kind == "workbook" || kind == "sheets")
+            {
+                var items = sheets.Take(maxItems).Select(sheet => new ExcelSheetSnapshot
+                {
+                    Name = sheet.Name,
+                    UsedRange = kind == "workbook" ? "A1:B4" : null
+                }).ToList();
+                snapshot.Sheets = kind == "sheets" ? items : null;
+                snapshot.Workbook = kind == "workbook" ? new ExcelWorkbookSnapshot
+                {
+                    Name = DocumentTitle, FullName = DocumentPathValue, Sheets = items
+                } : null;
+                snapshot.ReturnedCount = items.Count;
+                snapshot.Truncated = sheets.Count > items.Count;
+            }
+            else if (kind == "charts")
+            {
+                var chartName = Argument(command, "chartName", string.Empty);
+                var items = sheets.SelectMany(sheet => sheet.Charts.Select(chart => FakeChartSnapshot(sheet, chart)))
+                    .Take(maxItems + 1).ToList();
+                if (!string.IsNullOrWhiteSpace(chartName))
+                {
+                    snapshot.Chart = items.Take(maxItems).FirstOrDefault(chart =>
+                        string.Equals(chart.Name, chartName, StringComparison.OrdinalIgnoreCase));
+                    if (snapshot.Chart == null)
+                        return ToolResult.Fail("Chart not found: " + chartName, null, "excel_chart_not_found", false);
+                    snapshot.ReturnedCount = 1;
+                }
+                else
+                {
+                    snapshot.Charts = items.Take(maxItems).ToList();
+                    snapshot.ReturnedCount = snapshot.Charts.Count;
+                    snapshot.Truncated = items.Count > maxItems;
+                }
+            }
+            else if (kind == "tables")
+            {
+                var items = sheets.SelectMany(sheet => sheet.Tables.Select(table => new ExcelTableSnapshot
+                {
+                    Sheet = sheet.Name, Name = table, DisplayName = table,
+                    Range = "A1:B4", Rows = 3, Columns = 2
+                })).Take(maxItems + 1).ToList();
+                snapshot.Tables = items.Take(maxItems).ToList();
+                snapshot.ReturnedCount = snapshot.Tables.Count;
+                snapshot.Truncated = items.Count > maxItems;
+            }
+            else if (kind == "names")
+            {
+                snapshot.Names = new List<ExcelNameSnapshot>();
+            }
+            else if (kind == "shapes")
+            {
+                snapshot.Shapes = new List<ExcelShapeSnapshot>();
+            }
+            else return ToolResult.Fail("invalid inspect kind", null, "excel_inspect_kind_invalid", false);
+            return ToolResult.Ok("fake Excel inspection backend", JsonConvert.SerializeObject(snapshot));
+        }
+
+        private static ExcelChartSnapshot FakeChartSnapshot(FakeSheet sheet, FakeChart chart)
+        {
+            return new ExcelChartSnapshot
+            {
+                Sheet = sheet.Name, Name = chart.Name, Title = chart.Title,
+                ChartType = chart.ChartType, Series = new List<ExcelChartSeriesSnapshot>(),
+                SeriesTruncated = false
+            };
         }
 
         private ToolResult ExecuteWordTool(ToolCommand command)
@@ -1385,7 +1480,13 @@ namespace RNAssistant.Harness
 
         private static ToolCommand Clone(ToolCommand command)
         {
-            var clone = new ToolCommand { ToolId = command.ToolId, Description = command.Description, ToolCallId = command.ToolCallId };
+            var clone = new ToolCommand
+            {
+                ToolId = command.ToolId,
+                Description = command.Description,
+                ToolCallId = command.ToolCallId,
+                RuntimeStepId = command.RuntimeStepId
+            };
             foreach (var pair in command.Arguments)
             {
                 clone.Arguments[pair.Key] = pair.Value;

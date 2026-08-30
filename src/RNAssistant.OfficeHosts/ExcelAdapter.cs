@@ -10,13 +10,13 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.OfficeHosts
 {
     public sealed class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
     {
-        private const long MaxReadableCellCount = 100000;
         private const int MaxContextPreviewCells = 2000;
 
         private readonly Excel.Application _application;
@@ -312,10 +312,10 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
-                    case "excel.inspect":
-                        return InspectWorkbook(command);
-                    case "excel.read_range":
-                        return ReadRangeByContent(command);
+                    case ExcelReadToolIds.InspectBackend:
+                        return InspectWorkbookBackend(command);
+                    case ExcelReadToolIds.ReadRangeBackend:
+                        return ReadRangeBackend(command);
                     case "excel.find_cells":
                         return FindCells(command);
                     case "excel.replace_cells":
@@ -372,6 +372,10 @@ namespace RNAssistant.OfficeHosts
                         return ToolResult.Fail("Unsupported Excel tool: " + command.ToolId);
                 }
             }
+            catch (ExcelReadHostException ex)
+            {
+                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+            }
             catch (Exception ex)
             {
                 var isVba = (command == null ? string.Empty : command.ToolId ?? string.Empty)
@@ -380,156 +384,124 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
-        private ToolResult WorkbookSummary()
-        {
-            var workbook = RequireWorkbook();
-            var sheets = new List<object>();
-            foreach (Excel.Worksheet sheet in workbook.Worksheets)
-            {
-                sheets.Add(new { name = sheet.Name, usedRange = sheet.UsedRange.Address[false, false] });
-            }
-
-            return ToolResult.Ok("Workbook summary collected.", JsonConvert.SerializeObject(new
-            {
-                name = workbook.Name,
-                fullName = workbook.FullName,
-                sheets = sheets
-            }));
-        }
-
-        private ToolResult ListSheets()
-        {
-            var workbook = RequireWorkbook();
-            var names = new List<string>();
-            foreach (Excel.Worksheet sheet in workbook.Worksheets)
-            {
-                names.Add(sheet.Name);
-            }
-
-            return ToolResult.Ok("Sheets listed.", JsonConvert.SerializeObject(names));
-        }
-
-        private ToolResult InspectWorkbook(ToolCommand command)
+        private ToolResult InspectWorkbookBackend(ToolCommand command)
         {
             var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty).Trim().ToLowerInvariant();
+            var maxItems = ToolArgumentReader.Int32(command.Arguments, "maxItems", ExcelReadService.MaxInspectItems);
+            var maxSeries = ToolArgumentReader.Int32(command.Arguments, "maxSeries", ExcelReadService.MaxChartSeries);
+            if (maxItems < 1 || maxItems > ExcelReadService.MaxInspectItems ||
+                maxSeries < 1 || maxSeries > ExcelReadService.MaxChartSeries)
+            {
+                return ToolResult.Fail("Excel inspection bounds are invalid.", null, "excel_inspect_bound_invalid", false);
+            }
+
+            ExcelInspectSnapshot snapshot;
             switch (kind)
             {
-                case "workbook": return WorkbookSummary();
-                case "sheets": return ListSheets();
-                case "charts": return string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "chartName", string.Empty))
-                    ? ListCharts(command)
-                    : GetChart(command);
-                case "tables": return ListTables(command);
-                case "names": return ListNames();
-                case "shapes": return ListShapes(command);
-                default: return ToolResult.Fail("kind must be workbook, sheets, charts, tables, names, or shapes.");
+                case "workbook": snapshot = WorkbookSummary(maxItems); break;
+                case "sheets": snapshot = ListSheets(maxItems); break;
+                case "charts":
+                    snapshot = string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "chartName", string.Empty))
+                        ? ListChartsSnapshot(command, maxItems, maxSeries)
+                        : GetChartSnapshot(command, maxItems, maxSeries);
+                    break;
+                case "tables": snapshot = ListTablesSnapshot(command, maxItems); break;
+                case "names": snapshot = ListNamesSnapshot(maxItems); break;
+                case "shapes": snapshot = ListShapesSnapshot(command, maxItems); break;
+                default: return ToolResult.Fail("kind must be workbook, sheets, charts, tables, names, or shapes.", null, "excel_inspect_kind_invalid", false);
             }
+            return ToolResult.Ok("Excel inspection backend snapshot collected.", JsonConvert.SerializeObject(snapshot));
         }
 
-        private ToolResult ReadRangeByContent(ToolCommand command)
+        private ExcelInspectSnapshot WorkbookSummary(int maxItems)
         {
-            var content = ToolArgumentReader.String(command.Arguments, "content", "values");
-            if (string.Equals(content, "formulas", StringComparison.OrdinalIgnoreCase)) return ReadFormulaRange(command);
-            if (string.Equals(content, "profile", StringComparison.OrdinalIgnoreCase)) return ProfileRange(command);
-            return string.Equals(content, "values", StringComparison.OrdinalIgnoreCase)
-                ? ReadRange(command)
-                : ToolResult.Fail("content must be values, formulas, or profile.");
+            var workbook = RequireWorkbook();
+            var sheets = ReadSheets(workbook, maxItems, true);
+            return new ExcelInspectSnapshot
+            {
+                Kind = "workbook",
+                Workbook = new ExcelWorkbookSnapshot { Name = workbook.Name, FullName = workbook.FullName, Sheets = sheets.Items },
+                ReturnedCount = sheets.Items.Count,
+                Truncated = sheets.Truncated
+            };
         }
 
-        private ToolResult ReadRange(ToolCommand command)
+        private ExcelInspectSnapshot ListSheets(int maxItems)
         {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
-            var range = sheet.Range[address];
-            var sizeError = ValidateReadableRange(range, "Range");
-            if (sizeError != null) return sizeError;
-            var rows = RangeToRows(range);
-            return ToolResult.Ok("Range read: " + sheet.Name + "!" + address, JsonConvert.SerializeObject(rows));
+            var sheets = ReadSheets(RequireWorkbook(), maxItems, false);
+            return new ExcelInspectSnapshot
+            {
+                Kind = "sheets", Sheets = sheets.Items,
+                ReturnedCount = sheets.Items.Count, Truncated = sheets.Truncated
+            };
         }
 
-        private ToolResult ReadFormulaRange(ToolCommand command)
+        private static BoundedItems<ExcelSheetSnapshot> ReadSheets(Excel.Workbook workbook, int maxItems, bool includeUsedRange)
         {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var address = ToolArgumentReader.String(command.Arguments, "address", "A1");
-            var range = sheet.Range[address];
-            var sizeError = ValidateReadableRange(range, "Formula range");
-            if (sizeError != null) return sizeError;
-            var rows = RangeToFormulaRows(range);
-            return ToolResult.Ok("Formula range read: " + sheet.Name + "!" + address, JsonConvert.SerializeObject(rows));
+            var result = new List<ExcelSheetSnapshot>();
+            var total = workbook.Worksheets.Count;
+            var take = Math.Min(total, maxItems);
+            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            {
+                if (result.Count >= take) break;
+                result.Add(new ExcelSheetSnapshot
+                {
+                    Name = sheet.Name,
+                    UsedRange = includeUsedRange ? SafeString(delegate { return sheet.UsedRange.Address[false, false]; }) : null
+                });
+            }
+            return new BoundedItems<ExcelSheetSnapshot>(result, total > take);
         }
 
-        private ToolResult ProfileRange(ToolCommand command)
+        private ToolResult ReadRangeBackend(ToolCommand command)
         {
+            var content = ToolArgumentReader.String(command.Arguments, "content", "values").Trim().ToLowerInvariant();
+            var maxCells = ToolArgumentReader.Int32(command.Arguments, "maxCells", ExcelReadService.MaxReadCells);
+            if (maxCells < 1 || maxCells > ExcelReadService.MaxReadCells)
+                return ToolResult.Fail("Excel range ceiling is invalid.", null, "excel_range_bound_invalid", false);
+            if (content != "values" && content != "formulas" && content != "profile")
+                return ToolResult.Fail("content must be values, formulas, or profile.", null, "excel_range_content_invalid", false);
+
             var sheetName = ToolArgumentReader.String(command.Arguments, "sheet", null);
-            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
             var sheet = ResolveSheet(sheetName);
-            var range = string.IsNullOrWhiteSpace(address)
-                ? ResolveSelectionRange(RequireWorkbook()) ?? sheet.UsedRange
-                : sheet.Range[address];
-            var sizeError = ValidateReadableRange(range, "Profile range");
+            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
+            var range = content == "profile" && string.IsNullOrWhiteSpace(address)
+                ? (!string.IsNullOrWhiteSpace(sheetName)
+                    ? sheet.UsedRange
+                    : ResolveSelectionRange(RequireWorkbook()) ?? sheet.UsedRange)
+                : sheet.Range[string.IsNullOrWhiteSpace(address) ? "A1" : address];
+            if (range == null) return ToolResult.Fail("Excel range is unavailable.", null, "excel_range_unavailable", false);
+            if (range.Areas.Count != 1)
+                return ToolResult.Fail("Non-contiguous Excel ranges are not supported; read each area separately.", null, "excel_range_non_contiguous", false);
+            var sizeError = ValidateReadableRange(range, "Excel range", maxCells);
             if (sizeError != null) return sizeError;
-            var rows = RangeToRows(range);
-            var formulaRows = RangeToFormulaRows(range);
-            var rowCount = rows.Count;
-            var columnCount = rows.Count == 0 ? 0 : rows.Max(r => r.Count);
-            var blankCells = 0;
-            var formulaCells = 0;
-            var numericColumns = new List<object>();
-            for (var c = 0; c < columnCount; c++)
+
+            var rows = Convert.ToInt32(range.Rows.Count);
+            var columns = Convert.ToInt32(range.Columns.Count);
+            var rangeSheet = range.Worksheet as Excel.Worksheet;
+            var snapshot = new ExcelRangeSnapshot
             {
-                var numeric = 0;
-                var nonBlank = 0;
-                for (var r = 0; r < rowCount; r++)
-                {
-                    var value = c < rows[r].Count ? rows[r][c] : null;
-                    if (IsBlank(value))
-                    {
-                        blankCells += 1;
-                        continue;
-                    }
+                Sheet = rangeSheet == null ? sheet.Name : rangeSheet.Name,
+                Address = range.Address[false, false],
+                Rows = rows,
+                Columns = columns,
+                CellCount = (long)rows * columns
+            };
+            if (content == "values" || content == "profile") snapshot.Values = RangeToRows(range);
+            if (content == "formulas" || content == "profile") snapshot.Formulas = RangeToFormulaRows(range);
+            return ToolResult.Ok("Excel range backend snapshot collected.", JsonConvert.SerializeObject(snapshot));
+        }
 
-                    nonBlank += 1;
-                    if (IsNumeric(value))
-                    {
-                        numeric += 1;
-                    }
-                }
+        private sealed class BoundedItems<T>
+        {
+            internal List<T> Items { get; private set; }
+            internal bool Truncated { get; private set; }
 
-                if (nonBlank > 0 && numeric == nonBlank)
-                {
-                    numericColumns.Add(new
-                    {
-                        index = c + 1,
-                        header = HeaderAt(rows, c),
-                        nonBlank = nonBlank
-                    });
-                }
+            internal BoundedItems(List<T> items, bool truncated)
+            {
+                Items = items ?? new List<T>();
+                Truncated = truncated;
             }
-
-            for (var r = 0; r < formulaRows.Count; r++)
-            {
-                for (var c = 0; c < formulaRows[r].Count; c++)
-                {
-                    var formula = Convert.ToString(formulaRows[r][c]);
-                    if (!string.IsNullOrWhiteSpace(formula) && formula.StartsWith("=", StringComparison.Ordinal))
-                    {
-                        formulaCells += 1;
-                    }
-                }
-            }
-
-            return ToolResult.Ok("Range profiled: " + sheet.Name + "!" + range.Address[false, false], JsonConvert.SerializeObject(new
-            {
-                sheet = sheet.Name,
-                address = range.Address[false, false],
-                rows = rowCount,
-                columns = columnCount,
-                blankCells = blankCells,
-                formulaCells = formulaCells,
-                headers = rows.Count == 0 ? new string[0] : rows[0].Select(v => Convert.ToString(v)).ToArray(),
-                numericColumns = numericColumns,
-                sample = rows.Take(10).ToArray()
-            }));
         }
 
         private ToolResult FindCells(ToolCommand command)
@@ -709,118 +681,227 @@ namespace RNAssistant.OfficeHosts
         private sealed class ExcelSearchField { public string Name { get; set; } public string Text { get; set; } }
         private sealed class ExcelCellReplacement { public Excel.Range Cell { get; set; } public bool Formula { get; set; } public string Text { get; set; } public int Count { get; set; } }
 
-        private ToolResult ListCharts(ToolCommand command)
+        private ExcelInspectSnapshot ListChartsSnapshot(ToolCommand command, int maxItems, int maxSeries)
         {
-            var workbook = RequireWorkbook();
-            var sheetFilter = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
-            var charts = new List<object>();
-            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            var charts = new List<ExcelChartSnapshot>();
+            var sheets = InspectSheets(ToolArgumentReader.String(command.Arguments, "sheet", string.Empty), maxItems);
+            var truncated = sheets.Truncated;
+            for (var sheetIndex = 0; sheetIndex < sheets.Items.Count; sheetIndex++)
             {
-                if (!string.IsNullOrWhiteSpace(sheetFilter) &&
-                    !string.Equals(sheet.Name, sheetFilter, StringComparison.OrdinalIgnoreCase))
+                var sheet = sheets.Items[sheetIndex];
+                var objects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
+                var remaining = maxItems - charts.Count;
+                var take = Math.Min(objects.Count, remaining);
+                for (var index = 1; index <= take; index++)
                 {
-                    continue;
+                    var detail = ReadChartDetails(sheet, (Excel.ChartObject)objects.Item(index), maxSeries);
+                    charts.Add(detail);
+                    if (detail.SeriesTruncated) truncated = true;
                 }
-
-                var chartObjects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
-                var chartCount = chartObjects.Count;
-                for (var i = 1; i <= chartCount; i++)
+                if (objects.Count > take) { truncated = true; break; }
+                if (charts.Count >= maxItems)
                 {
-                    var chartObject = (Excel.ChartObject)chartObjects.Item(i);
-                    charts.Add(ChartDetails(sheet, chartObject));
+                    if (sheetIndex + 1 < sheets.Items.Count) truncated = true;
+                    break;
                 }
             }
-
-            return ToolResult.Ok("Charts listed: " + charts.Count, JsonConvert.SerializeObject(charts));
-        }
-
-        private ToolResult GetChart(ToolCommand command)
-        {
-            Excel.Worksheet sheet;
-            var chartObject = ResolveChartObject(
-                ToolArgumentReader.String(command.Arguments, "sheet", string.Empty),
-                ToolArgumentReader.String(command.Arguments, "chartName", string.Empty),
-                out sheet);
-            return ToolResult.Ok("Chart read: " + chartObject.Name, JsonConvert.SerializeObject(ChartDetails(sheet, chartObject)));
-        }
-
-        private ToolResult ListTables(ToolCommand command)
-        {
-            var workbook = RequireWorkbook();
-            var sheetFilter = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
-            var tables = new List<object>();
-            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            return new ExcelInspectSnapshot
             {
-                if (!string.IsNullOrWhiteSpace(sheetFilter) &&
-                    !string.Equals(sheet.Name, sheetFilter, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
+                Kind = "charts", Charts = charts, ReturnedCount = charts.Count, Truncated = truncated
+            };
+        }
 
-                foreach (Excel.ListObject table in sheet.ListObjects)
+        private ExcelInspectSnapshot GetChartSnapshot(ToolCommand command, int maxItems, int maxSeries)
+        {
+            var chartName = ToolArgumentReader.String(command.Arguments, "chartName", string.Empty);
+            if (string.IsNullOrWhiteSpace(chartName))
+                throw new ExcelReadHostException("chartName is required.", "excel_chart_name_required", false);
+            var truncated = false;
+            var scanned = 0;
+            var sheets = InspectSheets(ToolArgumentReader.String(command.Arguments, "sheet", string.Empty), maxItems);
+            truncated = sheets.Truncated;
+            foreach (var sheet in sheets.Items)
+            {
+                var objects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
+                for (var index = 1; index <= objects.Count; index++)
                 {
-                    tables.Add(new
+                    if (scanned >= maxItems)
+                        throw new ExcelReadHostException("Chart lookup reached the bounded inspection limit; provide sheet to narrow the lookup.",
+                            "excel_inspect_limit_reached", false);
+                    scanned++;
+                    var chart = (Excel.ChartObject)objects.Item(index);
+                    if (string.Equals(chart.Name, chartName, StringComparison.OrdinalIgnoreCase))
                     {
-                        sheet = sheet.Name,
-                        name = table.Name,
-                        displayName = table.DisplayName,
-                        range = table.Range == null ? string.Empty : table.Range.Address[false, false],
-                        rows = table.ListRows.Count,
-                        columns = table.ListColumns.Count
-                    });
+                        var detail = ReadChartDetails(sheet, chart, maxSeries);
+                        return new ExcelInspectSnapshot
+                        {
+                            Kind = "charts", Chart = detail,
+                            ReturnedCount = 1, Truncated = detail.SeriesTruncated
+                        };
+                    }
                 }
             }
-
-            return ToolResult.Ok("Tables listed: " + tables.Count, JsonConvert.SerializeObject(tables));
+            if (truncated)
+                throw new ExcelReadHostException("Chart lookup reached the bounded worksheet limit; provide sheet to narrow the lookup.",
+                    "excel_inspect_limit_reached", false);
+            throw new ExcelReadHostException("Chart not found: " + chartName, "excel_chart_not_found", false);
         }
 
-        private ToolResult ListNames()
+        private ExcelInspectSnapshot ListTablesSnapshot(ToolCommand command, int maxItems)
+        {
+            var tables = new List<ExcelTableSnapshot>();
+            var sheets = InspectSheets(ToolArgumentReader.String(command.Arguments, "sheet", string.Empty), maxItems);
+            var truncated = sheets.Truncated;
+            for (var sheetIndex = 0; sheetIndex < sheets.Items.Count; sheetIndex++)
+            {
+                var sheet = sheets.Items[sheetIndex];
+                var collection = sheet.ListObjects;
+                var remaining = maxItems - tables.Count;
+                var take = Math.Min(collection.Count, remaining);
+                var added = 0;
+                foreach (Excel.ListObject table in collection)
+                {
+                    if (added >= take) break;
+                    tables.Add(new ExcelTableSnapshot
+                    {
+                        Sheet = sheet.Name, Name = table.Name, DisplayName = table.DisplayName,
+                        Range = table.Range == null ? string.Empty : table.Range.Address[false, false],
+                        Rows = table.ListRows.Count, Columns = table.ListColumns.Count
+                    });
+                    added++;
+                }
+                if (collection.Count > take) { truncated = true; break; }
+                if (tables.Count >= maxItems)
+                {
+                    if (sheetIndex + 1 < sheets.Items.Count) truncated = true;
+                    break;
+                }
+            }
+            return new ExcelInspectSnapshot
+            {
+                Kind = "tables", Tables = tables, ReturnedCount = tables.Count, Truncated = truncated
+            };
+        }
+
+        private ExcelInspectSnapshot ListNamesSnapshot(int maxItems)
         {
             var workbook = RequireWorkbook();
-            var names = new List<object>();
+            var names = new List<ExcelNameSnapshot>();
+            var total = workbook.Names.Count;
+            var take = Math.Min(total, maxItems);
             foreach (Excel.Name name in workbook.Names)
             {
-                names.Add(new
+                if (names.Count >= take) break;
+                Excel.Range target = null;
+                try { target = name.RefersToRange; } catch { }
+                var sheet = target == null ? null : target.Worksheet as Excel.Worksheet;
+                names.Add(new ExcelNameSnapshot
                 {
-                    name = name.Name,
-                    refersTo = name.RefersTo,
-                    value = SafeString(delegate { return Convert.ToString(name.RefersToRange == null ? string.Empty : name.RefersToRange.Value2); })
+                    Name = name.Name,
+                    RefersTo = name.RefersTo,
+                    Sheet = sheet == null ? null : sheet.Name,
+                    Address = target == null ? null : SafeString(delegate { return target.Address[false, false]; })
                 });
             }
-
-            return ToolResult.Ok("Defined names listed: " + names.Count, JsonConvert.SerializeObject(names));
+            return new ExcelInspectSnapshot
+            {
+                Kind = "names", Names = names, ReturnedCount = names.Count, Truncated = total > take
+            };
         }
 
-        private ToolResult ListShapes(ToolCommand command)
+        private ExcelInspectSnapshot ListShapesSnapshot(ToolCommand command, int maxItems)
         {
-            var workbook = RequireWorkbook();
-            var sheetFilter = ToolArgumentReader.String(command.Arguments, "sheet", string.Empty);
-            var shapes = new List<object>();
-            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            var shapes = new List<ExcelShapeSnapshot>();
+            var sheets = InspectSheets(ToolArgumentReader.String(command.Arguments, "sheet", string.Empty), maxItems);
+            var truncated = sheets.Truncated;
+            for (var sheetIndex = 0; sheetIndex < sheets.Items.Count; sheetIndex++)
             {
-                if (!string.IsNullOrWhiteSpace(sheetFilter) &&
-                    !string.Equals(sheet.Name, sheetFilter, StringComparison.OrdinalIgnoreCase))
+                var sheet = sheets.Items[sheetIndex];
+                var collection = sheet.Shapes;
+                var remaining = maxItems - shapes.Count;
+                var take = Math.Min(collection.Count, remaining);
+                var added = 0;
+                foreach (Excel.Shape shape in collection)
                 {
-                    continue;
-                }
-
-                foreach (Excel.Shape shape in sheet.Shapes)
-                {
-                    shapes.Add(new
+                    if (added >= take) break;
+                    shapes.Add(new ExcelShapeSnapshot
                     {
-                        sheet = sheet.Name,
-                        name = shape.Name,
-                        type = shape.Type.ToString(),
-                        left = shape.Left,
-                        top = shape.Top,
-                        width = shape.Width,
-                        height = shape.Height,
-                        alternativeText = SafeString(delegate { return shape.AlternativeText; })
+                        Sheet = sheet.Name, Name = shape.Name, Type = shape.Type.ToString(),
+                        Left = shape.Left, Top = shape.Top, Width = shape.Width, Height = shape.Height,
+                        AlternativeText = SafeString(delegate { return shape.AlternativeText; })
                     });
+                    added++;
+                }
+                if (collection.Count > take) { truncated = true; break; }
+                if (shapes.Count >= maxItems)
+                {
+                    if (sheetIndex + 1 < sheets.Items.Count) truncated = true;
+                    break;
                 }
             }
+            return new ExcelInspectSnapshot
+            {
+                Kind = "shapes", Shapes = shapes, ReturnedCount = shapes.Count, Truncated = truncated
+            };
+        }
 
-            return ToolResult.Ok("Shapes listed: " + shapes.Count, JsonConvert.SerializeObject(shapes));
+        private BoundedItems<Excel.Worksheet> InspectSheets(string sheetFilter, int maxItems)
+        {
+            if (!string.IsNullOrWhiteSpace(sheetFilter))
+            {
+                return new BoundedItems<Excel.Worksheet>(new List<Excel.Worksheet> { ResolveSheet(sheetFilter) }, false);
+            }
+            var workbook = RequireWorkbook();
+            var total = workbook.Worksheets.Count;
+            var take = Math.Min(total, maxItems);
+            var result = new List<Excel.Worksheet>();
+            foreach (Excel.Worksheet sheet in workbook.Worksheets)
+            {
+                if (result.Count >= take) break;
+                result.Add(sheet);
+            }
+            return new BoundedItems<Excel.Worksheet>(result, total > take);
+        }
+
+        private static ExcelChartSnapshot ReadChartDetails(Excel.Worksheet sheet, Excel.ChartObject chartObject, int maxSeries)
+        {
+            var chart = chartObject.Chart;
+            var series = new List<ExcelChartSeriesSnapshot>();
+            var seriesTruncated = false;
+            try
+            {
+                var collection = (Excel.SeriesCollection)chart.SeriesCollection(Type.Missing);
+                var take = Math.Min(collection.Count, maxSeries);
+                seriesTruncated = collection.Count > take;
+                for (var index = 1; index <= take; index++)
+                {
+                    try
+                    {
+                        var item = (Excel.Series)collection.Item(index);
+                        series.Add(new ExcelChartSeriesSnapshot
+                        {
+                            Name = Convert.ToString(item.Name), Formula = Convert.ToString(item.Formula)
+                        });
+                    }
+                    catch { seriesTruncated = true; }
+                }
+            }
+            catch { seriesTruncated = true; }
+            return new ExcelChartSnapshot
+            {
+                Sheet = sheet == null ? string.Empty : sheet.Name,
+                Name = chartObject.Name,
+                Title = ChartTitle(chart),
+                ChartType = chart.ChartType.ToString(),
+                XAxisTitle = AxisTitle(chart, Excel.XlAxisType.xlCategory),
+                YAxisTitle = AxisTitle(chart, Excel.XlAxisType.xlValue),
+                Series = series,
+                SeriesTruncated = seriesTruncated,
+                Left = chartObject.Left,
+                Top = chartObject.Top,
+                Width = chartObject.Width,
+                Height = chartObject.Height
+            };
         }
 
         private ToolResult CreateChatChart(ToolCommand command)
@@ -1690,19 +1771,19 @@ namespace RNAssistant.OfficeHosts
             return rows;
         }
 
-        private static ToolResult ValidateReadableRange(Excel.Range range, string operation)
+        private static ToolResult ValidateReadableRange(Excel.Range range, string operation, int maxCells)
         {
             var cellCount = RangeCellCount(range);
-            if (cellCount <= MaxReadableCellCount) return null;
+            if (cellCount <= maxCells) return null;
             var address = range == null ? string.Empty : range.Address[false, false];
             return ToolResult.Fail(
                 (operation ?? "Excel read") + " is too large: " + cellCount +
-                " cells. Limit is " + MaxReadableCellCount + "; split the request into smaller ranges.",
+                " cells. Limit is " + maxCells + "; split the request into smaller ranges.",
                 JsonConvert.SerializeObject(new
                 {
                     address = address,
                     cellCount = cellCount,
-                    maxCells = MaxReadableCellCount
+                    maxCells = maxCells
                 }),
                 "excel_range_too_large",
                 true);
@@ -1732,27 +1813,17 @@ namespace RNAssistant.OfficeHosts
             return start == null ? range : start.Resize[rows, columns];
         }
 
-        private static string HeaderAt(IReadOnlyList<List<object>> rows, int columnIndex)
+        private sealed class ExcelReadHostException : InvalidOperationException
         {
-            return rows != null && rows.Count > 0 && columnIndex >= 0 && columnIndex < rows[0].Count
-                ? Convert.ToString(rows[0][columnIndex])
-                : string.Empty;
-        }
+            internal string ErrorCode { get; private set; }
+            internal bool Retryable { get; private set; }
 
-        private static bool IsBlank(object value)
-        {
-            return value == null || string.IsNullOrWhiteSpace(Convert.ToString(value));
-        }
-
-        private static bool IsNumeric(object value)
-        {
-            if (value == null)
+            internal ExcelReadHostException(string message, string errorCode, bool retryable)
+                : base(message)
             {
-                return false;
+                ErrorCode = errorCode;
+                Retryable = retryable;
             }
-
-            return value is byte || value is short || value is int || value is long ||
-                value is float || value is double || value is decimal;
         }
 
         private Excel.ChartObject ResolveChartObject(string sheetName, string chartName, out Excel.Worksheet resolvedSheet)

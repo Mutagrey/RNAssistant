@@ -90,6 +90,12 @@
     <Compile Include="Runtime\HostRuntime.cs" />
     <Compile Include="Runtime\DocumentAccessGate.cs" />
     <Compile Include="Tools\ResourceListToolHandler.cs" />
+    <Compile Include="Domains\Excel\ExcelReadContracts.cs" />
+    <Compile Include="Domains\Excel\ExcelReadService.cs" />
+    <Compile Include="Tools\ExcelReadCompatibilityBackend.cs" />
+    <Compile Include="Tools\ExcelReadToolAdapter.cs" />
+    <Compile Include="Tools\ExcelReadToolHandler.cs" />
+    <Compile Include="Tools\ExcelReadToolIds.cs" />
     <Compile Include="Runtime\DispatchedOfficeApplicationAdapter.cs" />
     <Compile Include="Agent\AgentTranscript.cs" />
     <Compile Include="Runtime\DocumentIdentity.cs" />

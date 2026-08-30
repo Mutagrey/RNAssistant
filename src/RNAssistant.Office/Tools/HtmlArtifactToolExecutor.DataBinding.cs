@@ -349,6 +349,13 @@ namespace RNAssistant.Office.Tools
                 using (_beginLiveOfficeRead == null ? null : _beginLiveOfficeRead(session))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    if (_executeOfficeDataSource != null)
+                        return _executeOfficeDataSource(sourceCommand, cancellationToken) ??
+                            ToolResult.Fail("Office data source returned no result.");
+                    if (sourceCommand != null && ExcelReadToolIds.Owns(sourceCommand.ToolId))
+                        return _standaloneExcelRead == null
+                            ? ToolResult.Fail("Excel read adapter is unavailable.", null, "excel_read_backend_missing", false)
+                            : _standaloneExcelRead.ExecuteLegacy(sourceCommand, cancellationToken);
                     return _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
                 }
             }
