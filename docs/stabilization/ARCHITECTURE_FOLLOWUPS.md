@@ -3,8 +3,8 @@
 Дата фиксации: 2026-08-30.
 
 Статус: backlog, не описание реализованной архитектуры и не разрешение расширять
-текущую фазу. Phase 9D5 завершён host-neutral; обязательный ближайший шаг — отдельный
-Phase 10 из `PROGRESS.md`.
+текущую фазу. Phase 10A boundary audit завершён host-neutral; обязательный ближайший
+шаг — exact host-ownership move group Phase 10B1 из `PROGRESS.md`.
 Изменения ниже выполняются только отдельными подэтапами после указанного gate. Если
 предложение становится обязательным, сначала обновляются master plan/ADR и
 `MIGRATION_MAP.md` с owner, consumers и removal gate.
@@ -32,8 +32,9 @@ store, model wire или UI-owned effect classification.
    существующий `ChatStore` без второго store/dual-write.
 2. Phase 9D5 завершён host-neutral: один immutable `RunViewState` переключил
    bridge/JS projection; flat/model-status UI path удалён.
-3. Следующий отдельный Phase 10: physical cleanup и architecture checks
-   обязательного core scope.
+3. Phase 10A подтвердил шесть mandatory dependency directions, запретил массовое
+   folder→namespace переименование и выделил exact move/removal groups. Следующий
+   отдельный 10B1 переносит host identity helper без изменения semantics.
 4. При доступной Windows: WQ0 -> 5B2 production `DocumentSession` -> 7D bound Excel
    backend; неизвестную COM identity semantics не угадывать.
 5. Milestone WQ и Phase 12 stable core.
@@ -171,7 +172,7 @@ storage, runtime, model, catalog, session и diagnostics services. Это усл
 
 ## E. Дополнительные architecture checks
 
-Phase 10 реализует только checks, соответствующие уже переключённым boundaries.
+Phase 10A реализовал checks, соответствующие уже переключённым boundaries.
 Остальные активируются вместе с removal gate соответствующего follow-up:
 
 - concrete `ChatStore` доступен только Storage, canonical adapters и composition root;
@@ -183,6 +184,12 @@ Phase 10 реализует только checks, соответствующие 
 - bridge operation ids после введения catalog имеют C#/JS parity;
 - новые `.cs` включены в old-style `.csproj`, а namespace dependency direction
   соответствует `docs/architecture.md`.
+
+Текущий `architecture: mandatory dependency direction` проверяет Core.Agent → no
+Office/UI, ModelProtocol → no tool execution, VBA → no UI, resources → no
+AgentKernel, OfficeHosts → no WebView types и UI/bridge → no domain executors.
+Assembly/folder ownership host-specific helpers закрывается отдельными `git mv`
+groups Phase 10B, а не расширением этого source-token check.
 
 Architecture tests должны проверять forbidden dependencies/symbols и production
 source inclusion, а не фиксировать случайные размеры файлов или текущее число

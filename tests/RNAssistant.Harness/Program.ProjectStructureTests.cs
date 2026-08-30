@@ -230,6 +230,98 @@ namespace RNAssistant.Harness
                 "the replaced flat projection type is physically removed");
         }
 
+        private static void MandatoryDependencyDirection()
+        {
+            var root = FindHarnessRepositoryRoot();
+            var coreRoot = Path.Combine(root, "src", "RNAssistant.Core");
+            var officeRoot = Path.Combine(root, "src", "RNAssistant.Office");
+            var hostsRoot = Path.Combine(root, "src", "RNAssistant.OfficeHosts");
+
+            AssertNoForbiddenDependencies(root,
+                SourceFiles(Path.Combine(coreRoot, "Agent")),
+                new[] { "RNAssistant.Office", "Microsoft.Office", "Microsoft.Web.WebView2", "System.Windows.Forms" },
+                "Core.Agent must stay independent of Office and UI");
+
+            AssertNoForbiddenDependencies(root,
+                SourceFiles(Path.Combine(coreRoot, "ModelProtocol")),
+                new[]
+                {
+                    "RNAssistant.Office", "IToolRuntime", "IToolHandler", "ToolExecutionContext",
+                    "ToolExecutionRecord", "ToolExecutionOutcome"
+                },
+                "ModelProtocol may use typed tool wire/schema contracts but not tool execution");
+
+            AssertNoForbiddenDependencies(root,
+                SourceFiles(Path.Combine(officeRoot, "Vba")),
+                new[]
+                {
+                    "RNAssistant.Office.WebView", "AssistantWebBridge", "AssistantPaneControl",
+                    "Microsoft.Web.WebView2", "System.Windows.Forms"
+                },
+                "VBA domain code must stay independent of UI");
+
+            var resourceFiles = SourceFiles(coreRoot)
+                .Concat(SourceFiles(officeRoot))
+                .Where(path => Path.GetFileName(path).IndexOf("Resource", StringComparison.OrdinalIgnoreCase) >= 0);
+            AssertNoForbiddenDependencies(root,
+                resourceFiles,
+                new[] { "RNAssistant.Core.Agent", "AgentKernel", "ConversationKernelAdapter" },
+                "resource data-plane owners must not depend on AgentKernel orchestration");
+
+            AssertNoForbiddenDependencies(root,
+                SourceFiles(hostsRoot),
+                new[]
+                {
+                    "RNAssistant.Office.WebView", "AssistantWebBridge", "AssistantPaneControl",
+                    "Microsoft.Web.WebView2"
+                },
+                "OfficeHosts may compose the application facade but must not depend on WebView types");
+
+            AssertNoForbiddenDependencies(root,
+                SourceFiles(officeRoot).Where(path =>
+                    !Path.GetFileName(path).StartsWith("VbaProjectSupport", StringComparison.Ordinal) &&
+                    !string.Equals(Path.GetFileName(path), "DocumentIdentity.cs", StringComparison.Ordinal)),
+                new[] { "VbaProjectSupport.", "DocumentIdentity." },
+                "transitional host-specific helpers must not gain Office consumers before their Phase 10B move");
+
+            var uiFiles = SourceFiles(Path.Combine(officeRoot, "WebView"))
+                .Concat(Directory.GetFiles(Path.Combine(root, "web"), "*.js", SearchOption.AllDirectories))
+                .Concat(Directory.GetFiles(Path.Combine(root, "web"), "*.html", SearchOption.AllDirectories));
+            AssertNoForbiddenDependencies(root,
+                uiFiles,
+                new[]
+                {
+                    "RNAssistant.Office.Tools", "RNAssistant.Office.Domains", "RNAssistant.Office.Vba",
+                    "OfficeToolExecutor", "VbaToolExecutor", "ExcelReadService", "ExcelWriteService", "ToolRuntime"
+                },
+                "UI and bridge code must use application contracts instead of domain executors");
+        }
+
+        private static IEnumerable<string> SourceFiles(string directory)
+        {
+            return Directory.GetFiles(directory, "*.cs", SearchOption.AllDirectories)
+                .Where(path => !IsGeneratedProjectPath(path));
+        }
+
+        private static void AssertNoForbiddenDependencies(
+            string root,
+            IEnumerable<string> paths,
+            IEnumerable<string> forbiddenTokens,
+            string boundary)
+        {
+            var offenders = new List<string>();
+            foreach (var path in (paths ?? new string[0]).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var source = File.ReadAllText(path);
+                foreach (var token in forbiddenTokens ?? new string[0])
+                {
+                    if (source.IndexOf(token, StringComparison.Ordinal) < 0) continue;
+                    offenders.Add(Path.GetRelativePath(root, path).Replace('\\', '/') + ": " + token);
+                }
+            }
+            AssertEqual(0, offenders.Count, boundary + ": " + string.Join(", ", offenders.ToArray()));
+        }
+
         private static bool IsGeneratedProjectPath(string path)
         {
             var normalized = Path.GetFullPath(path)
