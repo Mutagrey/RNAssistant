@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
-using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Tools
 {
@@ -14,13 +13,13 @@ namespace RNAssistant.Office.Tools
 
         internal static IEnumerable<ToolDefinition> GetControllerTools()
         {
-            yield return LegacyToolDefinitionAdapter.ProjectRead(
+            yield return ControllerToolDefinition.CreateReadProjection(
                 ResourceListToolHandler.Descriptor, ResourceListToolHandler.Policy, "resources_list");
-            yield return LegacyToolDefinitionAdapter.ProjectRead(
+            yield return ControllerToolDefinition.CreateReadProjection(
                 ResourceResolveToolHandler.Descriptor, ResourceResolveToolHandler.Policy, "resources_resolve");
-            yield return LegacyToolDefinitionAdapter.ProjectRead(
+            yield return ControllerToolDefinition.CreateReadProjection(
                 ResourceSearchToolHandler.Descriptor, ResourceSearchToolHandler.Policy, "resources_search");
-            yield return LegacyToolDefinitionAdapter.ProjectRead(
+            yield return ControllerToolDefinition.CreateReadProjection(
                 ResourceReadToolHandler.Descriptor, ResourceReadToolHandler.Policy, "resources_read");
         }
     }

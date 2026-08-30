@@ -1,3 +1,4 @@
+using System;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
@@ -5,6 +6,23 @@ namespace RNAssistant.Office.Tools
 {
     internal static class ControllerToolDefinition
     {
+        public static ToolDefinition CreateReadProjection(
+            ToolDescriptor descriptor,
+            ToolPolicy policy,
+            string name = null)
+        {
+            if (policy == null || policy.Effect != ToolEffect.Read)
+                throw new ArgumentException("This compatibility projection only supports read contracts.", nameof(policy));
+            return new ToolDefinition
+            {
+                Id = descriptor.Id, Host = "Common", Name = name ?? descriptor.Id,
+                Description = descriptor.Description, ArgumentSchemaJson = descriptor.ParametersJson,
+                BuiltIn = true, Enabled = true, Scope = "session", AgentCanRun = true,
+                RequiresConfirmation = policy.RequiresConfirmation, RiskLevel = policy.RiskLevel,
+                RuntimePolicy = policy
+            };
+        }
+
         public static ToolDefinition Create(
             string id,
             string host,

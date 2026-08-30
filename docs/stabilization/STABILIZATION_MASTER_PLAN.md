@@ -2168,9 +2168,9 @@ bounded rendering и реальные WebView/clipboard проверки на Wi
 - [x] 10B1: `git mv` host identity helper из Office Runtime в OfficeHosts с namespace/project/harness updates; algorithms/identity semantics не менять. [Evidence](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md).
 - [x] 10B2: отдельно `git mv` `VbaProjectSupport*.cs` в OfficeHosts/Vba, обновить namespace/project/harness/host consumers; domain services, guards, journal и backend logic не менять. Скрытая assembly-access dependency оформлена как explicit read-only Office.Vba contract без friend assembly/duplicate parser. [Evidence](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md).
 - [x] По явному решению пользователя отдельно добавить Windows local-build entrypoint для WQ preparation: default `Release` x64+x86 Native portable через declarative MSBuild, без PowerShell policy override, install/sign/register/network/process-kill; старый PowerShell native publisher удалить. Это tooling-only изменение, не candidate qualification и не product feature.
-- [ ] 10C: вынести application façade и удалить live resource-only projection двумя отдельными commits.
+- [x] 10C: вынести application façade и удалить live resource-only projection двумя отдельными commits.
   - [x] 10C1: `git mv` `AssistantRuntime.cs` из document/tool Runtime folder в root Office façade; namespace/lifecycle/consumers не менять. [Evidence](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md).
-  - [ ] 10C2: перенести четыре resource read projections из `LegacyToolDefinitionAdapter.ProjectRead` в действующий `ControllerToolDefinition`, сохранить exact descriptor/policy/schema и удалить только заменённый method; execution/ToolPack/model wire не менять.
+  - [x] 10C2: перенести четыре resource read projections из `LegacyToolDefinitionAdapter.ProjectRead` в действующий `ControllerToolDefinition`, сохранить exact descriptor/policy/schema и удалить только заменённый method; execution/ToolPack/model wire не менять. [Evidence](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md).
 - [ ] 10D: финально сверить canonical docs/AGENTS, migration statuses, production project includes и architecture suite; не закрывать Windows gates локальными checks.
 
 ### Definition of Done

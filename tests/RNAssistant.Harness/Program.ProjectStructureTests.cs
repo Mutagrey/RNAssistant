@@ -270,8 +270,12 @@ namespace RNAssistant.Harness
                 .Where(path => Path.GetFileName(path).IndexOf("Resource", StringComparison.OrdinalIgnoreCase) >= 0);
             AssertNoForbiddenDependencies(root,
                 resourceFiles,
-                new[] { "RNAssistant.Core.Agent", "AgentKernel", "ConversationKernelAdapter" },
-                "resource data-plane owners must not depend on AgentKernel orchestration");
+                new[]
+                {
+                    "RNAssistant.Core.Agent", "AgentKernel", "ConversationKernelAdapter",
+                    "LegacyToolDefinitionAdapter"
+                },
+                "resource data-plane/catalog owners must not depend on AgentKernel or legacy execution adapters");
 
             AssertNoForbiddenDependencies(root,
                 SourceFiles(hostsRoot),

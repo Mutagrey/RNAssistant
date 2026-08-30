@@ -1,13 +1,24 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 10 in progress; 10A–10C1 done host-neutral
-Current task: по явному решению пользователя добавлен отдельный tooling-only Windows local-build entrypoint перед WQ: default `Release` Native portable x64+x86 через declarative MSBuild. Runtime/COM/VSTO, product version и qualification status не менялись.
+Current phase: Phase 10 in progress; 10A–10C2 done host-neutral
+Current task: Phase 10C2 перенёс четыре controller-facing resource read projections из legacy execution adapter в `ControllerToolDefinition`, сохранив exact handler descriptor/schema и тот же экземпляр source-owned `ToolPolicy`. `LegacyToolDefinitionAdapter.ProjectRead` удалён; execution, ToolPack, model wire и остальные legacy adapter methods не менялись.
 Execution mode: согласован §16.1 deferred Windows qualification — dependency-safe mandatory slices продолжаются с host-neutral DoD; реальные COM/WebView/live-provider gates накапливаются до Milestone WQ. 5B2 production identity/factory switch по-прежнему ждёт отдельный WQ0 identity probe.
 
-Next step: отдельный Phase 10C2 — только четыре calls в `ResourceToolCatalog.GetControllerTools`: перенести exact descriptor/policy/schema projection из `LegacyToolDefinitionAdapter.ProjectRead` в действующий `ControllerToolDefinition`, затем удалить только `ProjectRead`. Native resource handlers, ToolPack authority/revision, execution bindings, mode policy, model wire и прочие legacy adapter methods не менять.
-Required context: [10A audit](PHASE_10A_BOUNDARY_AUDIT.md), [10C1 evidence](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [master Phase 10](STABILIZATION_MASTER_PLAN.md#phase-10--physical-cleanup-и-architecture-tests), [architecture](../architecture.md), [resource fabric](../resource-fabric.md), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md), repository `AGENTS.md`.
-Open gates / remaining legacy: application façade move done host-neutral; resource-only `ProjectRead` remains the last 10C cleanup. R49 fixed host-neutral; production OfficeHosts/VSTO compile, WQ0 и real Windows/VBE remain open. Phase 9/R45–R48 fixed host-neutral, но Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification remains open. R37 read-only historical diagnostics adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain for listed domain/authoring consumers. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/clipboard acceptance открыт. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 10D — финально сверить canonical docs и `AGENTS.md`, migration statuses, production old-style project includes и существующую architecture suite. Runtime, optional Phase 11, 5B2/7D и Windows gates не менять и не считать закрытыми локальными checks.
+Required context: [10A audit](PHASE_10A_BOUNDARY_AUDIT.md), [10C2 evidence](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [master Phase 10](STABILIZATION_MASTER_PLAN.md#phase-10--physical-cleanup-и-architecture-tests), [architecture](../architecture.md), [migration map](MIGRATION_MAP.md), [harness filters](../../tests/RNAssistant.Harness/README.md), repository `AGENTS.md`.
+Open gates / remaining legacy: 10C physical cleanup done host-neutral; только 10D остаётся в обязательном host-neutral Phase 10. R49 fixed host-neutral; production OfficeHosts/VSTO compile, WQ0 и real Windows/VBE remain open. Phase 9/R45–R48 fixed host-neutral, но Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification remains open. R37 read-only historical diagnostics adapter remains until Windows qualification and explicit retained-data reset/removal. Phase 8 is done host-neutral, but WQ-PACK remains open for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Legacy `ToolDefinition` execution/catalog adapters remain only for listed domain/authoring consumers; resource catalog no longer depends on them. Phase 5B2/R04 and therefore 7D; full Phase 6 Windows/VBE gate including R41/R42; WQ-EXCEL for 7B/7C also remain open. Controller/WebView/COM lifetime, real VBE/read-back/package/rename/Excel regression, R28/R29 live-provider и весь Windows x64 + Office + VS 2022 gate открыты. R32 UI Windows/clipboard acceptance открыт. Product 16.1.0-dev, no release/tag.
+
+Phase 10C2 resource projection cleanup (2026-08-31): four controller-facing
+`common.resources_*` definitions now use `ControllerToolDefinition` and preserve the
+exact native handler descriptor, JSON schema and source-owned `ToolPolicy` instance.
+The only removed member is `LegacyToolDefinitionAdapter.ProjectRead`; its active
+`Adapt`/`PolicyFor`/`BindingFor` consumers remain unchanged. A boundary check rejects
+future resource-file dependencies on the legacy execution adapter. Native execution,
+bindings, callable ToolPack, model wire and mode policy are unchanged. Focused resource
+projection/manual+model 1/1, hard-cutover resource 1/1 and architecture 4/4 pass;
+Windows WQ-PACK remains open. Next atomic step is only final audit 10D.
+[Evidence](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md).
 
 Phase 10 local Windows build entrypoint (2026-08-31): root `build-local.cmd`
 находит штатный VS 2022 MSBuild через `vswhere`; без аргументов последовательно
@@ -20,7 +31,7 @@ termination и без удаления destination. Три заменённых 
 policy. x86 output явно предупреждает об отсутствии x64-only PDF native runtime.
 На этой машине выполнены только XML/static/diff/version checks; Windows MSBuild/C++/CLI,
 Office PIA, portable contents и запуск не проверялись и остаются Windows gate.
-Следующий шаг не изменён: 10C2 resource projection cleanup.
+Следующий шаг был позднее выполнен в 10C2 resource projection cleanup.
 
 Phase 10C1 application façade move (2026-08-31): byte-identical
 `AssistantRuntime.cs` moved with `git mv` from `Office/Runtime` to root `Office`;
@@ -28,8 +39,8 @@ the production old-style include switched and a physical-owner assertion prevent
 return to document/tool Runtime. Namespace, controller/pane lifecycle, disposal,
 factories and all consumers are unchanged. Harness intentionally uses a controller
 stub and had no façade source-link to rewrite. Architecture 4/4 and production source
-inclusion 1/1 pass; real Office/VSTO/WebView lifetime remains a Windows gate. Next
-atomic change is only the resource projection half 10C2.
+inclusion 1/1 pass; real Office/VSTO/WebView lifetime remains a Windows gate. The
+resource projection half was later completed in 10C2.
 [Evidence](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md).
 
 Phase 10B2 VBA host backend move (2026-08-31): both `VbaProjectSupport` partials
@@ -62,8 +73,8 @@ Phase 10A physical/dependency audit (2026-08-31): inventory 107 Core, 176 Office
 R49 scope на момент аудита — `DocumentIdentity.cs` и два `VbaProjectSupport`
 partials без Office service/tool/domain consumers; первый файл позднее перенесён в
 10B1, а оба partials — в 10B2. `AssistantRuntime` и resource-only
-`ProjectRead` зафиксированы отдельными 10C cleanup invariants; projection сейчас
-live и не удалена.
+`ProjectRead` зафиксированы отдельными 10C cleanup invariants; projection позднее
+перенесена, а method удалён в 10C2.
 
 Новый `architecture: mandatory dependency direction` проверяет Core.Agent,
 ModelProtocol, VBA, resources, OfficeHosts и UI/bridge; вместе с существующими
@@ -90,7 +101,8 @@ reconstruction и 8D resource data-plane cutover завершены host-neutral
 9D2 same-process fail-stop reload/reconciliation, 9D3 typed event
 classification/`IEventStore`, 9D4 minimal `IConversationStore` и 9D5 immutable
 `RunViewState` завершены host-neutral; 10A audit, 10B1/10B2 host moves и 10C1 façade
-move также завершены, следующий dependency-safe этап — resource projection 10C2.
+move и resource projection 10C2 также завершены; следующий dependency-safe этап —
+финальная сверка 10D.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
 
@@ -564,7 +576,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 7 | 7A–7C done host-neutral; 7D pending WQ0/5B2 | [7A](PHASE_7A_EXCEL_SCOPE.md); [7B](PHASE_7B_EXCEL_READ.md); [7C](PHASE_7C_EXCEL_WRITE.md) | 7C: 15 distinct focused cases; MockDemo compile | not performed | Typed reads and verified write_range switched; WQ-EXCEL and bound production backend open |
 | 8 | 8A–8D done host-neutral; WQ-PACK pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md), [8C](PHASE_8C_TOOL_PACK_EVENTS.md), [8D](PHASE_8D_RESOURCE_DATA_PLANE.md) | 8D: 74 distinct targeted pass; MockDemo compile | not performed | Execution/callable authority, durable reconstruction and four native resource handlers switched; WQ-PACK open |
 | 9 | 9A–9D5 done host-neutral; Windows acceptance pending | through `9bbf088` | 9D5: 99 targeted harness, web 70/70, MockDemo compile | not performed | Diagnostics/viewer, typed persistence ports and immutable RunViewState switched; R37/WQ-UI open |
-| 10 | in progress: 10A–10C1 done host-neutral | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md) | 10C1: architecture 4/4; source inclusion 1/1 | not performed | 10C2 resource projection + 10D remain; R49 fixed host-neutral |
+| 10 | in progress: 10A–10C2 done host-neutral | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md) | 10C2: resource projection 1/1; hard cutover 1/1; architecture 4/4 | not performed | only 10D final audit remains; R49 fixed host-neutral |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
@@ -1214,7 +1226,7 @@ harness не запускались. Следующий отдельный ша�
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
 | Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | 4B wire switched; handler migrations 6–7 / optional 11 remove mapping; R23 remains |
-| LegacyToolDefinitionAdapter | ToolRuntime | Current catalog/schema/authoring, legacy execution, source policy projection | Phase 8 typed catalog/ToolPack; domain switches 6–7 / optional authoring 11; central name list removed in 4A |
+| LegacyToolDefinitionAdapter | ToolRuntime | Current legacy catalog/schema/authoring and execution consumers listed in `MIGRATION_MAP.md`; resource projection removed | Domain switches 6–7 / optional authoring 11; `ProjectRead` removed in 10C2, no resource dependency |
 | LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Handler switches 6–7 / optional 11; no old-history reader |
 | ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 typed UI projection; manual/domain consumers 6–7 / optional 11 |
 | Unbound host identity/access | HostRuntime / host factories | Production adapters, including gated context/catalog reads | 5B2 bound Excel/common lifetime identity + Windows gates; neutral gate не удаляет этот legacy |

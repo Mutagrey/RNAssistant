@@ -57,19 +57,5 @@ namespace RNAssistant.Office.Runtime
                 new ToolPackageMetadata(definition.PackageVersion, definition.StoragePath, definition.Code,
                     JsonConvert.SerializeObject(definition.Components ?? new List<VbaToolComponent>()), definition.InstallationStatus));
         }
-
-        internal static ToolDefinition ProjectRead(ToolDescriptor descriptor, ToolPolicy policy, string name = null)
-        {
-            if (policy == null || policy.Effect != ToolEffect.Read)
-                throw new ArgumentException("This compatibility projection only supports read contracts.", nameof(policy));
-            return new ToolDefinition
-            {
-                Id = descriptor.Id, Host = "Common", Name = name ?? descriptor.Id,
-                Description = descriptor.Description, ArgumentSchemaJson = descriptor.ParametersJson,
-                BuiltIn = true, Enabled = true, Scope = "session", AgentCanRun = true,
-                RequiresConfirmation = policy.RequiresConfirmation, RiskLevel = policy.RiskLevel,
-                RuntimePolicy = policy
-            };
-        }
     }
 }

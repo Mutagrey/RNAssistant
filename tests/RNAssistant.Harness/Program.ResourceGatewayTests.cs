@@ -27,6 +27,14 @@ namespace RNAssistant.Harness
                 session.Mode = ChatModes.Chat;
                 session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "First", InlineText = "body" });
                 var tools = executor.GetControllerTools().ToArray();
+                AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.ListToolId),
+                    ResourceListToolHandler.Descriptor, ResourceListToolHandler.Policy, "resources_list");
+                AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.ResolveToolId),
+                    ResourceResolveToolHandler.Descriptor, ResourceResolveToolHandler.Policy, "resources_resolve");
+                AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.SearchToolId),
+                    ResourceSearchToolHandler.Descriptor, ResourceSearchToolHandler.Policy, "resources_search");
+                AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.ReadToolId),
+                    ResourceReadToolHandler.Descriptor, ResourceReadToolHandler.Policy, "resources_read");
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Chat, false);
                 Func<string, string, ToolExecutionRecord> execute = (id, arguments) =>
                 {
@@ -122,6 +130,26 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Ok, released.Outcome, "native live list succeeds after document access release");
                 AssertTrue(adapter.Executed.Count > backendCalls, "released native live list reaches the Office backend");
             });
+        }
+
+        private static void AssertResourceControllerProjection(
+            ToolDefinition definition,
+            ToolDescriptor descriptor,
+            ToolPolicy policy,
+            string name)
+        {
+            AssertEqual(descriptor.Id, definition.Id, name + " id");
+            AssertEqual(descriptor.Description, definition.Description, name + " description");
+            AssertEqual(descriptor.ParametersJson, definition.ArgumentSchemaJson, name + " schema");
+            AssertEqual("Common", definition.Host, name + " host");
+            AssertEqual(name, definition.Name, name + " name");
+            AssertEqual("session", definition.Scope, name + " scope");
+            AssertTrue(definition.BuiltIn && definition.Enabled && definition.AgentCanRun,
+                name + " controller availability");
+            AssertTrue(!definition.MutatesDocument && !definition.MutatesLocalState,
+                name + " controller read flags");
+            AssertTrue(ReferenceEquals(policy, definition.RuntimePolicy),
+                name + " preserves source-owned policy instance");
         }
 
         private static void ResourceGatewayReadsSearchesAndPages()
