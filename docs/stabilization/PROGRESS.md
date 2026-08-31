@@ -9,6 +9,13 @@ Next step for tools: на реальном Windows выполнить WQ0, за�
 Required context: [master WQ/Phase 11](STABILIZATION_MASTER_PLAN.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current 5B2/7D owners.
 Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. 11T is admitted but blocked before runtime work by WQ0/production 5B2/7D; all remaining built-in Office tool branches are mapped to family switches rather than a big-bang rewrite. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
 
+WebView failed-initialization follow-up (2026-08-31): bridge bootstrap now queues
+early non-init calls, but an exception while applying an already-tokened init response
+could leave that token live and release queued calls from an unavailable UI state.
+Entering the bridge-unavailable state now revokes the token; queued calls fail closed
+and a later explicit reinitialization must obtain a fresh token. The focused bootstrap
+test covers this partial-init failure; real Windows WebView2 lifecycle remains open.
+
 Artifact identity ambiguity regression fix (2026-08-31): the chat resource
 projection previously collapsed case-insensitive duplicate artifact ids by selecting
 the first replayed item. Exact URI reads could therefore expose an arbitrary body

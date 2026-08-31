@@ -341,6 +341,7 @@ function applyBridgeUnavailableState(error) {
   var previousChatId = state.activeChatId || "";
   captureChatDraft(previousChatId);
   state.bridgeUnavailable = true;
+  state.bridgeToken = "";
   document.body.classList.add("bridge-unavailable");
   resetMessageEditState();
   state.appVersion = "";
