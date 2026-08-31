@@ -105,6 +105,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="Testing\FakeOfficeAdapter.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="Testing\FakeOfficeAdapter.ExcelWrite.cs" />
+    <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelFindReplace.cs" Link="Testing\FakeOfficeAdapter.ExcelFindReplace.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\coverage.v1.json"

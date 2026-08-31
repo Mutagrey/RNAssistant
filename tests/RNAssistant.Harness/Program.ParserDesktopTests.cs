@@ -1211,7 +1211,7 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend
         {
             private readonly FakeOfficeAdapter _inner;
 
@@ -1226,6 +1226,7 @@ namespace RNAssistant.Harness
             public IOfficeStaDispatcher StaDispatcher { get { return Session.StaDispatcher; } }
             public IExcelReadBackend ExcelReadBackend { get { return this; } }
             public IExcelWriteBackend ExcelWriteBackend { get { return this; } }
+            public IExcelFindReplaceBackend ExcelFindReplaceBackend { get { return this; } }
             public string HostName { get { return Session.Host; } }
             public string DocumentKey { get { return StaDispatcher.Invoke(() => Session.StableDocumentId); } }
             public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
@@ -1240,6 +1241,8 @@ namespace RNAssistant.Harness
             public ExcelRangeSnapshot ReadRange(ExcelRangeReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelRangeReadOperation); return _inner.ReadRange(request); }
             public ExcelWriteSnapshot Read(ExcelWriteReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelWriteReadOperation); return _inner.Read(request); }
             public void Apply(ExcelWriteApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelWriteApplyOperation); _inner.Apply(request, markDispatchPossible); }
+            public void ReadScope(ExcelCellScopeRequest request, Action<ExcelCellSnapshot> visit) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelFindScopeReadOperation); _inner.ReadScope(request, visit); }
+            public void Apply(ExcelReplaceApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelReplaceApplyOperation); _inner.Apply(request, markDispatchPossible); }
         }
 
         private sealed class BoundTestQueuedDispatcher : IOfficeStaDispatcher

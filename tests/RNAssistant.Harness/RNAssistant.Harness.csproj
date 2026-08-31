@@ -39,6 +39,7 @@
   <ItemGroup>
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="FakeOfficeAdapter.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="FakeOfficeAdapter.ExcelWrite.cs" />
+    <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelFindReplace.cs" Link="FakeOfficeAdapter.ExcelFindReplace.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentitySample.cs" Link="OfficeHosts\Qualification\ComIdentitySample.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentityLease.cs" Link="OfficeHosts\Qualification\ComIdentityLease.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ExcelProbeTarget.cs" Link="OfficeHosts\Qualification\ExcelProbeTarget.cs" />

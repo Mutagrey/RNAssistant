@@ -15,6 +15,7 @@ namespace RNAssistant.Office
         private readonly IOfficeDocumentSession _documentSession;
         private readonly IExcelReadBackend _excelReadBackend;
         private readonly IExcelWriteBackend _excelWriteBackend;
+        private readonly IExcelFindReplaceBackend _excelFindReplaceBackend;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
@@ -24,6 +25,7 @@ namespace RNAssistant.Office
             IOfficeDocumentSession documentSession = null;
             IExcelReadBackend excelReadBackend = null;
             IExcelWriteBackend excelWriteBackend = null;
+            IExcelFindReplaceBackend excelFindReplaceBackend = null;
             _dispatcher.Invoke(delegate
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
@@ -31,11 +33,13 @@ namespace RNAssistant.Office
                 var excel = _inner as IExcelBackendProvider;
                 excelReadBackend = excel == null ? null : excel.ExcelReadBackend;
                 excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
+                excelFindReplaceBackend = excel == null ? null : excel.ExcelFindReplaceBackend;
                 return true;
             });
             _documentSession = documentSession;
             _excelReadBackend = excelReadBackend;
             _excelWriteBackend = excelWriteBackend;
+            _excelFindReplaceBackend = excelFindReplaceBackend;
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
@@ -55,6 +59,10 @@ namespace RNAssistant.Office
 
         public IExcelReadBackend ExcelReadBackend { get { return _excelReadBackend; } }
         public IExcelWriteBackend ExcelWriteBackend { get { return _excelWriteBackend; } }
+        public IExcelFindReplaceBackend ExcelFindReplaceBackend
+        {
+            get { return _excelFindReplaceBackend; }
+        }
 
         public string GetDocumentSnapshot(int maxChars)
         {

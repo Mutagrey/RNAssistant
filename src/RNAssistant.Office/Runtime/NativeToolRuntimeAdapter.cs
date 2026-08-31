@@ -25,7 +25,8 @@ namespace RNAssistant.Office.Runtime
             new Dictionary<string, IReadOnlyList<ChatAttachment>>(StringComparer.Ordinal);
 
         internal NativeToolRuntimeAdapter(ResourceGatewayService gateway, ExcelReadToolAdapter excelReads,
-            ExcelWriteToolAdapter excelWrites, HostRuntime hostRuntime, ChatSession session,
+            ExcelWriteToolAdapter excelWrites, ExcelFindReplaceToolAdapter excelFindReplace,
+            HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
@@ -60,6 +61,13 @@ namespace RNAssistant.Office.Runtime
                         throw new InvalidOperationException("Excel read handler dependencies are unavailable.");
                     handler = new ExcelReadToolHandler(registration.Descriptor.Id, excelReads, hostRuntime, session);
                 }
+                else if (ExcelFindReplaceToolIds.Owns(registration.Descriptor.Id))
+                {
+                    if (excelFindReplace == null || hostRuntime == null)
+                        throw new InvalidOperationException("Excel find/replace handler dependencies are unavailable.");
+                    handler = new ExcelFindReplaceToolHandler(
+                        registration.Descriptor.Id, excelFindReplace, hostRuntime, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -80,7 +88,8 @@ namespace RNAssistant.Office.Runtime
                 string.Equals(toolId, ResourceToolCatalog.ResolveToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
-                ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId);
+                ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
+                ExcelFindReplaceToolIds.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -95,6 +104,8 @@ namespace RNAssistant.Office.Runtime
                 return ResourceReadToolHandler.Binding;
             if (ExcelReadToolIds.Owns(toolId)) return ExcelReadToolHandler.BindingFor(toolId);
             if (ExcelWriteToolIds.Owns(toolId)) return ExcelWriteToolHandler.Binding;
+            if (ExcelFindReplaceToolIds.Owns(toolId))
+                return ExcelFindReplaceToolHandler.BindingFor(toolId);
             return null;
         }
 

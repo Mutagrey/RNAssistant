@@ -12,12 +12,14 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
         internal const string ExcelWriteReadOperation = "write.read";
         internal const string ExcelWriteApplyOperation = "write.apply";
+        internal const string ExcelFindScopeReadOperation = "find_replace.read";
+        internal const string ExcelReplaceApplyOperation = "find_replace.apply";
 
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public readonly List<string> ExcelBackendCalls = new List<string>();
@@ -30,6 +32,7 @@ namespace RNAssistant.Harness
         public string ThrowOnExcelBackendOperation { get; set; }
         public Func<string, string> VbaWriteTransform { get; set; }
         public bool ExcelWriteThrowAfterMutation { get; set; }
+        public bool ExcelReplaceThrowAfterMutation { get; set; }
         public int VbaReportedLineCountOffset { get; set; }
         public string DocumentKeyValue { get; set; }
         public string RuntimeDocumentKeyValue { get; set; }
@@ -116,6 +119,10 @@ namespace RNAssistant.Harness
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
         public IExcelWriteBackend ExcelWriteBackend
+        {
+            get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
+        }
+        public IExcelFindReplaceBackend ExcelFindReplaceBackend
         {
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
@@ -642,35 +649,14 @@ namespace RNAssistant.Harness
 
             if (string.Equals(command.ToolId, "excel.find_cells", StringComparison.OrdinalIgnoreCase))
             {
-                var query = Argument(command, "query", string.Empty);
-                var matches = new List<object>();
-                foreach (var sheet in _sheets)
-                {
-                    foreach (var cell in sheet.Value.Cells)
-                    {
-                        var text = Convert.ToString(cell.Value) ?? string.Empty;
-                        if (text.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            matches.Add(new { sheet = sheet.Key, address = cell.Key, value = text });
-                        }
-                    }
-                }
-                return ToolResult.Ok("found " + matches.Count + " cell(s)", JsonConvert.SerializeObject(matches));
+                return ToolResult.Fail("Public excel.find_cells is owned by ToolRuntime.", null,
+                    "excel_public_find_moved", false);
             }
 
             if (string.Equals(command.ToolId, "excel.replace_cells", StringComparison.OrdinalIgnoreCase))
             {
-                var find = Argument(command, "find", string.Empty);
-                var replacement = Argument(command, "replace", string.Empty);
-                foreach (var sheet in _sheets.Values)
-                {
-                    foreach (var address in sheet.Cells.Keys.ToList())
-                    {
-                        sheet.Cells[address] = (Convert.ToString(sheet.Cells[address]) ?? string.Empty)
-                            .Replace(find, replacement);
-                    }
-                }
-                return ToolResult.Ok("replaced cells");
+                return ToolResult.Fail("Public excel.replace_cells is owned by ToolRuntime.", null,
+                    "excel_public_replace_moved", false);
             }
 
             if (string.Equals(command.ToolId, "excel.upsert_chart", StringComparison.OrdinalIgnoreCase))

@@ -338,10 +338,13 @@ namespace RNAssistant.Harness
                 "OfficeHosts may compose the application facade but must not depend on WebView types");
 
             var excelBackendPath = Path.Combine(hostsRoot, "Excel", "ExcelInteropBackend.cs");
+            var excelFindReplaceBackendPath = Path.Combine(
+                hostsRoot, "Excel", "ExcelFindReplaceInteropBackend.cs");
             var excelSessionPath = Path.Combine(hostsRoot, "Excel", "ExcelDocumentSession.cs");
             var excelAdapterPath = Path.Combine(hostsRoot, "ExcelAdapter.cs");
             var excelFactoryPath = Path.Combine(hostsRoot, "Targets", "OfficeComAdapterProvider.cs");
-            AssertTrue(File.Exists(excelBackendPath) && File.Exists(excelSessionPath),
+            AssertTrue(File.Exists(excelBackendPath) &&
+                File.Exists(excelFindReplaceBackendPath) && File.Exists(excelSessionPath),
                 "production Excel reads and writes require one bound session and direct backend");
             foreach (var removedPath in new[]
             {
@@ -356,6 +359,7 @@ namespace RNAssistant.Harness
             }
 
             var excelBackendSource = File.ReadAllText(excelBackendPath);
+            var excelFindReplaceBackendSource = File.ReadAllText(excelFindReplaceBackendPath);
             var excelSessionSource = File.ReadAllText(excelSessionPath);
             var excelAdapterSource = File.ReadAllText(excelAdapterPath);
             var excelFactorySource = File.ReadAllText(excelFactoryPath);
@@ -370,9 +374,17 @@ namespace RNAssistant.Harness
                 excelBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
                 "Excel direct backend must use only its exact bound workbook");
             AssertTrue(
+                excelFindReplaceBackendSource.IndexOf("session.BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
+                excelFindReplaceBackendSource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
+                excelFindReplaceBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                excelFindReplaceBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
+                "Excel find/replace backend must use only typed bound-document contracts");
+            AssertTrue(
                 excelAdapterSource.IndexOf("private Excel.Workbook ActiveWorkbook(", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("OfficeTargetDescriptor", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("_target.", StringComparison.Ordinal) < 0,
+                excelAdapterSource.IndexOf("_target.", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.find_cells\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.replace_cells\"", StringComparison.Ordinal) < 0,
                 "Excel execution adapter must not retain ActiveWorkbook or descriptor fallback");
             AssertTrue(
                 excelFactorySource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&

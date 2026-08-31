@@ -17,6 +17,7 @@ namespace RNAssistant.Office
         private IOfficeDocumentSession _documentSession;
         private IExcelReadBackend _excelReadBackend;
         private IExcelWriteBackend _excelWriteBackend;
+        private IExcelFindReplaceBackend _excelFindReplaceBackend;
         private volatile bool _innerInitialized;
         private bool _disposed;
 
@@ -82,6 +83,7 @@ namespace RNAssistant.Office
                     var excel = _inner as IExcelBackendProvider;
                     _excelReadBackend = excel == null ? null : excel.ExcelReadBackend;
                     _excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
+                    _excelFindReplaceBackend = excel == null ? null : excel.ExcelFindReplaceBackend;
                     // Publish the owner-initialized session once. Rebinding requires
                     // another adapter; metadata access must not queue behind a run.
                     _innerInitialized = true;
@@ -106,6 +108,15 @@ namespace RNAssistant.Office
             {
                 EnsureInitialized();
                 return _excelWriteBackend;
+            }
+        }
+
+        public IExcelFindReplaceBackend ExcelFindReplaceBackend
+        {
+            get
+            {
+                EnsureInitialized();
+                return _excelFindReplaceBackend;
             }
         }
 

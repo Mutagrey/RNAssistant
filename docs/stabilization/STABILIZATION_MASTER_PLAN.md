@@ -2377,8 +2377,12 @@ endpoint.
      production 5B2 над `_adapter.ExecuteTool`; WQ0/WQ-SESSION/WQ-EXCEL остаются
      обязательным deferred evidence и не возвращают fallback.
      [Evidence](PHASE_11T0_EXCEL_BOUND_CUTOVER.md);
-   - 11T1–11T5: переносить существующие Excel capabilities по families:
-     find/replace, sheet lifecycle, clear/sort/filter/format, tables, charts;
+   - [x] 11T1 — existing `excel.find_cells`/`excel.replace_cells` переведены на
+     typed service/direct bound backend с exact pre-dispatch state и read-back;
+     production host branches/helpers удалены. Windows WQ-EXCEL открыт.
+     [Evidence](PHASE_11T1_EXCEL_FIND_REPLACE.md);
+   - 11T2–11T5: переносить оставшиеся существующие Excel capabilities по families:
+     sheet lifecycle, clear/sort/filter/format, tables, charts;
    - 11T6–11T8: Word, PowerPoint и Outlook по одному host vertical. Каждый сначала
      получает собственный bound local `DocumentSession`, exact target/lifetime gate
      и host pack, затем его существующие reads и mutations переходят по semantic

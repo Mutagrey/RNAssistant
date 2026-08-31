@@ -139,6 +139,16 @@ Excel Interop. Protected sheets, large live workbooks, actual COM errors and
 desktop/VSTO/native composition remain WQ-EXCEL gates. See
 [Phase 7B evidence](../../docs/stabilization/PHASE_7B_EXCEL_READ.md).
 
+## Typed Excel find/replace owner (Phase 11T1)
+
+`excel find replace:` covers direct native ownership, the bound backend, literal and
+regex matching, values/formulas and workbook/sheet/range/selection scopes,
+`replaceAll`, bounds, verified no-op/change, exact pre-dispatch drift, post-dispatch
+failure/read-back divergence and closed/switched-document refusal. The fake generic
+host path rejects both public ids, so dual dispatch is observable. Real Excel COM,
+protected/large ranges and partial assignment remain WQ-EXCEL gates. See
+[Phase 11T1 evidence](../../docs/stabilization/PHASE_11T1_EXCEL_FIND_REPLACE.md).
+
 ## Typed VBA mutation outcome (Phase 6D)
 
 `vba: mutation` covers the typed service boundary and injected prepare, terminal,
