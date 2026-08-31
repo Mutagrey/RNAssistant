@@ -77,5 +77,67 @@ namespace RNAssistant.Harness
                 AssertTrue(question.Status == "awaiting_user", "question pauses for user input: " + question.Message);
             });
         }
+
+        private static void PlanDocumentPreservesExactMarkdownAndLinearHead()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Plan;
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var originalMarkdown = "\n# Exact plan\n\nKeep trailing Markdown spaces.  \n\n";
+                var created = executor.Execute(Command(PlanDocumentToolExecutor.CreateToolId,
+                    "title", "Exact plan", "markdown", originalMarkdown, "status", "draft"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(created.Success, "exact plan created");
+                var createdData = JObject.Parse(created.DataJson);
+                var planId = (string)createdData["planId"];
+                var firstId = (string)createdData["artifactId"];
+                var first = session.Artifacts.Single(item => item.Id == firstId);
+                AssertEqual(originalMarkdown, first.InlineText, "create preserves the complete Markdown payload");
+
+                var updatedMarkdown = "  \n# Exact ready plan\n\nDo not trim this revision.\n\n";
+                var updated = executor.Execute(Command(PlanDocumentToolExecutor.UpdateToolId,
+                    "id", planId,
+                    "expectedRevisionArtifactId", firstId,
+                    "markdown", updatedMarkdown,
+                    "status", "ready"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(updated.Success, "exact guarded update succeeds");
+                var secondId = (string)JObject.Parse(updated.DataJson)["artifactId"];
+                var second = session.Artifacts.Single(item => item.Id == secondId);
+                AssertEqual(updatedMarkdown, second.InlineText, "update preserves the complete Markdown payload");
+                AssertEqual(2, second.Revision, "revision is strictly monotonic");
+                AssertEqual(firstId, second.ParentArtifactId, "revision is a linear child of the exact current head");
+
+                var stale = executor.Execute(Command(PlanDocumentToolExecutor.UpdateToolId,
+                    "id", planId,
+                    "expectedRevisionArtifactId", firstId,
+                    "markdown", "# stale"),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("stale_plan_revision", stale.ErrorCode, "old exact guard is rejected");
+
+                session.Artifacts.Add(new ChatArtifact
+                {
+                    Id = planId + "_r4_conflict",
+                    Kind = ChatArtifactKinds.PlanDocument,
+                    Title = second.Title,
+                    MimeType = "text/markdown",
+                    Revision = 4,
+                    ParentArtifactId = second.Id,
+                    InlineText = "# conflicting branch",
+                    MetadataJson = second.MetadataJson
+                });
+                var artifactCount = session.Artifacts.Count;
+                var conflict = executor.Execute(Command(PlanDocumentToolExecutor.UpdateToolId,
+                    "id", planId,
+                    "expectedRevisionArtifactId", secondId,
+                    "markdown", "# must not append"),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("plan_lineage_conflict", conflict.ErrorCode, "non-linear lineage is rejected");
+                AssertEqual(artifactCount, session.Artifacts.Count, "lineage rejection does not append a revision");
+                AssertEqual(secondId, session.ActivePlanDocumentArtifactId, "lineage rejection keeps the exact current head");
+            });
+        }
     }
 }

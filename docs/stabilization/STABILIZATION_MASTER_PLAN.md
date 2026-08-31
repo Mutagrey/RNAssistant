@@ -2308,8 +2308,13 @@ transport или execution authority.
    - 11A2: exact library head/history projection and cleanup of current kind/label
      drift. Done host-neutral; no new resource transport or generic editor. Windows
      WebView qualification remains open. [Evidence](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md).
-2. Plan: Markdown preview/source, guarded exact whole-content revisions, history,
-   restore-as-new-head, explicit delete and ready-plan handoff by pinned URI.
+2. Plan, separate commits:
+   - 11B1: one domain service owns create/update; preserve exact whole Markdown and
+     require a unique linear exact-current head. Done host-neutral; Windows WebView
+     remains open. [Evidence](PHASE_11B1_PLAN_REVISION_GUARD.md).
+   - 11B2: restore-as-new-head plus guarded append-only tombstone removal, without
+     deleting exact historical message references.
+   - 11B3: history restore/removal UX and ready-plan handoff by pinned URI.
 3. HTML: whole-workspace revisions/branches, inert upload import, source/preview,
    bindings, recovery and export without silent payload truncation.
 4. Typed artifact viewers: bounded text/source and Markdown first; image, PDF and

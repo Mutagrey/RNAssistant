@@ -153,6 +153,7 @@
     <Compile Include="Vba\VbaVerifier.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ArtifactLibraryProjectionService.cs" />
+    <Compile Include="Services\PlanDocumentService.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatResourceReferenceService.cs" />
     <Compile Include="Services\ChatResourcePromptIndex.cs" />

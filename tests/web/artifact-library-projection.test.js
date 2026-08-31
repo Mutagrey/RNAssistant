@@ -87,6 +87,7 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   ["app-core.js", "app-chat-state.js", "app-chat-session.js", "app-artifacts.js", "app-html-workspace.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=artifact-library-20260831-1"), asset + " has the Artifact Library cache key");
   });
+  assert.ok(index.includes("app-html-workspace-artifacts.js?v=plan-revision-20260831-1"), "Plan editor has the exact-revision cache key");
   console.log("PASS artifact library: client lineage inference and Plan JSON label are removed");
 }
 

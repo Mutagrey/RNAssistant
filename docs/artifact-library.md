@@ -2,7 +2,9 @@
 
 Status: Phase 11 target contract. 11A1 and 11A2 implement the host-neutral commit-time
 boundary, explicit draft/preparing/committed labels and exact Library head/history
-projection. Plan/HTML mutation semantics and typed viewers remain later slices. The
+projection. 11B1 adds the Plan domain owner, exact whole-Markdown preservation and
+linear exact-current guard. Plan restore/delete/handoff, HTML mutation semantics and
+typed viewers remain later slices. The
 existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
@@ -164,6 +166,13 @@ Only domain-owned mutable resources expose Save/Delete:
 - Immutable uploads/snapshots have no in-place editor. `Create editable copy` or
   `Import` creates a related resource and leaves the original unchanged.
 
+`Office.Services.PlanDocumentService` owns Plan create/update lineage. Create and
+Save validate non-empty Markdown without normalizing it: leading/trailing whitespace
+and Markdown hard-break spaces are stored exactly. Update accepts only the active
+exact artifact id and appends `vN+1` as its linear child; duplicate, skipped or
+branched revision state fails closed. The tool executor only adapts arguments/results.
+Append-only restore and removal remain the next Plan slice.
+
 Draft discard deletes only staging data. `Hide from library` is a UI preference and
 does not alter history or model references. Destructive removal of a committed
 resource first displays every referencing message/document revision and either
@@ -194,8 +203,13 @@ Phase 11 is implemented as separate changes:
    committed UI states, commit-time revisioned projection, exact head/history
    presentation and current kind/label cleanup. Windows WebView qualification stays
    open.
-2. Plan: Markdown preview/source, guarded whole-content revisions, history,
-   restore-as-new-head, delete and exact ready-plan handoff.
+2. Plan, separate changes:
+   - 11B1 — done host-neutral: Markdown preview/source uses an exact payload, one
+     domain service owns linear whole-content revisions, and stale or broken heads
+     fail before append.
+   - 11B2 — append-only restore-as-new-head and guarded tombstone removal while
+     exact historical message refs remain present.
+   - 11B3 — history restore/removal UX and exact ready-plan handoff verification.
 3. HTML: whole-workspace revisions/branches, source/preview/import, bindings,
    recovery and exact payload preservation.
 4. Typed viewers: text/Markdown first; image, PDF and audio as separate measured

@@ -107,6 +107,10 @@ items display `Original`, while Plan/HTML/authored documents expose exact revisi
 history. Specialized viewer, edit, restore and delete behavior is canonical in
 [Artifact Library and Viewers](artifact-library.md); UI viewers consume bounded
 gateway representations and never read CAS or grant execution authority.
+Plan create/update is owned by `Office.Services.PlanDocumentService`: a Save keeps
+the complete Markdown string unchanged and appends only after the supplied artifact
+id is still the unique linear head. Resource discovery remains read-only and does
+not become a second Plan mutation path.
 
 HTML data bindings intentionally persist an approved typed read-only `toolId + arguments` contract, document identity, transform, and last-good JSON. A generic resource URI cannot represent parameterized reads such as an Excel range without recreating a tool contract inside the URI. Bind and refresh therefore revalidate the current tool schema and execute inside the shared document gate; failure retains the last-good value. Charts are immutable data snapshots with a human-readable source locator as provenance, not live bindings; current data requires regeneration or an explicit HTML binding.
 
