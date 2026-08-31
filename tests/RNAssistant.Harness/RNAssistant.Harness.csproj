@@ -41,6 +41,7 @@
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="FakeOfficeAdapter.ExcelWrite.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelFindReplace.cs" Link="FakeOfficeAdapter.ExcelFindReplace.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelRangeMutation.cs" Link="FakeOfficeAdapter.ExcelRangeMutation.cs" />
+    <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelTable.cs" Link="FakeOfficeAdapter.ExcelTable.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelSheet.cs" Link="FakeOfficeAdapter.ExcelSheet.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentitySample.cs" Link="OfficeHosts\Qualification\ComIdentitySample.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentityLease.cs" Link="OfficeHosts\Qualification\ComIdentityLease.cs" />

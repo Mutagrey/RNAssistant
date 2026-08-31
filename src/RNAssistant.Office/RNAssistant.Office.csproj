@@ -118,6 +118,8 @@
     <Compile Include="Domains\Excel\ExcelRangeMutationService.cs" />
     <Compile Include="Domains\Excel\ExcelSheetContracts.cs" />
     <Compile Include="Domains\Excel\ExcelSheetService.cs" />
+    <Compile Include="Domains\Excel\ExcelTableContracts.cs" />
+    <Compile Include="Domains\Excel\ExcelTableService.cs" />
     <Compile Include="Domains\Excel\ExcelWriteContracts.cs" />
     <Compile Include="Domains\Excel\ExcelWriteService.cs" />
     <Compile Include="Tools\ExcelReadToolAdapter.cs" />
@@ -132,6 +134,9 @@
     <Compile Include="Tools\ExcelSheetToolAdapter.cs" />
     <Compile Include="Tools\ExcelSheetToolHandler.cs" />
     <Compile Include="Tools\ExcelSheetToolIds.cs" />
+    <Compile Include="Tools\ExcelTableToolAdapter.cs" />
+    <Compile Include="Tools\ExcelTableToolHandler.cs" />
+    <Compile Include="Tools\ExcelTableToolIds.cs" />
     <Compile Include="Tools\ExcelWriteToolAdapter.cs" />
     <Compile Include="Tools\ExcelWriteToolHandler.cs" />
     <Compile Include="Tools\ExcelWriteToolIds.cs" />

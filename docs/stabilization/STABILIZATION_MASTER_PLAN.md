@@ -2390,8 +2390,11 @@ endpoint.
      bound backend с bounded exact target/pre-state token и operation-specific
      read-back; production host branches/methods/replaced helpers удалены. Windows
      WQ-EXCEL открыт. [Evidence](PHASE_11T3_EXCEL_RANGE_MUTATIONS.md);
-   - 11T4–11T5: переносить оставшиеся существующие Excel capabilities по families:
-     tables, charts;
+   - [x] 11T4 — existing `excel.add_table` переведён на typed service/direct bound
+     backend с bounded exact source/full collection pre-state и exact new-table
+     read-back; production host branch/method удалены. Windows WQ-EXCEL открыт.
+     [Evidence](PHASE_11T4_EXCEL_TABLES.md);
+   - 11T5 — перенести оставшиеся существующие Excel chart capabilities;
    - 11T6–11T8: Word, PowerPoint и Outlook по одному host vertical. Каждый сначала
      получает собственный bound local `DocumentSession`, exact target/lifetime gate
      и host pack, затем его существующие reads и mutations переходят по semantic

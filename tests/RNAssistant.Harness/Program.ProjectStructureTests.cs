@@ -344,6 +344,8 @@ namespace RNAssistant.Harness
                 hostsRoot, "Excel", "ExcelSheetInteropBackend.cs");
             var excelRangeMutationBackendPath = Path.Combine(
                 hostsRoot, "Excel", "ExcelRangeMutationInteropBackend.cs");
+            var excelTableBackendPath = Path.Combine(
+                hostsRoot, "Excel", "ExcelTableInteropBackend.cs");
             var excelSessionPath = Path.Combine(hostsRoot, "Excel", "ExcelDocumentSession.cs");
             var excelAdapterPath = Path.Combine(hostsRoot, "ExcelAdapter.cs");
             var excelFactoryPath = Path.Combine(hostsRoot, "Targets", "OfficeComAdapterProvider.cs");
@@ -351,6 +353,7 @@ namespace RNAssistant.Harness
                 File.Exists(excelFindReplaceBackendPath) &&
                 File.Exists(excelSheetBackendPath) &&
                 File.Exists(excelRangeMutationBackendPath) &&
+                File.Exists(excelTableBackendPath) &&
                 File.Exists(excelSessionPath),
                 "production Excel families require one bound session and direct backends");
             foreach (var removedPath in new[]
@@ -370,6 +373,7 @@ namespace RNAssistant.Harness
             var excelSheetBackendSource = File.ReadAllText(excelSheetBackendPath);
             var excelRangeMutationBackendSource =
                 File.ReadAllText(excelRangeMutationBackendPath);
+            var excelTableBackendSource = File.ReadAllText(excelTableBackendPath);
             var excelSessionSource = File.ReadAllText(excelSessionPath);
             var excelAdapterSource = File.ReadAllText(excelAdapterPath);
             var excelFactorySource = File.ReadAllText(excelFactoryPath);
@@ -402,6 +406,12 @@ namespace RNAssistant.Harness
                 excelRangeMutationBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
                 "Excel range mutation backend must use only typed bound-document contracts");
             AssertTrue(
+                excelTableBackendSource.IndexOf("session.BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
+                excelTableBackendSource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
+                excelTableBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                excelTableBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
+                "Excel table backend must use only typed bound-document contracts");
+            AssertTrue(
                 excelAdapterSource.IndexOf("private Excel.Workbook ActiveWorkbook(", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("OfficeTargetDescriptor", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("_target.", StringComparison.Ordinal) < 0 &&
@@ -412,7 +422,8 @@ namespace RNAssistant.Harness
                 excelAdapterSource.IndexOf("case \"excel.clear_range\"", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("case \"excel.sort_range\"", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("case \"excel.filter_range\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.format_range\"", StringComparison.Ordinal) < 0,
+                excelAdapterSource.IndexOf("case \"excel.format_range\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.add_table\"", StringComparison.Ordinal) < 0,
                 "Excel execution adapter must not retain ActiveWorkbook or descriptor fallback");
             AssertTrue(
                 excelFactorySource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&

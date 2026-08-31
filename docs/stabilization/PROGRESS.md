@@ -2,12 +2,12 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 migration contours — перенос всех существующих tools и удаление active legacy architecture явно обязательны до Phase 12; новые optional product features этим не добавлены
-Current task: 11T3 Excel clear/sort/filter/format is complete host-neutral over the bound workbook; 11T4 tables is the next typed-family migration. Real Windows/live-provider gates remain open.
+Current task: 11T4 Excel table creation is complete host-neutral over the bound workbook; 11T5 charts is the next typed-family migration. Real Windows/live-provider gates remain open.
 Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy обязательны. WQ0 больше не блокирует implementation: текущий `RuntimeKey` exact bound workbook принимается как lifetime assumption; реальные Windows/live-provider gates остаются deferred evidence и не могут быть закрыты локальными tests.
 
-Next step for tools: 11T4 переносит exact existing Excel table family на typed requests/domain service/direct bound backend/outcome path и удаляет заменённые host switch/helpers. Расширение schemas и generic action lists не входят в этот slice.
-Required context: [master Phase 11T](STABILIZATION_MASTER_PLAN.md), [11T3 evidence](PHASE_11T3_EXCEL_RANGE_MUTATIONS.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current Excel table owner.
-Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1 and 11T0–11T3 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Remaining Office tools still move family-by-family; the final switch removes `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. Excel read/write compatibility commands/backends, execution-time target fallback, find/replace, sheet-lifecycle and range-mutation host branches/helpers are gone. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION and WQ-EXCEL are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+Next step for tools: 11T5 переносит exact existing Excel chart upsert/delete family на typed requests/domain service/direct bound backend/outcome path и удаляет заменённые host switch/helpers. Расширение schemas и generic action lists не входят в этот slice.
+Required context: [master Phase 11T](STABILIZATION_MASTER_PLAN.md), [11T4 evidence](PHASE_11T4_EXCEL_TABLES.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current Excel chart owner.
+Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1 and 11T0–11T4 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Remaining Office tools still move family-by-family; the final switch removes `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. Excel read/write compatibility commands/backends, execution-time target fallback, find/replace, sheet-lifecycle, range-mutation and table host branches/helpers are gone. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION and WQ-EXCEL are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
 Model SSE terminal incident fix (2026-08-31): streaming reader теперь распознаёт
 non-empty `choices[0].finish_reason`, bounded одну секунду ждёт optional final usage
@@ -93,6 +93,20 @@ production C# sources parse under C# 7.3 constraints. Real Excel sorting locale,
 criteria normalization, Normal-style/conditional formatting, protected/large ranges,
 autofit and partial COM effects remain WQ-EXCEL evidence.
 [Evidence](PHASE_11T3_EXCEL_RANGE_MUTATIONS.md).
+
+Phase 11T4 Excel table creation (2026-08-31): `excel.add_table` now uses an exact
+native registration, typed request/outcome, one domain service and a narrow backend
+over the workbook retained by `ExcelDocumentSession`. The domain preserves the
+public schema/defaults, bounds the contiguous source to 100000 cells and the exact
+workbook collection to 1000 tables, rejects explicit workbook-wide name collisions
+and requires one exact new-table read-back. The backend rechecks an opaque token over
+source values/formulas and the full table collection immediately before
+`ListObjects.Add`. Production `ExcelAdapter` branch/method are removed and the fake
+generic path is fail-closed. Full host-neutral harness 557/557 and focused table 4/4,
+Excel read 4/4, kernel replay 10/10 and source inclusion 1/1 pass; MockDemo builds
+with 0 errors / 3 existing platform warnings. Real Excel `xlNo` header/range
+semantics, styles/localization, overlap/protection, rollback and partial COM effects
+remain WQ-EXCEL evidence. [Evidence](PHASE_11T4_EXCEL_TABLES.md).
 
 Pre-R37 trajectory inference removal (2026-08-31): `TrajectoryRunProjection` and
 `TrajectoryDerivedProjection` no longer reinterpret a persisted
@@ -1086,7 +1100,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 11C | done host-neutral: 11C1–11C3 | [11C1](PHASE_11C1_HTML_LINEAGE.md), [11C2](PHASE_11C2_HTML_IMPORT_PREVIEW.md), [11C3](PHASE_11C3_HTML_BINDING_EXPORT.md) | 11C3: harness 8/8; web 21/21; JS syntax | not performed | Unique lineage, inert exact import and one guarded exact binding/recovery/export checkpoint path switched; Windows WebView/Office remains |
 | 11D | in progress: 11D1 done host-neutral | [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md) | harness 4/4; web 48/48; JS syntax | not performed | Exact bounded text/source + complete-only sanitized Markdown switched; image/PDF/audio and Windows WebView remain |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
-| 11 | in progress; 11T0 done host-neutral, remaining existing-tool migration/final legacy cleanup mandatory | 11A–11D1 evidence above; [11T0](PHASE_11T0_EXCEL_BOUND_CUTOVER.md) | targeted per substep | not performed | 11T1 find/replace next, then remaining families and final generic-dispatch/adapter removal before Phase 12; new optional product contours are not gates |
+| 11 | in progress; 11T0–11T4 done host-neutral, remaining existing-tool migration/final legacy cleanup mandatory | 11A–11D1 evidence above; [11T4](PHASE_11T4_EXCEL_TABLES.md) | 11T4: table 4/4; full harness 557/557 | not performed | 11T5 charts next, then remaining hosts/families and final generic-dispatch/adapter removal before Phase 12; new optional product contours are not gates |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
 ## Phase 0 substeps

@@ -9,5 +9,6 @@ namespace RNAssistant.Office.Domains.Excel
         IExcelFindReplaceBackend ExcelFindReplaceBackend { get; }
         IExcelSheetBackend ExcelSheetBackend { get; }
         IExcelRangeMutationBackend ExcelRangeMutationBackend { get; }
+        IExcelTableBackend ExcelTableBackend { get; }
     }
 }

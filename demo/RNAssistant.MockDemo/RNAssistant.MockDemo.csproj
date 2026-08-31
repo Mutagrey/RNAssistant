@@ -107,6 +107,7 @@
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="Testing\FakeOfficeAdapter.ExcelWrite.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelFindReplace.cs" Link="Testing\FakeOfficeAdapter.ExcelFindReplace.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelRangeMutation.cs" Link="Testing\FakeOfficeAdapter.ExcelRangeMutation.cs" />
+    <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelTable.cs" Link="Testing\FakeOfficeAdapter.ExcelTable.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelSheet.cs" Link="Testing\FakeOfficeAdapter.ExcelSheet.cs" />
   </ItemGroup>
   <ItemGroup>

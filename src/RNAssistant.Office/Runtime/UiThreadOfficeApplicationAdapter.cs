@@ -18,6 +18,7 @@ namespace RNAssistant.Office
         private readonly IExcelFindReplaceBackend _excelFindReplaceBackend;
         private readonly IExcelSheetBackend _excelSheetBackend;
         private readonly IExcelRangeMutationBackend _excelRangeMutationBackend;
+        private readonly IExcelTableBackend _excelTableBackend;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
@@ -30,6 +31,7 @@ namespace RNAssistant.Office
             IExcelFindReplaceBackend excelFindReplaceBackend = null;
             IExcelSheetBackend excelSheetBackend = null;
             IExcelRangeMutationBackend excelRangeMutationBackend = null;
+            IExcelTableBackend excelTableBackend = null;
             _dispatcher.Invoke(delegate
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
@@ -41,6 +43,7 @@ namespace RNAssistant.Office
                 excelSheetBackend = excel == null ? null : excel.ExcelSheetBackend;
                 excelRangeMutationBackend = excel == null
                     ? null : excel.ExcelRangeMutationBackend;
+                excelTableBackend = excel == null ? null : excel.ExcelTableBackend;
                 return true;
             });
             _documentSession = documentSession;
@@ -49,6 +52,7 @@ namespace RNAssistant.Office
             _excelFindReplaceBackend = excelFindReplaceBackend;
             _excelSheetBackend = excelSheetBackend;
             _excelRangeMutationBackend = excelRangeMutationBackend;
+            _excelTableBackend = excelTableBackend;
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
@@ -77,6 +81,7 @@ namespace RNAssistant.Office
         {
             get { return _excelRangeMutationBackend; }
         }
+        public IExcelTableBackend ExcelTableBackend { get { return _excelTableBackend; } }
 
         public string GetDocumentSnapshot(int maxChars)
         {

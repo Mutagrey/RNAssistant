@@ -28,6 +28,7 @@ namespace RNAssistant.Office.Runtime
             ExcelWriteToolAdapter excelWrites, ExcelFindReplaceToolAdapter excelFindReplace,
             ExcelSheetToolAdapter excelSheets,
             ExcelRangeMutationToolAdapter excelRangeMutations,
+            ExcelTableToolAdapter excelTables,
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
         {
@@ -87,6 +88,14 @@ namespace RNAssistant.Office.Runtime
                         registration.Descriptor.Id, excelRangeMutations,
                         hostRuntime, session);
                 }
+                else if (ExcelTableToolIds.Owns(registration.Descriptor.Id))
+                {
+                    if (excelTables == null || hostRuntime == null)
+                        throw new InvalidOperationException(
+                            "Excel table handler dependencies are unavailable.");
+                    handler = new ExcelTableToolHandler(
+                        excelTables, hostRuntime, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -109,7 +118,7 @@ namespace RNAssistant.Office.Runtime
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
-                ExcelRangeMutationToolIds.Owns(toolId);
+                ExcelRangeMutationToolIds.Owns(toolId) || ExcelTableToolIds.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -130,6 +139,7 @@ namespace RNAssistant.Office.Runtime
                 return ExcelSheetToolHandler.BindingFor(toolId);
             if (ExcelRangeMutationToolIds.Owns(toolId))
                 return ExcelRangeMutationToolHandler.BindingFor(toolId);
+            if (ExcelTableToolIds.Owns(toolId)) return ExcelTableToolHandler.Binding;
             return null;
         }
 

@@ -95,7 +95,8 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                adapter.ExecuteTool(Command("excel.add_table", "sheet", "Data", "name", "SalesTable"));
+                adapter.AddExcelTableForTest(
+                    "Data", "A1:B4", "SalesTable", true, string.Empty);
                 adapter.ExecuteTool(Command("excel.upsert_chart", "sheet", "Data", "chartName", "SalesChart"));
                 var session = NewSession(adapter);
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();

@@ -27,6 +27,7 @@ namespace RNAssistant.OfficeHosts
         private readonly ExcelFindReplaceInteropBackend _excelFindReplaceBackend;
         private readonly ExcelSheetInteropBackend _excelSheetBackend;
         private readonly ExcelRangeMutationInteropBackend _excelRangeMutationBackend;
+        private readonly ExcelTableInteropBackend _excelTableBackend;
         private readonly string _qualificationOwnerLabel;
 
         public ExcelAdapter(
@@ -49,6 +50,7 @@ namespace RNAssistant.OfficeHosts
             _excelSheetBackend = new ExcelSheetInteropBackend(_documentSession);
             _excelRangeMutationBackend =
                 new ExcelRangeMutationInteropBackend(_documentSession);
+            _excelTableBackend = new ExcelTableInteropBackend(_documentSession);
         }
 
         public string HostName { get { return "Excel"; } }
@@ -65,6 +67,7 @@ namespace RNAssistant.OfficeHosts
         {
             get { return _excelRangeMutationBackend; }
         }
+        public IExcelTableBackend ExcelTableBackend { get { return _excelTableBackend; } }
 
         public string DocumentKey { get { return _documentSession.StableDocumentId; } }
         public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
@@ -289,8 +292,6 @@ namespace RNAssistant.OfficeHosts
                 {
                     case "excel.create_chat_chart":
                         return CreateChatChart(command);
-                    case "excel.add_table":
-                        return AddTable(command);
                     case "excel.upsert_chart":
                         return UpsertChart(command);
                     case "excel.delete_chart":
@@ -376,32 +377,6 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok(
                 "Chat chart artifact created: " + artifact.Title,
                 JsonConvert.SerializeObject(artifact));
-        }
-
-        private ToolResult AddTable(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var sourceRange = ToolArgumentReader.String(command.Arguments, "sourceRange", "A1:B2");
-            var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
-            var hasHeaders = ToolArgumentReader.Boolean(command.Arguments, "hasHeaders", true);
-            var style = ToolArgumentReader.String(command.Arguments, "style", string.Empty);
-            var range = sheet.Range[sourceRange];
-            var table = sheet.ListObjects.Add(
-                Excel.XlListObjectSourceType.xlSrcRange,
-                range,
-                Type.Missing,
-                hasHeaders ? Excel.XlYesNoGuess.xlYes : Excel.XlYesNoGuess.xlNo,
-                Type.Missing);
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                table.Name = name;
-            }
-            if (!string.IsNullOrWhiteSpace(style))
-            {
-                table.TableStyle = style;
-            }
-
-            return ToolResult.Ok("Table added: " + table.Name, JsonConvert.SerializeObject(new { sheet = sheet.Name, name = table.Name, range = table.Range.Address[false, false] }));
         }
 
         private ToolResult UpsertChart(ToolCommand command)

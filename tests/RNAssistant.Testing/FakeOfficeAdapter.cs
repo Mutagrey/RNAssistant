@@ -12,7 +12,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
@@ -25,11 +25,15 @@ namespace RNAssistant.Harness
         internal const string ExcelSheetRenameOperation = "sheet.rename";
         internal const string ExcelRangeMutationReadOperation = "range_mutation.read";
         internal const string ExcelRangeMutationApplyOperation = "range_mutation.apply";
+        internal const string ExcelTableReadOperation = "table.read";
+        internal const string ExcelTableAddOperation = "table.add";
 
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public readonly List<string> ExcelBackendCalls = new List<string>();
         public readonly List<ToolCommand> ExcelSheetRequests = new List<ToolCommand>();
         public readonly List<ToolCommand> ExcelRangeMutationRequests =
+            new List<ToolCommand>();
+        public readonly List<ToolCommand> ExcelTableRequests =
             new List<ToolCommand>();
         public string VbaModuleType = "StdModule";
         public readonly List<string> RanMacros = new List<string>();
@@ -43,10 +47,13 @@ namespace RNAssistant.Harness
         public bool ExcelReplaceThrowAfterMutation { get; set; }
         public bool ExcelSheetThrowAfterMutation { get; set; }
         public bool ExcelRangeMutationThrowAfterMutation { get; set; }
+        public bool ExcelTableThrowAfterMutation { get; set; }
         public Func<ExcelSheetCollectionSnapshot, ExcelSheetCollectionSnapshot>
             ExcelSheetReadTransform { get; set; }
         public Func<ExcelRangeMutationSnapshot, ExcelRangeMutationSnapshot>
             ExcelRangeMutationReadTransform { get; set; }
+        public Func<ExcelTableCollectionSnapshot, ExcelTableCollectionSnapshot>
+            ExcelTableReadTransform { get; set; }
         public int VbaReportedLineCountOffset { get; set; }
         public string DocumentKeyValue { get; set; }
         public string RuntimeDocumentKeyValue { get; set; }
@@ -55,6 +62,7 @@ namespace RNAssistant.Harness
         private ExcelWriteBackendException _nextExcelWriteApplyFailure;
         private ExcelSheetBackendException _nextExcelSheetApplyFailure;
         private ExcelRangeMutationBackendException _nextExcelRangeMutationApplyFailure;
+        private ExcelTableBackendException _nextExcelTableApplyFailure;
 
         private readonly string _hostName;
         private string _documentTitle;
@@ -159,6 +167,10 @@ namespace RNAssistant.Harness
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
         public IExcelRangeMutationBackend ExcelRangeMutationBackend
+        {
+            get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
+        }
+        public IExcelTableBackend ExcelTableBackend
         {
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
@@ -313,6 +325,13 @@ namespace RNAssistant.Harness
             _nextExcelRangeMutationApplyFailure =
                 new ExcelRangeMutationBackendException(
                     message, errorCode, retryable);
+        }
+
+        public void QueueExcelTableApplyFailure(
+            string message, string errorCode, bool retryable)
+        {
+            _nextExcelTableApplyFailure =
+                new ExcelTableBackendException(message, errorCode, retryable);
         }
 
         private void BeginExcelBackendCall(string operation)
@@ -764,11 +783,9 @@ namespace RNAssistant.Harness
 
             if (string.Equals(command.ToolId, "excel.add_table", StringComparison.OrdinalIgnoreCase))
             {
-                var sheetName = Argument(command, "sheet", "Sheet1");
-                var sheet = EnsureSheet(sheetName);
-                var name = Argument(command, "name", "Table" + (sheet.Tables.Count + 1));
-                sheet.Tables.Add(name);
-                return ToolResult.Ok("added table " + name, JsonConvert.SerializeObject(new { sheet = sheetName, name = name, range = Argument(command, "sourceRange", "A1:B2") }));
+                return ToolResult.Fail(
+                    "Public excel.add_table is owned by ToolRuntime.", null,
+                    "excel_public_table_moved", false);
             }
 
             if (string.Equals(command.ToolId, "excel.create_chat_chart", StringComparison.OrdinalIgnoreCase))
@@ -890,8 +907,9 @@ namespace RNAssistant.Harness
             {
                 var items = sheets.SelectMany(sheet => sheet.Tables.Select(table => new ExcelTableSnapshot
                 {
-                    Sheet = sheet.Name, Name = table, DisplayName = table,
-                    Range = "A1:B4", Rows = 3, Columns = 2
+                    Sheet = sheet.Name, Name = table.Name,
+                    DisplayName = table.DisplayName, Range = table.Range,
+                    Rows = table.Rows, Columns = table.Columns
                 })).Take(maxItems + 1).ToList();
                 snapshot.Tables = items.Take(maxItems).ToList();
                 snapshot.ReturnedCount = snapshot.Tables.Count;
@@ -1167,7 +1185,7 @@ namespace RNAssistant.Harness
                 cellCount = s.Cells.Count,
                 tableCount = s.Tables.Count,
                 chartCount = s.Charts.Count,
-                tables = s.Tables.ToArray(),
+                tables = s.Tables.Select(table => table.Name).ToArray(),
                 charts = s.Charts.Select(c => new { name = c.Name, title = c.Title, sourceRange = c.SourceRange, chartType = c.ChartType }).ToArray()
             }).ToArray());
         }
@@ -1539,15 +1557,26 @@ namespace RNAssistant.Harness
             public Dictionary<string, object> Cells { get; private set; }
             public HashSet<string> FormulaCells { get; private set; }
             public List<FakeChart> Charts { get; private set; }
-            public List<string> Tables { get; private set; }
+            public List<FakeTable> Tables { get; private set; }
 
             public FakeSheet()
             {
                 Cells = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                 FormulaCells = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 Charts = new List<FakeChart>();
-                Tables = new List<string>();
+                Tables = new List<FakeTable>();
             }
+        }
+
+        private sealed class FakeTable
+        {
+            public string Name { get; set; }
+            public string DisplayName { get; set; }
+            public string Range { get; set; }
+            public int Rows { get; set; }
+            public int Columns { get; set; }
+            public bool HasHeaders { get; set; }
+            public string Style { get; set; }
         }
 
         private sealed class FakeChart
