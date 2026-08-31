@@ -96,20 +96,34 @@ namespace RNAssistant.OfficeHosts
 
         private static void AddPowerPointTargets(List<OfficeTargetDescriptor> result, PowerPoint.Application application)
         {
-            var hwnd = NativeWindowInfo.ReadLongMemberPath(application, "HWND");
-            var processId = NativeWindowInfo.GetProcessId(hwnd);
             foreach (PowerPoint.Presentation presentation in application.Presentations)
             {
-                result.Add(new OfficeTargetDescriptor
+                if (presentation.Windows != null && presentation.Windows.Count > 0)
                 {
-                    Host = "PowerPoint",
-                    Hwnd = hwnd,
-                    ProcessId = processId,
-                    FullName = SafeString(delegate { return presentation.FullName; }),
-                    Path = SafeString(delegate { return presentation.FullName; }),
-                    Name = SafeString(delegate { return presentation.Name; })
-                });
+                    foreach (PowerPoint.DocumentWindow window in presentation.Windows)
+                        AddPowerPointTarget(result, presentation,
+                            NativeWindowInfo.ReadLongMemberPath(window, "HWND"));
+                }
+                else
+                    AddPowerPointTarget(result, presentation,
+                        NativeWindowInfo.ReadLongMemberPath(application, "HWND"));
             }
+        }
+
+        private static void AddPowerPointTarget(
+            ICollection<OfficeTargetDescriptor> result,
+            PowerPoint.Presentation presentation,
+            long hwnd)
+        {
+            result.Add(new OfficeTargetDescriptor
+            {
+                Host = "PowerPoint",
+                Hwnd = hwnd,
+                ProcessId = NativeWindowInfo.GetProcessId(hwnd),
+                FullName = SafeString(delegate { return presentation.FullName; }),
+                Path = SafeString(delegate { return presentation.FullName; }),
+                Name = SafeString(delegate { return presentation.Name; })
+            });
         }
 
         private static void AddOutlookTargets(List<OfficeTargetDescriptor> result, Outlook.Application application)

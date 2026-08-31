@@ -111,6 +111,8 @@
     <Compile Include="InProcessPanelSession.cs" />
     <Compile Include="OutlookAdapter.cs" />
     <Compile Include="PowerPointAdapter.cs" />
+    <Compile Include="PowerPoint\PowerPointDocumentSession.cs" />
+    <Compile Include="PowerPoint\PowerPointInteropBackend.cs" />
     <Compile Include="Targets\ExcelNativeObjectResolver.cs" />
     <Compile Include="Targets\NativeWindowInfo.cs" />
     <Compile Include="Targets\OfficeComAdapterProvider.cs" />

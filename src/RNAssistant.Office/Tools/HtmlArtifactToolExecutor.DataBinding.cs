@@ -362,6 +362,10 @@ namespace RNAssistant.Office.Tools
                         return _standaloneWordRead == null
                             ? ToolResult.Fail("Word read adapter is unavailable.", null, "word_read_backend_missing", false)
                             : _standaloneWordRead.ExecuteDataSource(sourceCommand, cancellationToken);
+                    if (sourceCommand != null && PowerPointToolIds.IsRead(sourceCommand.ToolId))
+                        return _standalonePowerPointRead == null
+                            ? ToolResult.Fail("PowerPoint read adapter is unavailable.", null, "powerpoint_read_backend_missing", false)
+                            : _standalonePowerPointRead.ExecuteDataSource(sourceCommand, cancellationToken);
                     return _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
                 }
             }

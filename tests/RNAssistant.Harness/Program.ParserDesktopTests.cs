@@ -13,6 +13,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Qualification;
 using RNAssistant.Office.Runtime;
@@ -1211,7 +1212,7 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend
         {
             private readonly FakeOfficeAdapter _inner;
 
@@ -1232,6 +1233,7 @@ namespace RNAssistant.Harness
             public IExcelTableBackend ExcelTableBackend { get { return this; } }
             public IExcelChartBackend ExcelChartBackend { get { return this; } }
             public IWordBackend WordBackend { get { return this; } }
+            public IPowerPointBackend PowerPointBackend { get { return this; } }
             public string HostName { get { return Session.Host; } }
             public string DocumentKey { get { return StaDispatcher.Invoke(() => Session.StableDocumentId); } }
             public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
@@ -1267,6 +1269,15 @@ namespace RNAssistant.Harness
             public WordMutationBackendResult AddTable(WordTableRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordTableOperation); return _inner.AddTable(request, markDispatchPossible); }
             public WordMutationBackendResult InsertPageBreak(WordPageBreakRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordPageBreakOperation); return _inner.InsertPageBreak(request, markDispatchPossible); }
             public WordMutationBackendResult AddComment(WordCommentRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordCommentOperation); return _inner.AddComment(request, markDispatchPossible); }
+            public PowerPointSlideReadSnapshot ReadSlides(PowerPointReadSlidesRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointReadSlidesOperation); return _inner.ReadSlides(request); }
+            public PowerPointListSnapshot List(PowerPointListRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointListOperation); return _inner.List(request); }
+            public IReadOnlyList<PowerPointTextTargetSnapshot> ReadTextTargets(PowerPointTextScopeRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointReadTextOperation); return _inner.ReadTextTargets(request); }
+            public PowerPointMutationBackendResult AddSlide(PowerPointAddSlideRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointAddSlideOperation); return _inner.AddSlide(request, markDispatchPossible); }
+            public PowerPointMutationBackendResult SetText(PowerPointSetTextRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointSetTextOperation); return _inner.SetText(request, markDispatchPossible); }
+            public IReadOnlyList<PowerPointTextTargetSnapshot> ApplyReplacement(PowerPointReplaceApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointReplaceOperation); return _inner.ApplyReplacement(request, markDispatchPossible); }
+            public PowerPointMutationBackendResult AddObject(PowerPointAddObjectRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointAddObjectOperation); return _inner.AddObject(request, markDispatchPossible); }
+            public PowerPointMutationBackendResult DuplicateSlide(PowerPointDuplicateSlideRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointDuplicateOperation); return _inner.DuplicateSlide(request, markDispatchPossible); }
+            public PowerPointMutationBackendResult MoveSlide(PowerPointMoveSlideRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointMoveOperation); return _inner.MoveSlide(request, markDispatchPossible); }
         }
 
         private sealed class BoundTestQueuedDispatcher : IOfficeStaDispatcher

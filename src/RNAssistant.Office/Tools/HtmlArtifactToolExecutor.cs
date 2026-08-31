@@ -9,6 +9,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.Word;
+using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
@@ -35,6 +36,7 @@ namespace RNAssistant.Office.Tools
         private readonly Func<ToolCommand, CancellationToken, ToolResult> _executeOfficeDataSource;
         private readonly ExcelReadToolAdapter _standaloneExcelRead;
         private readonly WordToolAdapter _standaloneWordRead;
+        private readonly PowerPointToolAdapter _standalonePowerPointRead;
 
         public HtmlArtifactToolExecutor()
             : this(null, null, null, null)
@@ -69,6 +71,11 @@ namespace RNAssistant.Office.Tools
             var word = adapter as IWordBackendProvider;
             _standaloneWordRead = word == null || word.WordBackend == null
                 ? null : new WordToolAdapter(word.WordBackend);
+            var powerPoint = adapter as IPowerPointBackendProvider;
+            _standalonePowerPointRead = powerPoint == null ||
+                powerPoint.PowerPointBackend == null
+                ? null : new PowerPointToolAdapter(
+                    powerPoint.PowerPointBackend);
             _dataSourceTools = (adapterTools ?? new ToolDefinition[0])
                 .Where(IsEligibleDataSourceTool)
                 .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)

@@ -2404,10 +2404,16 @@ endpoint.
      desktop/VSTO factories связывают exact document/window, public host branches и
      execution-time `ActiveDocument`/descriptor fallback удалены. Windows
      WQ-SESSION/WQ-WORD открыт. [Evidence](PHASE_11T6_WORD_BOUND_VERTICAL.md);
-   - 11T7–11T8: PowerPoint и Outlook по одному host vertical. Каждый сначала
-     получает собственный bound local `DocumentSession`, exact target/lifetime gate
-     и host pack, затем его существующие reads и mutations переходят по semantic
-     families;
+   - [x] 11T7 — все девять existing PowerPoint reads/mutations переведены
+     на exact native registrations, typed service и direct backend над bound
+     `PowerPointDocumentSession`; desktop/VSTO composition связывает exact
+     presentation/window, public host branches/helpers и execution-time
+     `ActivePresentation`/descriptor fallback удалены. Windows
+     WQ-SESSION/WQ-POWERPOINT открыт.
+     [Evidence](PHASE_11T7_POWERPOINT_BOUND_VERTICAL.md);
+   - 11T8: Outlook получает собственный bound local
+     `DocumentSession`, exact target/lifetime gate и host pack, затем его
+     существующие reads и mutations переходят по semantic families;
    - первый проход сохраняет exact public ids, schemas и пользовательское поведение.
      Один slice переключает Agent/manual execution на typed request → domain service
      → narrow bound backend → typed outcome/effect evidence и в том же изменении

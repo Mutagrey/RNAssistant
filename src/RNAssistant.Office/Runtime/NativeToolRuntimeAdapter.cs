@@ -31,6 +31,7 @@ namespace RNAssistant.Office.Runtime
             ExcelTableToolAdapter excelTables,
             ExcelChartToolAdapter excelCharts,
             WordToolAdapter wordTools,
+            PowerPointToolAdapter powerPointTools,
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
         {
@@ -116,6 +117,15 @@ namespace RNAssistant.Office.Runtime
                         registration.Descriptor.Id, wordTools,
                         hostRuntime, session);
                 }
+                else if (PowerPointToolIds.Owns(registration.Descriptor.Id))
+                {
+                    if (powerPointTools == null || hostRuntime == null)
+                        throw new InvalidOperationException(
+                            "PowerPoint handler dependencies are unavailable.");
+                    handler = new PowerPointToolHandler(
+                        registration.Descriptor.Id, powerPointTools,
+                        hostRuntime, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -140,7 +150,7 @@ namespace RNAssistant.Office.Runtime
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
                 ExcelRangeMutationToolIds.Owns(toolId) ||
                 ExcelTableToolIds.Owns(toolId) || ExcelChartToolIds.Owns(toolId) ||
-                WordToolIds.Owns(toolId);
+                WordToolIds.Owns(toolId) || PowerPointToolIds.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -166,6 +176,8 @@ namespace RNAssistant.Office.Runtime
                 return ExcelChartToolHandler.BindingFor(toolId);
             if (WordToolIds.Owns(toolId))
                 return WordToolHandler.BindingFor(toolId);
+            if (PowerPointToolIds.Owns(toolId))
+                return PowerPointToolHandler.BindingFor(toolId);
             return null;
         }
 

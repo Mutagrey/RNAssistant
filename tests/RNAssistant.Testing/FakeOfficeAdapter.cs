@@ -8,12 +8,13 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
@@ -35,6 +36,7 @@ namespace RNAssistant.Harness
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public readonly List<string> ExcelBackendCalls = new List<string>();
         public readonly List<string> WordBackendCalls = new List<string>();
+        public readonly List<string> PowerPointBackendCalls = new List<string>();
         public readonly List<ToolCommand> ExcelSheetRequests = new List<ToolCommand>();
         public readonly List<ToolCommand> ExcelRangeMutationRequests =
             new List<ToolCommand>();
@@ -57,6 +59,7 @@ namespace RNAssistant.Harness
         public bool ExcelTableThrowAfterMutation { get; set; }
         public bool ExcelChartThrowAfterMutation { get; set; }
         public bool WordThrowAfterMutation { get; set; }
+        public bool PowerPointThrowAfterMutation { get; set; }
         public Func<ExcelSheetCollectionSnapshot, ExcelSheetCollectionSnapshot>
             ExcelSheetReadTransform { get; set; }
         public Func<ExcelRangeMutationSnapshot, ExcelRangeMutationSnapshot>
@@ -89,6 +92,8 @@ namespace RNAssistant.Harness
         private readonly Dictionary<string, string> _excelRangeAutoFits;
         private string _activeExcelSheetName;
         private readonly List<FakeSlide> _slides;
+        private int _nextPowerPointSlideId = 1;
+        private int _nextPowerPointShapeId = 1;
         private readonly List<string> _wordComments;
         private readonly List<WordTableSnapshot> _wordTables =
             new List<WordTableSnapshot>();
@@ -199,6 +204,15 @@ namespace RNAssistant.Harness
             {
                 return string.Equals(
                     _hostName, "Word", StringComparison.OrdinalIgnoreCase)
+                    ? this : null;
+            }
+        }
+        public IPowerPointBackend PowerPointBackend
+        {
+            get
+            {
+                return string.Equals(
+                    _hostName, "PowerPoint", StringComparison.OrdinalIgnoreCase)
                     ? this : null;
             }
         }
@@ -702,7 +716,13 @@ namespace RNAssistant.Harness
             }
             else if (string.Equals(_hostName, "PowerPoint", StringComparison.OrdinalIgnoreCase))
             {
-                _slides.Add(new FakeSlide { Title = "Q2 Results", Body = "Revenue grew 18%; retention needs focus." });
+                _slides.Add(new FakeSlide
+                {
+                    Id = _nextPowerPointSlideId++,
+                    Title = "Q2 Results",
+                    Body = "Revenue grew 18%; retention needs focus.",
+                    Shapes = new List<FakePowerPointShape>()
+                });
             }
         }
 
@@ -936,71 +956,12 @@ namespace RNAssistant.Harness
 
         private ToolResult ExecutePowerPointTool(ToolCommand command)
         {
-            if (string.Equals(command.ToolId, "powerpoint.read_slides", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "powerpoint.list_objects", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("read slides", JsonConvert.SerializeObject(_slides.Select(s => new { title = s.Title, body = s.Body, notes = s.Notes }).ToArray()));
-            }
-
-            if (string.Equals(command.ToolId, "powerpoint.search_text", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("searched slides", JsonConvert.SerializeObject(_slides.Select(s => new { title = s.Title, body = s.Body }).ToArray()));
-            }
-
-            if (string.Equals(command.ToolId, "powerpoint.add_slide", StringComparison.OrdinalIgnoreCase))
-            {
-                var slide = new FakeSlide
-                {
-                    Title = Argument(command, "title", string.Empty),
-                    Body = Argument(command, "body", string.Empty)
-                };
-                _slides.Add(slide);
-                return ToolResult.Ok("added slide " + slide.Title, JsonConvert.SerializeObject(slide));
-            }
-
-            if (string.Equals(command.ToolId, "powerpoint.set_text", StringComparison.OrdinalIgnoreCase))
-            {
-                var slide = LastOrNewSlide();
-                if (string.Equals(Argument(command, "target", "shape"), "notes", StringComparison.OrdinalIgnoreCase))
-                {
-                    slide.Notes = Argument(command, "text", string.Empty);
-                    return ToolResult.Ok("set notes", JsonConvert.SerializeObject(slide));
-                }
-                slide.Body = Argument(command, "text", slide.Body ?? string.Empty);
-                return ToolResult.Ok("set slide shape text", JsonConvert.SerializeObject(slide));
-            }
-
-            if (string.Equals(command.ToolId, "powerpoint.replace_text", StringComparison.OrdinalIgnoreCase))
-            {
-                var find = Argument(command, "find", string.Empty);
-                var replacement = Argument(command, "replace", string.Empty);
-                foreach (var slide in _slides)
-                {
-                    slide.Title = (slide.Title ?? string.Empty).Replace(find, replacement);
-                    slide.Body = (slide.Body ?? string.Empty).Replace(find, replacement);
-                    slide.Notes = (slide.Notes ?? string.Empty).Replace(find, replacement);
-                }
-                return ToolResult.Ok("replaced slide text");
-            }
-
-            if (string.Equals(command.ToolId, "powerpoint.add_object", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("added slide object", JsonConvert.SerializeObject(new { slideCount = _slides.Count }));
-            }
-
-            if (string.Equals(command.ToolId, "powerpoint.duplicate_slide", StringComparison.OrdinalIgnoreCase))
-            {
-                var slide = LastOrNewSlide();
-                _slides.Add(new FakeSlide { Title = slide.Title, Body = slide.Body, Notes = slide.Notes });
-                return ToolResult.Ok("duplicated slide", JsonConvert.SerializeObject(new { slideCount = _slides.Count }));
-            }
-
-            if (string.Equals(command.ToolId, "powerpoint.move_slide", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("moved slide");
-            }
-
-            return null;
+            return PowerPointToolIds.Owns(
+                command == null ? null : command.ToolId)
+                ? ToolResult.Fail(
+                    "Public PowerPoint tools require the typed PowerPoint backend.",
+                    null, "powerpoint_legacy_dispatch_removed", false)
+                : null;
         }
 
         private ToolResult ExecuteOutlookTool(ToolCommand command)
@@ -1164,7 +1125,11 @@ namespace RNAssistant.Harness
         {
             if (_slides.Count == 0)
             {
-                _slides.Add(new FakeSlide());
+                _slides.Add(new FakeSlide
+                {
+                    Id = _nextPowerPointSlideId++,
+                    Shapes = new List<FakePowerPointShape>()
+                });
             }
 
             return _slides[_slides.Count - 1];
@@ -1545,9 +1510,26 @@ namespace RNAssistant.Harness
 
         private sealed class FakeSlide
         {
+            public int Id { get; set; }
             public string Title { get; set; }
             public string Body { get; set; }
             public string Notes { get; set; }
+            public List<FakePowerPointShape> Shapes { get; set; }
+        }
+
+        private sealed class FakePowerPointShape
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+            public string Kind { get; set; }
+            public string Text { get; set; }
+            public int Left { get; set; }
+            public int Top { get; set; }
+            public int Width { get; set; }
+            public int Height { get; set; }
+            public int Rows { get; set; }
+            public int Columns { get; set; }
+            public IReadOnlyList<IReadOnlyList<object>> Values { get; set; }
         }
 
         private sealed class FakeCellAddress

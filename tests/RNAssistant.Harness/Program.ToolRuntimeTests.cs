@@ -549,16 +549,16 @@ namespace RNAssistant.Harness
                 new { Source = LegacyResult.PartialFailure("Write may have changed state"), Status = ToolResultStatus.Unknown }
             };
             foreach (var item in cases)
-                WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
+                WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
                 {
                     item.Source.ModelResourceRefs = new ResourceRef[] { null };
-                    var outcome = LegacyToolOutcomeAdapter.Map(new ToolPolicySnapshot("powerpoint.add_slide", "revision", true), item.Source);
+                    var outcome = LegacyToolOutcomeAdapter.Map(new ToolPolicySnapshot("outlook.create_draft", "revision", true), item.Source);
                     RuntimeThrows<ArgumentException>(() => LegacyToolResultAdapter.Materialize(item.Source, outcome));
-                    adapter.QueueResult("powerpoint.add_slide", item.Source);
+                    adapter.QueueResult("outlook.create_draft", item.Source);
                     var responses = new Queue<string>(new[]
                     {
-                        LoadToolSchemaResponse("powerpoint.add_slide"),
-                        "{\"message\":\"Replace\",\"tool_calls\":[{\"name\":\"powerpoint.add_slide\",\"arguments\":{\"title\":\"Conversion\"}}]}"
+                        LoadToolSchemaResponse("outlook.create_draft"),
+                        "{\"message\":\"Replace\",\"tool_calls\":[{\"name\":\"outlook.create_draft\",\"arguments\":{\"kind\":\"new\",\"body\":\"Conversion\"}}]}"
                     });
                     var modelCalls = 0;
                     LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -571,14 +571,14 @@ namespace RNAssistant.Harness
                     var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                         ChatModes.Agent, "Create chart", session, NewContext(adapter),
                         new AppSettings { AutoConfirmToolActions = true }, tools, null).GetAwaiter().GetResult();
-                    AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "powerpoint.add_slide"), "conversion failure never retries execution");
+                    AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "outlook.create_draft"), "conversion failure never retries execution");
                     AssertEqual(2, modelCalls, "conversion failure never triggers model repair");
                     var view = JObject.FromObject(result)["RunViewState"];
                     AssertEqual(item.Status == ToolResultStatus.Ok ? 1 : 0, (int)view["UnverifiedWrites"], "legacy success is preserved without fabricated verification");
                     AssertEqual(item.Status == ToolResultStatus.Error ? 1 : 0, (int)view["FailedCalls"], "known error count survives conversion failure");
                     AssertEqual(item.Status == ToolResultStatus.Error ? 0 : 1, (int)view["UnknownEffects"], "conversion failure creates no extra unknown effect");
                     var message = session.Messages.Single(entry => entry.ProtocolMessage && entry.Role != "assistant" &&
-                        entry.ToolName == "powerpoint.add_slide");
+                        entry.ToolName == "outlook.create_draft");
                     ToolResultWireReadResult wire;
                     string error;
                     AssertTrue(ToolResultHistoryReader.TryRead(message, out wire, out error), "failed projection still closes the accepted exchange");

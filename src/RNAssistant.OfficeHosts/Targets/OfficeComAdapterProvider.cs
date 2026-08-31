@@ -50,7 +50,13 @@ namespace RNAssistant.OfficeHosts
             {
                 var application = (PowerPoint.Application)GetActiveOfficeObject("PowerPoint.Application");
                 ValidateTargetWindow("PowerPoint", application, target);
-                return new PowerPointAdapter(application, target);
+                var presentation = ResolvePowerPointPresentation(application, target);
+                var window = ResolvePowerPointWindow(presentation, target);
+                return new PowerPointAdapter(
+                    presentation.Application ?? application,
+                    presentation,
+                    window,
+                    dispatcher);
             }
 
             if (string.Equals(host, "Outlook", StringComparison.OrdinalIgnoreCase))
@@ -221,6 +227,127 @@ namespace RNAssistant.OfficeHosts
                 throw new InvalidOperationException(
                     "The requested Word document is not open.");
             return match;
+        }
+
+        private static PowerPoint.Presentation ResolvePowerPointPresentation(
+            PowerPoint.Application application,
+            OfficeTargetDescriptor target)
+        {
+            if (application == null)
+                throw new InvalidOperationException(
+                    "PowerPoint application is unavailable.");
+            if (!HasPowerPointDocumentIdentity(target))
+            {
+                if (target == null || target.Hwnd == 0)
+                    throw new InvalidOperationException(
+                        "An exact PowerPoint window is required to bind the current presentation.");
+                PowerPoint.Presentation windowMatch = null;
+                foreach (PowerPoint.Presentation presentation in application.Presentations)
+                {
+                    if (!HasPowerPointWindow(presentation, target.Hwnd)) continue;
+                    if (windowMatch != null)
+                        throw new InvalidOperationException(
+                            "The requested PowerPoint window maps to more than one presentation.");
+                    windowMatch = presentation;
+                }
+                if (windowMatch == null)
+                    throw new InvalidOperationException(
+                        "The presentation for the requested PowerPoint window could not be resolved.");
+                return windowMatch;
+            }
+
+            PowerPoint.Presentation match = null;
+            foreach (PowerPoint.Presentation presentation in application.Presentations)
+            {
+                if (!MatchesPowerPointTarget(presentation, target)) continue;
+                if (match != null)
+                    throw new InvalidOperationException(
+                        "The requested PowerPoint presentation identity is ambiguous.");
+                match = presentation;
+            }
+            if (match == null)
+                throw new InvalidOperationException(
+                    "The requested PowerPoint presentation is not open.");
+            return match;
+        }
+
+        private static PowerPoint.DocumentWindow ResolvePowerPointWindow(
+            PowerPoint.Presentation presentation,
+            OfficeTargetDescriptor target)
+        {
+            if (presentation == null) return null;
+            PowerPoint.DocumentWindow match = null;
+            if (target != null && target.Hwnd != 0)
+            {
+                foreach (PowerPoint.DocumentWindow window in presentation.Windows)
+                {
+                    if (NativeWindowInfo.ReadLongMemberPath(window, "HWND") !=
+                        target.Hwnd) continue;
+                    if (match != null)
+                        throw new InvalidOperationException(
+                            "The requested PowerPoint window identity is ambiguous.");
+                    match = window;
+                }
+            }
+            if (match != null) return match;
+            if (presentation.Windows == null || presentation.Windows.Count == 0)
+                return null;
+            if (presentation.Windows.Count == 1) return presentation.Windows[1];
+            throw new InvalidOperationException(
+                "An exact PowerPoint document window is required for a presentation with multiple windows.");
+        }
+
+        private static bool HasPowerPointWindow(
+            PowerPoint.Presentation presentation, long hwnd)
+        {
+            if (presentation == null || hwnd == 0) return false;
+            try
+            {
+                foreach (PowerPoint.DocumentWindow window in presentation.Windows)
+                    if (NativeWindowInfo.ReadLongMemberPath(window, "HWND") == hwnd)
+                        return true;
+            }
+            catch { }
+            return false;
+        }
+
+        private static bool HasPowerPointDocumentIdentity(
+            OfficeTargetDescriptor target)
+        {
+            return target != null &&
+                (!string.IsNullOrWhiteSpace(target.DocumentKey) ||
+                 !string.IsNullOrWhiteSpace(target.FullName) ||
+                 !string.IsNullOrWhiteSpace(target.Path) ||
+                 !string.IsNullOrWhiteSpace(target.Name));
+        }
+
+        private static bool MatchesPowerPointTarget(
+            PowerPoint.Presentation presentation,
+            OfficeTargetDescriptor target)
+        {
+            if (presentation == null || target == null) return false;
+            if (!string.IsNullOrWhiteSpace(target.DocumentKey))
+                return string.Equals(
+                    PowerPointDocumentKey(presentation),
+                    target.DocumentKey.Trim(),
+                    StringComparison.OrdinalIgnoreCase);
+            var fullName = SafeString(delegate { return presentation.FullName; });
+            if (!string.IsNullOrWhiteSpace(target.FullName))
+                return SamePath(fullName, target.FullName);
+            if (!string.IsNullOrWhiteSpace(target.Path))
+                return SamePath(fullName, target.Path);
+            return string.Equals(
+                SafeString(delegate { return presentation.Name; }),
+                target.Name == null ? string.Empty : target.Name.Trim(),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string PowerPointDocumentKey(
+            PowerPoint.Presentation presentation)
+        {
+            return PowerPointDocumentSession.StableKey(
+                presentation,
+                DocumentIdentity.RuntimeKey("PowerPoint", presentation));
         }
 
         private static bool HasWordWindow(Word.Document document, long hwnd)

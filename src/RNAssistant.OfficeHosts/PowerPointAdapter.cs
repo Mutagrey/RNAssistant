@@ -3,109 +3,87 @@ using System.Collections.Generic;
 using System.Text;
 using Microsoft.Office.Core;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using PowerPoint = Microsoft.Office.Interop.PowerPoint;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Tools;
 using RNAssistant.OfficeHosts.Identity;
 using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class PowerPointAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
+    public sealed class PowerPointAdapter : IOfficeApplicationAdapter,
+        IOfficeContextProvider, IOfficeBuiltInSkillProvider,
+        IOfficeDocumentCatalog, IOfficeDocumentSessionProvider,
+        IOfficeDispatcherProvider, IPowerPointBackendProvider
     {
         private readonly PowerPoint.Application _application;
-        private readonly OfficeTargetDescriptor _target;
+        private readonly PowerPoint.Presentation _targetPresentation;
+        private readonly PowerPoint.DocumentWindow _targetWindow;
+        private readonly PowerPointDocumentSession _documentSession;
+        private readonly PowerPointInteropBackend _powerPointBackend;
 
-        public PowerPointAdapter(PowerPoint.Application application)
-            : this(application, null)
+        public PowerPointAdapter(
+            PowerPoint.Application application,
+            PowerPoint.Presentation targetPresentation,
+            PowerPoint.DocumentWindow targetWindow,
+            IOfficeStaDispatcher dispatcher)
         {
-        }
-
-        public PowerPointAdapter(PowerPoint.Application application, OfficeTargetDescriptor target)
-        {
-            _application = application;
-            _target = target;
+            _application = application ?? throw new ArgumentNullException(nameof(application));
+            _targetPresentation = targetPresentation ??
+                throw new ArgumentNullException(nameof(targetPresentation));
+            _targetWindow = targetWindow;
+            var runtimeDocumentId = DocumentIdentity.RuntimeKey(
+                HostName, _targetPresentation);
+            _documentSession = new PowerPointDocumentSession(
+                _targetPresentation, _targetWindow,
+                runtimeDocumentId, dispatcher);
+            _powerPointBackend = new PowerPointInteropBackend(_documentSession);
         }
 
         public string HostName { get { return "PowerPoint"; } }
-
-        public string DocumentKey
-        {
-            get
-            {
-                return KeyForPresentation(ActivePresentation());
-            }
-        }
-
-        public string RuntimeDocumentKey
-        {
-            get
-            {
-                var presentation = ActivePresentation();
-                return presentation == null ? "PowerPoint:NoPresentation" : DocumentIdentity.RuntimeKey(HostName, presentation);
-            }
-        }
-
-        public string DocumentTitle
-        {
-            get
-            {
-                var presentation = ActivePresentation();
-                return presentation == null ? "No presentation" : presentation.Name;
-            }
-        }
+        public IOfficeDocumentSession DocumentSession { get { return _documentSession; } }
+        public IOfficeStaDispatcher StaDispatcher { get { return _documentSession.StaDispatcher; } }
+        public IPowerPointBackend PowerPointBackend { get { return _powerPointBackend; } }
+        public string DocumentKey { get { return _documentSession.StableDocumentId; } }
+        public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
+        public string DocumentTitle { get { return RequirePresentation().Name; } }
 
         public OfficeContext GetOfficeContext()
         {
             var context = new OfficeContext { Host = HostName };
             try
             {
-                var hwnd = NativeWindowInfo.ReadLongMemberPath(_application, "HWND");
+                var hwnd = _targetWindow == null
+                    ? NativeWindowInfo.ReadLongMemberPath(_application, "HWND")
+                    : NativeWindowInfo.ReadLongMemberPath(_targetWindow, "HWND");
                 context.AppHwnd = new IntPtr(hwnd);
                 context.ProcessId = NativeWindowInfo.GetProcessId(hwnd);
             }
-            catch
-            {
-            }
+            catch { }
 
-            var presentation = ActivePresentation();
-            if (presentation != null)
-            {
-                context.DocumentPath = PersistentPath(presentation);
-                context.DocumentTitle = SafeString(delegate { return presentation.Name; });
-            }
-
+            var presentation = RequirePresentation();
+            context.DocumentPath = PersistentPath(presentation);
+            context.DocumentTitle = SafeString(delegate { return presentation.Name; });
             try
             {
                 var selection = TryGetSelection();
                 var slide = TryGetSelectedSlide(selection) ?? TryGetActiveSlide();
                 if (slide != null)
-                {
                     context.ContainerName = "Slide " + slide.SlideIndex;
-                }
-
                 var shapeCount = TryGetSelectedShapeCount(selection);
                 if (shapeCount > 0)
-                {
                     context.SelectionAddress = shapeCount + " shape(s)";
-                }
             }
-            catch
-            {
-            }
-
+            catch { }
             return context;
         }
 
         public IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
         {
-            PowerPoint.Presentation active;
-            try { active = _application.ActivePresentation; }
-            catch { active = null; }
             var result = new List<OpenOfficeDocumentDto>();
             foreach (PowerPoint.Presentation presentation in _application.Presentations)
             {
@@ -115,7 +93,7 @@ namespace RNAssistant.OfficeHosts
                     DocumentKey = KeyForPresentation(presentation),
                     Title = SafeString(delegate { return presentation.Name; }),
                     Path = PersistentPath(presentation),
-                    IsActive = active != null && string.Equals(KeyForPresentation(active), KeyForPresentation(presentation), StringComparison.OrdinalIgnoreCase)
+                    IsActive = SamePresentation(_targetPresentation, presentation)
                 });
             }
             return result;
@@ -123,23 +101,16 @@ namespace RNAssistant.OfficeHosts
 
         public bool ActivateDocument(string documentKey)
         {
-            if (string.IsNullOrWhiteSpace(documentKey))
-            {
-                return false;
-            }
-
+            if (string.IsNullOrWhiteSpace(documentKey)) return false;
             foreach (PowerPoint.Presentation presentation in _application.Presentations)
             {
-                if (!string.Equals(KeyForPresentation(presentation), documentKey, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
+                if (!string.Equals(
+                    KeyForPresentation(presentation), documentKey,
+                    StringComparison.OrdinalIgnoreCase)) continue;
                 if (presentation.Windows != null && presentation.Windows.Count > 0)
-                {
                     presentation.Windows[1].Activate();
-                }
-                NativeWindowInfo.BringToForeground(NativeWindowInfo.ReadLongMemberPath(_application, "HWND"));
+                NativeWindowInfo.BringToForeground(
+                    NativeWindowInfo.ReadLongMemberPath(_application, "HWND"));
                 return true;
             }
             return false;
@@ -147,54 +118,18 @@ namespace RNAssistant.OfficeHosts
 
         public bool OpenDocument(string path)
         {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return false;
-            }
-
+            if (string.IsNullOrWhiteSpace(path)) return false;
             try
             {
                 var presentation = _application.Presentations.Open(path);
-                if (presentation == null)
-                {
-                    return false;
-                }
+                if (presentation == null) return false;
                 if (presentation.Windows != null && presentation.Windows.Count > 0)
-                {
                     presentation.Windows[1].Activate();
-                }
-                NativeWindowInfo.BringToForeground(NativeWindowInfo.ReadLongMemberPath(_application, "HWND"));
+                NativeWindowInfo.BringToForeground(
+                    NativeWindowInfo.ReadLongMemberPath(_application, "HWND"));
                 return true;
             }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private string KeyForPresentation(PowerPoint.Presentation presentation)
-        {
-            if (presentation == null)
-            {
-                return "PowerPoint:NoPresentation";
-            }
-
-            var runtimeKey = DocumentIdentity.RuntimeKey(HostName, presentation);
-            return DocumentIdentity.ForOfficeDocument(
-                HostName,
-                PersistentPath(presentation),
-                runtimeKey,
-                () => presentation.CustomDocumentProperties);
-        }
-
-        private static string PersistentPath(PowerPoint.Presentation presentation)
-        {
-            if (presentation == null || string.IsNullOrWhiteSpace(SafeString(delegate { return presentation.Path; })))
-            {
-                return string.Empty;
-            }
-
-            return SafeString(delegate { return presentation.FullName; });
+            catch { return false; }
         }
 
         public IEnumerable<ToolDefinition> GetBuiltInTools()
@@ -221,31 +156,17 @@ namespace RNAssistant.OfficeHosts
 
         public string GetDocumentSnapshot(int maxChars)
         {
-            var presentation = ActivePresentation();
-            if (presentation == null)
-            {
-                return "No active presentation.";
-            }
-
-            return Trim(ReadSlidesText(presentation, 20), maxChars);
+            return Trim(ReadSlidesText(RequirePresentation(), 20), maxChars);
         }
 
         public void PrepareForContextCapture()
         {
             try
             {
-                var presentation = ActivePresentation();
-                if (presentation != null)
-                {
-                    presentation.Application.Activate();
-                    return;
-                }
-
-                _application.Activate();
+                if (_targetWindow != null) _targetWindow.Activate();
+                else _targetPresentation.Application.Activate();
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
@@ -253,25 +174,22 @@ namespace RNAssistant.OfficeHosts
             var presentation = RequirePresentation();
             var selection = TryGetSelection();
             if (selection == null)
-            {
-                throw new InvalidOperationException("Select a PowerPoint slide or shape first.");
-            }
-
-            var referenceOnly = string.Equals(mode, "reference", StringComparison.OrdinalIgnoreCase);
+                throw new InvalidOperationException(
+                    "Select a PowerPoint slide or shape first in the bound presentation.");
+            var referenceOnly = string.Equals(
+                mode, "reference", StringComparison.OrdinalIgnoreCase);
             PowerPoint.Slide slide = null;
             PowerPoint.Shape shape = null;
             var text = string.Empty;
-
-            if (selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes && selection.ShapeRange.Count > 0)
+            if (selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes &&
+                selection.ShapeRange.Count > 0)
             {
                 shape = selection.ShapeRange[1];
                 slide = shape.Parent as PowerPoint.Slide;
-                if (shape.HasTextFrame == MsoTriState.msoTrue && shape.TextFrame.HasText == MsoTriState.msoTrue)
-                {
-                    text = shape.TextFrame.TextRange.Text;
-                }
+                text = ShapeText(shape);
             }
-            else if (selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides && selection.SlideRange.Count > 0)
+            else if (selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides &&
+                selection.SlideRange.Count > 0)
             {
                 slide = selection.SlideRange[1];
                 text = ReadSlideText(slide);
@@ -279,36 +197,23 @@ namespace RNAssistant.OfficeHosts
             else
             {
                 slide = TryGetActiveSlide();
-                if (slide != null)
-                {
-                    text = ReadSlideText(slide);
-                }
+                if (slide != null) text = ReadSlideText(slide);
             }
-
-            if (slide == null)
-            {
-                throw new InvalidOperationException("Select a PowerPoint slide or shape first.");
-            }
-            if (!SlideBelongsToPresentation(slide, presentation))
-            {
-                throw new InvalidOperationException("Selected PowerPoint object is not in the target presentation.");
-            }
-
-            var reference = "Slide " + slide.SlideIndex + (shape == null ? string.Empty : " / " + shape.Name);
+            if (slide == null || !SlideBelongsToPresentation(slide, presentation))
+                throw new InvalidOperationException(
+                    "Selected PowerPoint object is not in the bound presentation.");
+            var reference = "Slide " + slide.SlideIndex +
+                (shape == null ? string.Empty : " / " + shape.Name);
             if (referenceOnly)
-            {
                 text = "Reference only. Use PowerPoint tools with this slide/shape if exact content is needed.";
-            }
             else if (string.IsNullOrWhiteSpace(text))
-            {
                 text = "Selected PowerPoint object has no readable text. Use this reference for layout/object tasks.";
-            }
-
             text = Trim(text, maxChars);
             return new ContextNote
             {
                 Host = HostName,
-                Kind = referenceOnly ? "slide-reference" : (shape == null ? "slide" : "shape"),
+                Kind = referenceOnly ? "slide-reference" :
+                    (shape == null ? "slide" : "shape"),
                 Title = "PowerPoint " + reference,
                 Reference = reference,
                 Source = presentation.Name + " / " + reference,
@@ -331,24 +236,6 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
-                    case "powerpoint.read_slides":
-                        return ReadSlidesOrSlide(command);
-                    case "powerpoint.list_objects":
-                        return ListObjects(command);
-                    case "powerpoint.search_text":
-                        return SearchText(command);
-                    case "powerpoint.add_slide":
-                        return AddSlide(command);
-                    case "powerpoint.set_text":
-                        return SetText(command);
-                    case "powerpoint.replace_text":
-                        return ReplaceText(command);
-                    case "powerpoint.add_object":
-                        return AddObject(command);
-                    case "powerpoint.duplicate_slide":
-                        return DuplicateSlide(command);
-                    case "powerpoint.move_slide":
-                        return MoveSlide(command);
                     case "powerpoint.vba_list_project_components_internal":
                         return ListVbaProjectComponents();
                     case "powerpoint.vba_read_module":
@@ -358,11 +245,21 @@ namespace RNAssistant.OfficeHosts
                     case "powerpoint.run_macro":
                         return RunMacro(command);
                     case "powerpoint.vba_install_package_internal":
-                        return VbaProjectSupport.InstallPackage(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"), ToolArgumentReader.String(command.Arguments, "marker", string.Empty));
+                        return VbaProjectSupport.InstallPackage(
+                            RequirePresentation(),
+                            ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"),
+                            ToolArgumentReader.String(command.Arguments, "marker", string.Empty));
                     case "powerpoint.vba_remove_package_internal":
-                        return VbaProjectSupport.RemovePackage(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"), ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
+                        return VbaProjectSupport.RemovePackage(
+                            RequirePresentation(),
+                            ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"),
+                            ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
                     case "powerpoint.vba_create_module_internal":
-                        return VbaProjectSupport.CreateModule(RequirePresentation(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty), ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"), ToolArgumentReader.String(command.Arguments, "code", string.Empty));
+                        return VbaProjectSupport.CreateModule(
+                            RequirePresentation(),
+                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
+                            ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"),
+                            ToolArgumentReader.String(command.Arguments, "code", string.Empty));
                     case "powerpoint.vba_rename_module_internal":
                         return VbaProjectSupport.RenameModule(
                             RequirePresentation(),
@@ -376,464 +273,37 @@ namespace RNAssistant.OfficeHosts
                             ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                             ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
                     default:
-                        return ToolResult.Fail("Unsupported PowerPoint tool: " + command.ToolId);
+                        return ToolResult.Fail(
+                            "Unsupported PowerPoint tool: " + command.ToolId);
                 }
             }
             catch (Exception ex)
             {
-                var isVba = (command == null ? string.Empty : command.ToolId ?? string.Empty)
-                    .IndexOf(".vba_", StringComparison.OrdinalIgnoreCase) >= 0;
-                return ToolResult.Fail(ex.Message, null, isVba ? "vba_access_error" : "office_tool_error", !isVba);
+                var isVba = (command == null ? string.Empty :
+                    command.ToolId ?? string.Empty).IndexOf(
+                        ".vba_", StringComparison.OrdinalIgnoreCase) >= 0;
+                return ToolResult.Fail(
+                    ex.Message, null,
+                    isVba ? "vba_access_error" : "office_tool_error", !isVba);
             }
-        }
-
-        private ToolResult ReadSlides(ToolCommand command)
-        {
-            var maxSlides = ToolArgumentReader.Int32(command.Arguments, "maxSlides", 20);
-            return ToolResult.Ok("Slides read.", JsonConvert.SerializeObject(new { text = ReadSlidesText(RequirePresentation(), maxSlides) }));
-        }
-
-        private ToolResult ReadSlidesOrSlide(ToolCommand command)
-        {
-            var content = ToolArgumentReader.String(command.Arguments, "content", "text");
-            if (string.Equals(content, "notes", StringComparison.OrdinalIgnoreCase)) return ReadSpeakerNotes(command);
-            if (string.Equals(content, "both", StringComparison.OrdinalIgnoreCase))
-            {
-                if (command.Arguments != null && command.Arguments.ContainsKey("slideIndex")) return ReadSlide(command);
-                return ReadSlidesWithNotes(command);
-            }
-            if (!string.Equals(content, "text", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("content must be text, notes, or both.");
-            }
-            if (command.Arguments != null && command.Arguments.ContainsKey("slideIndex"))
-            {
-                var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
-                return ToolResult.Ok("Slide text read: " + slide.SlideIndex,
-                    JsonConvert.SerializeObject(new { index = slide.SlideIndex, text = ReadSlideText(slide) }));
-            }
-            return ReadSlides(command);
-        }
-
-        private ToolResult ReadSlidesWithNotes(ToolCommand command)
-        {
-            var presentation = RequirePresentation();
-            var maxSlides = Math.Max(1, Math.Min(200, ToolArgumentReader.Int32(command.Arguments, "maxSlides", 20)));
-            var slides = new List<object>();
-            var count = Math.Min(presentation.Slides.Count, maxSlides);
-            for (var i = 1; i <= count; i++)
-            {
-                var slide = presentation.Slides[i];
-                slides.Add(new { index = i, text = ReadSlideText(slide), notes = ReadNotesText(slide) });
-            }
-            return ToolResult.Ok("Slides and notes read: " + slides.Count, JsonConvert.SerializeObject(slides));
-        }
-
-        private ToolResult ListObjects(ToolCommand command)
-        {
-            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
-            if (string.Equals(kind, "slides", StringComparison.OrdinalIgnoreCase)) return ListSlides();
-            if (string.Equals(kind, "shapes", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!command.Arguments.ContainsKey("slideIndex"))
-                {
-                    var activeSlide = TryGetActiveSlide();
-                    command.Arguments["slideIndex"] = activeSlide == null ? 1 : activeSlide.SlideIndex;
-                }
-                return ListShapes(command);
-            }
-            return ToolResult.Fail("kind must be slides or shapes.");
-        }
-
-        private ToolResult ReadSlide(ToolCommand command)
-        {
-            var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
-            return ToolResult.Ok("Slide read: " + slide.SlideIndex, JsonConvert.SerializeObject(new
-            {
-                index = slide.SlideIndex,
-                text = ReadSlideText(slide),
-                notes = ReadNotesText(slide)
-            }));
-        }
-
-        private ToolResult ListSlides()
-        {
-            var presentation = RequirePresentation();
-            var slides = new List<object>();
-            for (var i = 1; i <= presentation.Slides.Count; i++)
-            {
-                var slide = presentation.Slides[i];
-                slides.Add(new
-                {
-                    index = i,
-                    title = SlideTitle(slide),
-                    text = Trim(ReadSlideText(slide), 1000)
-                });
-            }
-
-            return ToolResult.Ok("Slides listed: " + slides.Count, JsonConvert.SerializeObject(slides));
-        }
-
-        private ToolResult ListShapes(ToolCommand command)
-        {
-            var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
-            var shapes = new List<object>();
-            foreach (PowerPoint.Shape shape in slide.Shapes)
-            {
-                shapes.Add(new
-                {
-                    name = shape.Name,
-                    type = shape.Type.ToString(),
-                    text = ShapeText(shape),
-                    left = shape.Left,
-                    top = shape.Top,
-                    width = shape.Width,
-                    height = shape.Height
-                });
-            }
-
-            return ToolResult.Ok("Shapes listed: " + shapes.Count, JsonConvert.SerializeObject(shapes));
-        }
-
-        private ToolResult SearchText(ToolCommand command)
-        {
-            var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
-            if (string.IsNullOrWhiteSpace(query)) return ToolResult.Fail("query is required.");
-            var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 50)));
-            var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
-            var matches = new List<object>();
-            var hash = new StringBuilder();
-            var total = 0;
-            try
-            {
-                foreach (var target in TextTargets(command))
-                {
-                    var text = ShapeText(target.Shape);
-                    hash.Append(target.SlideIndex).Append(':').Append(target.Kind).Append(':').Append(target.Shape.Name).Append('\n').Append(text).Append('\n');
-                    var found = TextPatternEngine.Find(text, query, PatternOptions(command), Math.Max(1, maxResults - matches.Count), contextChars);
-                    total += found.MatchCount;
-                    foreach (var match in found.Matches)
-                    {
-                        if (matches.Count >= maxResults) break;
-                        matches.Add(new { slideIndex = target.SlideIndex, shapeName = target.Shape.Name, kind = target.Kind, start = match.Index, end = match.Index + match.Length, preview = match.Preview });
-                    }
-                }
-                var scopeHash = TextPatternEngine.Sha256(hash.ToString());
-                return ToolResult.Ok("PowerPoint text matches found: " + total, JsonConvert.SerializeObject(new { matchCount = total, returnedCount = matches.Count, truncated = total > matches.Count, scopeSha256 = scopeHash, contentSha256 = scopeHash, matches = matches }));
-            }
-            catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
-        }
-
-        private ToolResult ReplaceText(ToolCommand command)
-        {
-            var find = ToolArgumentReader.String(command.Arguments, "find", string.Empty);
-            if (string.IsNullOrWhiteSpace(find)) return ToolResult.Fail("find is required.");
-            var replacement = ToolArgumentReader.String(command.Arguments, "replace", string.Empty);
-            var replaceAll = ToolArgumentReader.Boolean(command.Arguments, "replaceAll", true);
-            var maxReplacements = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxReplacements", 500)));
-            var targets = new List<PptTextTarget>(TextTargets(command));
-            var plans = new List<PptReplacementPlan>();
-            var options = PatternOptions(command);
-            var replacementPlanned = false;
-            try
-            {
-                foreach (var target in targets)
-                {
-                    var text = ShapeText(target.Shape);
-                    var found = TextPatternEngine.Find(text, find, options, 1, 0);
-                    if (found.MatchCount > 0 && (replaceAll || !replacementPlanned))
-                    {
-                        var edits = TextPatternEngine.PlanReplacements(text, find, replacement, options, replaceAll, maxReplacements);
-                        if (edits.Count > 0)
-                        {
-                            plans.Add(new PptReplacementPlan { Target = target, Edits = edits });
-                            replacementPlanned = true;
-                        }
-                    }
-                }
-                var replacements = 0;
-                foreach (var plan in plans) replacements += plan.Edits.Count;
-                if (replacements > maxReplacements) return ToolResult.Fail("Replacement count exceeds maxReplacements=" + maxReplacements + ".", null, "replacement_limit_exceeded", false);
-                for (var p = plans.Count - 1; p >= 0; p--)
-                {
-                    var plan = plans[p];
-                    for (var e = plan.Edits.Count - 1; e >= 0; e--)
-                    {
-                        var edit = plan.Edits[e];
-                        plan.Target.Shape.TextFrame.TextRange.Characters(edit.Index + 1, edit.Length).Text = edit.Text;
-                    }
-                }
-                var verify = SearchCommand(command, find);
-                var post = SearchText(verify);
-                if (!post.Success) return post;
-                var postHash = Convert.ToString(JObject.Parse(post.DataJson ?? "{}")["scopeSha256"]);
-                return ToolResult.Ok("PowerPoint replacements completed: " + replacements + ".", JsonConvert.SerializeObject(new { replacements = replacements, scopeSha256 = postHash }));
-            }
-            catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
-        }
-
-        private ToolCommand SearchCommand(ToolCommand source, string query)
-        {
-            var command = new ToolCommand { ToolId = "powerpoint.search_text" };
-            command.Arguments["query"] = query;
-            foreach (var name in new[] { "scope", "slideIndex", "includeNotes", "mode", "matchCase", "wholeWord" })
-                if (source.Arguments.ContainsKey(name)) command.Arguments[name] = source.Arguments[name];
-            command.Arguments["maxResults"] = 500; command.Arguments["contextChars"] = 80;
-            return command;
-        }
-
-        private TextPatternOptions PatternOptions(ToolCommand command)
-        {
-            return new TextPatternOptions { Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"), MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false), WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false) };
-        }
-
-        private IEnumerable<PptTextTarget> TextTargets(ToolCommand command)
-        {
-            var presentation = RequirePresentation();
-            var scope = ToolArgumentReader.String(command.Arguments, "scope", "deck");
-            var slideIndex = ToolArgumentReader.Int32(command.Arguments, "slideIndex", 0);
-            var includeNotes = ToolArgumentReader.Boolean(command.Arguments, "includeNotes", true);
-            if (slideIndex < 0 || slideIndex > presentation.Slides.Count)
-            {
-                throw new InvalidOperationException("slideIndex is outside the presentation: " + slideIndex + ".");
-            }
-            if (string.Equals(scope, "selection", StringComparison.OrdinalIgnoreCase))
-            {
-                var activeSlide = TryGetActiveSlide();
-                var slide = ResolveSlide(slideIndex <= 0 ? (activeSlide == null ? 1 : activeSlide.SlideIndex) : slideIndex);
-                var shape = ResolveSelectedShape(slide);
-                if (shape != null) yield return new PptTextTarget { SlideIndex = slide.SlideIndex, Kind = "shape", Shape = shape };
-                yield break;
-            }
-            foreach (PowerPoint.Slide slide in presentation.Slides)
-            {
-                if (slideIndex > 0 && slide.SlideIndex != slideIndex) continue;
-                foreach (PowerPoint.Shape shape in slide.Shapes)
-                    if (!string.IsNullOrEmpty(ShapeText(shape))) yield return new PptTextTarget { SlideIndex = slide.SlideIndex, Kind = "shape", Shape = shape };
-                if (includeNotes)
-                {
-                    foreach (PowerPoint.Shape shape in slide.NotesPage.Shapes)
-                        if (!string.IsNullOrEmpty(ShapeText(shape))) yield return new PptTextTarget { SlideIndex = slide.SlideIndex, Kind = "notes", Shape = shape };
-                }
-            }
-        }
-
-        private sealed class PptTextTarget { public int SlideIndex { get; set; } public string Kind { get; set; } public PowerPoint.Shape Shape { get; set; } }
-        private sealed class PptReplacementPlan { public PptTextTarget Target { get; set; } public List<TextPatternReplacement> Edits { get; set; } }
-
-        private ToolResult ReadSpeakerNotes(ToolCommand command)
-        {
-            var presentation = RequirePresentation();
-            var slideIndex = ToolArgumentReader.Int32(command.Arguments, "slideIndex", 0);
-            var maxSlides = Math.Max(1, Math.Min(200, ToolArgumentReader.Int32(command.Arguments, "maxSlides", 20)));
-            var notes = new List<object>();
-            if (slideIndex > 0)
-            {
-                var slide = ResolveSlide(slideIndex);
-                notes.Add(new { index = slide.SlideIndex, notes = ReadNotesText(slide) });
-            }
-            else
-            {
-                var count = Math.Min(presentation.Slides.Count, maxSlides);
-                for (var i = 1; i <= count; i++)
-                {
-                    var slide = presentation.Slides[i];
-                    notes.Add(new { index = i, notes = ReadNotesText(slide) });
-                }
-            }
-
-            return ToolResult.Ok("Speaker notes read: " + notes.Count, JsonConvert.SerializeObject(notes));
-        }
-
-        private ToolResult AddSlide(ToolCommand command)
-        {
-            var presentation = RequirePresentation();
-            var title = ToolArgumentReader.String(command.Arguments, "title", "AI slide");
-            var body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
-            var slide = presentation.Slides.Add(presentation.Slides.Count + 1, PowerPoint.PpSlideLayout.ppLayoutText);
-            slide.Shapes.Title.TextFrame.TextRange.Text = title;
-            if (slide.Shapes.Count >= 2)
-            {
-                slide.Shapes[2].TextFrame.TextRange.Text = body;
-            }
-            return ToolResult.Ok("Slide added: " + title);
-        }
-
-        private ToolResult SetSpeakerNotes(ToolCommand command)
-        {
-            var slide = ResolveTargetSlide(command);
-            var notes = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
-            var shape = ResolveNotesTextShape(slide);
-            if (shape == null)
-            {
-                return ToolResult.Fail("Could not find speaker notes text shape.");
-            }
-
-            shape.TextFrame.TextRange.Text = notes;
-            return ToolResult.Ok("Speaker notes set for slide " + slide.SlideIndex);
-        }
-
-        private ToolResult SetText(ToolCommand command)
-        {
-            var target = ToolArgumentReader.String(command.Arguments, "target", string.Empty);
-            if (string.Equals(target, "notes", StringComparison.OrdinalIgnoreCase))
-            {
-                return SetSpeakerNotes(command);
-            }
-            if (string.Equals(target, "shape", StringComparison.OrdinalIgnoreCase)) return SetShapeText(command);
-            return ToolResult.Fail("target must be notes or shape.");
-        }
-
-        private ToolResult AddTextBox(ToolCommand command)
-        {
-            var slide = ResolveTargetSlide(command);
-            var text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
-            var left = ToolArgumentReader.Int32(command.Arguments, "left", 60);
-            var top = ToolArgumentReader.Int32(command.Arguments, "top", 120);
-            var width = ToolArgumentReader.Int32(command.Arguments, "width", 480);
-            var height = ToolArgumentReader.Int32(command.Arguments, "height", 120);
-            var fontSize = ToolArgumentReader.Int32(command.Arguments, "fontSize", 0);
-            var shape = slide.Shapes.AddTextbox(MsoTextOrientation.msoTextOrientationHorizontal, left, top, width, height);
-            shape.TextFrame.TextRange.Text = text;
-            if (fontSize > 0)
-            {
-                shape.TextFrame.TextRange.Font.Size = fontSize;
-            }
-
-            return ToolResult.Ok("Text box added.", JsonConvert.SerializeObject(new { slide = slide.SlideIndex, shape = shape.Name }));
-        }
-
-        private ToolResult SetShapeText(ToolCommand command)
-        {
-            var shapeName = ToolArgumentReader.String(command.Arguments, "shapeName", string.Empty);
-            PowerPoint.Shape shape;
-            if (string.IsNullOrWhiteSpace(shapeName))
-            {
-                var selection = TryGetSelection();
-                shape = selection != null &&
-                    selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes &&
-                    TryGetSelectedShapeCount(selection) > 0
-                        ? selection.ShapeRange[1]
-                        : null;
-                if (shape != null && !ShapeBelongsToPresentation(shape, RequirePresentation())) shape = null;
-            }
-            else
-            {
-                var slide = ResolveTargetSlide(command);
-                shape = ResolveShape(slide, shapeName);
-            }
-            if (shape == null)
-            {
-                return ToolResult.Fail("Shape not found.");
-            }
-            if (shape.HasTextFrame != MsoTriState.msoTrue)
-            {
-                return ToolResult.Fail("Shape has no text frame.");
-            }
-
-            shape.TextFrame.TextRange.Text = ToolArgumentReader.String(command.Arguments, "text", string.Empty);
-            return ToolResult.Ok("Shape text set: " + shape.Name);
-        }
-
-        private ToolResult AddPicture(ToolCommand command)
-        {
-            var slide = ResolveTargetSlide(command);
-            var path = ToolArgumentReader.String(command.Arguments, "path", string.Empty);
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return ToolResult.Fail("path is required.");
-            }
-
-            var left = ToolArgumentReader.Int32(command.Arguments, "left", 60);
-            var top = ToolArgumentReader.Int32(command.Arguments, "top", 120);
-            var width = ToolArgumentReader.Int32(command.Arguments, "width", 320);
-            var height = ToolArgumentReader.Int32(command.Arguments, "height", 180);
-            var shape = slide.Shapes.AddPicture(path, MsoTriState.msoFalse, MsoTriState.msoTrue, left, top, width, height);
-            return ToolResult.Ok("Picture added.", JsonConvert.SerializeObject(new { slide = slide.SlideIndex, shape = shape.Name }));
-        }
-
-        private ToolResult AddObject(ToolCommand command)
-        {
-            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
-            if (string.Equals(kind, "textBox", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!command.Arguments.ContainsKey("text")) return ToolResult.Fail("text is required for kind=textBox.");
-                return AddTextBox(command);
-            }
-            if (string.Equals(kind, "picture", StringComparison.OrdinalIgnoreCase)) return AddPicture(command);
-            if (string.Equals(kind, "table", StringComparison.OrdinalIgnoreCase)) return AddTable(command);
-            return ToolResult.Fail("kind must be textBox, picture, or table.");
-        }
-
-        private ToolResult AddTable(ToolCommand command)
-        {
-            var slide = ResolveTargetSlide(command);
-            ResolvedTableArguments tableArguments;
-            string argumentError;
-            if (!TableArgumentResolver.TryResolve(command, 2, 2, out tableArguments, out argumentError))
-            {
-                return ToolResult.Fail(argumentError);
-            }
-            var rows = tableArguments.Rows;
-            var columns = tableArguments.Columns;
-            var left = ToolArgumentReader.Int32(command.Arguments, "left", 60);
-            var top = ToolArgumentReader.Int32(command.Arguments, "top", 120);
-            var width = ToolArgumentReader.Int32(command.Arguments, "width", 520);
-            var height = ToolArgumentReader.Int32(command.Arguments, "height", 160);
-            var shape = slide.Shapes.AddTable(rows, columns, left, top, width, height);
-            var values = tableArguments.Values;
-            if (values != null)
-            {
-                for (var r = 1; r <= rows && r <= values.Count; r++)
-                {
-                    var row = (JArray)values[r - 1];
-                    for (var c = 1; c <= columns && c <= row.Count; c++)
-                    {
-                        shape.Table.Cell(r, c).Shape.TextFrame.TextRange.Text = Convert.ToString(row[c - 1]);
-                    }
-                }
-            }
-
-            return ToolResult.Ok("Table added.", JsonConvert.SerializeObject(new { slide = slide.SlideIndex, shape = shape.Name, rows = rows, columns = columns }));
-        }
-
-        private ToolResult DuplicateSlide(ToolCommand command)
-        {
-            var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
-            var duplicated = slide.Duplicate();
-            var duplicate = duplicated[1];
-            return ToolResult.Ok("Slide duplicated.", JsonConvert.SerializeObject(new { sourceIndex = slide.SlideIndex, duplicateIndex = duplicate.SlideIndex }));
-        }
-
-        private ToolResult MoveSlide(ToolCommand command)
-        {
-            var slide = ResolveSlide(ToolArgumentReader.Int32(command.Arguments, "slideIndex", 1));
-            var toIndex = ToolArgumentReader.Int32(command.Arguments, "toIndex", 1);
-            var slideCount = RequirePresentation().Slides.Count;
-            if (toIndex < 1 || toIndex > slideCount)
-            {
-                throw new InvalidOperationException("toIndex is outside the presentation: " + toIndex + ".");
-            }
-            slide.MoveTo(toIndex);
-            return ToolResult.Ok("Slide moved to " + toIndex);
         }
 
         private ToolResult ListVbaProjectComponents()
         {
             var presentation = RequirePresentation();
-            return VbaProjectSupport.ListProjectComponents(presentation, presentation.Name);
+            return VbaProjectSupport.ListProjectComponents(
+                presentation, presentation.Name);
         }
 
         private ToolResult ReadVbaModule(ToolCommand command)
         {
-            if (command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount"))
-            {
+            if (command.Arguments.ContainsKey("startLine") ||
+                command.Arguments.ContainsKey("lineCount"))
                 return VbaProjectSupport.ReadModuleLines(
                     RequirePresentation(),
                     ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
                     ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
                     ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
-            }
             return VbaProjectSupport.ReadModule(
                 RequirePresentation(),
                 ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
@@ -852,82 +322,114 @@ namespace RNAssistant.OfficeHosts
 
         private ToolResult RunMacro(ToolCommand command)
         {
-            var macroName = ToolArgumentReader.String(command.Arguments, "macroName", string.Empty);
+            var macroName = ToolArgumentReader.String(
+                command.Arguments, "macroName", string.Empty);
             if (string.IsNullOrWhiteSpace(macroName))
-            {
                 return ToolResult.Fail("No macroName provided.");
-            }
-
-            var argumentsJson = ToolArgumentReader.String(command.Arguments, "argumentsJson", "[]");
-            var output = VbaProjectSupport.RunStringFunction(_application, macroName, argumentsJson);
-            return ToolResult.Ok("Macro ran: " + macroName, JsonConvert.SerializeObject(new { output = output }));
+            var argumentsJson = ToolArgumentReader.String(
+                command.Arguments, "argumentsJson", "[]");
+            var output = VbaProjectSupport.RunStringFunction(
+                _application, macroName, argumentsJson);
+            return ToolResult.Ok(
+                "Macro ran: " + macroName,
+                JsonConvert.SerializeObject(new { output }));
         }
 
-        private string ReadSlidesText(PowerPoint.Presentation presentation, int maxSlides)
+        private PowerPoint.Presentation RequirePresentation()
+        {
+            if (!_documentSession.IsAlive)
+                throw new InvalidOperationException(
+                    "Target PowerPoint presentation is not open.");
+            return _targetPresentation;
+        }
+
+        private PowerPoint.Selection TryGetSelection()
+        {
+            try { return _targetWindow == null ? null : _targetWindow.Selection; }
+            catch { return null; }
+        }
+
+        private PowerPoint.Slide TryGetActiveSlide()
+        {
+            try
+            {
+                if (_targetWindow == null || _targetWindow.View == null) return null;
+                var slide = _targetWindow.View.Slide as PowerPoint.Slide;
+                return SlideBelongsToPresentation(slide, _targetPresentation)
+                    ? slide : null;
+            }
+            catch { return null; }
+        }
+
+        private static PowerPoint.Slide TryGetSelectedSlide(
+            PowerPoint.Selection selection)
+        {
+            if (selection == null) return null;
+            try
+            {
+                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides &&
+                    selection.SlideRange.Count > 0)
+                    return selection.SlideRange[1];
+                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes &&
+                    selection.ShapeRange.Count > 0)
+                    return selection.ShapeRange[1].Parent as PowerPoint.Slide;
+            }
+            catch { }
+            return null;
+        }
+
+        private static int TryGetSelectedShapeCount(
+            PowerPoint.Selection selection)
+        {
+            try
+            {
+                return selection != null &&
+                    selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes
+                    ? selection.ShapeRange.Count : 0;
+            }
+            catch { return 0; }
+        }
+
+        private string KeyForPresentation(PowerPoint.Presentation presentation)
+        {
+            return PowerPointDocumentSession.StableKey(
+                presentation,
+                presentation == null ? "PowerPoint:Runtime:none" :
+                    DocumentIdentity.RuntimeKey(HostName, presentation));
+        }
+
+        private static string PersistentPath(
+            PowerPoint.Presentation presentation)
+        {
+            if (presentation == null || string.IsNullOrWhiteSpace(
+                SafeString(delegate { return presentation.Path; })))
+                return string.Empty;
+            return SafeString(delegate { return presentation.FullName; });
+        }
+
+        private static string ReadSlidesText(
+            PowerPoint.Presentation presentation, int maxSlides)
         {
             var builder = new StringBuilder();
-            var count = Math.Min(presentation.Slides.Count, Math.Max(1, maxSlides));
-            for (var i = 1; i <= count; i++)
+            var count = Math.Min(
+                presentation.Slides.Count, Math.Max(1, maxSlides));
+            for (var index = 1; index <= count; index++)
             {
-                var slide = presentation.Slides[i];
-                builder.AppendLine("Slide " + i + ":");
-                builder.Append(ReadSlideText(slide));
+                builder.AppendLine("Slide " + index + ":");
+                builder.Append(ReadSlideText(presentation.Slides[index]));
             }
             return builder.ToString();
         }
 
-        private string ReadSlideText(PowerPoint.Slide slide)
+        private static string ReadSlideText(PowerPoint.Slide slide)
         {
             var builder = new StringBuilder();
             foreach (PowerPoint.Shape shape in slide.Shapes)
             {
-                if (shape.HasTextFrame == MsoTriState.msoTrue && shape.TextFrame.HasText == MsoTriState.msoTrue)
-                {
-                    builder.AppendLine(shape.TextFrame.TextRange.Text);
-                }
+                var text = ShapeText(shape);
+                if (!string.IsNullOrEmpty(text)) builder.AppendLine(text);
             }
             return builder.ToString();
-        }
-
-        private PowerPoint.Slide ResolveTargetSlide(ToolCommand command)
-        {
-            var activeSlide = TryGetActiveSlide();
-            return ResolveSlide(ToolArgumentReader.Int32(
-                command == null ? null : command.Arguments,
-                "slideIndex",
-                activeSlide == null ? 1 : activeSlide.SlideIndex));
-        }
-
-        private PowerPoint.Slide ResolveSlide(int slideIndex)
-        {
-            var presentation = RequirePresentation();
-            if (presentation.Slides.Count <= 0)
-            {
-                throw new InvalidOperationException("Presentation has no slides.");
-            }
-
-            if (slideIndex < 1 || slideIndex > presentation.Slides.Count)
-            {
-                throw new InvalidOperationException("slideIndex is outside the presentation: " + slideIndex + ".");
-            }
-
-            return presentation.Slides[slideIndex];
-        }
-
-        private static string SlideTitle(PowerPoint.Slide slide)
-        {
-            try
-            {
-                if (slide != null && slide.Shapes.HasTitle == MsoTriState.msoTrue)
-                {
-                    return slide.Shapes.Title.TextFrame.TextRange.Text;
-                }
-            }
-            catch
-            {
-            }
-
-            return string.Empty;
         }
 
         private static string ShapeText(PowerPoint.Shape shape)
@@ -937,294 +439,35 @@ namespace RNAssistant.OfficeHosts
                 return shape != null &&
                     shape.HasTextFrame == MsoTriState.msoTrue &&
                     shape.TextFrame.HasText == MsoTriState.msoTrue
-                    ? shape.TextFrame.TextRange.Text
-                    : string.Empty;
+                    ? shape.TextFrame.TextRange.Text : string.Empty;
             }
-            catch
-            {
-                return string.Empty;
-            }
+            catch { return string.Empty; }
         }
 
-        private static string ReadNotesText(PowerPoint.Slide slide)
+        private static bool SamePresentation(
+            PowerPoint.Presentation left, PowerPoint.Presentation right)
         {
-            var builder = new StringBuilder();
+            if (left == null || right == null) return false;
             try
             {
-                foreach (PowerPoint.Shape shape in slide.NotesPage.Shapes)
-                {
-                    var text = ShapeText(shape);
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        builder.AppendLine(text);
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            return builder.ToString();
-        }
-
-        private static PowerPoint.Shape ResolveNotesTextShape(PowerPoint.Slide slide)
-        {
-            try
-            {
-                var placeholders = slide.NotesPage.Shapes.Placeholders;
-                if (placeholders.Count >= 2)
-                {
-                    var placeholder = placeholders[2];
-                    if (placeholder.HasTextFrame == MsoTriState.msoTrue)
-                    {
-                        return placeholder;
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                foreach (PowerPoint.Shape shape in slide.NotesPage.Shapes)
-                {
-                    if (shape.HasTextFrame == MsoTriState.msoTrue)
-                    {
-                        return shape;
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            return null;
-        }
-
-        private PowerPoint.Shape ResolveSelectedShape(PowerPoint.Slide slide)
-        {
-            try
-            {
-                var selection = TryGetSelection();
-                if (selection != null &&
-                    selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes &&
-                    selection.ShapeRange.Count > 0)
-                {
-                    var shape = selection.ShapeRange[1];
-                    return ShapeBelongsToPresentation(shape, slide.Parent as PowerPoint.Presentation) ? shape : null;
-                }
-            }
-            catch
-            {
-            }
-
-            return null;
-        }
-
-        private PowerPoint.DocumentWindow TryGetActiveWindow()
-        {
-            try { return _application.ActiveWindow; }
-            catch { return null; }
-        }
-
-        private PowerPoint.Selection TryGetSelection()
-        {
-            try
-            {
-                var window = TryGetActiveWindow();
-                return window == null ? null : window.Selection;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private PowerPoint.Slide TryGetActiveSlide()
-        {
-            try
-            {
-                var window = TryGetActiveWindow();
-                if (window == null || window.View == null)
-                {
-                    return null;
-                }
-
-                return window.View.Slide as PowerPoint.Slide;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private PowerPoint.Slide TryGetSelectedSlide(PowerPoint.Selection selection)
-        {
-            if (selection == null)
-            {
-                return null;
-            }
-
-            try
-            {
-                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionSlides && selection.SlideRange.Count > 0)
-                {
-                    return selection.SlideRange[1];
-                }
-
-                if (selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes && selection.ShapeRange.Count > 0)
-                {
-                    var shape = selection.ShapeRange[1];
-                    return shape == null ? null : shape.Parent as PowerPoint.Slide;
-                }
-            }
-            catch
-            {
-            }
-
-            return null;
-        }
-
-        private static int TryGetSelectedShapeCount(PowerPoint.Selection selection)
-        {
-            try
-            {
-                return selection != null && selection.Type == PowerPoint.PpSelectionType.ppSelectionShapes
-                    ? selection.ShapeRange.Count
-                    : 0;
-            }
-            catch
-            {
-                return 0;
-            }
-        }
-
-        private static PowerPoint.Shape ResolveShape(PowerPoint.Slide slide, string shapeName)
-        {
-            if (slide == null || string.IsNullOrWhiteSpace(shapeName))
-            {
-                return null;
-            }
-
-            foreach (PowerPoint.Shape shape in slide.Shapes)
-            {
-                if (string.Equals(shape.Name, shapeName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return shape;
-                }
-            }
-
-            return null;
-        }
-
-        private PowerPoint.Presentation ActivePresentation()
-        {
-            if (HasTargetDocument())
-            {
-                return TargetPresentation();
-            }
-
-            try { return _application.ActivePresentation; }
-            catch { return null; }
-        }
-
-        private PowerPoint.Presentation TargetPresentation()
-        {
-            if (!HasTargetDocument())
-            {
-                return null;
-            }
-
-            foreach (PowerPoint.Presentation presentation in _application.Presentations)
-            {
-                if (MatchesPresentation(presentation))
-                {
-                    return presentation;
-                }
-            }
-
-            return null;
-        }
-
-        private bool HasTargetDocument()
-        {
-            return _target != null && _target.HasDocumentIdentity;
-        }
-
-        private bool MatchesPresentation(PowerPoint.Presentation presentation)
-        {
-            if (presentation == null)
-            {
-                return false;
-            }
-
-            var fullName = SafeString(delegate { return presentation.FullName; });
-            if (!string.IsNullOrWhiteSpace(_target.FullName) && SamePath(fullName, _target.FullName))
-            {
-                return true;
-            }
-
-            if (!string.IsNullOrWhiteSpace(_target.Path) && SamePath(fullName, _target.Path))
-            {
-                return true;
-            }
-
-            var name = SafeString(delegate { return presentation.Name; });
-            return string.IsNullOrWhiteSpace(_target.FullName)
-                && string.IsNullOrWhiteSpace(_target.Path)
-                && !string.IsNullOrWhiteSpace(_target.Name)
-                && string.Equals(name, _target.Name, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private PowerPoint.Presentation RequirePresentation()
-        {
-            var presentation = ActivePresentation();
-            if (presentation == null)
-            {
-                throw new InvalidOperationException(_target == null || !_target.HasDocumentIdentity
-                    ? "No active presentation."
-                    : "Target PowerPoint presentation is not open.");
-            }
-            return presentation;
-        }
-
-        private static bool ShapeBelongsToPresentation(PowerPoint.Shape shape, PowerPoint.Presentation presentation)
-        {
-            if (shape == null)
-            {
-                return false;
-            }
-
-            try
-            {
-                return SlideBelongsToPresentation(shape.Parent as PowerPoint.Slide, presentation);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static bool SlideBelongsToPresentation(PowerPoint.Slide slide, PowerPoint.Presentation presentation)
-        {
-            if (slide == null || presentation == null)
-            {
-                return false;
-            }
-
-            try
-            {
-                var parent = slide.Parent as PowerPoint.Presentation;
                 return string.Equals(
-                    DocumentIdentity.RuntimeKey("PowerPoint", parent),
-                    DocumentIdentity.RuntimeKey("PowerPoint", presentation),
+                    DocumentIdentity.RuntimeKey("PowerPoint", left),
+                    DocumentIdentity.RuntimeKey("PowerPoint", right),
                     StringComparison.OrdinalIgnoreCase);
             }
-            catch
+            catch { return false; }
+        }
+
+        private static bool SlideBelongsToPresentation(
+            PowerPoint.Slide slide, PowerPoint.Presentation presentation)
+        {
+            if (slide == null || presentation == null) return false;
+            try
             {
-                return false;
+                return SamePresentation(
+                    slide.Parent as PowerPoint.Presentation, presentation);
             }
+            catch { return false; }
         }
 
         private delegate string StringGetter();
@@ -1235,26 +478,12 @@ namespace RNAssistant.OfficeHosts
             catch { return string.Empty; }
         }
 
-        private static bool SamePath(string left, string right)
-        {
-            return !string.IsNullOrWhiteSpace(left)
-                && !string.IsNullOrWhiteSpace(right)
-                && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false, bool canSourceHtmlData = false)
-        {
-            return new ToolDefinition { Id = id, Host = "PowerPoint", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation, CanSourceHtmlData = canSourceHtmlData };
-        }
-
         private static string Trim(string text, int maxChars)
         {
             maxChars = Math.Max(0, maxChars);
             if (maxChars == 0) return string.Empty;
             if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
-            {
                 return text;
-            }
             return text.Substring(0, maxChars) + "\n...[truncated]";
         }
     }

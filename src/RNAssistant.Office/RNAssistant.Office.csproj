@@ -127,6 +127,9 @@
     <Compile Include="Domains\Word\WordBackendProvider.cs" />
     <Compile Include="Domains\Word\WordContracts.cs" />
     <Compile Include="Domains\Word\WordService.cs" />
+    <Compile Include="Domains\PowerPoint\PowerPointBackendProvider.cs" />
+    <Compile Include="Domains\PowerPoint\PowerPointContracts.cs" />
+    <Compile Include="Domains\PowerPoint\PowerPointService.cs" />
     <Compile Include="Tools\ExcelReadToolAdapter.cs" />
     <Compile Include="Tools\ExcelReadToolHandler.cs" />
     <Compile Include="Tools\ExcelReadToolIds.cs" />
@@ -136,6 +139,9 @@
     <Compile Include="Tools\WordToolAdapter.cs" />
     <Compile Include="Tools\WordToolHandler.cs" />
     <Compile Include="Tools\WordToolIds.cs" />
+    <Compile Include="Tools\PowerPointToolAdapter.cs" />
+    <Compile Include="Tools\PowerPointToolHandler.cs" />
+    <Compile Include="Tools\PowerPointToolIds.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolAdapter.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolHandler.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolIds.cs" />

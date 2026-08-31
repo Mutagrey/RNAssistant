@@ -13,6 +13,7 @@ using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Vba;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.Word;
+using RNAssistant.Office.Domains.PowerPoint;
 
 namespace RNAssistant.Office.Tools
 {
@@ -34,6 +35,7 @@ namespace RNAssistant.Office.Tools
         private readonly ExcelTableToolAdapter _excelTableAdapter;
         private readonly ExcelChartToolAdapter _excelChartAdapter;
         private readonly WordToolAdapter _wordAdapter;
+        private readonly PowerPointToolAdapter _powerPointAdapter;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
         private readonly TaskListToolExecutor _taskListToolExecutor;
         private readonly PlanDocumentToolExecutor _planDocumentToolExecutor;
@@ -93,6 +95,11 @@ namespace RNAssistant.Office.Tools
             var wordBackend = _adapter as IWordBackendProvider;
             _wordAdapter = wordBackend == null || wordBackend.WordBackend == null
                 ? null : new WordToolAdapter(wordBackend.WordBackend);
+            var powerPointBackend = _adapter as IPowerPointBackendProvider;
+            _powerPointAdapter = powerPointBackend == null ||
+                powerPointBackend.PowerPointBackend == null
+                ? null : new PowerPointToolAdapter(
+                    powerPointBackend.PowerPointBackend);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(
                 _adapter, _adapterTools, BeginLiveOfficeRead, ExecuteOfficeDataSourceUnderCurrentAccess);
             _taskListToolExecutor = new TaskListToolExecutor();
@@ -131,7 +138,7 @@ namespace RNAssistant.Office.Tools
             return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _excelWriteAdapter,
                 _excelFindReplaceAdapter, _excelSheetAdapter,
                 _excelRangeMutationAdapter, _excelTableAdapter,
-                _excelChartAdapter, _wordAdapter, _hostRuntime,
+                _excelChartAdapter, _wordAdapter, _powerPointAdapter, _hostRuntime,
                 session, snapshot, settings, mode, trace);
         }
 
@@ -459,7 +466,8 @@ namespace RNAssistant.Office.Tools
                     ExcelRangeMutationToolIds.Owns(command.ToolId) ||
                     ExcelTableToolIds.Owns(command.ToolId) ||
                     ExcelChartToolIds.IsMutation(command.ToolId) ||
-                    WordToolIds.IsMutation(command.ToolId)))
+                    WordToolIds.IsMutation(command.ToolId) ||
+                    PowerPointToolIds.IsMutation(command.ToolId)))
                 {
                     var validation = ValidateCommandArguments(command, tool);
                     if (validation != null) return validation;
@@ -710,6 +718,15 @@ namespace RNAssistant.Office.Tools
                         "The bound Word read backend is unavailable.", null,
                         "word_backend_unavailable", false);
                 return _wordAdapter.ExecuteDataSource(command, cancellationToken);
+            }
+            if (command != null && PowerPointToolIds.IsRead(command.ToolId))
+            {
+                if (_powerPointAdapter == null)
+                    return ToolResult.Fail(
+                        "The bound PowerPoint read backend is unavailable.", null,
+                        "powerpoint_backend_unavailable", false);
+                return _powerPointAdapter.ExecuteDataSource(
+                    command, cancellationToken);
             }
             return _adapter.ExecuteTool(command) ?? ToolResult.Fail("Office data source returned no result.");
         }
