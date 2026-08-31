@@ -30,8 +30,7 @@ namespace RNAssistant.Core.Services
 
         public static ResourceRef ResolveArtifactRevision(ChatSession session, string artifactId)
         {
-            var artifact = (session == null ? null : session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item =>
-                item != null && string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
+            var artifact = FindUniqueArtifact(session, artifactId);
             return artifact == null ? null : CreateArtifactRevision(session, artifact);
         }
 
@@ -111,8 +110,7 @@ namespace RNAssistant.Core.Services
                 return false;
             }
             var parsedArtifactId = artifactId;
-            var artifact = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item =>
-                item != null && string.Equals(item.Id, parsedArtifactId, StringComparison.OrdinalIgnoreCase));
+            var artifact = FindUniqueArtifact(session, parsedArtifactId);
             if (artifact != null && Math.Max(1, artifact.Revision) == revision) return true;
             artifactId = null;
             return false;
@@ -128,8 +126,7 @@ namespace RNAssistant.Core.Services
                 return false;
             }
             var parsedArtifactId = artifactId;
-            var artifact = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item =>
-                item != null && string.Equals(item.Id, parsedArtifactId, StringComparison.OrdinalIgnoreCase));
+            var artifact = FindUniqueArtifact(session, parsedArtifactId);
             if (artifact != null && Math.Max(1, artifact.Revision) == revision) return true;
             artifactId = null;
             return false;
@@ -148,6 +145,19 @@ namespace RNAssistant.Core.Services
                 }
             }
             return result;
+        }
+
+        private static ChatArtifact FindUniqueArtifact(ChatSession session, string artifactId)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(artifactId)) return null;
+            var matches = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && string.Equals(
+                    item.Id,
+                    artifactId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            return matches.Count == 1 ? matches[0] : null;
         }
     }
 }

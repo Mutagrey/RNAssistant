@@ -735,6 +735,7 @@ namespace RNAssistant.Harness
             session.Artifacts.Add(unique);
             var gateway = new ResourceGatewayService();
             var duplicateUri = ChatResourceUri.CreateArtifactRevisionUri(session, first);
+            var duplicateReference = ChatResourceUri.CreateArtifactRevision(session, first);
 
             var listed = gateway.List(
                 session, ChatArtifactResourceProvider.ProviderName, ChatArtifactKinds.Markdown, null, 10);
@@ -747,6 +748,18 @@ namespace RNAssistant.Harness
             RuntimeThrows<KeyNotFoundException>(() => gateway.Resolve(session, duplicateUri));
             RuntimeThrows<KeyNotFoundException>(() => ReadResource(
                 gateway, session, duplicateUri, ResourceRepresentations.Text, null, 128));
+            AssertEqual(null, ChatResourceUri.ResolveArtifactRevision(session, first.Id),
+                "ambiguous id cannot create a shared resource reference");
+            string referencedId;
+            AssertEqual(false, ChatResourceUri.TryGetCurrentArtifactId(
+                session, duplicateReference, out referencedId),
+                "ambiguous current reference is rejected");
+            AssertEqual(false, ChatResourceUri.TryGetArtifactId(
+                session, duplicateReference, out referencedId),
+                "ambiguous historical reference is rejected");
+            AssertEqual(0, ChatResourceUri.CurrentArtifactIds(
+                session, new[] { duplicateReference }).Count,
+                "ambiguous references do not enter prompt or reachability projections");
         }
 
         private static void ResourceGatewayPreservesEmptyTextRepresentations()
