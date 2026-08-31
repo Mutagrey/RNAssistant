@@ -2214,8 +2214,12 @@ policy/effect semantics. Текущий PowerShell WQ0 остаётся engineer
    collector owner, VSTO/native observation port, embedded pack и narrow same-build
    x64 helper для независимых client leases. Реальная Windows qualification остаётся
    отдельным обязательным gate; readiness не закрывает WQ0/5B2/R04.
-5. **WQ-A4 suites:** common/provider/storage/UI и по одному host pack, versioned
-   fixtures, deterministic final-state verifiers и coverage gates.
+5. **WQ-A4 suites:** common/provider/storage/UI и host packs, versioned fixtures,
+   deterministic final-state verifier IDs и coverage gates.
+   - [x] Canonical quick/full/release manifests и coverage owners embedded
+     host-neutral; exact all-or-nothing capabilities оставляют отсутствующие
+     production adapters/environment N/A, а не pass.
+     [Evidence](WQ_A4_SUITE_CATALOG.md).
 6. **WQ-A5 release integration:** immutable BuildEvidenceManifest и complete release suite.
 
 ### Обязательные ограничения

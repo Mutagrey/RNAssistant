@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "provider.live",
+  "revision": "1",
+  "title": "Provider live · protocol and recovery",
+  "description": "Проверяет live provider через production model protocol: strict response, refusal, streaming, repair/reset, bounded long payload, runtime call IDs и batch safety. Ни один model narrative не считается assertion evidence.",
+  "hosts": ["*"],
+  "suite": "full",
+  "workspacePolicy": "read-only",
+  "requirements": ["qualification.pack.provider.live.v1", "live-provider"],
+  "coverage": ["WQ-A4.provider-live"],
+  "steps": [
+    {
+      "id": "preflight",
+      "kind": "precondition",
+      "title": "Зафиксировать endpoint и protocol capabilities без secrets",
+      "action": "qualification.provider.live.preflight",
+      "timeoutSeconds": 20
+    },
+    {
+      "id": "strict-stream",
+      "kind": "hostProbe",
+      "title": "Проверить strict response и bounded streaming",
+      "action": "qualification.provider.live.strict-stream",
+      "dependsOn": ["preflight"],
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "refusal",
+      "kind": "hostProbe",
+      "title": "Проверить native refusal projection",
+      "action": "qualification.provider.live.refusal",
+      "dependsOn": ["strict-stream"],
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "repair-reset",
+      "kind": "fault",
+      "title": "Проверить bounded repair и incompatible-history reset",
+      "action": "qualification.provider.live.repair-reset",
+      "dependsOn": ["refusal"],
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "ids-batch",
+      "kind": "hostProbe",
+      "title": "Проверить runtime IDs, singleton safety и independent read batch",
+      "action": "qualification.provider.live.ids-batch",
+      "dependsOn": ["repair-reset"],
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить protocol outcomes и accepted history",
+      "assertion": "qualification.provider.live.protocol-matrix",
+      "dependsOn": ["ids-batch"],
+      "timeoutSeconds": 30
+    }
+  ]
+}

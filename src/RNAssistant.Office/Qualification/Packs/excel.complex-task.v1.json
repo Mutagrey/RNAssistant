@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "excel.complex-task",
+  "revision": "1",
+  "title": "Excel · complex agent task",
+  "description": "Одна сложная production задача связывает resources, analysis, progressive capability reads, multi-step Excel edits, confirmation, exact final-state verification и restart evidence на runner-owned workbook.",
+  "hosts": ["Excel"],
+  "suite": "release",
+  "workspacePolicy": "runner-owned",
+  "requirements": ["qualification.pack.excel.complex-task.v1", "live-provider", "windows-x64", "office-x64"],
+  "coverage": ["WQ-A4.excel-complex"],
+  "steps": [
+    {
+      "id": "fixture",
+      "kind": "fixture",
+      "title": "Создать workbook и resource fixture",
+      "action": "qualification.excel.complex.fixture.create",
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "agent-task",
+      "kind": "agentTask",
+      "title": "Выполнить сложную задачу анализа и редактирования",
+      "prompt": "Прочитай приложенный fixture brief и исходные листы, рассчитай сводные показатели, создай проверяемую таблицу результатов и формулы, сохрани исходные данные неизменными и объясни evidence каждой операции.",
+      "dependsOn": ["fixture"],
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "confirmation",
+      "kind": "confirmation",
+      "title": "Проверить singleton confirmation lifecycle",
+      "action": "qualification.excel.complex.confirmation",
+      "dependsOn": ["agent-task"],
+      "timeoutSeconds": 180
+    },
+    {
+      "id": "restart",
+      "kind": "restart",
+      "title": "Перезапустить projection после effect",
+      "action": "qualification.excel.complex.restart",
+      "dependsOn": ["confirmation"],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить workbook, formulas, events и trajectory",
+      "assertion": "qualification.excel.complex.final-state",
+      "dependsOn": ["restart"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "cleanup",
+      "kind": "cleanup",
+      "title": "Удалить только runner-owned artifacts",
+      "action": "qualification.excel.complex.cleanup",
+      "dependsOn": ["verify"],
+      "timeoutSeconds": 30
+    }
+  ]
+}

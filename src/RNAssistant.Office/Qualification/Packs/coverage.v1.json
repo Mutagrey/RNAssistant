@@ -9,6 +9,41 @@
       "mandatory": true
     },
     {
+      "id": "WQ-A4.common-quick",
+      "owner": "Qualification.Application.Agent",
+      "hosts": ["*"],
+      "suites": ["quick"],
+      "mandatory": true
+    },
+    {
+      "id": "WQ-A4.provider-live",
+      "owner": "Core.ModelProtocol",
+      "hosts": ["*"],
+      "suites": ["full"],
+      "mandatory": true
+    },
+    {
+      "id": "WQ-A4.storage-recovery",
+      "owner": "Core.Persistence",
+      "hosts": ["*"],
+      "suites": ["full"],
+      "mandatory": true
+    },
+    {
+      "id": "WQ-A4.ui-webview",
+      "owner": "Qualification.Application.UI",
+      "hosts": ["*"],
+      "suites": ["full"],
+      "mandatory": true
+    },
+    {
+      "id": "WQ-A4.excel-read-write",
+      "owner": "OfficeHosts.Excel",
+      "hosts": ["Excel"],
+      "suites": ["full"],
+      "mandatory": true
+    },
+    {
       "id": "WQ-A3.identity-owner",
       "owner": "OfficeHosts.Qualification",
       "hosts": ["Excel"],
@@ -26,6 +61,27 @@
       "id": "WQ-SESSION.identity",
       "owner": "HostRuntime.DocumentSession",
       "hosts": ["Excel"],
+      "suites": ["release"],
+      "mandatory": true
+    },
+    {
+      "id": "WQ-A4.excel-complex",
+      "owner": "Qualification.Application.Agent",
+      "hosts": ["Excel"],
+      "suites": ["release"],
+      "mandatory": true
+    },
+    {
+      "id": "WQ-A4.vba-lifecycle",
+      "owner": "Office.Vba",
+      "hosts": ["Excel", "Word", "PowerPoint", "Outlook"],
+      "suites": ["release"],
+      "mandatory": true
+    },
+    {
+      "id": "WQ-A4.cross-full-run",
+      "owner": "Qualification.Application",
+      "hosts": ["Excel", "Word", "PowerPoint", "Outlook"],
       "suites": ["release"],
       "mandatory": true
     }

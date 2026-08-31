@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "excel.read-write",
+  "revision": "1",
+  "title": "Excel · typed read/write matrix",
+  "description": "Versioned workbook fixture проверяет bound inspect/read, scalar/formula/table writes, no-op/error/unknown semantics и exact read-back. Все mutations ограничены runner-owned workbook и проходят production document gate.",
+  "hosts": ["Excel"],
+  "suite": "full",
+  "workspacePolicy": "runner-owned",
+  "requirements": ["qualification.pack.excel.read-write.v1", "windows-x64", "office-x64"],
+  "coverage": ["WQ-A4.excel-read-write"],
+  "steps": [
+    {
+      "id": "fixture",
+      "kind": "fixture",
+      "title": "Создать versioned Excel read/write fixture",
+      "action": "qualification.excel.read-write.fixture.create",
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "reads",
+      "kind": "agentTask",
+      "title": "Выполнить typed inspect/read задачи",
+      "prompt": "В runner-owned книге найди контрольный лист, прочитай указанный диапазон и таблицу через доступные capabilities и сообщи значения с адресами.",
+      "dependsOn": ["fixture"],
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "writes",
+      "kind": "agentTask",
+      "title": "Выполнить scalar, formula и table mutations",
+      "prompt": "Только в runner-owned книге запиши заданные fixture значения, формулу и строку таблицы. Используй production confirmation/document gate и дождись typed effect result.",
+      "dependsOn": ["reads"],
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "effect-matrix",
+      "kind": "fault",
+      "title": "Проверить no-op, error и unknown без ложного success",
+      "action": "qualification.excel.read-write.effect-matrix",
+      "dependsOn": ["writes"],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить live workbook final state и read-back",
+      "assertion": "qualification.excel.read-write.final-state",
+      "dependsOn": ["effect-matrix"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "cleanup",
+      "kind": "cleanup",
+      "title": "Закрыть и удалить runner-owned workbook",
+      "action": "qualification.excel.read-write.cleanup",
+      "dependsOn": ["verify"],
+      "timeoutSeconds": 30
+    }
+  ]
+}

@@ -251,8 +251,32 @@
     <EmbeddedResource Include="Qualification\Packs\common.ui-shell.v1.json">
       <LogicalName>RNAssistant.Office.Qualification.Packs.common.ui-shell.v1.json</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\common.quick.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.common.quick.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\provider.live.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.provider.live.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\storage.recovery.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.storage.recovery.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\ui.webview.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.ui.webview.v1.json</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Qualification\Packs\excel.wq0.identity.v1.json">
       <LogicalName>RNAssistant.Office.Qualification.Packs.excel.wq0.identity.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\excel.read-write.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.excel.read-write.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\excel.complex-task.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.excel.complex-task.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\vba.lifecycle.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.vba.lifecycle.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\cross.full-run.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.cross.full-run.v1.json</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>

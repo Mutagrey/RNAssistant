@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "ui.webview",
+  "revision": "1",
+  "title": "WebView UI · interaction and replay",
+  "description": "Проверяет реальный WebView2: entry points, keyboard/focus/DPI, confirmation, shared lossless JSON viewer, reload/resume и live journal append. DOM/UI не назначает pass; verifier читает server-owned state и captured UI evidence.",
+  "hosts": ["*"],
+  "suite": "full",
+  "workspacePolicy": "read-only",
+  "requirements": ["qualification.pack.ui.webview.v1", "windows-x64", "webview2"],
+  "coverage": ["WQ-A4.ui-webview"],
+  "steps": [
+    {
+      "id": "preflight",
+      "kind": "precondition",
+      "title": "Проверить WebView2 build/runtime и CSP",
+      "action": "qualification.ui.webview.preflight",
+      "timeoutSeconds": 20
+    },
+    {
+      "id": "interaction",
+      "kind": "hostProbe",
+      "title": "Проверить keyboard, focus, DPI и confirmation projection",
+      "action": "qualification.ui.webview.interaction",
+      "dependsOn": ["preflight"],
+      "timeoutSeconds": 180
+    },
+    {
+      "id": "json-viewer",
+      "kind": "hostProbe",
+      "title": "Проверить lossless JSON tree/raw/copy и safe rendering",
+      "action": "qualification.ui.webview.json-viewer",
+      "dependsOn": ["interaction"],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "reload-live-append",
+      "kind": "restart",
+      "title": "Перезагрузить WebView и продолжить live journal",
+      "action": "qualification.ui.webview.reload-live-append",
+      "dependsOn": ["json-viewer"],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить UI projection с server-owned revisions",
+      "assertion": "qualification.ui.webview.final-state",
+      "dependsOn": ["reload-live-append"],
+      "timeoutSeconds": 30
+    }
+  ]
+}

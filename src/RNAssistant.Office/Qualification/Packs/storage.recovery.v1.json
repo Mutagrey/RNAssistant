@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "storage.recovery",
+  "revision": "1",
+  "title": "Storage recovery · durable barriers",
+  "description": "Runner-owned stream проверяет mandatory append barriers, CAS payloads, restart/replay, multi-window revision ordering и bounded export. Используется существующий event/CAS authority без второго store или mutable dashboard index.",
+  "hosts": ["*"],
+  "suite": "full",
+  "workspacePolicy": "runner-owned",
+  "requirements": ["qualification.pack.storage.recovery.v1"],
+  "coverage": ["WQ-A4.storage-recovery"],
+  "steps": [
+    {
+      "id": "fixture",
+      "kind": "fixture",
+      "title": "Создать versioned runner-owned event/CAS fixture",
+      "action": "qualification.storage.recovery.fixture.create",
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "append-barriers",
+      "kind": "fault",
+      "title": "Проверить before/after-dispatch persistence matrix",
+      "action": "qualification.storage.recovery.append-barriers",
+      "dependsOn": ["fixture"],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "restart-replay",
+      "kind": "restart",
+      "title": "Перезапустить projection и replay canonical stream",
+      "action": "qualification.storage.recovery.restart-replay",
+      "dependsOn": ["append-barriers"],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "revision-export",
+      "kind": "hostProbe",
+      "title": "Проверить revision ordering, source IDs и bounded export",
+      "action": "qualification.storage.recovery.revision-export",
+      "dependsOn": ["restart-replay"],
+      "timeoutSeconds": 60
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить replayed state с canonical events",
+      "assertion": "qualification.storage.recovery.final-state",
+      "dependsOn": ["revision-export"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "cleanup",
+      "kind": "cleanup",
+      "title": "Удалить runner-owned storage fixture",
+      "action": "qualification.storage.recovery.cleanup",
+      "dependsOn": ["verify"],
+      "timeoutSeconds": 30
+    }
+  ]
+}

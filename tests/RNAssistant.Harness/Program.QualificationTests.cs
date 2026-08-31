@@ -368,11 +368,15 @@ namespace RNAssistant.Harness
         {
             var catalog = QualificationBuiltInCatalog.Load();
             var packs = catalog.List("Excel", "quick", new[] { QualificationApplicationService.ShellCapability });
-            AssertEqual(1, packs.Count, "one WQ-A2 shell pack is embedded");
-            AssertEqual("common.ui-shell", packs[0].Pack.Id, "embedded shell pack id");
-            AssertTrue(packs[0].Available, "shell capability admits the embedded pack");
+            AssertEqual(2, packs.Count, "shell and production-path quick packs are embedded");
+            var shell = packs.Single(item => item.Pack.Id == "common.ui-shell");
+            AssertTrue(shell.Available, "shell capability admits the embedded shell pack");
+            var productionQuick = packs.Single(item => item.Pack.Id == "common.quick");
+            AssertTrue(!productionQuick.Available && productionQuick.MissingRequirements.SequenceEqual(
+                    new[] { "qualification.pack.common.quick.v1" }),
+                "production quick pack remains N/A until its exact adapter exists");
             AssertEqual(0, catalog.MissingCoverage("Excel", "quick").Count,
-                "embedded shell pack covers mandatory WQ-A2 shell coverage");
+                "embedded quick packs own every mandatory quick coverage id");
 
             WithTempPaths(paths =>
             {
@@ -415,6 +419,54 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void QualificationBuiltInSuitesAreVersionedAndFailClosed()
+        {
+            var catalog = QualificationBuiltInCatalog.Load();
+            var expected = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["common.quick"] = "qualification.pack.common.quick.v1",
+                ["provider.live"] = "qualification.pack.provider.live.v1",
+                ["storage.recovery"] = "qualification.pack.storage.recovery.v1",
+                ["ui.webview"] = "qualification.pack.ui.webview.v1",
+                ["excel.read-write"] = "qualification.pack.excel.read-write.v1",
+                ["excel.complex-task"] = "qualification.pack.excel.complex-task.v1",
+                ["vba.lifecycle"] = "qualification.pack.vba.lifecycle.v1",
+                ["cross.full-run"] = "qualification.pack.cross.full-run.v1"
+            };
+            var packs = new[] { "quick", "full", "release" }
+                .SelectMany(suite => catalog.List("Excel", suite,
+                    new[] { QualificationApplicationService.ShellCapability }))
+                .Where(item => expected.ContainsKey(item.Pack.Id))
+                .ToArray();
+            AssertEqual(expected.Count, packs.Length, "every canonical WQ-A4 family is embedded for Excel");
+            foreach (var item in packs)
+            {
+                AssertEqual("1", item.Pack.Revision, item.Pack.Id + " pins manifest revision");
+                AssertEqual(64, item.Pack.ContentSha256.Length, item.Pack.Id + " pins manifest content hash");
+                AssertTrue(item.Pack.Requirements.Contains(expected[item.Pack.Id]),
+                    item.Pack.Id + " requires its exact all-or-nothing adapter capability");
+                AssertTrue(!item.Available && item.MissingRequirements.Contains(expected[item.Pack.Id]),
+                    item.Pack.Id + " is N/A rather than pass without its owner");
+                AssertTrue(item.Pack.Steps.Any(step => step.Kind == QualificationStepKind.Assertion && step.Required),
+                    item.Pack.Id + " has a required typed final-state verifier");
+                if (item.Pack.WorkspacePolicy == "runner-owned")
+                {
+                    AssertTrue(item.Pack.Steps.Any(step => step.Kind == QualificationStepKind.Fixture),
+                        item.Pack.Id + " owns a versioned runner fixture step");
+                    AssertTrue(item.Pack.Steps.Last().Kind == QualificationStepKind.Cleanup,
+                        item.Pack.Id + " ends with cleanup");
+                }
+            }
+            AssertEqual(0, catalog.MissingCoverage("Excel", "quick").Count,
+                "Excel quick suite has no orphan mandatory coverage");
+            AssertEqual(0, catalog.MissingCoverage("Excel", "full").Count,
+                "Excel full suite has no orphan mandatory coverage");
+            AssertEqual(0, catalog.MissingCoverage("Excel", "release").Count,
+                "Excel release suite has no orphan mandatory coverage");
+            AssertTrue(catalog.List("Word", "release", new string[0]).All(item => !item.Available),
+                "unimplemented Word release families remain N/A");
+        }
+
         private static void QualificationUiBridgeRoutesTypedPayloads()
         {
             var controller = new AssistantController();
@@ -452,12 +504,14 @@ namespace RNAssistant.Harness
             {
                 "qualification.excel.wq0.v1", "windows-x64", "office-x64", "independent-client-helper"
             };
-            var wq0 = builtIn.List("Excel", "release", requirements).Single();
+            var wq0 = builtIn.List("Excel", "release", requirements)
+                .Single(item => item.Pack.Id == "excel.wq0.identity");
             AssertEqual("excel.wq0.identity", wq0.Pack.Id, "embedded WQ0 pack id");
             AssertTrue(wq0.Available, "exact host requirements admit embedded WQ0 pack");
             AssertEqual(0, builtIn.MissingCoverage("Excel", "release").Count,
                 "embedded WQ0 owns mandatory release identity coverage");
-            AssertTrue(!builtIn.List("Excel", "release", new string[0]).Single().Available,
+            AssertTrue(!builtIn.List("Excel", "release", new string[0])
+                    .Single(item => item.Pack.Id == "excel.wq0.identity").Available,
                 "WQ0 is blocked without Windows/helper capabilities");
 
             var coverage = QualificationCoverageRegistry.Parse(

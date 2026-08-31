@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "vba.lifecycle",
+  "revision": "1",
+  "title": "VBA · lifecycle and recovery",
+  "description": "Runner-owned macro-enabled fixture проверяет resource list/read, exact patch, whole-source write, rename/delete/restore/package, journal recovery и Trust Access failure. Designer/FRX и automatic replay не используются.",
+  "hosts": ["Excel", "Word", "PowerPoint", "Outlook"],
+  "suite": "release",
+  "workspacePolicy": "runner-owned",
+  "requirements": ["qualification.pack.vba.lifecycle.v1", "windows-x64", "office-x64"],
+  "coverage": ["WQ-A4.vba-lifecycle"],
+  "steps": [
+    {
+      "id": "fixture",
+      "kind": "fixture",
+      "title": "Создать versioned CodeOnly VBA fixture",
+      "action": "qualification.vba.lifecycle.fixture.create",
+      "timeoutSeconds": 45
+    },
+    {
+      "id": "read-mutate",
+      "kind": "agentTask",
+      "title": "Пройти resource read и mutation lifecycle",
+      "prompt": "В runner-owned VBA fixture прочитай модули через resources, примени точный patch, создай или обнови whole-source модуль, затем выполни rename, delete, restore и package операции только после required confirmation.",
+      "dependsOn": ["fixture"],
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "fault-recovery",
+      "kind": "fault",
+      "title": "Проверить prepared/terminal journal и Trust Access refusal",
+      "action": "qualification.vba.lifecycle.fault-recovery",
+      "dependsOn": ["read-mutate"],
+      "timeoutSeconds": 180
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить live VBE state с journal evidence",
+      "assertion": "qualification.vba.lifecycle.final-state",
+      "dependsOn": ["fault-recovery"],
+      "timeoutSeconds": 45
+    },
+    {
+      "id": "cleanup",
+      "kind": "cleanup",
+      "title": "Закрыть runner-owned VBA fixture",
+      "action": "qualification.vba.lifecycle.cleanup",
+      "dependsOn": ["verify"],
+      "timeoutSeconds": 45
+    }
+  ]
+}

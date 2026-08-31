@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "common.quick",
+  "revision": "1",
+  "title": "Common quick · production path",
+  "description": "Короткая сквозная проверка нового agent-чата: fixture resources, capability discovery, production model turn, confirmation/cancel boundaries и causal journal. Доступна только когда единый production adapter зарегистрировал весь pack.",
+  "hosts": ["*"],
+  "suite": "quick",
+  "workspacePolicy": "runner-owned",
+  "requirements": ["qualification.pack.common.quick.v1"],
+  "coverage": ["WQ-A4.common-quick"],
+  "steps": [
+    {
+      "id": "preflight",
+      "kind": "precondition",
+      "title": "Проверить production Agent path",
+      "action": "qualification.common.quick.preflight",
+      "timeoutSeconds": 20
+    },
+    {
+      "id": "fixture",
+      "kind": "fixture",
+      "title": "Создать versioned runner-owned chat fixture",
+      "action": "qualification.common.quick.fixture.create",
+      "dependsOn": ["preflight"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "agent-task",
+      "kind": "agentTask",
+      "title": "Прочитать fixture и выполнить безопасную проверочную задачу",
+      "prompt": "Прочитай выданный runner-owned ресурс, найди контрольное значение, покажи использованные capability и resource evidence, затем подготовь одно подтверждаемое действие только внутри disposable fixture.",
+      "dependsOn": ["fixture"],
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "confirmation-cancel",
+      "kind": "confirmation",
+      "title": "Проверить production confirmation и cancel boundary",
+      "action": "qualification.common.quick.confirmation-cycle",
+      "dependsOn": ["agent-task"],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить chat, resources, confirmation и causal evidence",
+      "assertion": "qualification.common.quick.final-state",
+      "dependsOn": ["confirmation-cancel"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "cleanup",
+      "kind": "cleanup",
+      "title": "Удалить только runner-owned fixture",
+      "action": "qualification.common.quick.cleanup",
+      "dependsOn": ["verify"],
+      "timeoutSeconds": 30
+    }
+  ]
+}

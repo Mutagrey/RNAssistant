@@ -1,10 +1,10 @@
 # Qualification Center и расширяемые test packs
 
-Статус: WQ-A3 реализован host-neutral: UI подключён к узкому host port, встроен
-`excel.wq0.identity`, а decoder/lease/helper имеют одного owner в `OfficeHosts`.
-Реальный WQ0 остаётся открытым до запуска пакета на Windows x64 + Office x64.
-Production agent suites, immutable build evidence и Windows/Office qualification
-остаются WQ-A4/A5 и Milestone WQ.
+Статус: WQ-A4 suite catalog реализован host-neutral. UI показывает versioned
+common/provider/storage/UI/Excel/VBA/cross packs; каждый требует exact readiness
+capability и остаётся недоступным, пока production owner и нужная среда не готовы.
+Реальный WQ0 и остальные live suites остаются открытыми до Windows/Office/provider
+прогона. Immutable build evidence остаётся WQ-A5.
 
 ## 1. Назначение
 
@@ -46,8 +46,10 @@ WQ-A2 поставляет встроенный read-only quick pack
 manual checkpoint и typed verifier, но не квалифицирует Office, COM,
 live provider, model loop и document tools. WQ-A3 добавляет release suite selector и
 Windows-gated `excel.wq0.identity`: на другой платформе либо без same-build helper
-пакет виден как недоступный и не может стартовать. Остальные full/release packs
-появятся в WQ-A4. Exact immutable build commit остаётся `unavailable` до
+пакет виден как недоступный и не может стартовать. WQ-A4 добавляет остальные
+canonical quick/full/release manifests и coverage owners. Их exact readiness
+capabilities выдаются только полностью реализованным production adapter-ом, поэтому
+неподдержанный контур остаётся N/A. Exact immutable build commit остаётся `unavailable` до
 BuildEvidenceManifest в WQ-A5; UI не фабрикует его из working tree.
 
 Wizard может просить переключить книгу, выполнить Save As, закрыть/открыть документ,
@@ -81,6 +83,9 @@ Build pipeline -> immutable BuildEvidenceManifest -> Qualification UI
   сохраняют owner apartment; exact action/assertion IDs реализует только host owner.
   Verifier получает завершённые action evidence из уже записанного event stream,
   а не из UI или model narrative.
+- WQ-A4 регистрирует закрытый список suite families и по одному exact capability
+  полной готовности pack-а. Наличие manifest/coverage owner само по себе не выдаёт
+  capability; частичная реализация не допускает запуск и отображается как N/A.
 - `agentTask` всегда проходит через обычные `ConversationRunService`, `AgentKernel`,
   `ToolRuntime`, `HostRuntime` и production domain handlers. Test mode не расширяет
   callable tools и не отключает confirmation/policy.
@@ -302,8 +307,10 @@ Coverage registry связывает каждый mandatory invariant/risk/capab
    in-process observation, narrow same-build x64 helper, release-suite UI и удаление
    duplicate diagnostic decoder. Реальная Windows qualification остаётся открытым
    gate. [Evidence](stabilization/WQ_A3_EXCEL_WQ0.md).
-5. **WQ-A4 — suites:** common/provider/storage/UI, затем один host pack за раз;
-   fixtures, deterministic verifiers и coverage gates.
+5. **WQ-A4 — suites — host-neutral catalog done:** common/provider/storage/UI,
+   Excel/VBA/cross manifests, runner-owned fixture steps, deterministic assertion IDs
+   и fail-closed coverage/capability gates. Live adapters и evidence остаются
+   обязательными gates Milestone WQ. [Evidence](stabilization/WQ_A4_SUITE_CATALOG.md).
 6. **WQ-A5 — release integration:** immutable BuildEvidenceManifest и release suite;
    Phase 12 получает только complete/compatible evidence.
 

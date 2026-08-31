@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "cross.full-run",
+  "revision": "1",
+  "title": "Cross-system · full production run",
+  "description": "Release scenario связывает live model, immutable ToolPack, resource ingestion/read, bound document effect, confirmation, event stream, trajectory, UI projection и restart. Final pass вычисляет verifier из source IDs и live read-back.",
+  "hosts": ["Excel", "Word", "PowerPoint", "Outlook"],
+  "suite": "release",
+  "workspacePolicy": "runner-owned",
+  "requirements": ["qualification.pack.cross.full-run.v1", "live-provider", "windows-x64", "office-x64", "webview2"],
+  "coverage": ["WQ-A4.cross-full-run"],
+  "steps": [
+    {
+      "id": "fixture",
+      "kind": "fixture",
+      "title": "Создать host-specific document и resource fixture",
+      "action": "qualification.cross.full-run.fixture.create",
+      "timeoutSeconds": 45
+    },
+    {
+      "id": "agent-task",
+      "kind": "agentTask",
+      "title": "Выполнить resource-to-effect production task",
+      "prompt": "Используй предоставленный versioned brief и document fixture. Загрузи только нужные capabilities, прочитай ресурсы, выполни подтверждаемое host-действие, проверь результат через read-back и сообщи итог с causal evidence.",
+      "dependsOn": ["fixture"],
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "restart",
+      "kind": "restart",
+      "title": "Перезапустить приложение и восстановить run projection",
+      "action": "qualification.cross.full-run.restart",
+      "dependsOn": ["agent-task"],
+      "timeoutSeconds": 180
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить effect, events, ToolPack и trajectory",
+      "assertion": "qualification.cross.full-run.final-state",
+      "dependsOn": ["restart"],
+      "timeoutSeconds": 45
+    },
+    {
+      "id": "cleanup",
+      "kind": "cleanup",
+      "title": "Удалить runner-owned documents/resources",
+      "action": "qualification.cross.full-run.cleanup",
+      "dependsOn": ["verify"],
+      "timeoutSeconds": 45
+    }
+  ]
+}
