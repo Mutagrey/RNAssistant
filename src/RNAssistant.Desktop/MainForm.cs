@@ -158,9 +158,9 @@ namespace RNAssistant.Desktop
             {
                 DesktopLog.Info("Attach requested. Target=" + entry.DisplayName + ", hwnd=" + entry.Target.Hwnd + ", pid=" + entry.Target.ProcessId);
                 var target = CloneTarget(entry.Target);
-                adapter = new DispatchedOfficeApplicationAdapter(delegate
+                adapter = new DispatchedOfficeApplicationAdapter(delegate(IOfficeStaDispatcher dispatcher)
                 {
-                    return _adapterProvider.Create(target.Host, target);
+                    return _adapterProvider.Create(target.Host, target, dispatcher);
                 });
                 runtime = new AssistantRuntime(adapter);
                 DisposeCurrentRuntime();

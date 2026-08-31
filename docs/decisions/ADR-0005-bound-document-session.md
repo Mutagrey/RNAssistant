@@ -3,7 +3,8 @@
 Status: accepted. Phase 5A extracted the access boundary; 5B1 introduced its neutral
 session contract and operation gate. The 2026-08-31 accepted-risk decision removes
 WQ0 as a blocking prerequisite and re-owns the actual Excel binding plus legacy
-removal in one 11T0/7D switch. Windows qualification remains unperformed.
+removal in one 11T0/7D switch. That switch is delivered host-neutral; Windows
+qualification remains unperformed.
 
 ## Context
 
@@ -70,9 +71,10 @@ The session port distinguishes cached immutable host/runtime/gate/dispatcher
 metadata from STA-only stable identity, bound object and liveness. Wrappers cache
 one session at initialization; a new lifetime requires a new adapter. For a bound
 session, runtime identity takes precedence over a matching saved path, and the
-whole synchronous action runs on its owner STA. Fake sessions exercise this port;
-no production Excel factory supplies it yet. Legacy production adapters still use
-stable-key locks and stable-key OR runtime-key validation.
+whole synchronous action runs on its owner STA. Fake sessions first exercised this
+port; production Excel supplies it after the 11T0/7D switch below. Unswitched Word,
+PowerPoint and Outlook adapters still use stable-key locks and stable-key OR
+runtime-key validation.
 
 ## Delivered in 5B2: direct context/catalog reads
 
@@ -109,27 +111,31 @@ Identity lifetime, client attach/detach, close/reopen and in-process VSTO/native
 equivalence must be demonstrated, not inferred from parser tests. The probe README
 defines observations, actual call sites and cleanup evidence. Production liveness
 must remain separate from a retained COM reference. The diagnostic reader/resolver
-has no production consumer and is removed or replaced by the qualified implementation
-at the 5B2 candidate decision; it is not an additional runtime path.
+has no production execution consumer and remains qualification-only; it is not an
+additional runtime identity or dispatch path.
 
 ## Production switch and deferred qualification
 
-The next 11T0/7D change replaces the remaining legacy identity/binding together
-with all Excel factories and access consumers. The active-workbook fallback and
-repeated descriptor lookup still have live consumers; their removal is atomic with
-the bound switch recorded in the [migration map](../stabilization/MIGRATION_MAP.md).
+11T0/7D replaces the remaining Excel legacy identity/binding together with all
+Excel factories and read/write consumers. Desktop, VSTO and in-process composition
+bind one exact workbook at session creation. The adapter retains that workbook;
+the direct backend receives only `BoundDocumentObject`. Compatibility commands,
+compatibility backends, repeated descriptor lookup and execution-time
+`ActiveWorkbook` fallback are removed. See
+[11T0 evidence](../stabilization/PHASE_11T0_EXCEL_BOUND_CUTOVER.md).
 
 One live identity should be shared by desktop, VSTO and native clients/proxies. The
 current local `IUnknown` address is not proof of that identity across apartments or
 processes; a path, HWND or per-adapter GUID is not a substitute. This uncertainty is
 an accepted deferred risk rather than a factory-switch blocker.
-The direct context/catalog access switch delivered above does not qualify this
-production identity mechanism or its UI/STA behavior.
+The host-neutral implementation does not qualify this production identity
+mechanism or its UI/STA behavior.
 
 Fake host checks can cover ordering, cancellation and access release. They cannot
 close the Windows x64 + Office + VS 2022 gates for STA/COM identity, workbook switches,
 close/reopen, Save As, multiple windows/chats, manual/resource access or UI waits.
-R04 remains open; Excel effect verification itself remains Phase 7.
+R04 remains open evidence; Excel effect verification is delivered host-neutral by
+Phase 7C and likewise awaits WQ-EXCEL COM scenarios.
 
 ## 2026-08-31 accepted-risk cutover decision
 
@@ -148,3 +154,8 @@ it is not runtime authority or a pre-cutover gate. Windows close/reopen, Save As
 multi-window/client and cross-proxy scenarios remain unperformed qualification.
 Failures found later are fixed against the bound-session contract; legacy
 active-document fallback must not return.
+
+The delivered implementation also rejects ranges, selection and active cell that
+do not belong to the bound workbook. Closing the retained object fails access; it
+does not search for a replacement. Remaining Office-host legacy removal proceeds
+through 11T1–11T10 and does not reopen this Excel seam.

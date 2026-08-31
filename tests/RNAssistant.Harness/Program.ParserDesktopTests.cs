@@ -114,7 +114,7 @@ namespace RNAssistant.Harness
             var executeOnThread = 0;
             var adapter = new FakeOfficeAdapter();
 
-            using (var dispatched = new DispatchedOfficeApplicationAdapter(delegate
+            using (var dispatched = new DispatchedOfficeApplicationAdapter(delegate(IOfficeStaDispatcher ignored)
             {
                 createdOnThread = Thread.CurrentThread.ManagedThreadId;
                 return new ThreadRecordingOfficeAdapter(adapter, delegate
@@ -124,7 +124,7 @@ namespace RNAssistant.Harness
             }))
             {
                 AssertEqual("Excel", dispatched.HostName, "host name");
-                var result = dispatched.ExecuteTool(ExcelBackendReadCommand());
+                var result = dispatched.ExecuteTool(GuardProbeCommand(adapter));
                 AssertTrue(result.Success, "tool success");
                 AssertEqual(1, adapter.Executed.Count, "executed count");
             }
@@ -135,10 +135,9 @@ namespace RNAssistant.Harness
             foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
             {
                 var guardedAdapter = FakeOfficeAdapter.ForHost(host);
-                var toolId = string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
-                    ? ExcelReadToolIds.ReadRangeBackend
-                    : guardedAdapter.GetBuiltInTools().First().Id;
-                using (var dispatched = new DispatchedOfficeApplicationAdapter(delegate { return guardedAdapter; }))
+                var probe = GuardProbeCommand(guardedAdapter);
+                using (var dispatched = new DispatchedOfficeApplicationAdapter(
+                    delegate(IOfficeStaDispatcher ignored) { return guardedAdapter; }))
                 {
                     var originalDocumentKey = dispatched.DocumentKey;
                     var originalRuntimeKey = dispatched.RuntimeDocumentKey;
@@ -146,8 +145,7 @@ namespace RNAssistant.Harness
                         host, originalDocumentKey, originalRuntimeKey))
                     {
                         guardedAdapter.RuntimeDocumentKeyValue = originalRuntimeKey + "-new-proxy";
-                        var sameDocument = dispatched.ExecuteTool(string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
-                            ? ExcelBackendReadCommand() : new ToolCommand { ToolId = toolId });
+                        var sameDocument = dispatched.ExecuteTool(probe);
                         AssertTrue(sameDocument.Success,
                             host + " guard accepts a stable document key when COM runtime identity changes");
                     }
@@ -157,8 +155,7 @@ namespace RNAssistant.Harness
                         host, originalDocumentKey, originalRuntimeKey))
                     {
                         guardedAdapter.DocumentKeyValue = originalDocumentKey + "-saved";
-                        var migratedDocument = dispatched.ExecuteTool(string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
-                            ? ExcelBackendReadCommand() : new ToolCommand { ToolId = toolId });
+                        var migratedDocument = dispatched.ExecuteTool(probe);
                         AssertTrue(migratedDocument.Success,
                             host + " guard accepts the same runtime document after identity migration");
                     }
@@ -168,8 +165,7 @@ namespace RNAssistant.Harness
                     {
                         guardedAdapter.DocumentKeyValue += "-other";
                         guardedAdapter.RuntimeDocumentKeyValue += "-other";
-                        var blocked = dispatched.ExecuteTool(string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
-                            ? ExcelBackendReadCommand() : new ToolCommand { ToolId = toolId });
+                        var blocked = dispatched.ExecuteTool(probe);
                         AssertEqual("active_document_changed", blocked.ErrorCode,
                             host + " guard blocks a different Office document");
                         var readBlocked = false;
@@ -193,11 +189,11 @@ namespace RNAssistant.Harness
             }
         }
 
-        private static ToolCommand ExcelBackendReadCommand()
+        private static ToolCommand GuardProbeCommand(FakeOfficeAdapter adapter)
         {
-            return Command(ExcelReadToolIds.ReadRangeBackend,
-                "sheet", "Data", "address", "A1", "content", "values",
-                "maxCells", ExcelReadService.MaxReadCells);
+            var definition = adapter.GetBuiltInTools().First(tool =>
+                !ExcelReadToolIds.Owns(tool.Id) && !ExcelWriteToolIds.Owns(tool.Id));
+            return new ToolCommand { ToolId = definition.Id };
         }
 
         private static void HostRuntimeCancelsQueuedMutationAndReleasesAccess()
@@ -660,8 +656,8 @@ namespace RNAssistant.Harness
         private static DispatchedOfficeApplicationAdapter CreateBoundTestDispatchedAdapter(BoundTestDocument document, string runtimeId)
         {
             DispatchedOfficeApplicationAdapter adapter = null;
-            adapter = new DispatchedOfficeApplicationAdapter(() => new BoundTestOfficeAdapter(
-                new BoundTestOfficeSession(adapter.StaDispatcher, document, runtimeId, new object())));
+            adapter = new DispatchedOfficeApplicationAdapter(dispatcher => new BoundTestOfficeAdapter(
+                new BoundTestOfficeSession(dispatcher, document, runtimeId, new object())));
             return adapter;
         }
 
@@ -1215,7 +1211,7 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend
         {
             private readonly FakeOfficeAdapter _inner;
 
@@ -1228,6 +1224,8 @@ namespace RNAssistant.Harness
             public BoundTestOfficeSession Session { get; private set; }
             public IOfficeDocumentSession DocumentSession { get { return Session; } }
             public IOfficeStaDispatcher StaDispatcher { get { return Session.StaDispatcher; } }
+            public IExcelReadBackend ExcelReadBackend { get { return this; } }
+            public IExcelWriteBackend ExcelWriteBackend { get { return this; } }
             public string HostName { get { return Session.Host; } }
             public string DocumentKey { get { return StaDispatcher.Invoke(() => Session.StableDocumentId); } }
             public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
@@ -1238,6 +1236,10 @@ namespace RNAssistant.Harness
             public OfficeContext GetOfficeContext() { BeforeRead?.Invoke("context"); return _inner.GetOfficeContext(); }
             public IEnumerable<ToolDefinition> GetBuiltInTools() { return _inner.GetBuiltInTools(); }
             public ToolResult ExecuteTool(ToolCommand command) { BeforeRead?.Invoke(command.ToolId); return _inner.ExecuteTool(command); }
+            public ExcelInspectSnapshot Inspect(ExcelInspectRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelInspectOperation); return _inner.Inspect(request); }
+            public ExcelRangeSnapshot ReadRange(ExcelRangeReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelRangeReadOperation); return _inner.ReadRange(request); }
+            public ExcelWriteSnapshot Read(ExcelWriteReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelWriteReadOperation); return _inner.Read(request); }
+            public void Apply(ExcelWriteApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelWriteApplyOperation); _inner.Apply(request, markDispatchPossible); }
         }
 
         private sealed class BoundTestQueuedDispatcher : IOfficeStaDispatcher

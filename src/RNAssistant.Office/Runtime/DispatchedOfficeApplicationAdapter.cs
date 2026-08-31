@@ -3,21 +3,25 @@ using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Qualification;
 
 namespace RNAssistant.Office
 {
-    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IQualificationHostPort, IDisposable
+    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IQualificationHostPort, IDisposable
     {
-        private readonly Func<IOfficeApplicationAdapter> _adapterFactory;
+        private readonly Func<IOfficeStaDispatcher, IOfficeApplicationAdapter> _adapterFactory;
         private readonly OfficeStaDispatcher _dispatcher;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
         private IOfficeApplicationAdapter _inner;
         private IOfficeDocumentSession _documentSession;
+        private IExcelReadBackend _excelReadBackend;
+        private IExcelWriteBackend _excelWriteBackend;
         private volatile bool _innerInitialized;
         private bool _disposed;
 
-        public DispatchedOfficeApplicationAdapter(Func<IOfficeApplicationAdapter> adapterFactory)
+        public DispatchedOfficeApplicationAdapter(
+            Func<IOfficeStaDispatcher, IOfficeApplicationAdapter> adapterFactory)
         {
             if (adapterFactory == null)
             {
@@ -72,9 +76,12 @@ namespace RNAssistant.Office
             {
                 if (!_innerInitialized)
                 {
-                    if (_inner == null) _inner = _adapterFactory();
+                    if (_inner == null) _inner = _adapterFactory(_dispatcher);
                     var provider = _inner as IOfficeDocumentSessionProvider;
                     _documentSession = provider == null ? null : provider.DocumentSession;
+                    var excel = _inner as IExcelBackendProvider;
+                    _excelReadBackend = excel == null ? null : excel.ExcelReadBackend;
+                    _excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
                     // Publish the owner-initialized session once. Rebinding requires
                     // another adapter; metadata access must not queue behind a run.
                     _innerInitialized = true;
@@ -82,6 +89,34 @@ namespace RNAssistant.Office
 
                 return _inner;
             }
+        }
+
+        public IExcelReadBackend ExcelReadBackend
+        {
+            get
+            {
+                EnsureInitialized();
+                return _excelReadBackend;
+            }
+        }
+
+        public IExcelWriteBackend ExcelWriteBackend
+        {
+            get
+            {
+                EnsureInitialized();
+                return _excelWriteBackend;
+            }
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_innerInitialized) return;
+            _dispatcher.Invoke(delegate
+            {
+                var initialized = Inner;
+                return initialized != null;
+            });
         }
 
         public string GetDocumentSnapshot(int maxChars)

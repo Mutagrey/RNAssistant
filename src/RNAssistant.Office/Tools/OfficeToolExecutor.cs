@@ -11,6 +11,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Vba;
+using RNAssistant.Office.Domains.Excel;
 
 namespace RNAssistant.Office.Tools
 {
@@ -63,8 +64,11 @@ namespace RNAssistant.Office.Tools
                 loadArtifactBody,
                 readAttachmentText,
                 BeginLiveOfficeRead);
-            _excelReadAdapter = new ExcelReadToolAdapter(_adapter);
-            _excelWriteAdapter = new ExcelWriteToolAdapter(_adapter);
+            var excelBackends = _adapter as IExcelBackendProvider;
+            _excelReadAdapter = excelBackends == null || excelBackends.ExcelReadBackend == null
+                ? null : new ExcelReadToolAdapter(excelBackends.ExcelReadBackend);
+            _excelWriteAdapter = excelBackends == null || excelBackends.ExcelWriteBackend == null
+                ? null : new ExcelWriteToolAdapter(excelBackends.ExcelWriteBackend);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(
                 _adapter, _adapterTools, BeginLiveOfficeRead, ExecuteOfficeDataSourceUnderCurrentAccess);
             _taskListToolExecutor = new TaskListToolExecutor();
@@ -660,7 +664,12 @@ namespace RNAssistant.Office.Tools
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (command != null && ExcelReadToolIds.Owns(command.ToolId))
-                return _excelReadAdapter.ExecuteLegacy(command, cancellationToken);
+            {
+                if (_excelReadAdapter == null)
+                    return ToolResult.Fail("The bound Excel read backend is unavailable.", null,
+                        "excel_backend_unavailable", false);
+                return _excelReadAdapter.ExecuteDataSource(command, cancellationToken);
+            }
             return _adapter.ExecuteTool(command) ?? ToolResult.Fail("Office data source returned no result.");
         }
 
@@ -780,8 +789,6 @@ namespace RNAssistant.Office.Tools
             return !string.IsNullOrWhiteSpace(id) &&
                 (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
                  _controllerExecutors.ContainsKey(id) ||
-                 ExcelReadToolIds.IsInternal(id) ||
-                 ExcelWriteToolIds.IsInternal(id) ||
                  _vbaExecutor.IsInternalToolId(id));
         }
 

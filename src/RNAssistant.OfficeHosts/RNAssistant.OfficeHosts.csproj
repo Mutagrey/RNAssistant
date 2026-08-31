@@ -94,7 +94,8 @@
   <ItemGroup>
     <Compile Include="ExcelAdapter.cs" />
     <Compile Include="ExcelAdapter.Qualification.cs" />
-    <Compile Include="ExcelAdapter.WriteRange.cs" />
+    <Compile Include="Excel\ExcelDocumentSession.cs" />
+    <Compile Include="Excel\ExcelInteropBackend.cs" />
     <Compile Include="Identity\DocumentIdentity.cs" />
     <Compile Include="Qualification\ComIdentityLease.cs" />
     <Compile Include="Qualification\ComIdentitySample.cs" />

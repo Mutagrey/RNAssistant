@@ -33,8 +33,8 @@ namespace RNAssistant.Office.Tools
             {
                 var outcome = _runtime.ExecuteDocumentMutation(Target(_session), cancellationToken, delegate
                 {
-                    return _adapter.Execute(context.Arguments, context.Execution.Call.Id,
-                        context.Execution.StepId, context.MarkDispatchPossible, cancellationToken);
+                    return _adapter.Execute(context.Arguments,
+                        context.MarkDispatchPossible, cancellationToken);
                 });
                 return Task.FromResult(Result(outcome));
             }

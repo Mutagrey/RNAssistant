@@ -38,10 +38,12 @@ namespace RNAssistant.Harness
                     "write records its effect boundary");
                 AssertEqual(ToolEffectEvidence.VerifiedChange, changed.Evidence.Effect,
                     "matching read-back certifies a change");
-                AssertEqual(1, adapter.Executed.Count(item => item.ToolId == ExcelWriteToolIds.ApplyBackend),
-                    "one internal apply owns the write");
-                AssertEqual(2, adapter.Executed.Count(item => item.ToolId == ExcelWriteToolIds.ReadBackend),
-                    "the same backend reads before and after the exact target");
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelWriteApplyOperation),
+                    "one direct typed apply owns the write");
+                AssertEqual(2, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelWriteReadOperation),
+                    "the same direct backend reads before and after the exact target");
                 AssertEqual(0, adapter.Executed.Count(item => item.ToolId == ExcelWriteToolIds.WriteRange),
                     "public write id never reaches the host adapter");
 
@@ -53,21 +55,21 @@ namespace RNAssistant.Harness
                     "verified no-op skips host write dispatch");
                 AssertEqual(ToolEffectEvidence.VerifiedNoChange, noop.Evidence.Effect,
                     "matching before state is explicit no-change evidence");
-                AssertEqual(1, adapter.Executed.Count(item => item.ToolId == ExcelWriteToolIds.ApplyBackend),
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelWriteApplyOperation),
                     "no-op does not call apply");
 
-                var applies = adapter.Executed.Count(item => item.ToolId == ExcelWriteToolIds.ApplyBackend);
+                var applies = adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelWriteApplyOperation);
                 var dryRun = executor.Execute(Command(ExcelWriteToolIds.WriteRange, "kind", "value", "sheet", "Data",
                     "address", "J2", "value", "preview"), tools, new AppSettings(), true, true, session);
                 AssertTrue(dryRun.Success && string.IsNullOrEmpty(adapter.CellValue("Data", "J2")),
                     "native write dry-run remains non-mutating");
-                AssertEqual(applies, adapter.Executed.Count(item => item.ToolId == ExcelWriteToolIds.ApplyBackend),
+                AssertEqual(applies, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelWriteApplyOperation),
                     "dry-run never reaches the write backend");
                 AssertTrue(runtime.Describe(new ToolCall("wrong-case", "EXCEL.WRITE_RANGE", "{}")) == null,
                     "native ownership has no case alias");
-                AssertTrue(executor.IsProtectedToolId(ExcelWriteToolIds.ReadBackend) &&
-                    executor.IsProtectedToolId(ExcelWriteToolIds.ApplyBackend),
-                    "temporary backend ids are reserved");
                 AssertEqual("excel_public_write_moved",
                     adapter.ExecuteTool(Command(ExcelWriteToolIds.WriteRange, "kind", "value", "value", 1)).ErrorCode,
                     "host cannot execute the moved public id");
@@ -142,8 +144,8 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var definition = tools.Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
-                adapter.QueueResult(ExcelWriteToolIds.ApplyBackend,
-                    ToolResult.Fail("protected target", null, "excel_write_protected", false));
+                adapter.QueueExcelWriteApplyFailure(
+                    "protected target", "excel_write_protected", false);
                 var call = new ToolCall("excel-write-refused", ExcelWriteToolIds.WriteRange,
                     "{\"kind\":\"value\",\"sheet\":\"Data\",\"address\":\"N1\",\"value\":\"x\"}");
                 var refused = ExecuteNative(runtime, call, runtime.Describe(call));
@@ -162,10 +164,10 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var definition = adapter.GetBuiltInTools().Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeExcelBackendCall = operation =>
                 {
-                    if (command.ToolId == ExcelWriteToolIds.ApplyBackend)
-                        adapter.ThrowOnToolId = ExcelWriteToolIds.ReadBackend;
+                    if (operation == FakeOfficeAdapter.ExcelWriteApplyOperation)
+                        adapter.ThrowOnExcelBackendOperation = FakeOfficeAdapter.ExcelWriteReadOperation;
                 };
                 var call = new ToolCall("excel-write-readback-fault", ExcelWriteToolIds.WriteRange,
                     "{\"kind\":\"value\",\"sheet\":\"Data\",\"address\":\"N2\",\"value\":\"written\"}");
@@ -203,9 +205,9 @@ namespace RNAssistant.Harness
                 var definition = adapter.GetBuiltInTools().Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
                 var reads = 0;
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeExcelBackendCall = operation =>
                 {
-                    if (command.ToolId == ExcelWriteToolIds.ReadBackend && ++reads == 2)
+                    if (operation == FakeOfficeAdapter.ExcelWriteReadOperation && ++reads == 2)
                         adapter.SetExcelCell("Data", "N4", "diverged");
                 };
                 var call = new ToolCall("excel-write-diverged", ExcelWriteToolIds.WriteRange,
@@ -232,7 +234,7 @@ namespace RNAssistant.Harness
                     var ownerSta = false;
                     host.BeforeRead = toolId =>
                     {
-                        if (toolId == ExcelWriteToolIds.ApplyBackend) ownerSta = dispatcher.CheckAccess;
+                        if (toolId == FakeOfficeAdapter.ExcelWriteApplyOperation) ownerSta = dispatcher.CheckAccess;
                     };
                     var executor = new OfficeToolExecutor(host, new VbaJournalStore(paths),
                         new SkillStore(paths), new ToolStore(paths), paths: paths);
@@ -246,14 +248,16 @@ namespace RNAssistant.Harness
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(result.Success && ownerSta, "typed write stays on the bound document owner STA");
 
-                    var dispatched = inner.Executed.Count(item => item.ToolId == ExcelWriteToolIds.ApplyBackend);
+                    var dispatched = inner.ExcelBackendCalls.Count(operation =>
+                        operation == FakeOfficeAdapter.ExcelWriteApplyOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
                     var closed = executor.Execute(Command(ExcelWriteToolIds.WriteRange, "kind", "value",
                         "sheet", "Data", "address", "P2", "value", "blocked"),
                         tools, new AppSettings(), false, false, chat);
                     AssertEqual("active_document_changed", closed.ErrorCode,
                         "closed bound workbook is rejected before write dispatch");
-                    AssertEqual(dispatched, inner.Executed.Count(item => item.ToolId == ExcelWriteToolIds.ApplyBackend),
+                    AssertEqual(dispatched, inner.ExcelBackendCalls.Count(operation =>
+                        operation == FakeOfficeAdapter.ExcelWriteApplyOperation),
                         "closed workbook never reaches the write backend");
                 }
             });

@@ -3,26 +3,39 @@ using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Qualification;
 
 namespace RNAssistant.Office
 {
-    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IQualificationHostPort
+    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IQualificationHostPort
     {
         private readonly IOfficeApplicationAdapter _inner;
         private readonly OfficeUiDispatcher _dispatcher;
         private readonly IOfficeDocumentSession _documentSession;
+        private readonly IExcelReadBackend _excelReadBackend;
+        private readonly IExcelWriteBackend _excelWriteBackend;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
         {
             _inner = inner ?? throw new ArgumentNullException("inner");
             _dispatcher = dispatcher ?? throw new ArgumentNullException("dispatcher");
-            _documentSession = _dispatcher.Invoke(delegate
+            IOfficeDocumentSession documentSession = null;
+            IExcelReadBackend excelReadBackend = null;
+            IExcelWriteBackend excelWriteBackend = null;
+            _dispatcher.Invoke(delegate
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
-                return provider == null ? null : provider.DocumentSession;
+                documentSession = provider == null ? null : provider.DocumentSession;
+                var excel = _inner as IExcelBackendProvider;
+                excelReadBackend = excel == null ? null : excel.ExcelReadBackend;
+                excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
+                return true;
             });
+            _documentSession = documentSession;
+            _excelReadBackend = excelReadBackend;
+            _excelWriteBackend = excelWriteBackend;
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
@@ -39,6 +52,9 @@ namespace RNAssistant.Office
                 return _documentSession;
             }
         }
+
+        public IExcelReadBackend ExcelReadBackend { get { return _excelReadBackend; } }
+        public IExcelWriteBackend ExcelWriteBackend { get { return _excelWriteBackend; } }
 
         public string GetDocumentSnapshot(int maxChars)
         {

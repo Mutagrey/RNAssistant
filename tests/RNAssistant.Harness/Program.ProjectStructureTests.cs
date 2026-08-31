@@ -337,6 +337,64 @@ namespace RNAssistant.Harness
                 },
                 "OfficeHosts may compose the application facade but must not depend on WebView types");
 
+            var excelBackendPath = Path.Combine(hostsRoot, "Excel", "ExcelInteropBackend.cs");
+            var excelSessionPath = Path.Combine(hostsRoot, "Excel", "ExcelDocumentSession.cs");
+            var excelAdapterPath = Path.Combine(hostsRoot, "ExcelAdapter.cs");
+            var excelFactoryPath = Path.Combine(hostsRoot, "Targets", "OfficeComAdapterProvider.cs");
+            AssertTrue(File.Exists(excelBackendPath) && File.Exists(excelSessionPath),
+                "production Excel reads and writes require one bound session and direct backend");
+            foreach (var removedPath in new[]
+            {
+                Path.Combine(officeRoot, "Tools", "ExcelReadCompatibilityBackend.cs"),
+                Path.Combine(officeRoot, "Tools", "ExcelWriteCompatibilityBackend.cs"),
+                Path.Combine(hostsRoot, "ExcelAdapter.WriteRange.cs")
+            })
+            {
+                AssertTrue(!File.Exists(removedPath),
+                    "replaced Excel compatibility path must be physically removed: " +
+                    Path.GetFileName(removedPath));
+            }
+
+            var excelBackendSource = File.ReadAllText(excelBackendPath);
+            var excelSessionSource = File.ReadAllText(excelSessionPath);
+            var excelAdapterSource = File.ReadAllText(excelAdapterPath);
+            var excelFactorySource = File.ReadAllText(excelFactoryPath);
+            AssertTrue(
+                excelSessionSource.IndexOf("StableKey(_workbook, RuntimeDocumentId)", StringComparison.Ordinal) >= 0 &&
+                excelSessionSource.IndexOf("RequireOwnerAccess();", StringComparison.Ordinal) >= 0,
+                "Excel session stable identity must stay bound-object and owner-STA derived");
+            AssertTrue(
+                excelBackendSource.IndexOf("session.BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
+                excelBackendSource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
+                excelBackendSource.IndexOf("OfficeTargetDescriptor", StringComparison.Ordinal) < 0 &&
+                excelBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
+                "Excel direct backend must use only its exact bound workbook");
+            AssertTrue(
+                excelAdapterSource.IndexOf("private Excel.Workbook ActiveWorkbook(", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("OfficeTargetDescriptor", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("_target.", StringComparison.Ordinal) < 0,
+                "Excel execution adapter must not retain ActiveWorkbook or descriptor fallback");
+            AssertTrue(
+                excelFactorySource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
+                excelFactorySource.IndexOf("HasExcelWindow", StringComparison.Ordinal) >= 0,
+                "desktop/native Excel binding must resolve the exact selected window or descriptor");
+            var excelProductionSources = SourceFiles(officeRoot)
+                .Concat(SourceFiles(hostsRoot))
+                .Select(File.ReadAllText)
+                .ToArray();
+            foreach (var removedId in new[]
+            {
+                "excel.inspect_internal",
+                "excel.read_range_internal",
+                "excel.write_range_read_internal",
+                "excel.write_range_apply_internal"
+            })
+            {
+                AssertTrue(!excelProductionSources.Any(source =>
+                    source.IndexOf(removedId, StringComparison.Ordinal) >= 0),
+                    "internal Excel compatibility command must be physically removed: " + removedId);
+            }
+
             AssertNoForbiddenDependencies(root,
                 SourceFiles(officeRoot),
                 new[] { "VbaProjectSupport.", "DocumentIdentity." },

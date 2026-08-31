@@ -125,7 +125,9 @@ namespace RNAssistant.ExcelAddIn
 
             try
             {
-                var runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(new ExcelAdapter(Application, workbook), _officeDispatcher));
+                var runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(
+                    new ExcelAdapter(Application, workbook, _officeDispatcher, "vsto-owner"),
+                    _officeDispatcher));
                 var pane = CustomTaskPanes.Add(runtime.CreatePaneControl(), "RN Assistant", window);
                 pane.Width = 1200;
                 entry = new PaneEntry { Window = window, Pane = pane, Runtime = runtime };

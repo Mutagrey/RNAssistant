@@ -110,7 +110,7 @@ namespace RNAssistant.OfficeHosts
             if (!ExcelIdentityHelperClient.IsSupported(out reason))
                 return QualificationActionResult.Blocked("helper_unavailable", reason);
             ComIdentityLease.RequireWindowsSta();
-            var source = ActiveWorkbook();
+            var source = RequireWorkbook();
             if (source == null)
                 return QualificationActionResult.Blocked("source_workbook_required",
                     "Open a control workbook before starting Excel WQ0.");
@@ -129,7 +129,7 @@ namespace RNAssistant.OfficeHosts
         {
             if (_wq0Runs.ContainsKey(runId))
                 return QualificationActionResult.Blocked("fixture_exists", "This run already owns an Excel fixture.");
-            var source = ActiveWorkbook();
+            var source = RequireWorkbook();
             var state = new ExcelWq0State
             {
                 Source = source,
@@ -361,9 +361,7 @@ namespace RNAssistant.OfficeHosts
 
         private string QualificationOwnerLabel()
         {
-            if (_targetWorkbook != null) return "vsto-owner";
-            if (_target != null) return "desktop-native-owner";
-            return "host-owner";
+            return _qualificationOwnerLabel;
         }
 
         private ExcelWq0State RequireState(string runId)

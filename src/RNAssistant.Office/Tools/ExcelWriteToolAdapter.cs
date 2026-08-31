@@ -9,22 +9,21 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class ExcelWriteToolAdapter
     {
-        private readonly IOfficeApplicationAdapter _adapter;
+        private readonly IExcelWriteBackend _backend;
 
-        internal ExcelWriteToolAdapter(IOfficeApplicationAdapter adapter)
+        internal ExcelWriteToolAdapter(IExcelWriteBackend backend)
         {
-            _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
+            _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
         internal ExcelWriteOutcome Execute(IDictionary<string, object> arguments,
-            string toolCallId, string runtimeStepId, Action markDispatchPossible,
+            Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
             arguments = arguments ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             object value;
             var hasValue = arguments.TryGetValue("value", out value);
-            return new ExcelWriteService(new ExcelWriteCompatibilityBackend(
-                _adapter, toolCallId, runtimeStepId)).Write(new ExcelWriteRequest
+            return new ExcelWriteService(_backend).Write(new ExcelWriteRequest
                 {
                     Kind = ToolArgumentReader.String(arguments, "kind", string.Empty),
                     Sheet = ToolArgumentReader.String(arguments, "sheet", string.Empty),

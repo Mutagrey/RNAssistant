@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using RNAssistant.Office;
+using RNAssistant.OfficeHosts.Identity;
 using Excel = Microsoft.Office.Interop.Excel;
 using Outlook = Microsoft.Office.Interop.Outlook;
 using PowerPoint = Microsoft.Office.Interop.PowerPoint;
@@ -16,14 +17,22 @@ namespace RNAssistant.OfficeHosts
             return OfficeTargetEnumerator.ListOpenTargets(host, GetActiveOfficeObject);
         }
 
-        public IOfficeApplicationAdapter Create(string host, OfficeTargetDescriptor target)
+        public IOfficeApplicationAdapter Create(
+            string host,
+            OfficeTargetDescriptor target,
+            IOfficeStaDispatcher dispatcher)
         {
             host = NormalizeHost(host, target);
             if (string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase))
             {
                 var application = ResolveExcelApplication(target);
                 ValidateTargetWindow("Excel", application, target);
-                return new ExcelAdapter(application, target);
+                var workbook = ResolveExcelWorkbook(application, target);
+                return new ExcelAdapter(
+                    workbook.Application ?? application,
+                    workbook,
+                    dispatcher,
+                    "desktop-native-owner");
             }
 
             if (string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase))
@@ -112,6 +121,140 @@ namespace RNAssistant.OfficeHosts
         {
             var application = target == null ? null : ExcelNativeObjectResolver.ResolveApplication(target.Hwnd);
             return application ?? (Excel.Application)GetActiveOfficeObject("Excel.Application");
+        }
+
+        private static Excel.Workbook ResolveExcelWorkbook(
+            Excel.Application application,
+            OfficeTargetDescriptor target)
+        {
+            if (application == null)
+            {
+                throw new InvalidOperationException("Excel application is unavailable.");
+            }
+
+            if (!HasExcelDocumentIdentity(target))
+            {
+                if (target == null || target.Hwnd == 0)
+                {
+                    throw new InvalidOperationException(
+                        "An exact Excel window is required to bind the current workbook.");
+                }
+
+                Excel.Workbook windowMatch = null;
+                foreach (Excel.Workbook workbook in application.Workbooks)
+                {
+                    if (!HasExcelWindow(workbook, target.Hwnd)) continue;
+                    if (windowMatch != null)
+                        throw new InvalidOperationException(
+                            "The requested Excel window maps to more than one workbook.");
+                    windowMatch = workbook;
+                }
+                if (windowMatch == null)
+                    throw new InvalidOperationException(
+                        "The workbook for the requested Excel window could not be resolved.");
+                return windowMatch;
+            }
+
+            Excel.Workbook match = null;
+            foreach (Excel.Workbook workbook in application.Workbooks)
+            {
+                if (!MatchesExcelTarget(workbook, target))
+                {
+                    continue;
+                }
+
+                if (match != null)
+                {
+                    throw new InvalidOperationException("The requested Excel workbook identity is ambiguous.");
+                }
+                match = workbook;
+            }
+
+            if (match == null)
+            {
+                throw new InvalidOperationException("The requested Excel workbook is not open.");
+            }
+            return match;
+        }
+
+        private static bool HasExcelWindow(Excel.Workbook workbook, long hwnd)
+        {
+            if (workbook == null || hwnd == 0) return false;
+            try
+            {
+                foreach (Excel.Window window in workbook.Windows)
+                {
+                    if (Convert.ToInt64(window.Hwnd) == hwnd) return true;
+                }
+            }
+            catch
+            {
+            }
+            return false;
+        }
+
+        private static bool HasExcelDocumentIdentity(OfficeTargetDescriptor target)
+        {
+            return target != null
+                && (!string.IsNullOrWhiteSpace(target.DocumentKey)
+                    || !string.IsNullOrWhiteSpace(target.FullName)
+                    || !string.IsNullOrWhiteSpace(target.Path)
+                    || !string.IsNullOrWhiteSpace(target.Name));
+        }
+
+        private static bool MatchesExcelTarget(
+            Excel.Workbook workbook,
+            OfficeTargetDescriptor target)
+        {
+            if (workbook == null || target == null)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(target.DocumentKey))
+            {
+                return string.Equals(
+                    ExcelDocumentKey(workbook),
+                    target.DocumentKey.Trim(),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            var fullName = SafeString(delegate { return workbook.FullName; });
+            if (!string.IsNullOrWhiteSpace(target.FullName))
+            {
+                return SamePath(fullName, target.FullName);
+            }
+            if (!string.IsNullOrWhiteSpace(target.Path))
+            {
+                return SamePath(fullName, target.Path);
+            }
+
+            return string.Equals(
+                SafeString(delegate { return workbook.Name; }),
+                target.Name == null ? string.Empty : target.Name.Trim(),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ExcelDocumentKey(Excel.Workbook workbook)
+        {
+            return ExcelDocumentSession.StableKey(
+                workbook,
+                DocumentIdentity.RuntimeKey("Excel", workbook));
+        }
+
+        private delegate string StringGetter();
+
+        private static string SafeString(StringGetter getter)
+        {
+            try { return getter(); }
+            catch { return string.Empty; }
+        }
+
+        private static bool SamePath(string left, string right)
+        {
+            return !string.IsNullOrWhiteSpace(left)
+                && !string.IsNullOrWhiteSpace(right)
+                && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
         private static string NormalizeHost(string host, OfficeTargetDescriptor target)

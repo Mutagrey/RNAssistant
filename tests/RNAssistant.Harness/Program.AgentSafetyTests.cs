@@ -557,14 +557,9 @@ namespace RNAssistant.Harness
                 AssertTrue(acceptedCalls.Skip(1).All(message => message.AcceptedCallOrigin.ModelAttemptId == attemptIds[2]) &&
                     acceptedCalls.Skip(1).Select(message => message.AcceptedCallOrigin.CallIndex).SequenceEqual(new[] { 0, 1 }),
                     "batch members preserve their raw attempt and positions");
-                var internalCalls = adapter.Executed
-                    .Where(command => command.ToolId == ExcelReadToolIds.InspectBackend).ToList();
-                AssertEqual(2, internalCalls.Count,
-                    "independent native reads dispatch once each through the internal backend");
-                AssertTrue(internalCalls.Select(command => command.ToolCallId).SequenceEqual(runtimeIds.Skip(1)),
-                    "internal backend dispatch preserves persisted runtime call IDs");
-                AssertTrue(internalCalls.All(command => !string.IsNullOrWhiteSpace(command.RuntimeStepId)),
-                    "internal backend dispatch preserves runtime step correlation");
+                AssertEqual(2, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelInspectOperation),
+                    "independent native reads dispatch once each through the direct typed backend");
                 AssertEqual(0, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.Inspect),
                     "accepted public ids never dispatch through the host adapter");
                 AssertTrue(requests[0].CallContext.BatchSafeReadOnlyToolIds.Contains("common.resources_read") &&
@@ -1744,13 +1739,11 @@ namespace RNAssistant.Harness
                     {
                         Name = "Sheet " + index + " " + new string('x', 750)
                     }).ToList();
-                adapter.QueueResult(ExcelReadToolIds.InspectBackend, ToolResult.Ok(
-                    "large read",
-                    JsonConvert.SerializeObject(new ExcelInspectSnapshot
-                    {
-                        Kind = "sheets", Sheets = largeSheets,
-                        ReturnedCount = largeSheets.Count, Truncated = true
-                    })));
+                adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot
+                {
+                    Kind = "sheets", Sheets = largeSheets,
+                    ReturnedCount = largeSheets.Count, Truncated = true
+                });
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.inspect"),

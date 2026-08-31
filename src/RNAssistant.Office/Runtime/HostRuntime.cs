@@ -186,8 +186,8 @@ namespace RNAssistant.Office.Runtime
                     return action();
                 }
             };
-            // A bound host operation stays on its owner STA. Legacy adapters keep
-            // their current per-access dispatcher until the Excel identity switch.
+            // A bound host operation stays on its owner STA. Hosts not yet switched
+            // to a document session keep their current per-access dispatcher.
             return access.Session == null ? guarded() :
                 DocumentAccessGate.Invoke(access.Dispatcher, guarded);
         }

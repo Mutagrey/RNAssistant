@@ -3,9 +3,9 @@
 Дата фиксации: 2026-08-30; статус маршрута обновлён 2026-08-31.
 
 Статус: ordered migration route, не описание уже реализованной архитектуры. Phase
-10A–10D и WQ-A1–A5 завершены host-neutral. По принятому 2026-08-31 риску WQ0 больше
-не блокирует следующий atomic 11T0/7D bound Excel switch; Windows evidence остаётся
-не выполненным. Section B и финальное удаление active legacy обязательны до Phase 12.
+10A–10D, WQ-A1–A5 и atomic 11T0/7D bound Excel switch завершены host-neutral. По
+принятому 2026-08-31 риску WQ0 не блокировал implementation; Windows evidence
+остаётся не выполненным. Section B и финальное удаление active legacy обязательны до Phase 12.
 Новые optional product capabilities этим не допускаются. Если другое предложение
 становится обязательным, сначала обновляются master plan/ADR и `MIGRATION_MAP.md` с
 owner, consumers и removal gate.
@@ -40,10 +40,11 @@ store, model wire или UI-owned effect classification.
    canonical docs, migration statuses, project includes и checks.
 4. WQ-A создал data-only packs, production-path runner и встроенный WQ0 без второго
    executor/store; [qualification contract](../qualification.md) обязателен.
-5. Один production 11T0/7D change атомарно вводит bound `ExcelDocumentSession`/
+5. [x] Один production 11T0/7D change атомарно ввёл bound `ExcelDocumentSession`/
    factories, фиксирует текущий `RuntimeKey` на lifetime exact выбранной книги,
    подключает прямой Excel backend и удаляет compatibility commands/backends плюс
    execution-time active-document fallback. Это явное допущение до Windows evidence.
+   [Evidence](PHASE_11T0_EXCEL_BOUND_CUTOVER.md).
 6. Затем ранний 11T переводит built-in Office tools по semantic families; каждый
    switch удаляет свой legacy host path. Не создавать compatibility scaffolding,
    которое всё равно вызывает `ExecuteTool(ToolCommand)`; WQ0 выполняется позже как
@@ -96,7 +97,7 @@ string-based host dispatch.
 
 ### Gate и DoD
 
-- Начинать с атомарного 11T0/7D bound Excel switch; WQ0 не является prerequisite,
+- 11T0/7D bound Excel switch выполнен host-neutral; WQ0 не являлся prerequisite,
   но qualification не считается выполненной.
 - Один change переключает одну capability family и удаляет заменённый path.
 - Tests подтверждают document identity, dispatcher/lifetime и отсутствие второго
@@ -179,7 +180,7 @@ Active legacy означает второй execution/catalog/result/history pat
 
 - удалить generic `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`,
   `OfficeToolExecutor` fallback и host tool-id switches после последнего family;
-- удалить internal Excel compatibility commands/backends в 11T0/7D;
+- [x] удалить internal Excel compatibility commands/backends в 11T0/7D;
 - удалить VBA mutation/package adapters после direct typed host/backend switch;
 - удалить `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` и
   `ToolResultUiProjection` после последнего catalog/result/UI consumer;

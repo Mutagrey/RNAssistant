@@ -17,58 +17,43 @@ using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed partial class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog
+    public sealed partial class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IExcelBackendProvider
     {
         private const int MaxContextPreviewCells = 2000;
 
         private readonly Excel.Application _application;
-        private readonly OfficeTargetDescriptor _target;
         private readonly Excel.Workbook _targetWorkbook;
+        private readonly ExcelDocumentSession _documentSession;
+        private readonly ExcelInteropBackend _excelBackend;
+        private readonly string _qualificationOwnerLabel;
 
-        public ExcelAdapter(Excel.Application application)
-            : this(application, (OfficeTargetDescriptor)null)
+        public ExcelAdapter(
+            Excel.Application application,
+            Excel.Workbook targetWorkbook,
+            IOfficeStaDispatcher dispatcher,
+            string qualificationOwnerLabel = null)
         {
-        }
-
-        public ExcelAdapter(Excel.Application application, OfficeTargetDescriptor target)
-        {
-            _application = application;
-            _target = target;
-        }
-
-        public ExcelAdapter(Excel.Application application, Excel.Workbook targetWorkbook)
-        {
-            _application = application;
-            _targetWorkbook = targetWorkbook;
+            _application = application ?? throw new ArgumentNullException(nameof(application));
+            _targetWorkbook = targetWorkbook ?? throw new ArgumentNullException(nameof(targetWorkbook));
+            _qualificationOwnerLabel = string.IsNullOrWhiteSpace(qualificationOwnerLabel)
+                ? "host-owner" : qualificationOwnerLabel;
+            var runtimeDocumentId = DocumentIdentity.RuntimeKey(HostName, _targetWorkbook);
+            _documentSession = new ExcelDocumentSession(
+                _targetWorkbook,
+                runtimeDocumentId,
+                dispatcher);
+            _excelBackend = new ExcelInteropBackend(_documentSession);
         }
 
         public string HostName { get { return "Excel"; } }
+        public IOfficeDocumentSession DocumentSession { get { return _documentSession; } }
+        public IOfficeStaDispatcher StaDispatcher { get { return _documentSession.StaDispatcher; } }
+        public IExcelReadBackend ExcelReadBackend { get { return _excelBackend; } }
+        public IExcelWriteBackend ExcelWriteBackend { get { return _excelBackend; } }
 
-        public string DocumentKey
-        {
-            get
-            {
-                return KeyForWorkbook(ActiveWorkbook());
-            }
-        }
-
-        public string RuntimeDocumentKey
-        {
-            get
-            {
-                var workbook = ActiveWorkbook();
-                return workbook == null ? "Excel:NoWorkbook" : DocumentIdentity.RuntimeKey(HostName, workbook);
-            }
-        }
-
-        public string DocumentTitle
-        {
-            get
-            {
-                var workbook = ActiveWorkbook();
-                return workbook == null ? "No workbook" : workbook.Name;
-            }
-        }
+        public string DocumentKey { get { return _documentSession.StableDocumentId; } }
+        public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
+        public string DocumentTitle { get { return RequireWorkbook().Name; } }
 
         public OfficeContext GetOfficeContext()
         {
@@ -83,12 +68,9 @@ namespace RNAssistant.OfficeHosts
             {
             }
 
-            var workbook = ActiveWorkbook();
-            if (workbook != null)
-            {
-                context.DocumentPath = PersistentPath(workbook);
-                context.DocumentTitle = SafeString(delegate { return workbook.Name; });
-            }
+            var workbook = RequireWorkbook();
+            context.DocumentPath = PersistentPath(workbook);
+            context.DocumentTitle = SafeString(delegate { return workbook.Name; });
 
             try
             {
@@ -107,9 +89,6 @@ namespace RNAssistant.OfficeHosts
 
         public IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
         {
-            Excel.Workbook active;
-            try { active = _application.ActiveWorkbook; }
-            catch { active = null; }
             var result = new List<OpenOfficeDocumentDto>();
             foreach (Excel.Workbook workbook in _application.Workbooks)
             {
@@ -119,7 +98,7 @@ namespace RNAssistant.OfficeHosts
                     DocumentKey = KeyForWorkbook(workbook),
                     Title = SafeString(delegate { return workbook.Name; }),
                     Path = PersistentPath(workbook),
-                    IsActive = active != null && SameWorkbook(active, workbook)
+                    IsActive = SameWorkbook(_targetWorkbook, workbook)
                 });
             }
             return result;
@@ -180,16 +159,9 @@ namespace RNAssistant.OfficeHosts
 
         private string KeyForWorkbook(Excel.Workbook workbook)
         {
-            if (workbook == null)
-            {
-                return "Excel:NoWorkbook";
-            }
-            var runtimeKey = DocumentIdentity.RuntimeKey(HostName, workbook);
-            return DocumentIdentity.ForOfficeDocument(
-                HostName,
-                PersistentPath(workbook),
-                runtimeKey,
-                () => workbook.CustomDocumentProperties);
+            return ExcelDocumentSession.StableKey(
+                workbook,
+                workbook == null ? "Excel:Runtime:none" : DocumentIdentity.RuntimeKey(HostName, workbook));
         }
 
         private static string PersistentPath(Excel.Workbook workbook)
@@ -226,11 +198,7 @@ namespace RNAssistant.OfficeHosts
 
         public string GetDocumentSnapshot(int maxChars)
         {
-            var workbook = ActiveWorkbook();
-            if (workbook == null)
-            {
-                return "No active workbook.";
-            }
+            var workbook = RequireWorkbook();
 
             var builder = new StringBuilder();
             builder.AppendLine("Workbook: " + workbook.Name);
@@ -253,17 +221,7 @@ namespace RNAssistant.OfficeHosts
         {
             try
             {
-                var workbook = ActiveWorkbook();
-                if (workbook != null)
-                {
-                    workbook.Activate();
-                    return;
-                }
-
-                if (_application.ActiveWindow != null)
-                {
-                    _application.ActiveWindow.Activate();
-                }
+                RequireWorkbook().Activate();
             }
             catch
             {
@@ -314,14 +272,6 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
-                    case ExcelReadToolIds.InspectBackend:
-                        return InspectWorkbookBackend(command);
-                    case ExcelReadToolIds.ReadRangeBackend:
-                        return ReadRangeBackend(command);
-                    case ExcelWriteToolIds.ReadBackend:
-                        return ReadWriteRangeBackend(command);
-                    case ExcelWriteToolIds.ApplyBackend:
-                        return ApplyWriteRangeBackend(command);
                     case "excel.find_cells":
                         return FindCells(command);
                     case "excel.replace_cells":
@@ -376,139 +326,11 @@ namespace RNAssistant.OfficeHosts
                         return ToolResult.Fail("Unsupported Excel tool: " + command.ToolId);
                 }
             }
-            catch (ExcelReadHostException ex)
-            {
-                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
-            }
-            catch (ExcelWriteHostException ex)
-            {
-                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
-            }
             catch (Exception ex)
             {
                 var isVba = (command == null ? string.Empty : command.ToolId ?? string.Empty)
                     .IndexOf(".vba_", StringComparison.OrdinalIgnoreCase) >= 0;
                 return ToolResult.Fail(ex.Message, null, isVba ? "vba_access_error" : "office_tool_error", !isVba);
-            }
-        }
-
-        private ToolResult InspectWorkbookBackend(ToolCommand command)
-        {
-            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty).Trim().ToLowerInvariant();
-            var maxItems = ToolArgumentReader.Int32(command.Arguments, "maxItems", ExcelReadService.MaxInspectItems);
-            var maxSeries = ToolArgumentReader.Int32(command.Arguments, "maxSeries", ExcelReadService.MaxChartSeries);
-            if (maxItems < 1 || maxItems > ExcelReadService.MaxInspectItems ||
-                maxSeries < 1 || maxSeries > ExcelReadService.MaxChartSeries)
-            {
-                return ToolResult.Fail("Excel inspection bounds are invalid.", null, "excel_inspect_bound_invalid", false);
-            }
-
-            ExcelInspectSnapshot snapshot;
-            switch (kind)
-            {
-                case "workbook": snapshot = WorkbookSummary(maxItems); break;
-                case "sheets": snapshot = ListSheets(maxItems); break;
-                case "charts":
-                    snapshot = string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "chartName", string.Empty))
-                        ? ListChartsSnapshot(command, maxItems, maxSeries)
-                        : GetChartSnapshot(command, maxItems, maxSeries);
-                    break;
-                case "tables": snapshot = ListTablesSnapshot(command, maxItems); break;
-                case "names": snapshot = ListNamesSnapshot(maxItems); break;
-                case "shapes": snapshot = ListShapesSnapshot(command, maxItems); break;
-                default: return ToolResult.Fail("kind must be workbook, sheets, charts, tables, names, or shapes.", null, "excel_inspect_kind_invalid", false);
-            }
-            return ToolResult.Ok("Excel inspection backend snapshot collected.", JsonConvert.SerializeObject(snapshot));
-        }
-
-        private ExcelInspectSnapshot WorkbookSummary(int maxItems)
-        {
-            var workbook = RequireWorkbook();
-            var sheets = ReadSheets(workbook, maxItems, true);
-            return new ExcelInspectSnapshot
-            {
-                Kind = "workbook",
-                Workbook = new ExcelWorkbookSnapshot { Name = workbook.Name, FullName = workbook.FullName, Sheets = sheets.Items },
-                ReturnedCount = sheets.Items.Count,
-                Truncated = sheets.Truncated
-            };
-        }
-
-        private ExcelInspectSnapshot ListSheets(int maxItems)
-        {
-            var sheets = ReadSheets(RequireWorkbook(), maxItems, false);
-            return new ExcelInspectSnapshot
-            {
-                Kind = "sheets", Sheets = sheets.Items,
-                ReturnedCount = sheets.Items.Count, Truncated = sheets.Truncated
-            };
-        }
-
-        private static BoundedItems<ExcelSheetSnapshot> ReadSheets(Excel.Workbook workbook, int maxItems, bool includeUsedRange)
-        {
-            var result = new List<ExcelSheetSnapshot>();
-            var total = workbook.Worksheets.Count;
-            var take = Math.Min(total, maxItems);
-            foreach (Excel.Worksheet sheet in workbook.Worksheets)
-            {
-                if (result.Count >= take) break;
-                result.Add(new ExcelSheetSnapshot
-                {
-                    Name = sheet.Name,
-                    UsedRange = includeUsedRange ? SafeString(delegate { return sheet.UsedRange.Address[false, false]; }) : null
-                });
-            }
-            return new BoundedItems<ExcelSheetSnapshot>(result, total > take);
-        }
-
-        private ToolResult ReadRangeBackend(ToolCommand command)
-        {
-            var content = ToolArgumentReader.String(command.Arguments, "content", "values").Trim().ToLowerInvariant();
-            var maxCells = ToolArgumentReader.Int32(command.Arguments, "maxCells", ExcelReadService.MaxReadCells);
-            if (maxCells < 1 || maxCells > ExcelReadService.MaxReadCells)
-                return ToolResult.Fail("Excel range ceiling is invalid.", null, "excel_range_bound_invalid", false);
-            if (content != "values" && content != "formulas" && content != "profile")
-                return ToolResult.Fail("content must be values, formulas, or profile.", null, "excel_range_content_invalid", false);
-
-            var sheetName = ToolArgumentReader.String(command.Arguments, "sheet", null);
-            var sheet = ResolveSheet(sheetName);
-            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
-            var range = content == "profile" && string.IsNullOrWhiteSpace(address)
-                ? (!string.IsNullOrWhiteSpace(sheetName)
-                    ? sheet.UsedRange
-                    : ResolveSelectionRange(RequireWorkbook()) ?? sheet.UsedRange)
-                : sheet.Range[string.IsNullOrWhiteSpace(address) ? "A1" : address];
-            if (range == null) return ToolResult.Fail("Excel range is unavailable.", null, "excel_range_unavailable", false);
-            if (range.Areas.Count != 1)
-                return ToolResult.Fail("Non-contiguous Excel ranges are not supported; read each area separately.", null, "excel_range_non_contiguous", false);
-            var sizeError = ValidateReadableRange(range, "Excel range", maxCells);
-            if (sizeError != null) return sizeError;
-
-            var rows = Convert.ToInt32(range.Rows.Count);
-            var columns = Convert.ToInt32(range.Columns.Count);
-            var rangeSheet = range.Worksheet as Excel.Worksheet;
-            var snapshot = new ExcelRangeSnapshot
-            {
-                Sheet = rangeSheet == null ? sheet.Name : rangeSheet.Name,
-                Address = range.Address[false, false],
-                Rows = rows,
-                Columns = columns,
-                CellCount = (long)rows * columns
-            };
-            if (content == "values" || content == "profile") snapshot.Values = RangeToRows(range);
-            if (content == "formulas" || content == "profile") snapshot.Formulas = RangeToFormulaRows(range);
-            return ToolResult.Ok("Excel range backend snapshot collected.", JsonConvert.SerializeObject(snapshot));
-        }
-
-        private sealed class BoundedItems<T>
-        {
-            internal List<T> Items { get; private set; }
-            internal bool Truncated { get; private set; }
-
-            internal BoundedItems(List<T> items, bool truncated)
-            {
-                Items = items ?? new List<T>();
-                Truncated = truncated;
             }
         }
 
@@ -688,229 +510,6 @@ namespace RNAssistant.OfficeHosts
         private sealed class ExcelSearchRange { public Excel.Worksheet Sheet { get; set; } public Excel.Range Range { get; set; } }
         private sealed class ExcelSearchField { public string Name { get; set; } public string Text { get; set; } }
         private sealed class ExcelCellReplacement { public Excel.Range Cell { get; set; } public bool Formula { get; set; } public string Text { get; set; } public int Count { get; set; } }
-
-        private ExcelInspectSnapshot ListChartsSnapshot(ToolCommand command, int maxItems, int maxSeries)
-        {
-            var charts = new List<ExcelChartSnapshot>();
-            var sheets = InspectSheets(ToolArgumentReader.String(command.Arguments, "sheet", string.Empty), maxItems);
-            var truncated = sheets.Truncated;
-            for (var sheetIndex = 0; sheetIndex < sheets.Items.Count; sheetIndex++)
-            {
-                var sheet = sheets.Items[sheetIndex];
-                var objects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
-                var remaining = maxItems - charts.Count;
-                var take = Math.Min(objects.Count, remaining);
-                for (var index = 1; index <= take; index++)
-                {
-                    var detail = ReadChartDetails(sheet, (Excel.ChartObject)objects.Item(index), maxSeries);
-                    charts.Add(detail);
-                    if (detail.SeriesTruncated) truncated = true;
-                }
-                if (objects.Count > take) { truncated = true; break; }
-                if (charts.Count >= maxItems)
-                {
-                    if (sheetIndex + 1 < sheets.Items.Count) truncated = true;
-                    break;
-                }
-            }
-            return new ExcelInspectSnapshot
-            {
-                Kind = "charts", Charts = charts, ReturnedCount = charts.Count, Truncated = truncated
-            };
-        }
-
-        private ExcelInspectSnapshot GetChartSnapshot(ToolCommand command, int maxItems, int maxSeries)
-        {
-            var chartName = ToolArgumentReader.String(command.Arguments, "chartName", string.Empty);
-            if (string.IsNullOrWhiteSpace(chartName))
-                throw new ExcelReadHostException("chartName is required.", "excel_chart_name_required", false);
-            var truncated = false;
-            var scanned = 0;
-            var sheets = InspectSheets(ToolArgumentReader.String(command.Arguments, "sheet", string.Empty), maxItems);
-            truncated = sheets.Truncated;
-            foreach (var sheet in sheets.Items)
-            {
-                var objects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
-                for (var index = 1; index <= objects.Count; index++)
-                {
-                    if (scanned >= maxItems)
-                        throw new ExcelReadHostException("Chart lookup reached the bounded inspection limit; provide sheet to narrow the lookup.",
-                            "excel_inspect_limit_reached", false);
-                    scanned++;
-                    var chart = (Excel.ChartObject)objects.Item(index);
-                    if (string.Equals(chart.Name, chartName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        var detail = ReadChartDetails(sheet, chart, maxSeries);
-                        return new ExcelInspectSnapshot
-                        {
-                            Kind = "charts", Chart = detail,
-                            ReturnedCount = 1, Truncated = detail.SeriesTruncated
-                        };
-                    }
-                }
-            }
-            if (truncated)
-                throw new ExcelReadHostException("Chart lookup reached the bounded worksheet limit; provide sheet to narrow the lookup.",
-                    "excel_inspect_limit_reached", false);
-            throw new ExcelReadHostException("Chart not found: " + chartName, "excel_chart_not_found", false);
-        }
-
-        private ExcelInspectSnapshot ListTablesSnapshot(ToolCommand command, int maxItems)
-        {
-            var tables = new List<ExcelTableSnapshot>();
-            var sheets = InspectSheets(ToolArgumentReader.String(command.Arguments, "sheet", string.Empty), maxItems);
-            var truncated = sheets.Truncated;
-            for (var sheetIndex = 0; sheetIndex < sheets.Items.Count; sheetIndex++)
-            {
-                var sheet = sheets.Items[sheetIndex];
-                var collection = sheet.ListObjects;
-                var remaining = maxItems - tables.Count;
-                var take = Math.Min(collection.Count, remaining);
-                var added = 0;
-                foreach (Excel.ListObject table in collection)
-                {
-                    if (added >= take) break;
-                    tables.Add(new ExcelTableSnapshot
-                    {
-                        Sheet = sheet.Name, Name = table.Name, DisplayName = table.DisplayName,
-                        Range = table.Range == null ? string.Empty : table.Range.Address[false, false],
-                        Rows = table.ListRows.Count, Columns = table.ListColumns.Count
-                    });
-                    added++;
-                }
-                if (collection.Count > take) { truncated = true; break; }
-                if (tables.Count >= maxItems)
-                {
-                    if (sheetIndex + 1 < sheets.Items.Count) truncated = true;
-                    break;
-                }
-            }
-            return new ExcelInspectSnapshot
-            {
-                Kind = "tables", Tables = tables, ReturnedCount = tables.Count, Truncated = truncated
-            };
-        }
-
-        private ExcelInspectSnapshot ListNamesSnapshot(int maxItems)
-        {
-            var workbook = RequireWorkbook();
-            var names = new List<ExcelNameSnapshot>();
-            var total = workbook.Names.Count;
-            var take = Math.Min(total, maxItems);
-            foreach (Excel.Name name in workbook.Names)
-            {
-                if (names.Count >= take) break;
-                Excel.Range target = null;
-                try { target = name.RefersToRange; } catch { }
-                var sheet = target == null ? null : target.Worksheet as Excel.Worksheet;
-                names.Add(new ExcelNameSnapshot
-                {
-                    Name = name.Name,
-                    RefersTo = Convert.ToString(name.RefersTo),
-                    Sheet = sheet == null ? null : sheet.Name,
-                    Address = target == null ? null : SafeString(delegate { return target.Address[false, false]; })
-                });
-            }
-            return new ExcelInspectSnapshot
-            {
-                Kind = "names", Names = names, ReturnedCount = names.Count, Truncated = total > take
-            };
-        }
-
-        private ExcelInspectSnapshot ListShapesSnapshot(ToolCommand command, int maxItems)
-        {
-            var shapes = new List<ExcelShapeSnapshot>();
-            var sheets = InspectSheets(ToolArgumentReader.String(command.Arguments, "sheet", string.Empty), maxItems);
-            var truncated = sheets.Truncated;
-            for (var sheetIndex = 0; sheetIndex < sheets.Items.Count; sheetIndex++)
-            {
-                var sheet = sheets.Items[sheetIndex];
-                var collection = sheet.Shapes;
-                var remaining = maxItems - shapes.Count;
-                var take = Math.Min(collection.Count, remaining);
-                var added = 0;
-                foreach (Excel.Shape shape in collection)
-                {
-                    if (added >= take) break;
-                    shapes.Add(new ExcelShapeSnapshot
-                    {
-                        Sheet = sheet.Name, Name = shape.Name, Type = shape.Type.ToString(),
-                        Left = shape.Left, Top = shape.Top, Width = shape.Width, Height = shape.Height,
-                        AlternativeText = SafeString(delegate { return shape.AlternativeText; })
-                    });
-                    added++;
-                }
-                if (collection.Count > take) { truncated = true; break; }
-                if (shapes.Count >= maxItems)
-                {
-                    if (sheetIndex + 1 < sheets.Items.Count) truncated = true;
-                    break;
-                }
-            }
-            return new ExcelInspectSnapshot
-            {
-                Kind = "shapes", Shapes = shapes, ReturnedCount = shapes.Count, Truncated = truncated
-            };
-        }
-
-        private BoundedItems<Excel.Worksheet> InspectSheets(string sheetFilter, int maxItems)
-        {
-            if (!string.IsNullOrWhiteSpace(sheetFilter))
-            {
-                return new BoundedItems<Excel.Worksheet>(new List<Excel.Worksheet> { ResolveSheet(sheetFilter) }, false);
-            }
-            var workbook = RequireWorkbook();
-            var total = workbook.Worksheets.Count;
-            var take = Math.Min(total, maxItems);
-            var result = new List<Excel.Worksheet>();
-            foreach (Excel.Worksheet sheet in workbook.Worksheets)
-            {
-                if (result.Count >= take) break;
-                result.Add(sheet);
-            }
-            return new BoundedItems<Excel.Worksheet>(result, total > take);
-        }
-
-        private static ExcelChartSnapshot ReadChartDetails(Excel.Worksheet sheet, Excel.ChartObject chartObject, int maxSeries)
-        {
-            var chart = chartObject.Chart;
-            var series = new List<ExcelChartSeriesSnapshot>();
-            var seriesTruncated = false;
-            try
-            {
-                var collection = (Excel.SeriesCollection)chart.SeriesCollection(Type.Missing);
-                var take = Math.Min(collection.Count, maxSeries);
-                seriesTruncated = collection.Count > take;
-                for (var index = 1; index <= take; index++)
-                {
-                    try
-                    {
-                        var item = (Excel.Series)collection.Item(index);
-                        series.Add(new ExcelChartSeriesSnapshot
-                        {
-                            Name = Convert.ToString(item.Name), Formula = Convert.ToString(item.Formula)
-                        });
-                    }
-                    catch { seriesTruncated = true; }
-                }
-            }
-            catch { seriesTruncated = true; }
-            return new ExcelChartSnapshot
-            {
-                Sheet = sheet == null ? string.Empty : sheet.Name,
-                Name = chartObject.Name,
-                Title = ChartTitle(chart),
-                ChartType = chart.ChartType.ToString(),
-                XAxisTitle = AxisTitle(chart, Excel.XlAxisType.xlCategory),
-                YAxisTitle = AxisTitle(chart, Excel.XlAxisType.xlValue),
-                Series = series,
-                SeriesTruncated = seriesTruncated,
-                Left = chartObject.Left,
-                Top = chartObject.Top,
-                Width = chartObject.Width,
-                Height = chartObject.Height
-            };
-        }
 
         private ToolResult CreateChatChart(ToolCommand command)
         {
@@ -1348,89 +947,14 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Macro ran: " + macroName, JsonConvert.SerializeObject(new { output = output }));
         }
 
-        private Excel.Workbook ActiveWorkbook()
-        {
-            if (HasTargetDocument())
-            {
-                return TargetWorkbook();
-            }
-
-            try { return _application.ActiveWorkbook; }
-            catch { return null; }
-        }
-
-        private Excel.Workbook TargetWorkbook()
-        {
-            if (_targetWorkbook != null)
-            {
-                try
-                {
-                    var ignored = _targetWorkbook.Name;
-                    return _targetWorkbook;
-                }
-                catch
-                {
-                    return null;
-                }
-            }
-
-            if (!HasTargetDocument())
-            {
-                return null;
-            }
-
-            foreach (Excel.Workbook workbook in _application.Workbooks)
-            {
-                if (MatchesWorkbook(workbook))
-                {
-                    return workbook;
-                }
-            }
-
-            return null;
-        }
-
-        private bool HasTargetDocument()
-        {
-            return _targetWorkbook != null || _target != null && _target.HasDocumentIdentity;
-        }
-
-        private bool MatchesWorkbook(Excel.Workbook workbook)
-        {
-            if (workbook == null)
-            {
-                return false;
-            }
-
-            var fullName = SafeString(delegate { return workbook.FullName; });
-            if (!string.IsNullOrWhiteSpace(_target.FullName) && SamePath(fullName, _target.FullName))
-            {
-                return true;
-            }
-
-            if (!string.IsNullOrWhiteSpace(_target.Path) && SamePath(fullName, _target.Path))
-            {
-                return true;
-            }
-
-            var name = SafeString(delegate { return workbook.Name; });
-            return string.IsNullOrWhiteSpace(_target.FullName)
-                && string.IsNullOrWhiteSpace(_target.Path)
-                && !string.IsNullOrWhiteSpace(_target.Name)
-                && string.Equals(name, _target.Name, StringComparison.OrdinalIgnoreCase);
-        }
-
         private Excel.Workbook RequireWorkbook()
         {
-            var workbook = ActiveWorkbook();
-            if (workbook == null)
+            if (!_documentSession.IsAlive)
             {
-                throw new InvalidOperationException(!HasTargetDocument()
-                    ? "No active workbook."
-                    : "Target Excel workbook is not open.");
+                throw new InvalidOperationException("Target Excel workbook is not open.");
             }
 
-            return workbook;
+            return _targetWorkbook;
         }
 
         private Excel.Worksheet ResolveSheet(string name)
@@ -1494,43 +1018,10 @@ namespace RNAssistant.OfficeHosts
             {
             }
 
-            var targetRange = ResolveTargetSelectionRange(workbook);
-            if (targetRange != null)
-            {
-                return targetRange;
-            }
-
             try
             {
                 var activeCell = _application.ActiveCell as Excel.Range;
                 return RangeBelongsToWorkbook(activeCell, workbook) ? activeCell : null;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private Excel.Range ResolveTargetSelectionRange(Excel.Workbook workbook)
-        {
-            if (_target == null || string.IsNullOrWhiteSpace(_target.Selection))
-            {
-                return null;
-            }
-
-            var reference = _target.Selection.Trim();
-            var separator = reference.LastIndexOf('!');
-            if (separator <= 0 || separator >= reference.Length - 1)
-            {
-                return null;
-            }
-
-            var sheetName = reference.Substring(0, separator).Trim('\'');
-            var address = reference.Substring(separator + 1);
-            try
-            {
-                var sheet = FindWorksheet(workbook, sheetName);
-                return sheet == null ? null : sheet.Range[address];
             }
             catch
             {
@@ -1637,13 +1128,6 @@ namespace RNAssistant.OfficeHosts
             catch { return string.Empty; }
         }
 
-        private static bool SamePath(string left, string right)
-        {
-            return !string.IsNullOrWhiteSpace(left)
-                && !string.IsNullOrWhiteSpace(right)
-                && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
-        }
-
         private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false, bool canSourceHtmlData = false)
         {
             return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation, CanSourceHtmlData = canSourceHtmlData };
@@ -1672,47 +1156,6 @@ namespace RNAssistant.OfficeHosts
             return rows;
         }
 
-        private static List<List<object>> RangeToFormulaRows(Excel.Range range)
-        {
-            var rows = new List<List<object>>();
-            object value = range.Formula;
-            var array = value as object[,];
-            if (array == null)
-            {
-                rows.Add(new List<object> { value });
-                return rows;
-            }
-
-            for (var r = array.GetLowerBound(0); r <= array.GetUpperBound(0); r++)
-            {
-                var row = new List<object>();
-                for (var c = array.GetLowerBound(1); c <= array.GetUpperBound(1); c++)
-                {
-                    row.Add(array[r, c]);
-                }
-                rows.Add(row);
-            }
-            return rows;
-        }
-
-        private static ToolResult ValidateReadableRange(Excel.Range range, string operation, int maxCells)
-        {
-            var cellCount = RangeCellCount(range);
-            if (cellCount <= maxCells) return null;
-            var address = range == null ? string.Empty : range.Address[false, false];
-            return ToolResult.Fail(
-                (operation ?? "Excel read") + " is too large: " + cellCount +
-                " cells. Limit is " + maxCells + "; split the request into smaller ranges.",
-                JsonConvert.SerializeObject(new
-                {
-                    address = address,
-                    cellCount = cellCount,
-                    maxCells = maxCells
-                }),
-                "excel_range_too_large",
-                true);
-        }
-
         private static long RangeCellCount(Excel.Range range)
         {
             if (range == null) return 0;
@@ -1735,19 +1178,6 @@ namespace RNAssistant.OfficeHosts
             var rows = Math.Min(totalRows, Math.Max(1, maxCells / columns));
             var start = range.Cells[1, 1] as Excel.Range;
             return start == null ? range : start.Resize[rows, columns];
-        }
-
-        private sealed class ExcelReadHostException : InvalidOperationException
-        {
-            internal string ErrorCode { get; private set; }
-            internal bool Retryable { get; private set; }
-
-            internal ExcelReadHostException(string message, string errorCode, bool retryable)
-                : base(message)
-            {
-                ErrorCode = errorCode;
-                Retryable = retryable;
-            }
         }
 
         private Excel.ChartObject ResolveChartObject(string sheetName, string chartName, out Excel.Worksheet resolvedSheet)

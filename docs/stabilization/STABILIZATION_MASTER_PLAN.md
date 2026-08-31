@@ -1783,18 +1783,18 @@ change без промежуточного production состояния. WQ0 о
 - [x] 5B1: ввести `IOfficeDocumentSession` и нейтрального consumer в HostRuntime; production providers появятся только в 5B2.
 - [x] 5B2: подготовить отдельный [identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md) кандидата OXID/OID с retained marshal reference; production identity не переключать по результатам parser tests.
 - [ ] 5B2/WQ0: квалифицировать принятое lifetime identity допущение и равенство desktop/VSTO/native на Windows; это обязательное release evidence, не blocker implementation.
-- [ ] Ввести `ExcelDocumentSession`.
+- [x] Ввести `ExcelDocumentSession` (11T0/7D host-neutral; Windows lifetime evidence остаётся открытым).
 - [x] 5A: выделить текущую document access/serialization из `OfficeToolExecutor` в `HostRuntime`; старые helpers удалить.
-- [ ] 5B2: выделить выбор/удержание workbook из `ExcelAdapter`; write/read-back должны получать тот же bound object. Charts/formatting и прочие host adapters не рефакторить попутно.
-- [ ] Bind конкретного document object до execution.
-- [ ] Сериализовать writes по `RuntimeDocumentId`.
+- [x] 5B2: выделить выбор/удержание workbook из `ExcelAdapter`; write/read-back получают тот же bound object. Charts/formatting и прочие host adapters не рефакторились попутно.
+- [x] Bind конкретного document object до execution.
+- [x] Сериализовать writes по `RuntimeDocumentId`.
 - [x] 5B1: gate охватывает guard/preparation/live read, dispatch и read-back; resource/manual/editor paths используют тот же gate. Reentry только для той же operation/target, порядок document → shared; release при confirmation, повторная проверка после ожидания. Evidence — [PROGRESS](PROGRESS.md#phase-5b1--document-access-gate); Windows gate ниже остаётся открыт.
 - [x] 5B2 read switch (host-neutral): selection/context capture и VBA catalog reads используют HostRuntime.ReadDocument; отдельный operation root не наследует доступ mutation. Gate охватывает prepare/capture и cache/list/components; [evidence](PROGRESS.md#phase-5b2--direct-contextcatalog-reads).
 - [ ] 5B2: квалифицировать эти reads с production ExcelDocumentSession/factories и реальной UI/STA reentrancy на Windows; neutral switch не доказывает COM binding.
-- [ ] Удалить fallback на `ActiveWorkbook` из agent mutation path.
-- [ ] `ActiveWorkbook` оставить только для user action «выбрать текущую книгу».
-- [ ] Write и read-back выполнять через один bound object.
-- [ ] Проверять `IsAlive` до dispatch.
+- [x] Удалить fallback на `ActiveWorkbook` из agent mutation path.
+- [x] `ActiveWorkbook` оставить только для user action «выбрать текущую книгу».
+- [x] Write и read-back выполнять через один bound object.
+- [x] Проверять `IsAlive` до dispatch.
 - [x] 5B1: определить neutral close/cancel semantics — closed/replaced session не допускает action; cancellation до dispatch не запускает action, после начала mutation не доказывает отсутствие effect. Реальный COM lifetime — 5B2.
 - [x] 5B1: добавить fake host tests; они не подтверждают реальную Excel identity.
 - [ ] Добавить Windows integration scenarios:
@@ -2020,7 +2020,7 @@ consumer map и порядок — в [6H evidence](PHASE_6H_VBA_PACKAGE_SCOPE.m
 - [x] 7C: перенести только `excel.write_range` в typed write owner/native handler; прочие Excel mutations остаются legacy. [Evidence](PHASE_7C_EXCEL_WRITE.md).
 - [x] 7C: добавить exact before/read-back verification и различать `VerifiedNoChange`, `VerifiedChange`, definite pre-dispatch `error` и non-retryable post-dispatch `unknown`.
 - [x] 7C: сохранить deterministic null-padding ragged tables и применить size limits до COM matrix allocation/assignment.
-- [ ] 11T0/7D: одним production change ввести 5B2 bound session/factories, захватить текущий `RuntimeKey` exact workbook на bound lifetime, передать extracted interop backend только `ExcelDocumentSession.BoundDocumentObject` и удалить internal compatibility backend плюс `ActiveWorkbook`/descriptor execution fallback; WQ0 оставить открытым deferred evidence.
+- [x] 11T0/7D: одним production change ввести 5B2 bound session/factories, захватить текущий `RuntimeKey` exact workbook на bound lifetime, передать extracted interop backend только `ExcelDocumentSession.BoundDocumentObject` и удалить internal compatibility backend плюс `ActiveWorkbook`/descriptor execution fallback; WQ0 оставить открытым deferred evidence. [Evidence](PHASE_11T0_EXCEL_BOUND_CUTOVER.md).
 - [ ] Добавить host-neutral tests:
   - [x] все `inspect` selectors и общий Agent/manual/HTML read owner;
   - [x] values;
@@ -2033,7 +2033,7 @@ consumer map и порядок — в [6H evidence](PHASE_6H_VBA_PACKAGE_SCOPE.m
   - [x] write error before dispatch;
   - [x] verified no-op/change;
   - [x] unverified final state.
-- [ ] Не переносить `find_cells`, `create_chat_chart`, `replace_cells`, table/chart mutations, formatting, sheet management или clear/sort/filter до отдельного этапа.
+- [x] Не переносить `find_cells`, `create_chat_chart`, `replace_cells`, table/chart mutations, formatting, sheet management или clear/sort/filter в 11T0; эти families остаются отдельными этапами 11T1–11T5.
 
 ### Definition of Done
 
@@ -2271,9 +2271,10 @@ evidence и карта владельцев заданы в
 1. Завершить WQ-A1–A5: runner/UI, встроенный `excel.wq0.identity`, suite catalog и
    exact-build release evidence; manual probe
    остаётся только engineering fallback при дефекте самого runner-а.
-2. До Windows candidate атомарно выполнить 11T0/7D: bound Excel session/factories,
-   direct backend и удаление compatibility execution path с текущим `RuntimeKey` как
-   явным lifetime assumption.
+2. [x] До Windows candidate атомарно выполнить 11T0/7D: bound Excel
+   session/factories, direct backend и удаление compatibility execution path с
+   текущим `RuntimeKey` как явным lifetime assumption.
+   [Evidence](PHASE_11T0_EXCEL_BOUND_CUTOVER.md).
 3. Собрать один versioned `16.1.0-dev` candidate из известного commit; полный
    host-neutral harness, architecture tests и compatible BuildEvidenceManifest зелёные.
 4. На этом exact build выполнить WQ0 как diagnostic/regression принятого identity
@@ -2368,13 +2369,14 @@ endpoint.
    lifetime tests. The milestone ends with Windows WebView qualification of
    Artifacts, Plan and HTML together, including reload, history and large payloads.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
-   - 11T0/7D: один атомарный production change связывает exact выбранный workbook с
+   - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с
      `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой
      bound backend, затем физически удаляет compatibility commands/backends и
      `ActiveWorkbook`/descriptor execution fallback. Текущий `RuntimeKey` захватывается
      один раз на bound lifetime как явное допущение. Не оставлять промежуточный
      production 5B2 над `_adapter.ExecuteTool`; WQ0/WQ-SESSION/WQ-EXCEL остаются
-     обязательным deferred evidence и не возвращают fallback;
+     обязательным deferred evidence и не возвращают fallback.
+     [Evidence](PHASE_11T0_EXCEL_BOUND_CUTOVER.md);
    - 11T1–11T5: переносить существующие Excel capabilities по families:
      find/replace, sheet lifecycle, clear/sort/filter/format, tables, charts;
    - 11T6–11T8: Word, PowerPoint и Outlook по одному host vertical. Каждый сначала

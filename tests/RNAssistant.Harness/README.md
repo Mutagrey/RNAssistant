@@ -133,10 +133,10 @@ separates that compile/source review from the unperformed Windows delivery gate.
 owner-STA dispatch, every inspect selector, values/formulas/profile, explicit empty
 cells, host-before-materialization range bounds, domain snapshot validation,
 closed/switched target refusals and the shared HTML bind/refresh route. The fake host
-implements only the two internal compatibility commands; a public read reaching it
+implements the direct typed backend; a public read reaching generic host dispatch
 fails, so dual execution is observable. These tests do not compile or execute real
 Excel Interop. Protected sheets, large live workbooks, actual COM errors and
-desktop/VSTO/native composition remain WQ-EXCEL/7D gates. See
+desktop/VSTO/native composition remain WQ-EXCEL gates. See
 [Phase 7B evidence](../../docs/stabilization/PHASE_7B_EXCEL_READ.md).
 
 ## Typed VBA mutation outcome (Phase 6D)

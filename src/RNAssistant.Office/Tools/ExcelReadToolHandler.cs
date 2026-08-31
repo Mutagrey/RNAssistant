@@ -46,8 +46,6 @@ namespace RNAssistant.Office.Tools
                     return _adapter.Execute(
                         _toolId,
                         context.Arguments,
-                        context.Execution.Call.Id,
-                        context.Execution.StepId,
                         cancellationToken);
                 });
                 return Task.FromResult(new ToolHandlerResult(result, ToolEffectEvidence.None));

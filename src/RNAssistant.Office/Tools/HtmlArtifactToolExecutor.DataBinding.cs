@@ -357,7 +357,7 @@ namespace RNAssistant.Office.Tools
                     if (sourceCommand != null && ExcelReadToolIds.Owns(sourceCommand.ToolId))
                         return _standaloneExcelRead == null
                             ? ToolResult.Fail("Excel read adapter is unavailable.", null, "excel_read_backend_missing", false)
-                            : _standaloneExcelRead.ExecuteLegacy(sourceCommand, cancellationToken);
+                            : _standaloneExcelRead.ExecuteDataSource(sourceCommand, cancellationToken);
                     return _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
                 }
             }

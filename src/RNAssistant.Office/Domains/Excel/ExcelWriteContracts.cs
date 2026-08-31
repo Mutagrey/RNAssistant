@@ -38,11 +38,6 @@ namespace RNAssistant.Office.Domains.Excel
         public IReadOnlyList<IReadOnlyList<object>> Values { get; set; }
     }
 
-    public interface IExcelWriteDispatchBoundary
-    {
-        void Mark();
-    }
-
     public interface IExcelWriteBackend
     {
         ExcelWriteSnapshot Read(ExcelWriteReadRequest request);

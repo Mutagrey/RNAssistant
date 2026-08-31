@@ -94,7 +94,7 @@ namespace RNAssistant.OfficeHosts
                 // Agent continuations run on worker threads; all in-process Office COM calls
                 // must return to the UI STA to preserve COM and document identity.
                 officeDispatcher = new OfficeUiDispatcher();
-                innerAdapter = new OfficeComAdapterProvider().Create(host, target);
+                innerAdapter = new OfficeComAdapterProvider().Create(host, target, officeDispatcher);
                 var adapter = new UiThreadOfficeApplicationAdapter(innerAdapter, officeDispatcher);
                 runtime = new AssistantRuntime(adapter, rootPath);
                 var control = runtime.CreatePaneControl();

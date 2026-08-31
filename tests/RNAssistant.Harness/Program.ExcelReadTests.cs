@@ -28,38 +28,31 @@ namespace RNAssistant.Harness
                 AssertTrue(runtime.Describe(new ToolCall("range", ExcelReadToolIds.ReadRange, "{}")) == null,
                     "static ownership does not create a handler absent from the captured catalog");
 
-                adapter.Executed.Clear();
+                adapter.ExcelBackendCalls.Clear();
                 var inspect = executor.Execute(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(inspect.Success, "native inspect succeeds");
                 AssertEqual("sheets", (string)JObject.Parse(inspect.DataJson)["kind"], "inspect returns canonical selector");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.InspectBackend),
-                    "inspect reaches one internal compatibility backend");
-                AssertTrue(!string.IsNullOrWhiteSpace(adapter.Executed.Single().ToolCallId) &&
-                    !string.IsNullOrWhiteSpace(adapter.Executed.Single().RuntimeStepId),
-                    "internal backend keeps native call and step correlation");
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelInspectOperation),
+                    "inspect reaches one direct typed backend");
                 AssertEqual(0, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.Inspect),
                     "public inspect never reaches the host adapter");
 
-                adapter.Executed.Clear();
+                adapter.ExcelBackendCalls.Clear();
                 var range = executor.Execute(Command(ExcelReadToolIds.ReadRange,
                     "sheet", "Data", "address", "A1:B4", "content", "values"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(range.Success, "native range read succeeds");
                 var rangeJson = JObject.Parse(range.DataJson);
                 AssertEqual(8L, rangeJson["cellCount"].Value<long>(), "range reports exact cell count");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.ReadRangeBackend),
-                    "range reaches one internal compatibility backend");
-                AssertEqual(ExcelReadService.MaxReadCells,
-                    Convert.ToInt32(adapter.Executed.Single().Arguments["maxCells"]),
-                    "domain ceiling is passed to the host before materialization");
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelRangeReadOperation),
+                    "range reaches one direct typed backend");
 
                 AssertEqual("excel_public_read_moved",
                     adapter.ExecuteTool(Command(ExcelReadToolIds.Inspect, "kind", "sheets")).ErrorCode,
                     "host adapter cannot execute the moved public id");
-                AssertTrue(executor.IsProtectedToolId(ExcelReadToolIds.InspectBackend) &&
-                    executor.IsProtectedToolId(ExcelReadToolIds.ReadRangeBackend),
-                    "temporary backend ids are reserved from authored-tool collisions");
             });
 
             WithTempPaths(paths =>
@@ -73,7 +66,7 @@ namespace RNAssistant.Harness
                     var ownerSta = false;
                     host.BeforeRead = toolId =>
                     {
-                        if (toolId == ExcelReadToolIds.InspectBackend) ownerSta = dispatcher.CheckAccess;
+                        if (toolId == FakeOfficeAdapter.ExcelInspectOperation) ownerSta = dispatcher.CheckAccess;
                     };
                     var executor = new OfficeToolExecutor(host, new VbaJournalStore(paths),
                         new SkillStore(paths), new ToolStore(paths), paths: paths);
@@ -86,13 +79,13 @@ namespace RNAssistant.Harness
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(result.Success, "native read succeeds against a bound document session");
                     AssertTrue(ownerSta, "native backend dispatch runs on the bound document owner STA");
-                    var dispatched = inner.Executed.Count;
+                    var dispatched = inner.ExcelBackendCalls.Count;
                     dispatcher.Invoke(() => document.IsAlive = false);
                     var closed = executor.Execute(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
                         tools, new AppSettings(), false, false, chat);
                     AssertEqual("active_document_changed", closed.ErrorCode,
                         "closed bound workbook is rejected before dispatch");
-                    AssertEqual(dispatched, inner.Executed.Count,
+                    AssertEqual(dispatched, inner.ExcelBackendCalls.Count,
                         "closed bound workbook never reaches the backend");
                 }
             });
@@ -186,14 +179,15 @@ namespace RNAssistant.Harness
                     "inspect output is capped");
                 AssertTrue(boundedJson["truncated"].Value<bool>(), "inspect reports truncation");
 
-                adapter.Executed.Clear();
+                adapter.ExcelBackendCalls.Clear();
                 var wrongSession = NewSession(adapter);
                 wrongSession.DocumentKey = "other-document";
                 var wrongTarget = executor.Execute(Command(ExcelReadToolIds.ReadRange,
                     "sheet", "Data", "address", "A1"), tools, new AppSettings(), false, false, wrongSession);
                 AssertEqual("active_document_changed", wrongTarget.ErrorCode,
                     "native handler checks the chat document expectation");
-                AssertEqual(0, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.ReadRangeBackend),
+                AssertEqual(0, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                     "wrong-target refusal occurs before backend dispatch");
             });
 
@@ -256,15 +250,17 @@ namespace RNAssistant.Harness
                     "transform", "table", "headers", "firstRow");
                 var bound = executor.Execute(bind, tools, new AppSettings(), false, false, session);
                 AssertTrue(bound.Success, "HTML bind succeeds through the typed read route");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.ReadRangeBackend),
-                    "HTML bind uses the internal backend once");
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelRangeReadOperation),
+                    "HTML bind uses the direct backend once");
                 AssertEqual(0, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.ReadRange),
                     "HTML bind never dispatches the public id to the host");
 
                 var refresh = executor.Execute(Command(HtmlArtifactToolExecutor.RefreshDataToolId, "name", "sales"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(refresh.Success, "HTML refresh succeeds through the same adapter");
-                AssertEqual(2, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.ReadRangeBackend),
+                AssertEqual(2, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                     "bind and refresh share one backend route");
             });
         }

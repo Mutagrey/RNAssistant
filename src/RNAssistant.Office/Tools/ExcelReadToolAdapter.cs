@@ -9,32 +9,30 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class ExcelReadToolAdapter
     {
-        private readonly IOfficeApplicationAdapter _adapter;
+        private readonly IExcelReadBackend _backend;
 
-        internal ExcelReadToolAdapter(IOfficeApplicationAdapter adapter)
+        internal ExcelReadToolAdapter(IExcelReadBackend backend)
         {
-            _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
+            _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
         internal RuntimeResult Execute(
             string toolId,
             IDictionary<string, object> arguments,
-            string toolCallId,
-            string runtimeStepId,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var outcome = ExecuteOutcome(toolId, arguments, toolCallId, runtimeStepId);
+            var outcome = ExecuteOutcome(toolId, arguments);
             return outcome.Success
                 ? RuntimeResult.Ok(outcome.Message, outcome.DataJson)
                 : RuntimeResult.Error(outcome.Message, outcome.DataJson);
         }
 
-        internal ToolResult ExecuteLegacy(ToolCommand command, CancellationToken cancellationToken)
+        internal ToolResult ExecuteDataSource(ToolCommand command, CancellationToken cancellationToken)
         {
             if (command == null) return ToolResult.Fail("Excel read command is empty.", null, "excel_read_command_missing", false);
             cancellationToken.ThrowIfCancellationRequested();
-            var outcome = ExecuteOutcome(command.ToolId, command.Arguments, command.ToolCallId, command.RuntimeStepId);
+            var outcome = ExecuteOutcome(command.ToolId, command.Arguments);
             return outcome.Success
                 ? ToolResult.Ok(outcome.Message, outcome.DataJson)
                 : ToolResult.Fail(outcome.Message, outcome.DataJson, outcome.ErrorCode, outcome.Retryable);
@@ -42,13 +40,10 @@ namespace RNAssistant.Office.Tools
 
         private ExcelReadOutcome ExecuteOutcome(
             string toolId,
-            IDictionary<string, object> arguments,
-            string toolCallId,
-            string runtimeStepId)
+            IDictionary<string, object> arguments)
         {
             arguments = arguments ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            var service = new ExcelReadService(new ExcelReadCompatibilityBackend(
-                _adapter, toolCallId, runtimeStepId));
+            var service = new ExcelReadService(_backend);
             if (string.Equals(toolId, ExcelReadToolIds.Inspect, StringComparison.Ordinal))
             {
                 return service.Inspect(

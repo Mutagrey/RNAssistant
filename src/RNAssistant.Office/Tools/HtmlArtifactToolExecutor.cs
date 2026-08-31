@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
@@ -60,7 +61,9 @@ namespace RNAssistant.Office.Tools
             _adapter = adapter;
             _beginLiveOfficeRead = beginLiveOfficeRead;
             _executeOfficeDataSource = executeOfficeDataSource;
-            _standaloneExcelRead = adapter == null ? null : new ExcelReadToolAdapter(adapter);
+            var excel = adapter as IExcelBackendProvider;
+            _standaloneExcelRead = excel == null || excel.ExcelReadBackend == null
+                ? null : new ExcelReadToolAdapter(excel.ExcelReadBackend);
             _dataSourceTools = (adapterTools ?? new ToolDefinition[0])
                 .Where(IsEligibleDataSourceTool)
                 .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
