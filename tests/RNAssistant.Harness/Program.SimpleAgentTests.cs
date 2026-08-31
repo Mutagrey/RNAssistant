@@ -1317,13 +1317,14 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Готово.\",\"tool_calls\":[]}" });
                 };
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Inspect VBA.", NewSession(adapter), NewContext(adapter),
                     new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema }, tools, null, null,
                     BuiltInSkillProvider.GetSkills(adapter))
                     .GetAwaiter().GetResult();
 
+                AssertTrue(request != null, "agent request reaches model boundary: " + result.AssistantText);
                 var prompt = FlattenSimple(request);
                 AssertContains(prompt, "\"name\":\"common.resources_list\"", "resource discovery exposed");
                 AssertContains(prompt, "\"name\":\"common.resources_read\"", "resource reads exposed");

@@ -2,12 +2,23 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 Optional contours — ранние Artifact Library и typed Office tools contours явно допущены пользователем параллельно WQ
-Current task: WebView bootstrap regression fixed host-neutral — top-level UI load, bridge-token init race and settings/diagnostics navigation smoke pass locally; real Windows WebView2/Office gate remains open.
+Current task: stabilization-wide regression audit in progress — WebView bootstrap and default Excel Agent callable-pack startup regressions fixed host-neutral; real Windows/live-provider gates remain open.
 Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо. 11T не обходит WQ0/5B2/7D и не расширяет Phase 12 scope.
 
 Next step for tools: на реальном Windows выполнить WQ0, затем отдельными changes production 5B2 и 7D. До этого не создавать typed façade над legacy `ExecuteTool`; без Windows может продолжаться только уже допущенный независимый 11D2 viewer slice.
 Required context: [master WQ/Phase 11](STABILIZATION_MASTER_PLAN.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current 5B2/7D owners.
 Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. 11T is admitted but blocked before runtime work by WQ0/production 5B2/7D; all remaining built-in Office tool branches are mapped to family switches rather than a big-bang rewrite. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+
+Default Excel Agent callable-pack regression fix (2026-08-31): growth of the
+complete optional capability index pushed the mandatory Excel/VBA core request to
+about 28,742 tokens against the conservative 28,672-token input budget, so Agent
+failed before the first model dispatch. The complete catalog, exact ids/revisions,
+safety/body metadata and all core schemas remain unchanged; only prompt-index
+summaries now keep a 96-character prefix, while explicit capability search retains
+the previous 160-character prefix. The existing VBA/core regression now fails with
+the actual pre-dispatch error instead of an empty prompt, and focused Agent plus
+capability-discovery tests pass. Full host-neutral harness will be rerun at the end
+of the branch audit; real provider/Office qualification is unchanged.
 
 WebView bootstrap regression fix (2026-08-31): photo triage and browser smoke
 reproduced the UI-wide failure as a script-order regression in

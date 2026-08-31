@@ -151,6 +151,10 @@ namespace RNAssistant.Harness
                 AssertTrue(((JArray)completeCatalog["items"]).OfType<JObject>().Any(item =>
                     (string)item["id"] == "excel.synthetic_299"),
                     "complete prompt index contains the tail id");
+                var promptTail = ((JArray)completeCatalog["items"]).OfType<JObject>().Single(item =>
+                    (string)item["id"] == "excel.synthetic_299");
+                AssertEqual(new string('d', 96) + "...[truncated]", (string)promptTail["summary"],
+                    "complete prompt index keeps a compact bounded summary");
                 AssertTrue(completeCatalog["items"].ToString(Newtonsoft.Json.Formatting.None)
                         .IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
                     "complete prompt index remains schema-free");
@@ -166,6 +170,9 @@ namespace RNAssistant.Harness
                 AssertTrue(tailSearch.Success, "optional search filters the complete catalog");
                 AssertContains(tailSearch.DataJson, "excel.synthetic_299",
                     "search returns the exact tail capability id");
+                AssertEqual(new string('d', 160) + "...[truncated]",
+                    (string)JObject.Parse(tailSearch.DataJson).SelectToken("items[0].summary"),
+                    "search preserves the wider metadata summary");
                 AssertTrue(tailSearch.DataJson.IndexOf("schemaLoaded", StringComparison.Ordinal) < 0,
                     "search does not claim working-set state it cannot observe");
                 var tailRead = executor.Execute(

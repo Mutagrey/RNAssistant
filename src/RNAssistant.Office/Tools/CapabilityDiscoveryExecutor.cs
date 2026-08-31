@@ -19,6 +19,7 @@ namespace RNAssistant.Office.Tools
         private const int MaximumSearchPageSize = 20;
         private const int MaximumQueryCharacters = 200;
         private const int MaximumNameCharacters = 100;
+        private const int MaximumPromptSummaryCharacters = 96;
         private const int MaximumSummaryCharacters = 160;
 
         private readonly SkillToolExecutor _skillExecutor;
@@ -119,7 +120,7 @@ namespace RNAssistant.Office.Tools
                 .ThenBy(record => record.Kind, StringComparer.Ordinal)
                 .ToList();
             var selected = entries
-                .Select(record => Metadata(record, activeIds.Contains(record.Id)))
+                .Select(record => Metadata(record, activeIds.Contains(record.Id), MaximumPromptSummaryCharacters))
                 .ToArray();
             return new JObject
             {
@@ -302,7 +303,8 @@ namespace RNAssistant.Office.Tools
                 .ThenBy(record => record.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             cursor = Math.Min(cursor, matches.Count);
-            var page = matches.Skip(cursor).Take(limit).Select(record => Metadata(record, null)).ToArray();
+            var page = matches.Skip(cursor).Take(limit)
+                .Select(record => Metadata(record, null, MaximumSummaryCharacters)).ToArray();
             var next = cursor + page.Length;
             return ToolResult.Ok("Capability metadata search completed.", new JObject
             {
@@ -365,14 +367,17 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static JObject Metadata(CapabilityRecord record, bool? schemaLoaded)
+        private static JObject Metadata(
+            CapabilityRecord record,
+            bool? schemaLoaded,
+            int maximumSummaryCharacters)
         {
             var result = new JObject
             {
                 ["id"] = record.Id,
                 ["kind"] = record.Kind,
                 ["name"] = Bound(record.Name, MaximumNameCharacters),
-                ["summary"] = Bound(record.Summary, MaximumSummaryCharacters),
+                ["summary"] = Bound(record.Summary, maximumSummaryCharacters),
                 ["revision"] = record.Revision
             };
             if (record.Tool != null)
