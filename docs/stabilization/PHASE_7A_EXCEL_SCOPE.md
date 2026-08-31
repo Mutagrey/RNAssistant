@@ -18,7 +18,7 @@ cutover. Runtime, schemas, factories, COM and tests are unchanged.
 | Manual Tools execution | `OfficeToolExecutor` validates the public schema and calls the same legacy adapter under `HostRuntime` | Reuse the same 7B/7C domain adapter; no manual-only path |
 | HTML bind/refresh | `HtmlArtifactToolExecutor.ExecuteDataSource` holds the live-document gate but calls `_adapter.ExecuteTool` directly | Inject the 7B read adapter under the already-held access; never retain a second public Excel implementation |
 | Host implementation | `ExcelAdapter` owns public routing, target/sheet resolution, range materialization, profile logic and scalar/formula/table writes | Extract only the admitted read/write COM backend; leave other Excel behavior in place |
-| Production target | `ExcelAdapter` has no production `IOfficeDocumentSession`; descriptor/`ActiveWorkbook` compatibility resolution remains pending 5B2 | 7D only after WQ0: one `ExcelDocumentSession.BoundDocumentObject`, no execution fallback |
+| Production target | `ExcelAdapter` has no production `IOfficeDocumentSession`; descriptor/`ActiveWorkbook` compatibility resolution remains pending 5B2 | Accepted-risk atomic 11T0/7D: one `ExcelDocumentSession.BoundDocumentObject`, captured current `RuntimeKey`, no execution fallback; WQ0 remains deferred release evidence |
 | Catalog/schema | `OfficeBuiltInToolCatalog` owns the current exact public contracts | Preserve them through Phase 7; Phase 8 owns ToolPack/catalog replacement |
 
 Direct `FakeOfficeAdapter.ExecuteTool` calls used to seed harness state are test

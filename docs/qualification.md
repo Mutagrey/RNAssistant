@@ -271,7 +271,7 @@ switch. Он проверяет bound-lifetime допущение перед rel
 | `common.quick` | новый chat, режимы, live model, resources, tool discovery, confirmation/cancel, run journal |
 | `provider.live` | strict response, refusal, streaming, repair/reset, long payload, runtime call IDs, batch safety |
 | `storage.recovery` | mandatory append barriers, CAS, restart/replay, multi-window revision, export |
-| `excel.wq0.identity` | общий live workbook identity и lifetime до 5B2 |
+| `excel.wq0.identity` | post-cutover проверка принятого live workbook identity/lifetime допущения до release |
 | `excel.read-write` | inspect/read, scalar/formula/table write, no-op/error/unknown и exact read-back |
 | `excel.complex-task` | resources -> analysis -> multi-step edits -> confirmation -> verified workbook result |
 | `vba.lifecycle` | list/read/patch/write/rename/delete/restore/package, recovery и Trust Access failures |

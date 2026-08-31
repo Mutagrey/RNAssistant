@@ -58,8 +58,9 @@ Milestone WQ runbook; no Windows gate is closed here.
 
 ## Result and next gate
 
-Phases 0–10 are complete host-neutral. At the first available Windows x64 + Office
-x64 + VS 2022 window, run WQ0 identity probe before choosing production 5B2
-identity/factory semantics. Then complete 7D and the accumulated qualification
-runbook. Phase 12 remains blocked on that evidence; optional Phase 11 is not a
-prerequisite.
+Phases 0–10 are complete host-neutral. The later 2026-08-31 accepted-risk decision
+allows atomic production 11T0/7D before WQ0, using the captured current `RuntimeKey`
+for the exact bound workbook lifetime and deleting execution fallback. WQ0 and the
+accumulated Windows runbook remain mandatory release evidence. Mandatory 11T
+existing-tool migration and final active-legacy cleanup now also block Phase 12;
+new optional Phase 11 product contours do not.

@@ -64,7 +64,8 @@ store/index, second runner or alternate result authority was added.
 - Windows x64 + Office x64 + VS 2022/VSTO/WebView2 were not run. The shell UI and
   controller wiring therefore remain unqualified on the production host.
 - WQ-A3 must add the single Excel identity owner, native observations and narrow
-  same-build x64 helper, then collect real WQ0 evidence before production 5B2/7D.
+  same-build x64 helper. The later 2026-08-31 accepted-risk decision moved real WQ0
+  evidence after production 11T0/7D but kept it mandatory before release.
 - Production AgentTask/host-probe adapters, full suites and live provider coverage
   remain WQ-A4. Immutable `buildCommit` provenance remains explicitly
   `unavailable` until WQ-A5 BuildEvidenceManifest.

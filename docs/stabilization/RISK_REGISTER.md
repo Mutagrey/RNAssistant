@@ -34,7 +34,7 @@ safety, refusal и review/reset на prompt schema 12. Windows/live-provider gat
 | R11 | P0 | Replay меняет outcome | Runtime / Persistence | Phase 3B2 stored `RunSummary`; 9D1–9D5 extend actual normal/error/unknown/pending/cancel/append-fault/recovery replay through equal immutable `RunViewState`, without policy recomputation. [Evidence](PHASE_9D5_RUN_VIEW_STATE.md) | fixed host-neutral through Phase 9; Windows restart/WebView matrix open |
 | R12 | P2 | Локальное исправление затрагивает десятки файлов | Architecture | Freeze, boundaries, change budget; все фазы | monitored |
 | R13 | P2 | Версия/tag на каждый commit | Release process | Правила заменены; repeat-build/commit и release gates tests, Phase 0 | mitigated |
-| R14 | P1 | Legacy/new paths сосуществуют бессрочно | Migration | Удаление при switch последних consumers; Phase 10 сверяет core scope, optional consumers имеют явные gates Phase 11 в MIGRATION_MAP | open |
+| R14 | P1 | Legacy/new paths сосуществуют бессрочно | Migration | Удаление при switch последних consumers; Phase 10 сверяет core scope, все active compatibility consumers имеют обязательные gates 11T/11J/11K в MIGRATION_MAP | open; final active-legacy cleanup обязателен до Phase 12 |
 | R15 | P1 | Feature flags становятся второй архитектурой | Application | Временный явный release scope, Phases 10–12 | open |
 | R16 | P1 | Новые build metadata / ClickOnce не проверены на Windows | Release process | Сохранить исходную AssemblyVersion 16.0.4.0; qualification до release | open |
 | R17 | P2 | Чужие незакоммиченные изменения попадут в Phase 0 | Governance | Проверить исходные файлы и stage только явный список Phase 0 | monitored |

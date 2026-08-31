@@ -1620,10 +1620,10 @@ harness не запускались. Следующий отдельный ша�
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | Remaining mandatory 7D where applicable or admitted 11T handler slices; R23 remains |
+| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | Atomic 11T0/7D where applicable and mandatory 11T handler slices; R23 remains |
 | LegacyToolDefinitionAdapter | ToolRuntime | Current legacy catalog/schema/authoring and execution consumers listed in `MIGRATION_MAP.md`; resource projection removed | Atomic 11T0/7D where applicable, mandatory 11T built-in switches and 11J authoring switch; `ProjectRead` removed in 10C2, no resource dependency |
-| LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Remaining mandatory 7D where applicable or admitted 11T handler slices; no old-history reader |
-| ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 runtime state switched; remaining manual/domain presentation consumers leave with 7D or admitted 11T slices |
+| LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Atomic 11T0/7D where applicable and mandatory 11T handler slices; no old-history reader |
+| ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 runtime state switched; remaining manual/domain presentation consumers leave with 11T0/7D or mandatory 11T slices |
 | Unbound host identity/access | HostRuntime / host factories | Production adapters, including gated context/catalog reads | Atomic 11T0/7D bound Excel switch first; other hosts in mandatory 11T6–11T8. Windows gates remain evidence, not fallback owners |
 | `VbaMutationDocumentContextAdapter` / `VbaMutationReaderAdapter` / `VbaMutationBackendAdapter` | VBA / Tools | Typed mutation service over current wide host and legacy read/mutation results; backend serves patch, whole write/rename, delete and restore | Document context after 11T0; mandatory 11T9 direct-handler/typed-host cleanup before Phase 12 |
 | `VbaPackageToolAdapter` / `VbaPackageBackendAdapter` | VBA / Tools | Existing 6I package service over current ToolDefinition/host command/result seams | Mandatory 11T9/11J direct-handler/authoring switch before Phase 12; one-way mapping only, no domain legacy result/history |

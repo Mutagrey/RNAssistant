@@ -22,7 +22,8 @@ Excel tools, ToolPack/catalog schemas, production factories or document identity
   `ExcelReadCompatibilityBackend` maps typed requests to two internal host commands;
   it preserves runtime call/step correlation but owns no public dispatch semantics.
   The internal ids are absent from the catalog and reserved from authored-tool
-  collisions. This is a one-way 7B/7C adapter with removal gate 7D after WQ0/5B2.
+  collisions. This is a one-way 7B/7C adapter with mandatory removal gate in the
+  accepted-risk atomic 11T0/7D switch; WQ0 remains deferred release evidence.
 - HTML bind/refresh calls the same `ExcelReadToolAdapter` under its already-held
   document access. Unswitched Office data sources may still use their current host
   path, but the two switched Excel ids cannot fall back to it.

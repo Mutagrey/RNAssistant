@@ -99,7 +99,8 @@ The diagnostic candidate is a retained standard COM marshal reference and its
 OXID/OID, scoped by the local Excel process and creation time. It is not production
 runtime identity. The isolated [Excel identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md)
 records independent observations without modifying workbooks or switching factories;
-it is optional regression evidence, not a cutover prerequisite.
+it is deferred regression evidence, not a cutover prerequisite, and remains mandatory
+for release qualification.
 Only OBJREF_STANDARD/IUnknown is supported; any other format or cross-client mismatch
 blocks the candidate. No fallback to local pointer, path, HWND or a generated ID.
 
@@ -141,8 +142,8 @@ over `ExecuteTool(ToolCommand)` is an allowed intermediate state.
 
 The first implementation captures the existing `DocumentIdentity.RuntimeKey` once
 for that bound object and lifetime. This is explicit risk acceptance, not proof that
-independently resolved proxies/processes share an identity. WQ0 remains optional
-diagnostic/regression tooling and is still required as part of release qualification;
+independently resolved proxies/processes share an identity. WQ0 remains deferred
+diagnostic/regression tooling and is required as part of release qualification;
 it is not runtime authority or a pre-cutover gate. Windows close/reopen, Save As,
 multi-window/client and cross-proxy scenarios remain unperformed qualification.
 Failures found later are fixed against the bound-session contract; legacy
