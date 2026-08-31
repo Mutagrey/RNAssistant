@@ -692,6 +692,11 @@ namespace RNAssistant.Office.Tools
             return value;
         }
 
+        internal static string NormalizeWorkspacePath(string path)
+        {
+            return NormalizePath(path);
+        }
+
         private static HtmlWorkspace NormalizedWorkspaceCopy(HtmlWorkspace workspace)
         {
             var copy = workspace == null

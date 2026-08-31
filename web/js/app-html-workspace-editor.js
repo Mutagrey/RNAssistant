@@ -295,7 +295,7 @@
       frame.classList.toggle("hidden", !!special);
       detail.classList.toggle("hidden", !special);
       if (special) {
-        workspaceArtifacts.renderDetail(detail, selected, selectedEditorValue(selected), options.planActions);
+        workspaceArtifacts.renderDetail(detail, selected, selectedEditorValue(selected), options.artifactActions);
         frame.removeAttribute("src");
         frame.srcdoc = "";
         return;

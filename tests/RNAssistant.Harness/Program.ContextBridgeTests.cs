@@ -936,6 +936,31 @@ namespace RNAssistant.Harness
             AssertEqual("sales", controller.LastHtmlDataName, "html delete data name");
         }
 
+        private static void BridgeUsesTypedUploadedHtmlPayloads()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            const string sourceUri = "rna://chat/chat-html/artifact/upload-html/revision/1";
+            var preview = bridge.HandleMessageAsync(
+                "{\"id\":\"html-preview\",\"type\":\"getUploadedHtmlSourcePreview\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-html\",\"sourceResourceUri\":\"" + sourceUri + "\"}}")
+                .GetAwaiter().GetResult();
+            AssertTrue(JObject.Parse(preview)["ok"].Value<bool>(), "uploaded HTML preview bridge response ok");
+            AssertEqual(sourceUri, controller.LastHtmlSourceResourceUri, "preview forwards the exact source URI");
+
+            var imported = bridge.HandleMessageAsync(
+                "{\"id\":\"html-import\",\"type\":\"importUploadedHtmlToWorkspace\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-html\",\"sourceResourceUri\":\"" + sourceUri +
+                "\",\"expectedActiveHtmlArtifactId\":\"html-r2\",\"targetPath\":\"pages/upload.html\"}}")
+                .GetAwaiter().GetResult();
+            AssertTrue(JObject.Parse(imported)["ok"].Value<bool>(), "uploaded HTML import bridge response ok");
+            AssertEqual("chat-html", controller.LastChatId, "HTML import targets the addressed chat");
+            AssertEqual(sourceUri, controller.LastHtmlSourceResourceUri, "HTML import forwards exact source URI");
+            AssertEqual("html-r2", controller.LastExpectedHtmlArtifactId, "HTML import forwards active revision guard");
+            AssertEqual("pages/upload.html", controller.LastHtmlPath, "HTML import forwards explicit target path");
+        }
+
         private static void BridgeUsesTypedHtmlNetworkPayloads()
         {
             var controller = new AssistantController();

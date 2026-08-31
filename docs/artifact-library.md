@@ -3,10 +3,10 @@
 Status: Phase 11 target contract. 11A1 and 11A2 implement the host-neutral commit-time
 boundary, explicit draft/preparing/committed labels and exact Library head/history
 projection. 11B1–11B3 complete the host-neutral Plan domain owner, exact whole-Markdown
-lineage, restore/removal UX and ready handoff by pinned URI. 11C1 makes the existing
-HTML whole-workspace lineage globally monotonic across branches and fail-closed on
-ambiguous revision graphs. HTML import/viewer/binding work and typed viewers remain
-later slices. The
+lineage, restore/removal UX and ready handoff by pinned URI. 11C1–11C2 make HTML
+whole-workspace lineage globally monotonic and add inert uploaded-HTML source preview
+plus explicit provenance-preserving import. Binding/recovery/export work and typed
+viewers remain later slices. The
 existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
@@ -229,8 +229,13 @@ Phase 11 is implemented as separate changes:
      number across all branches, retains the exact active parent, and refuses
      duplicate/invalid lineage before mutation. The explicit active pointer remains
      authoritative after undo. [Evidence](stabilization/PHASE_11C1_HTML_LINEAGE.md).
-   - 11C2 — inert uploaded-HTML import with explicit provenance plus bounded
-     source/preview UX.
+   - 11C2 — done host-neutral: an uploaded HTML original remains immutable and
+     inert; the UI obtains only an exact 32,000-character bounded source projection
+     and inserts it with `textContent`. Explicit import requires the current HTML
+     head, a new `.html`/`.htm` path and a complete decoded payload within the
+     300,000-character workspace-file bound, then creates a separate workspace
+     revision with exact source URI/hash/relation provenance.
+     [Evidence](stabilization/PHASE_11C2_HTML_IMPORT_PREVIEW.md).
    - 11C3 — bindings, recovery and export with exact payload preservation.
 4. Typed viewers: text/Markdown first; image, PDF and audio as separate measured
    slices with their own security and Windows gates.

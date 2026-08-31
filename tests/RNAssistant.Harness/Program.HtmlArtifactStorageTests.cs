@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -9,6 +12,82 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void UploadedHtmlImportPreservesExactSource()
+        {
+            WithTempPaths(paths =>
+            {
+                var session = NewSession(FakeOfficeAdapter.ForHost("Word"));
+                var sourceText = "<!doctype html><main data-safe=\"yes\">" + new string('x', 33000) + "</main>";
+                var attachmentStore = new AttachmentStore(paths);
+                var attachment = attachmentStore.Import(
+                    "landing.html",
+                    "text/html; charset=utf-8",
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(sourceText)),
+                    session.Id);
+                var message = new ChatMessage
+                {
+                    Id = "uploaded-html-message",
+                    Role = "user",
+                    Content = "HTML upload",
+                    Attachments = new List<ChatAttachment> { attachment }
+                };
+                session.Messages.Add(message);
+                attachmentStore.CommitToCas(message);
+                ChatResourceReferenceService.LinkMessageResources(session, 0);
+                var sourceArtifact = session.Artifacts.Single(item => item.Id == "attachment_" + attachment.Id);
+                var sourceUri = ArtifactUri(session, sourceArtifact);
+                var sourceMetadata = sourceArtifact.MetadataJson;
+                var sourceHash = sourceArtifact.ContentSha256;
+                var sourceArtifactCount = session.Artifacts.Count;
+                var service = new UploadedHtmlResourceService(
+                    new ResourceGatewayService(null, attachmentStore.ReadExtractedText),
+                    attachmentStore.ReadExtractedText);
+
+                var preview = service.Preview(session, sourceUri);
+                AssertEqual(sourceUri, preview.SourceResourceUri, "preview retains the exact source URI");
+                AssertEqual(32000, preview.ReturnedCharacters, "uploaded HTML preview is bounded");
+                AssertEqual(sourceText.Length, preview.TotalCharacters, "preview reports the complete source length");
+                AssertTrue(preview.Truncated && !preview.Complete, "bounded source is explicitly labelled truncated");
+                AssertEqual(sourceArtifactCount, session.Artifacts.Count, "preview creates no artifact revision");
+                AssertEqual(0, session.HtmlWorkspace.Files.Count, "preview never inserts uploaded HTML into the workspace");
+
+                var imported = service.Import(session, sourceUri, string.Empty, "pages/landing.html");
+                AssertEqual("pages/landing.html", imported.ImportedPath, "explicit import target path");
+                AssertEqual(sourceUri, imported.ImportedFromResourceUri, "import result retains exact provenance");
+                AssertEqual(sourceText, session.HtmlWorkspace.Files.Single().Content, "import uses the complete decoded source");
+                AssertEqual(sourceHash, sourceArtifact.ContentSha256, "immutable original hash is unchanged");
+                AssertEqual(sourceMetadata, sourceArtifact.MetadataJson, "immutable original metadata is unchanged");
+                var importedRevision = session.Artifacts.Single(item => item.Id == imported.RevisionArtifactId);
+                var importedMetadata = JObject.Parse(importedRevision.MetadataJson);
+                AssertEqual(sourceUri, (string)importedMetadata["importedFromUri"], "revision records exact source URI");
+                AssertTrue(importedRevision.RelatedArtifactIds.Contains(sourceArtifact.Id),
+                    "revision keeps source artifact reachable");
+                var importedHead = ArtifactLibraryProjectionService.Project(session).Heads
+                    .Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                AssertEqual(sourceUri, importedHead.DerivedFromResourceUri, "library exposes import provenance");
+
+                HtmlArtifactToolExecutor.UpsertFile(
+                    session,
+                    "pages/landing.html",
+                    "html",
+                    sourceText.Replace("yes", "edited"),
+                    true);
+                var editedHead = ArtifactLibraryProjectionService.Project(session).Heads
+                    .Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                AssertEqual(sourceUri, editedHead.DerivedFromResourceUri, "descendant revisions retain import provenance");
+
+                var artifactCount = session.Artifacts.Count;
+                var fileCount = session.HtmlWorkspace.Files.Count;
+                RuntimeThrows<InvalidOperationException>(() =>
+                    service.Import(session, sourceUri, "stale-active", "pages/other.html"));
+                AssertEqual(artifactCount, session.Artifacts.Count, "stale import appends no revision");
+                AssertEqual(fileCount, session.HtmlWorkspace.Files.Count, "stale import mutates no file");
+                RuntimeThrows<InvalidOperationException>(() =>
+                    service.Import(session, sourceUri, session.ActiveHtmlArtifactId, "pages/landing.html"));
+                AssertEqual(artifactCount, session.Artifacts.Count, "path collision appends no revision");
+            });
+        }
+
         private static void HtmlWorkspaceBranchesUseUniqueMonotonicRevisions()
         {
             var session = new ChatSession();

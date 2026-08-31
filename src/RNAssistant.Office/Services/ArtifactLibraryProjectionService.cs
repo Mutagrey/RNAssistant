@@ -295,7 +295,7 @@ namespace RNAssistant.Office.Services
             ChatArtifact artifact,
             IReadOnlyDictionary<string, ChatArtifact> byId)
         {
-            var uri = MetadataText(artifact, "derivedFromUri");
+            var uri = MetadataText(artifact, "derivedFromUri", "importedFromUri");
             if (!string.IsNullOrWhiteSpace(uri)) return uri;
             var id = MetadataText(artifact, "derivedFromArtifactId");
             ChatArtifact source;

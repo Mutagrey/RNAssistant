@@ -56,9 +56,9 @@ for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.j
 
 function button(root, text) { return root.querySelectorAll("button").find(node => node.textContent === text); }
 function settle() { return new Promise(resolve => setImmediate(resolve)); }
-function render(item) {
+function render(item, actions) {
   const root = new Element("div");
-  context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(root, { type: "artifact", item }, "");
+  context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(root, { type: "artifact", item }, "", actions);
   return root;
 }
 
@@ -102,6 +102,42 @@ function render(item) {
   assert.equal(copied.at(-1), metadataText);
   console.log("PASS artifact JSON viewer: metadata fallback uses exact shared viewer");
 
+  const htmlUri = "rna://chat/c/artifact/upload-html/revision/1";
+  const hostileHtml = "<script>window.parent.postMessage('run')</script><img onerror=alert(1)>";
+  const imported = [];
+  context.RNAssistantArtifactVisuals = {
+    libraryHead(artifact) { return artifact.libraryHead || null; },
+    versionLabel() { return "Оригинал"; }
+  };
+  const uploadedHtml = render({
+    id: "upload-html",
+    Kind: "attachment",
+    Title: "landing.html",
+    MimeType: "text/html; charset=utf-8",
+    ResourceUri: htmlUri,
+    libraryHead: {
+      ResourceClass: "immutable_original",
+      History: [{ ArtifactId: "upload-html", ResourceUri: htmlUri }]
+    }
+  }, {
+    uploadedHtmlPreview() {
+      return { status: "ready", sourceResourceUri: htmlUri, text: hostileHtml, complete: true, truncated: false };
+    },
+    loadUploadedHtmlSource() {},
+    importUploadedHtml(request) { imported.push(request); }
+  });
+  assert.equal(context.RNAssistantHtmlWorkspaceArtifacts.isUploadedHtmlArtifact({
+    Kind: "attachment", Title: "landing.html", MimeType: "text/html", libraryHead: { ResourceClass: "immutable_original" }
+  }), true);
+  assert.equal(uploadedHtml.querySelector("pre").textContent, hostileHtml);
+  assert.equal(uploadedHtml.querySelector("script"), null, "uploaded source never becomes DOM");
+  assert.match(uploadedHtml.textContent, /инертен/);
+  button(uploadedHtml, "Импортировать в HTML workspace").click();
+  assert.equal(imported.length, 1);
+  assert.equal(imported[0].sourceResourceUri, htmlUri);
+  assert.equal(imported[0].targetPath, "landing.html");
+  console.log("PASS artifact JSON viewer: uploaded HTML stays escaped and inert until explicit import");
+
   const oldHost = fullHost;
   context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(full, {
     type: "artifact",
@@ -112,5 +148,5 @@ function render(item) {
   assert.equal(/JSON\.stringify\(JSON\.parse\(content\)/.test(source), false);
   assert.equal(/createElement\("pre"\)[\s\S]{0,120}JSON\.parse\(content\)/.test(source), false);
   console.log("PASS artifact JSON viewer: re-render unmounts viewer and old pretty/pre path is removed");
-  console.log("OK 5/5");
+  console.log("OK 6/6");
 })().catch(error => { console.error(error); process.exitCode = 1; });

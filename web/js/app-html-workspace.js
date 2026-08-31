@@ -45,12 +45,21 @@
     model: workspaceModel,
     preview: htmlPreview,
     artifacts: workspaceArtifacts,
-    planActions: {
+    artifactActions: {
       handoffPlan: function (request) {
         return workspaceActions && workspaceActions.handoffPlan(request);
       },
       restorePlanRevision: function (request) {
         return workspaceActions && workspaceActions.restorePlanRevision(request);
+      },
+      importUploadedHtml: function (request) {
+        return workspaceActions && workspaceActions.importUploadedHtml(request);
+      },
+      loadUploadedHtmlSource: function (request) {
+        return workspaceActions && workspaceActions.loadUploadedHtmlSource(request);
+      },
+      uploadedHtmlPreview: function (uri) {
+        return workspaceActions && workspaceActions.uploadedHtmlPreview(uri);
       }
     }
   });

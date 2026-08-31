@@ -86,6 +86,14 @@ session, keeps message cards pinned to raw exact revisions and selects the activ
 branch pointer instead of a client-guessed maximum revision. The full user-visible
 lifecycle is defined in [Artifact Library and Viewers](artifact-library.md).
 
+Uploaded HTML follows the same immutable ingestion path and never executes when it
+is selected. Its UI source view is one exact revision-pinned gateway read capped at
+32,000 characters with explicit completeness/truncation metadata. An explicit import
+revalidates that same attachment identity and complete decoded text, then creates a
+separate HTML workspace revision with the source URI, content hash and relation in
+artifact provenance. The original message reference and CAS object are unchanged;
+there is no second resource identity, automatic conversion or viewer execution path.
+
 Helper output is query-specific evidence for that model step. It is not silently treated as a complete durable description. Reusable OCR/transcription may be stored as a derived artifact revision with explicit provenance: source URI, extractor/model, parameters, timestamp, and content hash.
 
 ## Context and storage

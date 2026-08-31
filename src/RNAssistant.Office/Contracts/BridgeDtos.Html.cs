@@ -105,6 +105,33 @@ namespace RNAssistant.Office.Contracts
         public string SnapshotId { get; set; }
     }
 
+    public class UploadedHtmlSourcePayload : ChatPayload
+    {
+        [JsonProperty("sourceResourceUri")]
+        public string SourceResourceUri { get; set; }
+    }
+
+    public sealed class HtmlWorkspaceImportPayload : UploadedHtmlSourcePayload
+    {
+        [JsonProperty("expectedActiveHtmlArtifactId")]
+        public string ExpectedActiveHtmlArtifactId { get; set; }
+
+        [JsonProperty("targetPath")]
+        public string TargetPath { get; set; }
+    }
+
+    public sealed class UploadedHtmlSourcePreviewDto
+    {
+        [JsonProperty("sourceResourceUri")] public string SourceResourceUri { get; set; }
+        [JsonProperty("mimeType")] public string MimeType { get; set; }
+        [JsonProperty("contentSha256")] public string ContentSha256 { get; set; }
+        [JsonProperty("text")] public string Text { get; set; }
+        [JsonProperty("returnedCharacters")] public int ReturnedCharacters { get; set; }
+        [JsonProperty("totalCharacters")] public int TotalCharacters { get; set; }
+        [JsonProperty("complete")] public bool Complete { get; set; }
+        [JsonProperty("truncated")] public bool Truncated { get; set; }
+    }
+
     public sealed class HtmlWorkspaceResponse
     {
         [JsonProperty("sessionRevision")]
@@ -127,6 +154,12 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("redoChoiceRequired")]
         public bool RedoChoiceRequired { get; set; }
+
+        [JsonProperty("importedPath", NullValueHandling = NullValueHandling.Ignore)]
+        public string ImportedPath { get; set; }
+
+        [JsonProperty("importedFromResourceUri", NullValueHandling = NullValueHandling.Ignore)]
+        public string ImportedFromResourceUri { get; set; }
     }
 
     public sealed class HtmlWorkspaceDto

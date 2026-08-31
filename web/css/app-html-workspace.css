@@ -375,6 +375,23 @@
   font-weight: var(--label-font-weight);
 }
 
+.artifact-inert-html-note {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--secondary-bg);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.artifact-inert-html-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
 .artifact-json-viewer {
   height: min(480px, 58vh);
   min-height: 220px;

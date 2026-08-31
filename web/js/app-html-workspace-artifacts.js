@@ -120,6 +120,84 @@
     })[0] || null;
   }
 
+  function isUploadedHtmlArtifact(artifact) {
+    var head = libraryHead(artifact);
+    var resourceClass = String(prop(head, "ResourceClass", "resourceClass", "") || "").toLowerCase();
+    var kind = artifactKind(artifact);
+    var mediaType = artifactMimeType(artifact).split(";", 1)[0].trim();
+    var title = String(prop(artifact, "Title", "title", "") || "");
+    var htmlName = /\.html?$/i.test(title);
+    return resourceClass === "immutable_original" &&
+      (kind === "attachment" || kind === "file") &&
+      (mediaType === "text/html" || htmlName);
+  }
+
+  function uploadedHtmlResourceUri(artifact) {
+    var exact = libraryRevision(artifact);
+    return prop(exact, "ResourceUri", "resourceUri", prop(artifact, "ResourceUri", "resourceUri", "")) || "";
+  }
+
+  function uploadedHtmlTargetPath(artifact) {
+    var title = String(prop(artifact, "Title", "title", "index.html") || "index.html").split(/[\\/]/).pop();
+    return /\.html?$/i.test(title) ? title : "index.html";
+  }
+
+  function appendUploadedHtml(root, artifact, actions) {
+    actions = actions || {};
+    var uri = uploadedHtmlResourceUri(artifact);
+    var notice = document.createElement("div");
+    notice.className = "artifact-inert-html-note";
+    notice.textContent = "Загруженный HTML инертен: до явного импорта показывается только экранированный исходник.";
+    root.appendChild(notice);
+
+    var actionBox = document.createElement("div");
+    actionBox.className = "artifact-inert-html-actions";
+    var preview = typeof actions.uploadedHtmlPreview === "function" ? actions.uploadedHtmlPreview(uri) : null;
+    var load = document.createElement("button");
+    load.type = "button";
+    load.className = "secondary";
+    load.textContent = preview && preview.status === "loading" ? "Загружаю…" : "Показать исходник";
+    load.disabled = !uri || !!preview && (preview.status === "loading" || preview.status === "ready") ||
+      typeof actions.loadUploadedHtmlSource !== "function";
+    load.addEventListener("click", function () {
+      if (typeof actions.loadUploadedHtmlSource === "function") {
+        actions.loadUploadedHtmlSource({ sourceResourceUri: uri });
+      }
+    });
+    actionBox.appendChild(load);
+    var importButton = document.createElement("button");
+    importButton.type = "button";
+    importButton.className = "accent-soft";
+    importButton.textContent = "Импортировать в HTML workspace";
+    importButton.disabled = !uri || typeof actions.importUploadedHtml !== "function" || !!state.bridgeUnavailable;
+    importButton.addEventListener("click", function () {
+      if (typeof actions.importUploadedHtml === "function") {
+        actions.importUploadedHtml({
+          sourceResourceUri: uri,
+          targetPath: uploadedHtmlTargetPath(artifact)
+        });
+      }
+    });
+    actionBox.appendChild(importButton);
+    root.appendChild(actionBox);
+
+    if (preview && preview.status === "error") {
+      var error = document.createElement("div");
+      error.className = "artifact-detail-error";
+      error.textContent = preview.message || "Исходник HTML недоступен.";
+      root.appendChild(error);
+      return;
+    }
+    if (!preview || preview.status !== "ready" || preview.sourceResourceUri !== uri) return;
+    appendContentLabel(root, preview.truncated
+      ? "HTML source · ограниченный preview " + preview.returnedCharacters + " из " + preview.totalCharacters + " символов"
+      : "HTML source · полный");
+    var source = document.createElement("pre");
+    source.className = "artifact-text-viewer artifact-html-source-viewer";
+    source.textContent = preview.text || "";
+    root.appendChild(source);
+  }
+
   function versionLabel(artifact) {
     var visuals = window.RNAssistantArtifactVisuals;
     return visuals && typeof visuals.versionLabel === "function" ? visuals.versionLabel(artifact) : "";
@@ -280,6 +358,10 @@
     }
 
     appendMetadata(root, selected.item);
+    if (isUploadedHtmlArtifact(selected.item)) {
+      appendUploadedHtml(root, selected.item, actions);
+      return;
+    }
     appendArtifactContent(root, selected.item);
     appendLibraryHistory(root, selected.item, actions);
   }
@@ -292,6 +374,7 @@
 
   window.RNAssistantHtmlWorkspaceArtifacts = {
     planSummary: planSummary,
+    isUploadedHtmlArtifact: isUploadedHtmlArtifact,
     renderDetail: renderDetail,
     typeLabel: typeLabel,
     validatePlanDraft: validatePlanDraft

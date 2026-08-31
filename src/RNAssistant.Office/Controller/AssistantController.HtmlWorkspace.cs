@@ -52,6 +52,34 @@ namespace RNAssistant.Office
             });
         }
 
+        public UploadedHtmlSourcePreviewDto GetUploadedHtmlSourcePreview(
+            string chatId,
+            string sourceResourceUri)
+        {
+            return _uploadedHtmlResources.Preview(LoadSession(chatId), sourceResourceUri);
+        }
+
+        public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(
+            string chatId,
+            string sourceResourceUri,
+            string expectedActiveHtmlArtifactId,
+            string targetPath)
+        {
+            return WithReservedSession(LoadSession(chatId), session =>
+            {
+                var imported = _uploadedHtmlResources.Import(
+                    session,
+                    sourceResourceUri,
+                    expectedActiveHtmlArtifactId,
+                    targetPath);
+                SaveSessionChanges(session);
+                var response = HtmlWorkspaceState(session);
+                response.ImportedPath = imported.ImportedPath;
+                response.ImportedFromResourceUri = imported.ImportedFromResourceUri;
+                return response;
+            });
+        }
+
         public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
         {
             return WithReservedSession(LoadSession(chatId), session =>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Tools;
@@ -49,12 +50,7 @@ namespace RNAssistant.Office.Services
                 ParentArtifactId = current == null ? null : current.Id,
                 Revision = NextRevision(session),
                 InlineText = stateJson,
-                MetadataJson = JsonConvert.SerializeObject(new
-                {
-                    activeFileId = snapshot.ActiveFileId,
-                    fileCount = snapshot.Files.Count,
-                    dataSourceCount = snapshot.DataSources.Count
-                })
+                MetadataJson = Metadata(snapshot, current)
             };
             session.Artifacts.Add(artifact);
             session.ActiveHtmlArtifactId = artifact.Id;
@@ -243,6 +239,38 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("HTML workspace revision sequence is exhausted; start a new chat.");
             }
             return maximum + 1;
+        }
+
+        private static string Metadata(HtmlWorkspaceSnapshot snapshot, ChatArtifact parent)
+        {
+            var metadata = new JObject
+            {
+                ["activeFileId"] = snapshot == null ? string.Empty : snapshot.ActiveFileId,
+                ["fileCount"] = snapshot == null ? 0 : snapshot.Files.Count,
+                ["dataSourceCount"] = snapshot == null ? 0 : snapshot.DataSources.Count
+            };
+            if (parent != null && !string.IsNullOrWhiteSpace(parent.MetadataJson))
+            {
+                try
+                {
+                    var previous = JObject.Parse(parent.MetadataJson);
+                    foreach (var name in new[]
+                    {
+                        "importedFromUri",
+                        "importedFromArtifactId",
+                        "importedSourceContentSha256",
+                        "importedPath"
+                    })
+                    {
+                        var value = previous.GetValue(name, StringComparison.OrdinalIgnoreCase);
+                        if (value != null) metadata[name] = value.DeepClone();
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+            }
+            return metadata.ToString(Formatting.None);
         }
 
         private static List<ChatArtifact> ValidateRevisionLineage(ChatSession session)

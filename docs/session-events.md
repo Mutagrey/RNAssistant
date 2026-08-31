@@ -190,6 +190,14 @@ without loading their CAS bodies, and no mutable redo stack is stored. Chart UI 
 is derived from a chart artifact. Context checkpoints are derived from compaction
 artifacts. These values are not persisted again as competing state.
 
+An explicit uploaded-HTML import is an ordinary HTML
+`artifact.revision.created`, not a mutation of the attachment revision. Its metadata
+records the exact `importedFromUri`, source artifact id/hash and imported path, and
+its relation keeps the immutable source reachable. Descendant workspace revisions
+retain that source provenance. The original user-message `ResourceRef`, attachment
+metadata and CAS bytes are not rewritten, and bounded source preview appends no
+artifact or durable viewer state.
+
 Model context virtualizes these bodies. Durable messages, deterministic compaction reference unions, media handoff, and trajectory projections carry canonical revision-pinned `ResourceRef` values; internal artifact ids remain only inside the artifact lineage graph and domain-specific active pointers. The bounded prompt working set exposes the `rna://` URIs plus kinds, titles, sizes, representation hints, and active references; local paths and bodies remain absent. `common.resources_read` verifies the URI against the active session and existing CAS/attachment reference, then returns bounded text or an ephemeral model-media attachment. Immutable bodies are pinned by the URI; live read cursors bind their offset to the observed content hash, and collection cursors bind it to the observed collection fingerprint, so continuation after drift fails rather than combining versions. The ephemeral read reuses the original CAS reference and creates neither a new blob nor a competing durable representation; the materialized model request is still recorded before dispatch.
 
 Media is scoped to the next logical ModelProtocol step. Its materialized accepted prompt is reused for internal format/provider retries and request-local schema fallback; those requests may resend the same media (R24). `ConversationKernelAdapter.Model` releases it in `finally` when that protocol step returns or fails, before the next tool/model step. It is not released between repair attempts. Durable ResourceRef values remain; no retry creates a new resource revision. See [the active ModelProtocol boundary](conversation-protocol.md#modelprotocol-boundary-phase-2).

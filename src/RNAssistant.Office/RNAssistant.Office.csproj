@@ -209,6 +209,7 @@
     <Compile Include="Services\SessionTraceWriteQueue.cs" />
     <Compile Include="Services\HtmlNetworkService.cs" />
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />
+    <Compile Include="Services\UploadedHtmlResourceService.cs" />
     <Compile Include="Services\DocumentOpenService.cs" />
     <Compile Include="Services\ContextService.cs" />
     <Compile Include="Services\OfficeContextCaptureService.cs" />

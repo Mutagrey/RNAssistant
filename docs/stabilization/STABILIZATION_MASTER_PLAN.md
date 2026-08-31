@@ -2324,7 +2324,8 @@ transport или execution authority.
      ambiguous lineage. Done host-neutral; Windows WebView remains open.
      [Evidence](PHASE_11C1_HTML_LINEAGE.md).
    - 11C2: inert uploaded-HTML import with explicit provenance and bounded
-     source/preview UX.
+     source/preview UX. Done host-neutral; Windows WebView interaction remains
+     open. [Evidence](PHASE_11C2_HTML_IMPORT_PREVIEW.md).
    - 11C3: bindings, recovery and export without silent payload truncation.
 4. Typed artifact viewers: bounded text/source and Markdown first; image, PDF and
    audio are separate measured slices with MIME/security/vendor/worker/lifetime and

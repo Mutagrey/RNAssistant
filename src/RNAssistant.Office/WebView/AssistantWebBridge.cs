@@ -382,6 +382,20 @@ namespace RNAssistant.Office.WebView
                             htmlData.Name,
                             htmlData.Json);
                         break;
+                    case "getUploadedHtmlSourcePreview":
+                        var uploadedHtmlSource = Payload<UploadedHtmlSourcePayload>(payload);
+                        responsePayload = _controller.GetUploadedHtmlSourcePreview(
+                            uploadedHtmlSource.ChatId,
+                            uploadedHtmlSource.SourceResourceUri);
+                        break;
+                    case "importUploadedHtmlToWorkspace":
+                        var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);
+                        responsePayload = _controller.ImportUploadedHtmlToWorkspace(
+                            htmlImport.ChatId,
+                            htmlImport.SourceResourceUri,
+                            htmlImport.ExpectedActiveHtmlArtifactId,
+                            htmlImport.TargetPath);
+                        break;
                     case "deleteHtmlWorkspaceFile":
                         var deleteHtmlFile = Payload<HtmlWorkspaceDeleteFilePayload>(payload);
                         responsePayload = _controller.DeleteHtmlWorkspaceFile(

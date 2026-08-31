@@ -65,14 +65,14 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const editor = fs.readFileSync(path.join(root, "web/js/app-html-workspace-editor.js"), "utf8");
   assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "removed message cards keep the tombstone cache key");
   ["app-html-workspace.js", "app-html-workspace-actions.js", "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=plan-history-20260831-1"), asset + " has the Plan history cache key");
+    assert.ok(index.includes(asset + "?v=html-import-20260831-1"), asset + " has the current HTML/Plan action cache key");
   });
-  assert.ok(index.includes("app-html-workspace.css?v=plan-history-20260831-1"), "Plan history actions have the matching CSS cache key");
+  assert.ok(index.includes("app-html-workspace.css?v=html-import-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /result\.expectedRevisionArtifactId = artifactId\(selected\.item\)/);
   assert.match(actions, /expectedRevisionArtifactId: selected\.expectedRevisionArtifactId/);
   assert.match(detail, /expectedRevisionArtifactId: headArtifactId/);
   assert.match(detail, /sourceRevisionArtifactId: revisionArtifactId/);
-  assert.match(editor, /renderDetail\(detail, selected, selectedEditorValue\(selected\), options\.planActions\)/);
+  assert.match(editor, /renderDetail\(detail, selected, selectedEditorValue\(selected\), options\.artifactActions\)/);
   assert.match(workspace, /Выполни утверждённый план " \+ revisionUri/);
   console.log("PASS plan document: removal projections and guarded UI calls are cache-busted together");
 }

@@ -46,6 +46,8 @@ namespace RNAssistant.Office
         public string LastDocumentHost { get; private set; }
         public string LastHtmlPath { get; private set; }
         public string LastHtmlDataName { get; private set; }
+        public string LastHtmlSourceResourceUri { get; private set; }
+        public string LastExpectedHtmlArtifactId { get; private set; }
         public string LastTrajectoryCursor { get; private set; }
         public string LastTrajectoryView { get; private set; }
         public string LastTrajectorySearch { get; private set; }
@@ -414,6 +416,35 @@ namespace RNAssistant.Office
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = path ?? string.Empty }) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
+        public UploadedHtmlSourcePreviewDto GetUploadedHtmlSourcePreview(string chatId, string sourceResourceUri)
+        {
+            LastChatId = chatId;
+            LastHtmlSourceResourceUri = sourceResourceUri;
+            return new UploadedHtmlSourcePreviewDto
+            {
+                SourceResourceUri = sourceResourceUri,
+                Text = "<main>preview</main>",
+                Complete = true
+            };
+        }
+        public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(
+            string chatId,
+            string sourceResourceUri,
+            string expectedActiveHtmlArtifactId,
+            string targetPath)
+        {
+            LastChatId = chatId;
+            LastHtmlSourceResourceUri = sourceResourceUri;
+            LastExpectedHtmlArtifactId = expectedActiveHtmlArtifactId;
+            LastHtmlPath = targetPath;
+            return new HtmlWorkspaceResponse
+            {
+                ActiveChatId = chatId ?? string.Empty,
+                ImportedPath = targetPath,
+                ImportedFromResourceUri = sourceResourceUri,
+                Workspace = HtmlWorkspaceDto.From(null)
+            };
+        }
         public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
         {
             LastChatId = chatId;
