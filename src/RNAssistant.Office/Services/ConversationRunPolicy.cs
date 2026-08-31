@@ -24,6 +24,7 @@ namespace RNAssistant.Office.Services
             TaskListToolExecutor.CloseToolId,
             PlanDocumentToolExecutor.CreateToolId,
             PlanDocumentToolExecutor.UpdateToolId,
+            PlanDocumentToolExecutor.RestoreToolId,
             PlanDocumentToolExecutor.DeleteToolId,
             UserQuestionToolExecutor.AskToolId
         }, StringComparer.OrdinalIgnoreCase);

@@ -272,7 +272,8 @@ namespace RNAssistant.Office.Services
             {
                 ResourceAddress ignored;
                 if (reference == null || string.IsNullOrWhiteSpace(reference.Uri) ||
-                    !ResourceUri.TryParse(reference.Uri, out ignored)) return;
+                    !ResourceUri.TryParse(reference.Uri, out ignored) ||
+                    PlanDocumentService.IsRemovedReference(session, reference)) return;
                 var key = reference.Uri + "\n" + (reference.Revision ?? string.Empty);
                 if (!seen.Add(key) || result.Count >= MaximumCheckpointResourceReferences) return;
                 result.Add(new ResourceRef(reference.Uri, reference.Revision));
@@ -368,7 +369,8 @@ namespace RNAssistant.Office.Services
             if (session != null && !string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId)) referencedArtifactIds.Add(session.ActiveTaskListArtifactId);
             if (session != null && !string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId)) referencedArtifactIds.Add(session.ActivePlanDocumentArtifactId);
             var artifacts = (session == null || session.Artifacts == null ? new List<ChatArtifact>() : session.Artifacts)
-                .Where(artifact => artifact != null && referencedArtifactIds.Contains(artifact.Id))
+                .Where(artifact => artifact != null && referencedArtifactIds.Contains(artifact.Id) &&
+                    !PlanDocumentService.IsRemoved(session, artifact))
                 .ToList();
             builder.AppendLine("TRANSCRIPT:");
             foreach (var message in prefixMessages)

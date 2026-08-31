@@ -16,6 +16,14 @@
   function artifactTitle(artifact) { return value(artifact, "Title", "title", "Артефакт") || "Артефакт"; }
   function artifactRevision(artifact) { return Number(value(artifact, "Revision", "revision", 1) || 1); }
 
+  function artifactRemoved(artifact) {
+    var uri = String(value(artifact, "ResourceUri", "resourceUri", "") || "").toLowerCase();
+    if (!uri) return false;
+    var projection = state.artifactLibrary || {};
+    var removed = value(projection, "RemovedResourceUris", "removedResourceUris", []) || [];
+    return removed.some(function (item) { return String(item || "").toLowerCase() === uri; });
+  }
+
   function artifactLibraryHeads() {
     var projection = state.artifactLibrary || {};
     return value(projection, "Heads", "heads", []) || [];
@@ -187,6 +195,7 @@
   }
 
   function artifactMeta(artifact) {
+    if (artifactRemoved(artifact)) return "Ресурс удалён";
     var kind = artifactKind(artifact);
     var versionLabel = artifactVersionLabel(artifact);
     if (kind === "plan") return [planMeta(artifact), versionLabel].filter(Boolean).join(" · ");
@@ -249,12 +258,19 @@
 
   function artifactCard(artifact) {
     var kind = artifactKind(artifact);
+    var removed = artifactRemoved(artifact);
     var card = document.createElement("button");
     card.type = "button";
     card.className = "chat-artifact-card kind-" + kind + " category-" + kindCategory(artifact);
     card.dataset.artifactId = artifactId(artifact);
-    card.title = "Открыть во вкладке «Артефакты»";
-    card.setAttribute("aria-label", "Открыть " + kindLabel(kind) + " «" + artifactTitle(artifact) + "»");
+    card.title = removed ? "Ресурс удалён" : "Открыть во вкладке «Артефакты»";
+    card.setAttribute("aria-label", removed
+      ? "Ресурс удалён: " + artifactTitle(artifact)
+      : "Открыть " + kindLabel(kind) + " «" + artifactTitle(artifact) + "»");
+    if (removed) {
+      card.className += " is-removed";
+      card.disabled = true;
+    }
 
     var icon = document.createElement("span");
     icon.className = "artifact-type-icon";
@@ -276,9 +292,9 @@
     var arrow = document.createElement("span");
     arrow.className = "chat-artifact-open";
     arrow.setAttribute("aria-hidden", "true");
-    arrow.textContent = "›";
+    arrow.textContent = removed ? "×" : "›";
     card.appendChild(arrow);
-    card.addEventListener("click", function () { openArtifactResource(artifact); });
+    if (!removed) card.addEventListener("click", function () { openArtifactResource(artifact); });
     return card;
   }
 
@@ -529,7 +545,8 @@
     meta: artifactMeta,
     libraryHead: libraryHeadForArtifact,
     resourceClass: artifactResourceClass,
-    versionLabel: artifactVersionLabel
+    versionLabel: artifactVersionLabel,
+    removed: artifactRemoved
   };
   window.artifactResourceHeads = artifactResourceHeads;
   window.messageResourceRefs = messageResourceRefs;

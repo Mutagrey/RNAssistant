@@ -213,6 +213,7 @@ namespace RNAssistant.Office
                 string.Equals(toolId, TaskListToolExecutor.CloseToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, PlanDocumentToolExecutor.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, PlanDocumentToolExecutor.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanDocumentToolExecutor.RestoreToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, PlanDocumentToolExecutor.DeleteToolId, StringComparison.OrdinalIgnoreCase);
         }
     }

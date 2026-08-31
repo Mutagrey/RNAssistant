@@ -73,6 +73,7 @@ namespace RNAssistant.Office.Services
             {
                 throw new KeyNotFoundException("Resource not found in the active chat: " + resourceUri);
             }
+            EnsureNotRemoved(session, artifact, resourceUri);
             return Describe(session, artifact, false);
         }
 
@@ -165,6 +166,7 @@ namespace RNAssistant.Office.Services
             {
                 throw new KeyNotFoundException("Resource not found in the active chat: " + resourceUri);
             }
+            EnsureNotRemoved(session, artifact, resourceUri);
             var exactReference = ChatResourceUri.CreateArtifactRevision(session, artifact);
             var exactUri = exactReference.Uri;
             ResourceReadCursor.ValidatePinned(request, exactReference.Revision);
@@ -456,11 +458,21 @@ namespace RNAssistant.Office.Services
         private static IEnumerable<ChatArtifact> OrderedArtifacts(ChatSession session)
         {
             return Artifacts(session)
+                .Where(item => !PlanDocumentService.IsRemoved(session, item))
                 .OrderByDescending(item => string.Equals(item.Id, session == null ? null : session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => string.Equals(item.Id, session == null ? null : session.ActiveTaskListArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => string.Equals(item.Id, session == null ? null : session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => item.CreatedUtc)
                 .ThenBy(item => item.Id, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static void EnsureNotRemoved(ChatSession session, ChatArtifact artifact, string resourceUri)
+        {
+            if (!PlanDocumentService.IsRemoved(session, artifact)) return;
+            throw new ResourceRequestException(
+                "Resource was removed from this chat: " + resourceUri,
+                "resource_removed",
+                false);
         }
 
     }

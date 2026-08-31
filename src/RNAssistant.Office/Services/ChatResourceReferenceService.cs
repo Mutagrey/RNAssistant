@@ -67,10 +67,17 @@ namespace RNAssistant.Office.Services
         public static void PruneUnreachable(ChatSession session)
         {
             if (session == null) return;
+            var removedModelTombstoneSource = (session.Artifacts ?? new List<ChatArtifact>()).Any(item =>
+                PlanDocumentService.IsTombstone(item) &&
+                !string.IsNullOrWhiteSpace(item.SourceMessageId) &&
+                !PlanDocumentService.IsApplicableTombstone(session, item));
             var activeArtifactIds = new List<string>();
             if (!string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) activeArtifactIds.Add(session.ActiveHtmlArtifactId);
             if (!string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId)) activeArtifactIds.Add(session.ActiveTaskListArtifactId);
             if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId)) activeArtifactIds.Add(session.ActivePlanDocumentArtifactId);
+            activeArtifactIds.AddRange((session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => PlanDocumentService.IsApplicableTombstone(session, item))
+                .Select(item => item.Id));
             session.Artifacts = ReachableForMessages(session.Artifacts, session.Messages, activeArtifactIds);
             if (!string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId) &&
                 !session.Artifacts.Any(artifact => string.Equals(artifact.Id, session.ActiveTaskListArtifactId, StringComparison.OrdinalIgnoreCase) &&
@@ -83,6 +90,10 @@ namespace RNAssistant.Office.Services
                     string.Equals(artifact.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase)))
             {
                 session.ActivePlanDocumentArtifactId = null;
+            }
+            if (removedModelTombstoneSource && string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId))
+            {
+                RestoreActivePlanDocumentFromMessages(session);
             }
         }
 
@@ -132,7 +143,9 @@ namespace RNAssistant.Office.Services
                     : ReferencedArtifactIds(session.Messages[messageIndex], artifacts.Values);
                 for (var idIndex = ids.Count - 1; idIndex >= 0; idIndex--)
                 {
-                    if (!artifacts.ContainsKey(ids[idIndex])) continue;
+                    ChatArtifact artifact;
+                    if (!artifacts.TryGetValue(ids[idIndex], out artifact) ||
+                        PlanDocumentService.IsRemoved(session, artifact)) continue;
                     session.ActivePlanDocumentArtifactId = ids[idIndex];
                     return;
                 }

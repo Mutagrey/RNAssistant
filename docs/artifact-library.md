@@ -2,9 +2,9 @@
 
 Status: Phase 11 target contract. 11A1 and 11A2 implement the host-neutral commit-time
 boundary, explicit draft/preparing/committed labels and exact Library head/history
-projection. 11B1 adds the Plan domain owner, exact whole-Markdown preservation and
-linear exact-current guard. Plan restore/delete/handoff, HTML mutation semantics and
-typed viewers remain later slices. The
+projection. 11B1 and 11B2 add the Plan domain owner, exact whole-Markdown preservation,
+linear exact-current guard, restore-as-new-head and append-only tombstone removal.
+Plan history/handoff UX, HTML mutation semantics and typed viewers remain later slices. The
 existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
@@ -112,7 +112,8 @@ the active pointer through an explicit undo/redo branch operation; the next save
 creates a new child and the UI keeps alternative branches visible. No revision is
 silently overwritten or renumbered.
 
-The current bridge projection is `artifactLibrary { sessionRevision, heads[] }`.
+The current bridge projection is
+`artifactLibrary { sessionRevision, heads[], removedResourceUris[] }`.
 `ArtifactLibraryProjectionService` derives it from the replayed `ChatSession`; it is
 never persisted separately. Each head carries the server-owned class, group,
 normalized display kind, exact head URI and history entries with exact parent/
@@ -159,19 +160,26 @@ cannot call tools, bridge, CAS or network themselves.
 Only domain-owned mutable resources expose Save/Delete:
 
 - Plan Save uses an exact-current-revision guard and writes the complete Markdown
-  payload as a new revision. Delete targets the logical Plan and all revisions only
-  after an explicit warning.
+  payload as a new revision. Restore copies an exact historical revision into a new
+  guarded head. Delete appends a tombstone for the logical Plan only after an explicit
+  warning; it does not erase prior revisions or message references.
 - HTML Save/delete/bind/refresh operates on exact workspace members and produces a
   complete new workspace revision. A failed refresh keeps the last-good JSON.
 - Immutable uploads/snapshots have no in-place editor. `Create editable copy` or
   `Import` creates a related resource and leaves the original unchanged.
 
-`Office.Services.PlanDocumentService` owns Plan create/update lineage. Create and
+`Office.Services.PlanDocumentService` owns the complete Plan lifecycle lineage. Create and
 Save validate non-empty Markdown without normalizing it: leading/trailing whitespace
 and Markdown hard-break spaces are stored exactly. Update accepts only the active
 exact artifact id and appends `vN+1` as its linear child; duplicate, skipped or
 branched revision state fails closed. The tool executor only adapts arguments/results.
-Append-only restore and removal remain the next Plan slice.
+Restore requires the same exact-current guard, copies one exact non-tombstone revision
+and appends it as `vN+1` with `restoredFromArtifactId` provenance. Delete requires the
+exact current head and appends a `removed:true` child revision while clearing the
+active pointer. Historical `ResourceRef` values are never rewritten; Library and the
+new working set omit the removed Plan, while exact resolve/read returns
+`resource_removed`. A model-linked tombstone follows its source message during
+history editing/forking; a direct UI deletion is session-level.
 
 Draft discard deletes only staging data. `Hide from library` is a UI preference and
 does not alter history or model references. Destructive removal of a committed
@@ -207,8 +215,9 @@ Phase 11 is implemented as separate changes:
    - 11B1 — done host-neutral: Markdown preview/source uses an exact payload, one
      domain service owns linear whole-content revisions, and stale or broken heads
      fail before append.
-   - 11B2 — append-only restore-as-new-head and guarded tombstone removal while
-     exact historical message refs remain present.
+   - 11B2 — done host-neutral: append-only restore-as-new-head and guarded tombstone
+     removal preserve exact historical message refs and project `resource_removed`.
+     [Evidence](stabilization/PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md).
    - 11B3 — history restore/removal UX and exact ready-plan handoff verification.
 3. HTML: whole-workspace revisions/branches, source/preview/import, bindings,
    recovery and exact payload preservation.

@@ -28,6 +28,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("heads")]
         public IReadOnlyList<ArtifactLibraryHeadDto> Heads { get; set; }
+
+        [JsonProperty("removedResourceUris")]
+        public IReadOnlyList<string> RemovedResourceUris { get; set; }
     }
 
     public sealed class ArtifactLibraryHeadDto

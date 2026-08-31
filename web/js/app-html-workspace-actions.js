@@ -90,7 +90,7 @@
         if (selected.type === "plan") {
           var result = await options.send("runTool", {
             toolId: "common.plan_doc_delete",
-            arguments: { id: selected.planId },
+            arguments: { id: selected.planId, expectedRevisionArtifactId: selected.expectedRevisionArtifactId },
             dryRun: false
           });
           if (!toolSucceeded(result)) throw new Error(toolMessage(result, "План не удалён."));

@@ -1,7 +1,15 @@
+using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -21,6 +29,7 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var selected = ConversationRunPolicy.For(ChatModes.Plan).SelectTools(tools);
                 AssertTrue(selected.Any(item => item.Id == PlanDocumentToolExecutor.CreateToolId), "plan create available");
+                AssertTrue(selected.Any(item => item.Id == PlanDocumentToolExecutor.RestoreToolId), "plan restore available");
                 AssertTrue(selected.Any(item => item.Id == TaskListToolExecutor.CreateToolId), "task list available");
                 AssertTrue(selected.Any(item => item.Id == UserQuestionToolExecutor.AskToolId), "questions available");
                 AssertTrue(selected.Any(item => item.Id == ResourceToolCatalog.ReadToolId), "resource read available");
@@ -138,6 +147,192 @@ namespace RNAssistant.Harness
                 AssertEqual(artifactCount, session.Artifacts.Count, "lineage rejection does not append a revision");
                 AssertEqual(secondId, session.ActivePlanDocumentArtifactId, "lineage rejection keeps the exact current head");
             });
+        }
+
+        private static void PlanDocumentRestoreAndRemovalStayAppendOnly()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Plan;
+                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var createCommand = Command(PlanDocumentToolExecutor.CreateToolId,
+                    "title", "Release plan", "markdown", "# Original\n\nKeep this exact body.\n", "status", "draft");
+                var created = executor.Execute(createCommand, tools, new AppSettings(), false, false, session);
+                var createdData = JObject.Parse(created.DataJson);
+                var planId = (string)createdData["planId"];
+                var firstId = (string)createdData["artifactId"];
+                var createMessage = AgentTranscript.CreateLocalResultMessage(createCommand, created);
+                session.Messages.Add(createMessage);
+                ChatResourceReferenceService.LinkMessageResources(session, 0);
+
+                var updateCommand = Command(PlanDocumentToolExecutor.UpdateToolId,
+                    "id", planId,
+                    "expectedRevisionArtifactId", firstId,
+                    "title", "Release plan v2",
+                    "markdown", "# Current\n\nThis will be replaced by restore.\n",
+                    "status", "ready");
+                var updated = executor.Execute(updateCommand, tools, new AppSettings(), false, false, session);
+                var secondId = (string)JObject.Parse(updated.DataJson)["artifactId"];
+                var updateMessage = AgentTranscript.CreateLocalResultMessage(updateCommand, updated);
+                session.Messages.Add(updateMessage);
+                ChatResourceReferenceService.LinkMessageResources(session, 1);
+
+                var store = new ChatStore(FixturePaths.Value);
+                store.Save(session);
+                var first = session.Artifacts.Single(item => item.Id == firstId);
+                var firstUri = ChatResourceUri.CreateArtifactRevisionUri(session, first);
+                var restoreCommand = Command(PlanDocumentToolExecutor.RestoreToolId,
+                    "id", planId,
+                    "expectedRevisionArtifactId", secondId,
+                    "sourceRevisionArtifactId", firstId);
+                var restored = executor.Execute(restoreCommand, tools, new AppSettings(), false, false, session);
+                AssertTrue(restored.Success, "historical Plan revision restores as a new head");
+                var restoredData = JObject.Parse(restored.DataJson);
+                var thirdId = (string)restoredData["artifactId"];
+                var third = session.Artifacts.Single(item => item.Id == thirdId);
+                AssertEqual(3, third.Revision, "restore appends the next monotonic revision");
+                AssertEqual(secondId, third.ParentArtifactId, "restore remains linear from the current head");
+                AssertEqual(first.InlineText, third.InlineText, "restore copies the selected exact body");
+                AssertEqual(first.Title, third.Title, "restore copies the selected title");
+                AssertEqual(firstId, (string)JObject.Parse(third.MetadataJson)["restoredFromArtifactId"],
+                    "restore records exact provenance");
+                var restoreMessage = AgentTranscript.CreateLocalResultMessage(restoreCommand, restored);
+                session.Messages.Add(restoreMessage);
+                ChatResourceReferenceService.LinkMessageResources(session, 2);
+                store.Save(session);
+                AssertAppendOnlyPlanCommit(store, session, "restore");
+
+                var staleDelete = executor.Execute(Command(PlanDocumentToolExecutor.DeleteToolId,
+                    "id", planId, "expectedRevisionArtifactId", secondId),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("stale_plan_revision", staleDelete.ErrorCode, "delete requires the exact current head");
+                var beforeDeleteArtifactCount = session.Artifacts.Count;
+                var pinnedBefore = session.Messages
+                    .SelectMany(message => message.ResourceRefs)
+                    .Select(reference => reference.Uri)
+                    .ToArray();
+                var deleteCommand = Command(PlanDocumentToolExecutor.DeleteToolId,
+                    "id", planId, "expectedRevisionArtifactId", thirdId);
+                var removed = executor.Execute(deleteCommand,
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(removed.Success, "guarded Plan removal succeeds");
+                var removedData = JObject.Parse(removed.DataJson);
+                var tombstoneId = (string)removedData["artifactId"];
+                AssertEqual(beforeDeleteArtifactCount + 1, session.Artifacts.Count,
+                    "removal appends one artifact without deleting revisions");
+                AssertEqual(3, (int)removedData["removedRevisions"], "removal reports affected immutable revisions");
+                AssertEqual(3, ((JArray)removedData["referencingMessageIds"]).Count,
+                    "removal reports every currently referencing message");
+                AssertEqual(string.Empty, session.ActivePlanDocumentArtifactId ?? string.Empty,
+                    "removed logical Plan has no active head");
+                AssertTrue(PlanDocumentService.IsTombstone(session.Artifacts.Single(item => item.Id == tombstoneId)),
+                    "new terminal revision is the removal tombstone");
+                AssertTrue(pinnedBefore.SequenceEqual(session.Messages
+                    .SelectMany(message => message.ResourceRefs)
+                    .Select(reference => reference.Uri)),
+                    "removal never rewrites exact historical message references");
+                var deleteMessage = AgentTranscript.CreateLocalResultMessage(deleteCommand, removed);
+                session.Messages.Add(deleteMessage);
+                ChatResourceReferenceService.LinkMessageResources(session, 3);
+                AssertEqual(deleteMessage.Id, session.Artifacts.Single(item => item.Id == tombstoneId).SourceMessageId,
+                    "model-linked tombstone records its exact source message");
+
+                var library = ArtifactLibraryProjectionService.Project(session);
+                AssertTrue(!library.Heads.Any(item => item.LogicalId == planId),
+                    "removed Plan is absent from new library heads");
+                AssertTrue(library.RemovedResourceUris.Contains(firstUri, StringComparer.OrdinalIgnoreCase),
+                    "library marks the exact historical revision as removed");
+                AssertTrue(ChatResourcePromptIndex.Build(session, 2000).IndexOf(firstUri, StringComparison.OrdinalIgnoreCase) < 0,
+                    "removed Plan is not admitted to a new resource working set");
+
+                store.Save(session);
+                AssertAppendOnlyPlanCommit(store, session, "removal");
+                var loaded = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
+                AssertEqual(4, loaded.Artifacts.Count(item => PlanDocumentService.PlanId(item) == planId),
+                    "replay retains all three bodies plus the tombstone");
+                AssertTrue(loaded.Messages.First().ResourceRefs.Any(reference => reference.Uri == firstUri),
+                    "replay retains the original pinned message reference");
+                ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(loaded);
+                AssertEqual(string.Empty, loaded.ActivePlanDocumentArtifactId ?? string.Empty,
+                    "history projection cannot resurrect a tombstoned Plan");
+                ChatResourceReferenceService.PruneUnreachable(loaded);
+                AssertTrue(loaded.Artifacts.Any(item => item.Id == tombstoneId),
+                    "applicable model-linked tombstone survives reachability pruning");
+                AssertTrue(ChatCloneService.CloneArtifactsForMessages(loaded.Artifacts, loaded.Messages)
+                    .Any(item => item.Id == tombstoneId), "fork after removal retains its model-linked tombstone");
+
+                var rewound = ChatCloneService.CloneSessionSnapshot(loaded);
+                rewound.Messages.RemoveAll(message => message.Id == deleteMessage.Id);
+                ChatResourceReferenceService.PruneUnreachable(rewound);
+                AssertTrue(!rewound.Artifacts.Any(item => item.Id == tombstoneId),
+                    "history rewind before the removal drops its model-linked tombstone");
+                AssertEqual(thirdId, rewound.ActivePlanDocumentArtifactId,
+                    "history rewind restores the prior exact Plan head");
+                var forkMessages = ChatCloneService.CloneMessages(loaded.Messages
+                    .Where(message => message.Id != deleteMessage.Id));
+                var fork = new ChatSession
+                {
+                    Id = "plan_fork",
+                    Messages = forkMessages,
+                    Artifacts = ChatCloneService.CloneArtifactsForMessages(loaded.Artifacts, forkMessages)
+                };
+                ChatResourceReferenceService.LinkMessageResources(fork, 0);
+                ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(fork);
+                AssertTrue(!fork.Artifacts.Any(item => item.Id == tombstoneId),
+                    "fork before removal excludes its model-linked tombstone");
+                AssertEqual(thirdId, fork.ActivePlanDocumentArtifactId,
+                    "fork before removal restores the prior exact Plan head");
+
+                var manual = ChatCloneService.CloneSessionSnapshot(loaded);
+                manual.Artifacts.Single(item => item.Id == tombstoneId).SourceMessageId = null;
+                manual.Messages.RemoveAll(message => message.Id == deleteMessage.Id);
+                ChatResourceReferenceService.PruneUnreachable(manual);
+                AssertTrue(manual.Artifacts.Any(item => item.Id == tombstoneId),
+                    "direct UI tombstone remains session-level without a source message");
+                AssertEqual(string.Empty, manual.ActivePlanDocumentArtifactId ?? string.Empty,
+                    "session-level tombstone prevents historical Plan resurrection");
+
+                var removedRead = executor.Execute(Command(ResourceToolCatalog.ReadToolId,
+                    "uri", firstUri, "representation", "text"),
+                    tools, new AppSettings(), false, false, loaded);
+                AssertEqual("resource_removed", removedRead.ErrorCode,
+                    "exact historical read reports stable removal instead of falling forward");
+                AssertEqual(false, removedRead.Retryable, "removed resource read is terminal");
+                var listed = executor.Execute(Command(ResourceToolCatalog.ListToolId,
+                    "provider", "chat", "kind", ChatArtifactKinds.PlanDocument),
+                    tools, new AppSettings(), false, false, loaded);
+                AssertTrue(listed.Success, "resource list remains available after Plan removal");
+                AssertEqual(0, (int)JObject.Parse(listed.DataJson)["total"],
+                    "removed Plan revisions and tombstone are absent from discovery");
+
+                loaded.Messages.Add(new ChatMessage { Role = "user", Content = "Keep the remaining context." });
+                loaded.Messages.Add(new ChatMessage { Role = "assistant", Content = "Understood." });
+                loaded.Messages.Add(new ChatMessage { Role = "user", Content = "Continue without the removed Plan." });
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                    Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Plan removal retained.\"}" });
+                var checkpoint = new ContextCompactionService(completion).EnsureWithinBudgetAsync(
+                    loaded, new AppSettings(), null, true, null, CancellationToken.None).GetAwaiter().GetResult();
+                AssertTrue(checkpoint != null, "compaction checkpoint is created after Plan removal");
+                var compactionMessage = loaded.Messages.Last(message =>
+                    message.Activity != null && message.Activity.Kind == "compaction");
+                AssertTrue(!compactionMessage.ResourceRefs.Any(reference =>
+                    string.Equals(reference.Uri, firstUri, StringComparison.OrdinalIgnoreCase)),
+                    "removed Plan is not admitted to the compaction checkpoint working set");
+            });
+        }
+
+        private static void AssertAppendOnlyPlanCommit(ChatStore store, ChatSession session, string operation)
+        {
+            var commit = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                .Last(item => string.Equals(item.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal));
+            var operationTypes = ((JArray)commit.Data["Operations"])
+                .Select(item => (string)item["Type"])
+                .ToList();
+            AssertTrue(operationTypes.Contains(SessionOperationTypes.ArtifactRevisionCreated),
+                operation + " appends an artifact revision event");
+            AssertTrue(!operationTypes.Contains(SessionOperationTypes.ArtifactRemove),
+                operation + " never appends artifact.remove");
         }
     }
 }

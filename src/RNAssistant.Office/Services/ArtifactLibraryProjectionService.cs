@@ -15,7 +15,8 @@ namespace RNAssistant.Office.Services
             var projection = new ArtifactLibraryProjectionDto
             {
                 SessionRevision = session == null ? 0 : session.Revision,
-                Heads = new List<ArtifactLibraryHeadDto>()
+                Heads = new List<ArtifactLibraryHeadDto>(),
+                RemovedResourceUris = new List<string>()
             };
             if (session == null || string.IsNullOrWhiteSpace(session.Id)) return projection;
 
@@ -27,6 +28,7 @@ namespace RNAssistant.Office.Services
                 .ToList();
             var byId = artifacts.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
             var heads = new List<ArtifactLibraryHeadDto>();
+            var removedResourceUris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var versioned = new Dictionary<string, List<ChatArtifact>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var artifact in artifacts)
@@ -53,6 +55,14 @@ namespace RNAssistant.Office.Services
             foreach (var pair in versioned)
             {
                 var revisions = pair.Value;
+                if (revisions.Any(item => PlanDocumentService.IsApplicableTombstone(session, item)))
+                {
+                    foreach (var revision in revisions)
+                    {
+                        removedResourceUris.Add(ChatResourceUri.CreateArtifactRevisionUri(session, revision));
+                    }
+                    continue;
+                }
                 var head = SelectHead(session, revisions);
                 if (head == null) continue;
                 heads.Add(CreateHead(session, head, LogicalId(head, byId),
@@ -64,6 +74,9 @@ namespace RNAssistant.Office.Services
                 .ThenByDescending(item => item.CreatedUtc)
                 .ThenBy(item => item.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.ArtifactId ?? string.Empty, StringComparer.Ordinal)
+                .ToList();
+            projection.RemovedResourceUris = removedResourceUris
+                .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             return projection;
         }

@@ -2313,7 +2313,8 @@ transport или execution authority.
      require a unique linear exact-current head. Done host-neutral; Windows WebView
      remains open. [Evidence](PHASE_11B1_PLAN_REVISION_GUARD.md).
    - 11B2: restore-as-new-head plus guarded append-only tombstone removal, without
-     deleting exact historical message references.
+     deleting exact historical message references. Done host-neutral; Windows
+     WebView remains open. [Evidence](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md).
    - 11B3: history restore/removal UX and ready-plan handoff by pinned URI.
 3. HTML: whole-workspace revisions/branches, inert upload import, source/preview,
    bindings, recovery and export without silent payload truncation.

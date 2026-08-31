@@ -11,6 +11,7 @@ namespace RNAssistant.Office.Tools
     {
         public const string CreateToolId = "common.plan_doc_create";
         public const string UpdateToolId = "common.plan_doc_update";
+        public const string RestoreToolId = "common.plan_doc_restore";
         public const string DeleteToolId = "common.plan_doc_delete";
 
         private readonly PlanDocumentService _service;
@@ -28,8 +29,11 @@ namespace RNAssistant.Office.Tools
             yield return ControllerToolDefinition.Create(UpdateToolId, "Common",
                 "Plan document: Replace the active Markdown plan body using an exact current revision guard.",
                 UpdateSchema(), mutatesLocalState: true, name: "plan_doc_update", scope: "session");
+            yield return ControllerToolDefinition.Create(RestoreToolId, "Common",
+                "Plan document: Restore one exact historical revision as a new linear head without modifying history.",
+                RestoreSchema(), mutatesLocalState: true, name: "plan_doc_restore", scope: "session");
             yield return ControllerToolDefinition.Create(DeleteToolId, "Common",
-                "Plan document: Delete every revision only when the user explicitly asks to remove the plan.",
+                "Plan document: Append a removal tombstone only when the user explicitly asks to remove the logical plan.",
                 DeleteSchema(), mutatesLocalState: true, riskLevel: 1, name: "plan_doc_delete", scope: "session");
         }
 
@@ -41,6 +45,7 @@ namespace RNAssistant.Office.Tools
             {
                 if (string.Equals(command.ToolId, CreateToolId, StringComparison.OrdinalIgnoreCase)) return Create(command, session, dryRun);
                 if (string.Equals(command.ToolId, UpdateToolId, StringComparison.OrdinalIgnoreCase)) return Update(command, session, dryRun);
+                if (string.Equals(command.ToolId, RestoreToolId, StringComparison.OrdinalIgnoreCase)) return Restore(command, session, dryRun);
                 if (string.Equals(command.ToolId, DeleteToolId, StringComparison.OrdinalIgnoreCase)) return Delete(command, session, dryRun);
             }
             catch (InvalidOperationException ex)
@@ -78,6 +83,17 @@ namespace RNAssistant.Office.Tools
             return Project(_service.Delete(
                 session,
                 ToolArgumentReader.String(command.Arguments, "id", string.Empty),
+                ToolArgumentReader.String(command.Arguments, "expectedRevisionArtifactId", string.Empty),
+                dryRun));
+        }
+
+        private ToolResult Restore(ToolCommand command, ChatSession session, bool dryRun)
+        {
+            return Project(_service.Restore(
+                session,
+                ToolArgumentReader.String(command.Arguments, "id", string.Empty),
+                ToolArgumentReader.String(command.Arguments, "expectedRevisionArtifactId", string.Empty),
+                ToolArgumentReader.String(command.Arguments, "sourceRevisionArtifactId", string.Empty),
                 dryRun));
         }
 
@@ -91,20 +107,18 @@ namespace RNAssistant.Office.Tools
                     mutation.ErrorCode,
                     mutation.Retryable);
             }
-            if (mutation.Artifact == null)
+            var payload = Payload(mutation.PlanId, mutation.Status, mutation.Artifact);
+            if (!string.IsNullOrWhiteSpace(mutation.RestoredFromArtifactId))
+                payload["restoredFromArtifactId"] = mutation.RestoredFromArtifactId;
+            if (mutation.Removed)
             {
-                return ToolResult.Ok(
-                    mutation.Message,
-                    new JObject
-                    {
-                        ["id"] = mutation.PlanId,
-                        ["deletedRevisions"] = mutation.DeletedRevisions
-                    }.ToString(Newtonsoft.Json.Formatting.None));
+                payload["removed"] = true;
+                payload["removedRevisions"] = mutation.AffectedRevisions;
+                payload["referencingMessageIds"] = JArray.FromObject(mutation.ReferencingMessageIds);
             }
             return ToolResult.Ok(
                 mutation.Message,
-                Payload(mutation.PlanId, mutation.Status, mutation.Artifact)
-                    .ToString(Newtonsoft.Json.Formatting.None));
+                payload.ToString(Newtonsoft.Json.Formatting.None));
         }
 
         private static bool HasArgument(ToolCommand command, string name)
@@ -114,7 +128,13 @@ namespace RNAssistant.Office.Tools
 
         private static JObject Payload(string id, string status, ChatArtifact artifact)
         {
-            return new JObject { ["planId"] = id, ["status"] = status, ["artifactId"] = artifact.Id, ["revision"] = artifact.Revision };
+            return new JObject
+            {
+                ["planId"] = id,
+                ["status"] = status,
+                ["artifactId"] = artifact == null ? null : artifact.Id,
+                ["revision"] = artifact == null ? 0 : artifact.Revision
+            };
         }
 
         private static string CreateSchema()
@@ -149,7 +169,33 @@ namespace RNAssistant.Office.Tools
 
         private static string DeleteSchema()
         {
-            return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"minLength\":1,\"description\":\"Stable plan id; all revisions are removed.\"}},\"required\":[\"id\"],\"additionalProperties\":false}";
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject
+                {
+                    ["id"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["description"] = "Stable logical Plan id." },
+                    ["expectedRevisionArtifactId"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["description"] = "Exact active revision artifact id guarded by the removal." }
+                },
+                ["required"] = new JArray("id", "expectedRevisionArtifactId"),
+                ["additionalProperties"] = false
+            }.ToString(Formatting.None);
+        }
+
+        private static string RestoreSchema()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject
+                {
+                    ["id"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["description"] = "Stable logical Plan id." },
+                    ["expectedRevisionArtifactId"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["description"] = "Exact active revision artifact id used as the optimistic concurrency guard." },
+                    ["sourceRevisionArtifactId"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["description"] = "Exact historical revision whose complete body/title/status become the new head." }
+                },
+                ["required"] = new JArray("id", "expectedRevisionArtifactId", "sourceRevisionArtifactId"),
+                ["additionalProperties"] = false
+            }.ToString(Formatting.None);
         }
     }
 }

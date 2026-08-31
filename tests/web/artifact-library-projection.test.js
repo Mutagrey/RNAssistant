@@ -84,9 +84,12 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.match(htmlUi, /response\.artifactLibrary/);
   assert.match(htmlUi, /RNAssistantRunViewState\.accept/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  ["app-core.js", "app-chat-state.js", "app-chat-session.js", "app-artifacts.js", "app-html-workspace.js"].forEach(asset => {
+  ["app-core.js", "app-chat-state.js", "app-chat-session.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=artifact-library-20260831-1"), asset + " has the Artifact Library cache key");
   });
+  assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "artifact cards have the removal cache key");
+  assert.ok(index.includes("app-html-workspace.js?v=plan-tombstone-20260831-1"), "Plan actions have the removal cache key");
+  assert.ok(index.includes("app-html-workspace-actions.js?v=plan-tombstone-20260831-1"), "Plan tool calls have the removal cache key");
   assert.ok(index.includes("app-html-workspace-artifacts.js?v=plan-revision-20260831-1"), "Plan editor has the exact-revision cache key");
   console.log("PASS artifact library: client lineage inference and Plan JSON label are removed");
 }

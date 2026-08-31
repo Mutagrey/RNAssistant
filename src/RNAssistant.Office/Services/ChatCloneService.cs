@@ -98,7 +98,19 @@ namespace RNAssistant.Office.Services
 
         public static List<ChatArtifact> CloneArtifactsForMessages(IEnumerable<ChatArtifact> artifacts, IEnumerable<ChatMessage> messages)
         {
-            return ChatResourceReferenceService.ReachableForMessages(artifacts, messages)
+            var artifactList = (artifacts ?? new ChatArtifact[0]).Where(item => item != null).ToList();
+            var messageIds = new HashSet<string>((messages ?? new ChatMessage[0])
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => item.Id), System.StringComparer.OrdinalIgnoreCase);
+            var applicableTombstones = artifactList
+                .Where(PlanDocumentService.IsTombstone)
+                .Where(item => string.IsNullOrWhiteSpace(item.SourceMessageId) || messageIds.Contains(item.SourceMessageId))
+                .Select(item => item.Id)
+                .ToList();
+            return ChatResourceReferenceService.ReachableForMessages(
+                    artifactList,
+                    messages,
+                    applicableTombstones)
                 .Select(CloneArtifact)
                 .ToList();
         }

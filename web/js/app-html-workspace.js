@@ -187,6 +187,7 @@
     if (selected.type === "plan") {
       result.label = artifactTitle(selected.item);
       result.planId = planStableId(selected.item);
+      result.expectedRevisionArtifactId = artifactId(selected.item);
     } else if (selected.type === "data") {
       result.label = dataName(selected.item);
       result.name = dataName(selected.item);
