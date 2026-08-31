@@ -264,7 +264,7 @@ namespace RNAssistant.Core.Storage
         {
             if (session == null) return;
             var checkpoints = new List<ContextCheckpoint>();
-            foreach (var artifact in (session.Artifacts ?? new List<ChatArtifact>())
+            foreach (var artifact in UniqueArtifacts(session)
                 .Where(item => item != null &&
                     string.Equals(item.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(item => item.CreatedUtc))
@@ -312,8 +312,14 @@ namespace RNAssistant.Core.Storage
         private static ChatArtifact FindArtifact(ChatSession session, string artifactId)
         {
             if (session == null || string.IsNullOrWhiteSpace(artifactId)) return null;
-            return (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item =>
-                item != null && string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
+            var matches = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && string.Equals(
+                    item.Id,
+                    artifactId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            return matches.Count == 1 ? matches[0] : null;
         }
 
         private static ChatArtifact FindHtmlArtifact(ChatSession session, string artifactId)
@@ -338,6 +344,29 @@ namespace RNAssistant.Core.Storage
                 string.Equals(artifact.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static List<ChatArtifact> UniqueArtifacts(ChatSession session)
+        {
+            return (session == null ? new List<ChatArtifact>() : session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .Select(group => group.Single())
+                .ToList();
+        }
+
+        private static void EnsureUniqueArtifactIdentities(ChatSession session)
+        {
+            var ambiguous = (session == null ? new List<ChatArtifact>() : session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Count() != 1);
+            if (ambiguous != null)
+            {
+                throw new InvalidOperationException(
+                    "Chat artifact identity is ambiguous and cannot be saved: " + ambiguous.Key);
+            }
         }
 
     }

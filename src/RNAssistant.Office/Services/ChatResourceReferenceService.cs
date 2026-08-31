@@ -38,6 +38,13 @@ namespace RNAssistant.Office.Services
             var artifactList = (artifacts ?? new ChatArtifact[0])
                 .Where(artifact => artifact != null && !string.IsNullOrWhiteSpace(artifact.Id))
                 .ToList();
+            if (artifactList.GroupBy(artifact => artifact.Id, StringComparer.OrdinalIgnoreCase)
+                .Any(group => group.Count() != 1))
+            {
+                // Reachability must never choose one side of an ambiguous immutable identity.
+                // Preserve the whole set so pruning/forking cannot silently discard evidence.
+                return artifactList;
+            }
             var byId = artifactList
                 .GroupBy(artifact => artifact.Id, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
@@ -80,14 +87,12 @@ namespace RNAssistant.Office.Services
                 .Select(item => item.Id));
             session.Artifacts = ReachableForMessages(session.Artifacts, session.Messages, activeArtifactIds);
             if (!string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId) &&
-                !session.Artifacts.Any(artifact => string.Equals(artifact.Id, session.ActiveTaskListArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(artifact.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase)))
+                FindUniqueArtifact(session, session.ActiveTaskListArtifactId, ChatArtifactKinds.TaskList) == null)
             {
                 session.ActiveTaskListArtifactId = null;
             }
             if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId) &&
-                !session.Artifacts.Any(artifact => string.Equals(artifact.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(artifact.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase)))
+                FindUniqueArtifact(session, session.ActivePlanDocumentArtifactId, ChatArtifactKinds.PlanDocument) == null)
             {
                 session.ActivePlanDocumentArtifactId = null;
             }
@@ -107,7 +112,8 @@ namespace RNAssistant.Office.Services
                 .Where(item => item != null && string.Equals(item.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase))
                 .Where(item => !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+                .Where(group => group.Count() == 1)
+                .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
             session.ActiveTaskListArtifactId = null;
             for (var messageIndex = (session.Messages ?? new List<ChatMessage>()).Count - 1; messageIndex >= 0; messageIndex--)
             {
@@ -134,7 +140,9 @@ namespace RNAssistant.Office.Services
             var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
                 .Where(item => item != null && string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase))
                 .Where(item => !string.IsNullOrWhiteSpace(item.Id))
-                .ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
             session.ActivePlanDocumentArtifactId = null;
             for (var messageIndex = (session.Messages ?? new List<ChatMessage>()).Count - 1; messageIndex >= 0; messageIndex--)
             {
@@ -154,20 +162,44 @@ namespace RNAssistant.Office.Services
 
         private static void LinkAttachments(ChatSession session, ChatMessage message)
         {
-            foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
+            var attachments = (message.Attachments ?? new List<ChatAttachment>())
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .ToList();
+            if (attachments.Count == 0) return;
+
+            var sourceMessages = (session.Messages ?? new List<ChatMessage>())
+                .Where(item => item != null && string.Equals(item.Id, message.Id, StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            if (sourceMessages.Count != 1)
             {
-                if (attachment == null || string.IsNullOrWhiteSpace(attachment.Id)) continue;
+                throw new InvalidOperationException("Attachment source message identity is ambiguous.");
+            }
+            var attachmentIds = attachments
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase);
+            if (attachmentIds.Any(group => group.Count() != 1))
+            {
+                throw new InvalidOperationException("Attachment identity is ambiguous within its source message.");
+            }
+            foreach (var attachment in attachments)
+            {
                 var id = "attachment_" + attachment.Id;
-                var artifact = session.Artifacts.FirstOrDefault(item => item != null &&
-                    string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
+                var matches = session.Artifacts.Where(item => item != null &&
+                    string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+                if (matches.Count > 1)
+                {
+                    throw new InvalidOperationException("Attachment artifact identity is ambiguous: " + id);
+                }
+                var artifact = matches.Count == 1 ? matches[0] : null;
+                var expectedKind = string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)
+                    ? ChatArtifactKinds.Image
+                    : ChatArtifactKinds.Attachment;
                 if (artifact == null)
                 {
                     artifact = new ChatArtifact
                     {
                         Id = id,
-                        Kind = string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)
-                            ? ChatArtifactKinds.Image
-                            : ChatArtifactKinds.Attachment,
+                        Kind = expectedKind,
                         Title = string.IsNullOrWhiteSpace(attachment.FileName) ? "Вложение" : attachment.FileName,
                         MimeType = attachment.ContentType,
                         SourceMessageId = message.Id,
@@ -188,21 +220,19 @@ namespace RNAssistant.Office.Services
                 }
                 else
                 {
-                    artifact.Title = string.IsNullOrWhiteSpace(attachment.FileName) ? artifact.Title : attachment.FileName;
-                    artifact.MimeType = attachment.ContentType;
-                    artifact.SourceMessageId = message.Id;
-                    artifact.RelativePath = attachment.RelativePath;
-                    artifact.ContentSha256 = attachment.ContentSha256;
-                    artifact.ContentByteLength = attachment.ContentByteLength;
-                    artifact.MetadataJson = JsonConvert.SerializeObject(new
+                    if (!string.Equals(artifact.Kind, expectedKind, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(artifact.MimeType, attachment.ContentType, StringComparison.OrdinalIgnoreCase) ||
+                        string.IsNullOrWhiteSpace(artifact.ContentSha256) ||
+                        !string.Equals(artifact.ContentSha256, attachment.ContentSha256, StringComparison.OrdinalIgnoreCase) ||
+                        !artifact.ContentByteLength.HasValue ||
+                        !attachment.ContentByteLength.HasValue ||
+                        artifact.ContentByteLength.Value != attachment.ContentByteLength.Value ||
+                        !string.Equals(AttachmentId(artifact), attachment.Id, StringComparison.OrdinalIgnoreCase))
                     {
-                        attachmentId = attachment.Id,
-                        attachment.Kind,
-                        attachment.Size,
-                        attachment.PageCount,
-                        attachment.ExtractedCharCount,
-                        attachment.TextTruncated
-                    });
+                        throw new InvalidOperationException(
+                            "Attachment artifact cannot be rebound to different immutable evidence: " + id);
+                    }
                 }
                 AddReference(session, message, artifact);
             }
@@ -238,9 +268,7 @@ namespace RNAssistant.Office.Services
                 return;
             }
             if (string.IsNullOrWhiteSpace(artifactId)) return;
-            var artifact = session.Artifacts.FirstOrDefault(item => item != null &&
-                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
+            var artifact = FindUniqueArtifact(session, artifactId, ChatArtifactKinds.HtmlWorkspace);
             if (artifact != null)
             {
                 artifact.SourceMessageId = string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? message.Id : artifact.SourceMessageId;
@@ -266,11 +294,10 @@ namespace RNAssistant.Office.Services
             {
                 var artifactId = (string)JObject.Parse(activity.DataJson)["artifactId"];
                 if (string.IsNullOrWhiteSpace(artifactId)) return;
-                var artifact = session.Artifacts.FirstOrDefault(item => item != null &&
-                    string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(item.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase));
+                var artifact = FindUniqueArtifact(session, artifactId, ChatArtifactKinds.TaskList);
                 if (artifact == null) return;
                 artifact.SourceMessageId = string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? message.Id : artifact.SourceMessageId;
+                if (!string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase)) return;
                 artifact.RunId = string.IsNullOrWhiteSpace(artifact.RunId) ? message.RunId : artifact.RunId;
                 AddReference(session, message, artifact);
             }
@@ -289,11 +316,10 @@ namespace RNAssistant.Office.Services
             {
                 var artifactId = (string)JObject.Parse(activity.DataJson)["artifactId"];
                 if (string.IsNullOrWhiteSpace(artifactId)) return;
-                var artifact = session.Artifacts.FirstOrDefault(item => item != null &&
-                    string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase));
+                var artifact = FindUniqueArtifact(session, artifactId, ChatArtifactKinds.PlanDocument);
                 if (artifact == null) return;
                 artifact.SourceMessageId = string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? message.Id : artifact.SourceMessageId;
+                if (!string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase)) return;
                 artifact.RunId = string.IsNullOrWhiteSpace(artifact.RunId) ? message.RunId : artifact.RunId;
                 AddReference(session, message, artifact);
             }
@@ -319,11 +345,40 @@ namespace RNAssistant.Office.Services
             string artifactId;
             int revision;
             if (!ChatResourceUri.TryParseArtifactRevision(reference, out ignoredSessionId, out artifactId, out revision)) return null;
-            return (artifacts ?? new ChatArtifact[0]).Any(item => item != null &&
-                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
-                Math.Max(1, item.Revision) == revision)
-                    ? artifactId
+            var matches = (artifacts ?? new ChatArtifact[0]).Where(item => item != null &&
+                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+            return matches.Count == 1 && Math.Max(1, matches[0].Revision) == revision ? artifactId : null;
+        }
+
+        private static ChatArtifact FindUniqueArtifact(ChatSession session, string artifactId, string kind)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(artifactId)) return null;
+            var matches = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && string.Equals(
+                    item.Id,
+                    artifactId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            return matches.Count == 1 && string.Equals(
+                matches[0].Kind,
+                kind,
+                StringComparison.OrdinalIgnoreCase)
+                    ? matches[0]
                     : null;
+        }
+
+        private static string AttachmentId(ChatArtifact artifact)
+        {
+            try
+            {
+                return (string)JObject.Parse(artifact == null ? "{}" : artifact.MetadataJson ?? "{}")
+                    .GetValue("attachmentId", StringComparison.OrdinalIgnoreCase) ?? string.Empty;
+            }
+            catch (JsonException)
+            {
+                return string.Empty;
+            }
         }
 
         private static void AddReference(ChatSession session, ChatMessage message, ChatArtifact artifact)
@@ -340,7 +395,9 @@ namespace RNAssistant.Office.Services
         {
             var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
-                .ToDictionary(item => item.Id, item => item, StringComparer.OrdinalIgnoreCase);
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
             var rebased = new List<ResourceRef>();
             foreach (var reference in message.ResourceRefs ?? new List<ResourceRef>())
             {

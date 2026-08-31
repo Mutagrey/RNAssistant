@@ -372,6 +372,7 @@ namespace RNAssistant.Harness
 
                 Test("attachments: import commit delete", AttachmentImportCommitDelete),
                 Test("attachments: resource link precedes model dispatch", AttachmentPromotionLinksResourceBeforeModelDispatch),
+                Test("attachments: immutable identity cannot be rebound", AttachmentIdentityCannotBeRebound),
                 Test("attachments: fork artifact reuses shared blob", ForkedAttachmentArtifactTracksCopiedFile),
                 Test("attachments: multimodal api payload", AttachmentMultimodalApiPayload),
                 Test("attachments: image import bypasses pdf extraction", AttachmentImageImportBypassesPdfExtraction),

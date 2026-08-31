@@ -105,6 +105,43 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void AttachmentIdentityCannotBeRebound()
+        {
+            var session = new ChatSession();
+            var firstMessage = new ChatMessage { Id = "attachment-source-a", Role = "user" };
+            firstMessage.Attachments.Add(new ChatAttachment
+            {
+                Id = "shared-attachment-id",
+                FileName = "first.txt",
+                ContentType = "text/plain",
+                Kind = "text",
+                ContentSha256 = new string('a', 64),
+                ContentByteLength = 5
+            });
+            var secondMessage = new ChatMessage { Id = "attachment-source-b", Role = "user" };
+            secondMessage.Attachments.Add(new ChatAttachment
+            {
+                Id = "SHARED-ATTACHMENT-ID",
+                FileName = "second.txt",
+                ContentType = "text/plain",
+                Kind = "text",
+                ContentSha256 = new string('b', 64),
+                ContentByteLength = 6
+            });
+            session.Messages.Add(firstMessage);
+            session.Messages.Add(secondMessage);
+
+            RuntimeThrows<InvalidOperationException>(() =>
+                ChatResourceReferenceService.LinkMessageResources(session, 0));
+            var artifact = session.Artifacts.Single();
+            AssertEqual(firstMessage.Id, artifact.SourceMessageId,
+                "attachment artifact keeps its original source message");
+            AssertEqual(firstMessage.Attachments[0].ContentSha256, artifact.ContentSha256,
+                "attachment artifact keeps its original immutable body");
+            AssertEqual(0, secondMessage.ResourceRefs.Count,
+                "conflicting attachment source receives no canonical reference");
+        }
+
         private static void AttachmentMultimodalApiPayload()
         {
             var bytes = new byte[] { 0xff, 0xd8, 0xff, 0xd9 };

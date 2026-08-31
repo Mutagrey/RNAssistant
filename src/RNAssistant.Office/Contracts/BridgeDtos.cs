@@ -523,11 +523,14 @@ namespace RNAssistant.Office.Contracts
 
         public static IReadOnlyList<ChatArtifactDto> From(ChatSession session)
         {
-            var result = From(session == null ? null : session.Artifacts).ToList();
-            if (session == null) return result;
+            if (session == null) return From((IEnumerable<ChatArtifact>)null);
             var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
-                .Where(item => item != null)
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .Select(group => group.Single())
                 .ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+            var result = From(artifacts.Values).ToList();
             foreach (var item in result)
             {
                 ChatArtifact artifact;

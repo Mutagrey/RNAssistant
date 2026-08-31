@@ -109,10 +109,27 @@ namespace RNAssistant.Office.Services
                 : result.Result.Resources)
             {
                 string artifactId;
-                if (!ChatResourceUri.TryGetCurrentArtifactId(session, reference, out artifactId)) continue;
-                var artifact = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item => item != null &&
-                    string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
+                int revision;
+                if (!ChatResourceUri.TryParseArtifactRevision(
+                    session == null ? null : session.Id,
+                    reference,
+                    out artifactId,
+                    out revision)) continue;
+                var matches = (session.Artifacts ?? new List<ChatArtifact>())
+                    .Where(item => item != null && string.Equals(
+                        item.Id,
+                        artifactId,
+                        StringComparison.OrdinalIgnoreCase))
+                    .Take(2)
+                    .ToList();
+                if (matches.Count > 1)
+                {
+                    throw new InvalidOperationException(
+                        "Tool result artifact identity is ambiguous: " + artifactId);
+                }
+                var artifact = matches.Count == 1 ? matches[0] : null;
                 if (artifact != null &&
+                    Math.Max(1, artifact.Revision) == revision &&
                     string.Equals(artifact.Kind, kind, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(artifact.InlineText ?? string.Empty, content ?? string.Empty, StringComparison.Ordinal))
                 {

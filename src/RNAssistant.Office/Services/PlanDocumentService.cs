@@ -289,7 +289,7 @@ namespace RNAssistant.Office.Services
                 StringComparison.OrdinalIgnoreCase)) return false;
             var planId = PlanId(artifact);
             return !string.IsNullOrWhiteSpace(planId) &&
-                (session.Artifacts ?? new List<ChatArtifact>()).Any(item =>
+                UniqueArtifacts(session).Any(item =>
                     IsApplicableTombstone(session, item) &&
                     string.Equals(PlanId(item), planId, StringComparison.OrdinalIgnoreCase));
         }
@@ -314,7 +314,7 @@ namespace RNAssistant.Office.Services
                 reference,
                 out artifactId,
                 out revision)) return false;
-            var artifact = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item => item != null &&
+            var artifact = UniqueArtifacts(session).FirstOrDefault(item =>
                 string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
                 Math.Max(1, item.Revision) == revision);
             return IsRemoved(session, artifact);
@@ -377,7 +377,7 @@ namespace RNAssistant.Office.Services
 
         private static ChatArtifact FindCurrent(ChatSession session, string planId)
         {
-            var current = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item => item != null &&
+            var current = UniqueArtifacts(session).FirstOrDefault(item =>
                 string.Equals(item.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase));
             return current != null && string.Equals(PlanId(current), planId, StringComparison.OrdinalIgnoreCase)
@@ -387,9 +387,19 @@ namespace RNAssistant.Office.Services
 
         private static IEnumerable<ChatArtifact> Revisions(ChatSession session, string planId)
         {
-            return (session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null &&
+            return UniqueArtifacts(session).Where(item =>
                 string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(PlanId(item), planId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static List<ChatArtifact> UniqueArtifacts(ChatSession session)
+        {
+            return (session == null ? new List<ChatArtifact>() : session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .Select(group => group.Single())
+                .ToList();
         }
 
         private static List<ChatArtifact> OrderedRevisions(ChatSession session, string planId)

@@ -24,12 +24,12 @@ namespace RNAssistant.Office.Services
             }
             session.HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace);
             session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
+            ValidateRevisionLineage(session);
             var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(
                 session.HtmlWorkspace,
                 string.IsNullOrWhiteSpace(title) ? "HTML workspace" : title);
             var stateJson = SerializeState(snapshot);
-            var current = session.Artifacts.FirstOrDefault(item => item != null &&
-                string.Equals(item.Id, session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase));
+            var current = FindArtifact(session, session.ActiveHtmlArtifactId);
             if (current != null && SameState(current.InlineText, snapshot))
             {
                 RebuildNavigation(session);
@@ -62,9 +62,7 @@ namespace RNAssistant.Office.Services
         {
             if (session == null || string.IsNullOrWhiteSpace(artifactId) || session.Artifacts == null) return false;
             ValidateRevisionLineage(session);
-            var artifact = session.Artifacts.FirstOrDefault(item => item != null &&
-                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
+            var artifact = FindArtifact(session, artifactId);
             if (artifact == null || string.IsNullOrWhiteSpace(artifact.InlineText)) return false;
             HtmlWorkspaceSnapshot snapshot;
             try
@@ -296,16 +294,23 @@ namespace RNAssistant.Office.Services
 
         private static List<ChatArtifact> ValidateRevisionLineage(ChatSession session)
         {
-            var artifacts = (session == null || session.Artifacts == null
+            var allArtifacts = (session == null || session.Artifacts == null
                     ? new List<ChatArtifact>()
                     : session.Artifacts)
+                .Where(item => item != null)
+                .ToList();
+            var artifacts = allArtifacts
                 .Where(item => item != null && string.Equals(
                     item.Kind,
                     ChatArtifactKinds.HtmlWorkspace,
                     StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            if (artifacts.GroupBy(item => item.Id ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-                .Any(group => string.IsNullOrWhiteSpace(group.Key) || group.Count() != 1) ||
+            var ambiguousIds = new HashSet<string>(allArtifacts
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() != 1)
+                .Select(group => group.Key), StringComparer.OrdinalIgnoreCase);
+            if (artifacts.Any(item => string.IsNullOrWhiteSpace(item.Id) || ambiguousIds.Contains(item.Id)) ||
                 artifacts.Any(item => item.Revision < 1) ||
                 artifacts.GroupBy(item => item.Revision).Any(group => group.Count() != 1))
             {
@@ -330,9 +335,19 @@ namespace RNAssistant.Office.Services
         private static ChatArtifact FindArtifact(ChatSession session, string artifactId)
         {
             if (session == null || string.IsNullOrWhiteSpace(artifactId)) return null;
-            return (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item => item != null &&
-                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
+            var matches = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && string.Equals(
+                    item.Id,
+                    artifactId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            return matches.Count == 1 && string.Equals(
+                matches[0].Kind,
+                ChatArtifactKinds.HtmlWorkspace,
+                StringComparison.OrdinalIgnoreCase)
+                    ? matches[0]
+                    : null;
         }
 
         private static HtmlWorkspaceSnapshot ParseSnapshot(ChatArtifact artifact)

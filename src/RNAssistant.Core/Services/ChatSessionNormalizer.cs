@@ -151,8 +151,6 @@ namespace RNAssistant.Core.Services
             }
             session.Artifacts = artifacts
                 .Where(item => item != null)
-                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.OrderByDescending(item => item.CreatedUtc).First())
                 .ToList();
         }
 
@@ -166,18 +164,30 @@ namespace RNAssistant.Core.Services
                 session.ActiveContextCheckpointId = null;
             }
 
-            if (!session.Artifacts.Any(item =>
-                string.Equals(item.Id, session.ActiveTaskListArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase)))
+            if (!HasUniqueArtifact(session, session.ActiveTaskListArtifactId, ChatArtifactKinds.TaskList))
             {
                 session.ActiveTaskListArtifactId = null;
             }
-            if (!session.Artifacts.Any(item =>
-                string.Equals(item.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase)))
+            if (!HasUniqueArtifact(session, session.ActivePlanDocumentArtifactId, ChatArtifactKinds.PlanDocument))
             {
                 session.ActivePlanDocumentArtifactId = null;
             }
+        }
+
+        private static bool HasUniqueArtifact(ChatSession session, string artifactId, string kind)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(artifactId)) return false;
+            var matches = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && string.Equals(
+                    item.Id,
+                    artifactId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            return matches.Count == 1 && string.Equals(
+                matches[0].Kind,
+                kind,
+                StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -486,8 +486,7 @@ namespace RNAssistant.Core.Storage
         public bool LoadArtifactBody(ChatSession session, string artifactId)
         {
             if (session == null || string.IsNullOrWhiteSpace(artifactId)) return false;
-            var artifact = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item =>
-                item != null && string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
+            var artifact = FindArtifact(session, artifactId);
             return HydrateArtifact(artifact);
         }
 
@@ -790,6 +789,7 @@ namespace RNAssistant.Core.Storage
 
         private void SaveInternalLocked(ChatSession session, string path, bool allowRelocatedSession)
         {
+            EnsureUniqueArtifactIdentities(session);
             EnsureChartArtifacts(session);
             ExternalizeArtifacts(session);
             var exists = File.Exists(path);

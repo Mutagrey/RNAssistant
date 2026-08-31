@@ -1657,6 +1657,15 @@ namespace RNAssistant.Harness
             AssertEqual(chartArtifact.Id, ToolResultResourceService.ExternalizeIfNeeded(
                 chartSession, command, chartResult, 10000, new AppSettings()).Id,
                 "chart result externalization is idempotent for an existing exact reference");
+            chartSession.Artifacts.Add(new ChatArtifact
+            {
+                Id = chartArtifact.Id.ToUpperInvariant(),
+                Kind = chartArtifact.Kind,
+                InlineText = chartArtifact.InlineText
+            });
+            RuntimeThrows<InvalidOperationException>(() => ToolResultResourceService.ExternalizeIfNeeded(
+                chartSession, command, chartResult, 10000, new AppSettings()));
+            chartSession.Artifacts.RemoveAt(chartSession.Artifacts.Count - 1);
             var chartMessage = AgentTranscript.CreateRunningToolMessage(chartSession, command, "chart_step", "Read chart");
             chartMessage.RunId = "chart_run";
             ToolResultUiProjection.IncludeResources(chartUiResult, chartResult);

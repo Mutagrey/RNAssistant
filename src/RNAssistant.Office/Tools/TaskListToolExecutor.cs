@@ -191,7 +191,12 @@ namespace RNAssistant.Office.Tools
 
         private static IEnumerable<PlanRevision> TaskListRevisions(ChatSession session)
         {
-            foreach (var artifact in (session == null ? null : session.Artifacts) ?? new List<ChatArtifact>())
+            var artifacts = ((session == null ? null : session.Artifacts) ?? new List<ChatArtifact>())
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .Select(group => group.Single());
+            foreach (var artifact in artifacts)
             {
                 if (artifact == null || !string.Equals(artifact.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(artifact.InlineText)) continue;
                 ChatTaskList plan;

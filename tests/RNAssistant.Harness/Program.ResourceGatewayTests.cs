@@ -11,6 +11,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -775,6 +776,63 @@ namespace RNAssistant.Harness
                 new AppSettings());
             AssertTrue(runtimeContext.IndexOf("\"active_plan\"", StringComparison.Ordinal) < 0,
                 "ambiguous active Plan is not projected into model context");
+
+            ChatSessionNormalizer.Normalize(session, "Excel", "ambiguous-artifacts", "Ambiguous.xlsx");
+            AssertEqual(3, session.Artifacts.Count,
+                "normalization preserves ambiguity instead of selecting a newest duplicate");
+            AssertEqual(null, session.ActivePlanDocumentArtifactId,
+                "ambiguous active Plan pointer is cleared");
+            var bridgeArtifacts = ChatArtifactDto.From(session);
+            AssertEqual(1, bridgeArtifacts.Count,
+                "bridge projection omits every ambiguous revision without hiding unique artifacts");
+            AssertEqual(unique.Id, bridgeArtifacts[0].Id, "bridge retains the unrelated unique artifact");
+            AssertEqual(1, ArtifactLibraryProjectionService.Project(session).Heads.Count,
+                "Library projection retains only the unrelated unique artifact");
+
+            var referenceMessage = new ChatMessage
+            {
+                Id = "ambiguous-reference-message",
+                ProtocolMessage = true,
+                ResourceRefs = new List<ResourceRef>
+                {
+                    duplicateReference,
+                    ChatResourceUri.CreateArtifactRevision(session, unique)
+                }
+            };
+            session.Messages.Add(referenceMessage);
+            ChatResourceReferenceService.LinkMessageResources(session, 0);
+            AssertEqual(1, referenceMessage.ResourceRefs.Count,
+                "reference rebase drops ambiguous identities without blocking unrelated resources");
+            AssertEqual(ChatResourceUri.CreateArtifactRevisionUri(session, unique), referenceMessage.ResourceRefs[0].Uri,
+                "reference rebase preserves the unrelated exact artifact");
+
+            WithTempPaths(paths =>
+            {
+                var store = new RNAssistant.Core.Storage.ChatStore(paths);
+                AssertEqual(false, store.LoadArtifactBody(session, first.Id),
+                    "body hydration does not choose an arbitrary duplicate");
+                RuntimeThrows<InvalidOperationException>(() => store.Save(session));
+            });
+
+            var htmlSession = new ChatSession { ActiveHtmlArtifactId = "duplicate-html" };
+            htmlSession.Artifacts.Add(new ChatArtifact
+            {
+                Id = "duplicate-html",
+                Kind = ChatArtifactKinds.HtmlWorkspace,
+                Revision = 1,
+                InlineText = "{\"Files\":[],\"DataSources\":[]}"
+            });
+            htmlSession.Artifacts.Add(new ChatArtifact
+            {
+                Id = "DUPLICATE-HTML",
+                Kind = ChatArtifactKinds.HtmlWorkspace,
+                Revision = 2,
+                InlineText = "{\"Files\":[],\"DataSources\":[]}"
+            });
+            RuntimeThrows<InvalidOperationException>(() =>
+                HtmlWorkspaceArtifactService.Restore(htmlSession, htmlSession.ActiveHtmlArtifactId));
+            AssertEqual(0, HtmlWorkspaceNavigationService.GetRecoveryCandidates(htmlSession, null).Count,
+                "HTML recovery never offers an ambiguous revision candidate");
         }
 
         private static void ResourceGatewayPreservesEmptyTextRepresentations()

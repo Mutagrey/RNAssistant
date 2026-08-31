@@ -19,7 +19,7 @@ namespace RNAssistant.Core.Services
                 return new List<HtmlWorkspaceRedoBranch>();
             }
 
-            var artifacts = session.Artifacts ?? new List<ChatArtifact>();
+            var artifacts = UniqueArtifacts(session);
             var active = artifacts.FirstOrDefault(item => item != null &&
                 string.Equals(item.Id, session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
@@ -65,7 +65,7 @@ namespace RNAssistant.Core.Services
 
         public static List<HtmlWorkspaceRecoveryCandidate> GetRecoveryCandidates(ChatSession session, string excludedArtifactId)
         {
-            var artifacts = session == null ? new List<ChatArtifact>() : session.Artifacts ?? new List<ChatArtifact>();
+            var artifacts = UniqueArtifacts(session);
             var active = artifacts.FirstOrDefault(item => item != null &&
                 string.Equals(item.Id, excludedArtifactId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
@@ -81,6 +81,16 @@ namespace RNAssistant.Core.Services
                 .ThenBy(item => item.Id, StringComparer.Ordinal)
                 .Take(MaxRecoveryCandidates)
                 .Select(ToRecoveryCandidate)
+                .ToList();
+        }
+
+        private static List<ChatArtifact> UniqueArtifacts(ChatSession session)
+        {
+            return (session == null ? new List<ChatArtifact>() : session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .Select(group => group.Single())
                 .ToList();
         }
 
