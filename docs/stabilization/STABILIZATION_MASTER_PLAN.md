@@ -2318,8 +2318,14 @@ transport или execution authority.
    - 11B3: history restore/removal UX and ready-plan handoff by pinned URI. Done
      host-neutral; Windows WebView interaction remains open.
      [Evidence](PHASE_11B3_PLAN_HISTORY_HANDOFF.md).
-3. HTML: whole-workspace revisions/branches, inert upload import, source/preview,
-   bindings, recovery and export without silent payload truncation.
+3. HTML, отдельными commits:
+   - 11C1: whole-workspace revision/branch owner uses one unique monotonic sequence
+     across all branches, preserves the exact active parent and fails closed on
+     ambiguous lineage. Done host-neutral; Windows WebView remains open.
+     [Evidence](PHASE_11C1_HTML_LINEAGE.md).
+   - 11C2: inert uploaded-HTML import with explicit provenance and bounded
+     source/preview UX.
+   - 11C3: bindings, recovery and export without silent payload truncation.
 4. Typed artifact viewers: bounded text/source and Markdown first; image, PDF and
    audio are separate measured slices with MIME/security/vendor/worker/lifetime and
    Windows WebView gates. ViewerRegistry remains UI-only and cannot read bridge/CAS

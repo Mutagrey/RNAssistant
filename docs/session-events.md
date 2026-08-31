@@ -178,7 +178,17 @@ Authenticated-encryption writes place AES ciphertext directly into the final env
 
 File-backed CAS ingestion (committed attachment bytes and extracted-text sidecars) uses a bounded streaming path. It hashes the staging file incrementally, gzip-compresses eligible content to a temporary candidate beside that staging source, and streams the candidate or original file through AES/HMAC into the atomic CAS write. Verification authenticates ciphertext before streaming decryption/decompression directly into SHA-256; it creates no decrypted temporary file and no full-size managed payload arrays. CAS health uses the same verifier. Existing `RNACAS01` and `RNAENC01` formats remain byte-compatible; model/HTTP payloads stay byte-buffered because the same materialized bytes are required by `HttpContent`.
 
-Artifact metadata and lineage remain in the session stream. HTML undo follows the active artifact's parent. Redo is derived only from its direct children: one child is deterministic, while multiple children require an explicit artifact id. The bridge exposes child revision/count metadata without loading their CAS bodies, and no mutable redo stack is stored. Chart UI data is derived from a chart artifact. Context checkpoints are derived from compaction artifacts. These values are not persisted again as competing state.
+Artifact metadata and lineage remain in the session stream. Each HTML whole-workspace
+`artifact.revision.created` uses the next revision number across the complete logical
+workspace graph, including inactive branches, and records the exact active artifact
+as parent. Duplicate revision numbers or a parent that is not older than its child
+block HTML mutation/restoration and require explicit reset/new chat; replay never
+renumbers history. HTML undo follows the active artifact's parent. Redo is derived
+only from its direct children: one child is deterministic, while multiple children
+require an explicit artifact id. The bridge exposes child revision/count metadata
+without loading their CAS bodies, and no mutable redo stack is stored. Chart UI data
+is derived from a chart artifact. Context checkpoints are derived from compaction
+artifacts. These values are not persisted again as competing state.
 
 Model context virtualizes these bodies. Durable messages, deterministic compaction reference unions, media handoff, and trajectory projections carry canonical revision-pinned `ResourceRef` values; internal artifact ids remain only inside the artifact lineage graph and domain-specific active pointers. The bounded prompt working set exposes the `rna://` URIs plus kinds, titles, sizes, representation hints, and active references; local paths and bodies remain absent. `common.resources_read` verifies the URI against the active session and existing CAS/attachment reference, then returns bounded text or an ephemeral model-media attachment. Immutable bodies are pinned by the URI; live read cursors bind their offset to the observed content hash, and collection cursors bind it to the observed collection fingerprint, so continuation after drift fails rather than combining versions. The ephemeral read reuses the original CAS reference and creates neither a new blob nor a competing durable representation; the materialized model request is still recorded before dispatch.
 

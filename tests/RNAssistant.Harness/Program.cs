@@ -347,6 +347,7 @@ namespace RNAssistant.Harness
                 Test("storage: corrupted artifact blob is safe", CorruptedArtifactBlobIsSafe),
                 Test("storage: chart activity projects from artifact", ChartActivityProjectsFromArtifact),
                 Test("storage: compaction projects from artifact", CompactionProjectsFromArtifact),
+                Test("html lineage: branches use unique monotonic revisions", HtmlWorkspaceBranchesUseUniqueMonotonicRevisions),
                 Test("storage: html navigation projects from artifacts", HtmlNavigationProjectsFromArtifacts),
                 Test("storage: html redo branches are explicit and lazy", HtmlRedoBranchesAreExplicitAndLazy),
                 Test("storage: html recovery blocks mutation and selects healthy revision", HtmlRecoveryBlocksMutationAndSelectsHealthyRevision),

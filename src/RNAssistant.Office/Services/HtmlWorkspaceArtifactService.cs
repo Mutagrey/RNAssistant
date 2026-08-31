@@ -47,7 +47,7 @@ namespace RNAssistant.Office.Services
                 Title = snapshot.Label,
                 MimeType = "application/vnd.rnassistant.html-workspace+json",
                 ParentArtifactId = current == null ? null : current.Id,
-                Revision = current == null ? 1 : Math.Max(1, current.Revision + 1),
+                Revision = NextRevision(session),
                 InlineText = stateJson,
                 MetadataJson = JsonConvert.SerializeObject(new
                 {
@@ -65,6 +65,7 @@ namespace RNAssistant.Office.Services
         public static bool Restore(ChatSession session, string artifactId)
         {
             if (session == null || string.IsNullOrWhiteSpace(artifactId) || session.Artifacts == null) return false;
+            ValidateRevisionLineage(session);
             var artifact = session.Artifacts.FirstOrDefault(item => item != null &&
                 string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
@@ -93,10 +94,13 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Chat session is required.");
             }
             var recovery = session.HtmlWorkspaceRecovery;
-            if (recovery == null || recovery.CanMutate) return;
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(recovery.Message)
-                ? "HTML workspace mutation is blocked until a healthy revision is selected."
-                : recovery.Message);
+            if (recovery != null && !recovery.CanMutate)
+            {
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(recovery.Message)
+                    ? "HTML workspace mutation is blocked until a healthy revision is selected."
+                    : recovery.Message);
+            }
+            ValidateRevisionLineage(session);
         }
 
         public static void RebuildNavigation(ChatSession session)
@@ -227,6 +231,51 @@ namespace RNAssistant.Office.Services
             {
                 return false;
             }
+        }
+
+        private static int NextRevision(ChatSession session)
+        {
+            var artifacts = ValidateRevisionLineage(session);
+            if (artifacts.Count == 0) return 1;
+            var maximum = artifacts.Max(item => item.Revision);
+            if (maximum == int.MaxValue)
+            {
+                throw new InvalidOperationException("HTML workspace revision sequence is exhausted; start a new chat.");
+            }
+            return maximum + 1;
+        }
+
+        private static List<ChatArtifact> ValidateRevisionLineage(ChatSession session)
+        {
+            var artifacts = (session == null || session.Artifacts == null
+                    ? new List<ChatArtifact>()
+                    : session.Artifacts)
+                .Where(item => item != null && string.Equals(
+                    item.Kind,
+                    ChatArtifactKinds.HtmlWorkspace,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (artifacts.GroupBy(item => item.Id ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .Any(group => string.IsNullOrWhiteSpace(group.Key) || group.Count() != 1) ||
+                artifacts.Any(item => item.Revision < 1) ||
+                artifacts.GroupBy(item => item.Revision).Any(group => group.Count() != 1))
+            {
+                throw new InvalidOperationException(
+                    "HTML workspace revision lineage is ambiguous; start a new chat or reset the incompatible workspace.");
+            }
+            var byId = artifacts.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+            foreach (var artifact in artifacts)
+            {
+                ChatArtifact parent;
+                if (!string.IsNullOrWhiteSpace(artifact.ParentArtifactId) &&
+                    byId.TryGetValue(artifact.ParentArtifactId, out parent) &&
+                    parent.Revision >= artifact.Revision)
+                {
+                    throw new InvalidOperationException(
+                        "HTML workspace parent revision is not older than its child; start a new chat or reset the incompatible workspace.");
+                }
+            }
+            return artifacts;
         }
 
         private static ChatArtifact FindArtifact(ChatSession session, string artifactId)

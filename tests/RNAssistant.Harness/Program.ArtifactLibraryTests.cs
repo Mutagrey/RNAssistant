@@ -52,7 +52,7 @@ namespace RNAssistant.Harness
             plan2.MetadataJson = JsonConvert.SerializeObject(new { planId = "release-plan", status = "ready" });
             var html1 = Artifact("html-r1", ChatArtifactKinds.HtmlWorkspace, 1, null, 3);
             var htmlLeft = Artifact("html-left-r2", ChatArtifactKinds.HtmlWorkspace, 2, html1.Id, 4);
-            var htmlRight = Artifact("html-right-r2", ChatArtifactKinds.HtmlWorkspace, 2, html1.Id, 5);
+            var htmlRight = Artifact("html-right-r3", ChatArtifactKinds.HtmlWorkspace, 3, html1.Id, 5);
             session.Artifacts.AddRange(new[] { plan1, plan2, html1, htmlLeft, htmlRight });
             session.ActivePlanDocumentArtifactId = plan2.Id;
             session.ActiveHtmlArtifactId = htmlLeft.Id;
@@ -69,7 +69,7 @@ namespace RNAssistant.Harness
                 "Plan exact parent URI");
 
             var html = projection.Heads.Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
-            AssertEqual(htmlLeft.Id, html.ArtifactId, "HTML active pointer wins equal branch revisions");
+            AssertEqual(htmlLeft.Id, html.ArtifactId, "HTML active pointer wins a newer alternative branch revision");
             AssertEqual(3, html.History.Count, "HTML branch history count");
             AssertEqual("head", html.History.Single(item => item.ArtifactId == htmlLeft.Id).Relation, "HTML head relation");
             AssertEqual("ancestor", html.History.Single(item => item.ArtifactId == html1.Id).Relation, "HTML ancestor relation");

@@ -43,6 +43,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Excel identity owner/helper protocol (no Office execution) | `Program.ParserDesktopTests.cs`; source-linked `OfficeHosts.Qualification` | `excel identity probe:` |
 | Qualification pack/catalog/runner/event/build authority | `Program.QualificationTests.cs`; strict manifest/coverage, fake action/verifier ports, pause/replay/fault barriers, real chat CAS and signed exact-build admission | `qualification:` |
 | Artifact Library classes, exact heads/history and HTML branch selection | `Program.ArtifactLibraryTests.cs`; UI contract in `tests/web/artifact-library-projection.test.js` | `artifact library:` |
+| HTML whole-workspace revision lineage and branch recovery | `Program.HtmlArtifactStorageTests.cs`; replay/recovery in `Program.SessionEventStoreTests.cs` | `html lineage:`, `storage: html navigation`, `storage: html redo branches`, `storage: html recovery` |
 | Plan exact Markdown lineage, restore/removal and pinned-URI handoff | `Program.PlanModeTests.cs`; UI restore/preflight/handoff contract in `tests/web/plan-document.test.js` | `plan document:`, `plan mode:` |
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
 | Immutable run/UI projection and ordering | `Program.RunViewStateTests.cs`, replay/recovery in `Program.SessionEventStoreTests.cs`, boundary check in `Program.ProjectStructureTests.cs`; static UI in `tests/web/run-view-state.test.js` | `run view:`, `kernel replay:`, `kernel recovery:`, `architecture:` |
