@@ -462,7 +462,7 @@
         tree.setAttribute("role", "tree");
         tree.appendChild(renderNode(state.document.root, null, 1, true));
         body.appendChild(tree);
-        setStatus(state.document.nodeCount + " узлов" + (state.document.duplicateKeyCount ? ", повторов ключей: " + state.document.duplicateKeyCount : ""), "ok");
+        setStatus(nodeCountLabel(state.document.nodeCount) + (state.document.duplicateKeyCount ? ", " + duplicateKeyLabel(state.document.duplicateKeyCount) : ""), "ok");
       } else {
         var pre = element("pre", "rn-json-text");
         var shown;
@@ -487,6 +487,27 @@
       return error.message + " Позиция: " + error.position + " (" + error.code + ")";
     }
 
+    function pluralRu(count, one, few, many) {
+      var value = Math.abs(Number(count) || 0);
+      var mod10 = value % 10;
+      var mod100 = value % 100;
+      if (mod10 === 1 && mod100 !== 11) return one;
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+      return many;
+    }
+
+    function itemCountLabel(count) {
+      return count + " " + pluralRu(count, "элемент", "элемента", "элементов");
+    }
+
+    function nodeCountLabel(count) {
+      return count + " " + pluralRu(count, "узел", "узла", "узлов");
+    }
+
+    function duplicateKeyLabel(count) {
+      return count + " " + pluralRu(count, "повтор ключа", "повтора ключей", "повторов ключей");
+    }
+
     function renderNode(node, entry, level, open) {
       if (node.type !== "object" && node.type !== "array") return renderScalar(node, entry, level);
       var details = element("details", "rn-json-node rn-json-container");
@@ -499,13 +520,15 @@
       var bracket = node.type === "object" ? "{" : "[";
       var close = node.type === "object" ? "}" : "]";
       var count = node.type === "object" ? node.entries.length : node.items.length;
+      if (count > 0) details.classList.add("rn-json-has-children");
       summary.appendChild(element("span", "rn-json-punctuation", bracket));
-      summary.appendChild(element("span", "rn-json-count", count + (count === 1 ? " элемент" : " элементов")));
-      summary.appendChild(element("span", "rn-json-punctuation", close));
+      summary.appendChild(element("span", "rn-json-count", itemCountLabel(count)));
+      summary.appendChild(element("span", "rn-json-punctuation rn-json-container-close", close));
       appendNodeActions(summary, node);
       details.appendChild(summary);
       var children = element("div", "rn-json-children");
       details.appendChild(children);
+      if (count > 0) details.appendChild(renderClosingRow(close));
       var loaded = 0;
       var moreButton = null;
       function loadPage() {
@@ -531,6 +554,13 @@
       });
       if (details.open) loadPage();
       return details;
+    }
+
+    function renderClosingRow(close) {
+      var row = element("div", "rn-json-row rn-json-closing-row");
+      row.setAttribute("aria-hidden", "true");
+      row.appendChild(element("span", "rn-json-punctuation", close));
+      return row;
     }
 
     function childEntries(node) {

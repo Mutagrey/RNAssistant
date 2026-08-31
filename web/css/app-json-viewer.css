@@ -154,6 +154,10 @@
   transform: rotate(90deg);
 }
 
+.rn-json-container.rn-json-has-children[open] > summary .rn-json-container-close {
+  display: none;
+}
+
 .rn-json-row:hover {
   background: var(--secondary-bg-hover);
 }
@@ -161,6 +165,10 @@
 .rn-json-children {
   margin-left: 15px;
   border-left: 1px solid var(--code-border);
+}
+
+.rn-json-closing-row {
+  color: var(--muted);
 }
 
 .rn-json-key {
