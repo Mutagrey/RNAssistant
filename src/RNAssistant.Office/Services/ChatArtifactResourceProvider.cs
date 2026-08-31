@@ -194,7 +194,7 @@ namespace RNAssistant.Office.Services
             if (representation == "media")
             {
                 ResourceReadCursor.RejectCursor(request);
-                var attachment = FindAttachment(session, artifact);
+                var attachment = FindExactAttachment(session, artifact);
                 if (!IsModelMedia(attachment))
                 {
                     throw new InvalidOperationException("Resource has no image, audio, or visual PDF representation: " + exactUri);
@@ -241,7 +241,7 @@ namespace RNAssistant.Office.Services
                 {
                     Resource = Describe(session, artifact, false),
                     Representation = representation,
-                    ContentSha256 = TextRepresentationSha256(artifact, FindAttachment(session, artifact)),
+                    ContentSha256 = TextRepresentationSha256(artifact, FindExactAttachment(session, artifact)),
                     Offset = offset,
                     ReturnedCharacters = length,
                     TotalCharacters = content.Length,
@@ -259,7 +259,7 @@ namespace RNAssistant.Office.Services
 
         private ResourceDescriptor Describe(ChatSession session, ChatArtifact artifact, bool compact)
         {
-            var attachment = FindAttachment(session, artifact);
+            var attachment = FindExactAttachment(session, artifact);
             var representations = new List<string> { "metadata" };
             if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
             {
@@ -322,15 +322,16 @@ namespace RNAssistant.Office.Services
                     "resource_representation_unavailable",
                     true);
             }
-            if (HasTextHint(artifact, FindAttachment(session, artifact))) return "text";
-            if (IsModelMedia(FindAttachment(session, artifact))) return "media";
+            if (HasTextHint(artifact, FindExactAttachment(session, artifact))) return "text";
+            if (IsModelMedia(FindExactAttachment(session, artifact))) return "media";
             return "metadata";
         }
 
         private string ReadText(ChatSession session, ChatArtifact artifact, int maxChars)
         {
             if (artifact == null || maxChars <= 0) return string.Empty;
-            var attachment = FindAttachment(session, artifact);
+            var attachment = FindExactAttachment(session, artifact);
+            if (attachment == null && !string.IsNullOrWhiteSpace(AttachmentId(artifact))) return string.Empty;
             if (attachment != null)
             {
                 var text = _readAttachmentText == null
@@ -379,6 +380,7 @@ namespace RNAssistant.Office.Services
                     !string.IsNullOrWhiteSpace(attachment.ExtractedTextSha256);
             }
             if (artifact == null) return false;
+            if (!string.IsNullOrWhiteSpace(AttachmentId(artifact))) return false;
             if (!string.IsNullOrWhiteSpace(artifact.InlineText)) return true;
             return !string.IsNullOrWhiteSpace(artifact.ContentSha256) &&
                 (string.Equals(artifact.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase) ||
@@ -405,16 +407,40 @@ namespace RNAssistant.Office.Services
                  string.Equals(attachment.Kind, "pdf", StringComparison.OrdinalIgnoreCase));
         }
 
-        private static ChatAttachment FindAttachment(ChatSession session, ChatArtifact artifact)
+        internal static ChatAttachment FindExactAttachment(ChatSession session, ChatArtifact artifact)
         {
             if (session == null || artifact == null) return null;
             var attachmentId = AttachmentId(artifact);
-            if (string.IsNullOrWhiteSpace(attachmentId)) return null;
-            return (session.Messages ?? new List<ChatMessage>())
-                .Where(message => message != null)
-                .OrderByDescending(message => string.Equals(message.Id, artifact.SourceMessageId, StringComparison.OrdinalIgnoreCase))
-                .SelectMany(message => message.Attachments ?? new List<ChatAttachment>())
-                .FirstOrDefault(item => item != null && string.Equals(item.Id, attachmentId, StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrWhiteSpace(attachmentId) || string.IsNullOrWhiteSpace(artifact.SourceMessageId)) return null;
+            var messages = (session.Messages ?? new List<ChatMessage>())
+                .Where(message => message != null && string.Equals(
+                    message.Id,
+                    artifact.SourceMessageId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            if (messages.Count != 1) return null;
+            var attachments = (messages[0].Attachments ?? new List<ChatAttachment>())
+                .Where(item => item != null && string.Equals(
+                    item.Id,
+                    attachmentId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            if (attachments.Count != 1) return null;
+            var attachment = attachments[0];
+            if (string.IsNullOrWhiteSpace(artifact.ContentSha256) ||
+                string.IsNullOrWhiteSpace(attachment.ContentSha256) ||
+                !string.Equals(artifact.ContentSha256, attachment.ContentSha256, StringComparison.OrdinalIgnoreCase) ||
+                !artifact.ContentByteLength.HasValue ||
+                !attachment.ContentByteLength.HasValue ||
+                artifact.ContentByteLength.Value != attachment.ContentByteLength.Value ||
+                string.Equals(attachment.Status, "error", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(attachment.Status, "missing", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            return attachment;
         }
 
         private static string AttachmentId(ChatArtifact artifact)

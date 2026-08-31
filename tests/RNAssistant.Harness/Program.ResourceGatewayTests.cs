@@ -161,7 +161,10 @@ namespace RNAssistant.Harness
                 FileName = "notes.txt",
                 ContentType = "text/plain",
                 ExtractedText = new string('a', 180) + " NEEDLE " + new string('b', 180),
-                ExtractedCharCount = 368
+                ExtractedCharCount = 368,
+                ExtractedTextSha256 = TextPatternEngine.Sha256(new string('a', 180) + " NEEDLE " + new string('b', 180)),
+                ContentSha256 = new string('1', 64),
+                ContentByteLength = 368
             };
             var message = new ChatMessage
             {
@@ -177,6 +180,8 @@ namespace RNAssistant.Harness
                 Title = "notes.txt",
                 MimeType = "text/plain",
                 SourceMessageId = message.Id,
+                ContentSha256 = attachment.ContentSha256,
+                ContentByteLength = attachment.ContentByteLength,
                 MetadataJson = "{\"attachmentId\":\"attachment-text\"}"
             };
             var session = new ChatSession
@@ -300,7 +305,9 @@ namespace RNAssistant.Harness
                 Id = "direct-image",
                 Kind = "image",
                 FileName = "direct.png",
-                ContentType = "image/png"
+                ContentType = "image/png",
+                ContentSha256 = new string('2', 64),
+                ContentByteLength = 512
             };
             var imageMessage = new ChatMessage
             {
@@ -314,6 +321,8 @@ namespace RNAssistant.Harness
                 Id = "attachment_direct-image",
                 Kind = ChatArtifactKinds.Image,
                 SourceMessageId = imageMessage.Id,
+                ContentSha256 = imageAttachment.ContentSha256,
+                ContentByteLength = imageAttachment.ContentByteLength,
                 MetadataJson = "{\"attachmentId\":\"direct-image\"}"
             };
             session.Artifacts.Add(imageArtifact);
@@ -512,7 +521,8 @@ namespace RNAssistant.Harness
             };
             session.Artifacts.Add(artifact);
             var uri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
-            var viewer = new ArtifactViewerService(new ResourceGatewayService());
+            var viewerGateway = new ResourceGatewayService();
+            var viewer = new ArtifactViewerService(viewerGateway);
 
             var first = viewer.ReadPage(session, uri, null);
             AssertEqual(ArtifactViewerKinds.Markdown, first.ViewerKind, "viewer classifies Markdown without sniffing");
@@ -540,7 +550,8 @@ namespace RNAssistant.Harness
                 ExtractedText = extracted,
                 ExtractedCharCount = extracted.Length,
                 ExtractedTextSha256 = TextPatternEngine.Sha256(extracted),
-                ContentSha256 = new string('a', 64)
+                ContentSha256 = new string('a', 64),
+                ContentByteLength = 128
             };
             var message = new ChatMessage
             {
@@ -555,6 +566,7 @@ namespace RNAssistant.Harness
                 MimeType = "text/plain",
                 SourceMessageId = message.Id,
                 ContentSha256 = attachment.ContentSha256,
+                ContentByteLength = attachment.ContentByteLength,
                 MetadataJson = "{\"attachmentId\":\"text-a\",\"textTruncated\":false}"
             };
             session.Messages.Add(message);
@@ -564,6 +576,58 @@ namespace RNAssistant.Harness
             AssertEqual(ArtifactViewerKinds.Text, attachmentPage.ViewerKind, "viewer classifies admitted text source");
             AssertEqual(attachment.ExtractedTextSha256, attachmentPage.ContentSha256,
                 "text viewer pins the extracted representation hash, not binary attachment hash");
+
+            var foreignAttachment = new ChatAttachment
+            {
+                Id = "reused-id",
+                Kind = "text",
+                FileName = "foreign.txt",
+                ContentType = "text/plain",
+                ExtractedText = "foreign text",
+                ExtractedCharCount = 12,
+                ExtractedTextSha256 = TextPatternEngine.Sha256("foreign text"),
+                ContentSha256 = new string('b', 64),
+                ContentByteLength = 64
+            };
+            session.Messages.Add(new ChatMessage
+            {
+                Id = "foreign-message",
+                Attachments = new List<ChatAttachment> { foreignAttachment }
+            });
+            var reboundArtifact = new ChatArtifact
+            {
+                Id = "rebound-attachment",
+                Kind = ChatArtifactKinds.Attachment,
+                Title = "foreign.txt",
+                MimeType = "text/plain",
+                SourceMessageId = "missing-source-message",
+                InlineText = "must not replace missing attachment evidence",
+                ContentSha256 = foreignAttachment.ContentSha256,
+                ContentByteLength = foreignAttachment.ContentByteLength,
+                MetadataJson = "{\"attachmentId\":\"reused-id\"}"
+            };
+            session.Artifacts.Add(reboundArtifact);
+            var reboundUri = ChatResourceUri.CreateArtifactRevisionUri(session, reboundArtifact);
+            AssertEqual("metadata", string.Join(",", viewerGateway.Resolve(session, reboundUri).Resource.Representations),
+                "attachment id cannot rebind an artifact to a different source message");
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(session, reboundUri, null));
+
+            var mismatchedArtifact = new ChatArtifact
+            {
+                Id = "mismatched-attachment",
+                Kind = ChatArtifactKinds.Attachment,
+                Title = "notes.txt",
+                MimeType = "text/plain",
+                SourceMessageId = message.Id,
+                ContentSha256 = new string('c', 64),
+                ContentByteLength = attachment.ContentByteLength,
+                MetadataJson = "{\"attachmentId\":\"text-a\"}"
+            };
+            session.Artifacts.Add(mismatchedArtifact);
+            var mismatchedUri = ChatResourceUri.CreateArtifactRevisionUri(session, mismatchedArtifact);
+            AssertEqual("metadata", string.Join(",", viewerGateway.Resolve(session, mismatchedUri).Resource.Representations),
+                "attachment binary evidence must match the immutable artifact revision");
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(session, mismatchedUri, null));
 
             var truncatedText = "bounded extraction";
             var truncatedAttachment = new ChatAttachment
@@ -576,6 +640,7 @@ namespace RNAssistant.Harness
                 ExtractedCharCount = truncatedText.Length,
                 ExtractedTextSha256 = TextPatternEngine.Sha256(truncatedText),
                 ContentSha256 = new string('d', 64),
+                ContentByteLength = 96,
                 TextTruncated = true
             };
             var truncatedMessage = new ChatMessage
@@ -591,6 +656,7 @@ namespace RNAssistant.Harness
                 MimeType = "text/plain",
                 SourceMessageId = truncatedMessage.Id,
                 ContentSha256 = truncatedAttachment.ContentSha256,
+                ContentByteLength = truncatedAttachment.ContentByteLength,
                 MetadataJson = "{\"attachmentId\":\"truncated-a\",\"textTruncated\":true}"
             };
             session.Messages.Add(truncatedMessage);
@@ -1031,7 +1097,9 @@ namespace RNAssistant.Harness
                     Kind = "image",
                     FileName = "chart.png",
                     ContentType = "image/png",
-                    Size = 4
+                    Size = 4,
+                    ContentSha256 = new string('4', 64),
+                    ContentByteLength = 4
                 };
                 var source = new ChatMessage
                 {
@@ -1051,6 +1119,8 @@ namespace RNAssistant.Harness
                     Title = image.FileName,
                     MimeType = image.ContentType,
                     SourceMessageId = source.Id,
+                    ContentSha256 = image.ContentSha256,
+                    ContentByteLength = image.ContentByteLength,
                     MetadataJson = "{\"attachmentId\":\"historic-image\"}"
                 });
                 source.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
@@ -1134,7 +1204,9 @@ namespace RNAssistant.Harness
                     Kind = "image",
                     FileName = "scan.png",
                     ContentType = "image/png",
-                    Size = 4
+                    Size = 4,
+                    ContentSha256 = new string('5', 64),
+                    ContentByteLength = 4
                 };
                 var source = new ChatMessage
                 {
@@ -1154,6 +1226,8 @@ namespace RNAssistant.Harness
                     Title = image.FileName,
                     MimeType = image.ContentType,
                     SourceMessageId = source.Id,
+                    ContentSha256 = image.ContentSha256,
+                    ContentByteLength = image.ContentByteLength,
                     MetadataJson = "{\"attachmentId\":\"helper-image\"}"
                 });
                 source.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));

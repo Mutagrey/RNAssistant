@@ -74,6 +74,12 @@ Paste, drag-and-drop, and the paperclip all call the same chat-scoped ingestion 
 4. Route supported media directly to a multimodal primary model for the current turn.
 5. If the primary model cannot consume the modality, call a bounded helper with only the current request and selected media.
 
+An attachment-backed representation is admitted only when its artifact resolves to
+exactly one source message and one metadata-named attachment, and the attachment CAS
+SHA-256 and byte length match the immutable artifact revision. Missing, ambiguous,
+failed, or mismatched provenance remains metadata-only; the provider never falls
+back to another message with the same attachment id or to an artifact inline body.
+
 Drafts are not artifacts, are not listed in model context, and may appear outside
 the composer only in a separately labelled non-durable Drafts group. After CAS,
 message/artifact linking and the mandatory chat save succeed, application queues a

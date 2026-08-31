@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
@@ -94,7 +92,7 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Artifact viewer received inconsistent exact-read evidence.");
             }
 
-            var attachment = FindAttachment(session, artifact);
+            var attachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
             if (string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
                 attachment == null)
             {
@@ -167,30 +165,5 @@ namespace RNAssistant.Office.Services
             return (value ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
         }
 
-        private static ChatAttachment FindAttachment(ChatSession session, ChatArtifact artifact)
-        {
-            if (session == null || artifact == null) return null;
-            string attachmentId;
-            try
-            {
-                attachmentId = (string)JObject.Parse(artifact.MetadataJson ?? "{}")["attachmentId"];
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
-            if (string.IsNullOrWhiteSpace(attachmentId)) return null;
-            return (session.Messages ?? new List<ChatMessage>())
-                .Where(message => message != null)
-                .OrderByDescending(message => string.Equals(
-                    message.Id,
-                    artifact.SourceMessageId,
-                    StringComparison.OrdinalIgnoreCase))
-                .SelectMany(message => message.Attachments ?? new List<ChatAttachment>())
-                .FirstOrDefault(item => item != null && string.Equals(
-                    item.Id,
-                    attachmentId,
-                    StringComparison.OrdinalIgnoreCase));
-        }
     }
 }

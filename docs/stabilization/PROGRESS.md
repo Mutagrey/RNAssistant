@@ -2,12 +2,22 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 Optional contours — ранние Artifact Library и typed Office tools contours явно допущены пользователем параллельно WQ
-Current task: stabilization-wide regression audit in progress — WebView bootstrap, default Excel Agent startup and MockDemo qualification composition regressions fixed host-neutral; real Windows/live-provider gates remain open.
+Current task: stabilization-wide regression audit in progress — WebView bootstrap, default Excel Agent startup, MockDemo qualification composition and attachment provenance regressions fixed host-neutral; real Windows/live-provider gates remain open.
 Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо. 11T не обходит WQ0/5B2/7D и не расширяет Phase 12 scope.
 
 Next step for tools: на реальном Windows выполнить WQ0, затем отдельными changes production 5B2 и 7D. До этого не создавать typed façade над legacy `ExecuteTool`; без Windows может продолжаться только уже допущенный независимый 11D2 viewer slice.
 Required context: [master WQ/Phase 11](STABILIZATION_MASTER_PLAN.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current 5B2/7D owners.
 Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. 11T is admitted but blocked before runtime work by WQ0/production 5B2/7D; all remaining built-in Office tool branches are mapped to family switches rather than a big-bang rewrite. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+
+Attachment provenance regression fix (2026-08-31): chat resource reads and the new
+11D1 text viewer previously preferred the declared source message but then searched
+all other messages for the same attachment id. A missing/corrupt source binding could
+therefore hydrate unrelated bytes or extracted text under another artifact URI. One
+shared exact resolver now requires a unique source message, a unique metadata-named
+attachment, matching artifact/attachment CAS SHA-256 and byte length, and non-failed
+attachment status. Invalid mapped attachments remain metadata-only and cannot fall
+back to `InlineText`. Focused Resource Gateway and artifact-viewer tests pass; real
+Windows/WebView2 and Office validation are unchanged.
 
 MockDemo qualification composition regression fix (2026-08-31): WQ-A4/A5
 expanded `QualificationBuiltInCatalog` to the complete versioned suite, but the
