@@ -28,8 +28,8 @@ Artifact identity ambiguity regression fix (2026-08-31): the chat resource
 projection previously collapsed case-insensitive duplicate artifact ids by selecting
 the first replayed item. Exact URI reads could therefore expose an arbitrary body
 after corrupt or inconsistent replay. Ambiguous ids are now omitted from list and
-search, exact resolve/read fails closed, and shared URI helpers cannot reintroduce
-the ambiguous id into prompt, checkpoint or reachability projections. Unrelated
+search, exact resolve/read fails closed, and neither shared URI helpers nor the
+bounded resource/active-Plan prompt can reintroduce the ambiguous id. Unrelated
 unique artifacts remain available. The focused Resource Gateway regression passes;
 no Office/COM path was changed.
 

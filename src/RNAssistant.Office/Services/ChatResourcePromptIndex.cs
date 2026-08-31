@@ -16,8 +16,13 @@ namespace RNAssistant.Office.Services
         {
             var artifacts = session == null || session.Artifacts == null
                 ? new List<ChatArtifact>()
-                : session.Artifacts.Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id) &&
-                    !PlanDocumentService.IsRemoved(session, item)).ToList();
+                : session.Artifacts
+                    .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                    .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                    .Where(group => group.Count() == 1)
+                    .Select(group => group.Single())
+                    .Where(item => !PlanDocumentService.IsRemoved(session, item))
+                    .ToList();
             if (artifacts.Count == 0 || maxTokens <= 0) return string.Empty;
 
             var preferredIds = new List<string>();

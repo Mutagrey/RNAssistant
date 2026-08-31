@@ -47,7 +47,8 @@ Registered providers:
 Within one replayed chat, an immutable artifact id must be unique
 case-insensitively. If projection corruption produces duplicates, every ambiguous
 revision is excluded from list/search and exact resolve/read fails closed; the
-provider and shared reference helpers never choose an arbitrary first artifact.
+provider, shared reference helpers and bounded model prompt never choose an
+arbitrary first artifact.
 
 Every provider implements bounded `list`, `resolve`, `search`, and `read(ResourceReadRequest)`. The read request carries one `ResourceRef`, representation, opaque cursor, and character limit, so revision evidence cannot be lost between routing and the provider. Immutable text uses an offset internally because its URI is already pinned. Live Office/VBA chunks bind the internal position to the content hash; collection pages bind it to a deterministic collection fingerprint. Model-facing list/read results expose only the usable `nextCursor`, never the current-page cursor or raw offset. Continuation copies it unchanged into `cursor` only for the same operation and exact list query or resource representation. Reusing a cursor after drift fails with retryable `resource_revision_changed`; a cursor from another operation/query/resource fails non-retryably and must be omitted to restart.
 

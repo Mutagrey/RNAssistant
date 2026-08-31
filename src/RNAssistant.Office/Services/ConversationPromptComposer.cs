@@ -207,10 +207,15 @@ namespace RNAssistant.Office.Services
         private static JObject BuildActivePlan(ChatSession session)
         {
             if (session == null || string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId)) return null;
-            var artifact = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item => item != null &&
-                string.Equals(item.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase));
-            if (artifact == null) return null;
+            var matches = (session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null &&
+                string.Equals(item.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            if (matches.Count != 1 || !string.Equals(
+                matches[0].Kind,
+                ChatArtifactKinds.PlanDocument,
+                StringComparison.OrdinalIgnoreCase)) return null;
+            var artifact = matches[0];
             var status = "draft";
             var planId = string.Empty;
             try

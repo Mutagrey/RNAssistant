@@ -706,7 +706,7 @@ namespace RNAssistant.Harness
             var first = new ChatArtifact
             {
                 Id = "duplicate-artifact",
-                Kind = ChatArtifactKinds.Markdown,
+                Kind = ChatArtifactKinds.PlanDocument,
                 Title = "First.md",
                 MimeType = "text/markdown",
                 InlineText = "FIRST_DUPLICATE_BODY",
@@ -715,7 +715,7 @@ namespace RNAssistant.Harness
             var second = new ChatArtifact
             {
                 Id = first.Id.ToUpperInvariant(),
-                Kind = ChatArtifactKinds.Markdown,
+                Kind = ChatArtifactKinds.PlanDocument,
                 Title = "Second.md",
                 MimeType = "text/markdown",
                 InlineText = "SECOND_DUPLICATE_BODY",
@@ -733,6 +733,7 @@ namespace RNAssistant.Harness
             session.Artifacts.Add(first);
             session.Artifacts.Add(second);
             session.Artifacts.Add(unique);
+            session.ActivePlanDocumentArtifactId = first.Id;
             var gateway = new ResourceGatewayService();
             var duplicateUri = ChatResourceUri.CreateArtifactRevisionUri(session, first);
             var duplicateReference = ChatResourceUri.CreateArtifactRevision(session, first);
@@ -760,6 +761,20 @@ namespace RNAssistant.Harness
             AssertEqual(0, ChatResourceUri.CurrentArtifactIds(
                 session, new[] { duplicateReference }).Count,
                 "ambiguous references do not enter prompt or reachability projections");
+            var promptIndex = ChatResourcePromptIndex.Build(session, 5000, new AppSettings());
+            AssertTrue(promptIndex.IndexOf(first.Id, StringComparison.OrdinalIgnoreCase) < 0,
+                "ambiguous id is omitted from the bounded prompt index");
+            AssertContains(promptIndex, unique.Id, "unrelated exact artifact remains in the prompt index");
+            var runtimeContext = ConversationPromptComposer.BuildRuntimeContext(
+                ChatModes.Plan,
+                null,
+                new ToolDefinition[0],
+                new SkillDefinition[0],
+                null,
+                session,
+                new AppSettings());
+            AssertTrue(runtimeContext.IndexOf("\"active_plan\"", StringComparison.Ordinal) < 0,
+                "ambiguous active Plan is not projected into model context");
         }
 
         private static void ResourceGatewayPreservesEmptyTextRepresentations()
