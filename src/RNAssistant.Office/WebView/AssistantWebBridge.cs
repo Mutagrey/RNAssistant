@@ -583,6 +583,7 @@ namespace RNAssistant.Office.WebView
             _postMessageJson(JsonConvert.SerializeObject(new ChatStateMessage
             {
                 Type = "chatState",
+                Scope = state != null && state.Messages != null ? "full" : "catalog",
                 Payload = state
             }));
         }

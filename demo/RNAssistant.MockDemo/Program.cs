@@ -24,6 +24,20 @@ namespace RNAssistant.MockDemo
         {
             var options = DemoOptions.Parse(args);
             SettingsService.ConfigureDemoDefaults(options.BaseUrl, "mock-strict");
+            if (options.ArtifactCommitTest)
+            {
+                try
+                {
+                    await ExerciseFailedTurnPersistenceAsync().ConfigureAwait(false);
+                    Console.WriteLine("PASS artifact-commit-projection");
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("FAIL artifact-commit-projection: " + ex.Message);
+                    return 1;
+                }
+            }
             if (options.SelfTest)
             {
                 return await RunSelfTestAsync(options).ConfigureAwait(false);
@@ -111,28 +125,77 @@ namespace RNAssistant.MockDemo
             var root = Path.Combine(Path.GetTempPath(), "RNAssistant.MockDemo.Failure." + Guid.NewGuid().ToString("N"));
             try
             {
+                var committedProjectionQueued = false;
+                var transportCalled = false;
+                JObject committedProjection = null;
                 var controller = new AssistantController(
                     FakeOfficeAdapter.ForHost("Excel"),
                     AppDataPaths.CreateForRoot(root),
                     delegate(AppSettings settings, System.Collections.Generic.IEnumerable<ChatMessage> requestMessages, CancellationToken cancellationToken)
                     {
+                        transportCalled = true;
+                        if (!committedProjectionQueued)
+                        {
+                            throw new InvalidOperationException("model transport started before committed projection");
+                        }
                         return Task.FromException<LlmCompletionResult>(new InvalidOperationException("scripted transport failure"));
                     });
-                var bridge = new MockBridgeHost(controller);
+                var bridge = new MockBridgeHost(controller, eventJson =>
+                {
+                    var message = JObject.Parse(eventJson);
+                    if (string.Equals((string)message["type"], "chatState", StringComparison.Ordinal) &&
+                        string.Equals((string)message["scope"], "full", StringComparison.Ordinal))
+                    {
+                        committedProjection = message["payload"] as JObject;
+                        committedProjectionQueued = committedProjection != null;
+                    }
+                });
                 var init = await SendAsync(bridge, "failure-init", "init", null, null).ConfigureAwait(false);
                 var token = Payload(init)["bridgeToken"].ToString();
                 var chatId = Payload(init)["activeChatId"].ToString();
+                var draft = controller.StageChatResource(
+                    chatId,
+                    "failure-note.txt",
+                    "text/plain",
+                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("durable attachment")));
                 var request = JsonConvert.SerializeObject(new
                 {
                     id = "failure-send",
                     type = "sendChat",
                     bridgeToken = token,
-                    payload = new { chatId = chatId, text = "persist failed turn" }
+                    payload = new
+                    {
+                        chatId = chatId,
+                        text = "persist failed turn",
+                        resourceDraftIds = new[] { draft.Resource.Id }
+                    }
                 });
                 var failedPacket = await bridge.HandleAsync(request).ConfigureAwait(false);
-                if ((bool)JObject.Parse(failedPacket.Response)["ok"])
+                var failedResponse = JObject.Parse(failedPacket.Response);
+                var failedPayload = failedResponse["payload"] as JObject;
+                if (!(bool)failedResponse["ok"] || failedPayload == null ||
+                    !string.Equals((string)failedPayload["runViewState"]?["Lifecycle"], "failed", StringComparison.OrdinalIgnoreCase) ||
+                    ((string)failedPayload["message"] ?? string.Empty).IndexOf("scripted transport failure", StringComparison.Ordinal) < 0)
                 {
-                    throw new InvalidOperationException("transport failure unexpectedly succeeded");
+                    throw new InvalidOperationException("transport failure did not produce typed failed state");
+                }
+
+                if (!transportCalled || committedProjection == null || (long?)committedProjection["sessionRevision"] <= 0)
+                {
+                    throw new InvalidOperationException("committed projection was not queued before transport");
+                }
+                var committedUser = ((JArray)committedProjection["messages"])
+                    .OfType<JObject>()
+                    .Single(message => string.Equals((string)message["Role"], "user", StringComparison.OrdinalIgnoreCase));
+                var committedAttachment = ((JArray)committedUser["Attachments"]).OfType<JObject>().Single();
+                var committedReference = ((JArray)committedUser["ResourceRefs"]).OfType<JObject>().Single();
+                var committedArtifact = ((JArray)committedProjection["artifacts"])
+                    .OfType<JObject>()
+                    .Single(artifact => string.Equals((string)artifact["resourceUri"], (string)committedReference["uri"], StringComparison.Ordinal));
+                if (committedAttachment["DraftChatId"] != null ||
+                    (int)committedArtifact["revision"] != 1 || string.IsNullOrWhiteSpace((string)committedReference["revision"]))
+                {
+                    throw new InvalidOperationException("projection contains draft or unpinned resource state");
                 }
 
                 var selected = await SendAsync(
@@ -141,12 +204,19 @@ namespace RNAssistant.MockDemo
                     "selectChat",
                     new { chatId = chatId },
                     token).ConfigureAwait(false);
-                var storedMessages = Payload(selected)["messages"] as JArray;
-                var json = storedMessages == null ? string.Empty : storedMessages.ToString(Formatting.None);
-                if (json.IndexOf("persist failed turn", StringComparison.Ordinal) < 0 ||
-                    json.IndexOf("runtime_error", StringComparison.OrdinalIgnoreCase) < 0)
+                var selectedPayload = Payload(selected);
+                var storedMessages = selectedPayload["messages"] as JArray;
+                var storedJson = storedMessages == null ? string.Empty : storedMessages.ToString(Formatting.None);
+                if (storedJson.IndexOf("persist failed turn", StringComparison.Ordinal) < 0 ||
+                    !string.Equals((string)selectedPayload["runViewState"]?["Lifecycle"], "failed", StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException("failed user turn and diagnostic were not persisted");
+                }
+                var storedArtifacts = selectedPayload["artifacts"] as JArray;
+                if (storedArtifacts == null || storedArtifacts.OfType<JObject>().All(artifact =>
+                    !string.Equals((string)artifact["resourceUri"], (string)committedReference["uri"], StringComparison.Ordinal)))
+                {
+                    throw new InvalidOperationException("provider failure rolled back the committed resource");
                 }
             }
             finally

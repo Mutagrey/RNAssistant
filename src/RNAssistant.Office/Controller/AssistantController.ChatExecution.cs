@@ -394,6 +394,19 @@ namespace RNAssistant.Office
                         Status = "running"
                     });
                     _chatSessions.NotifySaved(session);
+                    if (chatStateChanged != null)
+                    {
+                        try
+                        {
+                            // The committed turn and exact resource revisions must reach the UI queue
+                            // before attachment helpers or the primary model can start transport.
+                            chatStateChanged(ChatState(session));
+                        }
+                        catch
+                        {
+                            // UI delivery is best-effort after the durable commit.
+                        }
+                    }
                     if (commitUserAttachments && appendedUserMessage != null)
                     {
                         _chatResourceIngestion.DeleteDrafts(appendedUserMessage);
@@ -404,17 +417,6 @@ namespace RNAssistant.Office
                     }
                     input.MessagesToDeleteAfterSave = null;
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
-                    if (!string.IsNullOrWhiteSpace(provisionalTitle) && chatStateChanged != null)
-                    {
-                        try
-                        {
-                            chatStateChanged(CreateStoredChatState(session.Host, session.DocumentKey, session.DocumentTitle));
-                        }
-                        catch
-                        {
-                            // A UI notification cannot invalidate an already persisted request.
-                        }
-                    }
                 }
                 catch (Exception ex)
                 {

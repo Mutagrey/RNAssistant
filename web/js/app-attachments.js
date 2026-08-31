@@ -94,9 +94,10 @@ async function removeDraftAttachment(item) {
   }
 }
 
-function attachmentCard(item, removable) {
+function attachmentCard(item, removable, lifecycle) {
+  lifecycle = lifecycle || (removable ? "draft" : "committed");
   var card = document.createElement("div");
-  card.className = removable ? "attachment-draft" : "message-attachment";
+  card.className = (removable ? "attachment-draft" : "message-attachment") + " lifecycle-" + lifecycle;
   var thumb = document.createElement("div");
   thumb.className = "attachment-thumb";
   if (item.previewUrl) {
@@ -117,7 +118,9 @@ function attachmentCard(item, removable) {
   var meta = document.createElement("div");
   meta.className = "attachment-meta";
   var warning = attachmentValue(item, "ExtractionWarning", "extractionWarning", "");
-  meta.textContent = formatAttachmentSize(attachmentSize(item)) + (warning ? " · требуется внимание" : "");
+  var lifecycleLabels = { draft: "Не отправлено", preparing: "Подготовка", committed: "Оригинал" };
+  meta.textContent = (lifecycleLabels[lifecycle] || lifecycleLabels.committed) + " · " +
+    formatAttachmentSize(attachmentSize(item)) + (warning ? " · требуется внимание" : "");
   if (warning) meta.title = warning;
   copy.appendChild(meta);
   card.appendChild(copy);
@@ -138,7 +141,7 @@ function renderAttachmentDrafts() {
   if (!box) return;
   box.innerHTML = "";
   box.classList.toggle("hidden", !state.draftAttachments.length);
-  state.draftAttachments.forEach(function (item) { box.appendChild(attachmentCard(item, true)); });
+  state.draftAttachments.forEach(function (item) { box.appendChild(attachmentCard(item, true, "draft")); });
   updateComposerInputState();
 }
 

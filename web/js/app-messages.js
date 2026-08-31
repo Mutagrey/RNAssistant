@@ -256,7 +256,8 @@ function renderActivityArticle(message, index, activity, options) {
       var attachmentBox = document.createElement("div");
       attachmentBox.className = "message-attachments";
       attachments.forEach(function (attachment) {
-        attachmentBox.appendChild(attachmentCard(attachment, false));
+        attachmentBox.appendChild(attachmentCard(attachment, false,
+          message.Local ? (message.Pending ? "preparing" : "draft") : "committed"));
       });
       node.appendChild(attachmentBox);
     }
@@ -366,7 +367,8 @@ function renderMessageArticle(message, index) {
     var attachmentBox = document.createElement("div");
     attachmentBox.className = "message-attachments";
     attachments.forEach(function (attachment) {
-      attachmentBox.appendChild(attachmentCard(attachment, false));
+      attachmentBox.appendChild(attachmentCard(attachment, false,
+        message.Local ? (message.Pending ? "preparing" : "draft") : "committed"));
     });
     node.appendChild(attachmentBox);
   }

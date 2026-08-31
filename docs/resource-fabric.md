@@ -76,11 +76,12 @@ Paste, drag-and-drop, and the paperclip all call the same chat-scoped ingestion 
 
 Drafts are not artifacts, are not listed in model context, and may appear outside
 the composer only in a separately labelled non-durable Drafts group. After CAS,
-message/artifact linking and the mandatory chat save succeed, application must
-queue a monotonic `sessionRevision` projection containing the committed turn and
-artifact heads before the first model transport call. Model execution does not wait
-for WebView acknowledgement; missed delivery recovers by chat reload. Model failure
-after this boundary never rolls the committed resource back to a draft. The full
+message/artifact linking and the mandatory chat save succeed, application queues a
+full monotonic `sessionRevision` projection containing the committed turn and exact
+artifact revisions before attachment-helper or primary model transport. Model
+execution does not wait for WebView acknowledgement; missed delivery recovers by
+chat reload. Model failure after this boundary never rolls the committed resource
+back to a draft. Exact Library head/history projection remains Phase 11A2. The full
 user-visible lifecycle is defined in [Artifact Library and Viewers](artifact-library.md).
 
 Helper output is query-specific evidence for that model step. It is not silently treated as a complete durable description. Reusable OCR/transcription may be stored as a derived artifact revision with explicit provenance: source URI, extractor/model, parameters, timestamp, and content hash.

@@ -1,9 +1,11 @@
 # Artifact Library and Viewers
 
-Status: target contract for Phase 11. The existing Resource Fabric ingestion,
-CAS, `ResourceRef`, provider and model-context semantics remain authoritative.
-This document defines the user-visible lifecycle, viewers and mutation rules;
-it does not introduce another artifact transport or store.
+Status: Phase 11 target contract. 11A1 implements the host-neutral commit-time
+projection boundary and explicit draft/preparing/committed labels; exact Library
+head/history projection remains 11A2. The existing Resource Fabric ingestion, CAS,
+`ResourceRef`, provider and model-context semantics remain authoritative. This
+document defines the user-visible lifecycle, viewers and mutation rules; it does not
+introduce another artifact transport or store.
 
 ## Principles
 

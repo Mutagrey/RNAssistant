@@ -122,6 +122,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("type")]
         public string Type { get; set; }
 
+        [JsonProperty("scope")]
+        public string Scope { get; set; }
+
         [JsonProperty("payload")]
         public ChatStateResponse Payload { get; set; }
     }

@@ -511,6 +511,7 @@ namespace RNAssistant.Harness
             AssertEqual("Hel", stream["payload"]["contentDelta"].Value<string>(), "stream content delta");
             var chatState = JObject.Parse(progressMessages[3]);
             AssertEqual("chatState", chatState["type"].Value<string>(), "chat state event type");
+            AssertEqual("full", chatState["scope"].Value<string>(), "committed chat state event scope");
             AssertEqual("chat-1", chatState["payload"]["activeChatId"].Value<string>(), "chat state active id");
         }
 

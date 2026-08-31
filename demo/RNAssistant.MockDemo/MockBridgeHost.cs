@@ -21,10 +21,12 @@ namespace RNAssistant.MockDemo
     {
         private readonly AssistantWebBridge _bridge;
         private readonly AsyncLocal<List<string>> _currentEvents;
+        private readonly Action<string> _eventObserver;
 
-        public MockBridgeHost(AssistantController controller)
+        public MockBridgeHost(AssistantController controller, Action<string> eventObserver = null)
         {
             _currentEvents = new AsyncLocal<List<string>>();
+            _eventObserver = eventObserver;
             _bridge = new AssistantWebBridge(controller, PostMessage);
         }
 
@@ -49,6 +51,7 @@ namespace RNAssistant.MockDemo
 
         private void PostMessage(string json)
         {
+            if (_eventObserver != null) _eventObserver(json);
             var events = _currentEvents.Value;
             if (events != null)
             {

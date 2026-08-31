@@ -121,6 +121,18 @@ function applyChatStateForChat(response, expectedChatId) {
   return false;
 }
 
+function applyPushedChatState(message) {
+  message = message || {};
+  var response = message.payload || message.Payload || {};
+  var scope = String(message.scope || message.Scope || "catalog").toLowerCase();
+  var responseChatId = response.activeChatId || response.ActiveChatId || "";
+  if (scope === "full" && responseChatId && responseChatId === state.activeChatId) {
+    return applyChatState(response);
+  }
+  applyChatCatalogState(response);
+  return false;
+}
+
 function applyLibraryCatalogState(response) {
   var changed = false;
   response = response || {};

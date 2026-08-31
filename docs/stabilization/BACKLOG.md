@@ -4,7 +4,8 @@
 после Definition of Done предыдущей на основном маршруте 0–10 → 12, кроме явно
 зафиксированного в master §16.1 режима dependency-safe deferred qualification:
 Windows-blocked gate остаётся открыт, а независимый обязательный slice идёт дальше.
-Phase 11 — отдельная ветка после stable core, не prerequisite release qualification.
+Phase 11 не является prerequisite release qualification; Artifact Library milestone
+11A отдельно и явно допущен пользователем раньше stable core параллельно WQ.
 
 | Phase | Работа | Условие начала / проверки |
 |---|---|---|
@@ -46,7 +47,7 @@ Phase 11 — отдельная ветка после stable core, не prerequi
 | 10 | Финальная структурная сверка и architecture tests | **done host-neutral:** 10A–10D dependency/physical/canonical audit; host helpers and application façade moved; resource legacy projection removed; project includes and architecture suite pass; R49 fixed host-neutral. [Audit](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [10D](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md) |
 | WQ-A | In-app Qualification Center и расширяемые host packs | **WQ-A0–A5 done host-neutral:** A3 — единый identity owner/helper и `excel.wq0.identity`; A4 — closed versioned suite catalog с fail-closed readiness; A5 — detached signed exact-build provenance и complete-only `release.candidate`. Отсутствующий production adapter/environment остаётся N/A. [Contract](../qualification.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md). Next Milestone WQ: real Windows/live runs, evidence signing and release admission |
 | 12 | Release qualification и packaging | Gates основного маршрута; Windows x64 + Office x64 + VS 2022; Phase 11 не блокирует |
-| 11 | Optional contours | После stable core либо отдельно согласованный post-beta milestone; не расширять release-critical scope автоматически. Первые atomic slices: artifact draft/commit library projection → Plan Markdown revisions/history/delete/handoff → HTML workspace revisions/import/preview/bindings → bounded text/Markdown, image, PDF и audio viewers отдельными security/Windows gates. [Artifact contract](../artifact-library.md). Затем skills/dynamic tools и optional direct-handler removal оставшихся VBA definition/result adapters после 5B2; существующий Phase 6 runtime не блокирует Phase 12. Общие правила future host/domain/bridge changes: [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md) |
+| 11 | Optional contours | Отдельный ранний Artifact Library milestone явно допущен пользователем параллельно WQ, без расширения Phase 12. 11A1 commit-time full projection и draft/preparing/committed UI states done host-neutral; next 11A2 exact heads/history и kind/label cleanup. Затем Plan Markdown revisions/history/delete/handoff → HTML workspace revisions/import/preview/bindings → bounded text/Markdown, image, PDF и audio viewers отдельными security/Windows gates. [11A1](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md), [Artifact contract](../artifact-library.md). Skills/dynamic tools и optional VBA adapter removal остаются после 5B2; Phase 6 runtime не блокирует Phase 12. Общие правила: [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md) |
 
 До каждого switch сверять его scope и acceptance с [архитектурным аудитом](RISK_REGISTER.md#архитектурный-аудит-2026-08-28) и соответствующим разделом master plan. Уточнение target contracts не запускает будущую фазу и не закрывает runtime gates; R29 исправлен отдельным v4 protocol change; его qualification нельзя подменять реализацией Phase 4.
 

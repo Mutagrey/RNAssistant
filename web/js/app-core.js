@@ -400,7 +400,7 @@ if (window.chrome && window.chrome.webview) {
       return;
     }
     if (response && response.type === "chatState") {
-      applyChatCatalogState(response.payload || {});
+      applyPushedChatState(response);
       return;
     }
     var pending = state.pending[response.id];

@@ -2290,7 +2290,7 @@ false-positive mutation success или неизвестного target/effect. �
 
 **Pipelines: отключены по явному решению пользователя (2026-08-28).** Это сокращение действующего scope в Phase 2, не начало Phase 11. Нет исполнения (включая manual/dry-run/confirmation resume), discovery, authoring и UI; parser/executor и обходы вложенных зависимостей удалены. Старые определения не поддерживаются, не мигрируются и не replay-ятся; файлы пользователя автоматически не удаляются. Pipelines не участвуют в gates Phases 3–10/12. Их возврат — отдельное решение после stable core через общие ToolRuntime/contracts с собственными тестами; совместимость со старым форматом не требуется.
 
-Phase 11 — отдельная ветка после stable core, не prerequisite Phase 12. Каждый контур переносится отдельной minor feature. Более ранний post-beta milestone допустим только по отдельному явному решению, со своими gates и без автоматического расширения scope первого stable.
+Phase 11 — отдельная ветка после stable core, не prerequisite Phase 12. Каждый контур переносится отдельной minor feature. Более ранний post-beta milestone допустим только по отдельному явному решению, со своими gates и без автоматического расширения scope первого stable. По явному решению пользователя 2026-08-31 первый Artifact Library milestone допущен раньше stable core на отдельной `stab/11*` ветке параллельно WQ; он не закрывает и не расширяет WQ/Phase 12 gates.
 
 Целевой пользовательский контракт библиотеки ресурсов, viewers, revision history,
 edit/delete и попадания в model context зафиксирован в
@@ -2301,10 +2301,12 @@ transport или execution authority.
 
 Порядок:
 
-1. Artifact lifecycle/library foundation: separate draft/committed states,
-   queue revision-guarded post-commit projection before first model transport, exact
-   head/history presentation and cleanup of current kind/label drift. No new
-   resource transport or generic editor.
+1. Artifact lifecycle/library foundation, отдельными commits:
+   - 11A1: separate draft/preparing/committed UI states and queue the full
+     revision-guarded post-commit projection before attachment-helper or primary
+     model transport. Done host-neutral; Windows WebView remains open.
+   - 11A2: exact library head/history projection and cleanup of current kind/label
+     drift. No new resource transport or generic editor.
 2. Plan: Markdown preview/source, guarded exact whole-content revisions, history,
    restore-as-new-head, explicit delete and ready-plan handoff by pinned URI.
 3. HTML: whole-workspace revisions/branches, inert upload import, source/preview,

@@ -124,9 +124,12 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(/fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   assert.equal(/agent-run-history-state\.status-(?:blocked|refused|awaiting_user|planned)/.test(agentCss), false);
   assert.equal(/message-outcome\.status-(?:blocked|refused|awaiting_user|planned)/.test(chatCss), false);
-  ["app-core.js", "app-utils.js", "app-run-view-state.js", "app-chat-state.js", "app-agent-model.js",
-    "app-agent-approval.js", "app-agent.js", "app-messages.js", "app-chat-session.js"].forEach(asset => {
+  ["app-utils.js", "app-run-view-state.js", "app-agent-model.js", "app-agent-approval.js",
+    "app-agent.js", "app-chat-session.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=run-view-state-20260830-1"), asset + " uses the atomic cutover cache key");
+  });
+  ["app-core.js", "app-chat-state.js", "app-messages.js"].forEach(asset => {
+    assert.ok(index.includes(asset + "?v=artifact-commit-20260831-1"), asset + " uses the artifact commit cache key");
   });
   ["app-chat.css", "app-agent.css"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=run-view-state-20260830-1"), asset + " uses the atomic cutover cache key");
