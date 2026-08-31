@@ -394,6 +394,7 @@ namespace RNAssistant.Harness
                 Test("excel write: dispatch fault classification", ExcelWriteClassifiesDispatchFaults),
                 Test("excel write: bound document scope", ExcelWriteUsesBoundDocumentScope),
                 Test("resources: gateway reads searches resolves and pages", ResourceGatewayReadsSearchesAndPages),
+                Test("artifact viewer: exact bounded text and markdown", ArtifactViewerReadsExactBoundedTextAndMarkdown),
                 Test("resources: live Office and VBA are bounded and guarded", LiveOfficeAndVbaResourcesAreBoundedAndGuarded),
                 Test("artifacts: prompt uses bounded working set", ArtifactPromptUsesBoundedWorkingSet),
                 Test("artifacts: historical attachments stay reference-only", HistoricalAttachmentsStayReferenceOnly),
@@ -579,6 +580,7 @@ namespace RNAssistant.Harness
                 Test("bridge: typed html delete", BridgeUsesTypedHtmlWorkspaceDeletePayloads),
                 Test("bridge: typed html import", BridgeUsesTypedUploadedHtmlPayloads),
                 Test("bridge: typed html export", BridgeUsesTypedHtmlExportPayload),
+                Test("bridge: typed artifact viewer", BridgeUsesTypedArtifactViewerPayload),
                 Test("bridge: typed html network", BridgeUsesTypedHtmlNetworkPayloads),
                 Test("bridge: cancels addressed run", BridgeCancelsAddressedChatRun)
             };

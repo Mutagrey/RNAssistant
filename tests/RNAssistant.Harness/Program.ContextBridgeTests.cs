@@ -978,6 +978,26 @@ namespace RNAssistant.Harness
                 "HTML export returns the guarded checkpoint id");
         }
 
+        private static void BridgeUsesTypedArtifactViewerPayload()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            const string uri = "rna://chat/chat-view/artifact/plan-r2/revision/2";
+            var response = bridge.HandleMessageAsync(
+                "{\"id\":\"artifact-page\",\"type\":\"readArtifactViewerPage\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + uri +
+                "\",\"cursor\":\"32000\"}}")
+                .GetAwaiter().GetResult();
+            var envelope = JObject.Parse(response);
+            AssertTrue(envelope["ok"].Value<bool>(), "artifact viewer bridge response ok");
+            AssertEqual("chat-view", controller.LastChatId, "artifact viewer targets the addressed chat");
+            AssertEqual(uri, controller.LastArtifactViewerResourceUri, "artifact viewer forwards exact resource URI");
+            AssertEqual("32000", controller.LastArtifactViewerCursor, "artifact viewer forwards opaque continuation");
+            AssertEqual("markdown", (string)envelope["payload"]["viewerKind"],
+                "artifact viewer returns typed viewer kind");
+        }
+
         private static void BridgeUsesTypedHtmlNetworkPayloads()
         {
             var controller = new AssistantController();

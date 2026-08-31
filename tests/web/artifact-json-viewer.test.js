@@ -50,7 +50,9 @@ const context = vm.createContext({
   state: { activePlanDocumentArtifactId: "" }
 });
 context.window = context;
-for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-html-workspace-artifacts.js"]) {
+context.markdown = text => String(text);
+context.clearMarkdownEnhancements = () => {};
+for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-text-viewer.js", "app-html-workspace-artifacts.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 
@@ -86,11 +88,20 @@ function render(item, actions) {
   console.log("PASS artifact JSON viewer: bridge-truncated JSON stays an explicit exact preview");
 
   const text = "<img src=x onerror=alert(1)>\nplain tool output";
-  const plain = render({ Kind: "tool_result", MimeType: "text/plain; charset=utf-8", InlineText: text, InlineTruncated: true, Revision: 1 });
+  const textUri = "rna://chat/c/artifact/text-r1/revision/1";
+  const plain = render({ Kind: "tool_result", MimeType: "text/plain; charset=utf-8", InlineText: text, InlineTruncated: true, Revision: 1, ResourceUri: textUri }, {
+    artifactViewerState() {
+      return {
+        status: "ready", resourceUri: textUri, viewerKind: "text", contentSha256: "a".repeat(64),
+        fullReadAllowed: false, sourceComplete: false, viewerLimitReached: true, pageIndex: 0,
+        pages: [{ text, offset: 0, startLine: 1, totalCharacters: 99 }]
+      };
+    }
+  });
   assert.equal(plain.querySelector(".artifact-json-viewer"), null);
-  assert.equal(plain.querySelector("pre").textContent, text);
-  assert.match(plain.textContent, /ограниченный preview/);
-  console.log("PASS artifact JSON viewer: non-JSON content remains inert text with explicit preview state");
+  assert.equal(plain.querySelector(".rn-text-viewer-content").textContent, text);
+  assert.match(plain.textContent, /исходное извлечение обрезано/);
+  console.log("PASS artifact JSON viewer: non-JSON content routes to the bounded typed text viewer");
 
   const metadataText = '{"attachmentId":"a-1","size":42}';
   const metadata = render({ Kind: "attachment", MimeType: "image/png", InlineText: "", MetadataJson: metadataText, Revision: 1 });

@@ -191,6 +191,7 @@ function applyChatState(response) {
   var chatChanged = previousChatId !== nextChatId;
   if (chatChanged) {
     captureChatDraft(previousChatId);
+    state.artifactViewerPages = {};
   }
   if (typeof resetMessageEditState === "function") {
     resetMessageEditState();

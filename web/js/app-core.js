@@ -25,6 +25,7 @@ var state = {
   messages: [],
   artifacts: [],
   artifactLibrary: { sessionRevision: 0, heads: [] },
+  artifactViewerPages: {},
   activeContextCheckpointId: "",
   activeHtmlArtifactId: "",
   activeTaskListArtifactId: "",

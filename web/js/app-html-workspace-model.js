@@ -57,10 +57,21 @@
       return prop(artifact, "InlineText", "inlineText", "") || "";
     }
 
+    function artifactInlineTruncated(artifact) {
+      return prop(artifact, "InlineTruncated", "inlineTruncated", false) === true;
+    }
+
     function setArtifactInlineText(artifact, value) {
       if (!artifact) return;
       if (artifact.inlineText !== undefined || artifact.InlineText === undefined) artifact.inlineText = value || "";
       else artifact.InlineText = value || "";
+    }
+
+    function setArtifactInlineProjection(artifact, value) {
+      setArtifactInlineText(artifact, value);
+      if (!artifact) return;
+      if (artifact.inlineTruncated !== undefined || artifact.InlineTruncated === undefined) artifact.inlineTruncated = false;
+      else artifact.InlineTruncated = false;
     }
 
     function artifactById(id) {
@@ -250,6 +261,7 @@
     return {
       artifactId: artifactId,
       artifactInlineText: artifactInlineText,
+      artifactInlineTruncated: artifactInlineTruncated,
       artifactKind: artifactKind,
       artifactRevision: artifactRevision,
       artifactTitle: artifactTitle,
@@ -275,6 +287,7 @@
       redoBranches: redoBranches,
       selectedItem: selectedItem,
       setArtifactInlineText: setArtifactInlineText,
+      setArtifactInlineProjection: setArtifactInlineProjection,
       setDataJson: setDataJson,
       setFileContent: setFileContent,
       snapshotLabel: snapshotLabel,

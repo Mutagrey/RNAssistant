@@ -64,8 +64,9 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const detail = fs.readFileSync(path.join(root, "web/js/app-html-workspace-artifacts.js"), "utf8");
   const editor = fs.readFileSync(path.join(root, "web/js/app-html-workspace-editor.js"), "utf8");
   assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "removed message cards keep the tombstone cache key");
-  ["app-html-workspace.js", "app-html-workspace-actions.js", "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=html-export-20260831-1"), asset + " has the current HTML/Plan action cache key");
+  ["app-html-workspace.js", "app-artifact-viewer-actions.js", "app-html-workspace-actions.js",
+    "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"].forEach(asset => {
+    assert.ok(index.includes(asset + "?v=artifact-text-20260831-1"), asset + " has the current HTML/Plan action cache key");
   });
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /result\.expectedRevisionArtifactId = artifactId\(selected\.item\)/);
@@ -84,6 +85,8 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const confirmations = [];
   actionContext.confirm = message => { confirmations.push(message); return true; };
   actionContext.alert = () => {};
+  vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-artifact-viewer-actions.js"), "utf8"), actionContext,
+    { filename: "app-artifact-viewer-actions.js" });
   vm.runInContext(actionsSource, actionContext, { filename: "app-html-workspace-actions.js" });
 
   const uri = "rna://chat/c/artifact/plan-r2/revision/2";

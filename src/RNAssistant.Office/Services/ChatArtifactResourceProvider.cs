@@ -241,7 +241,7 @@ namespace RNAssistant.Office.Services
                 {
                     Resource = Describe(session, artifact, false),
                     Representation = representation,
-                    ContentSha256 = artifact.ContentSha256,
+                    ContentSha256 = TextRepresentationSha256(artifact, FindAttachment(session, artifact)),
                     Offset = offset,
                     ReturnedCharacters = length,
                     TotalCharacters = content.Length,
@@ -388,6 +388,13 @@ namespace RNAssistant.Office.Services
                  string.Equals(artifact.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string TextRepresentationSha256(ChatArtifact artifact, ChatAttachment attachment)
+        {
+            return attachment != null
+                ? attachment.ExtractedTextSha256
+                : artifact == null ? null : artifact.ContentSha256;
         }
 
         private static bool IsModelMedia(ChatAttachment attachment)

@@ -15,6 +15,7 @@
     var artifactTitle = model.artifactTitle;
     var artifactRevision = model.artifactRevision;
     var artifactInlineText = model.artifactInlineText;
+    var artifactInlineTruncated = model.artifactInlineTruncated;
     var setArtifactInlineText = model.setArtifactInlineText;
     var historyItems = model.historyItems;
     var redoBranches = model.redoBranches;
@@ -275,8 +276,14 @@
       if (editButton) {
         editButton.textContent = isPlan ? "Источник" : "Код";
         editButton.classList.toggle("hidden", isArtifact);
-        editButton.disabled = blocked && !isPlan;
+        editButton.disabled = (blocked && !isPlan) || (isPlan && artifactInlineTruncated(selected.item));
+        if (isPlan && artifactInlineTruncated(selected.item)) {
+          editButton.title = "Точный Markdown source ещё загружается";
+        } else {
+          editButton.title = "";
+        }
       }
+      if (isPlan && artifactInlineTruncated(selected.item)) state.htmlWorkspaceMode = "preview";
       if (isArtifact) state.htmlWorkspaceMode = "preview";
       if ($("saveHtmlWorkspaceButton")) $("saveHtmlWorkspaceButton").classList.toggle("hidden", isArtifact);
       if ($("deleteHtmlWorkspaceButton")) $("deleteHtmlWorkspaceButton").classList.toggle("hidden", isArtifact);

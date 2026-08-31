@@ -48,6 +48,8 @@ namespace RNAssistant.Office
         public string LastHtmlDataName { get; private set; }
         public string LastHtmlSourceResourceUri { get; private set; }
         public string LastExpectedHtmlArtifactId { get; private set; }
+        public string LastArtifactViewerResourceUri { get; private set; }
+        public string LastArtifactViewerCursor { get; private set; }
         public string LastTrajectoryCursor { get; private set; }
         public string LastTrajectoryView { get; private set; }
         public string LastTrajectorySearch { get; private set; }
@@ -425,6 +427,28 @@ namespace RNAssistant.Office
                 SourceResourceUri = sourceResourceUri,
                 Text = "<main>preview</main>",
                 Complete = true
+            };
+        }
+        public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor)
+        {
+            LastChatId = chatId;
+            LastArtifactViewerResourceUri = resourceUri;
+            LastArtifactViewerCursor = cursor;
+            return new ArtifactViewerPageDto
+            {
+                ResourceUri = resourceUri,
+                ViewerKind = "markdown",
+                Title = "Plan.md",
+                MimeType = "text/markdown",
+                ContentSha256 = new string('b', 64),
+                Text = "# Exact",
+                Offset = 32000,
+                ReturnedCharacters = 7,
+                TotalCharacters = 32007,
+                Complete = true,
+                SourceComplete = true,
+                FullReadAllowed = true,
+                MaximumDocumentCharacters = 512000
             };
         }
         public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(

@@ -11,6 +11,8 @@ context.window = context;
 context.alert = () => {};
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-preview.js"), "utf8"), context,
   { filename: "app-html-workspace-preview.js" });
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-artifact-viewer-actions.js"), "utf8"), context,
+  { filename: "app-artifact-viewer-actions.js" });
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actions.js"), "utf8"), context,
   { filename: "app-html-workspace-actions.js" });
 
@@ -107,9 +109,10 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   console.log("PASS HTML export: incomplete revision evidence fails closed before download");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  ["app-html-workspace-preview.js", "app-html-workspace.js", "app-html-workspace-actions.js",
+  ["app-html-workspace-preview.js", "app-html-workspace.js", "app-artifact-viewer-actions.js", "app-html-workspace-actions.js",
     "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"]
-    .forEach(asset => assert.ok(index.includes(asset + "?v=html-export-20260831-1"), asset));
+    .forEach(asset => assert.ok(index.includes(asset + "?v=" +
+      (asset === "app-html-workspace-preview.js" ? "html-export-20260831-1" : "artifact-text-20260831-1")), asset));
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"));
   console.log("PASS HTML export: changed UI graph uses one cache key");
 

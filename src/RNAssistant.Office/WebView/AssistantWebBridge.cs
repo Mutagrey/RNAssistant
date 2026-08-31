@@ -388,6 +388,13 @@ namespace RNAssistant.Office.WebView
                             uploadedHtmlSource.ChatId,
                             uploadedHtmlSource.SourceResourceUri);
                         break;
+                    case "readArtifactViewerPage":
+                        var artifactViewerPage = Payload<ArtifactViewerPagePayload>(payload);
+                        responsePayload = _controller.ReadArtifactViewerPage(
+                            artifactViewerPage.ChatId,
+                            artifactViewerPage.ResourceUri,
+                            artifactViewerPage.Cursor);
+                        break;
                     case "importUploadedHtmlToWorkspace":
                         var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);
                         responsePayload = _controller.ImportUploadedHtmlToWorkspace(

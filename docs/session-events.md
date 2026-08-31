@@ -198,6 +198,13 @@ retain that source provenance. The original user-message `ResourceRef`, attachme
 metadata and CAS bytes are not rewritten, and bounded source preview appends no
 artifact or durable viewer state.
 
+Text/source and Markdown viewer paging is likewise a transient UI projection over an
+exact revision-pinned gateway read. The bridge page carries representation hash,
+offset, total and completeness, while the screen owner keeps only a bounded per-chat
+cache and clears it on chat switch. Completing, searching, copying or downloading a
+viewer source appends no event and creates no artifact/CAS body; durable authority
+remains the original artifact revision and its existing attachment/text evidence.
+
 `HtmlWorkspaceArtifactService` is the only owner allowed to append whole-workspace
 revisions. A generic `ChatStore.Save` externalizes already-created artifact bodies
 but cannot compare mutable workspace state or manufacture a revision. Successful

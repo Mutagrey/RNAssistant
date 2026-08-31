@@ -7,12 +7,14 @@ const vm = require("node:vm");
 
 const root = path.join(__dirname, "../..");
 const source = fs.readFileSync(path.join(root, "web/js/app-html-workspace-actions.js"), "utf8");
+const viewerActions = fs.readFileSync(path.join(root, "web/js/app-artifact-viewer-actions.js"), "utf8");
 const context = vm.createContext({});
 context.window = context;
 const confirmations = [];
 context.confirm = message => { confirmations.push(message); return true; };
 context.prompt = () => "pages/imported.html";
 context.alert = () => {};
+vm.runInContext(viewerActions, context, { filename: "app-artifact-viewer-actions.js" });
 vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
 
 (async function () {
@@ -97,8 +99,9 @@ vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
   console.log("PASS HTML upload import: explicit import sends source, head guard and target path");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  ["app-html-workspace.js", "app-html-workspace-actions.js", "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"]
-    .forEach(asset => assert.ok(index.includes(asset + "?v=html-export-20260831-1"), asset));
+  ["app-html-workspace.js", "app-artifact-viewer-actions.js", "app-html-workspace-actions.js",
+    "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"]
+    .forEach(asset => assert.ok(index.includes(asset + "?v=artifact-text-20260831-1"), asset));
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"));
   console.log("PASS HTML upload import: changed UI graph uses one cache key");
   console.log("OK 5/5");

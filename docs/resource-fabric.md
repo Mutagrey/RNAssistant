@@ -115,6 +115,13 @@ items display `Original`, while Plan/HTML/authored documents expose exact revisi
 history. Specialized viewer, edit, restore and delete behavior is canonical in
 [Artifact Library and Viewers](artifact-library.md); UI viewers consume bounded
 gateway representations and never read CAS or grant execution authority.
+11D1 exposes text/source and Markdown only through a typed controller projection
+over the same `ResourceGatewayService`: the active chat and canonical revision URI
+are revalidated on every fixed 32,000-character page. A stable representation hash,
+offset and total bind continuations; attachment pages use extracted-text hash rather
+than binary-media hash. The UI may assemble a full source only inside the explicit
+512,000-character viewer bound, and it stores pages only in an ephemeral per-chat
+cache. This creates no resource, event, index or model-facing transport.
 Plan create/update/restore/delete is owned by `Office.Services.PlanDocumentService`:
 a Save keeps the complete Markdown string unchanged and appends only after the
 supplied artifact id is still the unique linear head; restore copies an exact prior

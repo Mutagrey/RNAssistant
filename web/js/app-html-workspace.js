@@ -46,6 +46,15 @@
     preview: htmlPreview,
     artifacts: workspaceArtifacts,
     artifactActions: {
+      artifactViewerState: function (uri) {
+        return workspaceActions && workspaceActions.artifactViewerState(uri);
+      },
+      changeArtifactViewerPage: function (request) {
+        return workspaceActions && workspaceActions.changeArtifactViewerPage(request);
+      },
+      downloadArtifactViewer: function (request) {
+        return workspaceActions && workspaceActions.downloadArtifactViewer(request);
+      },
       handoffPlan: function (request) {
         return workspaceActions && workspaceActions.handoffPlan(request);
       },
@@ -57,6 +66,12 @@
       },
       loadUploadedHtmlSource: function (request) {
         return workspaceActions && workspaceActions.loadUploadedHtmlSource(request);
+      },
+      loadArtifactViewer: function (request) {
+        return workspaceActions && workspaceActions.loadArtifactViewer(request);
+      },
+      loadArtifactViewerFull: function (request) {
+        return workspaceActions && workspaceActions.loadArtifactViewerFull(request);
       },
       uploadedHtmlPreview: function (uri) {
         return workspaceActions && workspaceActions.uploadedHtmlPreview(uri);
@@ -85,6 +100,8 @@
     switchChatMode: saveChatMode,
     submitPlanHandoff: submitPlanHandoff,
     downloadHtmlExport: downloadHtmlWorkspaceExport,
+    downloadArtifactText: downloadArtifactText,
+    applyArtifactViewerText: applyArtifactViewerText,
     validatePlanDraft: workspaceArtifacts.validatePlanDraft,
     hideCreate: hideHtmlWorkspaceCreate,
     render: renderHtmlWorkspace
@@ -396,6 +413,38 @@
     link.click();
     link.remove();
     window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function applyArtifactViewerText(resourceUri, contentSha256, text) {
+    var applied = false;
+    (state.artifacts || []).forEach(function (artifact) {
+      if (applied || artifactKind(artifact) !== "plan") return;
+      var uri = prop(artifact, "ResourceUri", "resourceUri", "") || "";
+      var hash = prop(artifact, "ContentSha256", "contentSha256", "") || "";
+      if (uri !== resourceUri || (hash && hash.toLowerCase() !== String(contentSha256 || "").toLowerCase())) return;
+      workspaceModel.setArtifactInlineProjection(artifact, String(text || ""));
+      applied = true;
+    });
+    return applied;
+  }
+
+  function downloadArtifactText(download) {
+    download = download || {};
+    if (!download.resourceUri || !/^[a-f0-9]{64}$/i.test(download.contentSha256 || "")) {
+      throw new Error("Artifact download has no exact revision evidence.");
+    }
+    var title = String(download.title || "artifact.txt").split(/[\\/]/).pop().replace(/[<>:"|?*\u0000-\u001f]/g, "_");
+    if (!title) title = "artifact.txt";
+    var mimeType = String(download.mimeType || "text/plain").split(";", 1)[0] + ";charset=utf-8";
+    var url = URL.createObjectURL(new Blob([String(download.text || "")], { type: mimeType }));
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = title;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    return true;
   }
 
   function bindHtmlWorkspaceActions() {

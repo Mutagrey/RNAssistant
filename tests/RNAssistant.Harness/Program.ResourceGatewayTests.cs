@@ -496,6 +496,144 @@ namespace RNAssistant.Harness
                 "HTML structure does not copy member bodies");
         }
 
+        private static void ArtifactViewerReadsExactBoundedTextAndMarkdown()
+        {
+            var markdown = "# Exact\n\n" + new string('m', 40050);
+            var session = new ChatSession();
+            var artifact = new ChatArtifact
+            {
+                Id = "plan-r2",
+                Kind = ChatArtifactKinds.PlanDocument,
+                Title = "Plan.md",
+                MimeType = "text/markdown",
+                Revision = 2,
+                InlineText = markdown,
+                ContentSha256 = TextPatternEngine.Sha256(markdown)
+            };
+            session.Artifacts.Add(artifact);
+            var uri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
+            var viewer = new ArtifactViewerService(new ResourceGatewayService());
+
+            var first = viewer.ReadPage(session, uri, null);
+            AssertEqual(ArtifactViewerKinds.Markdown, first.ViewerKind, "viewer classifies Markdown without sniffing");
+            AssertEqual(uri, first.ResourceUri, "viewer preserves exact canonical URI");
+            AssertEqual(0, first.Offset, "viewer first page offset");
+            AssertEqual(ArtifactViewerService.PageCharacters, first.ReturnedCharacters, "viewer page bound");
+            AssertTrue(first.Truncated && !first.Complete && first.FullReadAllowed,
+                "bounded first page retains availability of an admitted exact full read");
+            AssertEqual(artifact.ContentSha256, first.ContentSha256, "viewer returns representation hash evidence");
+
+            var second = viewer.ReadPage(session, uri, first.NextCursor);
+            AssertEqual(first.ReturnedCharacters, second.Offset, "viewer continuation is contiguous");
+            AssertTrue(second.Complete && second.SourceComplete, "second page completes exact Markdown");
+            AssertEqual(markdown, first.Text + second.Text, "viewer pages preserve exact Markdown bytes as text");
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(
+                session, uri.Replace(session.Id, "other-chat"), null));
+
+            var extracted = "attachment exact text";
+            var attachment = new ChatAttachment
+            {
+                Id = "text-a",
+                Kind = "text",
+                FileName = "notes.txt",
+                ContentType = "text/plain",
+                ExtractedText = extracted,
+                ExtractedCharCount = extracted.Length,
+                ExtractedTextSha256 = TextPatternEngine.Sha256(extracted),
+                ContentSha256 = new string('a', 64)
+            };
+            var message = new ChatMessage
+            {
+                Id = "message-a",
+                Attachments = new List<ChatAttachment> { attachment }
+            };
+            var attachmentArtifact = new ChatArtifact
+            {
+                Id = "attachment_text-a",
+                Kind = ChatArtifactKinds.Attachment,
+                Title = "notes.txt",
+                MimeType = "text/plain",
+                SourceMessageId = message.Id,
+                ContentSha256 = attachment.ContentSha256,
+                MetadataJson = "{\"attachmentId\":\"text-a\",\"textTruncated\":false}"
+            };
+            session.Messages.Add(message);
+            session.Artifacts.Add(attachmentArtifact);
+            var attachmentPage = viewer.ReadPage(
+                session, ChatResourceUri.CreateArtifactRevisionUri(session, attachmentArtifact), null);
+            AssertEqual(ArtifactViewerKinds.Text, attachmentPage.ViewerKind, "viewer classifies admitted text source");
+            AssertEqual(attachment.ExtractedTextSha256, attachmentPage.ContentSha256,
+                "text viewer pins the extracted representation hash, not binary attachment hash");
+
+            var truncatedText = "bounded extraction";
+            var truncatedAttachment = new ChatAttachment
+            {
+                Id = "truncated-a",
+                Kind = "text",
+                FileName = "truncated.txt",
+                ContentType = "text/plain",
+                ExtractedText = truncatedText,
+                ExtractedCharCount = truncatedText.Length,
+                ExtractedTextSha256 = TextPatternEngine.Sha256(truncatedText),
+                ContentSha256 = new string('d', 64),
+                TextTruncated = true
+            };
+            var truncatedMessage = new ChatMessage
+            {
+                Id = "message-truncated",
+                Attachments = new List<ChatAttachment> { truncatedAttachment }
+            };
+            var truncated = new ChatArtifact
+            {
+                Id = "truncated-text",
+                Kind = ChatArtifactKinds.Attachment,
+                Title = "truncated.txt",
+                MimeType = "text/plain",
+                SourceMessageId = truncatedMessage.Id,
+                ContentSha256 = truncatedAttachment.ContentSha256,
+                MetadataJson = "{\"attachmentId\":\"truncated-a\",\"textTruncated\":true}"
+            };
+            session.Messages.Add(truncatedMessage);
+            session.Artifacts.Add(truncated);
+            var truncatedPage = viewer.ReadPage(
+                session, ChatResourceUri.CreateArtifactRevisionUri(session, truncated), null);
+            AssertTrue(!truncatedPage.SourceComplete && !truncatedPage.Complete && !truncatedPage.FullReadAllowed,
+                "truncated extraction cannot masquerade as full copy/download authority");
+
+            var oversizedText = new string('x', ArtifactViewerService.MaximumDocumentCharacters + 1000);
+            var oversized = new ChatArtifact
+            {
+                Id = "oversized-text",
+                Kind = ChatArtifactKinds.File,
+                Title = "oversized.txt",
+                MimeType = "text/plain",
+                InlineText = oversizedText,
+                ContentSha256 = TextPatternEngine.Sha256(oversizedText)
+            };
+            session.Artifacts.Add(oversized);
+            var boundedEnd = viewer.ReadPage(
+                session,
+                ChatResourceUri.CreateArtifactRevisionUri(session, oversized),
+                "480000");
+            AssertTrue(boundedEnd.ViewerLimitReached && boundedEnd.NextCursor == null && !boundedEnd.FullReadAllowed,
+                "viewer stops paging at the explicit document bound");
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(
+                session, ChatResourceUri.CreateArtifactRevisionUri(session, oversized), "512000"));
+
+            var html = new ChatArtifact
+            {
+                Id = "uploaded-html",
+                Kind = ChatArtifactKinds.Attachment,
+                Title = "unsafe.html",
+                MimeType = "text/html",
+                InlineText = "<script>unsafe()</script>",
+                ContentSha256 = TextPatternEngine.Sha256("<script>unsafe()</script>")
+            };
+            session.Artifacts.Add(html);
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(
+                session, ChatResourceUri.CreateArtifactRevisionUri(session, html), null));
+        }
+
         private static void LiveOfficeAndVbaResourcesAreBoundedAndGuarded()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

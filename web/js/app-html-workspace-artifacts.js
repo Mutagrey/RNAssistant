@@ -35,8 +35,10 @@
 
   function clearDetail(root) {
     if (window.RNAssistantViewerRegistry) {
-      Array.prototype.slice.call(root.querySelectorAll(".artifact-json-viewer")).forEach(function (target) {
-        window.RNAssistantViewerRegistry.unmount(target);
+      [".artifact-json-viewer", ".artifact-typed-viewer"].forEach(function (selector) {
+        Array.prototype.slice.call(root.querySelectorAll(selector)).forEach(function (target) {
+          window.RNAssistantViewerRegistry.unmount(target);
+        });
       });
     }
     root.replaceChildren();
@@ -65,21 +67,119 @@
     });
   }
 
-  function appendArtifactContent(root, artifact) {
+  function artifactViewerKind(artifact) {
+    var mediaType = artifactMimeType(artifact).split(";", 1)[0].trim();
+    var kind = artifactKind(artifact);
+    var title = String(prop(artifact, "Title", "title", "") || "");
+    if (mediaType === "text/markdown" || mediaType === "text/x-markdown" || kind === "plan" || kind === "markdown" ||
+        /\.(?:md|markdown|mdx)$/i.test(title)) return "markdown";
+    if (mediaType === "text/html" || mediaType === "application/xhtml+xml" ||
+        mediaType === "application/json" || /\+json$/.test(mediaType)) return "";
+    if (/^text\//.test(mediaType) || mediaType === "application/xml" || /\+xml$/.test(mediaType) ||
+        mediaType === "application/javascript" || mediaType === "application/ecmascript" ||
+        mediaType === "application/sql" || mediaType === "application/yaml" || mediaType === "application/x-yaml" ||
+        /\.(?:txt|log|csv|tsv|xml|ya?ml|ini|cfg|conf|cs|vb|[cm]?js|css|scss|less|py|rb|java|kts?|c|h|cpp|hpp|sql|sh|ps1|bat)$/i.test(title)) {
+      return "text";
+    }
+    return "";
+  }
+
+  function exactArtifactUri(artifact) {
+    var exact = libraryRevision(artifact);
+    return prop(exact, "ResourceUri", "resourceUri", prop(artifact, "ResourceUri", "resourceUri", "")) || "";
+  }
+
+  function appendViewerError(root, message) {
+    var error = document.createElement("div");
+    error.className = "artifact-detail-error";
+    error.textContent = message;
+    root.appendChild(error);
+  }
+
+  function appendTypedArtifactViewer(root, artifact, actions, draftText) {
+    actions = actions || {};
+    var expectedKind = artifactViewerKind(artifact);
+    if (!expectedKind) return false;
+    if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has(expectedKind)) {
+      appendViewerError(root, "Typed artifact viewer is unavailable.");
+      return true;
+    }
+    if (typeof draftText === "string") {
+      var draftTarget = document.createElement("div");
+      draftTarget.className = "artifact-typed-viewer";
+      root.appendChild(draftTarget);
+      window.RNAssistantViewerRegistry.mount("markdown", draftTarget, {
+        text: draftText,
+        fullText: draftText,
+        complete: true,
+        sourceComplete: true,
+        draft: true,
+        onCopy: window.copyTextResult
+      });
+      return true;
+    }
+    var uri = exactArtifactUri(artifact);
+    if (!uri) {
+      appendViewerError(root, "Artifact has no exact revision URI.");
+      return true;
+    }
+    var viewer = typeof actions.artifactViewerState === "function" ? actions.artifactViewerState(uri) : null;
+    if (!viewer) {
+      appendContentLabel(root, "Загружаю exact source…");
+      if (typeof actions.loadArtifactViewer === "function") actions.loadArtifactViewer({ resourceUri: uri });
+      return true;
+    }
+    if (viewer.status === "loading") {
+      appendContentLabel(root, "Загружаю exact source…");
+      return true;
+    }
+    if (viewer.status === "error") {
+      appendViewerError(root, viewer.message || "Artifact source is unavailable.");
+      return true;
+    }
+    var pages = viewer.pages || [];
+    var pageIndex = Math.max(0, Math.min(Number(viewer.pageIndex || 0), Math.max(0, pages.length - 1)));
+    var page = pages[pageIndex];
+    if (!page || viewer.viewerKind !== expectedKind) {
+      appendViewerError(root, "Artifact viewer state does not match the selected revision.");
+      return true;
+    }
+    var target = document.createElement("div");
+    target.className = "artifact-typed-viewer";
+    root.appendChild(target);
+    window.RNAssistantViewerRegistry.mount(expectedKind, target, {
+      text: page.text,
+      fullText: viewer.complete ? viewer.fullText : null,
+      complete: viewer.complete === true,
+      offset: page.offset,
+      startLine: page.startLine,
+      totalCharacters: page.totalCharacters,
+      sourceComplete: viewer.sourceComplete,
+      viewerLimitReached: viewer.viewerLimitReached,
+      fullReadAllowed: viewer.fullReadAllowed && !viewer.pending,
+      hasPrevious: !viewer.pending && pageIndex > 0,
+      hasNext: !viewer.pending && (pageIndex + 1 < pages.length || !!page.nextCursor),
+      onPrevious: function () { return actions.changeArtifactViewerPage({ resourceUri: uri, direction: "previous" }); },
+      onNext: function () { return actions.changeArtifactViewerPage({ resourceUri: uri, direction: "next" }); },
+      onLoadFull: function () { return actions.loadArtifactViewerFull({ resourceUri: uri }); },
+      onCopy: window.copyTextResult,
+      onDownload: function () { return actions.downloadArtifactViewer({ resourceUri: uri }); }
+    });
+    return true;
+  }
+
+  function appendArtifactContent(root, artifact, actions) {
     var inline = artifactInlineText(artifact);
     var metadataJson = prop(artifact, "MetadataJson", "metadataJson", "") || "";
     if (inline) {
       if (isJsonArtifact(artifact)) {
         appendJsonContent(root, inline, artifactInlineTruncated(artifact) ? "preview" : "full", "Содержимое JSON");
-      } else {
-        appendContentLabel(root, artifactInlineTruncated(artifact) ? "Содержимое · ограниченный preview" : "Содержимое");
-        var pre = document.createElement("pre");
-        pre.className = "artifact-text-viewer";
-        pre.textContent = inline;
-        root.appendChild(pre);
+      } else if (!appendTypedArtifactViewer(root, artifact, actions)) {
+        appendContentLabel(root, "Для этого формата typed viewer ещё не подключён.");
       }
       return;
     }
+    if (appendTypedArtifactViewer(root, artifact, actions)) return;
     if (metadataJson) appendJsonContent(root, metadataJson, "full", "Metadata JSON");
   }
 
@@ -333,7 +433,7 @@
         handoff.type = "button";
         handoff.className = "primary";
         handoff.textContent = "Начать выполнение";
-        handoff.disabled = !!state.activeTaskListArtifactId ||
+        handoff.disabled = !!state.activeTaskListArtifactId || !!state.htmlWorkspaceDirty ||
           !prop(selected.item, "ResourceUri", "resourceUri", "") ||
           typeof actions.handoffPlan !== "function";
         if (state.activeTaskListArtifactId) handoff.title = "Сначала закройте активный Task List.";
@@ -348,11 +448,8 @@
         root.appendChild(handoff);
       }
       appendMetadata(root, selected.item);
-      var body = document.createElement("div");
-      body.className = "markdown";
-      body.innerHTML = markdown(editorValue || "_План пуст._");
-      root.appendChild(body);
-      if (typeof enhanceMarkdown === "function") enhanceMarkdown(body);
+      appendTypedArtifactViewer(root, selected.item, actions,
+        state.htmlWorkspaceDirty ? String(editorValue || "") : null);
       appendLibraryHistory(root, selected.item, actions);
       return;
     }
@@ -362,7 +459,7 @@
       appendUploadedHtml(root, selected.item, actions);
       return;
     }
-    appendArtifactContent(root, selected.item);
+    appendArtifactContent(root, selected.item, actions);
     appendLibraryHistory(root, selected.item, actions);
   }
 

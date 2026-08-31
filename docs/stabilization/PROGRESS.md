@@ -2,12 +2,25 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 Optional contours — отдельный ранний Artifact Library milestone явно допущен пользователем параллельно WQ
-Current task: 11D1 in progress — bounded text/source и sanitized Markdown viewers через typed already-authorized representation.
+Current task: 11D1 done host-neutral — bounded text/source и sanitized Markdown viewers используют exact revision-pinned gateway pages без второго transport/store.
 Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо и этим milestone не закрываются. Phase 12 scope не расширен.
 
-Next step: завершить отдельный 11D1 commit; image, PDF и audio оставить следующими отдельными slices.
-Required context: [Artifact Library contract](../artifact-library.md), [Resource Fabric](../resource-fabric.md), current Artifact Library/resource gateway/viewer owners, [11C3 evidence](PHASE_11C3_HTML_BINDING_EXPORT.md), [master Phase 11](STABILIZATION_MASTER_PLAN.md#phase-11--optional-contours).
-Open gates / remaining legacy: 11A1–11A2, 11B1–11B3 and 11C1–11C3 are done host-neutral, but R51 remains open for typed viewers, other committed-resource removal and Windows WebView lifecycle. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library and R57 Issue Center remain docs-only. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+Next step: отдельный 11D2 commit — image bytes, dimensions, fit/zoom/download и object-URL lifetime; PDF и audio оставить следующими отдельными slices.
+Required context: [Artifact Library contract](../artifact-library.md), [Resource Fabric](../resource-fabric.md), current Artifact Library/resource gateway/viewer owners, [11D1 evidence](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md), [master Phase 11](STABILIZATION_MASTER_PLAN.md#phase-11--optional-contours).
+Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library and R57 Issue Center remain docs-only. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+
+Phase 11D1 bounded text/source and Markdown viewers (2026-08-31): новый
+host-neutral `ArtifactViewerService` принимает только canonical exact artifact URI
+активного chat и читает representation через общий Resource Gateway страницами по
+32,000 символов с общим limit 512,000. Full copy/download появляется только после
+contiguous read с неизменными URI/hash/total/kind; truncated attachment extraction и
+over-limit source остаются partial. Text/Markdown adapters UI-only: line numbers,
+page search/copy, sanitized Markdown только для complete source и exact Source tab.
+Старый generic artifact `<pre>` удалён; JSON и inert uploaded HTML сохраняют своих
+owners. Viewer state ephemeral и очищается при chat switch. Harness 4/4 focused,
+web 48/48 targeted/reused; changed JS syntax, version format, diff, source inclusion
+и local Markdown links pass. Windows WebView2/clipboard/download не проверялись.
+[Evidence](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md).
 
 Approved Phase 11 priority: complete Artifact/Plan/HTML Workbench viewers → coherent
 Library UI and typed Issue Center → read-only selected-endpoint Tool Inspector →
@@ -822,8 +835,9 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 11A | done host-neutral: 11A1–11A2 | [11A1](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md), [11A2](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md) | 11A2: harness 9/9; web 10/10; MockDemo full self-test | not performed | Commit projection + exact Library heads/history/classes/labels; Plan/HTML/viewer slices and R51 Windows gates remain |
 | 11B | done host-neutral: 11B1–11B3 | [11B1](PHASE_11B1_PLAN_REVISION_GUARD.md), [11B2](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md), [11B3](PHASE_11B3_PLAN_HISTORY_HANDOFF.md) | 11B3: web Plan 7/7; Artifact Library 3/3; JS syntax 4/4 | not performed | Complete exact Plan lineage/restore/removal/history/handoff contour; Windows WebView remains |
 | 11C | done host-neutral: 11C1–11C3 | [11C1](PHASE_11C1_HTML_LINEAGE.md), [11C2](PHASE_11C2_HTML_IMPORT_PREVIEW.md), [11C3](PHASE_11C3_HTML_BINDING_EXPORT.md) | 11C3: harness 8/8; web 21/21; JS syntax | not performed | Unique lineage, inert exact import and one guarded exact binding/recovery/export checkpoint path switched; Windows WebView/Office remains |
+| 11D | in progress: 11D1 done host-neutral | [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md) | harness 4/4; web 48/48; JS syntax | not performed | Exact bounded text/source + complete-only sanitized Markdown switched; image/PDF/audio and Windows WebView remain |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
-| 11 | in progress by explicit early milestone | 11A–11C evidence above; 11D1 worktree | targeted per substep | not performed | Artifact Workbench first; then Issue Center/Tool Inspector, Host Fabric and qualified host verticals; not a Phase 12 gate |
+| 11 | in progress by explicit early milestone | 11A–11D1 evidence above | targeted per substep | not performed | Artifact Workbench first; then Issue Center/Tool Inspector, Host Fabric and qualified host verticals; not a Phase 12 gate |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
 ## Phase 0 substeps

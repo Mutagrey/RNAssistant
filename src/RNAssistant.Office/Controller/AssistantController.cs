@@ -30,6 +30,7 @@ namespace RNAssistant.Office
         private readonly AttachmentStore _attachmentStore;
         private readonly ChatResourceIngestionService _chatResourceIngestion;
         private readonly UploadedHtmlResourceService _uploadedHtmlResources;
+        private readonly ArtifactViewerService _artifactViewer;
         private readonly ToolStore _toolStore;
         private readonly SkillStore _skillStore;
         private readonly VbaJournalStore _vbaJournalStore;
@@ -93,6 +94,7 @@ namespace RNAssistant.Office
             _uploadedHtmlResources = new UploadedHtmlResourceService(
                 _toolExecutor.ResourceGateway,
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
+            _artifactViewer = new ArtifactViewerService(_toolExecutor.ResourceGateway);
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _officeContextCapture = new OfficeContextCaptureService(_adapter, _toolExecutor.DocumentRuntime);
             _skillCatalog = new SkillCatalogService(_adapter, _skillStore);

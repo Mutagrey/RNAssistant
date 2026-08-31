@@ -5,9 +5,9 @@ boundary, explicit draft/preparing/committed labels and exact Library head/histo
 projection. 11B1–11B3 complete the host-neutral Plan domain owner, exact whole-Markdown
 lineage, restore/removal UX and ready handoff by pinned URI. 11C1–11C3 complete the
 host-neutral HTML lineage, inert uploaded-source import, binding evidence, recovery
-and guarded exact export contour. Typed viewer work starts with 11D1 text/Markdown;
-image, PDF and audio remain later independent slices. The
-existing Resource Fabric ingestion, CAS,
+and guarded exact export contour. 11D1 implements host-neutral bounded text/source
+and complete-only sanitized Markdown viewers; image, PDF and audio remain later
+independent slices. The existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
 introduce another artifact transport or store.
@@ -132,11 +132,13 @@ placeholder rather than falling forward to another revision.
 
 ## Viewer contracts
 
-- Text/source: bounded paging, line numbers, search, exact copy and download. A
-  truncated preview is labelled and cannot offer `copy full` without an authorized
-  full read.
-- Markdown: rendered/sanitized view plus exact Source. Plan uses this viewer and
-  must never be labelled JSON.
+- Text/source: fixed 32,000-character pages within a 512,000-character viewer
+  document bound, line numbers, page search/copy and exact full copy/download only
+  after a contiguous stable-URI/hash/total read. A truncated extracted source or an
+  over-limit document remains explicitly partial.
+- Markdown: rendered/sanitized view plus exact Source. Rendering is disabled until
+  the full exact source is available. Plan uses this viewer and is never labelled
+  JSON; a dirty Plan preview is explicitly a non-durable draft.
 - Image: local bytes only, fit/zoom, dimensions and download; object URLs are
   revoked on selection/chat/window changes.
 - PDF: page navigation plus extracted-text view and scan/extraction warning. Any
@@ -156,6 +158,15 @@ ViewerRegistry remains UI-only dispatch. Fetching bounded text/media and checkin
 the exact revision belong to the Artifact Library owner and the shared resource
 gateway. Viewers receive already authorized data plus completeness metadata and
 cannot call tools, bridge, CAS or network themselves.
+
+For 11D1, `ArtifactViewerService` accepts only a canonical revision-pinned URI from
+the active chat and returns a typed page projection over `ResourceGatewayService`.
+Attachment text pages carry the extracted-text hash, never the source binary hash.
+The screen owner validates contiguous offset, representation hash, total and viewer
+kind before granting full-source actions. Page state is ephemeral, bounded to eight
+selected resources and cleared on chat switch; it is not an event, artifact revision
+or persisted index. HTML/JSON are rejected by this generic text bridge and remain
+with their specialized viewer owners.
 
 ## Edit and delete semantics
 
@@ -242,8 +253,12 @@ Phase 11 is implemented as separate changes:
      returns its pinned URI/CAS hash before standalone assembly. Raw JSON strings
      are not parsed/stringified during export.
      [Evidence](stabilization/PHASE_11C3_HTML_BINDING_EXPORT.md).
-4. Typed viewers: text/Markdown first; image, PDF and audio as separate measured
-   slices with their own security and Windows gates.
+4. Typed viewers:
+   - 11D1 — done host-neutral: exact bounded text/source paging, complete-only full
+     copy/download and complete-only sanitized Markdown with exact Source.
+     [Evidence](stabilization/PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md).
+   - Image, PDF and audio remain separate measured slices with their own security
+     and Windows gates.
 5. The Artifact milestone closes only after one Windows WebView pass covers the
    Library, Plan and HTML together: reload, exact history navigation, stale
    revisions, viewer cleanup and bounded large payloads. Product-wide Problems and

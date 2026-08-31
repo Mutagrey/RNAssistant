@@ -34,6 +34,7 @@
   function create(options) {
     options = options || {};
     var state = options.state;
+    var artifactViewers = window.RNAssistantArtifactViewerActions.create(options);
     var refreshPending = false;
     var planMutationPending = false;
     var planHandoffPending = false;
@@ -515,6 +516,11 @@
       exportWorkspace: exportWorkspace,
       handoffPlan: handoffPlan,
       importUploadedHtml: importUploadedHtml,
+      artifactViewerState: artifactViewers.artifactViewerState,
+      changeArtifactViewerPage: artifactViewers.changeArtifactViewerPage,
+      downloadArtifactViewer: artifactViewers.downloadArtifactViewer,
+      loadArtifactViewer: artifactViewers.loadArtifactViewer,
+      loadArtifactViewerFull: artifactViewers.loadArtifactViewerFull,
       loadUploadedHtmlSource: loadUploadedHtmlSource,
       recoverRevision: recoverRevision,
       refreshAll: function () { return refreshData("", "all", true); },

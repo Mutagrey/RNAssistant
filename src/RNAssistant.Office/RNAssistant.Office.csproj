@@ -61,6 +61,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Contracts\ArtifactLibraryDtos.cs" />
+    <Compile Include="Contracts\BridgeDtos.ArtifactViewer.cs" />
     <Compile Include="Contracts\BridgeDtos.cs" />
     <Compile Include="Contracts\BridgeDtos.Diagnostics.cs" />
     <Compile Include="Contracts\BridgeDtos.Html.cs" />
@@ -71,6 +72,7 @@
     <Compile Include="Controller\AssistantController.cs" />
     <Compile Include="Controller\AssistantController.Compatibility.cs" />
     <Compile Include="Controller\AssistantController.Agent.cs" />
+    <Compile Include="Controller\AssistantController.ArtifactViewer.cs" />
     <Compile Include="Controller\AssistantController.ChatExecution.cs" />
     <Compile Include="Controller\AssistantController.RunStoreRecovery.cs" />
     <Compile Include="Controller\AssistantController.Chats.cs" />
@@ -153,6 +155,7 @@
     <Compile Include="Vba\VbaVerifier.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ArtifactLibraryProjectionService.cs" />
+    <Compile Include="Services\ArtifactViewerService.cs" />
     <Compile Include="Services\PlanDocumentService.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatResourceReferenceService.cs" />
