@@ -806,7 +806,7 @@ namespace RNAssistant.OfficeHosts
                 names.Add(new ExcelNameSnapshot
                 {
                     Name = name.Name,
-                    RefersTo = name.RefersTo,
+                    RefersTo = Convert.ToString(name.RefersTo),
                     Sheet = sheet == null ? null : sheet.Name,
                     Address = target == null ? null : SafeString(delegate { return target.Address[false, false]; })
                 });

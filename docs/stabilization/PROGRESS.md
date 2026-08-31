@@ -22,6 +22,12 @@ bounded `compose_slide` и exact Outlook EntryID updates; generic batch writes �
 Docs-only verification: `git diff --check` и local Markdown targets pass; harness,
 build и Windows/Office/VSTO validation не запускались.
 
+Excel interop boundary normalization (2026-08-31): `Excel.Name.RefersTo` теперь
+явно приводится к строке перед заполнением typed `ExcelNameSnapshot`; schema,
+bounds и read route не менялись. `excel read:` — 4/4 pass, с 4 ожидаемыми
+CA1416 warnings из Windows-only identity probe. Реальный OfficeHosts build и live
+Excel COM остаются Windows gate.
+
 Phase 11D1 bounded text/source and Markdown viewers (2026-08-31): новый
 host-neutral `ArtifactViewerService` принимает только canonical exact artifact URI
 активного chat и читает representation через общий Resource Gateway страницами по
