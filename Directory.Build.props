@@ -7,6 +7,8 @@
     <!-- Preserve baseline assembly binding until Windows/VSTO qualification. -->
     <RNAssistantAssemblyVersion>16.0.4.0</RNAssistantAssemblyVersion>
     <RNAssistantBuildNumber Condition="'$(RNAssistantBuildNumber)' == ''">0</RNAssistantBuildNumber>
+    <!-- Candidate builds pin the SHA-256 of the detached evidence signing certificate. -->
+    <RNAssistantBuildEvidenceSignerSha256 Condition="'$(RNAssistantBuildEvidenceSignerSha256)' == ''">unavailable</RNAssistantBuildEvidenceSignerSha256>
 
     <VersionPrefix>$(RNAssistantVersionPrefix)</VersionPrefix>
     <VersionSuffix>$(RNAssistantVersionSuffix)</VersionSuffix>

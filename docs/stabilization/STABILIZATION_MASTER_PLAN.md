@@ -1279,6 +1279,7 @@ ValidateVersionFormat
 ValidateReleaseTagMatchesProductVersion
 ValidateReleaseTreeClean
 ValidateReleaseChangelog
+ValidateReleaseEvidenceSigner
 ValidateTagDoesNotExist
 ```
 
@@ -1300,10 +1301,12 @@ tools/Prepare-Release.ps1
 4. Обновить product version/suffix.
 5. Запустить required tests.
 6. Проверить changelog.
-7. Создать release commit.
-8. Создать annotated tag только после успешной проверки.
-9. Не перемещать существующие tags.
-10. Не делать push без явного параметра.
+7. Создать release commit и остановиться без tag.
+8. Собрать и проверить exact candidate, затем подписать detached evidence manifest
+   сертификатом, SHA-256 которого pin-ится в candidate metadata.
+9. В отдельной finalization проверить тот же tracked version/commit, signature,
+   manifest и explicit Windows/pack evidence; только затем создать annotated tag.
+10. Не перемещать существующие tags и не делать push без явного параметра.
 
 Обычный агентский commit этот script не вызывает.
 
@@ -2221,6 +2224,10 @@ policy/effect semantics. Текущий PowerShell WQ0 остаётся engineer
      production adapters/environment N/A, а не pass.
      [Evidence](WQ_A4_SUITE_CATALOG.md).
 6. **WQ-A5 release integration:** immutable BuildEvidenceManifest и complete release suite.
+   - [x] Detached RS256-signed evidence pin-ит signer/build/catalog/files и полный
+     release run matrix; `release.candidate` доступен только для exact complete
+     manifest. Preparation не создаёт tag, finalization требует тот же commit и
+     evidence. [Evidence](WQ_A5_BUILD_EVIDENCE.md).
 
 ### Обязательные ограничения
 
@@ -2255,7 +2262,8 @@ evidence и карта владельцев заданы в
 
 ### Порядок
 
-1. Завершить WQ-A1–A3: runner/UI и встроенный `excel.wq0.identity`; manual probe
+1. Завершить WQ-A1–A5: runner/UI, встроенный `excel.wq0.identity`, suite catalog и
+   exact-build release evidence; manual probe
    остаётся только engineering fallback при дефекте самого runner-а.
 2. На первом Windows candidate выполнить WQ0 для 5B2. Зафиксировать observations,
    затем отдельным подэтапом выбрать production identity/factory semantics и повторить

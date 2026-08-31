@@ -63,6 +63,8 @@ namespace RNAssistant.Harness
                 Test("qualification: typed bridge projection is bounded", QualificationBridgeProjectionIsBounded),
                 Test("qualification: built-in shell persists and resumes", QualificationBuiltInShellPersistsAndResumes),
                 Test("qualification: built-in suite catalog is versioned and fail-closed", QualificationBuiltInSuitesAreVersionedAndFailClosed),
+                Test("qualification: signed build evidence gates release suite", QualificationSignedBuildEvidenceGatesReleaseSuite),
+                Test("qualification: RSA evidence signature rejects tampering", QualificationRsaEvidenceSignatureRejectsTampering),
                 Test("qualification: host port owns WQ0 actions and verifier", QualificationHostPortOwnsActionsAndVerifier),
                 Test("qualification: typed UI bridge routes", QualificationUiBridgeRoutesTypedPayloads),
                 Test("conversation: extracts streamed message JSON", ConversationStreamExtractorHandlesChunkedJson),

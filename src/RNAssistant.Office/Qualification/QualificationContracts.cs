@@ -118,7 +118,7 @@ namespace RNAssistant.Office.Qualification
     public sealed class QualificationRunContext
     {
         public QualificationRunContext(string host, string productVersion, string buildCommit, string channel,
-            IEnumerable<string> capabilities)
+            IEnumerable<string> capabilities, string buildEvidenceSha256 = "unavailable")
         {
             if (string.IsNullOrWhiteSpace(host)) throw new ArgumentException("Host is required.", nameof(host));
             if (string.IsNullOrWhiteSpace(productVersion)) throw new ArgumentException("Product version is required.", nameof(productVersion));
@@ -127,8 +127,13 @@ namespace RNAssistant.Office.Qualification
             ProductVersion = productVersion.Trim();
             BuildCommit = buildCommit.Trim();
             Channel = string.IsNullOrWhiteSpace(channel) ? "development" : channel.Trim();
-            if (Host.Length > 32 || ProductVersion.Length > 64 || BuildCommit.Length > 128 || Channel.Length > 32)
+            BuildEvidenceSha256 = string.IsNullOrWhiteSpace(buildEvidenceSha256)
+                ? "unavailable" : buildEvidenceSha256.Trim();
+            if (Host.Length > 32 || ProductVersion.Length > 64 || BuildCommit.Length > 128 ||
+                Channel.Length > 32 || BuildEvidenceSha256.Length > 64)
                 throw new ArgumentException("Qualification run provenance contains an overlong value.");
+            if (BuildEvidenceSha256 != "unavailable" && !Regex.IsMatch(BuildEvidenceSha256, "^[0-9a-f]{64}$"))
+                throw new ArgumentException("Build evidence provenance must be unavailable or a lowercase SHA-256.");
             var capabilityList = new List<string>(capabilities ?? new string[0])
                 .Select(value => value == null ? null : value.Trim())
                 .ToList();
@@ -144,6 +149,7 @@ namespace RNAssistant.Office.Qualification
         public string ProductVersion { get; private set; }
         public string BuildCommit { get; private set; }
         public string Channel { get; private set; }
+        public string BuildEvidenceSha256 { get; private set; }
         public IReadOnlyList<string> Capabilities { get; private set; }
     }
 

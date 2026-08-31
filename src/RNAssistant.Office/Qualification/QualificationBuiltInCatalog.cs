@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 
@@ -29,6 +31,8 @@ namespace RNAssistant.Office.Qualification
             "RNAssistant.Office.Qualification.Packs.vba.lifecycle.v1.json";
         internal const string CrossFullRunPackResource =
             "RNAssistant.Office.Qualification.Packs.cross.full-run.v1.json";
+        internal const string ReleaseCandidatePackResource =
+            "RNAssistant.Office.Qualification.Packs.release.candidate.v1.json";
 
         private static readonly string[] PackResources =
         {
@@ -41,7 +45,8 @@ namespace RNAssistant.Office.Qualification
             ExcelReadWritePackResource,
             ExcelComplexPackResource,
             VbaLifecyclePackResource,
-            CrossFullRunPackResource
+            CrossFullRunPackResource,
+            ReleaseCandidatePackResource
         };
 
         public static QualificationPackCatalog Load()
@@ -60,6 +65,20 @@ namespace RNAssistant.Office.Qualification
                 packs[index] = parser.Parse(Read(assembly, PackResources[index]));
             }
             return new QualificationPackCatalog(coverage, packs);
+        }
+
+        internal static string Fingerprint(Assembly assembly)
+        {
+            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
+            var parser = new QualificationManifestParser();
+            var values = new List<string>
+            {
+                "coverage\t" + QualificationJson.Sha256(Read(assembly, CoverageResource))
+            };
+            values.AddRange(PackResources.Select(resource => parser.Parse(Read(assembly, resource)))
+                .OrderBy(pack => pack.Id, StringComparer.Ordinal)
+                .Select(pack => pack.Id + "\t" + pack.Revision + "\t" + pack.ContentSha256));
+            return QualificationJson.Sha256(string.Join("\n", values));
         }
 
         private static string Read(Assembly assembly, string name)

@@ -66,7 +66,8 @@ function runState(status, currentStepId) {
     packSha256: "a".repeat(64),
     host: "Excel",
     productVersion: "16.1.0-dev",
-    buildCommit: "unavailable",
+    buildCommit: "b".repeat(40),
+    buildEvidenceSha256: "unavailable",
     channel: "development",
     suite: "quick",
     status,
@@ -118,7 +119,7 @@ const context = vm.createContext({
   $: id => document.getElementById(id),
   send(type, payload) {
     requests.push({ type, payload });
-    if (type === "getQualificationCatalog") return Promise.resolve({ schemaVersion: 1, host: "Excel", suite: payload.suite, packs: payload.suite === "quick" ? [pack] : [], missingCoverage: [] });
+    if (type === "getQualificationCatalog") return Promise.resolve({ schemaVersion: 1, host: "Excel", suite: payload.suite, packs: payload.suite === "quick" ? [pack] : [], missingCoverage: [], buildEvidence: { status: "missing", complete: false, productVersion: "16.1.0-dev", commitSha: "b".repeat(40), manifestSha256: "unavailable" } });
     if (type === "getQualificationRun") return Promise.resolve({ schemaVersion: 1, chat: { activeChatId: state.activeChatId }, run: null });
     if (type === "startQualification") return Promise.resolve({ schemaVersion: 1, chat: { activeChatId: "qualification-chat" }, run: runState("awaiting_user", "acknowledge") });
     if (type === "advanceQualification") return Promise.resolve({ schemaVersion: 1, chat: { activeChatId: "qualification-chat" }, run: runState("passed", null) });
@@ -152,6 +153,7 @@ async function flush() { await Promise.resolve(); await Promise.resolve(); await
   assert.deepEqual(requests.slice(0, 2).map(item => item.type), ["getQualificationRun", "getQualificationCatalog"]);
   assert.equal(document.ids.qualificationCenterOverlay.classList.contains("hidden"), false);
   assert.match(document.ids.qualificationRunDescription.textContent, /Shell only/);
+  assert.match(document.ids.qualificationProvenance.textContent, /build evidence: missing/);
   document.ids.qualificationSuiteSelect.value = "release";
   document.ids.qualificationSuiteSelect.change();
   await flush();

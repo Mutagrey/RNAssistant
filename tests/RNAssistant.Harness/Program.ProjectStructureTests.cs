@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace RNAssistant.Harness
@@ -434,7 +435,9 @@ namespace RNAssistant.Harness
                     new[] { "-p:AssemblyVersion=99.0.0.0", "AssemblyVersion must match" },
                     new[] { "-p:InformationalVersion=unidentified", "InformationalVersion must include" },
                     new[] { "-p:RNAssistantCommitSha=unknown", "full Git commit SHA" },
-                    new[] { "-p:RNAssistantWorkingTreeState=unknown", "RNAssistantWorkingTreeState must be clean or dirty" }
+                    new[] { "-p:RNAssistantWorkingTreeState=unknown", "RNAssistantWorkingTreeState must be clean or dirty" },
+                    new[] { "-p:RNAssistantBuildEvidenceSignerSha256=abc", "certificate fingerprint" },
+                    new[] { "-p:RNAssistantRuntimePlatform=../x64", "bounded platform name" }
                 };
                 foreach (var item in cases)
                     AssertContains(fixture.Build("ValidateVersionFormat", false, item[0]), item[1], "invalid build metadata fails");
@@ -446,6 +449,9 @@ namespace RNAssistant.Harness
         {
             using (var fixture = new VersioningFixture())
             {
+                AssertContains(fixture.Build("ValidateReleaseEvidenceSigner", false),
+                    "pinned RNAssistantBuildEvidenceSignerSha256",
+                    "release admission cannot trust an unpinned evidence signer");
                 fixture.ReleaseBuild("ValidateRNAssistantRelease", true);
                 fixture.ReleaseBuild("PrintBuildIdentity", true);
                 AssertContains(fixture.Build("PrintBuildIdentity", false, "-p:RNAssistantReleaseBuild=true"),
@@ -469,6 +475,19 @@ namespace RNAssistant.Harness
                 File.Delete(changelog);
                 AssertContains(fixture.ReleaseBuild("ValidateReleaseChangelog", false), "requires CHANGELOG.md", "missing changelog blocks release");
             }
+            var releaseScript = File.ReadAllText(Path.Combine(
+                FindHarnessRepositoryRoot(), "tools", "Prepare-Release.ps1"));
+            AssertContains(releaseScript, "Assert-TrackedReleaseVersion",
+                "finalization checks the tracked source version, not only MSBuild overrides");
+            AssertContains(releaseScript, "Assert-SignedBuildEvidence",
+                "finalization verifies detached evidence before tagging");
+            AssertContains(releaseScript, "if ($Finalize)",
+                "tag creation is isolated in the explicit finalization stage");
+            AssertEqual(1, Regex.Matches(releaseScript,
+                "Arguments @\\(\\\"tag\\\"", RegexOptions.CultureInvariant).Count,
+                "release script has one non-reusable tag creation site");
+            AssertContains(releaseScript, "Prepared release commit $preparedCommit without a tag",
+                "preparation explicitly stops before tag creation");
         }
 
         private static void VersioningTagsCannotBeReused()
@@ -501,6 +520,11 @@ namespace RNAssistant.Harness
                 "SDK assembly carries product and commit identity or explicit archive provenance");
             AssertTrue(metadata["BuildUtc"].EndsWith("Z", StringComparison.Ordinal), "SDK assembly records UTC");
             AssertTrue(!string.IsNullOrWhiteSpace(metadata["Branch"]) && !string.IsNullOrWhiteSpace(metadata["Channel"]), "SDK assembly records branch/channel");
+            AssertTrue(!string.IsNullOrWhiteSpace(metadata["Configuration"]) &&
+                !string.IsNullOrWhiteSpace(metadata["RuntimePlatform"]),
+                "SDK assembly records configuration/runtime platform");
+            AssertEqual("unavailable", metadata["BuildEvidenceSignerSha256"],
+                "ordinary build does not invent a trusted evidence signer");
             using (var fixture = new VersioningFixture())
             {
                 fixture.Build("GenerateRNAssistantVersionInfo", true);
@@ -510,6 +534,8 @@ namespace RNAssistant.Harness
                 AssertContains(generated, "AssemblyMetadataAttribute(\"CommitSha\", \"" + fixture.Git("rev-parse", "HEAD").Trim() + "\")",
                     "old-style project emits the full commit SHA");
                 AssertContains(generated, "AssemblyMetadataAttribute(\"BuildUtc\"", "old-style project emits UTC metadata");
+                AssertContains(generated, "AssemblyMetadataAttribute(\"BuildEvidenceSignerSha256\", \"unavailable\")",
+                    "old-style ordinary build marks evidence signer unavailable");
             }
         }
 
@@ -575,7 +601,9 @@ namespace RNAssistant.Harness
             public string ReleaseBuild(string target, bool success)
             {
                 return Build(target, success, "-p:RNAssistantVersionPrefix=16.1.0",
-                    "-p:RNAssistantVersionSuffix=rc.1", "-p:RNAssistantReleaseTag=v16.1.0-rc.1");
+                    "-p:RNAssistantVersionSuffix=rc.1", "-p:RNAssistantReleaseTag=v16.1.0-rc.1",
+                    "-p:RNAssistantBuildEvidenceSignerSha256=" + new string('a', 64),
+                    "-p:RNAssistantRuntimePlatform=x64");
             }
 
             public void Dispose()

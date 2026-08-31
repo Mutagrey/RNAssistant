@@ -1,6 +1,7 @@
 # ADR-0010: Qualification evidence belongs to runtime and domain verifiers
 
-Status: accepted; WQ-A1 host-neutral core implemented, delivery adapters/UI pending.
+Status: accepted; WQ-A1–A5 host-neutral implementation complete, real Windows/live
+pack evidence pending.
 
 ## Context
 
@@ -35,8 +36,9 @@ confirmation, HostRuntime или persistence. Отдельный mutable result 
 - Host probes/fault hooks — узкие host-owned capabilities. WQ0 использует same-build
   local helper с одним typed contract, explicit target и local one-time channel;
   generic process execution не публикуется.
-- Host-neutral harness остаётся build/CI contour. Его exact BuildEvidenceManifest
-  показывается в приложении, но VSTO не запускает compiler, shell или test runner.
+- Host-neutral harness остаётся build/CI contour. Detached signed
+  BuildEvidenceManifest pin-ит exact binary/catalog/files и полный run matrix;
+  приложение проверяет его, но VSTO не запускает compiler, shell или test runner.
 - Новая карточка пустого чата открывает Qualification Center и не превращает pack в
   обычный prompt.
 
@@ -44,10 +46,9 @@ confirmation, HostRuntime или persistence. Отдельный mutable result 
 
 Пользователь получает один управляемый UI для реальных Office сценариев и может
 расширять pack catalog без копирования orchestration. Один source of truth и causal
-correlation сохраняются. WQ-A1 реализовал strict contracts, конечный runner,
-mandatory events/CAS evidence и typed bridge DTO, но не подключил controller/UI,
-normal conversation adapter или host probes. WQ-A2/WQ-A3 и Windows проверка остаются
-отдельными подэтапами; этот ADR сам не квалифицирует COM identity и не разрешает
-production 5B2 switch.
+correlation сохраняются. WQ-A1–A5 реализовали strict core, UI shell, Excel WQ0 host
+port/helper, closed suite catalog и exact-build release admission. Отсутствующие live
+adapters остаются N/A, а Windows проверка — отдельным Milestone WQ; этот ADR сам не
+квалифицирует COM identity и не разрешает production 5B2 switch.
 
 Полный контракт: [qualification.md](../qualification.md).

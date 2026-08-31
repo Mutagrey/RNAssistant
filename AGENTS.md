@@ -24,7 +24,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 - `RNAssistant.OfficeHosts` и `RNAssistant.*AddIn`: host adapters, ribbon, VSTO и Office COM.
 - `web`: static WebView2 UI без npm/bundler. Feature logic остаётся в тематических `app-*.js`; `app.js` — только boot/shared rendering.
 - `tools` и `%AppData%/RNAssistant/tools`: пользовательские tools; executor logic живёт в `RNAssistant.Office/Tools`.
-- Folder и namespace не обязаны совпадать механически: root `RNAssistant.Office` остаётся у публичного application façade и host ports, а тематическая папка задаёт owner. Не делай массовый namespace rename. Phase 10B1/10B2 перенесли host-specific helpers в OfficeHosts, 10C1 перенёс `AssistantRuntime.cs` в root Office façade, а 10C2 перенёс четыре resource read projections в `ControllerToolDefinition`; возвращать старые paths, aliases, linked duplicates или `LegacyToolDefinitionAdapter.ProjectRead` запрещено. Phase 10 закрыт host-neutral; по прямому запросу пользователя перед Windows WQ добавляется Milestone WQ-A Qualification Center. Он не закрывает WQ0/5B2 локальными checks: первый реальный pack — WQ0 identity, затем production 5B2/7D switch.
+- Folder и namespace не обязаны совпадать механически: root `RNAssistant.Office` остаётся у публичного application façade и host ports, а тематическая папка задаёт owner. Не делай массовый namespace rename. Phase 10B1/10B2 перенесли host-specific helpers в OfficeHosts, 10C1 перенёс `AssistantRuntime.cs` в root Office façade, а 10C2 перенёс четыре resource read projections в `ControllerToolDefinition`; возвращать старые paths, aliases, linked duplicates или `LegacyToolDefinitionAdapter.ProjectRead` запрещено. Phase 10 и WQ-A1–A5 закрыты host-neutral. Следующий gate — реальный Milestone WQ: сначала WQ0 identity, затем production 5B2/7D switch и полный Windows pack matrix.
 
 ## Перед изменениями
 
@@ -38,7 +38,8 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 - in-app qualification, packs, evidence и safety: `docs/qualification.md`;
 - VBA mutations/packages/UserForms: `docs/vba-mutation-journal.md`, `docs/vba-tool-packages.md`, `docs/vba-userforms.md`;
 - быстрые и таргетированные тесты: `tests/RNAssistant.Harness/README.md`.
-- versioning/release: `docs/operations/VERSIONING.md`, `docs/operations/RELEASE_PROCESS.md`.
+- versioning/release/evidence: `docs/operations/VERSIONING.md`,
+  `docs/operations/RELEASE_PROCESS.md`, `docs/operations/BUILD_EVIDENCE.md`.
 
 Не загружай все документы и тесты «на всякий случай».
 
@@ -85,10 +86,11 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 - `AssistantController` — orchestration only. Chat/session bridge methods — `AssistantController.Chats.cs`, context — `AssistantController.Context.cs`, reusable behavior — `Services`.
 - Dispatch — `OfficeToolExecutor`; guard/preparation/dispatch/read-back и live reads сериализует `Runtime/HostRuntime` через `DocumentAccessGate`. Reentry — только та же синхронная operation/target, с явным STA transfer; gate не держится во время model/user wait. Нейтральный session port введён в 5B1; direct selection/context/catalog reads используют отдельные operation roots в HostRuntime. Production Excel binding/identity и Windows qualification остаются 5B2. VBA execution/guards/journal/packages — `VbaToolExecutor*`.
 - Новые bridge payload/response формы — typed DTO в `Contracts`, без anonymous response shapes и ad-hoc `JObject` parsing.
-- Qualification core живёт в `Office/Qualification`: manifest/data only, action/verifier
-  IDs проходят allowlist, mandatory step-start пишется до automatic action, а pass
-  принадлежит typed assertion evidence. Не подключай controller/UI или host probe в
-  WQ-A1; WQ-A2 и WQ-A3 остаются отдельными commits.
+- Qualification core живёт в `Office/Qualification`: manifest/data only,
+  action/verifier IDs проходят allowlist, mandatory step-start пишется до automatic
+  action, а pass принадлежит typed assertion evidence. Exact-build evidence — только
+  detached signed sidecar с pinned signer/build/catalog/files/run matrix; missing
+  adapter/evidence остаётся N/A, не pass. Не запускай harness/shell из VSTO.
 - Host-neutral код не добавляй в VSTO/add-ins. Не меняй `*.Designer.cs` и VSTO metadata без необходимости.
 - Не раздувай существующие крупные файлы: новый самостоятельный behavior выноси в тематический файл/service. Partial split допустим как безопасный первый шаг, но не как оправдание нового монолита.
 - Сохраняй C# 7.3 и .NET Framework 4.8 compatibility. Новые `.cs` обязательно добавляй в old-style `.csproj`.

@@ -1,10 +1,9 @@
 # Qualification Center и расширяемые test packs
 
-Статус: WQ-A4 suite catalog реализован host-neutral. UI показывает versioned
-common/provider/storage/UI/Excel/VBA/cross packs; каждый требует exact readiness
-capability и остаётся недоступным, пока production owner и нужная среда не готовы.
-Реальный WQ0 и остальные live suites остаются открытыми до Windows/Office/provider
-прогона. Immutable build evidence остаётся WQ-A5.
+Статус: WQ-A1–A5 реализованы host-neutral. UI показывает versioned packs и
+проверенное состояние detached signed exact-build evidence. Реальный WQ0 и остальные
+live suites остаются открытыми до Windows/Office/provider прогона; без полного
+evidence `release.candidate` недоступен.
 
 ## 1. Назначение
 
@@ -49,8 +48,8 @@ Windows-gated `excel.wq0.identity`: на другой платформе либ�
 пакет виден как недоступный и не может стартовать. WQ-A4 добавляет остальные
 canonical quick/full/release manifests и coverage owners. Их exact readiness
 capabilities выдаются только полностью реализованным production adapter-ом, поэтому
-неподдержанный контур остаётся N/A. Exact immutable build commit остаётся `unavailable` до
-BuildEvidenceManifest в WQ-A5; UI не фабрикует его из working tree.
+неподдержанный контур остаётся N/A. WQ-A5 читает immutable build identity из assembly
+metadata и detached signed manifest; UI не фабрикует commit/evidence из working tree.
 
 Wizard может просить переключить книгу, выполнить Save As, закрыть/открыть документ,
 подтвердить tool call, перезапустить add-in или визуально проверить layout. Команды,
@@ -67,7 +66,7 @@ Qualification UI -> typed bridge -> QualificationApplicationService -> Qualifica
                                                                       |-> IEventStore + existing chat JSONL/CAS
                                                                       `-> ITrajectoryQuery / report export
 
-Build pipeline -> immutable BuildEvidenceManifest -> Qualification UI
+Build pipeline -> detached signed BuildEvidenceManifest -> Qualification UI
 ```
 
 - `QualificationRunner` — application orchestration. Он не реализует model loop,
@@ -86,6 +85,9 @@ Build pipeline -> immutable BuildEvidenceManifest -> Qualification UI
 - WQ-A4 регистрирует закрытый список suite families и по одному exact capability
   полной готовности pack-а. Наличие manifest/coverage owner само по себе не выдаёт
   capability; частичная реализация не допускает запуск и отображается как N/A.
+- WQ-A5 проверяет certificate pin, RS256 signature, exact assembly/catalog/file
+  hashes и полный release run matrix. Только status `complete` публикует capability
+  для read-only `release.candidate`; run pin-ит hash envelope в event stream.
 - `agentTask` всегда проходит через обычные `ConversationRunService`, `AgentKernel`,
   `ToolRuntime`, `HostRuntime` и production domain handlers. Test mode не расширяет
   callable tools и не отключает confirmation/policy.
@@ -211,9 +213,11 @@ Terminal assertion содержит:
 остаются явно manual и не подменяют automatic assertions другой boundary.
 
 BuildEvidenceManifest создаётся сборочным/release contour после host-neutral checks и
-включает exact commit, configuration, checks, timestamps и file hashes. Приложение
-только показывает и проверяет подпись/provenance этого manifest; оно не запускает
-`dotnet`, MSBuild, Node или shell из VSTO.
+включает exact commit, configuration, catalog/pack revisions, checks, run matrix,
+timestamps и file hashes. Он остаётся sidecar: встраивание результата после прогона
+изменило бы проверенный binary. Candidate заранее pin-ит SHA-256 сертификата, а
+приложение проверяет RS256 и exact compatibility без `dotnet`, MSBuild, Node или shell
+из VSTO. Полный контракт: [exact-build evidence](operations/BUILD_EVIDENCE.md).
 
 ## 6. Safety
 
@@ -311,8 +315,11 @@ Coverage registry связывает каждый mandatory invariant/risk/capab
    Excel/VBA/cross manifests, runner-owned fixture steps, deterministic assertion IDs
    и fail-closed coverage/capability gates. Live adapters и evidence остаются
    обязательными gates Milestone WQ. [Evidence](stabilization/WQ_A4_SUITE_CATALOG.md).
-6. **WQ-A5 — release integration:** immutable BuildEvidenceManifest и release suite;
-   Phase 12 получает только complete/compatible evidence.
+6. **WQ-A5 — release integration — done host-neutral:** detached immutable signed
+   BuildEvidenceManifest, certificate pin, exact build/catalog/file admission,
+   19-run release matrix и read-only `release.candidate`. Реальная подпись и Windows
+   evidence остаются gate Milestone WQ.
+   [Evidence](stabilization/WQ_A5_BUILD_EVIDENCE.md).
 
 Каждый этап — отдельный commit. Host-neutral tests не закрывают Windows gates; один
 pack/host failure исправляется у его owner и повторяет только затронутый scenario,

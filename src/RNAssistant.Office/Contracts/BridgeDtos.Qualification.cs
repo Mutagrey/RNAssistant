@@ -38,6 +38,47 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("suite")] public string Suite { get; set; }
         [JsonProperty("packs")] public IReadOnlyList<QualificationPackDto> Packs { get; set; }
         [JsonProperty("missingCoverage")] public IReadOnlyList<string> MissingCoverage { get; set; }
+        [JsonProperty("buildEvidence")] public QualificationBuildEvidenceDto BuildEvidence { get; set; }
+    }
+
+    public sealed class QualificationBuildEvidenceDto
+    {
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("complete")] public bool Complete { get; set; }
+        [JsonProperty("manifestSha256")] public string ManifestSha256 { get; set; }
+        [JsonProperty("catalogSha256")] public string CatalogSha256 { get; set; }
+        [JsonProperty("productVersion")] public string ProductVersion { get; set; }
+        [JsonProperty("informationalVersion")] public string InformationalVersion { get; set; }
+        [JsonProperty("commitSha")] public string CommitSha { get; set; }
+        [JsonProperty("buildUtc")] public string BuildUtc { get; set; }
+        [JsonProperty("configuration")] public string Configuration { get; set; }
+        [JsonProperty("platform")] public string Platform { get; set; }
+        [JsonProperty("workingTreeState")] public string WorkingTreeState { get; set; }
+        [JsonProperty("requiredRuns")] public int RequiredRuns { get; set; }
+        [JsonProperty("passedRuns")] public int PassedRuns { get; set; }
+        [JsonProperty("issues")] public IReadOnlyList<string> Issues { get; set; }
+
+        public static QualificationBuildEvidenceDto From(BuildEvidenceEvaluation evidence)
+        {
+            if (evidence == null) return null;
+            return new QualificationBuildEvidenceDto
+            {
+                Status = evidence.Status,
+                Complete = evidence.Complete,
+                ManifestSha256 = evidence.EnvelopeSha256,
+                CatalogSha256 = evidence.CatalogSha256,
+                ProductVersion = evidence.Identity.ProductVersion,
+                InformationalVersion = evidence.Identity.InformationalVersion,
+                CommitSha = evidence.Identity.CommitSha,
+                BuildUtc = evidence.Identity.BuildUtc,
+                Configuration = evidence.Identity.Configuration,
+                Platform = evidence.Identity.Platform,
+                WorkingTreeState = evidence.Identity.WorkingTreeState,
+                RequiredRuns = evidence.RequiredRunCount,
+                PassedRuns = evidence.PassedRunCount,
+                Issues = evidence.Issues
+            };
+        }
     }
 
     public sealed class QualificationSessionResponse
@@ -119,6 +160,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("productVersion")] public string ProductVersion { get; set; }
         [JsonProperty("buildCommit")] public string BuildCommit { get; set; }
         [JsonProperty("channel")] public string Channel { get; set; }
+        [JsonProperty("buildEvidenceSha256")] public string BuildEvidenceSha256 { get; set; }
         [JsonProperty("suite")] public string Suite { get; set; }
         [JsonProperty("capabilities")] public IReadOnlyList<string> Capabilities { get; set; }
         [JsonProperty("status")] public string Status { get; set; }
@@ -154,6 +196,7 @@ namespace RNAssistant.Office.Contracts
                 ProductVersion = run.Context.ProductVersion,
                 BuildCommit = run.Context.BuildCommit,
                 Channel = run.Context.Channel,
+                BuildEvidenceSha256 = run.Context.BuildEvidenceSha256,
                 Suite = run.Pack.Suite,
                 Capabilities = run.Context.Capabilities,
                 Status = QualificationManifestParser.RunStatusName(run.Status),

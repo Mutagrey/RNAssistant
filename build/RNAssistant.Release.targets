@@ -10,7 +10,12 @@
           DependsOnTargets="ValidateRNAssistantRelease" />
 
   <Target Name="ValidateRNAssistantRelease"
-          DependsOnTargets="ValidateReleaseTagMatchesProductVersion;ValidateReleaseTreeClean;ValidateReleaseChangelog" />
+          DependsOnTargets="ValidateReleaseTagMatchesProductVersion;ValidateReleaseTreeClean;ValidateReleaseChangelog;ValidateReleaseEvidenceSigner" />
+
+  <Target Name="ValidateReleaseEvidenceSigner" DependsOnTargets="ValidateVersionFormat">
+    <Error Condition="'$(RNAssistantBuildEvidenceSignerSha256)' == 'unavailable'"
+           Text="Release requires a pinned RNAssistantBuildEvidenceSignerSha256 for detached exact-build evidence." />
+  </Target>
 
   <Target Name="ValidateReleaseTagMatchesProductVersion" DependsOnTargets="ValidateVersionFormat">
     <Error Condition="'$(RNAssistantCommitSha)' == 'unknown' or '$(RNAssistantBranch)' == 'unknown' or '$(RNAssistantWorkingTreeState)' == 'unknown'"

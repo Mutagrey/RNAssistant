@@ -617,6 +617,7 @@ namespace RNAssistant.Office.Qualification
                 ProductVersion = run.Context.ProductVersion,
                 BuildCommit = run.Context.BuildCommit,
                 Channel = run.Context.Channel,
+                BuildEvidenceSha256 = run.Context.BuildEvidenceSha256,
                 Capabilities = new List<string>(run.Context.Capabilities),
                 RunStatus = QualificationManifestParser.RunStatusName(run.Status),
                 PendingTerminalStatus = run.PendingTerminalStatus.HasValue
@@ -661,6 +662,7 @@ namespace RNAssistant.Office.Qualification
                     !string.Equals(data.ProductVersion, context.ProductVersion, StringComparison.Ordinal) ||
                     !string.Equals(data.BuildCommit, context.BuildCommit, StringComparison.Ordinal) ||
                     !string.Equals(data.Channel, context.Channel, StringComparison.Ordinal) ||
+                    !string.Equals(data.BuildEvidenceSha256, context.BuildEvidenceSha256, StringComparison.Ordinal) ||
                     data.Capabilities == null || !data.Capabilities.SequenceEqual(context.Capabilities,
                         StringComparer.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Qualification run provenance does not match the selected pack and build.");

@@ -24,7 +24,7 @@ Requirements: [master plan, section 13](../stabilization/STABILIZATION_MASTER_PL
 | Assembly compatibility | `RNAssistantAssemblyVersion=16.0.4.0` | Preserve baseline binding, independent of product changes |
 | File / VSTO Application | `16.1.0.<RNAssistantBuildNumber>` | Default build number 0; CI/release passes it without a commit |
 | Informational | `16.1.0-dev+g<12-char-sha>` | Add `.dirty` when tracked/index/untracked changes exist; archives without SHA use `+source-archive`, unknown tree state adds `.unknown` |
-| Assembly metadata | ProductVersion, CommitSha, BuildUtc, Branch, Channel, WorkingTreeState | Full SHA; UTC timestamp; branch or `HEAD` for detached checkout |
+| Assembly metadata | ProductVersion, CommitSha, BuildUtc, Branch, Channel, WorkingTreeState, Configuration, RuntimePlatform, BuildEvidenceSignerSha256 | Full SHA; UTC timestamp; exact candidate configuration/platform; signer is `unavailable` outside an evidence-bearing candidate |
 | Protocol | Defined by each existing contract | Never inferred from product/assembly version |
 
 Numeric version components must be 0–65534. Build number changes do not change
@@ -61,8 +61,11 @@ settings already in that file). Explicit malformed metadata still fails validati
 The Visual Studio Release configuration is not an explicit release milestone:
 `RNAssistantReleaseBuild=true`, a release tag or direct release validation still
 require known provenance and a Git checkout for live clean-tree checks.
-CI may also provide `RNAssistantBuildUtc` in `yyyy-MM-ddTHH:mm:ssZ` format and
-`RNAssistantBuildNumber`. These values are metadata, not a product bump.
+CI may also provide `RNAssistantBuildUtc` in `yyyy-MM-ddTHH:mm:ssZ` format,
+`RNAssistantBuildNumber` and `RNAssistantRuntimePlatform`. These values are metadata,
+not a product bump. Only a candidate for signed qualification evidence supplies the
+lowercase certificate-DER SHA-256 as `RNAssistantBuildEvidenceSignerSha256`; ordinary
+builds use `unavailable`.
 
 ## Release-only gates
 
@@ -71,8 +74,9 @@ CI may also provide `RNAssistantBuildUtc` in `yyyy-MM-ddTHH:mm:ssZ` format and
 | `ValidateReleaseTagMatchesProductVersion` | Exact `v<Version>`; stable or alpha.N/beta.N/rc.N; rejects dev |
 | `ValidateReleaseTreeClean` | No tracked, staged or untracked changes |
 | `ValidateReleaseChangelog` | Dated exact version section with at least one note |
+| `ValidateReleaseEvidenceSigner` | Candidate pins a lowercase SHA-256 signer fingerprint; `unavailable` is rejected |
 | `ValidateTagDoesNotExist` | Tag absent locally and on configured remote; inaccessible remote fails closed |
-| `ValidateRNAssistantRelease` | Format/tag match, clean tree, changelog |
+| `ValidateRNAssistantRelease` | Format/tag match, clean tree, changelog and signer pin |
 
 `RNAssistantReleaseBuild=true` or a nonempty `RNAssistantReleaseTag` enables the
 release aggregate before build. A tag build must supply `RNAssistantReleaseTag`.
@@ -81,4 +85,5 @@ does not demand a new tag. The default remote is `origin`; an alternate configur
 name can be supplied as `RNAssistantReleaseRemote`.
 
 No release gate creates or moves a tag. Only the explicitly invoked
-[release script](RELEASE_PROCESS.md) creates the annotated tag after qualification.
+[release script](RELEASE_PROCESS.md) creates the annotated tag only in its explicit
+finalization step after compatible [exact-build evidence](BUILD_EVIDENCE.md).

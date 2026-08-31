@@ -84,6 +84,13 @@
       "hosts": ["Excel", "Word", "PowerPoint", "Outlook"],
       "suites": ["release"],
       "mandatory": true
+    },
+    {
+      "id": "WQ-A5.build-evidence",
+      "owner": "Build.Release.Qualification",
+      "hosts": ["Excel", "Word", "PowerPoint", "Outlook"],
+      "suites": ["release"],
+      "mandatory": true
     }
   ]
 }

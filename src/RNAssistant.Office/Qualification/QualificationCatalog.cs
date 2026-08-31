@@ -143,6 +143,15 @@ namespace RNAssistant.Office.Qualification
             return pack;
         }
 
+        public IReadOnlyList<QualificationPack> Packs
+        {
+            get
+            {
+                return Array.AsReadOnly(_packs.Values
+                    .OrderBy(pack => pack.Id, StringComparer.OrdinalIgnoreCase).ToArray());
+            }
+        }
+
         public IReadOnlyList<QualificationPackAvailability> List(string host, string suite,
             IEnumerable<string> availableRequirements)
         {

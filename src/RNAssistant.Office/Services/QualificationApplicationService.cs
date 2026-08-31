@@ -18,30 +18,39 @@ namespace RNAssistant.Office.Services
         private readonly IEventStore _events;
         private readonly QualificationPackCatalog _catalog;
         private readonly IQualificationHostPort _host;
+        private readonly BuildEvidenceEvaluation _buildEvidence;
         private readonly IReadOnlyList<string> _capabilities;
 
         public QualificationApplicationService(IEventStore events)
-            : this(events, QualificationBuiltInCatalog.Load(), null)
+            : this(events, QualificationBuiltInCatalog.Load(), null, null)
         {
         }
 
         public QualificationApplicationService(IEventStore events, IQualificationHostPort host)
-            : this(events, QualificationBuiltInCatalog.Load(), host)
+            : this(events, QualificationBuiltInCatalog.Load(), host, null)
         {
         }
 
         internal QualificationApplicationService(IEventStore events, QualificationPackCatalog catalog,
-            IQualificationHostPort host = null)
+            IQualificationHostPort host = null, BuildEvidenceEvaluation buildEvidence = null)
         {
             _events = events ?? throw new ArgumentNullException(nameof(events));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _host = host;
+            _buildEvidence = buildEvidence ?? BuildEvidenceRuntime.Load(
+                _catalog, typeof(QualificationApplicationService).Assembly);
             var capabilities = new[] { ShellCapability }
                 .Concat(host == null ? new string[0] : host.QualificationCapabilities ?? new string[0])
+                .Concat(_buildEvidence.Complete ? new[] { BuildEvidenceRuntime.Capability } : new string[0])
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             _capabilities = Array.AsReadOnly(capabilities);
+        }
+
+        public BuildEvidenceEvaluation BuildEvidence
+        {
+            get { return _buildEvidence; }
         }
 
         public QualificationPack GetPack(string packId)
@@ -155,8 +164,8 @@ namespace RNAssistant.Office.Services
         private QualificationRunner Runner(QualificationEventJournal journal)
         {
             return new QualificationRunner(
-                new ApplicationActions(new ShellActions(), _host),
-                new ApplicationVerifier(new ShellVerifier(journal), _host, journal),
+                new ApplicationActions(new ShellActions(_buildEvidence), _host),
+                new ApplicationVerifier(new ShellVerifier(journal, _buildEvidence), _host, journal),
                 journal);
         }
 
@@ -167,8 +176,9 @@ namespace RNAssistant.Office.Services
 
         private QualificationRunContext CurrentContext(string host)
         {
-            return new QualificationRunContext(host, ApplicationVersionService.Current,
-                "unavailable", "development", _capabilities);
+            return new QualificationRunContext(host, _buildEvidence.Identity.ProductVersion,
+                _buildEvidence.Identity.CommitSha, _buildEvidence.Identity.Channel, _capabilities,
+                _buildEvidence.EnvelopeSha256);
         }
 
         private static bool HasDurableTerminal(IReadOnlyList<QualificationJournalRecord> records)
@@ -184,11 +194,20 @@ namespace RNAssistant.Office.Services
 
         private sealed class ShellActions : IQualificationActionExecutor
         {
+            private readonly BuildEvidenceEvaluation _buildEvidence;
+
+            internal ShellActions(BuildEvidenceEvaluation buildEvidence)
+            {
+                _buildEvidence = buildEvidence ?? throw new ArgumentNullException(nameof(buildEvidence));
+            }
+
             public bool Supports(QualificationStep step)
             {
                 return step != null &&
                     (step.Kind == QualificationStepKind.Precondition &&
                      string.Equals(step.Action, "qualification.shell.preflight", StringComparison.Ordinal) ||
+                     step.Kind == QualificationStepKind.Precondition &&
+                     string.Equals(step.Action, "qualification.release.evidence.preflight", StringComparison.Ordinal) ||
                      step.Kind == QualificationStepKind.Cleanup &&
                      string.Equals(step.Action, "qualification.shell.cleanup", StringComparison.Ordinal));
             }
@@ -212,6 +231,15 @@ namespace RNAssistant.Office.Services
                     return Task.FromResult(QualificationActionResult.Passed(
                         "{\"closed\":true}", "Qualification shell cleanup completed."));
                 }
+                if (string.Equals(context.Step.Action, "qualification.release.evidence.preflight", StringComparison.Ordinal))
+                {
+                    return Task.FromResult(_buildEvidence.Complete
+                        ? QualificationActionResult.Passed(_buildEvidence.ActualJson(),
+                            "Signed exact-build evidence is compatible and complete.", "verified_no_change")
+                        : QualificationActionResult.Blocked("build_evidence_incomplete",
+                            "Signed exact-build evidence is not complete for this binary.",
+                            _buildEvidence.ActualJson()));
+                }
                 return Task.FromResult(QualificationActionResult.Blocked(
                     "action_not_allowlisted", "Qualification shell action is not allowlisted."));
             }
@@ -220,16 +248,19 @@ namespace RNAssistant.Office.Services
         private sealed class ShellVerifier : IQualificationVerifier
         {
             private readonly IQualificationRunJournal _journal;
+            private readonly BuildEvidenceEvaluation _buildEvidence;
 
-            internal ShellVerifier(IQualificationRunJournal journal)
+            internal ShellVerifier(IQualificationRunJournal journal, BuildEvidenceEvaluation buildEvidence)
             {
                 _journal = journal;
+                _buildEvidence = buildEvidence ?? throw new ArgumentNullException(nameof(buildEvidence));
             }
 
             public bool Supports(QualificationStep step)
             {
                 return step != null && step.Kind == QualificationStepKind.Assertion &&
-                    string.Equals(step.Assertion, "qualification.shell.roundtrip", StringComparison.Ordinal);
+                    (string.Equals(step.Assertion, "qualification.shell.roundtrip", StringComparison.Ordinal) ||
+                     string.Equals(step.Assertion, "qualification.release.evidence.complete", StringComparison.Ordinal));
             }
 
             public Task<QualificationVerificationResult> VerifyAsync(
@@ -237,6 +268,16 @@ namespace RNAssistant.Office.Services
                 CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (string.Equals(context.Step.Assertion, "qualification.release.evidence.complete", StringComparison.Ordinal))
+                {
+                    var expectedEvidence = BuildEvidenceEvaluation.ExpectedJson();
+                    var actualEvidence = _buildEvidence.ActualJson();
+                    return Task.FromResult(_buildEvidence.Complete
+                        ? QualificationVerificationResult.Passed(expectedEvidence, actualEvidence,
+                            "Complete signed release evidence matches this exact build.", "verified_no_change")
+                        : QualificationVerificationResult.Failed("build_evidence_incomplete",
+                            "Release evidence is incomplete or incompatible.", expectedEvidence, actualEvidence));
+                }
                 var completed = _journal.Read(context.RunId)
                     .Where(item => item.Kind == QualificationRunEventKind.StepCompleted)
                     .ToDictionary(item => item.Data.StepId, item => item.Data, StringComparer.Ordinal);

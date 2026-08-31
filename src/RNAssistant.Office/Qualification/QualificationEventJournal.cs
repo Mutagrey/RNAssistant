@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
@@ -19,7 +20,7 @@ namespace RNAssistant.Office.Qualification
 
     public sealed class QualificationRunEventData
     {
-        public const int CurrentContractVersion = 1;
+        public const int CurrentContractVersion = 2;
 
         public QualificationRunEventData()
         {
@@ -37,6 +38,7 @@ namespace RNAssistant.Office.Qualification
         [JsonProperty("productVersion")] public string ProductVersion { get; set; }
         [JsonProperty("buildCommit")] public string BuildCommit { get; set; }
         [JsonProperty("channel")] public string Channel { get; set; }
+        [JsonProperty("buildEvidenceSha256")] public string BuildEvidenceSha256 { get; set; }
         [JsonProperty("capabilities")] public List<string> Capabilities { get; set; }
         [JsonProperty("runStatus")] public string RunStatus { get; set; }
         [JsonProperty("pendingTerminalStatus")] public string PendingTerminalStatus { get; set; }
@@ -96,7 +98,7 @@ namespace RNAssistant.Office.Qualification
         private static readonly string[] EventFields =
         {
             "contractVersion", "eventKind", "runId", "previousRunId", "packId", "packRevision",
-            "packSha256", "host", "productVersion", "buildCommit", "channel", "runStatus",
+            "packSha256", "host", "productVersion", "buildCommit", "channel", "buildEvidenceSha256", "runStatus",
             "pendingTerminalStatus",
             "capabilities",
             "stepIndex", "stepId", "stepKind", "stepOutcome", "attemptId", "evidenceStrength",
@@ -230,6 +232,10 @@ namespace RNAssistant.Office.Qualification
             Required(data.ProductVersion, 64, "productVersion");
             Required(data.BuildCommit, 128, "buildCommit");
             Required(data.Channel, 32, "channel");
+            Required(data.BuildEvidenceSha256, 64, "buildEvidenceSha256");
+            if (data.BuildEvidenceSha256 != "unavailable" &&
+                !Regex.IsMatch(data.BuildEvidenceSha256, "^[0-9a-f]{64}$", RegexOptions.CultureInvariant))
+                throw new InvalidDataException("Qualification buildEvidenceSha256 is invalid.");
             if (data.Capabilities == null || data.Capabilities.Count > 256 ||
                 data.Capabilities.Any(value => string.IsNullOrWhiteSpace(value) || value.Length > 96) ||
                 data.Capabilities.Any(value => !Regex.IsMatch(value,

@@ -144,5 +144,8 @@
     <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\cross.full-run.v1.json"
                       Link="Office\Qualification\Packs\cross.full-run.v1.json"
                       LogicalName="RNAssistant.Office.Qualification.Packs.cross.full-run.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\release.candidate.v1.json"
+                      Link="Office\Qualification\Packs\release.candidate.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.release.candidate.v1.json" />
   </ItemGroup>
 </Project>

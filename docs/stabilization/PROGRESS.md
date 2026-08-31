@@ -1,13 +1,13 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 10 done host-neutral; Milestone WQ-A Qualification Center
-Current task: WQ-A4 suite catalog done host-neutral — embedded common/provider/storage/UI/Excel/VBA/cross manifests имеют revision/hash, runner-owned fixture steps, required typed assertions и exact all-or-nothing readiness capabilities. Missing production adapter/environment остаётся N/A и не может стартовать. Реальные live suites не выполнялись.
+Current phase: Phase 10 and Milestone WQ-A done host-neutral; Milestone WQ pending
+Current task: WQ-A5 exact-build evidence done host-neutral — detached RS256 envelope pin-ит candidate signer, assembly/catalog/files и полный 19-run matrix; read-only `release.candidate` доступен только при complete compatible evidence. Release preparation больше не создаёт tag; finalization требует exact signed manifest и отдельные Windows/pack acknowledgements. Реальные live suites и подпись не выполнялись.
 Execution mode: §16.1 deferred Windows qualification сохраняется. По прямому запросу пользователя перед WQ добавлен release-critical WQ-A: удобный in-app runner вместо ручного основного пути. Он не закрывает COM/WebView/live-provider gates локально; 5B2 production identity/factory switch всё ещё ждёт реальный WQ0.
 
-Next step: отдельный WQ-A5 commit — immutable BuildEvidenceManifest, exact-build compatibility/admission и complete release suite. WQ0 запускается только на Windows x64 + Office x64; до его evidence production 5B2/7D/R04 не переключать. Phase 12 не начинать.
-Required context: [qualification contract](../qualification.md), [WQ-A4 evidence](WQ_A4_SUITE_CATALOG.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md), [master WQ-A](STABILIZATION_MASTER_PLAN.md#milestone-wq-a--in-app-qualification-center), [WQ runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [release process](../operations/RELEASE_PROCESS.md), [migration map](MIGRATION_MAP.md).
-Open gates / remaining legacy: mandatory host-neutral route 0–10 and WQ-A1–A4 implementation are complete, but WQ-A5 and all real Windows/live-provider gates remain open; catalog readiness is not scenario evidence. Exact production AgentTask/host/UI adapters must register their pack capability before a suite can run; immutable `buildCommit` remains unavailable until WQ-A5. R51 Artifact Library, R52 Host Fabric, R53 Local Automation and R54 Skill Library remain docs-only optional Phase 11 contours and do not expand WQ-A/Phase 12. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE gate including R41/R42 and WQ-EXCEL for 7B/7C remain open. Phase 8 needs WQ-PACK for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Phase 9/R45–R48 need Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification; R37 remains a read-only historical diagnostics adapter until Windows qualification and explicit retained-data reset/removal. R28/R29 live-provider and R32 UI/clipboard acceptance remain open. Legacy definition/result/host adapters remain only for consumers and removal gates listed in `MIGRATION_MAP.md`; optional direct-handler cleanup does not block Phase 12. Product 16.1.0-dev, no release/tag.
+Next step: Milestone WQ на одном неизменяемом Windows x64 + Office x64 candidate: сначала WQ0, затем production 5B2/7D owner switch отдельными commits и полный required pack matrix; после него создать/sign detached evidence и пройти `release.candidate`. Phase 12 не начинать до WQ evidence.
+Required context: [qualification contract](../qualification.md), [WQ-A5 evidence](WQ_A5_BUILD_EVIDENCE.md), [build evidence](../operations/BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md), [master WQ](STABILIZATION_MASTER_PLAN.md#milestone-wq--отложенная-windowsoffice-qualification), [WQ runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [release process](../operations/RELEASE_PROCESS.md), [migration map](MIGRATION_MAP.md).
+Open gates / remaining legacy: mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, but all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Exact production AgentTask/host/UI adapters must register their pack capability before a suite can run. R51 Artifact Library, R52 Host Fabric, R53 Local Automation and R54 Skill Library remain docs-only optional Phase 11 contours and do not expand WQ/Phase 12. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE gate including R41/R42 and WQ-EXCEL for 7B/7C remain open. Phase 8 needs WQ-PACK for real providers, resource handler/manual parity, media lifetime and durable ToolPack reconstruction. Phase 9/R45–R48 need Windows controller/WebView/restart/multi-window/reload/confirmation/live-append qualification; R37 remains a read-only historical diagnostics adapter until Windows qualification and explicit retained-data reset/removal. R28/R29 live-provider and R32 UI/clipboard acceptance remain open. Legacy definition/result/host adapters remain only for consumers and removal gates listed in `MIGRATION_MAP.md`; optional direct-handler cleanup does not block Phase 12. Product 16.1.0-dev, no release/tag.
 
 Qualification Center requirements (2026-08-31, WQ-A0 docs-only): пользовательский запрос на встроенные расширяемые проверки оформлен в [canonical contract](../qualification.md) и [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md). Empty-chat card должна открывать отдельный wizard, а не вставлять prompt. Packs versioned/data-only, complex agent tasks идут через production runtime, pass принадлежит typed verifier evidence; dedicated qualification chat использует тот же events/CAS и causal journal. Первый pack — Excel WQ0 с in-app VSTO/native observations и narrow independent-client helper. PowerShell остаётся временным engineering fallback. Код/UI/helper не менялись; WQ0/5B2/R04 не закрыты. Docs diff/205 local links/anchors в затронутых документах и pre-commit `ValidateVersionFormat` — pass; build/tests не запускались.
 
@@ -59,6 +59,20 @@ N/A and cannot start. `qualification:` 12/12 pass; production resource inclusion
 diff/link and version checks are recorded with the commit. Live provider,
 AgentTask, Windows/Office/VBE/WebView/restart and host final-state evidence were not
 run. [Evidence](WQ_A4_SUITE_CATALOG.md).
+
+WQ-A5 exact-build release evidence (2026-08-31): added strict bounded detached
+RS256 envelope/payload, candidate certificate pin, assembly metadata identity,
+catalog fingerprint, artifact hashes and full 19-run matrix admission. The
+application exposes evidence status/provenance and the read-only
+`release.candidate` capability only for a complete exact manifest; run events pin its
+SHA-256. Release flow is two-stage: preparation commits without tag, finalization
+checks tracked version, exact commit/signature/evidence and creates a tag only after
+explicit Windows/pack acknowledgements. Host-neutral `qualification:` 14/14 pass;
+versioning 6/6, source inclusion 1/1, Web UI 5/5 and MockDemo Release compile pass.
+PowerShell,
+certificate store, Office/VSTO and real signed Windows evidence remain unverified.
+Pre-A5 qualification chats require explicit reset because their events lack evidence
+provenance. [Evidence](WQ_A5_BUILD_EVIDENCE.md).
 
 Artifact Library target (2026-08-31, отдельный user-requested docs-only contract):
 [canonical spec](../artifact-library.md) различает non-durable draft, committed exact
@@ -1356,4 +1370,7 @@ model-session/metadata owners не являются compatibility adapters.
 - R41: runtime fixed host-neutral в 6I — durable lifecycle + marker/journal-aware fail-closed state и explicit cleanup regression pass; production Windows/VBE/Trust Access qualification открыта.
 - R42: rename guard/backend теперь связывают source type/hash и оба имени; cancellation/fault/recovery matrix pass host-neutral. Production Windows/VBE/confirmation/cancellation qualification открыта.
 - R43/R44: исправлены host-neutral атомарным 7B switch; real Excel/WebView2 qualification остаётся открытой.
+- R50/R55: runner и exact-build admission contained host-neutral через WQ-A5; missing
+  adapters остаются N/A. Реальная подпись, PowerShell/certificate store и полный
+  Windows/live pack matrix открыты.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).

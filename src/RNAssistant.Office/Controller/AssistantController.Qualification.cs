@@ -21,7 +21,8 @@ namespace RNAssistant.Office
                 Suite = normalizedSuite,
                 Packs = _qualification.List(session.Host, normalizedSuite)
                     .Select(QualificationPackDto.From).Where(item => item != null).ToArray(),
-                MissingCoverage = _qualification.MissingCoverage(session.Host, normalizedSuite)
+                MissingCoverage = _qualification.MissingCoverage(session.Host, normalizedSuite),
+                BuildEvidence = QualificationBuildEvidenceDto.From(_qualification.BuildEvidence)
             };
         }
 

@@ -9,6 +9,9 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ### Added
 
+- Qualification Center runs versioned in-app host checks with durable typed evidence;
+  release admission now verifies a signed manifest for the exact candidate build.
+
 ### Changed
 
 - Development builds target `16.1.0-dev` and include commit identity; local changes

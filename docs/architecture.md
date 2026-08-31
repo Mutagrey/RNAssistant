@@ -38,9 +38,9 @@ automation first needs an ADR for workspace-owned sessions and a signed isolated
 worker. Office processes never become general shell workers. See
 [Local Automation Agent](local-automation-agent.md).
 
-## Qualification boundary (WQ-A2 UI shell)
+## Qualification boundary (WQ-A1–A5)
 
-The planned Qualification Center is an application orchestrator over declarative,
+Qualification Center is an application orchestrator over declarative,
 versioned host packs. Agent tasks use the normal conversation/kernel/tool/domain
 path; allowlisted host probes and deterministic verifiers supply evidence. Model
 text and UI presentation cannot declare pass. Runs append closed typed operations to
@@ -61,8 +61,14 @@ read-only `common.ui-shell` pack from both empty chat and Diagnostics. Each run 
 dedicated document chat, replays from the same validated event stream after restart,
 rejects ordinary conversation turns and navigates to the existing exact run journal
 and shared JSON viewer. UI status cannot override the typed runner result. The shell
-does not exercise Office, COM, the model loop or document tools; production
-conversation/host adapters and host-specific probes remain WQ-A3/A4.
+itself does not exercise Office, COM, the model loop or document tools. WQ-A3 adds
+the single Excel identity owner/host port and bounded same-build helper.
+WQ-A4 embeds the closed versioned suite catalog; absent exact production capabilities
+remain N/A. WQ-A5 verifies a detached RS256 envelope against the signer pinned in
+assembly metadata, exact build/catalog/file hashes and the complete release run
+matrix. Only compatible complete evidence enables the read-only
+`release.candidate` pack. Real Office/provider adapters and scenario evidence remain
+Milestone WQ; local admission tests do not close them.
 
 ## Chat, Plan, and Agent
 

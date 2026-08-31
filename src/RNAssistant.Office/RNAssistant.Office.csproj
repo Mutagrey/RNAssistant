@@ -84,6 +84,8 @@
     <Compile Include="Controller\AssistantController.Tools.cs" />
     <Compile Include="Controller\AssistantController.Vba.cs" />
     <Compile Include="Diagnostics\RuntimeLog.cs" />
+    <Compile Include="Qualification\BuildEvidenceContracts.cs" />
+    <Compile Include="Qualification\BuildEvidenceRuntime.cs" />
     <Compile Include="Qualification\QualificationCatalog.cs" />
     <Compile Include="Qualification\QualificationBuiltInCatalog.cs" />
     <Compile Include="Qualification\QualificationContracts.cs" />
@@ -277,6 +279,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Qualification\Packs\cross.full-run.v1.json">
       <LogicalName>RNAssistant.Office.Qualification.Packs.cross.full-run.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\release.candidate.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.release.candidate.v1.json</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>

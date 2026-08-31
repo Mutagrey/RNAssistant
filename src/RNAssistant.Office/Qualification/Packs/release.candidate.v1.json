@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "release.candidate",
+  "revision": "1",
+  "title": "Release candidate · exact build evidence",
+  "description": "Проверяет detached signed BuildEvidenceManifest для текущих binaries: exact build identity, catalog fingerprint, file hashes, host-neutral harness и полный required run matrix. Пакет ничего не запускает и доступен только при уже complete/compatible evidence.",
+  "hosts": ["Excel", "Word", "PowerPoint", "Outlook"],
+  "suite": "release",
+  "workspacePolicy": "read-only",
+  "requirements": ["qualification.build-evidence.v1"],
+  "coverage": ["WQ-A5.build-evidence"],
+  "steps": [
+    {
+      "id": "preflight",
+      "kind": "precondition",
+      "title": "Проверить signature, identity, catalog и file hashes",
+      "action": "qualification.release.evidence.preflight",
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "verify",
+      "kind": "assertion",
+      "title": "Сверить complete release evidence matrix",
+      "assertion": "qualification.release.evidence.complete",
+      "dependsOn": ["preflight"],
+      "timeoutSeconds": 30
+    }
+  ]
+}

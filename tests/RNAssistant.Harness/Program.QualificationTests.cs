@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -407,8 +411,11 @@ namespace RNAssistant.Harness
                     "typed verifier passes only after reading persisted preflight and manual evidence");
                 AssertTrue(completed.HasDurableTerminal && !restarted.HasOpenRun(reloaded),
                     "terminal state is durable and no longer resumable");
-                AssertEqual("unavailable", completed.Context.BuildCommit,
-                    "shell report does not fabricate unavailable build provenance");
+                var buildIdentity = BuildIdentitySnapshot.FromAssembly(typeof(QualificationApplicationService).Assembly);
+                AssertEqual(buildIdentity.CommitSha, completed.Context.BuildCommit,
+                    "shell report uses immutable assembly build provenance");
+                AssertEqual("unavailable", completed.Context.BuildEvidenceSha256,
+                    "ordinary build does not fabricate a signed evidence manifest");
 
                 var finalReload = store.Load(session.Id);
                 var replayed = new QualificationApplicationService(EventStore(store)).GetLatest(finalReload);
@@ -465,6 +472,167 @@ namespace RNAssistant.Harness
                 "Excel release suite has no orphan mandatory coverage");
             AssertTrue(catalog.List("Word", "release", new string[0]).All(item => !item.Available),
                 "unimplemented Word release families remain N/A");
+        }
+
+        private static void QualificationSignedBuildEvidenceGatesReleaseSuite()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "rna-build-evidence-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var assemblyPath = Path.Combine(root, "RNAssistant.Office.dll");
+                File.WriteAllBytes(assemblyPath, Encoding.UTF8.GetBytes("exact candidate binary"));
+                var catalog = QualificationBuiltInCatalog.Load();
+                var catalogSha = QualificationBuiltInCatalog.Fingerprint(
+                    typeof(QualificationApplicationService).Assembly);
+                var certificate = Encoding.ASCII.GetBytes("pinned-test-certificate");
+                var identity = new BuildIdentitySnapshot(
+                    "16.1.0-dev", "16.1.0-dev+gaaaaaaaaaaaa", new string('a', 40),
+                    "2026-08-31T12:00:00Z", "stabilization/16.1", "dev", "clean",
+                    "Release", "x64", BuildEvidenceRuntime.Sha256(certificate));
+                var payload = BuildEvidencePayload(catalog, catalogSha, identity, assemblyPath);
+                var envelope = BuildEvidenceEnvelope.Parse(new JObject
+                {
+                    ["schemaVersion"] = 1,
+                    ["algorithm"] = "RS256",
+                    ["certificateDer"] = Convert.ToBase64String(certificate),
+                    ["payloadBase64"] = Convert.ToBase64String(payload),
+                    ["signatureBase64"] = Convert.ToBase64String(new byte[] { 1, 2, 3 })
+                }.ToString(Formatting.None));
+                var complete = BuildEvidenceRuntime.EvaluateEnvelope(envelope, identity, catalog,
+                    catalogSha, root, assemblyPath, new FakeBuildEvidenceSignatureVerifier(true));
+                AssertTrue(complete.Complete && complete.PassedRunCount == QualificationReleaseMatrix.RequiredRuns.Count,
+                    "signed exact identity/files/catalog and full run matrix admit release evidence");
+
+                WithTempPaths(paths =>
+                {
+                    var store = new ChatStore(paths);
+                    var session = store.Create("Excel", "qualification-release", "Qualification.xlsx", "Release evidence");
+                    var service = new QualificationApplicationService(EventStore(store), catalog, null, complete);
+                    var releasePack = service.List("Excel", "release")
+                        .Single(item => item.Pack.Id == "release.candidate");
+                    AssertTrue(releasePack.Available,
+                        "only complete compatible evidence exposes release admission capability");
+                    var run = service.StartAsync(session, releasePack.Pack.Id, null, CancellationToken.None)
+                        .GetAwaiter().GetResult();
+                    AssertEqual(QualificationRunStatus.Passed, run.Status,
+                        "built-in verifier, not UI/model narrative, passes release evidence");
+                    AssertEqual(envelope.Sha256, run.Context.BuildEvidenceSha256,
+                        "run pins the exact detached evidence envelope hash");
+                });
+
+                var badPayload = JObject.Parse(Encoding.UTF8.GetString(payload));
+                ((JObject)((JArray)badPayload["runs"])[0])["packSha256"] = new string('f', 64);
+                var incompatibleEnvelope = BuildEvidenceEnvelope.Parse(new JObject
+                {
+                    ["schemaVersion"] = 1,
+                    ["algorithm"] = "RS256",
+                    ["certificateDer"] = Convert.ToBase64String(certificate),
+                    ["payloadBase64"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(
+                        badPayload.ToString(Formatting.None))),
+                    ["signatureBase64"] = Convert.ToBase64String(new byte[] { 1, 2, 3 })
+                }.ToString(Formatting.None));
+                var incompatible = BuildEvidenceRuntime.EvaluateEnvelope(incompatibleEnvelope, identity,
+                    catalog, catalogSha, root, assemblyPath, new FakeBuildEvidenceSignatureVerifier(true));
+                AssertEqual("incompatible", incompatible.Status,
+                    "different pack content cannot qualify the current catalog");
+                var invalid = BuildEvidenceRuntime.EvaluateEnvelope(envelope, identity, catalog,
+                    catalogSha, root, assemblyPath, new FakeBuildEvidenceSignatureVerifier(false));
+                AssertEqual("invalid", invalid.Status, "invalid signature fails closed");
+
+                var unsafePayload = JObject.Parse(Encoding.UTF8.GetString(payload));
+                ((JObject)((JArray)unsafePayload["files"])[0])["path"] = "../RNAssistant.Office.dll";
+                RuntimeThrows<QualificationManifestException>(() => BuildEvidenceManifest.Parse(
+                    Encoding.UTF8.GetBytes(unsafePayload.ToString(Formatting.None))));
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); } catch { }
+            }
+        }
+
+        private static byte[] BuildEvidencePayload(QualificationPackCatalog catalog, string catalogSha,
+            BuildIdentitySnapshot identity, string assemblyPath)
+        {
+            var runs = new JArray();
+            var index = 0;
+            foreach (var requirement in QualificationReleaseMatrix.RequiredRuns)
+            {
+                var pack = catalog.Get(requirement.PackId);
+                runs.Add(new JObject
+                {
+                    ["packId"] = requirement.PackId,
+                    ["host"] = requirement.Host,
+                    ["variant"] = requirement.Variant,
+                    ["packRevision"] = pack.Revision,
+                    ["packSha256"] = pack.ContentSha256,
+                    ["outcome"] = "passed",
+                    ["runId"] = "run-" + index.ToString("00"),
+                    ["completedEventId"] = "event-" + index.ToString("00"),
+                    ["completedUtc"] = "2026-08-31T13:00:00Z",
+                    ["evidenceSha256"] = new string(((char)('a' + index % 6)), 64)
+                });
+                index++;
+            }
+            var root = new JObject
+            {
+                ["schemaVersion"] = 1,
+                ["status"] = "complete",
+                ["productVersion"] = identity.ProductVersion,
+                ["informationalVersion"] = identity.InformationalVersion,
+                ["commitSha"] = identity.CommitSha,
+                ["buildUtc"] = identity.BuildUtc,
+                ["branch"] = identity.Branch,
+                ["channel"] = identity.Channel,
+                ["workingTreeState"] = identity.WorkingTreeState,
+                ["configuration"] = identity.Configuration,
+                ["platform"] = identity.Platform,
+                ["catalogSha256"] = catalogSha,
+                ["environment"] = "windows-x64-office-x64",
+                ["environmentSha256"] = new string('b', 64),
+                ["evidenceBundleSha256"] = new string('c', 64),
+                ["files"] = new JArray(new JObject
+                {
+                    ["id"] = "office",
+                    ["path"] = Path.GetFileName(assemblyPath),
+                    ["byteLength"] = new FileInfo(assemblyPath).Length,
+                    ["sha256"] = BuildEvidenceRuntime.Sha256File(assemblyPath)
+                }),
+                ["checks"] = new JArray(new JObject
+                {
+                    ["id"] = "host-neutral.harness",
+                    ["outcome"] = "passed",
+                    ["completedUtc"] = "2026-08-31T12:30:00Z",
+                    ["evidenceSha256"] = new string('d', 64)
+                }),
+                ["runs"] = runs
+            };
+            return Encoding.UTF8.GetBytes(root.ToString(Formatting.None));
+        }
+
+        private static void QualificationRsaEvidenceSignatureRejectsTampering()
+        {
+            var payload = Encoding.UTF8.GetBytes("{\"schemaVersion\":1}");
+            using (var rsa = RSA.Create(2048))
+            {
+                var request = new CertificateRequest("CN=RNAssistant qualification test", rsa,
+                    HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+                using (var certificate = request.CreateSelfSigned(
+                    DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddMinutes(5)))
+                {
+                    var signature = rsa.SignData(payload, HashAlgorithmName.SHA256,
+                        RSASignaturePadding.Pkcs1);
+                    var verifier = new RsaBuildEvidenceSignatureVerifier();
+                    string error;
+                    AssertTrue(verifier.Verify(payload, signature,
+                            certificate.Export(X509ContentType.Cert), out error),
+                        "RS256 verifier accepts the exact signed payload");
+                    payload[0] ^= 1;
+                    AssertTrue(!verifier.Verify(payload, signature,
+                            certificate.Export(X509ContentType.Cert), out error),
+                        "RS256 verifier rejects a modified payload");
+                }
+            }
         }
 
         private static void QualificationUiBridgeRoutesTypedPayloads()
@@ -610,6 +778,7 @@ namespace RNAssistant.Harness
                 Host = "Excel",
                 ProductVersion = "16.1.0-dev",
                 BuildCommit = "test-commit",
+                BuildEvidenceSha256 = "unavailable",
                 Channel = "development",
                 Capabilities = new List<string> { "fake.capability" },
                 RunStatus = runStatus,
@@ -741,6 +910,22 @@ namespace RNAssistant.Harness
                 StepIds.Add(context.Step.Id);
                 _cancellation.Cancel();
                 return _never.Task;
+            }
+        }
+
+        private sealed class FakeBuildEvidenceSignatureVerifier : IBuildEvidenceSignatureVerifier
+        {
+            private readonly bool _result;
+
+            internal FakeBuildEvidenceSignatureVerifier(bool result)
+            {
+                _result = result;
+            }
+
+            public bool Verify(byte[] payload, byte[] signature, byte[] certificateDer, out string error)
+            {
+                error = _result ? null : "Injected invalid signature.";
+                return _result;
             }
         }
 

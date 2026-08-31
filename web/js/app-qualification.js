@@ -277,6 +277,13 @@
 
     var provenance = $("qualificationProvenance");
     provenance.replaceChildren();
+    var buildEvidence = center.catalog ? value(center.catalog, "buildEvidence", null) : null;
+    if (buildEvidence) {
+      appendProvenance(provenance, "build evidence", value(buildEvidence, "status", "missing"));
+      appendProvenance(provenance, "product", value(buildEvidence, "productVersion", ""));
+      appendProvenance(provenance, "commit", value(buildEvidence, "commitSha", ""));
+      appendProvenance(provenance, "manifest", String(value(buildEvidence, "manifestSha256", "")).slice(0, 16));
+    }
     if (pack) {
       appendProvenance(provenance, "pack", value(pack, "id", ""));
       appendProvenance(provenance, "revision", value(pack, "revision", ""));
@@ -287,6 +294,7 @@
       appendProvenance(provenance, "host", value(center.run, "host", ""));
       appendProvenance(provenance, "product", value(center.run, "productVersion", ""));
       appendProvenance(provenance, "commit", value(center.run, "buildCommit", ""));
+      appendProvenance(provenance, "evidence", String(value(center.run, "buildEvidenceSha256", "")).slice(0, 16));
       appendProvenance(provenance, "run", value(center.run, "runId", ""));
     }
     renderInstruction(pack, runStatus);
@@ -297,6 +305,12 @@
     else if (center.run && value(center.run, "reportTruncated", false))
       setStatus("Report preview ограничен; полные evidence остаются в event stream/CAS.", false);
     else if (center.run) setStatus("Показано состояние из durable qualification events.", false);
+    else if (pack && !value(pack, "available", false)) {
+      var missing = arrayValue(pack, "missingRequirements").join(", ");
+      var evidenceIssues = buildEvidence ? arrayValue(buildEvidence, "issues") : [];
+      setStatus("Пакет недоступен" + (missing ? ": " + missing : "") +
+        (evidenceIssues.length ? " · " + String(evidenceIssues[0]) : ""), false);
+    }
     else setStatus("Выберите доступный пакет. Запуск создаст отдельный qualification-чат.", false);
   }
 
@@ -445,6 +459,7 @@
     var report = JSON.stringify({
       schemaVersion: 1,
       pack: selectedPack(),
+      buildEvidence: center.catalog ? value(center.catalog, "buildEvidence", null) : null,
       run: center.run
     }, null, 2);
     if (report.length > MAX_REPORT_CHARS) throw new Error("Bounded qualification report exceeds the UI limit.");

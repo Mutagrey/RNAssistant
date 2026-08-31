@@ -8,7 +8,8 @@ host-neutral миграции. Он не заменяет targeted tests под�
 
 - Windows x64, Office x64 и VS 2022; записать версии Windows, Office, WebView2 Runtime
   и тип установки add-in.
-- Известный Git commit, product version и один неизменяемый build на весь прогон.
+- Известный Git commit, product version и один неизменяемый Release/x64 build на весь
+  прогон; candidate metadata заранее pin-ит SHA-256 evidence signer certificate.
 - Отдельные тестовые `.xlsx`/`.xlsm`, включая две книги с одинаковым видимым именем в
   разных каталогах. Не использовать пользовательские документы без резервной копии.
 - Включённые diagnostics и возможность экспортировать causal journal/trajectory.
@@ -23,6 +24,13 @@ host-neutral миграции. Он не заменяет targeted tests под�
 выберите suite `release` и pack `excel.wq0.identity`. Pack wizard, automatic
 assertion и report работают без scripts. Команды из probe README остаются только
 engineering fallback и сами не считаются встроенным UI evidence.
+
+До прогона `RNAssistant.BuildEvidence.v1.json` отсутствует, поэтому
+`release.candidate` закономерно недоступен. Сначала выполнить остальные required
+packs и собрать immutable evidence bundle; затем release contour подписывает
+[exact-build manifest](../operations/BUILD_EVIDENCE.md). После размещения sidecar
+рядом с тем же `RNAssistant.Office.dll` и перезапуска приложения выполнить
+`release.candidate`; rebuilt binary требует нового полного evidence.
 
 ## 2. WQ0 — blocking identity probe для 5B2
 
@@ -78,6 +86,8 @@ causal journal не позволяет установить последнюю �
 - FAIL исправлен отдельным commit, покрыт targeted regression и повторно проверен в
   затронутом Windows scenario.
 - После последних исправлений повторены WQ-BASE и общий smoke WQ-CROSS.
+- Detached manifest имеет status `complete`, hashes совпадают с неизменёнными
+  distributable files, а `release.candidate` прошёл и сохранил тот же manifest SHA.
 - Нет неразобранных P0/P1, false-positive success, wrong-target или unclassified
   `unknown` effect.
 - Результаты и оставшиеся ограничения записаны в `PROGRESS.md`; только затем начинается
