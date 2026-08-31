@@ -2,12 +2,12 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 migration contours — перенос всех существующих tools и удаление active legacy architecture явно обязательны до Phase 12; новые optional product features этим не добавлены
-Current task: 11T7 completes every current PowerPoint public family host-neutral over one bound presentation; 11T8 bound Outlook vertical is next. Real Windows/live-provider gates remain open.
-Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy обязательны. WQ0 больше не блокирует implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint object принимается как lifetime assumption; реальные Windows/live-provider gates остаются deferred evidence и не могут быть закрыты локальными tests.
+Current task: 11T8 completes every current Outlook public family host-neutral over one bound Inspector/mail or Explorer/folder; 11T9 direct VBA/controller execution is next. Real Windows/live-provider gates remain open.
+Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy обязательны. WQ0 больше не блокирует implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принимается как lifetime assumption; реальные Windows/live-provider gates остаются deferred evidence и не могут быть закрыты локальными tests.
 
-Next step for tools: 11T8 переносит existing Outlook reads/mutations на собственный bound `DocumentSession`, typed requests/domain service/direct backend и удаляет заменённые host switch/helpers. Расширение schemas, send/reply/forward и generic action lists не входят в этот slice.
-Required context: [master Phase 11T](STABILIZATION_MASTER_PLAN.md), [11T7 evidence](PHASE_11T7_POWERPOINT_BOUND_VERTICAL.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current Outlook host owner.
-Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1 and 11T0–11T7 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Remaining Office built-ins move through the bound Outlook vertical; then direct VBA/controller/authoring switches and final cleanup remove `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. All current Excel, Word and PowerPoint public families use direct typed/bound handlers; their compatibility commands, execution-time target fallback and generic host branches/helpers are gone. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD and WQ-POWERPOINT are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+Next step for tools: 11T9 переключает existing VBA mutations/packages и остальные controller-owned execution paths на direct typed registrations/backends без `ToolDefinition`/legacy `ToolResult` roundtrip; VBA journal/CAS остаются единственной authority.
+Required context: [master Phase 11T](STABILIZATION_MASTER_PLAN.md), [11T8 evidence](PHASE_11T8_OUTLOOK_BOUND_VERTICAL.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current VBA/controller owners.
+Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1 and 11T0–11T8 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. All current Excel, Word, PowerPoint and Outlook public families use direct typed/bound handlers; their compatibility commands, execution-time target fallback and generic host branches/helpers are gone. Direct VBA/controller/authoring switches and final cleanup still must remove `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host VBA/macro switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
 Model SSE terminal incident fix (2026-08-31): streaming reader теперь распознаёт
 non-empty `choices[0].finish_reason`, bounded одну секунду ждёт optional final usage
@@ -152,6 +152,24 @@ MockDemo build and C# 7.3 syntax checks pass. Real PowerPoint COM shape/slide
 semantics, multi-window lifetime, rollback/partial effects and VSTO pane cleanup
 remain WQ-POWERPOINT/WQ-SESSION evidence.
 [Evidence](PHASE_11T7_POWERPOINT_BOUND_VERTICAL.md).
+
+Phase 11T8 Outlook bound vertical (2026-09-01): all five existing public Outlook
+ids now use exact native registrations, typed requests/outcomes, one
+`OutlookService` and a direct backend over an Inspector/mail or Explorer/folder
+retained by `OutlookDocumentSession`. Desktop resolves an exact open Outlook window;
+Outlook VSTO owns one runtime per window. Implicit selected-mail access stays inside
+that retained window, while explicit EntryID reads remain exact. Reads and HTML
+binding share the typed adapter and bounded projections. Draft/update mutations
+recheck exact target state before dispatch and require operation-specific read-back;
+post-boundary failure is `unknown`. Production `OutlookAdapter` public branches,
+methods, recursive folder/active-window helpers and execution-time
+`ActiveInspector`/`ActiveExplorer` fallback are removed. Focused Outlook 4/4,
+architecture 4/4, source inclusion 1/1, MockDemo build and C# 7.3 syntax checks
+pass. The isolated full candidate is 572/576: four unchanged baseline failures are
+in tool-result materialization/replay outside 11T8. Real Outlook Inspector/Explorer identity,
+selection/folder drift, recipient normalization, partial effects and VSTO pane
+cleanup remain WQ-OUTLOOK/WQ-SESSION evidence.
+[Evidence](PHASE_11T8_OUTLOOK_BOUND_VERTICAL.md).
 
 Pre-R37 trajectory inference removal (2026-08-31): `TrajectoryRunProjection` and
 `TrajectoryDerivedProjection` no longer reinterpret a persisted
@@ -1164,7 +1182,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 11C | done host-neutral: 11C1–11C3 | [11C1](PHASE_11C1_HTML_LINEAGE.md), [11C2](PHASE_11C2_HTML_IMPORT_PREVIEW.md), [11C3](PHASE_11C3_HTML_BINDING_EXPORT.md) | 11C3: harness 8/8; web 21/21; JS syntax | not performed | Unique lineage, inert exact import and one guarded exact binding/recovery/export checkpoint path switched; Windows WebView/Office remains |
 | 11D | in progress: 11D1 done host-neutral | [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md) | harness 4/4; web 48/48; JS syntax | not performed | Exact bounded text/source + complete-only sanitized Markdown switched; image/PDF/audio and Windows WebView remain |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
-| 11 | in progress; 11T0–11T7 done host-neutral, remaining existing-tool migration/final legacy cleanup mandatory | 11A–11D1 evidence above; [11T7](PHASE_11T7_POWERPOINT_BOUND_VERTICAL.md) | 11T7: PowerPoint 4/4; architecture 4/4; source inclusion 1/1 | not performed | 11T8 bound Outlook next, then direct controller/authoring switches and final generic-dispatch/adapter removal before Phase 12; new optional product contours are not gates |
+| 11 | in progress; 11T0–11T8 done host-neutral, remaining controller/authoring migration and final legacy cleanup mandatory | 11A–11D1 evidence above; [11T8](PHASE_11T8_OUTLOOK_BOUND_VERTICAL.md) | 11T8: Outlook 4/4; architecture 4/4; source inclusion 1/1; isolated full candidate 572/576 with four unchanged non-11T8 baseline failures | not performed | 11T9 direct VBA/controller execution next, then typed authoring and final generic-dispatch/adapter removal before Phase 12; new optional product contours are not gates |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
 ## Phase 0 substeps
@@ -1813,11 +1831,10 @@ harness не запускались. Следующий отдельный ша�
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | All current Excel, Word and PowerPoint families bypass it after 11T7; remaining mandatory 11T handler slices remove their consumers; R23 remains |
+| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Remaining VBA/controller handlers → kernel records | All current Excel, Word, PowerPoint and Outlook public families bypass it after 11T8; 11T9 removes the remaining execution consumers; R23 remains |
 | LegacyToolDefinitionAdapter | ToolRuntime | Current legacy catalog/schema/authoring and execution consumers listed in `MIGRATION_MAP.md`; resource projection removed | Remaining mandatory 11T built-in switches and 11J authoring switch; `ProjectRead` removed in 10C2, no resource dependency |
-| LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | All current Excel, Word and PowerPoint families bypass it after 11T7; remaining mandatory 11T handler slices remove their consumers; no old-history reader |
+| LegacyToolResultAdapter | ToolRuntime | Remaining VBA/controller executors → typed result materialization | All four Office public host families bypass it after 11T8; 11T9 removes the remaining execution consumers; no old-history reader |
 | ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 runtime state switched; remaining manual/domain presentation consumers leave with mandatory 11T slices |
-| Unbound host identity/access | HostRuntime / host factories | Outlook production adapter | Excel removed this path in 11T0/7D, Word in 11T6 and PowerPoint in 11T7; Outlook switches in mandatory 11T8. Windows gates remain evidence, not fallback owners |
 | `VbaMutationDocumentContextAdapter` / `VbaMutationReaderAdapter` / `VbaMutationBackendAdapter` | VBA / Tools | Typed mutation service over current wide host and legacy read/mutation results; backend serves patch, whole write/rename, delete and restore | Document context after 11T0; mandatory 11T9 direct-handler/typed-host cleanup before Phase 12 |
 | `VbaPackageToolAdapter` / `VbaPackageBackendAdapter` | VBA / Tools | Existing 6I package service over current ToolDefinition/host command/result seams | Mandatory 11T9/11J direct-handler/authoring switch before Phase 12; one-way mapping only, no domain legacy result/history |
 | `VbaMutationToolResultMapper` | VBA / Tools | Current VBA executor → legacy handler boundary | Mandatory 11T9 direct typed ToolRuntime handler switch before Phase 12; no model-history reader |

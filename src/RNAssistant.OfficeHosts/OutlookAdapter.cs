@@ -1,108 +1,82 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Outlook = Microsoft.Office.Interop.Outlook;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Tools;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Tools;
+using RNAssistant.OfficeHosts.Identity;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed class OutlookAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider
+    public sealed class OutlookAdapter : IOfficeApplicationAdapter,
+        IOfficeContextProvider, IOfficeBuiltInSkillProvider,
+        IOfficeDocumentSessionProvider, IOfficeDispatcherProvider,
+        IOutlookBackendProvider
     {
-        private readonly Outlook.Application _application;
-        private readonly OfficeTargetDescriptor _target;
+        private readonly OutlookDocumentSession _documentSession;
+        private readonly OutlookInteropBackend _outlookBackend;
 
-        public OutlookAdapter(Outlook.Application application)
-            : this(application, null)
+        public OutlookAdapter(
+            Outlook.Application application,
+            Outlook.MailItem targetMail,
+            Outlook.MAPIFolder targetFolder,
+            Outlook.Inspector targetInspector,
+            Outlook.Explorer targetExplorer,
+            IOfficeStaDispatcher dispatcher)
         {
-        }
-
-        public OutlookAdapter(Outlook.Application application, OfficeTargetDescriptor target)
-        {
-            _application = application;
-            _target = target;
+            var bound = (object)targetMail ?? targetFolder;
+            var runtimeDocumentId = DocumentIdentity.RuntimeKey(
+                HostName, bound ?? throw new ArgumentNullException("target"));
+            _documentSession = new OutlookDocumentSession(
+                application, targetMail, targetFolder,
+                targetInspector, targetExplorer,
+                runtimeDocumentId, dispatcher);
+            _outlookBackend = new OutlookInteropBackend(_documentSession);
         }
 
         public string HostName { get { return "Outlook"; } }
-
-        public string DocumentKey
-        {
-            get
-            {
-                var mail = SelectedMail();
-                if (mail != null && !string.IsNullOrWhiteSpace(mail.EntryID))
-                {
-                    return mail.EntryID;
-                }
-
-                var folder = CurrentFolder();
-                return folder == null ? "Outlook" : folder.FolderPath;
-            }
-        }
-
-        public string RuntimeDocumentKey
-        {
-            get { return DocumentKey; }
-        }
-
-        public string DocumentTitle
-        {
-            get
-            {
-                var mail = SelectedMail();
-                if (mail != null)
-                {
-                    return mail.Subject;
-                }
-
-                var folder = CurrentFolder();
-                return folder == null ? "Outlook" : folder.Name;
-            }
-        }
+        public IOfficeDocumentSession DocumentSession { get { return _documentSession; } }
+        public IOfficeStaDispatcher StaDispatcher { get { return _documentSession.StaDispatcher; } }
+        public IOutlookBackend OutlookBackend { get { return _outlookBackend; } }
+        public string DocumentKey { get { return _documentSession.StableDocumentId; } }
+        public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
+        public string DocumentTitle { get { return _documentSession.Title; } }
 
         public OfficeContext GetOfficeContext()
         {
-            var context = new OfficeContext { Host = HostName };
-            var hwnd = ActiveOutlookHwnd();
-            context.AppHwnd = new IntPtr(hwnd);
-            context.ProcessId = NativeWindowInfo.GetProcessId(hwnd);
-
-            var mail = SelectedMail();
-            if (mail != null)
+            var hwnd = _documentSession.WindowHwnd;
+            var context = new OfficeContext
             {
-                context.DocumentTitle = SafeString(delegate { return mail.Subject; });
-                context.SelectionAddress = SafeString(delegate { return mail.EntryID; });
-                context.SelectionText = Trim(SafeString(delegate { return mail.Body; }), 2000);
+                Host = HostName,
+                AppHwnd = new IntPtr(hwnd),
+                ProcessId = NativeWindowInfo.GetProcessId(hwnd)
+            };
+            if (_documentSession.IsMailTarget)
+            {
+                var mail = RequireSelectedMail();
+                context.DocumentTitle = SafeString(
+                    delegate { return mail.Subject; });
+                context.SelectionAddress = SafeString(
+                    delegate { return mail.EntryID; });
+                context.SelectionText = Trim(SafeString(
+                    delegate { return mail.Body; }), 2000);
+                context.DocumentPath = _documentSession.FolderPath;
                 try
                 {
                     var folder = mail.Parent as Outlook.MAPIFolder;
                     if (folder != null)
-                    {
-                        context.ContainerName = folder.Name;
-                        context.DocumentPath = folder.FolderPath;
-                    }
+                        context.ContainerName = SafeString(
+                            delegate { return folder.Name; });
                 }
-                catch
-                {
-                }
+                catch { }
                 return context;
             }
-
-            var currentFolder = CurrentFolder();
-            if (currentFolder != null)
-            {
-                context.DocumentTitle = SafeString(delegate { return currentFolder.Name; });
-                context.DocumentPath = SafeString(delegate { return currentFolder.FolderPath; });
-                context.ContainerName = context.DocumentTitle;
-            }
-            else
-            {
-                context.DocumentTitle = "Outlook";
-            }
-
+            context.DocumentTitle = _documentSession.Title;
+            context.DocumentPath = _documentSession.FolderPath;
+            context.ContainerName = context.DocumentTitle;
             return context;
         }
 
@@ -130,63 +104,64 @@ namespace RNAssistant.OfficeHosts
 
         public string GetDocumentSnapshot(int maxChars)
         {
-            var mail = SelectedMail();
+            var mail = _documentSession.SelectedMail();
             if (mail == null)
-            {
-                var folder = CurrentFolder();
-                return folder == null ? "No selected email." : "Current folder: " + folder.FolderPath;
-            }
-
-            return Trim("Subject: " + mail.Subject + "\nFrom: " + mail.SenderName + "\nReceived: " + mail.ReceivedTime + "\n\n" + mail.Body, maxChars);
+                return Trim(
+                    "Current folder: " + _documentSession.FolderPath,
+                    maxChars);
+            return Trim(
+                "Subject: " + SafeString(delegate { return mail.Subject; }) +
+                "\nFrom: " + SafeString(delegate { return mail.SenderName; }) +
+                "\nReceived: " + SafeString(
+                    delegate { return mail.ReceivedTime.ToString(); }) +
+                "\n\n" + SafeString(delegate { return mail.Body; }),
+                maxChars);
         }
 
         public void PrepareForContextCapture()
         {
-            try
-            {
-                var explorer = _application.ActiveExplorer();
-                if (explorer != null)
-                {
-                    explorer.Activate();
-                    return;
-                }
-
-                var inspector = _application.ActiveInspector();
-                if (inspector != null)
-                {
-                    inspector.Activate();
-                }
-            }
-            catch
-            {
-            }
+            try { _documentSession.Activate(); }
+            catch { }
         }
 
         public ContextNote CaptureSelectionContext(string mode, int maxChars)
         {
             var mail = RequireSelectedMail();
-            var referenceOnly = string.Equals(mode, "reference", StringComparison.OrdinalIgnoreCase);
-            var reference = string.IsNullOrWhiteSpace(mail.EntryID) ? mail.Subject : mail.EntryID;
+            var referenceOnly = string.Equals(
+                mode, "reference", StringComparison.OrdinalIgnoreCase);
+            var entryId = SafeString(delegate { return mail.EntryID; });
+            var subject = SafeString(delegate { return mail.Subject; });
+            var reference = string.IsNullOrWhiteSpace(entryId)
+                ? subject : entryId;
             var text = referenceOnly
-                ? "Reference only. Use Outlook tools with the selected email if exact body content is needed."
-                : Trim("Subject: " + mail.Subject + "\nFrom: " + mail.SenderName + " <" + mail.SenderEmailAddress + ">\nReceived: " + mail.ReceivedTime + "\n\n" + mail.Body, maxChars);
-
+                ? "Reference only. Use Outlook tools with this email if exact body content is needed."
+                : Trim(
+                    "Subject: " + subject +
+                    "\nFrom: " + SafeString(delegate { return mail.SenderName; }) +
+                    " <" + SafeString(
+                        delegate { return mail.SenderEmailAddress; }) + ">" +
+                    "\nReceived: " + SafeString(
+                        delegate { return mail.ReceivedTime.ToString(); }) +
+                    "\n\n" + SafeString(delegate { return mail.Body; }),
+                    maxChars);
             return new ContextNote
             {
                 Host = HostName,
                 Kind = referenceOnly ? "mail-reference" : "mail",
-                Title = "Outlook mail: " + mail.Subject,
+                Title = "Outlook mail: " + subject,
                 Reference = reference,
-                Source = mail.Subject,
+                Source = subject,
                 Text = text,
                 Preview = Trim(text, 360),
                 DetailsJson = JsonConvert.SerializeObject(new
                 {
-                    subject = mail.Subject,
-                    sender = mail.SenderName,
-                    senderEmail = mail.SenderEmailAddress,
-                    received = mail.ReceivedTime,
-                    entryId = mail.EntryID,
+                    subject,
+                    sender = SafeString(delegate { return mail.SenderName; }),
+                    senderEmail = SafeString(
+                        delegate { return mail.SenderEmailAddress; }),
+                    received = SafeString(
+                        delegate { return mail.ReceivedTime.ToString("O"); }),
+                    entryId,
                     mode = referenceOnly ? "reference" : "text"
                 })
             };
@@ -194,551 +169,32 @@ namespace RNAssistant.OfficeHosts
 
         public ToolResult ExecuteTool(ToolCommand command)
         {
-            try
-            {
-                switch (command.ToolId)
-                {
-                    case "outlook.read_mail":
-                        return ReadMail(command);
-                    case "outlook.search_mail":
-                        return SearchMail(command);
-                    case "outlook.create_draft":
-                        return CreateDraft(command);
-                    case "outlook.update_mail":
-                        return UpdateMail(command);
-                    case "outlook.collect_mail":
-                        return CollectFolderMail(command,
-                            string.Equals(ToolArgumentReader.String(command.Arguments, "groupBy", "none"), "month", StringComparison.OrdinalIgnoreCase));
-                    default:
-                        return ToolResult.Fail("Unsupported Outlook tool: " + command.ToolId);
-                }
-            }
-            catch (Exception ex)
-            {
-                return ToolResult.Fail(ex.Message);
-            }
-        }
-
-        private ToolResult ReadSelection(ToolCommand command)
-        {
-            var mail = RequireSelectedMail();
-            var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
-            return ToolResult.Ok("Selected email read.", JsonConvert.SerializeObject(MailPayload(mail, maxChars)));
-        }
-
-        private ToolResult ReadMailByEntryId(ToolCommand command)
-        {
-            var entryId = ToolArgumentReader.String(command.Arguments, "entryId", string.Empty);
-            if (string.IsNullOrWhiteSpace(entryId))
-            {
-                return ToolResult.Fail("entryId is required.");
-            }
-
-            var mail = _application.Session.GetItemFromID(entryId, Type.Missing) as Outlook.MailItem;
-            if (mail == null)
-            {
-                return ToolResult.Fail("Mail item not found: " + entryId);
-            }
-
-            var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 12000);
-            return ToolResult.Ok("Email read by EntryID.", JsonConvert.SerializeObject(MailPayload(mail, maxChars)));
-        }
-
-        private ToolResult ReadMail(ToolCommand command)
-        {
-            var content = ToolArgumentReader.String(command.Arguments, "content", "message");
-            if (string.Equals(content, "attachments", StringComparison.OrdinalIgnoreCase)) return ListAttachments(command);
-            var message = string.IsNullOrWhiteSpace(ToolArgumentReader.String(command.Arguments, "entryId", string.Empty))
-                ? ReadSelection(command)
-                : ReadMailByEntryId(command);
-            if (!message.Success || string.Equals(content, "message", StringComparison.OrdinalIgnoreCase)) return message;
-            if (!string.Equals(content, "both", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("content must be message, attachments, or both.");
-            }
-            var attachments = ListAttachments(command);
-            if (!attachments.Success) return attachments;
-            return ToolResult.Ok("Email and attachments read.", new JObject
-            {
-                ["message"] = JToken.Parse(message.DataJson ?? "{}"),
-                ["attachments"] = JToken.Parse(attachments.DataJson ?? "[]")
-            }.ToString(Formatting.None));
-        }
-
-        private ToolResult CreateDraft(ToolCommand command)
-        {
-            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
-            if (string.Equals(kind, "new", StringComparison.OrdinalIgnoreCase)) return CreateMailDraft(command);
-            if (string.Equals(kind, "reply", StringComparison.OrdinalIgnoreCase)) return DraftReply(command);
-            if (string.Equals(kind, "replyAll", StringComparison.OrdinalIgnoreCase)) return DraftReplyAll(command);
-            if (string.Equals(kind, "forward", StringComparison.OrdinalIgnoreCase)) return DraftForward(command);
-            return ToolResult.Fail("kind must be new, reply, replyAll, or forward.");
-        }
-
-        private ToolResult SearchMail(ToolCommand command)
-        {
-            var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty);
-            if (string.IsNullOrWhiteSpace(query))
-            {
-                return ToolResult.Fail("query is required.");
-            }
-
-            var folder = CurrentFolder();
-            if (folder == null)
-            {
-                return ToolResult.Fail("No current Outlook folder.");
-            }
-
-            var maxItems = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxItems", 100)));
-            var maxResults = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxResults", 50)));
-            var maxBodyChars = ToolArgumentReader.Int32(command.Arguments, "maxBodyChars", 1000);
-            var contextChars = Math.Max(0, Math.Min(1000, ToolArgumentReader.Int32(command.Arguments, "contextChars", 80)));
-            var requestedFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var requested in (ToolArgumentReader.String(command.Arguments, "fields", "subject,sender,body") ?? string.Empty).Split(','))
-            {
-                var field = (requested ?? string.Empty).Trim();
-                if (!string.IsNullOrWhiteSpace(field)) requestedFields.Add(field);
-            }
-            if (requestedFields.Count == 0)
-            {
-                return ToolResult.Fail("fields must contain at least one mail field.", null, "invalid_arguments", false);
-            }
-            foreach (var field in requestedFields)
-            {
-                if (!string.Equals(field, "subject", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(field, "sender", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(field, "recipients", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(field, "body", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail("Unsupported Outlook search field: " + field + ".", null, "invalid_arguments", false);
-                }
-            }
-            var options = new TextPatternOptions { Mode = ToolArgumentReader.String(command.Arguments, "mode", "literal"), MatchCase = ToolArgumentReader.Boolean(command.Arguments, "matchCase", false), WholeWord = ToolArgumentReader.Boolean(command.Arguments, "wholeWord", false) };
-            var matches = new List<object>();
-            var total = 0;
-            var items = folder.Items;
-            items.Sort("[ReceivedTime]", true);
-            try
-            {
-                for (var i = 1; i <= items.Count && i <= maxItems; i++)
-                {
-                    var mail = items[i] as Outlook.MailItem;
-                    if (mail == null) continue;
-                    var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                    {
-                        { "subject", mail.Subject ?? string.Empty },
-                        { "sender", (mail.SenderName ?? string.Empty) + " <" + (mail.SenderEmailAddress ?? string.Empty) + ">" },
-                        { "recipients", "To: " + (mail.To ?? string.Empty) + "; CC: " + (mail.CC ?? string.Empty) + "; BCC: " + (mail.BCC ?? string.Empty) },
-                        { "body", mail.Body ?? string.Empty }
-                    };
-                    foreach (var field in fields)
-                    {
-                        if (!requestedFields.Contains(field.Key)) continue;
-                        var found = TextPatternEngine.Find(field.Value, query, options, Math.Max(1, maxResults - matches.Count), contextChars);
-                        total += found.MatchCount;
-                        foreach (var match in found.Matches)
-                        {
-                            if (matches.Count >= maxResults) break;
-                            matches.Add(new { entryId = mail.EntryID, subject = mail.Subject, received = mail.ReceivedTime, field = field.Key, start = match.Index, end = match.Index + match.Length, preview = match.Preview, body = Trim(mail.Body, maxBodyChars) });
-                        }
-                    }
-                }
-                return ToolResult.Ok("Mail search matches: " + total, JsonConvert.SerializeObject(new { folder = folder.FolderPath, matchCount = total, returnedCount = matches.Count, truncated = total > matches.Count, matches = matches }));
-            }
-            catch (TextPatternException ex) { return ToolResult.Fail(ex.Message, null, ex.ErrorCode, false); }
-        }
-
-        private ToolResult ListAttachments(ToolCommand command)
-        {
-            var entryId = ToolArgumentReader.String(command.Arguments, "entryId", string.Empty);
-            var mail = string.IsNullOrWhiteSpace(entryId)
-                ? RequireSelectedMail()
-                : _application.Session.GetItemFromID(entryId, Type.Missing) as Outlook.MailItem;
-            if (mail == null)
-            {
-                return ToolResult.Fail("Mail item not found.");
-            }
-
-            var attachments = new List<object>();
-            for (var i = 1; i <= mail.Attachments.Count; i++)
-            {
-                var attachment = mail.Attachments[i];
-                attachments.Add(new
-                {
-                    index = i,
-                    fileName = attachment.FileName,
-                    displayName = attachment.DisplayName,
-                    size = attachment.Size,
-                    type = attachment.Type.ToString()
-                });
-            }
-
-            return ToolResult.Ok("Attachments listed: " + attachments.Count, JsonConvert.SerializeObject(attachments));
-        }
-
-        private ToolResult CreateMailDraft(ToolCommand command)
-        {
-            var mail = _application.CreateItem(Outlook.OlItemType.olMailItem) as Outlook.MailItem;
-            if (mail == null)
-            {
-                return ToolResult.Fail("Could not create mail draft.");
-            }
-
-            mail.To = ToolArgumentReader.String(command.Arguments, "to", string.Empty);
-            mail.CC = ToolArgumentReader.String(command.Arguments, "cc", string.Empty);
-            mail.BCC = ToolArgumentReader.String(command.Arguments, "bcc", string.Empty);
-            mail.Subject = ToolArgumentReader.String(command.Arguments, "subject", string.Empty);
-            mail.Body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
-            mail.Display(false);
-            return ToolResult.Ok("Mail draft displayed.");
-        }
-
-        private ToolResult DraftReply(ToolCommand command)
-        {
-            var mail = RequireSelectedMail();
-            var body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
-            var reply = mail.Reply() as Outlook.MailItem;
-            if (reply == null)
-            {
-                return ToolResult.Fail("Could not create reply.");
-            }
-
-            reply.Body = body + "\n\n" + reply.Body;
-            reply.Display(false);
-            return ToolResult.Ok("Reply draft displayed.");
-        }
-
-        private ToolResult DraftReplyAll(ToolCommand command)
-        {
-            var mail = RequireSelectedMail();
-            var body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
-            var reply = mail.ReplyAll() as Outlook.MailItem;
-            if (reply == null)
-            {
-                return ToolResult.Fail("Could not create reply-all draft.");
-            }
-
-            reply.Body = body + "\n\n" + reply.Body;
-            reply.Display(false);
-            return ToolResult.Ok("Reply-all draft displayed.");
-        }
-
-        private ToolResult DraftForward(ToolCommand command)
-        {
-            var mail = RequireSelectedMail();
-            var body = ToolArgumentReader.String(command.Arguments, "body", string.Empty);
-            var forward = mail.Forward() as Outlook.MailItem;
-            if (forward == null)
-            {
-                return ToolResult.Fail("Could not create forward draft.");
-            }
-
-            forward.To = ToolArgumentReader.String(command.Arguments, "to", string.Empty);
-            forward.Body = body + "\n\n" + forward.Body;
-            forward.Display(false);
-            return ToolResult.Ok("Forward draft displayed.");
-        }
-
-        private ToolResult SetCategories(ToolCommand command)
-        {
-            var mail = RequireSelectedMail();
-            mail.Categories = ToolArgumentReader.String(command.Arguments, "categories", string.Empty);
-            mail.Save();
-            return ToolResult.Ok("Mail categories updated.");
-        }
-
-        private ToolResult MarkAsRead()
-        {
-            var mail = RequireSelectedMail();
-            mail.UnRead = false;
-            mail.Save();
-            return ToolResult.Ok("Mail marked as read.");
-        }
-
-        private ToolResult UpdateMail(ToolCommand command)
-        {
-            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty);
-            if (string.Equals(kind, "categories", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!command.Arguments.ContainsKey("categories")) return ToolResult.Fail("categories is required for kind=categories.");
-                return SetCategories(command);
-            }
-            if (string.Equals(kind, "markRead", StringComparison.OrdinalIgnoreCase)) return MarkAsRead();
-            return ToolResult.Fail("kind must be categories or markRead.");
-        }
-
-        private ToolResult CollectFolderMail(ToolCommand command, bool groupedByMonth)
-        {
-            var folder = CurrentFolder();
-            if (folder == null)
-            {
-                return ToolResult.Fail("No current Outlook folder.");
-            }
-
-            var maxItems = ToolArgumentReader.Int32(command.Arguments, "maxItems", groupedByMonth ? 500 : 100);
-            var maxBodyChars = ToolArgumentReader.Int32(command.Arguments, "maxBodyChars", groupedByMonth ? 500 : 1000);
-            var rows = new List<object>();
-            var monthly = new Dictionary<string, List<object>>();
-            var items = folder.Items;
-            items.Sort("[ReceivedTime]", true);
-
-            var count = Math.Min(items.Count, Math.Max(1, maxItems));
-            for (var i = 1; i <= count; i++)
-            {
-                var mail = items[i] as Outlook.MailItem;
-                if (mail == null)
-                {
-                    continue;
-                }
-
-                var record = new
-                {
-                    subject = mail.Subject,
-                    sender = mail.SenderName,
-                    received = mail.ReceivedTime,
-                    body = Trim(mail.Body, maxBodyChars)
-                };
-
-                if (groupedByMonth)
-                {
-                    var key = mail.ReceivedTime.ToString("yyyy-MM");
-                    if (!monthly.ContainsKey(key))
-                    {
-                        monthly[key] = new List<object>();
-                    }
-                    monthly[key].Add(record);
-                }
-                else
-                {
-                    rows.Add(record);
-                }
-            }
-
-            var data = groupedByMonth
-                ? JsonConvert.SerializeObject(new { folder = folder.FolderPath, months = monthly })
-                : JsonConvert.SerializeObject(new { folder = folder.FolderPath, messages = rows });
-            return ToolResult.Ok("Mail data collected.", data);
-        }
-
-        private static object MailPayload(Outlook.MailItem mail, int maxBodyChars)
-        {
-            return new
-            {
-                entryId = mail.EntryID,
-                subject = mail.Subject,
-                sender = mail.SenderName,
-                senderEmail = mail.SenderEmailAddress,
-                received = mail.ReceivedTime,
-                categories = mail.Categories,
-                unread = mail.UnRead,
-                body = Trim(mail.Body, maxBodyChars)
-            };
-        }
-
-        private Outlook.MailItem SelectedMail()
-        {
-            if (HasTargetMail())
-            {
-                return TargetMail();
-            }
-
-            if (HasTargetFolder())
-            {
-                return null;
-            }
-
-            try
-            {
-                var inspector = _application.ActiveInspector();
-                if (inspector != null)
-                {
-                    var currentItem = inspector.CurrentItem as Outlook.MailItem;
-                    if (currentItem != null)
-                    {
-                        return currentItem;
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                var explorer = _application.ActiveExplorer();
-                if (explorer == null || explorer.Selection == null || explorer.Selection.Count == 0)
-                {
-                    return null;
-                }
-
-                return explorer.Selection[1] as Outlook.MailItem;
-            }
-            catch
-            {
-                return null;
-            }
+            return ToolResult.Fail(
+                "Public Outlook tools require the typed Outlook backend.",
+                null, "outlook_legacy_dispatch_removed", false);
         }
 
         private Outlook.MailItem RequireSelectedMail()
         {
-            var mail = SelectedMail();
+            var mail = _documentSession.SelectedMail();
             if (mail == null)
-            {
-                throw new InvalidOperationException(_target != null && !string.IsNullOrWhiteSpace(_target.EntryId)
-                    ? "Target Outlook mail item is not available."
-                    : "Select an email first.");
-            }
+                throw new InvalidOperationException(
+                    "Select an email first in the bound Outlook window.");
             return mail;
         }
 
-        private Outlook.MailItem TargetMail()
+        private static string SafeString(Func<string> getter)
         {
-            if (!HasTargetMail())
-            {
-                return null;
-            }
-
-            try
-            {
-                return _application.Session.GetItemFromID(_target.EntryId, Type.Missing) as Outlook.MailItem;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private Outlook.MAPIFolder CurrentFolder()
-        {
-            if (HasTargetFolder())
-            {
-                return TargetFolder();
-            }
-
-            if (HasTargetMail())
-            {
-                return null;
-            }
-
-            try
-            {
-                var explorer = _application.ActiveExplorer();
-                return explorer == null ? null : explorer.CurrentFolder as Outlook.MAPIFolder;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private Outlook.MAPIFolder TargetFolder()
-        {
-            if (!HasTargetFolder())
-            {
-                return null;
-            }
-
-            try
-            {
-                foreach (Outlook.MAPIFolder root in _application.Session.Folders)
-                {
-                    var found = FindFolder(root, _target.FolderPath);
-                    if (found != null)
-                    {
-                        return found;
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            return null;
-        }
-
-        private bool HasTargetMail()
-        {
-            return _target != null && !string.IsNullOrWhiteSpace(_target.EntryId);
-        }
-
-        private bool HasTargetFolder()
-        {
-            return _target != null && !string.IsNullOrWhiteSpace(_target.FolderPath);
-        }
-
-        private static Outlook.MAPIFolder FindFolder(Outlook.MAPIFolder folder, string folderPath)
-        {
-            if (folder == null)
-            {
-                return null;
-            }
-
-            if (string.Equals(folder.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
-            {
-                return folder;
-            }
-
-            foreach (Outlook.MAPIFolder child in folder.Folders)
-            {
-                var found = FindFolder(child, folderPath);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-
-            return null;
-        }
-
-        private long ActiveOutlookHwnd()
-        {
-            try
-            {
-                var inspector = _application.ActiveInspector();
-                var hwnd = NativeWindowInfo.ReadLongMemberPath(inspector, "HWND");
-                if (hwnd != 0)
-                {
-                    return hwnd;
-                }
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                return NativeWindowInfo.ReadLongMemberPath(_application.ActiveExplorer(), "HWND");
-            }
-            catch
-            {
-                return 0;
-            }
-        }
-
-        private delegate string StringGetter();
-
-        private static string SafeString(StringGetter getter)
-        {
-            try { return getter(); }
+            try { return getter() ?? string.Empty; }
             catch { return string.Empty; }
-        }
-
-        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool canSourceHtmlData = false)
-        {
-            return new ToolDefinition { Id = id, Host = "Outlook", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, CanSourceHtmlData = canSourceHtmlData };
         }
 
         private static string Trim(string text, int maxChars)
         {
             maxChars = Math.Max(0, maxChars);
-            if (maxChars == 0)
-            {
-                return string.Empty;
-            }
+            if (maxChars == 0) return string.Empty;
             if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
-            {
-                return text;
-            }
+                return text ?? string.Empty;
             return text.Substring(0, maxChars) + "\n...[truncated]";
         }
     }

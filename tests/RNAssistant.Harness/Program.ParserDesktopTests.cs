@@ -14,6 +14,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.PowerPoint;
+using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Qualification;
 using RNAssistant.Office.Runtime;
@@ -1212,7 +1213,7 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend
         {
             private readonly FakeOfficeAdapter _inner;
 
@@ -1234,6 +1235,7 @@ namespace RNAssistant.Harness
             public IExcelChartBackend ExcelChartBackend { get { return this; } }
             public IWordBackend WordBackend { get { return this; } }
             public IPowerPointBackend PowerPointBackend { get { return this; } }
+            public IOutlookBackend OutlookBackend { get { return this; } }
             public string HostName { get { return Session.Host; } }
             public string DocumentKey { get { return StaDispatcher.Invoke(() => Session.StableDocumentId); } }
             public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
@@ -1278,6 +1280,10 @@ namespace RNAssistant.Harness
             public PowerPointMutationBackendResult AddObject(PowerPointAddObjectRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointAddObjectOperation); return _inner.AddObject(request, markDispatchPossible); }
             public PowerPointMutationBackendResult DuplicateSlide(PowerPointDuplicateSlideRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointDuplicateOperation); return _inner.DuplicateSlide(request, markDispatchPossible); }
             public PowerPointMutationBackendResult MoveSlide(PowerPointMoveSlideRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointMoveOperation); return _inner.MoveSlide(request, markDispatchPossible); }
+            public OutlookMailReadSnapshot ReadMail(OutlookReadMailRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.OutlookReadMailOperation); return _inner.ReadMail(request); }
+            public OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.OutlookReadFolderOperation); return _inner.ReadFolder(request); }
+            public OutlookDraftBackendResult CreateDraft(OutlookCreateDraftRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.OutlookCreateDraftOperation); return _inner.CreateDraft(request, markDispatchPossible); }
+            public OutlookUpdateBackendResult UpdateMail(OutlookUpdateMailRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.OutlookUpdateMailOperation); return _inner.UpdateMail(request, markDispatchPossible); }
         }
 
         private sealed class BoundTestQueuedDispatcher : IOfficeStaDispatcher

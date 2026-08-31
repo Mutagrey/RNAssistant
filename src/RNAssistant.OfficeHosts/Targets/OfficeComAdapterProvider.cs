@@ -62,8 +62,10 @@ namespace RNAssistant.OfficeHosts
             if (string.Equals(host, "Outlook", StringComparison.OrdinalIgnoreCase))
             {
                 var application = (Outlook.Application)GetActiveOfficeObject("Outlook.Application");
-                ValidateTargetWindow("Outlook", application, target);
-                return new OutlookAdapter(application, target);
+                var binding = ResolveOutlookBinding(application, target);
+                return new OutlookAdapter(
+                    application, binding.Mail, binding.Folder,
+                    binding.Inspector, binding.Explorer, dispatcher);
             }
 
             throw new InvalidOperationException("Unsupported Office host: " + (host ?? string.Empty));
@@ -466,6 +468,81 @@ namespace RNAssistant.OfficeHosts
             return ExcelDocumentSession.StableKey(
                 workbook,
                 DocumentIdentity.RuntimeKey("Excel", workbook));
+        }
+
+        private static OutlookBinding ResolveOutlookBinding(
+            Outlook.Application application,
+            OfficeTargetDescriptor target)
+        {
+            if (application == null)
+                throw new InvalidOperationException(
+                    "Outlook application is unavailable.");
+            if (target == null ||
+                (target.Hwnd == 0 &&
+                 string.IsNullOrWhiteSpace(target.EntryId) &&
+                 string.IsNullOrWhiteSpace(target.FolderPath)))
+                throw new InvalidOperationException(
+                    "An exact Outlook inspector or explorer target is required.");
+
+            OutlookBinding match = null;
+            foreach (Outlook.Inspector inspector in application.Inspectors)
+            {
+                var hwnd = NativeWindowInfo.ReadLongMemberPath(inspector, "HWND");
+                var mail = inspector.CurrentItem as Outlook.MailItem;
+                if (mail == null || !MatchesOutlookWindow(hwnd, target) ||
+                    (!string.IsNullOrWhiteSpace(target.EntryId) &&
+                     !string.Equals(
+                        SafeString(delegate { return mail.EntryID; }),
+                        target.EntryId.Trim(), StringComparison.Ordinal)))
+                    continue;
+                if (match != null)
+                    throw new InvalidOperationException(
+                        "The requested Outlook target is ambiguous.");
+                match = new OutlookBinding
+                {
+                    Mail = mail,
+                    Inspector = inspector
+                };
+            }
+            foreach (Outlook.Explorer explorer in application.Explorers)
+            {
+                var hwnd = NativeWindowInfo.ReadLongMemberPath(explorer, "HWND");
+                var folder = explorer.CurrentFolder as Outlook.MAPIFolder;
+                if (folder == null || !MatchesOutlookWindow(hwnd, target) ||
+                    (!string.IsNullOrWhiteSpace(target.FolderPath) &&
+                     !string.Equals(
+                        SafeString(delegate { return folder.FolderPath; }),
+                        target.FolderPath.Trim(),
+                        StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                if (!string.IsNullOrWhiteSpace(target.EntryId)) continue;
+                if (match != null)
+                    throw new InvalidOperationException(
+                        "The requested Outlook target is ambiguous.");
+                match = new OutlookBinding
+                {
+                    Folder = folder,
+                    Explorer = explorer
+                };
+            }
+            if (match == null)
+                throw new InvalidOperationException(
+                    "The requested Outlook inspector or explorer is not open.");
+            return match;
+        }
+
+        private static bool MatchesOutlookWindow(
+            long hwnd, OfficeTargetDescriptor target)
+        {
+            return target == null || target.Hwnd == 0 || target.Hwnd == hwnd;
+        }
+
+        private sealed class OutlookBinding
+        {
+            public Outlook.MailItem Mail { get; set; }
+            public Outlook.MAPIFolder Folder { get; set; }
+            public Outlook.Inspector Inspector { get; set; }
+            public Outlook.Explorer Explorer { get; set; }
         }
 
         private delegate string StringGetter();

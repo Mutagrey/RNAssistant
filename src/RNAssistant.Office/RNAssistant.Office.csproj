@@ -130,6 +130,9 @@
     <Compile Include="Domains\PowerPoint\PowerPointBackendProvider.cs" />
     <Compile Include="Domains\PowerPoint\PowerPointContracts.cs" />
     <Compile Include="Domains\PowerPoint\PowerPointService.cs" />
+    <Compile Include="Domains\Outlook\OutlookBackendProvider.cs" />
+    <Compile Include="Domains\Outlook\OutlookContracts.cs" />
+    <Compile Include="Domains\Outlook\OutlookService.cs" />
     <Compile Include="Tools\ExcelReadToolAdapter.cs" />
     <Compile Include="Tools\ExcelReadToolHandler.cs" />
     <Compile Include="Tools\ExcelReadToolIds.cs" />
@@ -142,6 +145,9 @@
     <Compile Include="Tools\PowerPointToolAdapter.cs" />
     <Compile Include="Tools\PowerPointToolHandler.cs" />
     <Compile Include="Tools\PowerPointToolIds.cs" />
+    <Compile Include="Tools\OutlookToolAdapter.cs" />
+    <Compile Include="Tools\OutlookToolHandler.cs" />
+    <Compile Include="Tools\OutlookToolIds.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolAdapter.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolHandler.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolIds.cs" />

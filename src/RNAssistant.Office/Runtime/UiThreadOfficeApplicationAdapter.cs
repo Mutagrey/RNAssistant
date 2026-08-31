@@ -6,11 +6,12 @@ using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Domains.PowerPoint;
+using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Qualification;
 
 namespace RNAssistant.Office
 {
-    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IQualificationHostPort
+    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IOutlookBackendProvider, IQualificationHostPort
     {
         private readonly IOfficeApplicationAdapter _inner;
         private readonly OfficeUiDispatcher _dispatcher;
@@ -24,6 +25,7 @@ namespace RNAssistant.Office
         private readonly IExcelChartBackend _excelChartBackend;
         private readonly IWordBackend _wordBackend;
         private readonly IPowerPointBackend _powerPointBackend;
+        private readonly IOutlookBackend _outlookBackend;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
@@ -40,6 +42,7 @@ namespace RNAssistant.Office
             IExcelChartBackend excelChartBackend = null;
             IWordBackend wordBackend = null;
             IPowerPointBackend powerPointBackend = null;
+            IOutlookBackend outlookBackend = null;
             _dispatcher.Invoke(delegate
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
@@ -58,6 +61,9 @@ namespace RNAssistant.Office
                 var powerPoint = _inner as IPowerPointBackendProvider;
                 powerPointBackend = powerPoint == null
                     ? null : powerPoint.PowerPointBackend;
+                var outlook = _inner as IOutlookBackendProvider;
+                outlookBackend = outlook == null
+                    ? null : outlook.OutlookBackend;
                 return true;
             });
             _documentSession = documentSession;
@@ -70,6 +76,7 @@ namespace RNAssistant.Office
             _excelChartBackend = excelChartBackend;
             _wordBackend = wordBackend;
             _powerPointBackend = powerPointBackend;
+            _outlookBackend = outlookBackend;
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
@@ -104,6 +111,10 @@ namespace RNAssistant.Office
         public IPowerPointBackend PowerPointBackend
         {
             get { return _powerPointBackend; }
+        }
+        public IOutlookBackend OutlookBackend
+        {
+            get { return _outlookBackend; }
         }
 
         public string GetDocumentSnapshot(int maxChars)

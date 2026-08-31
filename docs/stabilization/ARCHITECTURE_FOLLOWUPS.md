@@ -1,9 +1,9 @@
 # Отложенные архитектурные улучшения
 
-Дата фиксации: 2026-08-30; статус маршрута обновлён 2026-08-31.
+Дата фиксации: 2026-08-30; статус маршрута обновлён 2026-09-01.
 
 Статус: ordered migration route, не описание уже реализованной архитектуры. Phase
-10A–10D, WQ-A1–A5 и 11T0/7D–11T7 Excel/Word/PowerPoint switches завершены
+10A–10D, WQ-A1–A5 и 11T0/7D–11T8 Office host switches завершены
 host-neutral. По
 принятому 2026-08-31 риску WQ0 не блокировал implementation; Windows evidence
 остаётся не выполненным. Section B и финальное удаление active legacy обязательны до Phase 12.
@@ -135,6 +135,9 @@ effect, read-back и `ok/error/unknown`. Host backend получает bound doc
 7. [x] PowerPoint vertical — 11T7 bound presentation/window session, nine direct
    typed reads and mutations, shared HTML read path; public host branches/helpers
    and execution-time active-presentation fallback removed.
+8. [x] Outlook vertical — 11T8 bound Inspector/mail or Explorer/folder session,
+   five direct typed reads/mutations and shared HTML read path; public host
+   branches/helpers and execution-time active-window fallback removed.
 
 Не создавать общий `IOfficeMutationService`: у разных domains различаются guards,
 verification и recovery semantics. Общими остаются `ToolRuntime`, `HostRuntime`,
@@ -199,6 +202,8 @@ Active legacy означает второй execution/catalog/result/history pat
   fallback в 11T6;
 - [x] удалить все public PowerPoint generic host branches/helpers и unbound
   execution fallback в 11T7;
+- [x] удалить все public Outlook generic host branches/helpers и unbound execution
+  fallback в 11T8;
 - удалить VBA mutation/package adapters после direct typed host/backend switch;
 - удалить `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` и
   `ToolResultUiProjection` после последнего catalog/result/UI consumer;

@@ -1,0 +1,34 @@
+using System;
+
+namespace RNAssistant.Office.Tools
+{
+    internal static class OutlookToolIds
+    {
+        internal const string ReadMail = "outlook.read_mail";
+        internal const string SearchMail = "outlook.search_mail";
+        internal const string CreateDraft = "outlook.create_draft";
+        internal const string UpdateMail = "outlook.update_mail";
+        internal const string CollectMail = "outlook.collect_mail";
+
+        internal static bool Owns(string toolId)
+        {
+            return string.Equals(toolId, ReadMail, StringComparison.Ordinal) ||
+                string.Equals(toolId, SearchMail, StringComparison.Ordinal) ||
+                string.Equals(toolId, CreateDraft, StringComparison.Ordinal) ||
+                string.Equals(toolId, UpdateMail, StringComparison.Ordinal) ||
+                string.Equals(toolId, CollectMail, StringComparison.Ordinal);
+        }
+
+        internal static bool IsRead(string toolId)
+        {
+            return string.Equals(toolId, ReadMail, StringComparison.Ordinal) ||
+                string.Equals(toolId, SearchMail, StringComparison.Ordinal) ||
+                string.Equals(toolId, CollectMail, StringComparison.Ordinal);
+        }
+
+        internal static bool IsMutation(string toolId)
+        {
+            return Owns(toolId) && !IsRead(toolId);
+        }
+    }
+}

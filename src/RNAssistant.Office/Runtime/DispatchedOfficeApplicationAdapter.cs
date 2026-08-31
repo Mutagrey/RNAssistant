@@ -6,11 +6,12 @@ using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Domains.PowerPoint;
+using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Qualification;
 
 namespace RNAssistant.Office
 {
-    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IQualificationHostPort, IDisposable
+    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IOutlookBackendProvider, IQualificationHostPort, IDisposable
     {
         private readonly Func<IOfficeStaDispatcher, IOfficeApplicationAdapter> _adapterFactory;
         private readonly OfficeStaDispatcher _dispatcher;
@@ -26,6 +27,7 @@ namespace RNAssistant.Office
         private IExcelChartBackend _excelChartBackend;
         private IWordBackend _wordBackend;
         private IPowerPointBackend _powerPointBackend;
+        private IOutlookBackend _outlookBackend;
         private volatile bool _innerInitialized;
         private bool _disposed;
 
@@ -104,6 +106,9 @@ namespace RNAssistant.Office
                     var powerPoint = _inner as IPowerPointBackendProvider;
                     _powerPointBackend = powerPoint == null
                         ? null : powerPoint.PowerPointBackend;
+                    var outlook = _inner as IOutlookBackendProvider;
+                    _outlookBackend = outlook == null
+                        ? null : outlook.OutlookBackend;
                     // Publish the owner-initialized session once. Rebinding requires
                     // another adapter; metadata access must not queue behind a run.
                     _innerInitialized = true;
@@ -191,6 +196,15 @@ namespace RNAssistant.Office
             {
                 EnsureInitialized();
                 return _powerPointBackend;
+            }
+        }
+
+        public IOutlookBackend OutlookBackend
+        {
+            get
+            {
+                EnsureInitialized();
+                return _outlookBackend;
             }
         }
 

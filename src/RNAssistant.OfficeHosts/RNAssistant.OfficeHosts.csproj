@@ -110,6 +110,8 @@
     <Compile Include="Qualification\ExcelWq0EvidenceVerifier.cs" />
     <Compile Include="InProcessPanelSession.cs" />
     <Compile Include="OutlookAdapter.cs" />
+    <Compile Include="Outlook\OutlookDocumentSession.cs" />
+    <Compile Include="Outlook\OutlookInteropBackend.cs" />
     <Compile Include="PowerPointAdapter.cs" />
     <Compile Include="PowerPoint\PowerPointDocumentSession.cs" />
     <Compile Include="PowerPoint\PowerPointInteropBackend.cs" />

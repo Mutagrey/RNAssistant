@@ -32,6 +32,7 @@ namespace RNAssistant.Office.Runtime
             ExcelChartToolAdapter excelCharts,
             WordToolAdapter wordTools,
             PowerPointToolAdapter powerPointTools,
+            OutlookToolAdapter outlookTools,
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
         {
@@ -126,6 +127,15 @@ namespace RNAssistant.Office.Runtime
                         registration.Descriptor.Id, powerPointTools,
                         hostRuntime, session);
                 }
+                else if (OutlookToolIds.Owns(registration.Descriptor.Id))
+                {
+                    if (outlookTools == null || hostRuntime == null)
+                        throw new InvalidOperationException(
+                            "Outlook handler dependencies are unavailable.");
+                    handler = new OutlookToolHandler(
+                        registration.Descriptor.Id, outlookTools,
+                        hostRuntime, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -150,7 +160,8 @@ namespace RNAssistant.Office.Runtime
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
                 ExcelRangeMutationToolIds.Owns(toolId) ||
                 ExcelTableToolIds.Owns(toolId) || ExcelChartToolIds.Owns(toolId) ||
-                WordToolIds.Owns(toolId) || PowerPointToolIds.Owns(toolId);
+                WordToolIds.Owns(toolId) || PowerPointToolIds.Owns(toolId) ||
+                OutlookToolIds.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -178,6 +189,8 @@ namespace RNAssistant.Office.Runtime
                 return WordToolHandler.BindingFor(toolId);
             if (PowerPointToolIds.Owns(toolId))
                 return PowerPointToolHandler.BindingFor(toolId);
+            if (OutlookToolIds.Owns(toolId))
+                return OutlookToolHandler.BindingFor(toolId);
             return null;
         }
 

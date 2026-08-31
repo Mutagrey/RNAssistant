@@ -366,6 +366,10 @@ namespace RNAssistant.Office.Tools
                         return _standalonePowerPointRead == null
                             ? ToolResult.Fail("PowerPoint read adapter is unavailable.", null, "powerpoint_read_backend_missing", false)
                             : _standalonePowerPointRead.ExecuteDataSource(sourceCommand, cancellationToken);
+                    if (sourceCommand != null && OutlookToolIds.IsRead(sourceCommand.ToolId))
+                        return _standaloneOutlookRead == null
+                            ? ToolResult.Fail("Outlook read adapter is unavailable.", null, "outlook_read_backend_missing", false)
+                            : _standaloneOutlookRead.ExecuteDataSource(sourceCommand, cancellationToken);
                     return _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
                 }
             }

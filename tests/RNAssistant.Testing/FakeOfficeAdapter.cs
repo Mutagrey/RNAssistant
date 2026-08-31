@@ -9,12 +9,13 @@ using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.PowerPoint;
+using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
@@ -37,6 +38,7 @@ namespace RNAssistant.Harness
         public readonly List<string> ExcelBackendCalls = new List<string>();
         public readonly List<string> WordBackendCalls = new List<string>();
         public readonly List<string> PowerPointBackendCalls = new List<string>();
+        public readonly List<string> OutlookBackendCalls = new List<string>();
         public readonly List<ToolCommand> ExcelSheetRequests = new List<ToolCommand>();
         public readonly List<ToolCommand> ExcelRangeMutationRequests =
             new List<ToolCommand>();
@@ -60,6 +62,7 @@ namespace RNAssistant.Harness
         public bool ExcelChartThrowAfterMutation { get; set; }
         public bool WordThrowAfterMutation { get; set; }
         public bool PowerPointThrowAfterMutation { get; set; }
+        public bool OutlookThrowAfterMutation { get; set; }
         public Func<ExcelSheetCollectionSnapshot, ExcelSheetCollectionSnapshot>
             ExcelSheetReadTransform { get; set; }
         public Func<ExcelRangeMutationSnapshot, ExcelRangeMutationSnapshot>
@@ -92,6 +95,7 @@ namespace RNAssistant.Harness
         private readonly Dictionary<string, string> _excelRangeAutoFits;
         private string _activeExcelSheetName;
         private readonly List<FakeSlide> _slides;
+        private readonly List<FakeOutlookMail> _outlookMail;
         private int _nextPowerPointSlideId = 1;
         private int _nextPowerPointShapeId = 1;
         private readonly List<string> _wordComments;
@@ -130,6 +134,7 @@ namespace RNAssistant.Harness
             _excelRangeAutoFits = new Dictionary<string, string>(
                 StringComparer.OrdinalIgnoreCase);
             _slides = new List<FakeSlide>();
+            _outlookMail = new List<FakeOutlookMail>();
             _wordComments = new List<string>();
             _wordText = documentSnapshot ?? string.Empty;
             _outlookSelection = documentSnapshot ?? string.Empty;
@@ -213,6 +218,15 @@ namespace RNAssistant.Harness
             {
                 return string.Equals(
                     _hostName, "PowerPoint", StringComparison.OrdinalIgnoreCase)
+                    ? this : null;
+            }
+        }
+        public IOutlookBackend OutlookBackend
+        {
+            get
+            {
+                return string.Equals(
+                    _hostName, "Outlook", StringComparison.OrdinalIgnoreCase)
                     ? this : null;
             }
         }
@@ -714,6 +728,33 @@ namespace RNAssistant.Harness
                     new List<string> { "Mar", "180" }
                 });
             }
+            else if (string.Equals(_hostName, "Outlook", StringComparison.OrdinalIgnoreCase))
+            {
+                _outlookMail.Add(new FakeOutlookMail
+                {
+                    EntryId = "mail-1",
+                    Subject = "Renewal follow-up",
+                    Sender = "Customer",
+                    SenderEmail = "customer@example.com",
+                    To = "owner@example.com",
+                    Received = new DateTime(2026, 8, 31, 9, 0, 0, DateTimeKind.Utc),
+                    Categories = string.Empty,
+                    Unread = true,
+                    Body = "Customer asks for a concise answer about next steps."
+                });
+                _outlookMail.Add(new FakeOutlookMail
+                {
+                    EntryId = "mail-2",
+                    Subject = "Quarterly plan",
+                    Sender = "Manager",
+                    SenderEmail = "manager@example.com",
+                    To = "owner@example.com",
+                    Received = new DateTime(2026, 7, 15, 10, 0, 0, DateTimeKind.Utc),
+                    Categories = "Planning",
+                    Unread = false,
+                    Body = "Please review the quarterly plan."
+                });
+            }
             else if (string.Equals(_hostName, "PowerPoint", StringComparison.OrdinalIgnoreCase))
             {
                 _slides.Add(new FakeSlide
@@ -966,35 +1007,12 @@ namespace RNAssistant.Harness
 
         private ToolResult ExecuteOutlookTool(ToolCommand command)
         {
-            if (string.Equals(command.ToolId, "outlook.read_mail", StringComparison.OrdinalIgnoreCase))
-            {
-                return string.Equals(Argument(command, "content", "message"), "attachments", StringComparison.OrdinalIgnoreCase)
-                    ? ToolResult.Ok("read Outlook attachments", "[]")
-                    : ToolResult.Ok("read selected mail", JsonConvert.SerializeObject(new { text = _outlookSelection }));
-            }
-
-            if (string.Equals(command.ToolId, "outlook.search_mail", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("read Outlook metadata", JsonConvert.SerializeObject(new { selection = _outlookSelection }));
-            }
-
-            if (string.Equals(command.ToolId, "outlook.create_draft", StringComparison.OrdinalIgnoreCase))
-            {
-                _outlookDraft = Argument(command, "body", string.Empty);
-                return ToolResult.Ok("drafted reply", JsonConvert.SerializeObject(new { body = _outlookDraft }));
-            }
-
-            if (string.Equals(command.ToolId, "outlook.update_mail", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("updated Outlook mail");
-            }
-
-            if (string.Equals(command.ToolId, "outlook.collect_mail", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("collected Outlook data", JsonConvert.SerializeObject(new { selection = _outlookSelection }));
-            }
-
-            return null;
+            return OutlookToolIds.Owns(
+                command == null ? null : command.ToolId)
+                ? ToolResult.Fail(
+                    "Public Outlook tools require the typed Outlook backend.",
+                    null, "outlook_legacy_dispatch_removed", false)
+                : null;
         }
 
         private string SelectionText()

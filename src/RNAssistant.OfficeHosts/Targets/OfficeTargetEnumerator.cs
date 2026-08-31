@@ -130,10 +130,11 @@ namespace RNAssistant.OfficeHosts
         {
             try
             {
-                var inspector = application.ActiveInspector();
-                var mail = inspector == null ? null : inspector.CurrentItem as Outlook.MailItem;
-                if (mail != null)
+                foreach (Outlook.Inspector inspector in application.Inspectors)
                 {
+                    var mail = inspector == null
+                        ? null : inspector.CurrentItem as Outlook.MailItem;
+                    if (mail == null) continue;
                     var hwnd = NativeWindowInfo.ReadLongMemberPath(inspector, "HWND");
                     result.Add(new OfficeTargetDescriptor
                     {
@@ -151,11 +152,12 @@ namespace RNAssistant.OfficeHosts
 
             try
             {
-                var explorer = application.ActiveExplorer();
-                var hwnd = NativeWindowInfo.ReadLongMemberPath(explorer, "HWND");
-                var folder = explorer == null ? null : explorer.CurrentFolder as Outlook.MAPIFolder;
-                if (folder != null)
+                foreach (Outlook.Explorer explorer in application.Explorers)
                 {
+                    var folder = explorer == null
+                        ? null : explorer.CurrentFolder as Outlook.MAPIFolder;
+                    if (folder == null) continue;
+                    var hwnd = NativeWindowInfo.ReadLongMemberPath(explorer, "HWND");
                     result.Add(new OfficeTargetDescriptor
                     {
                         Host = "Outlook",
