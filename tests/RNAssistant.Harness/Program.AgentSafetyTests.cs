@@ -1330,6 +1330,9 @@ namespace RNAssistant.Harness
                 "call schema exposes only name and arguments; IDs are runtime metadata");
             AssertEqual("excel.read_range", (string)call.SelectToken("properties.name.const"), "exact tool name in schema");
             AssertEqual("string", (string)call.SelectToken("properties.arguments.properties.range.type"), "tool argument schema copied");
+            AssertTrue(call.SelectToken("properties.arguments.properties.range.description") == null &&
+                call.SelectToken("properties.arguments.properties.mode.default") == null,
+                "strict response schema omits prompt-only annotations without changing constraints");
             var optionalSheetType = call.SelectToken("properties.arguments.properties.sheet.type") as JArray;
             AssertTrue(optionalSheetType != null && optionalSheetType.Values<string>().Contains("null"),
                 "strict response schema makes optional arguments nullable");
@@ -1692,33 +1695,6 @@ namespace RNAssistant.Harness
                     "chart UI projection rehydrates the body from CAS");
             });
 
-            var skillCommand = new ToolCommand { ToolId = CapabilityDiscoveryExecutor.ReadToolId, ToolCallId = "call_skill_large" };
-            var skillData = JsonConvert.SerializeObject(new { kind = "skill", id = "common.large", revision = "r1", loaded = true, complete = true, truncated = false, bodyMarkdown = new string('x', 50000) });
-            var oversizedSkillResult = new ToolResultMaterialization(TerminalToolResult.Ok("Skill loaded", skillData));
-            AgentJsonProtocol.FailClosedOversizedCapabilityEvidence(skillCommand, oversizedSkillResult, 256, new AppSettings());
-            var boundedSkill = JObject.Parse(AgentJsonProtocol.BuildToolResult(skillCommand, oversizedSkillResult, 256));
-            AssertEqual("error", (string)boundedSkill["status"], "oversized capability evidence fails closed");
-            AssertEqual("capability_evidence_context_too_large", (string)boundedSkill.SelectToken("data.code"),
-                "oversized capability evidence has an actionable error");
-            AssertEqual(false, (bool)boundedSkill.SelectToken("data.loaded"), "oversized skill never claims loaded evidence");
-            AssertEqual(true, (bool)boundedSkill.SelectToken("data.truncated"), "oversized skill reports incomplete transport");
-            AssertTrue(ToolResultResourceService.ExternalizeIfNeeded(
-                    new ChatSession(), skillCommand, new ToolResultMaterialization(TerminalToolResult.Ok("read", skillData)), 256, new AppSettings()) == null,
-                "trusted skill evidence is not duplicated into an untrusted artifact");
-
-            var fittingSchemaResult = new ToolResultMaterialization(TerminalToolResult.Ok("Tool schema loaded", JsonConvert.SerializeObject(new
-            {
-                kind = "tool-schema",
-                id = "common.small",
-                revision = "r2",
-                loaded = true,
-                complete = true,
-                truncated = false,
-                descriptor = new { type = "function" }
-            })));
-            AgentJsonProtocol.FailClosedOversizedCapabilityEvidence(skillCommand, fittingSchemaResult, 256, new AppSettings());
-            AssertEqual(ToolResultStatus.Ok, fittingSchemaResult.Result.Status, "complete capability evidence that fits remains successful");
-
             var nestedData = JsonConvert.SerializeObject(new { value = new string('x', 200000) });
             var pipeline = AgentTranscript.CreateToolActivity(command, ToolResult.Ok("pipeline", JsonConvert.SerializeObject(new
             {
@@ -1750,10 +1726,10 @@ namespace RNAssistant.Harness
                     "{\"message\":\"Читаю.\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
                     "{\"message\":\"Диапазон результата нужно сузить.\",\"tool_calls\":[]}"
                 });
-                var calls = new List<IReadOnlyList<ChatMessage>>();
+                var calls = new List<Tuple<IReadOnlyList<ChatMessage>, LlmRequestOptions>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
-                    calls.Add(messages.ToList());
+                    calls.Add(Tuple.Create((IReadOnlyList<ChatMessage>)messages.ToList(), options));
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var settings = new AppSettings
@@ -1772,11 +1748,22 @@ namespace RNAssistant.Harness
 
                 AssertEqual("Диапазон результата нужно сузить.", turn.AssistantText, "agent continues after bounded result");
                 AssertEqual(3, calls.Count, "schema read, data read, and final model calls");
-                var replay = FlattenSimple(calls[2]);
-                AssertContains(replay, "\"truncated\":true", "bounded marker reaches model");
-                var estimated = ModelContextBudget.EstimateMessagesTokens(calls[1]) +
-                    ModelContextBudget.EstimateRequestOptionsTokens(new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonObject });
-                AssertTrue(estimated <= ModelContextBudget.InputBudgetTokens(settings), "next prompt stays within budget");
+                var replay = FlattenSimple(calls[2].Item1);
+                AssertTrue(replay.IndexOf("\"externalized\":true", StringComparison.Ordinal) >= 0 ||
+                    replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) >= 0,
+                    "bounded inline projection reaches the model");
+                AssertContains(replay, "\"relation\":\"result\"", "full result stays available by exact resource reference");
+                foreach (var request in calls)
+                {
+                    var estimated = ModelContextBudget.EstimateAdmittedRequestTokens(
+                        request.Item1,
+                        request.Item2,
+                        settings,
+                        ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings),
+                        ModelContextBudget.ContinuationReserveTokens(settings));
+                    AssertTrue(estimated <= ModelContextBudget.InputBudgetTokens(settings),
+                        "every model request stays within budget with all reserves");
+                }
             });
         }
 

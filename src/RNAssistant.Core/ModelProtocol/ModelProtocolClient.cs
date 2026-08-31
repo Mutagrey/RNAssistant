@@ -12,7 +12,7 @@ namespace RNAssistant.Core.ModelProtocol
 {
     public sealed class ModelProtocolClient : IMaterializedModelProtocol
     {
-        private const int MaximumFormatRepairErrorCharacters = 2048;
+        private const int MaximumFormatRepairErrorCharacters = 1024;
         private readonly LlmCompletionDelegate _completeAsync;
         private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
         private bool _useJsonObject;
@@ -64,7 +64,16 @@ namespace RNAssistant.Core.ModelProtocol
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         string budgetError;
-                        if (!TryValidatePromptBudget(attemptMessages, settings, options, out budgetError))
+                        var repairReserve = lastError == null
+                            ? EstimateFormatRepairOverheadTokens(settings)
+                            : 0;
+                        if (!TryValidatePromptBudget(
+                            attemptMessages,
+                            settings,
+                            options,
+                            repairReserve,
+                            ModelContextBudget.ContinuationReserveTokens(settings),
+                            out budgetError))
                             return BudgetFailure(budgetError, contextUsage);
                         try
                         {
@@ -157,16 +166,28 @@ namespace RNAssistant.Core.ModelProtocol
             return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.PromptBudgetExceeded, message), contextUsage);
         }
 
-        private static bool TryValidatePromptBudget(IReadOnlyList<ChatMessage> messages, AppSettings settings,
-            LlmRequestOptions options, out string error)
+        private static bool TryValidatePromptBudget(
+            IReadOnlyList<ChatMessage> messages,
+            AppSettings settings,
+            LlmRequestOptions options,
+            int repairReserveTokens,
+            int continuationReserveTokens,
+            out string error)
         {
             var inputBudget = ModelContextBudget.InputBudgetTokens(settings);
-            var estimated = ModelContextBudget.EstimateMessagesTokens(messages, settings) +
-                ModelContextBudget.EstimateRequestOptionsTokens(options, settings);
+            var requestTokens = ModelContextBudget.EstimateRequestTokens(messages, options, settings);
+            var estimated = ModelContextBudget.EstimateAdmittedRequestTokens(
+                messages,
+                options,
+                settings,
+                repairReserveTokens,
+                continuationReserveTokens);
             if (estimated <= inputBudget) { error = null; return true; }
-            error = "Выполнение остановлено до следующего запроса модели: контекст занимает ≈" + estimated +
-                " токенов при доступном лимите " + inputBudget +
-                ". Сузьте диапазон/объём результата или начните новый чат.";
+            error = "Выполнение остановлено до следующего запроса модели: материализованный запрос занимает ≈" +
+                requestTokens + " токенов, обязательные резервы repair/continuation — ≈" +
+                (Math.Max(0, repairReserveTokens) + Math.Max(0, continuationReserveTokens)) +
+                ", доступный входной лимит — " + inputBudget +
+                ". Сузьте диапазон/объём результата, сожмите контекст или начните новый чат.";
             return false;
         }
 

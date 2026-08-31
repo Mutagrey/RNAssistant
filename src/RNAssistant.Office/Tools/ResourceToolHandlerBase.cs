@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -53,6 +54,16 @@ namespace RNAssistant.Office.Tools
         {
             return JsonConvert.SerializeObject(value,
                 new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+        }
+
+        protected static ResourceRef[] ExactReferences(IEnumerable<ResourceRef> references)
+        {
+            return (references ?? new ResourceRef[0])
+                .Where(reference => reference != null && !string.IsNullOrWhiteSpace(reference.Uri))
+                .GroupBy(reference => reference.Uri + "\n" + (reference.Revision ?? string.Empty),
+                    StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToArray();
         }
 
         private static Task<ToolHandlerResult> Failure(string message, string code, bool retryable)

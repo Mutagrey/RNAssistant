@@ -12,6 +12,9 @@ namespace RNAssistant.Core.Llm
         public const int EstimatedImageTokens = 4096;
         public const int MinimumInputTokens = 1024;
         public const int MaximumSafetyReserveTokens = 16384;
+        public const int MinimumContinuationReserveTokens = 512;
+        public const int MaximumContinuationReserveTokens = 8192;
+        public const int ContinuationReserveDivisor = 12;
 
         public static ModelCapabilitySettings Capability(AppSettings settings, string model = null)
         {
@@ -48,6 +51,40 @@ namespace RNAssistant.Core.Llm
                 RequestedOutputTokens(settings, model),
                 Math.Max(1, window - safety - MinimumInputTokens));
             return Math.Max(MinimumInputTokens, window - output - safety);
+        }
+
+        public static int ContinuationReserveTokens(AppSettings settings, string model = null)
+        {
+            var input = Math.Max(1, InputBudgetTokens(settings, model));
+            return Math.Max(
+                MinimumContinuationReserveTokens,
+                Math.Min(MaximumContinuationReserveTokens,
+                    (int)Math.Ceiling(input / (double)ContinuationReserveDivisor)));
+        }
+
+        public static int EstimateRequestTokens(
+            IEnumerable<ChatMessage> messages,
+            LlmRequestOptions options,
+            AppSettings settings,
+            string model = null)
+        {
+            return SaturatingSum(
+                EstimateMessagesTokens(messages, settings, model),
+                EstimateRequestOptionsTokens(options, settings, model));
+        }
+
+        public static int EstimateAdmittedRequestTokens(
+            IEnumerable<ChatMessage> messages,
+            LlmRequestOptions options,
+            AppSettings settings,
+            int repairReserveTokens,
+            int continuationReserveTokens,
+            string model = null)
+        {
+            return SaturatingSum(
+                EstimateRequestTokens(messages, options, settings, model),
+                Math.Max(0, repairReserveTokens),
+                Math.Max(0, continuationReserveTokens));
         }
 
         public static int EffectiveOutputTokens(AppSettings settings, IEnumerable<ChatMessage> messages, string model = null)
@@ -324,6 +361,17 @@ namespace RNAssistant.Core.Llm
         {
             if (rawTokens <= 0) return 0;
             return Math.Max(1, (int)Math.Ceiling(rawTokens * TokenEstimateCalibration.EffectiveMultiplier(settings, model)));
+        }
+
+        private static int SaturatingSum(params int[] values)
+        {
+            long result = 0;
+            foreach (var value in values ?? new int[0])
+            {
+                result += Math.Max(0, value);
+                if (result >= int.MaxValue) return int.MaxValue;
+            }
+            return (int)result;
         }
 
         public static int EstimateAudioTokens(long bytes)

@@ -72,6 +72,8 @@ namespace RNAssistant.Harness
                 {
                     var record = item.Key == ResourceToolCatalog.ListToolId ? listed : execute(item.Key, item.Value);
                     AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, item.Key + " uses its native handler");
+                    AssertTrue(record.Result.Resources.Any(reference => reference.Uri == resourceUri),
+                        item.Key + " exposes each returned exact resource at Tool Result root");
                     var command = new ToolCommand
                     {
                         ToolId = item.Key,
@@ -81,6 +83,9 @@ namespace RNAssistant.Harness
                     AssertTrue(manual.Success, item.Key + " manual path uses the same native handler");
                     AssertEqual(record.Result.DataJson, manual.DataJson,
                         item.Key + " manual and kernel paths share one implementation");
+                    AssertTrue((manual.ModelResourceRefs ?? new ResourceRef[0])
+                            .Any(reference => reference.Uri == resourceUri),
+                        item.Key + " manual projection retains the same root resource reference");
                     AssertTrue(runtime.Describe(new ToolCall("wrong_case", item.Key.ToUpperInvariant(), "{}")) == null,
                         item.Key + " has no case alias");
 
@@ -1189,6 +1194,17 @@ namespace RNAssistant.Harness
                     defaultVba.Items.Any(item => item.Kind == VbaResourceProvider.ComponentKind &&
                         string.Equals(item.Title, "ResourceModule", StringComparison.OrdinalIgnoreCase)),
                     "default VBA discovery exposes exact live component URIs without hidden kind vocabulary");
+                ResourceRequestException unknownVbaKind = null;
+                try
+                {
+                    gateway.List(session, VbaResourceProvider.ProviderName, "module", null, 20);
+                }
+                catch (ResourceRequestException ex)
+                {
+                    unknownVbaKind = ex;
+                }
+                AssertEqual("resource_kind_unknown", unknownVbaKind == null ? null : unknownVbaKind.ErrorCode,
+                    "unknown VBA kind is explicit instead of looking like an empty project");
 
                 var document = gateway.List(
                     session,

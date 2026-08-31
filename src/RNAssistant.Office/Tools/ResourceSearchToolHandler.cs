@@ -1,5 +1,6 @@
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
+using System.Linq;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
@@ -28,7 +29,10 @@ namespace RNAssistant.Office.Tools
                 ToolArgumentReader.String(context.Arguments, "kind", string.Empty),
                 ToolArgumentReader.Int32(context.Arguments, "limit", 10),
                 ToolArgumentReader.Int32(context.Arguments, "maxCharsPerMatch", 600));
-            return Completed(RuntimeResult.Ok("Resource search completed.", Serialize(data)));
+            return Completed(RuntimeResult.Ok("Resource search completed.", Serialize(data),
+                ExactReferences(data.Matches
+                    .Where(match => match != null)
+                    .Select(match => match.Reference))));
         }
 
         private static string Parameters()

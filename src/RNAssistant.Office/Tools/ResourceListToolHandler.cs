@@ -1,3 +1,4 @@
+using System.Linq;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
@@ -25,7 +26,10 @@ namespace RNAssistant.Office.Tools
                 ToolArgumentReader.String(context.Arguments, "kind", string.Empty),
                 ToolArgumentReader.String(context.Arguments, "cursor", string.Empty),
                 ToolArgumentReader.Int32(context.Arguments, "limit", 20));
-            return Completed(RuntimeResult.Ok("Resources listed.", Serialize(data)));
+            var references = ExactReferences(data.Items
+                .Where(item => item != null)
+                .Select(item => item.Reference));
+            return Completed(RuntimeResult.Ok("Resources listed.", Serialize(data), references));
         }
 
         private static string Parameters()

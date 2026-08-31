@@ -68,7 +68,11 @@ namespace RNAssistant.Office.Services
                 }
                 else
                 {
-                    items = new List<ResourceDescriptor>();
+                    throw new ResourceRequestException(
+                        "Unknown VBA resource kind. Omit kind for the project and live components, or use one of: " +
+                        ProjectKind + ", " + ComponentKind + ", " + BackupKind + ".",
+                        "resource_kind_unknown",
+                        false);
                 }
                 var cursorBinding = ResourceReadCursor.ListBinding(ProviderName, kind);
                 var position = ResourceReadCursor.ParseRevisionBound(cursor, cursorBinding);

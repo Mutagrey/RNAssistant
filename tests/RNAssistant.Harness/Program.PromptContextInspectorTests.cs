@@ -93,6 +93,9 @@ namespace RNAssistant.Harness
                 "deterministic Excel core schemas are visible in the callable pack");
             AssertTrue(result.Sections.Any(section => section.Id == "format_repair_reserve" && section.Tokens > 0),
                 "inspector exposes the same bounded repair reserve used by admission");
+            AssertTrue(result.Sections.Any(section => section.Id == "continuation_reserve" &&
+                section.Tokens == ModelContextBudget.ContinuationReserveTokens(settings)),
+                "inspector exposes the same continuation reserve used by admission");
             var capabilities = result.Sections.Single(section => section.Id == "capabilities");
             AssertTrue(capabilities.Items.Any(item => item.Kind == "tool"), "tool ids are visible in the unified catalog");
             AssertTrue(capabilities.Items.Any(item => item.Kind == "skill"), "skill ids are visible in the unified catalog");

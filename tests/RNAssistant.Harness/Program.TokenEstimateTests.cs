@@ -33,6 +33,36 @@ namespace RNAssistant.Harness
                 "truncation uses the same multiplier");
         }
 
+        private static void TokenEstimateRequestAdmissionReserves()
+        {
+            var settings = new AppSettings();
+            var input = ModelContextBudget.InputBudgetTokens(settings);
+            AssertEqual((int)Math.Ceiling(input / (double)ModelContextBudget.ContinuationReserveDivisor),
+                ModelContextBudget.ContinuationReserveTokens(settings),
+                "default continuation reserve is proportional to the admitted input");
+            AssertEqual(ModelContextBudget.MinimumContinuationReserveTokens,
+                ModelContextBudget.ContinuationReserveTokens(new AppSettings
+                {
+                    ContextWindowOverrideTokens = 4096
+                }),
+                "small contexts retain the minimum continuation reserve");
+            AssertEqual(ModelContextBudget.MaximumContinuationReserveTokens,
+                ModelContextBudget.ContinuationReserveTokens(new AppSettings
+                {
+                    ContextWindowOverrideTokens = 200000
+                }),
+                "large contexts cap the continuation reserve");
+
+            var messages = new[] { new ChatMessage { Role = "user", Content = "Request" } };
+            var options = new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonObject };
+            var requestTokens = ModelContextBudget.EstimateRequestTokens(messages, options, settings);
+            var continuation = ModelContextBudget.ContinuationReserveTokens(settings);
+            AssertEqual(requestTokens + 123 + continuation,
+                ModelContextBudget.EstimateAdmittedRequestTokens(
+                    messages, options, settings, 123, continuation),
+                "admission adds messages, actual options, repair, and continuation exactly once");
+        }
+
         private static void TokenEstimateCalibrationLearnsFromApiUsage()
         {
             var settings = new AppSettings

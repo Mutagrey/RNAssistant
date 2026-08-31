@@ -24,7 +24,7 @@ namespace RNAssistant.Office.Services
             {
                 return null;
             }
-            if (IsReadEvidence(command)) return null;
+            if (IsExactReadEvidence(command)) return null;
 
             JObject chart;
             if (TryParseChart(data, out chart))
@@ -139,11 +139,17 @@ namespace RNAssistant.Office.Services
             return null;
         }
 
-        private static bool IsReadEvidence(ToolCommand command)
+        internal static bool IsExactReadEvidence(ToolCommand command)
         {
             var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
             return id.StartsWith("common.resources_", StringComparison.OrdinalIgnoreCase) ||
                 id.StartsWith("common.capabilities_", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool IsResourceEvidence(ToolCommand command)
+        {
+            var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
+            return id.StartsWith("common.resources_", StringComparison.OrdinalIgnoreCase);
         }
 
         private static int EstimateProtocolDataTokens(string data, AppSettings settings)

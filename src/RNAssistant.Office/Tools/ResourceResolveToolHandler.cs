@@ -30,7 +30,8 @@ namespace RNAssistant.Office.Tools
                     ToolArgumentReader.String(context.Arguments, "parentUri", string.Empty),
                     ToolArgumentReader.String(context.Arguments, "memberPath", string.Empty),
                     ToolArgumentReader.String(context.Arguments, "memberType", string.Empty));
-            return Completed(RuntimeResult.Ok("Resource resolved.", Serialize(data)));
+            return Completed(RuntimeResult.Ok("Resource resolved.", Serialize(data),
+                ExactReferences(new[] { data.Resource == null ? null : data.Resource.Reference })));
         }
 
         private static string Parameters()

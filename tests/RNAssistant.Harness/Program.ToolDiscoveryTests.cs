@@ -263,6 +263,98 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void AgentRejectsOversizedCapabilityEvidenceExplicitly()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                const string skillId = "common.oversized_evidence";
+                const string bodyMarker = "OVERSIZED_SKILL_BODY_MUST_NOT_BE_PARTIALLY_LOADED";
+                var skills = new[]
+                {
+                    new SkillDefinition
+                    {
+                        Id = skillId,
+                        Name = "Oversized evidence",
+                        Description = "Budget boundary fixture.",
+                        BodyMarkdown = "# Fixture\n\n" + bodyMarker + "\n" + new string('x', 50000),
+                        Enabled = true
+                    }
+                };
+                var catalog = ConversationRunService.PrepareToolsForRun(
+                    executor.GetControllerTools().Where(tool =>
+                        tool.Id == CapabilityDiscoveryExecutor.ReadToolId));
+                CapabilityDiscoveryExecutor.BindReadSchema(catalog, skills);
+                var settings = new AppSettings
+                {
+                    AgentResponseMode = AgentResponseModes.JsonObject,
+                    ContextWindowOverrideTokens = 12000,
+                    MaxTokens = 512
+                };
+                var session = NewSession(adapter);
+                var store = new ChatStore(FixturePaths.Value);
+                store.Save(session);
+                using (var modelSession = ConversationModelSession.CreateAsync(
+                    adapter,
+                    null,
+                    new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    EventStore(store),
+                    ChatModes.Agent,
+                    "Load the exact skill.",
+                    session,
+                    NewContext(adapter),
+                    settings,
+                    catalog,
+                    skills,
+                    null,
+                    false,
+                    null,
+                    CancellationToken.None).GetAwaiter().GetResult())
+                {
+                    const string callId = "read_oversized_capability";
+                    modelSession.AppendToolCall(new AgentToolCall
+                    {
+                        Id = callId,
+                        Name = CapabilityDiscoveryExecutor.ReadToolId,
+                        Arguments = new Dictionary<string, object> { { "id", skillId } }
+                    }, string.Empty, null, FixtureCallOrigin("oversized-capability-step"));
+                    var command = Command(CapabilityDiscoveryExecutor.ReadToolId, "id", skillId);
+                    command.ToolCallId = callId;
+                    var result = executor.Execute(
+                        command,
+                        catalog,
+                        settings,
+                        false,
+                        false,
+                        session,
+                        AppSettings.DefaultMaxAgentToolSteps,
+                        skills);
+                    AssertTrue(result.Success, "provider returns complete oversized skill evidence before projection");
+                    modelSession.AppendToolResult(command, new ConversationModelSession.PreparedToolResult(
+                        LegacyToolResultAdapter.Materialize(result, ToolExecutionOutcome.Ok), null));
+
+                    var request = modelSession.CreateRequest("after-oversized-capability",
+                        new ModelProtocolCallContext(new string[0]));
+                    var wire = LastToolResult(request.AcceptedMessages, CapabilityDiscoveryExecutor.ReadToolId);
+                    AssertEqual("error", (string)wire["status"],
+                        "oversized capability cannot remain a successful partial result");
+                    AssertEqual("capability_evidence_context_too_large", (string)wire.SelectToken("data.code"),
+                        "oversized capability reports the exact admission error");
+                    AssertEqual(false, (bool)wire.SelectToken("data.loaded"),
+                        "oversized capability never claims loaded evidence");
+                    AssertTrue(FlattenSimple(request.AcceptedMessages).IndexOf(bodyMarker, StringComparison.Ordinal) < 0,
+                        "oversized body is not partially copied into model history");
+                    AssertTrue(ModelContextBudget.EstimateAdmittedRequestTokens(
+                            request.AcceptedMessages,
+                            request.Options,
+                            settings,
+                            ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings),
+                            ModelContextBudget.ContinuationReserveTokens(settings)) <=
+                        ModelContextBudget.InputBudgetTokens(settings),
+                        "explicit failure still retains all request reserves");
+                }
+            });
+        }
+
         private static void ToolPackSnapshotPinsCompleteContracts()
         {
             const string schema = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}";
@@ -496,7 +588,8 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var longDescription = new string('x', 15000);
+                var enumValues = new JArray(Enumerable.Range(0, 600)
+                    .Select(value => "value_" + value + "_" + new string('x', 12)));
                 var optionalTools = Enumerable.Range(1, 2).Select(index => new ToolDefinition
                 {
                     Id = "fixture.large_" + index,
@@ -508,7 +601,12 @@ namespace RNAssistant.Harness
                         ["type"] = "object",
                         ["properties"] = new JObject
                         {
-                            ["value"] = new JObject { ["type"] = "string", ["description"] = longDescription }
+                            ["value"] = new JObject
+                            {
+                                ["type"] = "string",
+                                ["description"] = "Bounded value.",
+                                ["enum"] = enumValues.DeepClone()
+                            }
                         },
                         ["required"] = new JArray(),
                         ["additionalProperties"] = false
@@ -524,7 +622,7 @@ namespace RNAssistant.Harness
                 var settings = new AppSettings
                 {
                     AgentResponseMode = AgentResponseModes.JsonSchema,
-                    ContextWindowOverrideTokens = 16000,
+                    ContextWindowOverrideTokens = 20000,
                     MaxTokens = 512
                 };
                 var session = NewSession(adapter);
@@ -572,7 +670,8 @@ namespace RNAssistant.Harness
                     AssertTrue(optionalTools.All(candidate => request.RunnableCatalog.Any(tool => tool.Id == candidate.Id)),
                         "overflow keeps the dynamic registry available for discovery");
                     AssertTrue(optionalTools.All(candidate => !request.CallableTools.Any(tool => tool.Id == candidate.Id)),
-                        "overflow publishes none of the requested schemas");
+                        "overflow publishes none of the requested schemas; callable=" +
+                        string.Join(",", request.CallableTools.Select(tool => tool.Id).ToArray()));
                     var state = request.AcceptedMessages.Last(message =>
                         (message.Content ?? string.Empty).StartsWith("TOOL_PACK_STATE:", StringComparison.Ordinal));
                     AssertContains(state.Content, "\"admitted\":false", "runtime rejects the candidate before publication");
@@ -581,11 +680,14 @@ namespace RNAssistant.Harness
                         "rejection does not repeat an unbounded list of exact ids");
                     AssertContains(state.Content, "\"requestedSchemaCount\":2",
                         "compact rejection retains the requested batch size");
-                    var estimated = ModelContextBudget.EstimateMessagesTokens(request.AcceptedMessages, settings) +
-                        ModelContextBudget.EstimateRequestOptionsTokens(request.Options, settings) +
-                        ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
+                    var estimated = ModelContextBudget.EstimateAdmittedRequestTokens(
+                        request.AcceptedMessages,
+                        request.Options,
+                        settings,
+                        ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings),
+                        ModelContextBudget.ContinuationReserveTokens(settings));
                     AssertTrue(estimated <= ModelContextBudget.InputBudgetTokens(settings),
-                        "rejected state and retained pack still fit with repair overhead");
+                        "rejected state and retained pack still fit with all request reserves");
                 }
 
                 var rejectedEvents = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
@@ -704,8 +806,14 @@ namespace RNAssistant.Harness
                         "compaction rematerializes the exact durable optional schema");
                     AssertContains(FlattenSimple(request.AcceptedMessages), "Earlier work summarized.", "request uses the new checkpoint");
                     AssertTrue(!request.AcceptedMessages.Any(message => message.Id == evidence.Id), "old schema evidence is absent from the request");
-                    AssertTrue(ModelContextBudget.EstimateMessagesTokens(request.AcceptedMessages, settings) <= ModelContextBudget.InputBudgetTokens(settings),
-                        "recomposed request fits the input budget");
+                    AssertTrue(ModelContextBudget.EstimateAdmittedRequestTokens(
+                            request.AcceptedMessages,
+                            request.Options,
+                            settings,
+                            ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings),
+                            ModelContextBudget.ContinuationReserveTokens(settings)) <=
+                        ModelContextBudget.InputBudgetTokens(settings),
+                        "recomposed request fits the input budget with all reserves");
                     AssertTrue(originalMessages.SequenceEqual(session.Messages.Take(originalMessages.Length)), "compaction keeps the original transcript");
                 }
             });

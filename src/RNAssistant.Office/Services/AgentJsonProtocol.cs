@@ -50,6 +50,12 @@ namespace RNAssistant.Office.Services
                         ["original_chars"] = (result.DataJson ?? string.Empty).Length,
                         ["hint"] = "The chart body is available through the exact resource with relation=result."
                     };
+                else if (data == null || data.Type == JTokenType.Null)
+                    data = new JObject
+                    {
+                        ["externalized"] = true,
+                        ["kind"] = ChatArtifactKinds.ToolResult
+                    };
                 var boundedData = data as JObject;
                 if ((bool?)boundedData?["truncated"] == true)
                     boundedData["hint"] = "The full result is available through the resource with relation=result. Read its exact URI with common.resources_read, or request a smaller scope.";
@@ -92,49 +98,6 @@ namespace RNAssistant.Office.Services
                 Content = native ? resultJson : "TOOL_RESULT:\n" + resultJson,
                 ProtocolMessage = true
             };
-        }
-
-        internal static void FailClosedOversizedCapabilityEvidence(ToolCommand command,
-            ToolResultMaterialization materialized, int maxDataTokens, AppSettings settings = null)
-        {
-            var result = materialized == null ? null : materialized.Result;
-            if (command == null || result == null || result.Status != ToolResultStatus.Ok ||
-                !string.Equals(command.ToolId, CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.IsNullOrWhiteSpace(result.DataJson)) return;
-
-            JObject data;
-            try
-            {
-                data = JsonConvert.DeserializeObject<JObject>(result.DataJson,
-                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
-            }
-            catch (JsonException) { return; }
-            if (data == null) return;
-            var kind = (string)data["kind"] ?? string.Empty;
-            var isCoreEvidence = (string.Equals(kind, "tool-schema", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase)) &&
-                (bool?)data["loaded"] == true && (bool?)data["complete"] == true && (bool?)data["truncated"] == false;
-            if (!isCoreEvidence) return;
-
-            var compact = data.ToString(Formatting.None);
-            var estimatedTokens = ModelContextBudget.EstimateTextTokens(compact, settings);
-            if (estimatedTokens <= Math.Max(0, maxDataTokens)) return;
-
-            materialized.ReplaceResult(TerminalResult.Error(
-                "Capability was found but its complete evidence did not fit the remaining model context, so it was not loaded. Reduce context or start a new chat; do not retry unchanged.",
-                new JObject
-                {
-                    ["code"] = "capability_evidence_context_too_large",
-                    ["kind"] = kind,
-                    ["id"] = data["id"] == null ? JValue.CreateNull() : data["id"].DeepClone(),
-                    ["revision"] = data["revision"] == null ? JValue.CreateNull() : data["revision"].DeepClone(),
-                    ["loaded"] = false,
-                    ["complete"] = false,
-                    ["truncated"] = true,
-                    ["original_chars"] = compact.Length,
-                    ["original_estimated_tokens"] = estimatedTokens,
-                    ["available_tokens"] = Math.Max(0, maxDataTokens)
-                }.ToString(Formatting.None), result.Resources));
         }
 
         public static ChatMessage CreateToolCallMessage(
@@ -211,6 +174,8 @@ namespace RNAssistant.Office.Services
             {
                 return parsed;
             }
+
+            if (boundedTokens == 0) return JValue.CreateNull();
 
             var previewBudget = Math.Max(0, boundedTokens - 96);
             return new JObject

@@ -182,6 +182,25 @@ headroom regression. No event, id, store, verifier phase or generic batch abstra
 was added. Focused harness and Web UI suites pass; Windows WebView2/Office remain
 unqualified.
 
+Resource-result admission regression fix (2026-08-31): VBA discovery/read already
+returned exact modules, source and cursor v2, but the model-session projection first
+filled the Excel Agent request almost to its input limit and then replaced the
+structured result with a successful generic preview. One shared calculation now
+covers messages, actual response options, bounded format-repair overhead and a
+proportional continuation reserve at composition, ToolPack admission, result
+projection, Prompt Inspector and final pre-dispatch. Successful
+`common.resources_*`/`common.capabilities_*` evidence is passed intact or becomes an
+explicit context-too-large error; it is never a successful empty/truncated transport
+wrapper. Resource list/resolve/search results also expose returned exact refs at Tool
+Result root. Generic oversized results retain the full CAS resource and use only the
+largest inline
+projection that fits the same reserves. The replaced capability-only budget helper
+and fixed 1,200-token envelope guess are removed. Host-neutral `agent:` 36/36,
+`model protocol:` 15/15, `tool pack:` 6/6, `resources:` 10/10 and Prompt Inspector
+3/3 pass, including a default Excel/VBA list→source→cursor loop and explicit
+oversized-evidence refusal. Windows WebView2/Office/VBE qualification is unchanged;
+the active Phase 11T next step is not advanced by this fix.
+
 Resource continuation scope fix (2026-08-31): prior immutable cursors were raw opaque
 offsets, while revision-bound cursors carried only offset plus data hash. Reusing a
 cursor on another URI/query with identical content or collection hashes could

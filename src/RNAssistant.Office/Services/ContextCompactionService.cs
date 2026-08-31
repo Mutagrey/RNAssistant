@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 
@@ -63,7 +64,8 @@ namespace RNAssistant.Office.Services
                 ModelContextBudget.EstimateTextTokens(activeCheckpoint == null ? null : activeCheckpoint.SummaryMarkdown, settings) +
                 ModelContextBudget.EstimateTextTokens(incomingText, settings) +
                 instructionTokens +
-                Math.Max(512, inputBudget / 10);
+                ModelContextBudget.ContinuationReserveTokens(settings) +
+                ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
             if (!force && projected * 100 < inputBudget * TriggerPercent)
             {
                 return null;

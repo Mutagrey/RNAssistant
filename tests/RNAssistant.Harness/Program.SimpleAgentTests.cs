@@ -1329,8 +1329,9 @@ namespace RNAssistant.Harness
                 var estimated = ModelContextBudget.EstimateMessagesTokens(request, promptSettings) +
                     ModelContextBudget.EstimateRequestOptionsTokens(requestOptions, promptSettings) +
                     ModelProtocolClient.EstimateFormatRepairOverheadTokens(promptSettings);
-                AssertTrue(ModelContextBudget.InputBudgetTokens(promptSettings) - estimated >= 512,
-                    "mandatory Excel/VBA core keeps at least 512 estimated tokens of prompt headroom");
+                AssertTrue(ModelContextBudget.InputBudgetTokens(promptSettings) - estimated >=
+                    ModelContextBudget.ContinuationReserveTokens(promptSettings),
+                    "mandatory Excel/VBA core keeps the shared continuation reserve");
                 var prompt = FlattenSimple(request);
                 AssertContains(prompt, "\"name\":\"common.resources_list\"", "resource discovery exposed");
                 AssertContains(prompt, "\"name\":\"common.resources_read\"", "resource reads exposed");
@@ -1370,6 +1371,110 @@ namespace RNAssistant.Harness
                     "host macro backend is hidden from the compact catalog");
                 AssertTrue(callableNames.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase),
                     "public macro schema is complete in the VBA core");
+            });
+        }
+
+        private static void AgentPreservesVbaResourceEvidenceWithinBudget()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                const string moduleName = "BudgetModule";
+                const string sourceMarker = "VBA_RESOURCE_SOURCE_SENTINEL";
+                var source = "Option Explicit\n' " + sourceMarker + "\n" +
+                    string.Concat(Enumerable.Range(0, 420).Select(index =>
+                        "Public Sub BudgetLine" + index + "()\nDebug.Print \"" + index + "\"\nEnd Sub\n"));
+                adapter.SetVbaModule(moduleName, source, "StdModule");
+
+                var calls = new List<Tuple<IReadOnlyList<ChatMessage>, LlmRequestOptions>>();
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
+                {
+                    calls.Add(Tuple.Create((IReadOnlyList<ChatMessage>)messages.ToList(), options));
+                    if (calls.Count == 1)
+                    {
+                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(
+                            "Ищу VBA-модули.", new[]
+                            {
+                                new ConversationToolCall
+                                {
+                                    Name = ResourceToolCatalog.ListToolId,
+                                    Arguments = new Dictionary<string, object> { ["provider"] = VbaResourceProvider.ProviderName }
+                                }
+                            }) });
+                    }
+
+                    if (calls.Count == 2)
+                    {
+                        var wire = LastToolResult(messages, ResourceToolCatalog.ListToolId);
+                        AssertEqual("ok", (string)wire["status"], "VBA resource list remains successful");
+                        var data = wire["data"] as JObject;
+                        AssertTrue(data != null && data["items"] is JArray,
+                            "VBA list data is preserved instead of a transport truncation wrapper");
+                        var component = ((JArray)data["items"]).OfType<JObject>().Single(item =>
+                            string.Equals((string)item["title"], moduleName, StringComparison.OrdinalIgnoreCase));
+                        var reference = component["reference"] as JObject;
+                        AssertTrue(reference != null && !string.IsNullOrWhiteSpace((string)reference["uri"]),
+                            "VBA component exposes its exact resource URI");
+                        AssertTrue(wire["resources"] is JArray && ((JArray)wire["resources"]).OfType<JObject>()
+                            .Any(item => string.Equals((string)item["uri"], (string)reference["uri"], StringComparison.Ordinal)),
+                            "listed VBA URIs are also exact Tool Result resources");
+                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(
+                            "Читаю исходник.", new[]
+                            {
+                                new ConversationToolCall
+                                {
+                                    Name = ResourceToolCatalog.ReadToolId,
+                                    Arguments = new Dictionary<string, object>
+                                    {
+                                        ["uri"] = (string)reference["uri"],
+                                        ["representation"] = ResourceRepresentations.Source,
+                                        ["maxChars"] = 8000
+                                    }
+                                }
+                            }) });
+                    }
+
+                    var readWire = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
+                    AssertEqual("ok", (string)readWire["status"],
+                        "VBA source read remains successful: " + readWire.ToString(Formatting.None));
+                    var readData = readWire["data"] as JObject;
+                    AssertTrue(readData != null && readData["resource"] is JObject,
+                        "VBA source metadata is not replaced by a transport truncation wrapper");
+                    AssertContains((string)readData["text"], sourceMarker, "VBA source reaches the model");
+                    AssertTrue(!string.IsNullOrWhiteSpace((string)readData["nextCursor"]),
+                        "bounded VBA source keeps its exact continuation cursor");
+                    AssertTrue(readWire["resources"] is JArray && ((JArray)readWire["resources"]).Count == 1,
+                        "VBA source read retains the exact root resource reference");
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = ModelProtocolWire.Write("VBA прочитан.", new ConversationToolCall[0])
+                    });
+                };
+
+                var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema };
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent,
+                    "Прочитай VBA-модуль " + moduleName + ".",
+                    NewSession(adapter),
+                    NewContext(adapter),
+                    settings,
+                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    null,
+                    null,
+                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
+
+                AssertEqual("VBA прочитан.", result.AssistantText, "VBA resource loop completes");
+                AssertEqual(3, calls.Count, "list, source read, and final response use three model steps");
+                foreach (var request in calls)
+                {
+                    var admitted = ModelContextBudget.EstimateAdmittedRequestTokens(
+                        request.Item1,
+                        request.Item2,
+                        settings,
+                        ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings),
+                        ModelContextBudget.ContinuationReserveTokens(settings));
+                    AssertTrue(admitted <= ModelContextBudget.InputBudgetTokens(settings),
+                        "every VBA resource request retains repair and continuation reserves");
+                }
             });
         }
 
@@ -2160,6 +2265,18 @@ namespace RNAssistant.Harness
                 .Where(message => message != null)
                 .Select(message => message.Content ?? string.Empty)
                 .ToArray());
+        }
+
+        private static JObject LastToolResult(IEnumerable<ChatMessage> messages, string toolId)
+        {
+            var message = (messages ?? new ChatMessage[0]).Last(item => item != null && item.ProtocolMessage &&
+                string.Equals(item.ToolName, toolId, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase));
+            var content = message.Content ?? string.Empty;
+            const string prefix = "TOOL_RESULT:\n";
+            return JObject.Parse(content.StartsWith(prefix, StringComparison.Ordinal)
+                ? content.Substring(prefix.Length)
+                : content);
         }
     }
 }

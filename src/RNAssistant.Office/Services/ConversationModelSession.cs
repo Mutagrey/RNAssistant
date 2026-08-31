@@ -17,7 +17,6 @@ namespace RNAssistant.Office.Services
     // working-set lifecycle; this owner stays outside the future Core kernel.
     internal sealed class ConversationModelSession : IDisposable
     {
-        private const int ToolResultEnvelopeReserveTokens = 1200;
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly ConversationPromptComposer _promptComposer = new ConversationPromptComposer();
         private readonly ContextCompactionService _contextCompactionService;
@@ -104,7 +103,7 @@ namespace RNAssistant.Office.Services
         {
             // The callable pack was reconstructed from the durable turn event before
             // this confirmed result is projected into the next model request.
-            var accepted = CreateBoundedToolResultMessage(command, result);
+            var accepted = MaterializeToolResultMessage(command, result);
             _session.Messages.Add(accepted);
             _messages.Add(accepted);
         }
@@ -153,7 +152,7 @@ namespace RNAssistant.Office.Services
         internal void AppendToolResult(ToolCommand command, PreparedToolResult prepared)
         {
             var result = prepared.Result;
-            var accepted = CreateBoundedToolResultMessage(command, result);
+            var accepted = MaterializeToolResultMessage(command, result);
             accepted.RunId = _session.LastRun == null ? null : _session.LastRun.RunId;
             AppendPairedResult(_session.Messages, accepted);
             AppendPairedResult(_messages, accepted);
@@ -250,6 +249,7 @@ namespace RNAssistant.Office.Services
                 session == null || session.LastRun == null ? null : session.LastRun.RunId,
                 runnableCatalog,
                 restoredAdmissions);
+            var messageBudget = RequestMessageBudget(toolPack.Tools);
             try
             {
                 _messages = _promptComposer.BuildMessages(
@@ -263,7 +263,7 @@ namespace RNAssistant.Office.Services
                     session,
                     attachments,
                     replayCurrentUserInHistory,
-                    0,
+                    messageBudget,
                     toolPack.CapabilityContext(skills));
                 AppendRestorationState(_messages, toolPack);
                 EnsureToolPackFits(_messages, toolPack, true);
@@ -281,6 +281,7 @@ namespace RNAssistant.Office.Services
                     session == null || session.LastRun == null ? null : session.LastRun.RunId,
                     runnableCatalog,
                     restoredAdmissions);
+                messageBudget = RequestMessageBudget(toolPack.Tools);
                 _messages = _promptComposer.BuildMessages(
                     mode,
                     text,
@@ -292,7 +293,7 @@ namespace RNAssistant.Office.Services
                     session,
                     attachments,
                     replayCurrentUserInHistory,
-                    0,
+                    messageBudget,
                     toolPack.CapabilityContext(skills));
                 AppendRestorationState(_messages, toolPack);
                 EnsureToolPackFits(_messages, toolPack, false);
@@ -306,22 +307,15 @@ namespace RNAssistant.Office.Services
             if (state != null) messages.Add(state);
         }
 
-        private ChatMessage CreateBoundedToolResultMessage(
+        private ChatMessage MaterializeToolResultMessage(
             ToolCommand command,
             ToolResultMaterialization result)
         {
-            var inputBudget = ModelContextBudget.InputBudgetTokens(_settings);
-            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, _toolPack.Tools, _session, null);
-            var used = ModelContextBudget.EstimateMessagesTokens(_messages, _settings) +
-                ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
-                ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings);
-            var availableForData = Math.Max(0, inputBudget - used - ToolResultEnvelopeReserveTokens);
-            var toolId = command == null ? null : command.ToolId;
-            var maxDataTokens = string.Equals(toolId, CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase)
-                    ? availableForData
-                    : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
-            AgentJsonProtocol.FailClosedOversizedCapabilityEvidence(
-                command, result, maxDataTokens, _settings);
+            var exactEvidence = ToolResultResourceService.IsExactReadEvidence(command);
+            var availableForData = AvailableToolResultDataTokens();
+            var maxDataTokens = exactEvidence
+                ? int.MaxValue
+                : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
             var artifact = ToolResultResourceService.ExternalizeIfNeeded(
                 _session,
                 command,
@@ -330,6 +324,41 @@ namespace RNAssistant.Office.Services
                 _settings);
             var message = AgentJsonProtocol.CreateToolResultMessage(
                 command, result, maxDataTokens, _settings.ToolResultRole, _settings);
+            if (!RequestFits(message) && !exactEvidence)
+            {
+                if (artifact == null)
+                {
+                    artifact = ToolResultResourceService.ExternalizeIfNeeded(
+                        _session,
+                        command,
+                        result,
+                        0,
+                        _settings);
+                }
+                if (artifact != null)
+                {
+                    message = LargestFittingExternalizedResultMessage(command, result, maxDataTokens);
+                }
+            }
+            if (!RequestFits(message) && exactEvidence &&
+                result != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
+            {
+                ReplaceOversizedReadEvidence(command, result, availableForData);
+                message = AgentJsonProtocol.CreateToolResultMessage(
+                    command, result, int.MaxValue, _settings.ToolResultRole, _settings);
+            }
+            if (!RequestFits(message))
+            {
+                var candidateMessages = new List<ChatMessage>(_messages) { message };
+                var candidateTokens = EstimatedAdmittedRequestTokens(candidateMessages, _toolPack.Tools);
+                throw new PromptBudgetExceededException(
+                    "Tool result cannot be projected without removing evidence or the mandatory continuation reserve. " +
+                    "The candidate request uses ≈" + candidateTokens + " tokens at an input limit of " +
+                    ModelContextBudget.InputBudgetTokens(_settings) + " (inline data allowance ≈" +
+                    availableForData + "). Request a smaller resource page/chunk, " +
+                    "compact the context, or use a larger-context model.",
+                    false);
+            }
             message.ResourceRefs = AgentTranscript.CloneResourceRefs(result == null ? null : result.Result.Resources);
             if (artifact != null && !string.Equals(
                 artifact.Kind,
@@ -342,7 +371,7 @@ namespace RNAssistant.Office.Services
         {
             var candidateMessages = new List<ChatMessage>(_messages);
             if (stateMessage != null) candidateMessages.Add(stateMessage);
-            return EstimatedRequestTokens(candidateMessages, candidateTools) <=
+            return EstimatedAdmittedRequestTokens(candidateMessages, candidateTools) <=
                 ModelContextBudget.InputBudgetTokens(_settings);
         }
 
@@ -351,24 +380,122 @@ namespace RNAssistant.Office.Services
             CallableToolPack toolPack,
             bool canCompact)
         {
-            var estimated = EstimatedRequestTokens(messages, toolPack.Tools);
+            var estimated = EstimatedAdmittedRequestTokens(messages, toolPack.Tools);
             var budget = ModelContextBudget.InputBudgetTokens(_settings);
             if (estimated <= budget) return;
             throw new PromptBudgetExceededException(
-                "Callable tool pack cannot be published: the complete request plus format-repair reserve uses ≈" +
+                "Callable tool pack cannot be published: the complete request plus format-repair and continuation reserves uses ≈" +
                 estimated + " tokens at an input limit of " + budget +
                 ". Start a new chat, use a larger-context model, or reduce optional schemas.",
                 canCompact);
         }
 
-        private int EstimatedRequestTokens(
+        private int EstimatedAdmittedRequestTokens(
             IReadOnlyList<ChatMessage> messages,
             IReadOnlyList<ToolDefinition> tools)
         {
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools, _session, null);
-            return ModelContextBudget.EstimateMessagesTokens(messages, _settings) +
-                ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
-                ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings);
+            return ModelContextBudget.EstimateAdmittedRequestTokens(
+                messages,
+                options,
+                _settings,
+                ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings),
+                ModelContextBudget.ContinuationReserveTokens(_settings));
+        }
+
+        private int RequestMessageBudget(IReadOnlyList<ToolDefinition> tools)
+        {
+            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools, _session, null);
+            var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
+                ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
+                ModelContextBudget.ContinuationReserveTokens(_settings);
+            return Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens);
+        }
+
+        private int AvailableToolResultDataTokens()
+        {
+            var admitted = EstimatedAdmittedRequestTokens(_messages, _toolPack.Tools);
+            return Math.Max(0, ModelContextBudget.InputBudgetTokens(_settings) - admitted);
+        }
+
+        private bool RequestFits(ChatMessage resultMessage)
+        {
+            var messages = new List<ChatMessage>(_messages);
+            if (resultMessage != null) messages.Add(resultMessage);
+            return EstimatedAdmittedRequestTokens(messages, _toolPack.Tools) <=
+                ModelContextBudget.InputBudgetTokens(_settings);
+        }
+
+        private ChatMessage LargestFittingExternalizedResultMessage(
+            ToolCommand command,
+            ToolResultMaterialization result,
+            int maximumDataTokens)
+        {
+            var best = AgentJsonProtocol.CreateToolResultMessage(
+                command, result, 0, _settings.ToolResultRole, _settings);
+            if (!RequestFits(best)) return best;
+            var low = 1;
+            var high = Math.Max(0, maximumDataTokens);
+            while (low <= high)
+            {
+                var middle = low + (high - low) / 2;
+                var candidate = AgentJsonProtocol.CreateToolResultMessage(
+                    command, result, middle, _settings.ToolResultRole, _settings);
+                if (RequestFits(candidate))
+                {
+                    best = candidate;
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
+            }
+            return best;
+        }
+
+        private void ReplaceOversizedReadEvidence(
+            ToolCommand command,
+            ToolResultMaterialization materialized,
+            int availableDataTokens)
+        {
+            var result = materialized.Result;
+            JObject original;
+            try
+            {
+                original = JsonConvert.DeserializeObject<JObject>(result.DataJson ?? "{}",
+                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) ?? new JObject();
+            }
+            catch (JsonException)
+            {
+                original = new JObject();
+            }
+            var compact = original.ToString(Formatting.None);
+            var capability = !ToolResultResourceService.IsResourceEvidence(command);
+            var data = new JObject
+            {
+                ["code"] = capability
+                    ? "capability_evidence_context_too_large"
+                    : "resource_evidence_context_too_large",
+                ["complete"] = false,
+                ["original_chars"] = compact.Length,
+                ["original_estimated_tokens"] = ModelContextBudget.EstimateTextTokens(compact, _settings),
+                ["available_tokens"] = Math.Max(0, availableDataTokens)
+            };
+            if (capability)
+            {
+                data["kind"] = original["kind"] == null ? JValue.CreateNull() : original["kind"].DeepClone();
+                data["id"] = original["id"] == null ? JValue.CreateNull() : original["id"].DeepClone();
+                data["revision"] = original["revision"] == null ? JValue.CreateNull() : original["revision"].DeepClone();
+                data["loaded"] = false;
+                data["truncated"] = true;
+            }
+            materialized.ReplaceResult(RNAssistant.Core.Tools.Contracts.ToolResult.Error(
+                capability
+                    ? "Capability evidence did not fit the request with mandatory reserves and was not loaded. Reduce context or use a larger-context model; do not retry unchanged."
+                    : "Resource evidence did not fit the request with mandatory reserves. Request a smaller list limit or read maxChars, compact context, then retry.",
+                data.ToString(Formatting.None),
+                capability ? result.Resources : new ResourceRef[0]));
         }
 
         private async Task<ChatMessage> BuildArtifactMediaMessageAsync(

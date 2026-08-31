@@ -144,6 +144,7 @@ namespace RNAssistant.Core.Tools
             CollapseObjectAnyOfConstraints(clone);
             MakeOptionalPropertiesNullable(clone);
             MakeObjectSchemasStrict(clone);
+            RemoveStructuredOutputAnnotations(clone);
             return clone;
         }
 
@@ -233,6 +234,20 @@ namespace RNAssistant.Core.Tools
                 ["required"] = new JArray(),
                 ["additionalProperties"] = false
             };
+        }
+
+        private static void RemoveStructuredOutputAnnotations(JToken node)
+        {
+            var obj = node as JObject;
+            if (obj != null)
+            {
+                obj.Property("description")?.Remove();
+                obj.Property("default")?.Remove();
+            }
+            foreach (var child in node == null ? new JToken[0] : node.Children().ToArray())
+            {
+                RemoveStructuredOutputAnnotations(child);
+            }
         }
 
         private static bool ValidateValue(JToken value, JObject schema, string path, bool applyDefaults, out string error)

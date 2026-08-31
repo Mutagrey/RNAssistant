@@ -102,13 +102,26 @@ namespace RNAssistant.Office.Services
                 runnableCatalog);
             var runnableTools = toolPack.Tools;
             var capabilityCatalog = toolPack.CapabilityContext(enabledSkills);
+            var options = ConversationModelSession.BuildRequestOptions(
+                mode,
+                AgentResponseModes.Normalize(settings.AgentResponseMode),
+                runnableTools,
+                previewSession,
+                null);
+            var repairReserveTokens = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
+            var continuationReserveTokens = ModelContextBudget.ContinuationReserveTokens(settings);
+            var inputLimit = ModelContextBudget.InputBudgetTokens(settings);
+            var messageBudget = Math.Max(1, inputLimit -
+                EstimateRequestOptionsTokens(options) -
+                repairReserveTokens -
+                continuationReserveTokens);
 
             var relaxed = false;
             List<ChatMessage> messages;
             try
             {
                 messages = BuildMessages(mode, draftText, previewSession, context, settings,
-                    runnableTools, enabledSkills, attachments, 0, capabilityCatalog);
+                    runnableTools, enabledSkills, attachments, messageBudget, capabilityCatalog);
             }
             catch (PromptBudgetExceededException)
             {
@@ -117,17 +130,12 @@ namespace RNAssistant.Office.Services
                     runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens, capabilityCatalog);
             }
 
-            var options = ConversationModelSession.BuildRequestOptions(
-                mode,
-                AgentResponseModes.Normalize(settings.AgentResponseMode),
-                runnableTools,
-                previewSession,
-                null);
-            var repairReserveTokens = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
-            var usedTokens = EstimateMessagesTokens(messages) +
-                EstimateRequestOptionsTokens(options) +
-                repairReserveTokens;
-            var inputLimit = ModelContextBudget.InputBudgetTokens(settings);
+            var usedTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
+                messages,
+                options,
+                settings,
+                repairReserveTokens,
+                continuationReserveTokens);
             var contextWindow = Math.Max(4096, ModelContextBudget.ContextWindowTokens(settings));
             var safety = ModelContextBudget.SafetyReserveTokens(contextWindow);
             var reservedOutput = Math.Max(1, contextWindow - safety - inputLimit);
@@ -146,7 +154,8 @@ namespace RNAssistant.Office.Services
                 attachments,
                 draftText,
                 usedTokens,
-                repairReserveTokens);
+                repairReserveTokens,
+                continuationReserveTokens);
             var lastUsage = (session.Messages ?? new List<ChatMessage>())
                 .Where(item => item != null && item.PromptTokens.HasValue)
                 .OrderByDescending(item => item.CreatedUtc)
@@ -250,7 +259,8 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
             int usedTokens,
-            int repairReserveTokens)
+            int repairReserveTokens,
+            int continuationReserveTokens)
         {
             var sections = new List<PromptContextSectionDto>();
             var current = messages == null || messages.Count == 0 ? null : messages[messages.Count - 1];
@@ -360,6 +370,25 @@ namespace RNAssistant.Office.Services
                         Item("format-repair-reserve", "reserve", "FORMAT_REPAIR reserve", string.Empty,
                             repairReserveTokens,
                             "Не отправляется в первом запросе; место сохраняется для одной bounded repair-инструкции.")
+                    }
+                });
+            }
+
+            if (continuationReserveTokens > 0)
+            {
+                sections.Add(new PromptContextSectionDto
+                {
+                    Id = "continuation_reserve",
+                    Title = "Резерв следующего tool-result",
+                    Tokens = continuationReserveTokens,
+                    Count = 1,
+                    Detail = "Обязательный запас каждого conversation request",
+                    Included = true,
+                    Items = new List<PromptContextItemDto>
+                    {
+                        Item("continuation-reserve", "reserve", "Continuation reserve", string.Empty,
+                            continuationReserveTokens,
+                            "Не отправляется как текст; admission сохраняет место для следующего bounded результата и его envelope.")
                     }
                 });
             }
