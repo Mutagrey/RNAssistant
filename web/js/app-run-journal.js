@@ -220,16 +220,8 @@
   }
 
   function identityText(row) {
-    var parts = [];
-    var attempt = value(row, "ModelAttemptId", "modelAttemptId", "");
     var tool = value(row, "ToolId", "toolId", "");
-    var call = value(row, "ToolCallId", "toolCallId", "");
-    var mutation = value(row, "MutationId", "mutationId", "");
-    if (attempt) parts.push("attempt " + boundedText(attempt, 24));
-    if (tool) parts.push(boundedText(tool, 42));
-    if (call) parts.push("call " + boundedText(call, 24));
-    if (mutation) parts.push("mutation " + boundedText(mutation, 24));
-    return parts.join(" · ");
+    return tool ? boundedText(tool, 64) : "";
   }
 
   function rowNote(row) {
@@ -306,6 +298,58 @@
       value(row, "DataTruncated", "dataTruncated", false) ? "preview" : "full");
     mountJson(evidenceHost, evidenceJson(row), "full");
     details.setAttribute("data-mounted", "true");
+  }
+
+  function payloadAction(row) {
+    var kind = rowKind(row);
+    var ids = sourceIds(row);
+    if (ids.length !== 1) return null;
+    if (kind === "model.request.prepared" || kind === "llm.request") {
+      return { eventId: ids[0], label: "Показать запрос модели", title: "Фактический запрос модели" };
+    }
+    if (kind === "llm.response") {
+      return { eventId: ids[0], label: "Показать ответ модели", title: "Фактический ответ модели" };
+    }
+    if (kind === "model.attempt.rejected" || kind === "agent.response.rejected") {
+      return { eventId: ids[0], label: "Показать отклонённый ответ", title: "Отклонённый ответ модели" };
+    }
+    return null;
+  }
+
+  function appendPayloadAction(actions, row, options) {
+    var definition = payloadAction(row);
+    if (!definition || typeof options.onLoadPayload !== "function") return null;
+    var section = document.createElement("section");
+    section.className = "rn-run-journal-payload hidden";
+    appendText(section, "h4", "", definition.title);
+    var host = document.createElement("div");
+    host.className = "rn-run-journal-payload-host";
+    section.appendChild(host);
+
+    var button = actionButton(definition.label, function () {
+      button.disabled = true;
+      button.textContent = "Загружаю…";
+      Promise.resolve(options.onLoadPayload(definition.eventId)).then(function (response) {
+        var text = value(response, "Text", "text", "");
+        var truncated = !!value(response, "TextTruncated", "textTruncated", false);
+        var contentType = String(value(response, "ContentType", "contentType", "") || "");
+        section.classList.remove("hidden");
+        if (/json/i.test(contentType)) {
+          mountJson(host, text, truncated ? "preview" : "full");
+        } else {
+          host.textContent = text + (truncated ? "\n\n[Показан только bounded preview.]" : "");
+        }
+        button.textContent = "Payload загружен";
+      }).catch(function (error) {
+        section.classList.remove("hidden");
+        host.textContent = "Не удалось загрузить payload: " + (error && error.message ? error.message : String(error));
+        button.textContent = "Повторить";
+      }).then(function () {
+        button.disabled = false;
+      });
+    });
+    actions.appendChild(button);
+    return section;
   }
 
   function actionButton(label, onClick) {
@@ -387,25 +431,28 @@
     var actions = document.createElement("div");
     actions.className = "rn-run-journal-actions";
     appendNavigationActions(actions, row, options);
+    var payloadSection = appendPayloadAction(actions, row, options);
     if (actions.childElementCount) body.appendChild(actions);
+    if (payloadSection) body.appendChild(payloadSection);
 
-    var grids = document.createElement("div");
-    grids.className = "rn-run-journal-json-grid";
     var dataSection = document.createElement("section");
     dataSection.className = "rn-run-journal-json-section";
-    appendText(dataSection, "h4", "", "Данные этапа");
+    appendText(dataSection, "h4", "", "Содержимое этапа");
     var dataHost = document.createElement("div");
     dataHost.className = "rn-run-journal-json rn-run-journal-data";
     dataSection.appendChild(dataHost);
+    body.appendChild(dataSection);
+
+    var technical = document.createElement("details");
+    technical.className = "rn-run-journal-technical";
+    appendText(technical, "summary", "", "Технические связи и ID");
     var evidenceSection = document.createElement("section");
     evidenceSection.className = "rn-run-journal-json-section";
-    appendText(evidenceSection, "h4", "", "Связи проекции");
     var evidenceHost = document.createElement("div");
     evidenceHost.className = "rn-run-journal-json rn-run-journal-evidence";
     evidenceSection.appendChild(evidenceHost);
-    grids.appendChild(dataSection);
-    grids.appendChild(evidenceSection);
-    body.appendChild(grids);
+    technical.appendChild(evidenceSection);
+    body.appendChild(technical);
     details.appendChild(body);
 
     details.addEventListener("toggle", function () {
@@ -507,6 +554,7 @@
   function unmount(root) {
     if (!root) return;
     Array.prototype.slice.call(root.querySelectorAll(".rn-run-journal-json")).forEach(unmountJson);
+    Array.prototype.slice.call(root.querySelectorAll(".rn-run-journal-payload-host")).forEach(unmountJson);
     root.replaceChildren();
   }
 

@@ -305,11 +305,37 @@
   line-height: 1.4;
 }
 
-.rn-run-journal-json-grid {
-  display: grid;
+.rn-run-journal-payload,
+.rn-run-journal-technical {
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 38%);
-  gap: 7px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.rn-run-journal-payload h4,
+.rn-run-journal-technical > summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: var(--label-font-weight);
+}
+
+.rn-run-journal-technical > summary {
+  cursor: pointer;
+}
+
+.rn-run-journal-payload-host {
+  min-width: 0;
+  max-height: 520px;
+  margin-top: 5px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.rn-run-journal-technical .rn-run-journal-json-section {
+  margin-top: 5px;
 }
 
 .rn-run-journal-json-section {
@@ -341,9 +367,6 @@
     grid-template-columns: repeat(3, minmax(90px, 1fr));
   }
 
-  .rn-run-journal-json-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 @media (max-width: 620px) {

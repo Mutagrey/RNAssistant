@@ -242,6 +242,10 @@ Phase 10A реализовал checks, соответствующие уже п�
 - после 5B2/7D `ActiveWorkbook` запрещён в execution/mutation paths;
 - host adapters не добавляют новые public tool-id switches;
 - UI не зависит от executors/domain services и не выводит effect из prose;
+- новые correlation/operation/batch ids запрещены без отдельного recovery или
+  cross-boundary consumer; действующие ids остаются internal и по умолчанию скрыты
+  в UI. Дубли envelope/Data удаляются только schema-owned change после consumer audit,
+  а не новым projection/store;
 - bridge operation ids после введения catalog имеют C#/JS parity;
 - новые `.cs` включены в old-style `.csproj`, а namespace dependency direction
   соответствует `docs/architecture.md`.

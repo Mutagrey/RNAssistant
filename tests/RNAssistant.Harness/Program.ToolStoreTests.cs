@@ -228,6 +228,8 @@ namespace RNAssistant.Harness
         {
             var excel = new List<ToolDefinition>(FakeOfficeAdapter.ForHost("Excel").GetBuiltInTools());
             AssertTrue(HasTool(excel, "excel.inspect"), "excel inspection facade visible");
+            AssertContains(FindTool(excel, "excel.inspect").Description, "Not a write preflight",
+                "excel inspection contract discourages unchanged preflight loops");
             AssertTrue(HasTool(excel, "excel.read_range"), "excel range reader visible");
             AssertTrue(HasTool(excel, "excel.find_cells"), "excel find cells visible");
             AssertTrue(FindTool(excel, "excel.replace_cells").ArgumentSchemaJson.IndexOf("expectedScopeSha256", StringComparison.Ordinal) < 0,

@@ -1107,6 +1107,17 @@ namespace RNAssistant.Harness
                 AssertEqual("chat,document,vba", string.Join(",", discovery.Providers.ToArray()),
                     "resource discovery exposes the registered providers only");
 
+                var defaultVba = gateway.List(
+                    session,
+                    VbaResourceProvider.ProviderName,
+                    null,
+                    null,
+                    20);
+                AssertTrue(defaultVba.Items.Any(item => item.Kind == VbaResourceProvider.ProjectKind) &&
+                    defaultVba.Items.Any(item => item.Kind == VbaResourceProvider.ComponentKind &&
+                        string.Equals(item.Title, "ResourceModule", StringComparison.OrdinalIgnoreCase)),
+                    "default VBA discovery exposes exact live component URIs without hidden kind vocabulary");
+
                 var document = gateway.List(
                     session,
                     LiveDocumentResourceProvider.ProviderName,

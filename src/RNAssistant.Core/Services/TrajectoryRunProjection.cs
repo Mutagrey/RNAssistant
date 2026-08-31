@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 
@@ -152,8 +153,9 @@ namespace RNAssistant.Core.Services
                 data["sourceCallPosition"] = callPosition;
                 data["originComplete"] = !string.IsNullOrWhiteSpace(originStepId) &&
                     !string.IsNullOrWhiteSpace(modelAttemptId) && originCallIndex.HasValue;
-                data["argumentsAvailable"] = Property(call, "Arguments") != null ||
-                    Property(call, "ArgumentsJson") != null || Property(message, "Content") != null;
+                var arguments = Property(call, "Arguments") ?? Property(call, "ArgumentsJson");
+                data["argumentsAvailable"] = arguments != null || Property(message, "Content") != null;
+                if (arguments != null) data["arguments"] = Structured(arguments, null);
 
                 var row = new TrajectoryViewRow
                 {
@@ -207,6 +209,11 @@ namespace RNAssistant.Core.Services
             Copy(data, activity, "ErrorCode", "errorCode");
             Copy(data, activity, "PendingId", "pendingId");
             Copy(data, activity, "Retryable", "retryable");
+            Copy(data, activity, "ResultMessage", "resultMessage");
+            CopyStructured(data, activity, "ArgumentsJson", "arguments", null);
+            CopyStructured(data, activity, "DataJson", "resultData", null);
+            CopyStructured(data, activity, "ExecutionEvidence", "executionEvidence", null);
+            CopyStructured(data, value, "Content", "toolResult", "TOOL_RESULT:\n");
             if (origin != null) data["acceptedCallOrigin"] = origin.DeepClone();
             if (incompatible)
             {
@@ -482,6 +489,30 @@ namespace RNAssistant.Core.Services
         {
             var value = Property(source, sourceName);
             if (value != null && value.Type != JTokenType.Null) target[targetName] = value.DeepClone();
+        }
+
+        private static void CopyStructured(
+            JObject target,
+            JObject source,
+            string sourceName,
+            string targetName,
+            string prefix)
+        {
+            var value = Property(source, sourceName);
+            if (value != null && value.Type != JTokenType.Null)
+                target[targetName] = Structured(value, prefix);
+        }
+
+        private static JToken Structured(JToken value, string prefix)
+        {
+            if (value == null || value.Type != JTokenType.String) return value == null
+                ? JValue.CreateNull()
+                : value.DeepClone();
+            var text = (string)value ?? string.Empty;
+            if (!string.IsNullOrEmpty(prefix) && text.StartsWith(prefix, StringComparison.Ordinal))
+                text = text.Substring(prefix.Length);
+            try { return JToken.Parse(text); }
+            catch (JsonException) { return value.DeepClone(); }
         }
 
         private static void ApplySource(TrajectoryViewRow row, IEnumerable<SessionEvent> events)

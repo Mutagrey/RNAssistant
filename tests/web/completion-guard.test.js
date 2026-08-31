@@ -85,9 +85,12 @@ const tests = [
     assert.match(note.textContent, /ошибки вызовов — 1/);
     assert.match(walk(node).find(item => item.className === "agent-run-history-title").textContent, /содержит ошибки/);
   }],
-  ["unknown effects dominate failures and narrative", () => {
+  ["legacy unverified write is explained once without duplicate unknown count", () => {
     const node = renderFinal(view("unknown", { unverified: 1, failed: 1, unknown: 1 }));
-    assert.match(assertVisibleEvidence(node, "unknown").textContent, /Требуется проверка/);
+    const text = assertVisibleEvidence(node, "unknown").textContent;
+    assert.match(text, /legacy-handler без read-back/);
+    assert.match(text, /legacy без read-back — 1/);
+    assert.match(text, /прочие неизвестные эффекты — 0/);
     assert.match(walk(node).find(item => item.className === "agent-run-history-title").textContent, /не определён/);
   }],
   ["no write is an ordinary response", () => {

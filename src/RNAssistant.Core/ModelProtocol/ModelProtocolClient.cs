@@ -185,7 +185,7 @@ namespace RNAssistant.Core.ModelProtocol
                 ["instruction"] =
                     "Return a new response to the current user request as exactly one conversation-response-v4 JSON object " +
                     "containing only message (string) and tool_calls (array). Never return status or any other root field. " +
-                    "Do not use Markdown, fences, or surrounding prose. Empty tool_calls ends the model loop; wording proves no effect. " +
+                    "Do not use Markdown, fences, or surrounding prose. Empty tool_calls ends the loop: use it only when every requested deliverable is complete or blocked. Intermediate success and wording prove no effect. " +
                     "Every call contains only an exact name and object arguments. Do not include id; runtime assigns call IDs. " +
                     "Write, external, confirmation-required and unclassified calls must be singleton; batch only independent local reads. " +
                     "Follow the error action exactly. " +

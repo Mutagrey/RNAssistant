@@ -153,8 +153,17 @@ namespace RNAssistant.Harness
                     "complete prompt index contains the tail id");
                 var promptTail = ((JArray)completeCatalog["items"]).OfType<JObject>().Single(item =>
                     (string)item["id"] == "excel.synthetic_299");
-                AssertEqual(new string('d', 96) + "...[truncated]", (string)promptTail["summary"],
-                    "complete prompt index keeps a compact bounded summary");
+                AssertTrue(promptTail["summary"] == null && promptTail["name"] == null &&
+                    promptTail["mutatesDocument"] == null && (bool)promptTail["schemaLoaded"],
+                    "active schema metadata is not duplicated in the compact index");
+                var optionalCatalog = CapabilityDiscoveryExecutor.BuildPromptCatalog(
+                    largeCatalog,
+                    skills,
+                    catalog);
+                var optionalTail = ((JArray)optionalCatalog["items"]).OfType<JObject>().Single(item =>
+                    (string)item["id"] == "excel.synthetic_299");
+                AssertEqual(new string('d', 96) + "...[truncated]", (string)optionalTail["summary"],
+                    "unloaded capability keeps a bounded summary for selection");
                 AssertTrue(completeCatalog["items"].ToString(Newtonsoft.Json.Formatting.None)
                         .IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
                     "complete prompt index remains schema-free");

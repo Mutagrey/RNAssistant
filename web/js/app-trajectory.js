@@ -459,6 +459,11 @@
       },
       onNavigate: function (field, filterValue, targetView) {
         navigateCorrelation(field, filterValue, targetView, trajectoryChatId || state.activeChatId);
+      },
+      onLoadPayload: function (eventId) {
+        var chatId = trajectoryChatId || state.activeChatId;
+        if (!chatId) return Promise.reject(new Error("Нет активного чата."));
+        return send("getChatEventPayload", { chatId: chatId, eventId: eventId });
       }
     });
     root.scrollTop = previousScroll;

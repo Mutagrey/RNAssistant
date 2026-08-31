@@ -376,10 +376,17 @@ namespace RNAssistant.Office.Tools
             {
                 ["id"] = record.Id,
                 ["kind"] = record.Kind,
-                ["name"] = Bound(record.Name, MaximumNameCharacters),
-                ["summary"] = Bound(record.Summary, maximumSummaryCharacters),
                 ["revision"] = record.Revision
             };
+            if (record.Tool != null && schemaLoaded == true)
+            {
+                // The full active descriptor and safety policy are already present
+                // in RUNTIME_CONTEXT.tools. Keep only exact membership here.
+                result["schemaLoaded"] = true;
+                return result;
+            }
+            result["name"] = Bound(record.Name, MaximumNameCharacters);
+            result["summary"] = Bound(record.Summary, maximumSummaryCharacters);
             if (record.Tool != null)
             {
                 if (schemaLoaded.HasValue) result["schemaLoaded"] = schemaLoaded.Value;

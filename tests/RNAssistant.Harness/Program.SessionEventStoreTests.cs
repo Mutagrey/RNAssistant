@@ -1598,8 +1598,20 @@ namespace RNAssistant.Harness
                             ["Data"] = new JObject { ["Value"] = new JObject { ["Activity"] = new JObject
                             {
                                 ["RunId"] = "run-1", ["StepId"] = "logical-1", ["ToolCallId"] = "call-1",
-                                ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "completed", ["ExecutionStatus"] = "completed"
+                                ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "completed", ["ExecutionStatus"] = "completed",
+                                ["ArgumentsJson"] = "{\"html\":\"<main>ok</main>\"}",
+                                ["ResultMessage"] = "Workspace updated.", ["DataJson"] = "{\"changed\":true}",
+                                ["ExecutionEvidence"] = new JObject { ["Dispatch"] = "MayHaveDispatched", ["Effect"] = "VerifiedChange" }
                             } } }
+                        },
+                        new JObject
+                        {
+                            ["Type"] = SessionOperationTypes.ToolResultRecorded,
+                            ["Data"] = new JObject { ["Value"] = new JObject
+                            {
+                                ["ToolCallId"] = "call-1", ["ToolName"] = "common.html_workspace_upsert",
+                                ["Content"] = "TOOL_RESULT:\n{\"version\":1,\"tool_call_id\":\"call-1\",\"name\":\"common.html_workspace_upsert\",\"status\":\"ok\",\"message\":\"Workspace updated.\",\"data\":{\"changed\":true}}"
+                            } }
                         })
                     }),
                 TrajectoryEvent(16, SessionEventTypes.TurnEnded, started.AddSeconds(15), "run-1", "turn-1", null,
@@ -1674,7 +1686,20 @@ namespace RNAssistant.Harness
             AssertEqual("logical-1", accepted.StepId, "accepted call preserves logical step origin");
             AssertEqual(0, (int)accepted.Data["acceptedCallOrigin"]["CallIndex"], "accepted call preserves raw call position");
             AssertTrue((bool)accepted.Data["argumentsAvailable"], "accepted call points to persisted executor arguments");
+            AssertEqual("<main>ok</main>", (string)accepted.Data["arguments"]["html"],
+                "accepted call exposes exact executor arguments without opening raw storage JSON");
             AssertTrue(accepted.SourceEventSeqs.SequenceEqual(new long[] { 8 }), "accepted call retains exact source event");
+
+            var finished = run.Single(item => item.Kind == SessionOperationTypes.ToolExecutionFinished);
+            AssertEqual("Workspace updated.", (string)finished.Data["resultMessage"],
+                "tool completion exposes the executor result message");
+            AssertEqual(true, (bool)finished.Data["resultData"]["changed"],
+                "tool completion exposes structured result data");
+            AssertEqual("VerifiedChange", (string)finished.Data["executionEvidence"]["Effect"],
+                "tool completion exposes exact effect evidence");
+            var toolResult = run.Single(item => item.Kind == SessionOperationTypes.ToolResultRecorded);
+            AssertEqual("ok", (string)toolResult.Data["toolResult"]["status"],
+                "tool result wire is readable in the run journal projection");
 
             var raw = run.Single(item => item.ModelAttemptId == "attempt-2" && item.Kind == SessionEventTypes.LlmResponse);
             AssertEqual(new string('a', 64), (string)raw.Data["payload"]["sha256"], "raw response keeps lazy CAS metadata");

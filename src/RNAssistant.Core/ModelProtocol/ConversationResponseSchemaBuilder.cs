@@ -37,9 +37,9 @@ namespace RNAssistant.Core.ModelProtocol
             return new JObject
             {
                 ["type"] = "object",
-                ["description"] = "Conversation response v4. Return only message and tool_calls; each call contains only name and arguments. " +
-                    "Runtime assigns call IDs and owns lifecycle and execution health. Write, external, confirmation-required and unclassified calls " +
-                    "must be singleton; only independent local read-only calls may be batched, in sequence.",
+                ["description"] = "V4: only message/tool_calls and name/arguments. Runtime owns IDs, lifecycle and effects. " +
+                    "Writes, external, confirmation-required and unclassified calls are singleton; batch only independent reads. " +
+                    "Before [], check every requested deliverable against tool results; intermediate success is not completion.",
                 ["properties"] = new JObject
                 {
                     ["message"] = new JObject { ["type"] = "string", ["description"] = "User-facing message; its wording does not determine execution success." },
@@ -52,7 +52,7 @@ namespace RNAssistant.Core.ModelProtocol
                             ["required"] = new JArray(), ["additionalProperties"] = false
                         },
                         ["maxItems"] = options.Count > 0 ? MaximumToolCalls : 0,
-                        ["description"] = "Exact calls to execute now, or [] when the model ends its loop. This is not evidence of successful effects."
+                        ["description"] = "Calls to execute now. Use [] only when all requested deliverables are complete or blocked; [] proves no effect."
                     }
                 },
                 ["required"] = new JArray("message", "tool_calls"),

@@ -49,8 +49,12 @@ namespace RNAssistant.Office.Services
             {
                 limit = Math.Max(1, Math.Min(MaximumItems, limit <= 0 ? 20 : limit));
                 List<ResourceDescriptor> items;
-                if (string.IsNullOrWhiteSpace(kind) ||
-                    string.Equals(kind, ProjectKind, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(kind))
+                {
+                    items = new List<ResourceDescriptor> { DescribeProject(session) };
+                    items.AddRange(LoadModules().Select(module => DescribeComponent(session, module, null)));
+                }
+                else if (string.Equals(kind, ProjectKind, StringComparison.OrdinalIgnoreCase))
                 {
                     items = new List<ResourceDescriptor> { DescribeProject(session) };
                 }
@@ -117,7 +121,7 @@ namespace RNAssistant.Office.Services
             descriptor.Metadata["host"] = _adapter.HostName ?? string.Empty;
             descriptor.Metadata["live"] = "true";
             descriptor.Metadata["childKinds"] = ComponentKind + "," + BackupKind;
-            descriptor.Metadata["childDiscovery"] = "List this provider with one exact child kind.";
+            descriptor.Metadata["childDiscovery"] = "The default provider list includes live components; use kind=vba-backup for backups.";
             return descriptor;
         }
 

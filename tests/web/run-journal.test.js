@@ -96,16 +96,21 @@ function findButton(root, prefix) {
   return root.querySelectorAll("button").find(button => button.textContent.startsWith(prefix));
 }
 
-(function run() {
+(async function run() {
   const root = new Element("div");
   let filter = "";
   let navigation = null;
+  let payloadEventId = null;
   const expanded = {};
   const options = {
     filter: "all", expanded, activeRunId: "run-1",
     onFilterChange(value) { filter = value; },
     onExpandedChange(id, open) { expanded[id] = open; },
     onNavigate(field, value, view) { navigation = { field, value, view }; },
+    onLoadPayload(eventId) {
+      payloadEventId = eventId;
+      return Promise.resolve({ Text: "{\"message\":\"done\",\"tool_calls\":[]}", ContentType: "application/json", TextTruncated: false });
+    },
     onExpandedSet(ids, open) { ids.forEach(id => { expanded[id] = open; }); }
   };
 
@@ -119,6 +124,14 @@ function findButton(root, prefix) {
   assert.equal(metrics[1].textContent, "3Проблемы");
   assert.equal(metrics[2].textContent, "2Уникальные tool calls");
   console.log("PASS run journal: chronological typed rows and run view evidence render without inference");
+
+  findButton(root, "Показать ответ модели").click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(payloadEventId, "evt-3");
+  assert.match(root.textContent, /Фактический ответ модели/);
+  assert.match(root.textContent, /tool_calls/);
+  assert.doesNotMatch(root.textContent, /attempt attempt-1/);
+  console.log("PASS run journal: model request/response payload is available directly while correlation IDs stay collapsed");
 
   findButton(root, "Проблемы").click();
   assert.equal(filter, "problems");
@@ -181,6 +194,9 @@ function findButton(root, prefix) {
   const activity = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-activity.js"), "utf8");
   const agent = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8");
   assert.ok(page.indexOf("app-run-journal.js") < page.indexOf("app-trajectory.js"));
+  ["app-run-journal.css", "app-run-journal.js", "app-trajectory.js", "app-agent.js"].forEach(asset => {
+    assert.ok(page.includes(asset + "?v=runtime-diagnostics-20260831-1"), asset + " uses the diagnostics cache key");
+  });
   assert.match(page, /option value="run-causal">Журнал запуска/);
   assert.match(trajectory, /pageSize:\s*view === "run-causal" \? 200 : 100/);
   assert.match(trajectory, /combined\.slice\(0, journalLimit\)/);
@@ -191,5 +207,8 @@ function findButton(root, prefix) {
   assert.match(agent, /appendAgentRunViewState\(body, runViewState, agentRunId\(items, finalMessage\)\)/);
   assert.equal(/JSON\.parse|fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   console.log("PASS run journal: integration defaults to bounded run-causal and exposes direct failed-activity navigation");
-  console.log("OK 6/6");
-}());
+  console.log("OK 7/7");
+}()).catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

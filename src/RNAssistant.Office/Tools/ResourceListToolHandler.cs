@@ -8,7 +8,7 @@ namespace RNAssistant.Office.Tools
     {
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.ListToolId,
-            "Read-only: Discover providers or list bounded resource metadata from one provider. If multiple providers exist, omit provider once to receive their ids, then select one. Bodies are never returned. Continue only with nextCursor from the same result and the identical provider/kind query.",
+            "Read-only: Discover providers or list bounded metadata; never bodies. For VBA source use provider=vba, then read an exact returned component URI with representation=source; kind=vba-backup is only for backups. Continue only with nextCursor and unchanged provider/kind.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
@@ -32,7 +32,7 @@ namespace RNAssistant.Office.Tools
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"provider\":{\"type\":\"string\",\"description\":\"Optional exact provider id; omit when only one provider is available.\",\"maxLength\":64}," +
-                "\"kind\":{\"type\":\"string\",\"description\":\"Optional exact resource kind filter.\",\"maxLength\":64}," +
+                "\"kind\":{\"type\":\"string\",\"description\":\"Optional exact kind. With provider=vba, omit for live components; use vba-backup for backups.\",\"maxLength\":64}," +
                 "\"cursor\":{\"type\":\"string\",\"description\":\"Optional continuation: copy nextCursor only from the immediately preceding resources_list result with the identical provider and kind. Omit it for the first page, after changing any filter, or when nextCursor is absent. Never use a resources_read cursor.\",\"maxLength\":256}," +
                 "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum metadata rows.\",\"minimum\":1,\"maximum\":50,\"default\":20}" +
                 "},\"required\":[],\"additionalProperties\":false}";

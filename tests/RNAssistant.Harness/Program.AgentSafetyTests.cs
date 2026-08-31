@@ -1346,6 +1346,8 @@ namespace RNAssistant.Harness
                 "strict response schema still lists every property as required");
             AssertTrue(call.SelectToken("properties.arguments.additionalProperties").Value<bool>() == false, "tool arguments remain strict");
             AssertTrue(schema["additionalProperties"].Value<bool>() == false, "agent response root is strict");
+            AssertContains((string)schema.SelectToken("properties.tool_calls.description"),
+                "requested deliverables", "terminal schema tells the model not to stop after an intermediate tool result");
 
             var noToolSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new ToolDefinition[0]));
             AssertEqual(0, (int)noToolSchema.SelectToken("properties.tool_calls.maxItems"),

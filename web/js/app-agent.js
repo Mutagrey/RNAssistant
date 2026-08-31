@@ -412,12 +412,17 @@ function appendAgentRunOutcome(parent, activity, overview) {
 
 function appendAgentRunViewState(parent, runViewState, runId) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
+  var otherUnknownEffects = runViewState
+    ? Math.max(0, runViewState.unknownEffects - runViewState.unverifiedWrites)
+    : 0;
   var note = document.createElement("div");
   note.className = "message-outcome " + (health === "clean" ? "status-unknown" : "status-warning");
   note.setAttribute("data-runtime-health", health);
   note.setAttribute("role", health === "clean" ? "status" : "alert");
   if (!runViewState) {
     note.textContent = "Для этого run нет typed runtime state. Результат изменений не подтверждён.";
+  } else if (health === "unknown" && runViewState.unverifiedWrites && !otherUnknownEffects) {
+    note.textContent = "Есть изменения через legacy-handler без read-back; runtime не может подтвердить их эффект.";
   } else if (health === "unknown") {
     note.textContent = "Результат изменений не определён. Требуется проверка фактического состояния.";
   } else if (health === "errors") {
@@ -431,9 +436,9 @@ function appendAgentRunViewState(parent, runViewState, runId) {
       runViewState.unverifiedWrites || runViewState.failedCalls || runViewState.unknownEffects)) {
     note.textContent += " Runtime evidence: изменения — " + runViewState.verifiedWrites +
       ", без изменения — " + runViewState.noChangeWrites +
-      ", без проверки — " + runViewState.unverifiedWrites +
+      ", legacy без read-back — " + runViewState.unverifiedWrites +
       ", ошибки вызовов — " + runViewState.failedCalls +
-      ", неизвестный эффект — " + runViewState.unknownEffects + ".";
+      ", прочие неизвестные эффекты — " + otherUnknownEffects + ".";
   }
   parent.appendChild(note);
   if (runId) {

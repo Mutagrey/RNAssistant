@@ -67,11 +67,13 @@ Diagnostics turns row correlations into navigation rather than another index: ru
 
 The Phase 9C UI defaults Diagnostics to the latest known run, requests at most 200
 chronological rows per page and passes already loaded DTOs to `RNAssistantRunJournal`.
-It keeps filters, expansion and scroll in UI memory only. Expanded row data and exact
-projection correlations use the shared JSON viewer; the source-range action returns
-to raw JSONL rows and their existing lazy CAS payload owner. Missing evidence and
-`ui.projected` retain their non-proof wording. No journal component reads bridge,
-network, CAS or storage directly.
+It keeps filters, expansion and scroll in UI memory only. Expanded rows show accepted
+arguments, executor result/data and typed effect evidence. Model request/response rows
+load their exact persisted CAS payload directly through the existing Diagnostics
+callback; the journal itself still reads no bridge, network, CAS or storage. Projection
+correlation IDs are collapsed under a technical section, while the source-range action
+still returns to raw JSONL rows. Missing evidence and `ui.projected` retain their
+non-proof wording.
 
 New `llm.response` events keep compact actual token usage inline beside the immutable CAS response reference. Older streams fall back to token usage in replayable assistant-message operations. Cost is shown only when the provider persisted it in `usage`; RNAssistant does not recalculate historical cost from mutable current price tables.
 

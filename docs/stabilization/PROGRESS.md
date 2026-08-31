@@ -2,7 +2,7 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 migration contours — перенос всех существующих tools и удаление active legacy architecture явно обязательны до Phase 12; новые optional product features этим не добавлены
-Current task: accepted-risk WQ0 decision synchronized; atomic 11T0/7D production bound Excel cutover is next. Real Windows/live-provider gates remain open.
+Current task: Resource Fabric/runtime diagnostics usability fixes integrated host-neutral; atomic 11T0/7D production bound Excel cutover remains the next architecture step. Real Windows/live-provider gates remain open.
 Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy обязательны. WQ0 больше не блокирует implementation: текущий `RuntimeKey` exact bound workbook принимается как lifetime assumption; реальные Windows/live-provider gates остаются deferred evidence и не могут быть закрыты локальными tests.
 
 Next step for tools: один атомарный production change 11T0/7D связывает exact выбранный workbook с `ExcelDocumentSession`, фиксирует его текущий `RuntimeKey` на bound lifetime, переключает factories и typed Excel read/write на прямой backend и удаляет compatibility commands/backends и `ActiveWorkbook`/descriptor execution fallback. Промежуточного production 5B2 поверх старого backend быть не должно; WQ0 выполняется позже как diagnostic/regression.
@@ -37,6 +37,22 @@ without rebinding evidence; unrelated unique artifacts remain usable. Attachment
 artifact provenance cannot move between source messages or bodies. Focused resource,
 attachment and tool-result regressions pass; full host-neutral harness 539/539 and
 `git diff --check` pass. No Office/COM/WebView path or Windows gate changed.
+
+Runtime diagnostics/VBA usability fix (2026-08-31): existing raw model request and
+response CAS payloads are now opened directly from their Run Journal rows; accepted
+arguments, executor result/data and typed effect evidence are present in row content,
+while attempt/call/mutation ids stay in a collapsed technical section. The UI no
+longer presents one legacy unverified write as both `без проверки=1` and a second
+`неизвестный эффект=1`; it labels that single cause as legacy without read-back.
+`resources_list(provider=vba)` now returns the project plus live components by
+default, and backups remain explicit. `excel.inspect` is no longer described as a
+write preflight, and the fixed v4 schema tells the model to check all requested
+deliverables before ending its loop. Already callable tool summaries/safety are no
+longer duplicated in the compact capability index; unloaded tools and skills retain
+selection metadata, and the mandatory Excel/VBA request now has an explicit prompt
+headroom regression. No event, id, store, verifier phase or generic batch abstraction
+was added. Focused harness and Web UI suites pass; Windows WebView2/Office remain
+unqualified.
 
 Resource member reference fix (2026-08-31): HTML mutation results exposed only an
 internal revision artifact id, while exact member discovery used an opaque SHA-256
