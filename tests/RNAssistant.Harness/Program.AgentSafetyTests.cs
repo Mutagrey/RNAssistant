@@ -1135,7 +1135,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
-                adapter.ThrowOnToolId = "excel.add_sheet";
+                adapter.ExcelSheetThrowAfterMutation = true;
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
@@ -1152,12 +1152,12 @@ namespace RNAssistant.Harness
                     new AppSettings { AutoConfirmToolActions = true },
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Cancelled, cancelled.RunViewState.Lifecycle, "kernel owns cancellation lifecycle");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no automatic write retry");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "no automatic write retry");
                 AssertEqual(RunViewHealth.Unknown, RunViewStateProjector.Create(session).ExecutionHealth,
                     "cancellation cannot erase unknown");
                 AssertKernelReplay(session);
                 var activity = session.Messages.Last(message => message.Activity != null && message.Activity.Kind == "tool");
-                AssertEqual("tool_effect_uncertain", activity.Activity.ErrorCode, "real executor classifies thrown mutation as uncertain");
+                AssertEqual("excel_sheet_effect_unknown", activity.Activity.ErrorCode, "typed sheet owner classifies post-dispatch failure as uncertain");
                 AssertEqual(1, activity.RunViewState.UnknownEffects, "visible activity retains uncertainty before controller handling");
             });
         }

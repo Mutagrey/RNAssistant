@@ -35,12 +35,12 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "replay-run", TurnId = "replay-turn", RuntimeId = "runtime" };
                 store.Save(session);
-                if (outcome != "ok") adapter.QueueResult("excel.add_sheet", ToolResult.Fail("Write failed", null,
+                if (outcome != "ok") adapter.QueueResult("excel.format_range", ToolResult.Fail("Write failed", null,
                     outcome == "unknown" ? "tool_effect_uncertain" : "write_rejected", false));
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Replay\"}}]}",
+                    LoadToolSchemaResponse("excel.format_range"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.format_range\",\"arguments\":{\"numberFormat\":\"0\"}}]}",
                     "{\"message\":\"Everything done\",\"tool_calls\":[]}"
                 });
                 var modelCalls = 0;
@@ -74,7 +74,7 @@ namespace RNAssistant.Harness
                 AssertEqual(outcome == "ok" ? 1 : 0, result.RunViewState.UnverifiedWrites, "successful legacy write is not called verified");
                 AssertEqual(outcome == "error" ? 1 : 0, result.RunViewState.FailedCalls, "error call count");
                 AssertEqual(outcome == "error" ? 0 : 1, result.RunViewState.UnknownEffects, "unknown effect count");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "single execution, no retry");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.format_range"), "single execution, no retry");
                 AssertTrue(replay.LastRun.KernelState.InFlightTool == null, "terminal clears in-flight evidence");
             });
         }
@@ -321,7 +321,7 @@ namespace RNAssistant.Harness
                 AssertEqual(RunLifecycle.Failed, recovered.LastRun.KernelState.Summary.Lifecycle, "interrupted lifecycle failed");
                 AssertTrue(recovered.Messages.Where(message => message.ProtocolMessage).All(message => message.ExcludeFromModelContext),
                     "an incomplete result exchange is not replayed");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "recovery never replays known mutation");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "recovery never replays known mutation");
                 AssertKernelReplay(recovered);
             });
         }
@@ -366,7 +366,7 @@ namespace RNAssistant.Harness
                 }
                 catch (RunStoreException ex) { failure = ex; }
                 AssertTrue(failure != null, "mandatory store failure escapes without retry");
-                AssertEqual(afterDispatch ? 1 : 0, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no dispatch before accepted append / no retry after effect");
+                AssertEqual(afterDispatch ? 1 : 0, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "no dispatch before accepted append / no retry after effect");
                 AssertEqual(afterDispatch ? 1 : 0, failure.UnpersistedSummary.ToolCounts.WriteOk, "unpersisted effect is not passed off as durable evidence");
                 var owned = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(RunLifecycle.Running, owned.LastRun.KernelState.Summary.Lifecycle,
@@ -872,7 +872,7 @@ namespace RNAssistant.Harness
                     adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
                 AssertEqual("Answer.", final.AssistantText, "optional accepted trace failure preserves response");
                 AssertEqual(RunViewLifecycles.Completed, final.RunViewState.Lifecycle, "optional accepted trace failure preserves outcome");
-                AssertEqual(1, adapter.Executed.Count(item => item.ToolId == "excel.add_sheet"), "trace failure never retries a write");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(item => item.ToolId == "excel.add_sheet"), "trace failure never retries a write");
             });
         }
 

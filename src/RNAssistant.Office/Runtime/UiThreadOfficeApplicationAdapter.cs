@@ -16,6 +16,7 @@ namespace RNAssistant.Office
         private readonly IExcelReadBackend _excelReadBackend;
         private readonly IExcelWriteBackend _excelWriteBackend;
         private readonly IExcelFindReplaceBackend _excelFindReplaceBackend;
+        private readonly IExcelSheetBackend _excelSheetBackend;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
@@ -26,6 +27,7 @@ namespace RNAssistant.Office
             IExcelReadBackend excelReadBackend = null;
             IExcelWriteBackend excelWriteBackend = null;
             IExcelFindReplaceBackend excelFindReplaceBackend = null;
+            IExcelSheetBackend excelSheetBackend = null;
             _dispatcher.Invoke(delegate
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
@@ -34,12 +36,14 @@ namespace RNAssistant.Office
                 excelReadBackend = excel == null ? null : excel.ExcelReadBackend;
                 excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
                 excelFindReplaceBackend = excel == null ? null : excel.ExcelFindReplaceBackend;
+                excelSheetBackend = excel == null ? null : excel.ExcelSheetBackend;
                 return true;
             });
             _documentSession = documentSession;
             _excelReadBackend = excelReadBackend;
             _excelWriteBackend = excelWriteBackend;
             _excelFindReplaceBackend = excelFindReplaceBackend;
+            _excelSheetBackend = excelSheetBackend;
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
@@ -63,6 +67,7 @@ namespace RNAssistant.Office
         {
             get { return _excelFindReplaceBackend; }
         }
+        public IExcelSheetBackend ExcelSheetBackend { get { return _excelSheetBackend; } }
 
         public string GetDocumentSnapshot(int maxChars)
         {

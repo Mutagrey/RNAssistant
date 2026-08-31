@@ -552,13 +552,13 @@ namespace RNAssistant.Harness
                 WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
                 {
                     item.Source.ModelResourceRefs = new ResourceRef[] { null };
-                    var outcome = LegacyToolOutcomeAdapter.Map(new ToolPolicySnapshot("excel.add_sheet", "revision", true), item.Source);
+                    var outcome = LegacyToolOutcomeAdapter.Map(new ToolPolicySnapshot("excel.format_range", "revision", true), item.Source);
                     RuntimeThrows<ArgumentException>(() => LegacyToolResultAdapter.Materialize(item.Source, outcome));
-                    adapter.QueueResult("excel.add_sheet", item.Source);
+                    adapter.QueueResult("excel.format_range", item.Source);
                     var responses = new Queue<string>(new[]
                     {
-                        LoadToolSchemaResponse("excel.add_sheet"),
-                        "{\"message\":\"Add sheet\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Added\"}}]}"
+                        LoadToolSchemaResponse("excel.format_range"),
+                        "{\"message\":\"Format\",\"tool_calls\":[{\"name\":\"excel.format_range\",\"arguments\":{\"numberFormat\":\"0\"}}]}"
                     });
                     var modelCalls = 0;
                     LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -569,16 +569,16 @@ namespace RNAssistant.Harness
                     var session = NewSession(adapter);
                     var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                     var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                        ChatModes.Agent, "Add sheet", session, NewContext(adapter),
+                        ChatModes.Agent, "Format range", session, NewContext(adapter),
                         new AppSettings { AutoConfirmToolActions = true }, tools, null).GetAwaiter().GetResult();
-                    AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "conversion failure never retries execution");
+                    AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.format_range"), "conversion failure never retries execution");
                     AssertEqual(2, modelCalls, "conversion failure never triggers model repair");
                     var view = JObject.FromObject(result)["RunViewState"];
                     AssertEqual(item.Status == ToolResultStatus.Ok ? 1 : 0, (int)view["UnverifiedWrites"], "legacy success is preserved without fabricated verification");
                     AssertEqual(item.Status == ToolResultStatus.Error ? 1 : 0, (int)view["FailedCalls"], "known error count survives conversion failure");
                     AssertEqual(item.Status == ToolResultStatus.Error ? 0 : 1, (int)view["UnknownEffects"], "conversion failure creates no extra unknown effect");
                     var message = session.Messages.Single(entry => entry.ProtocolMessage && entry.Role != "assistant" &&
-                        entry.ToolName == "excel.add_sheet");
+                        entry.ToolName == "excel.format_range");
                     ToolResultWireReadResult wire;
                     string error;
                     AssertTrue(ToolResultHistoryReader.TryRead(message, out wire, out error), "failed projection still closes the accepted exchange");

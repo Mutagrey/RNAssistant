@@ -149,6 +149,16 @@ host path rejects both public ids, so dual dispatch is observable. Real Excel CO
 protected/large ranges and partial assignment remain WQ-EXCEL gates. See
 [Phase 11T1 evidence](../../docs/stabilization/PHASE_11T1_EXCEL_FIND_REPLACE.md).
 
+## Typed Excel sheet lifecycle owner (Phase 11T2)
+
+`excel sheet:` covers direct native ownership, add/rename defaults and active-sheet
+selection, worksheet-name/collision rules, exact collection pre-state, verified
+no-op/change, pre-dispatch drift, post-dispatch failure/read-back divergence and
+closed/switched-document refusal. The fake generic host path rejects both public ids,
+so dual dispatch is observable. Real Excel protected workbook structure, COM rollback
+and case-only rename remain WQ-EXCEL gates. See
+[Phase 11T2 evidence](../../docs/stabilization/PHASE_11T2_EXCEL_SHEETS.md).
+
 ## Typed VBA mutation outcome (Phase 6D)
 
 `vba: mutation` covers the typed service boundary and injected prepare, terminal,

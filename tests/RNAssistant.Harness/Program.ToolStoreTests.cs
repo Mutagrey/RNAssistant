@@ -184,11 +184,13 @@ namespace RNAssistant.Harness
                 AssertTrue(catalogTool != null && catalogTool.BuiltIn, "catalog keeps built-in definition");
                 var command = new ToolCommand { ToolId = shadow.Id };
                 command.Arguments["name"] = "Protected";
-                var result = executor.Execute(command, new[] { shadow }, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var result = executor.Execute(command, new[] { shadow },
+                    new AppSettings { AutoConfirmToolActions = true }, false, false,
+                    NewSession(adapter));
 
                 AssertTrue(result.Success, "built-in executes despite custom collision");
                 AssertTrue(adapter.HasSheet("Protected"), "built-in add sheet was executed");
-                AssertEqual(1, adapter.Executed.Count(item => string.Equals(item.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase)), "built-in add sheet executed once");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(item => string.Equals(item.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase)), "built-in add sheet executed once");
                 AssertEqual(0, adapter.Executed.Count(item => string.Equals(item.ToolId, "excel.inspect", StringComparison.OrdinalIgnoreCase)), "shadow custom tool was not executed");
 
                 var save = new ToolCommand { ToolId = "common.tools_upsert" };

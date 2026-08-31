@@ -665,9 +665,9 @@ namespace RNAssistant.Harness
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "successful write keeps the accepted model status");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "successful write completes the current run");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "final status enters accepted history");
-                AssertRunViewState(result, session, "unknown", 1, 0, 0);
+                AssertRunViewState(result, session, "clean", 1, 0, 0);
                 AssertTrue(adapter.HasSheet("Report"), "tool executed");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "one write dispatch");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "one write dispatch");
                 AssertEqual(3, calls.Count, "schema read, execution, and final model turns");
                 AssertContains(FlattenSimple(calls[0]),
                     "\"function\":{\"name\":\"excel.add_sheet\"",
@@ -686,8 +686,8 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
-                adapter.QueueResult("excel.add_sheet",
-                    ToolResult.Fail("Write rejected before the effect.", null, "write_rejected", false));
+                adapter.QueueExcelSheetApplyFailure(
+                    "Write rejected before the effect.", "write_rejected", false);
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
@@ -712,7 +712,7 @@ namespace RNAssistant.Harness
                 AssertEqual(false, (bool)write["success"], "write failure is preserved");
                 AssertEqual("write_rejected", (string)write["errorCode"], "actual failure code is preserved");
                 AssertTrue(!adapter.HasSheet("Report"), "the claimed sheet was not created");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "failed write is not retried");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "failed write is not retried");
                 AssertContains(FlattenSimple(requests.Last()), "\"status\":\"error\"", "the final model request saw the error");
                 AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v4");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
@@ -971,7 +971,7 @@ namespace RNAssistant.Harness
 
                 AssertEqual(1, calls, "terminal no-call response stops the loop");
                 AssertEqual(0, result.ToolResults.Count, "there is no tool effect evidence");
-                AssertEqual(0, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "no requested write was dispatched");
+                AssertEqual(0, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "no requested write was dispatched");
                 AssertTrue(!adapter.HasSheet("Report"), "model text did not create a sheet");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "a no-write response may finish the loop");
                 AssertRunViewState(result, session, "clean", 0, 0, 0);
@@ -1447,23 +1447,22 @@ namespace RNAssistant.Harness
                 AssertEqual("Оба листа созданы.", result.AssistantText, "multi-tool final response");
                 AssertTrue(adapter.HasSheet("First") && adapter.HasSheet("Second"), "both tools executed");
                 AssertEqual(5, callCount, "one rejected batch, schema read, two singleton writes and final response");
-                AssertEqual(2, adapter.Executed.Count(command => command.ToolId == "excel.add_sheet"), "each accepted write executes once");
-                AssertEqual("excel.add_sheet", adapter.Executed[adapter.Executed.Count - 2].ToolId, "first execution recorded");
-                AssertEqual("First", Convert.ToString(adapter.Executed[adapter.Executed.Count - 2].Arguments["name"]), "first call order");
-                AssertEqual("Second", Convert.ToString(adapter.Executed[adapter.Executed.Count - 1].Arguments["name"]), "second call order");
+                AssertEqual(2, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "each accepted write executes once");
+                AssertEqual("excel.add_sheet", adapter.ExcelSheetRequests[adapter.ExcelSheetRequests.Count - 2].ToolId, "first execution recorded");
+                AssertEqual("First", Convert.ToString(adapter.ExcelSheetRequests[adapter.ExcelSheetRequests.Count - 2].Arguments["name"]), "first call order");
+                AssertEqual("Second", Convert.ToString(adapter.ExcelSheetRequests[adapter.ExcelSheetRequests.Count - 1].Arguments["name"]), "second call order");
                 var replay = FlattenSimple(secondTurn);
                 AssertEqual(3, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1,
                     "schema result and two execution results replayed");
-                var executedIds = adapter.Executed.Where(command => command.ToolId == "excel.add_sheet")
-                    .Select(command => command.ToolCallId).ToArray();
-                AssertEqual(2, executedIds.Distinct().Count(), "singleton writes receive different runtime IDs");
-                foreach (var id in executedIds) AssertContains(replay, id, "executed call ID is replayed");
                 var activities = session.Messages
                     .Where(message => message != null && message.Activity != null && message.Activity.Kind == "tool" &&
                         string.Equals(message.Activity.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase))
                     .Select(message => message.Activity)
                     .ToList();
                 AssertEqual(2, activities.Count, "two visible tool activities");
+                var executedIds = activities.Select(activity => activity.ToolCallId).ToArray();
+                AssertEqual(2, executedIds.Distinct().Count(), "singleton writes receive different runtime IDs");
+                foreach (var id in executedIds) AssertContains(replay, id, "executed call ID is replayed");
                 AssertTrue(!string.IsNullOrWhiteSpace(activities[0].StepId), "model step id stored");
                 AssertTrue(activities[0].StepId != activities[1].StepId, "singleton writes belong to separate model steps");
                 AssertEqual("Создаю первый лист.", activities[0].StepMessage, "only accepted step message is stored");
@@ -1479,8 +1478,11 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
-                adapter.QueueResult("excel.add_sheet", ToolResult.Fail("Write did not report success", null,
-                    initialHealth == "unknown" ? "tool_effect_uncertain" : "write_rejected", false));
+                if (initialHealth == "unknown")
+                    adapter.ExcelSheetThrowAfterMutation = true;
+                else
+                    adapter.QueueExcelSheetApplyFailure(
+                        "Write did not report success", "write_rejected", false);
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),

@@ -12,7 +12,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
@@ -20,9 +20,13 @@ namespace RNAssistant.Harness
         internal const string ExcelWriteApplyOperation = "write.apply";
         internal const string ExcelFindScopeReadOperation = "find_replace.read";
         internal const string ExcelReplaceApplyOperation = "find_replace.apply";
+        internal const string ExcelSheetReadOperation = "sheet.read";
+        internal const string ExcelSheetAddOperation = "sheet.add";
+        internal const string ExcelSheetRenameOperation = "sheet.rename";
 
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public readonly List<string> ExcelBackendCalls = new List<string>();
+        public readonly List<ToolCommand> ExcelSheetRequests = new List<ToolCommand>();
         public string VbaModuleType = "StdModule";
         public readonly List<string> RanMacros = new List<string>();
         public bool FailUnknownSkills { get; set; }
@@ -33,12 +37,16 @@ namespace RNAssistant.Harness
         public Func<string, string> VbaWriteTransform { get; set; }
         public bool ExcelWriteThrowAfterMutation { get; set; }
         public bool ExcelReplaceThrowAfterMutation { get; set; }
+        public bool ExcelSheetThrowAfterMutation { get; set; }
+        public Func<ExcelSheetCollectionSnapshot, ExcelSheetCollectionSnapshot>
+            ExcelSheetReadTransform { get; set; }
         public int VbaReportedLineCountOffset { get; set; }
         public string DocumentKeyValue { get; set; }
         public string RuntimeDocumentKeyValue { get; set; }
         public string DocumentPathValue { get; set; }
         private ExcelInspectSnapshot _nextExcelInspectSnapshot;
         private ExcelWriteBackendException _nextExcelWriteApplyFailure;
+        private ExcelSheetBackendException _nextExcelSheetApplyFailure;
 
         private readonly string _hostName;
         private string _documentTitle;
@@ -47,6 +55,8 @@ namespace RNAssistant.Harness
         private readonly Dictionary<string, Queue<ToolResult>> _scriptedResults;
         private readonly Dictionary<string, FakeVbaModule> _vbaModules;
         private readonly Dictionary<string, FakeSheet> _sheets;
+        private readonly List<string> _excelSheetOrder;
+        private string _activeExcelSheetName;
         private readonly List<FakeSlide> _slides;
         private readonly List<string> _wordComments;
         private string _wordText;
@@ -73,6 +83,7 @@ namespace RNAssistant.Harness
             _scriptedResults = new Dictionary<string, Queue<ToolResult>>(StringComparer.OrdinalIgnoreCase);
             _vbaModules = new Dictionary<string, FakeVbaModule>(StringComparer.OrdinalIgnoreCase);
             _sheets = new Dictionary<string, FakeSheet>(StringComparer.OrdinalIgnoreCase);
+            _excelSheetOrder = new List<string>();
             _slides = new List<FakeSlide>();
             _wordComments = new List<string>();
             _wordText = documentSnapshot ?? string.Empty;
@@ -123,6 +134,10 @@ namespace RNAssistant.Harness
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
         public IExcelFindReplaceBackend ExcelFindReplaceBackend
+        {
+            get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
+        }
+        public IExcelSheetBackend ExcelSheetBackend
         {
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
@@ -262,6 +277,13 @@ namespace RNAssistant.Harness
         public void QueueExcelWriteApplyFailure(string message, string errorCode, bool retryable)
         {
             _nextExcelWriteApplyFailure = new ExcelWriteBackendException(message, errorCode, retryable);
+        }
+
+        public void QueueExcelSheetApplyFailure(
+            string message, string errorCode, bool retryable)
+        {
+            _nextExcelSheetApplyFailure =
+                new ExcelSheetBackendException(message, errorCode, retryable);
         }
 
         private void BeginExcelBackendCall(string operation)
@@ -631,9 +653,8 @@ namespace RNAssistant.Harness
         {
             if (string.Equals(command.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase))
             {
-                var name = Argument(command, "name", "Sheet" + (_sheets.Count + 1));
-                EnsureSheet(name);
-                return ToolResult.Ok("added sheet " + name, JsonConvert.SerializeObject(new { sheet = name }));
+                return ToolResult.Fail("Public excel.add_sheet is owned by ToolRuntime.", null,
+                    "excel_public_sheet_moved", false);
             }
 
             if (string.Equals(command.ToolId, ExcelWriteToolIds.WriteRange, StringComparison.OrdinalIgnoreCase))
@@ -728,17 +749,8 @@ namespace RNAssistant.Harness
 
             if (string.Equals(command.ToolId, "excel.rename_sheet", StringComparison.OrdinalIgnoreCase))
             {
-                var oldName = Argument(command, "sheet", "Sheet1");
-                var newName = Argument(command, "newName", string.Empty);
-                if (string.IsNullOrWhiteSpace(newName))
-                {
-                    return ToolResult.Fail("newName is required.");
-                }
-                var sheet = EnsureSheet(oldName);
-                _sheets.Remove(oldName);
-                sheet.Name = newName;
-                _sheets[newName] = sheet;
-                return ToolResult.Ok("renamed sheet " + oldName + " to " + newName);
+                return ToolResult.Fail("Public excel.rename_sheet is owned by ToolRuntime.", null,
+                    "excel_public_sheet_moved", false);
             }
 
             if (string.Equals(command.ToolId, "excel.clear_range", StringComparison.OrdinalIgnoreCase))
@@ -1066,6 +1078,9 @@ namespace RNAssistant.Harness
             {
                 sheet = new FakeSheet { Name = sheetName };
                 _sheets[sheetName] = sheet;
+                _excelSheetOrder.Add(sheetName);
+                if (string.IsNullOrWhiteSpace(_activeExcelSheetName))
+                    _activeExcelSheetName = sheetName;
             }
 
             return sheet;

@@ -26,6 +26,7 @@ namespace RNAssistant.Office.Runtime
 
         internal NativeToolRuntimeAdapter(ResourceGatewayService gateway, ExcelReadToolAdapter excelReads,
             ExcelWriteToolAdapter excelWrites, ExcelFindReplaceToolAdapter excelFindReplace,
+            ExcelSheetToolAdapter excelSheets,
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
         {
@@ -68,6 +69,14 @@ namespace RNAssistant.Office.Runtime
                     handler = new ExcelFindReplaceToolHandler(
                         registration.Descriptor.Id, excelFindReplace, hostRuntime, session);
                 }
+                else if (ExcelSheetToolIds.Owns(registration.Descriptor.Id))
+                {
+                    if (excelSheets == null || hostRuntime == null)
+                        throw new InvalidOperationException(
+                            "Excel sheet handler dependencies are unavailable.");
+                    handler = new ExcelSheetToolHandler(
+                        registration.Descriptor.Id, excelSheets, hostRuntime, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -89,7 +98,7 @@ namespace RNAssistant.Office.Runtime
                 string.Equals(toolId, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
-                ExcelFindReplaceToolIds.Owns(toolId);
+                ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -106,6 +115,8 @@ namespace RNAssistant.Office.Runtime
             if (ExcelWriteToolIds.Owns(toolId)) return ExcelWriteToolHandler.Binding;
             if (ExcelFindReplaceToolIds.Owns(toolId))
                 return ExcelFindReplaceToolHandler.BindingFor(toolId);
+            if (ExcelSheetToolIds.Owns(toolId))
+                return ExcelSheetToolHandler.BindingFor(toolId);
             return null;
         }
 

@@ -97,6 +97,7 @@
     <Compile Include="Excel\ExcelDocumentSession.cs" />
     <Compile Include="Excel\ExcelFindReplaceInteropBackend.cs" />
     <Compile Include="Excel\ExcelInteropBackend.cs" />
+    <Compile Include="Excel\ExcelSheetInteropBackend.cs" />
     <Compile Include="Identity\DocumentIdentity.cs" />
     <Compile Include="Qualification\ComIdentityLease.cs" />
     <Compile Include="Qualification\ComIdentitySample.cs" />

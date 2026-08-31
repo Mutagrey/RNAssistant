@@ -1204,7 +1204,7 @@ namespace RNAssistant.Harness
 
                 for (var index = 0; index < 6; index++)
                 {
-                    adapter.ExecuteTool(Command("excel.add_sheet", "name", "ResourcePage" + index));
+                    adapter.AddExcelSheetForTest("ResourcePage" + index);
                 }
                 var documentText = ReadResource(
                     gateway,
@@ -1222,7 +1222,7 @@ namespace RNAssistant.Harness
                     "live document read carries exact revision evidence");
                 AssertTrue(!string.IsNullOrWhiteSpace(documentText.NextCursor),
                     "long live document read exposes a revision-bound continuation");
-                adapter.ExecuteTool(Command("excel.add_sheet", "name", "ResourceDrift"));
+                adapter.AddExcelSheetForTest("ResourceDrift");
                 ResourceRequestException documentDrift = null;
                 try
                 {

@@ -191,8 +191,11 @@ namespace RNAssistant.Harness
 
         private static ToolCommand GuardProbeCommand(FakeOfficeAdapter adapter)
         {
-            var definition = adapter.GetBuiltInTools().First(tool =>
-                !ExcelReadToolIds.Owns(tool.Id) && !ExcelWriteToolIds.Owns(tool.Id));
+            var definition = string.Equals(
+                adapter.HostName, "Excel", StringComparison.OrdinalIgnoreCase)
+                ? adapter.GetBuiltInTools().First(tool =>
+                    string.Equals(tool.Id, "excel.create_chat_chart", StringComparison.Ordinal))
+                : adapter.GetBuiltInTools().First();
             return new ToolCommand { ToolId = definition.Id };
         }
 
@@ -1211,7 +1214,7 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend
         {
             private readonly FakeOfficeAdapter _inner;
 
@@ -1227,6 +1230,7 @@ namespace RNAssistant.Harness
             public IExcelReadBackend ExcelReadBackend { get { return this; } }
             public IExcelWriteBackend ExcelWriteBackend { get { return this; } }
             public IExcelFindReplaceBackend ExcelFindReplaceBackend { get { return this; } }
+            public IExcelSheetBackend ExcelSheetBackend { get { return this; } }
             public string HostName { get { return Session.Host; } }
             public string DocumentKey { get { return StaDispatcher.Invoke(() => Session.StableDocumentId); } }
             public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
@@ -1243,6 +1247,9 @@ namespace RNAssistant.Harness
             public void Apply(ExcelWriteApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelWriteApplyOperation); _inner.Apply(request, markDispatchPossible); }
             public void ReadScope(ExcelCellScopeRequest request, Action<ExcelCellSnapshot> visit) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelFindScopeReadOperation); _inner.ReadScope(request, visit); }
             public void Apply(ExcelReplaceApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelReplaceApplyOperation); _inner.Apply(request, markDispatchPossible); }
+            public ExcelSheetCollectionSnapshot Read() { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelSheetReadOperation); return _inner.Read(); }
+            public void Add(ExcelAddSheetApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelSheetAddOperation); _inner.Add(request, markDispatchPossible); }
+            public void Rename(ExcelRenameSheetApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelSheetRenameOperation); _inner.Rename(request, markDispatchPossible); }
         }
 
         private sealed class BoundTestQueuedDispatcher : IOfficeStaDispatcher

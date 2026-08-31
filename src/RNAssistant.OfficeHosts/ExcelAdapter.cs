@@ -25,6 +25,7 @@ namespace RNAssistant.OfficeHosts
         private readonly ExcelDocumentSession _documentSession;
         private readonly ExcelInteropBackend _excelBackend;
         private readonly ExcelFindReplaceInteropBackend _excelFindReplaceBackend;
+        private readonly ExcelSheetInteropBackend _excelSheetBackend;
         private readonly string _qualificationOwnerLabel;
 
         public ExcelAdapter(
@@ -44,6 +45,7 @@ namespace RNAssistant.OfficeHosts
                 dispatcher);
             _excelBackend = new ExcelInteropBackend(_documentSession);
             _excelFindReplaceBackend = new ExcelFindReplaceInteropBackend(_documentSession);
+            _excelSheetBackend = new ExcelSheetInteropBackend(_documentSession);
         }
 
         public string HostName { get { return "Excel"; } }
@@ -55,6 +57,7 @@ namespace RNAssistant.OfficeHosts
         {
             get { return _excelFindReplaceBackend; }
         }
+        public IExcelSheetBackend ExcelSheetBackend { get { return _excelSheetBackend; } }
 
         public string DocumentKey { get { return _documentSession.StableDocumentId; } }
         public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
@@ -287,10 +290,6 @@ namespace RNAssistant.OfficeHosts
                         return DeleteChart(command);
                     case "excel.format_range":
                         return FormatRange(command);
-                    case "excel.add_sheet":
-                        return AddSheet(command);
-                    case "excel.rename_sheet":
-                        return RenameSheet(command);
                     case "excel.clear_range":
                         return ClearRange(command);
                     case "excel.sort_range":
@@ -591,55 +590,6 @@ namespace RNAssistant.OfficeHosts
             return ToolResult.Ok("Range formatted: " + sheet.Name + "!" + range.Address[false, false]);
         }
 
-        private ToolResult AddSheet(ToolCommand command)
-        {
-            var workbook = RequireWorkbook();
-            var name = ToolArgumentReader.String(command.Arguments, "name", "AI Sheet");
-            ValidateWorksheetName(workbook, name, null);
-            Excel.Worksheet sheet = null;
-            try
-            {
-                sheet = (Excel.Worksheet)workbook.Worksheets.Add();
-                sheet.Name = name;
-            }
-            catch
-            {
-                if (sheet != null)
-                {
-                    var displayAlerts = _application.DisplayAlerts;
-                    try
-                    {
-                        _application.DisplayAlerts = false;
-                        sheet.Delete();
-                    }
-                    catch
-                    {
-                    }
-                    finally
-                    {
-                        _application.DisplayAlerts = displayAlerts;
-                    }
-                }
-                throw;
-            }
-            return ToolResult.Ok("Added sheet: " + name);
-        }
-
-        private ToolResult RenameSheet(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var newName = ToolArgumentReader.String(command.Arguments, "newName", string.Empty);
-            if (string.IsNullOrWhiteSpace(newName))
-            {
-                return ToolResult.Fail("newName is required.");
-            }
-
-            var oldName = sheet.Name;
-            ValidateWorksheetName(RequireWorkbook(), newName, oldName);
-            sheet.Name = newName;
-            return ToolResult.Ok("Renamed sheet " + oldName + " to " + newName);
-        }
-
         private ToolResult ClearRange(ToolCommand command)
         {
             var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
@@ -896,21 +846,6 @@ namespace RNAssistant.OfficeHosts
             }
 
             return null;
-        }
-
-        private static void ValidateWorksheetName(Excel.Workbook workbook, string name, string currentName)
-        {
-            if (string.IsNullOrWhiteSpace(name) || name.Length > 31 || name.IndexOfAny(new[] { ':', '\\', '/', '?', '*', '[', ']' }) >= 0 ||
-                name[0] == '\'' || name[name.Length - 1] == '\'')
-            {
-                throw new InvalidOperationException("Invalid Excel worksheet name: " + (name ?? string.Empty));
-            }
-
-            var existing = FindWorksheet(workbook, name);
-            if (existing != null && !string.Equals(name, currentName, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Worksheet already exists: " + name);
-            }
         }
 
         private static bool RangeBelongsToWorkbook(Excel.Range range, Excel.Workbook workbook)

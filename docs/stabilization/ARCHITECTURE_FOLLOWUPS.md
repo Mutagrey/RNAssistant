@@ -122,7 +122,7 @@ effect, read-back и `ok/error/unknown`. Host backend получает bound doc
 Предпочтительные Excel families после stable `inspect/read/write_range`:
 
 1. [x] find/replace — 11T1 direct typed/bound switch; host branches/helpers removed;
-2. sheet lifecycle;
+2. [x] sheet lifecycle — 11T2 direct typed/bound add/rename; host branches removed;
 3. clear/sort/filter/format range;
 4. tables;
 5. charts.
@@ -182,6 +182,7 @@ Active legacy означает второй execution/catalog/result/history pat
   `OfficeToolExecutor` fallback и host tool-id switches после последнего family;
 - [x] удалить internal Excel compatibility commands/backends в 11T0/7D;
 - [x] удалить Excel find/replace generic host branches/helpers в 11T1;
+- [x] удалить Excel add/rename generic host branches/helpers в 11T2;
 - удалить VBA mutation/package adapters после direct typed host/backend switch;
 - удалить `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` и
   `ToolResultUiProjection` после последнего catalog/result/UI consumer;
