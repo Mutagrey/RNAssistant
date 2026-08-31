@@ -16,6 +16,7 @@ namespace RNAssistant.Core.Llm
         private const int MaxStoredRefusalChars = 12000;
         private const int MaxStoredContentChars = 16 * 1024 * 1024;
         private const int MaxUsageJsonChars = 64 * 1024;
+        private const int TerminalUsageDrainTimeoutMilliseconds = 1000;
 
         internal static LlmCompletionResult ParseStreamingResponse(string sse)
         {
@@ -92,6 +93,7 @@ namespace RNAssistant.Core.Llm
             var bufferedJson = new StringBuilder();
             bool? isEventStream = null;
             var firstChunkReported = false;
+            Task terminalUsageDrain = null;
             using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, true))
             using (cancellationToken.Register(streamState => ((Stream)streamState).Dispose(), stream))
             {
@@ -100,7 +102,18 @@ namespace RNAssistant.Core.Llm
                     while (true)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        var line = await reader.ReadLineAsync().ConfigureAwait(false);
+                        var lineRead = reader.ReadLineAsync();
+                        if (terminalUsageDrain != null)
+                        {
+                            var completed = await Task.WhenAny(lineRead, terminalUsageDrain).ConfigureAwait(false);
+                            if (!object.ReferenceEquals(completed, lineRead))
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                                ObservePendingRead(lineRead);
+                                break;
+                            }
+                        }
+                        var line = await lineRead.ConfigureAwait(false);
                         if (line == null) break;
                         if (!firstChunkReported)
                         {
@@ -125,6 +138,12 @@ namespace RNAssistant.Core.Llm
                         if (isEventStream == true)
                         {
                             if (ProcessStreamingLine(line, state, rawJsonProgress)) break;
+                            if (state.TerminalFinishReasonObserved && terminalUsageDrain == null)
+                            {
+                                terminalUsageDrain = Task.Delay(
+                                    TerminalUsageDrainTimeoutMilliseconds,
+                                    cancellationToken);
+                            }
                         }
                         else if (isEventStream == false)
                         {
@@ -159,6 +178,19 @@ namespace RNAssistant.Core.Llm
             var result = state.ToResult();
             ReportCompleted(streamProgress);
             return result;
+        }
+
+        private static void ObservePendingRead(Task<string> readTask)
+        {
+            if (readTask == null || readTask.IsCompleted)
+            {
+                return;
+            }
+            readTask.ContinueWith(
+                task => { var ignored = task.Exception; },
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
 
         private static void ReportCompleted(Action<LlmStreamUpdate> streamProgress)
@@ -216,7 +248,7 @@ namespace RNAssistant.Core.Llm
                 if (rawJsonProgress != null) rawJsonProgress(data);
                 var chunk = JObject.Parse(data.TrimStart('\uFEFF'));
                 state.Add(chunk);
-                return false;
+                return state.TerminalFinishReasonObserved && state.UsageObserved;
             }
             catch (JsonException ex)
             {
@@ -237,6 +269,9 @@ namespace RNAssistant.Core.Llm
             private bool _embeddedReasoningTruncated;
             private bool _embeddedProgressReported;
 
+            public bool TerminalFinishReasonObserved { get; private set; }
+            public bool UsageObserved { get { return _usage != null; } }
+
             public StreamingCompletionState(Action<LlmStreamUpdate> progress = null)
             {
                 _progress = progress;
@@ -254,6 +289,14 @@ namespace RNAssistant.Core.Llm
                 if (usage != null)
                 {
                     _usage = usage;
+                }
+
+                var finishReason = ReadStringToken(
+                    chunk.SelectToken("choices[0].finish_reason"),
+                    "choices[0].finish_reason");
+                if (!string.IsNullOrWhiteSpace(finishReason))
+                {
+                    TerminalFinishReasonObserved = true;
                 }
 
                 var delta = chunk.SelectToken("choices[0].delta") as JObject;

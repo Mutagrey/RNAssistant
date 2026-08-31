@@ -248,6 +248,7 @@ namespace RNAssistant.Harness
                 Test("model diagnostics: connection probe reports timings", ModelConnectionProbeReportsTimings),
                 Test("model diagnostics: tracker lifecycle", ModelDiagnosticsTrackerReportsOneTerminalLifecycle),
                 Test("model diagnostics: stream reports first chunk", ModelDiagnosticsStreamReportsFirstChunk),
+                Test("model diagnostics: finish reason ends open stream", ModelStreamFinishReasonEndsOpenResponse),
                 Test("chat: uses only read-only resource loop", ChatUsesReadOnlyResourceLoop),
                 Test("chat: rereads referenced artifact on demand", ChatRereadsReferencedArtifactOnDemand),
                 Test("chat: session model overrides global settings", ChatSettingsUseSessionModelWithoutMutatingGlobalSettings),

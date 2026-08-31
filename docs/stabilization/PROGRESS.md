@@ -9,6 +9,14 @@ Next step for tools: 11T2 переносит exact existing Excel sheet lifecycl
 Required context: [master Phase 11T](STABILIZATION_MASTER_PLAN.md), [11T1 evidence](PHASE_11T1_EXCEL_FIND_REPLACE.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current Excel sheet lifecycle owner.
 Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1 and 11T0–11T1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Remaining Office tools still move family-by-family; the final switch removes `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. Excel read/write compatibility commands/backends, execution-time target fallback and find/replace host branches/helpers are gone. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION and WQ-EXCEL are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
+Model SSE terminal incident fix (2026-08-31): streaming reader теперь распознаёт
+non-empty `choices[0].finish_reason`, bounded одну секунду ждёт optional final usage
+или `[DONE]` и завершает response, даже если совместимый endpoint оставил соединение
+открытым. Final usage сохраняется; cancellation, JSON response path и общий request
+timeout не менялись. Red open-stream characterization заменён green regression;
+model diagnostics 4/4 и conversation streaming 4/4 pass. Реальный Qwen endpoint и
+Windows UI не проверялись; 11T2 остаётся следующим tool migration slice.
+
 Live artifact projection correction (2026-08-31): после каждого durable
 `tool_result` controller теперь ставит в WebView очередь существующую full
 revision-guarded chat projection до дальнейшего progress/следующего model step.

@@ -1949,6 +1949,48 @@ namespace RNAssistant.Harness
             AssertEqual(1, firstChunkCount, "first stream chunk reported once");
         }
 
+        private static void ModelStreamFinishReasonEndsOpenResponse()
+        {
+            const string sse =
+                "data: {\"choices\":[{\"delta\":{\"content\":\"PONG\"},\"finish_reason\":null}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n";
+            using (var stream = new OpenEndedSseStream(Encoding.UTF8.GetBytes(sse)))
+            {
+                var completedUpdates = 0;
+                var completion = LlmResponseParser.ReadStreamingOrJsonResponseAsync(
+                    stream,
+                    update => { if (update != null && update.Completed) completedUpdates++; },
+                    CancellationToken.None,
+                    null);
+                var winner = Task.WhenAny(completion, Task.Delay(TimeSpan.FromSeconds(3)))
+                    .GetAwaiter().GetResult();
+
+                AssertTrue(object.ReferenceEquals(completion, winner),
+                    "terminal finish_reason completes an SSE response without DONE or EOF");
+                var result = completion.GetAwaiter().GetResult();
+                AssertEqual("PONG", result.Content, "finish_reason stream content parsed");
+                AssertEqual(1, completedUpdates, "finish_reason emits one completed stream update");
+            }
+
+            const string usageSse =
+                "data: {\"choices\":[{\"delta\":{\"content\":\"OK\"}}]}\n\n" +
+                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+                "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\n" +
+                "data: not-json-after-terminal\n\n";
+            using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(usageSse)))
+            {
+                var result = LlmResponseParser.ReadStreamingOrJsonResponseAsync(
+                    stream,
+                    null,
+                    CancellationToken.None,
+                    null).GetAwaiter().GetResult();
+                AssertEqual("OK", result.Content, "terminal drain preserves streamed content");
+                AssertEqual(7, result.PromptTokens.Value, "terminal drain preserves final usage chunk");
+                AssertEqual(2, result.CompletionTokens.Value, "terminal drain preserves completion usage");
+                AssertEqual(9, result.TotalTokens.Value, "terminal drain stops after complete usage");
+            }
+        }
+
         private static void ModelDiagnosticsTrackerReportsOneTerminalLifecycle()
         {
             var requestUpdates = new List<LlmRequestDiagnosticUpdate>();
@@ -1985,6 +2027,61 @@ namespace RNAssistant.Harness
             failed.Failed(new LlmRequestException(LlmFailureKind.Timeout, "timeout"));
             AssertEqual(LlmRequestDiagnosticPhases.Failed, failedUpdates.Last().Phase, "request error is failed phase");
             AssertEqual(LlmFailureKind.Timeout, failedUpdates.Last().FailureKind.Value, "failure kind retained");
+        }
+
+        private sealed class OpenEndedSseStream : Stream
+        {
+            private readonly byte[] _payload;
+            private readonly TaskCompletionSource<int> _end =
+                new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private int _offset;
+
+            public OpenEndedSseStream(byte[] payload)
+            {
+                _payload = payload ?? new byte[0];
+            }
+
+            public override bool CanRead { get { return true; } }
+            public override bool CanSeek { get { return false; } }
+            public override bool CanWrite { get { return false; } }
+            public override long Length { get { throw new NotSupportedException(); } }
+            public override long Position
+            {
+                get { throw new NotSupportedException(); }
+                set { throw new NotSupportedException(); }
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                throw new NotSupportedException("Only asynchronous reads are supported by this fixture.");
+            }
+
+            public override Task<int> ReadAsync(
+                byte[] buffer,
+                int offset,
+                int count,
+                CancellationToken cancellationToken)
+            {
+                if (_offset < _payload.Length)
+                {
+                    var copied = Math.Min(count, _payload.Length - _offset);
+                    Buffer.BlockCopy(_payload, _offset, buffer, offset, copied);
+                    _offset += copied;
+                    return Task.FromResult(copied);
+                }
+                return _end.Task;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) _end.TrySetResult(0);
+                base.Dispose(disposing);
+            }
+
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin) { throw new NotSupportedException(); }
+            public override void SetLength(long value) { throw new NotSupportedException(); }
+            public override void Write(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
         }
     }
 }
