@@ -2,9 +2,10 @@
 
 ## Status and scope
 
-This is a deferred Phase 11 target contract, prioritized after the Artifact
-Workbench, Issue Center and read-only Tool Inspector. It does not change the current
-WQ-A, WQ or Phase 12 route and does not qualify existing Office/COM behavior.
+This is a deferred Phase 11 target contract, prioritized after the admitted 11T
+local typed-tool verticals, Artifact Workbench, Issue Center and read-only Tool
+Inspector. It does not change the current WQ-A, WQ or Phase 12 route and does not
+qualify existing Office/COM behavior.
 
 The goal is one RNAssistant window, opened from any supported Office host, that can
 list and select documents/items owned by other running Excel, Word, PowerPoint and

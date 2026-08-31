@@ -3,11 +3,11 @@
 Дата фиксации: 2026-08-30; статус маршрута обновлён 2026-08-31.
 
 Статус: backlog, не описание реализованной архитектуры и не разрешение расширять
-текущую фазу. Phase 10A–10D завершены host-neutral; следующий обязательный этап —
-Milestone WQ-A Qualification Center, затем Windows WQ начиная с WQ0, по `PROGRESS.md`.
-Изменения ниже выполняются только отдельными подэтапами после указанного gate. Если
-предложение становится обязательным, сначала обновляются master plan/ADR и
-`MIGRATION_MAP.md` с owner, consumers и removal gate.
+текущую фазу. Phase 10A–10D и WQ-A1–A5 завершены host-neutral; следующий обязательный
+runtime gate — Windows WQ0, затем production 5B2/7D, по `PROGRESS.md`. Section B
+допущен как ранний Phase 11T contour только после этого gate. Если другое предложение
+становится обязательным, сначала обновляются master plan/ADR и `MIGRATION_MAP.md` с
+owner, consumers и removal gate.
 
 ## Целевой путь
 
@@ -37,14 +37,17 @@ store, model wire или UI-owned effect classification.
    runtime algorithms; 10C1 перенёс application façade без lifecycle changes; 10C2
    перенёс exact resource read projections и удалил `ProjectRead`; 10D сверил
    canonical docs, migration statuses, project includes и checks.
-4. WQ-A создаёт data-only packs, production-path runner и встроенный WQ0 без второго
+4. WQ-A создал data-only packs, production-path runner и встроенный WQ0 без второго
    executor/store; [qualification contract](../qualification.md) обязателен.
 5. При доступной Windows: in-app WQ0 -> 5B2 production `DocumentSession` -> 7D bound
    Excel backend; неизвестную COM identity semantics не угадывать.
-6. Milestone WQ и Phase 12 stable core. Оставшиеся VBA definition/result adapters
+6. Затем ранний 11T переводит built-in Office tools по semantic families; каждый
+   switch удаляет свой legacy host path. До WQ0/5B2/7D не создавать compatibility
+   scaffolding, которое всё равно вызывает `ExecuteTool(ToolCommand)`.
+7. Milestone WQ и Phase 12 stable core. Оставшиеся VBA definition/result adapters
    обслуживают действующий Phase 6 runtime; их optional direct-handler cleanup после
    5B2 относится к отдельно admitted Phase 11 и не блокирует этот маршрут.
-7. Улучшения ниже — отдельные post-stable minor changes либо соответствующие
+8. Улучшения ниже — отдельные post-stable minor changes либо соответствующие
    independently admitted Phase 11 contours. Не включать их в 9D5/Phase 10.
 
 ## Когда нужен protocol или interface
@@ -119,6 +122,35 @@ effect, read-back и `ok/error/unknown`. Host backend получает bound doc
 Не создавать общий `IOfficeMutationService`: у разных domains различаются guards,
 verification и recovery semantics. Общими остаются `ToolRuntime`, `HostRuntime`,
 `DocumentSession` и typed effect evidence.
+
+### Порядок: parity, затем расширение
+
+Первый проход сохраняет существующие public ids, schemas и observable behavior. Его
+цель — не новый набор функций, а удаление legacy execution path. Typed service,
+который в production продолжает вызывать generic `ExecuteTool(ToolCommand)`, не
+закрывает slice. Один family switch обязан удалить свой host `switch` branch,
+legacy result/definition mapper и мёртвые helpers без alias или dual dispatch.
+
+Только после qualification family и подтверждённой потребности по trajectory/evals
+допускается отдельный contract expansion:
+
+- Excel: actual ListObject `upsert_table` вместо двусмысленного смешения с 2D matrix;
+  multi-key sort, apply/clear и несколько filter criteria, borders/wrap/dimensions;
+  `write_range.kind=table` переименовать в `matrix` только versioned cutover без
+  alias; `create_report_sheet` — лишь как bounded domain operation с одним target и
+  общим read-back;
+- Word: exact character-range target, `replace_text` с `exactlyOne`, paragraph/list
+  formatting. Не смешивать чтение и mutation в один public tool;
+- PowerPoint: stable slide/shape refs раньше сложной композиции;
+  `compose_slide` допустим только как одна bounded slide mutation с полным read-back;
+- Outlook: exact EntryID target для update/reply/forward, затем flag/unread. Draft и
+  send имеют разный risk/effect contract и не объединяются; send не добавляется этим
+  контуром.
+
+Не объединять find с replace, upsert с delete или несколько независимых mutations
+ради уменьшения числа model calls. Один более крупный tool допустим только когда вся
+операция имеет один semantic intent, target, confirmation, effect boundary и recovery
+contract. Generic `execute_actions`/arbitrary command list и batch writes запрещены.
 
 ### Checklist одного slice
 

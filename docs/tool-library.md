@@ -6,6 +6,11 @@ This is the Phase 11 target contract for tool visibility and authoring. It does 
 change the current `ToolRuntime`, `ToolPackSnapshot`, confirmation or execution
 policy, and it does not add dynamic authoring to the `16.1.0` release scope.
 
+Migration of built-in Excel/Word/PowerPoint/Outlook execution is the separate 11T
+contour: parity-first semantic-family switches remove legacy host dispatch after a
+qualified bound `DocumentSession`. The Library neither performs that migration nor
+hides its incomplete state; Inspector projects the exact current endpoint catalog.
+
 A tool is an executable capability, not a chat artifact. Built-in tools belong to
 the application build, custom tools are global or host-scoped packages, and
 document-local VBA tools belong to the exact live document. An uploaded manifest,

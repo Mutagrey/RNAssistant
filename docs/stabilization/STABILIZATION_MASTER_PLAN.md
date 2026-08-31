@@ -2290,7 +2290,7 @@ false-positive mutation success или неизвестного target/effect. �
 
 **Pipelines: отключены по явному решению пользователя (2026-08-28).** Это сокращение действующего scope в Phase 2, не начало Phase 11. Нет исполнения (включая manual/dry-run/confirmation resume), discovery, authoring и UI; parser/executor и обходы вложенных зависимостей удалены. Старые определения не поддерживаются, не мигрируются и не replay-ятся; файлы пользователя автоматически не удаляются. Pipelines не участвуют в gates Phases 3–10/12. Их возврат — отдельное решение после stable core через общие ToolRuntime/contracts с собственными тестами; совместимость со старым форматом не требуется.
 
-Phase 11 — отдельная ветка после stable core, не prerequisite Phase 12. Каждый контур переносится отдельной minor feature. Более ранний post-beta milestone допустим только по отдельному явному решению, со своими gates и без автоматического расширения scope первого stable. По явному решению пользователя 2026-08-31 первый Artifact Library milestone допущен раньше stable core на отдельной `stab/11*` ветке параллельно WQ; он не закрывает и не расширяет WQ/Phase 12 gates.
+Phase 11 — отдельная ветка после stable core, не prerequisite Phase 12. Каждый контур переносится отдельной minor feature. Более ранний post-beta milestone допустим только по отдельному явному решению, со своими gates и без автоматического расширения scope первого stable. По явному решению пользователя 2026-08-31 первый Artifact Library milestone допущен раньше stable core на отдельной `stab/11*` ветке параллельно WQ; он не закрывает и не расширяет WQ/Phase 12 gates. Тем же решением отдельно допущен ранний контур 11T typed Office tools, но его production switch начинается только после реального WQ0, 5B2 и 7D. Typed façade над `ExecuteTool(ToolCommand)` или nullable/unbound `DocumentSession` не считается миграцией и не разрешён как способ обойти этот gate.
 
 Целевой пользовательский контракт библиотеки ресурсов, viewers, revision history,
 edit/delete и попадания в model context зафиксирован в
@@ -2300,9 +2300,12 @@ Resource Fabric: drafts не являются artifacts, committed resources и�
 transport или execution authority.
 
 Приоритет пересмотрен 2026-08-31 вокруг четырёх пользовательских outcomes:
-полноценный Artifact/Plan/HTML Workbench, понятный UI, наблюдаемая работа tools и все
-Office hosts из одного окна. Read-only visibility идёт раньше authoring, а локальная
-работоспособность каждого host — раньше публикации его cross-process endpoint.
+полноценный Artifact/Plan/HTML Workbench, надёжные typed Office tools, понятный UI и
+все Office hosts из одного окна. 11T становится первым Office-runtime контуром сразу
+после WQ0/5B2/7D; пока этот Windows gate недоступен, могут продолжаться только уже
+допущенные независимые Artifact slices. Read-only visibility идёт раньше authoring,
+а локальная работоспособность каждого host — раньше публикации его cross-process
+endpoint.
 
 Порядок:
 
@@ -2346,34 +2349,56 @@ Office hosts из одного окна. Read-only visibility идёт рань�
    Every slice keeps `ViewerRegistry` UI-only and has its own MIME/security/vendor/
    lifetime tests. The milestone ends with Windows WebView qualification of
    Artifacts, Plan and HTML together, including reload, history and large payloads.
-5. **11E — coherent product UI and Issue Center:** one Library shell may expose
+5. **11T — typed Office tools и удаление legacy host dispatch — admitted, gate
+   open:**
+   - 11T0: real Windows WQ0 → production 5B2 `DocumentSession`/factories → 7D
+     bound Excel backend. Не добавлять промежуточный typed wrapper над legacy
+     `_adapter.ExecuteTool` и не угадывать COM identity/lifetime на fake host;
+   - 11T1–11T5: переносить существующие Excel capabilities по families:
+     find/replace, sheet lifecycle, clear/sort/filter/format, tables, charts;
+   - 11T6–11T8: Word, PowerPoint и Outlook по одному host vertical. Каждый сначала
+     получает собственный bound local `DocumentSession`, exact target/lifetime gate
+     и host pack, затем его существующие reads и mutations переходят по semantic
+     families;
+   - первый проход сохраняет exact public ids, schemas и пользовательское поведение.
+     Один slice переключает Agent/manual execution на typed request → domain service
+     → narrow bound backend → typed outcome/effect evidence и в том же изменении
+     удаляет заменённый host switch, mapper и dead helpers;
+   - расширения schema/возможностей идут только вторым отдельным проходом после
+     qualification и trajectory/eval evidence. Разрешены bounded semantic operations
+     с одним target/effect/recovery contract; generic `execute_actions`, arbitrary
+     command list и batch writes запрещены.
+   Кандидаты и checklist закреплены в
+   [Architecture follow-ups §B](ARCHITECTURE_FOLLOWUPS.md).
+   11T не становится новым Phase 12 prerequisite без отдельного решения.
+6. **11E — coherent product UI and Issue Center:** one Library shell may expose
    separate Artifacts, Tools and Skills sections without merging their authority.
    Use one status vocabulary for draft/preparing/committed/running/error/unknown/
    blocked/stale; preserve exact target and revision in every detail view. Add a
    Problems projection, exact causal navigation and redacted `Copy issue`/evidence
    export over existing trajectory and qualification owners, never a second log or
    outcome inferred from prose. See [Qualification §11](../qualification.md#11-phase-11-issue-center).
-6. **11F — read-only Tool Inspector and host capability truth:** first show the
+7. **11F — read-only Tool Inspector and host capability truth:** first show the
    current local endpoint's exact built-in/custom/document-local tools, then reuse
    the same DTO for the Host Fabric-selected endpoint; include origin, host/scope,
    callable/blocked reason, policy, catalog/package revision, qualification state
    and exact run/result links. It is a projection over runtime authority, not an
    editor or second catalog. See [Tool Library](../tool-library.md).
-7. **11G — Host Fabric core on Excel:** endpoint/lease/target DTOs, fail-closed run
+8. **11G — Host Fabric core on Excel:** endpoint/lease/target DTOs, fail-closed run
    pinning, one-process inventory, then cross-process Excel through an approved
    broker or separately admitted peer rendezvous. No ROT fallback or cross-process
    COM. An initial picker proves target changes cannot retarget an accepted run.
-8. **11H — host parity, one independently qualified vertical at a time:** Word,
+9. **11H — host parity, one independently qualified vertical at a time:** Word,
    PowerPoint, then Outlook. Each slice first proves its local `DocumentSession`,
    resources, built-in tools, confirmation/effect evidence, restart/fault behavior
    and host pack; only then does it publish a Host Fabric endpoint adapter. VBA is
    admitted only for Excel/Word/PowerPoint capabilities that actually exist.
-9. **11I — unified all-host experience:** one picker/filter/activation/auto-follow
+10. **11I — unified all-host experience:** one picker/filter/activation/auto-follow
    UX, endpoint health and capability matrix across admitted Excel/Word/PowerPoint/
    Outlook instances. Finish mixed-process, modal/busy, Save As, close/restart,
    stale lease and in-flight target-switch gates. The Office-hosted launcher remains
    a separate optional profile. See [Host Fabric](../host-fabric.md).
-10. **11J — custom Tool Library and authoring:** only after 11F and Host Fabric
+11. **11J — custom Tool Library and authoring:** only after 11F and Host Fabric
     target pinning. Add immutable package history, exact revision conflicts,
     restore-as-new-head, tombstone, import/export provenance and disposable-document
     test flow; switch UI/model authoring without changing an accepted run catalog.
@@ -2381,19 +2406,19 @@ Office hosts из одного окна. Read-only visibility идёт рань�
     adapters is after production 5B2. Existing 6H-admitted package execution remains
     stable-core Phase 6 work and does not block Phase 12. See
     [Tool Library](../tool-library.md).
-11. **11K — Skills authoring:** installed skills remain global/host-scoped Library
+12. **11K — Skills authoring:** installed skills remain global/host-scoped Library
     capability packages, not chat artifacts. Add immutable package history, exact
     version/revision UX, restore-as-new-head, tombstone, guarded conflicts and
     explicit artifact import/export; preserve exact `common.capabilities_read` and
     later-run catalog refresh. See [Skill Library](../skills.md).
-12. **11L — Browser:** a separately permissioned session/package. HTML preview
+13. **11L — Browser:** a separately permissioned session/package. HTML preview
     WebView is never reused as browser authority.
-13. **11M — Local Automation:** LA0 session-ownership ADR and LA1 bounded read-only
+14. **11M — Local Automation:** LA0 session-ownership ADR and LA1 bounded read-only
     files first; LA2 guarded file mutations with Recycle-Bin-first delete; LA4 typed
     non-shell execution in a signed isolated worker; LA5 raw shell/PTY and LA6
     desktop control remain separate deny-by-default high-risk capabilities. See
     [Local Automation Agent](../local-automation-agent.md).
-14. **11N — Pipelines:** remain disabled. Reconsider only by another explicit
+15. **11N — Pipelines:** remain disabled. Reconsider only by another explicit
     decision after the preceding runtime/tool/host contracts are qualified; no
     compatibility with the removed format is required.
 

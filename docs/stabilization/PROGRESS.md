@@ -1,13 +1,26 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 11 Optional contours — отдельный ранний Artifact Library milestone явно допущен пользователем параллельно WQ
-Current task: 11D1 done host-neutral — bounded text/source и sanitized Markdown viewers используют exact revision-pinned gateway pages без второго transport/store.
-Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо и этим milestone не закрываются. Phase 12 scope не расширен.
+Current phase: Phase 11 Optional contours — ранние Artifact Library и typed Office tools contours явно допущены пользователем параллельно WQ
+Current task: 11T0 docs-only done — существующие Excel/Word/PowerPoint/Outlook tools переходят parity-first по semantic families с удалением legacy branch; contract expansions отделены.
+Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо. 11T не обходит WQ0/5B2/7D и не расширяет Phase 12 scope.
 
-Next step: отдельный 11D2 commit — image bytes, dimensions, fit/zoom/download и object-URL lifetime; PDF и audio оставить следующими отдельными slices.
-Required context: [Artifact Library contract](../artifact-library.md), [Resource Fabric](../resource-fabric.md), current Artifact Library/resource gateway/viewer owners, [11D1 evidence](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md), [master Phase 11](STABILIZATION_MASTER_PLAN.md#phase-11--optional-contours).
-Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library and R57 Issue Center remain docs-only. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+Next step for tools: на реальном Windows выполнить WQ0, затем отдельными changes production 5B2 и 7D. До этого не создавать typed façade над legacy `ExecuteTool`; без Windows может продолжаться только уже допущенный независимый 11D2 viewer slice.
+Required context: [master WQ/Phase 11](STABILIZATION_MASTER_PLAN.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current 5B2/7D owners.
+Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. 11T is admitted but blocked before runtime work by WQ0/production 5B2/7D; all remaining built-in Office tool branches are mapped to family switches rather than a big-bang rewrite. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+
+Phase 11T Office tool modernization route (2026-08-31, docs-only): code audit
+подтвердил, что production `IOfficeDocumentSession` ещё не реализован, Excel typed
+read/write используют explicit compatibility backends до 7D, а Word/PowerPoint/
+Outlook и остальные Excel families всё ещё входят через generic host `ExecuteTool`.
+План теперь требует parity-first migration: один semantic family получает typed
+request/domain service/bound backend/outcome/effect evidence и в том же change теряет
+legacy branch/mapper/helpers. Только после qualification/evals отдельно допускаются
+`upsert_table`, richer sort/filter/format, exact Word ranges, stable PowerPoint refs,
+bounded `compose_slide` и exact Outlook EntryID updates; generic batch writes и
+`execute_actions` запрещены. Runtime/UI/schema не менялись; WQ/Phase 12 не закрыты.
+Docs-only verification: `git diff --check` и local Markdown targets pass; harness,
+build и Windows/Office/VSTO validation не запускались.
 
 Phase 11D1 bounded text/source and Markdown viewers (2026-08-31): новый
 host-neutral `ArtifactViewerService` принимает только canonical exact artifact URI
@@ -1485,10 +1498,10 @@ harness не запускались. Следующий отдельный ша�
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | Remaining mandatory 7D where applicable or admitted Phase 11 handler slices; R23 remains |
-| LegacyToolDefinitionAdapter | ToolRuntime | Current legacy catalog/schema/authoring and execution consumers listed in `MIGRATION_MAP.md`; resource projection removed | Actual 5B2/7D or admitted Phase 11 consumer switch; `ProjectRead` removed in 10C2, no resource dependency |
-| LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Remaining mandatory 7D where applicable or admitted Phase 11 handler slices; no old-history reader |
-| ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 runtime state switched; remaining manual/domain presentation consumers leave with 7D or admitted Phase 11 slices |
+| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | Remaining mandatory 7D where applicable or admitted 11T handler slices; R23 remains |
+| LegacyToolDefinitionAdapter | ToolRuntime | Current legacy catalog/schema/authoring and execution consumers listed in `MIGRATION_MAP.md`; resource projection removed | Actual 5B2/7D, admitted 11T built-in switch or 11J authoring switch; `ProjectRead` removed in 10C2, no resource dependency |
+| LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Remaining mandatory 7D where applicable or admitted 11T handler slices; no old-history reader |
+| ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 runtime state switched; remaining manual/domain presentation consumers leave with 7D or admitted 11T slices |
 | Unbound host identity/access | HostRuntime / host factories | Production adapters, including gated context/catalog reads | 5B2 bound Excel/common lifetime identity + Windows gates; neutral gate не удаляет этот legacy |
 | `VbaMutationDocumentContextAdapter` / `VbaMutationReaderAdapter` / `VbaMutationBackendAdapter` | VBA / Tools | Typed mutation service over current wide host and legacy read/mutation results; backend serves patch, whole write/rename, delete and restore | Document context: WQ0/5B2. Remaining direct-handler/typed-host cleanup: separate optional Phase 11 slice after 5B2; not a Phase 10/12 blocker |
 | `VbaPackageToolAdapter` / `VbaPackageBackendAdapter` | VBA / Tools | Existing 6I package service over current ToolDefinition/host command/result seams | Separate optional Phase 11 dynamic-tool/package direct-handler slice after 5B2; one-way mapping only, no domain legacy result/history |
