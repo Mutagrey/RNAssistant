@@ -2326,7 +2326,10 @@ transport или execution authority.
    - 11C2: inert uploaded-HTML import with explicit provenance and bounded
      source/preview UX. Done host-neutral; Windows WebView interaction remains
      open. [Evidence](PHASE_11C2_HTML_IMPORT_PREVIEW.md).
-   - 11C3: bindings, recovery and export without silent payload truncation.
+   - 11C3: one domain-owned checkpoint path, binding completeness/integrity and
+     guarded exact export without silent payload truncation. Done host-neutral;
+     Windows WebView/Office interaction remains open.
+     [Evidence](PHASE_11C3_HTML_BINDING_EXPORT.md).
 4. Typed artifact viewers: bounded text/source and Markdown first; image, PDF and
    audio are separate measured slices with MIME/security/vendor/worker/lifetime and
    Windows WebView gates. ViewerRegistry remains UI-only and cannot read bridge/CAS

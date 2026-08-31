@@ -521,6 +521,7 @@ namespace RNAssistant.Core.Models
         public string DocumentTitle { get; set; }
         public string Status { get; set; }
         public string LastError { get; set; }
+        public string PayloadCompleteness { get; set; }
         public string ContentSha256 { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
@@ -533,6 +534,7 @@ namespace RNAssistant.Core.Models
             Headers = "firstRow";
             RefreshPolicy = "on_preview";
             Status = "ready";
+            PayloadCompleteness = "bounded";
             CreatedUtc = DateTime.UtcNow;
             UpdatedUtc = CreatedUtc;
         }

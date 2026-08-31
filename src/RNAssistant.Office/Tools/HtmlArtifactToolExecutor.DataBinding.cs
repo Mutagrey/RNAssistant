@@ -181,6 +181,7 @@ namespace RNAssistant.Office.Tools
                 DocumentTitle = session.DocumentTitle,
                 Status = "ready",
                 LastError = null,
+                PayloadCompleteness = SourcePayloadCompleteness(sourceResult.DataJson),
                 ContentSha256 = TextPatternEngine.Sha256(json),
                 CreatedUtc = now,
                 UpdatedUtc = now,
@@ -295,6 +296,7 @@ namespace RNAssistant.Office.Tools
                 binding.DocumentTitle = session.DocumentTitle;
                 binding.Status = "ready";
                 binding.LastError = null;
+                binding.PayloadCompleteness = SourcePayloadCompleteness(result.DataJson);
                 binding.LastRefreshUtc = now;
                 binding.UpdatedUtc = now;
                 session.HtmlWorkspace.UpdatedUtc = now;
@@ -691,6 +693,28 @@ namespace RNAssistant.Office.Tools
             return string.Equals(value, "manual", StringComparison.OrdinalIgnoreCase) ? "manual" : "on_preview";
         }
 
+        private static string SourcePayloadCompleteness(string sourceJson)
+        {
+            try
+            {
+                var source = JToken.Parse(sourceJson ?? string.Empty) as JObject;
+                var truncated = source == null ? null : source.GetValue("truncated", StringComparison.OrdinalIgnoreCase);
+                if (truncated != null && truncated.Type == JTokenType.Boolean)
+                {
+                    return truncated.Value<bool>() ? "truncated" : "complete";
+                }
+                var complete = source == null ? null : source.GetValue("complete", StringComparison.OrdinalIgnoreCase);
+                if (complete != null && complete.Type == JTokenType.Boolean)
+                {
+                    return complete.Value<bool>() ? "complete" : "truncated";
+                }
+            }
+            catch (JsonException)
+            {
+            }
+            return "bounded";
+        }
+
         private static object BindingDetails(HtmlWorkspaceDataBinding binding)
         {
             if (binding == null) return null;
@@ -714,6 +738,7 @@ namespace RNAssistant.Office.Tools
                 binding.DocumentTitle,
                 binding.Status,
                 binding.LastError,
+                binding.PayloadCompleteness,
                 binding.LastRefreshUtc,
                 binding.CreatedUtc,
                 binding.UpdatedUtc
@@ -729,12 +754,28 @@ namespace RNAssistant.Office.Tools
             binding.Headers = NormalizeHeaders(binding.Headers);
             binding.RefreshPolicy = NormalizeRefreshPolicy(binding.RefreshPolicy);
             binding.Status = string.Equals(binding.Status, "error", StringComparison.OrdinalIgnoreCase) ? "error" : "ready";
+            binding.PayloadCompleteness = NormalizePayloadCompleteness(binding.PayloadCompleteness);
             if (binding.CreatedUtc == default(DateTime)) binding.CreatedUtc = dataSource == null || dataSource.CreatedUtc == default(DateTime) ? DateTime.UtcNow : dataSource.CreatedUtc;
             if (binding.UpdatedUtc == default(DateTime)) binding.UpdatedUtc = binding.CreatedUtc;
             if (string.IsNullOrWhiteSpace(binding.ContentSha256) && dataSource != null)
             {
                 binding.ContentSha256 = TextPatternEngine.Sha256(dataSource.Json);
             }
+            else if (dataSource != null && !string.Equals(
+                binding.ContentSha256,
+                TextPatternEngine.Sha256(dataSource.Json),
+                StringComparison.OrdinalIgnoreCase))
+            {
+                binding.Status = "error";
+                binding.LastError = "Bound data payload failed its integrity check; refresh or freeze it before use.";
+            }
+        }
+
+        private static string NormalizePayloadCompleteness(string value)
+        {
+            if (string.Equals(value, "complete", StringComparison.OrdinalIgnoreCase)) return "complete";
+            if (string.Equals(value, "truncated", StringComparison.OrdinalIgnoreCase)) return "truncated";
+            return "bounded";
         }
 
     }

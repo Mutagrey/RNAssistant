@@ -323,6 +323,39 @@ namespace RNAssistant.Harness
                 AssertEqual("rnassistant.table.v1", (string)table["schema"], "html table transform schema");
                 AssertEqual(3, table["rowCount"].Value<int>(), "html table transform row count");
                 AssertEqual("Jan", (string)table["rows"][0]["month"], "html table header becomes stable key");
+                AssertEqual("bounded", boundSession.HtmlWorkspace.DataSources[0].Binding.PayloadCompleteness,
+                    "binding makes unknown source completeness explicit");
+
+                var truncatedSource = adapter.GetBuiltInTools().Single(item => item.Id == "excel.inspect");
+                var truncatedHtml = new HtmlArtifactToolExecutor(
+                    adapter,
+                    new[] { truncatedSource },
+                    null,
+                    (ignoredCommand, ignoredCancellation) => ToolResult.Ok(
+                        "Bounded source.",
+                        "{\"kind\":\"sheets\",\"returnedCount\":200,\"truncated\":true,\"items\":[]}"));
+                var truncatedSession = new ChatSession
+                {
+                    Host = adapter.HostName,
+                    DocumentKey = adapter.DocumentKey,
+                    DocumentTitle = adapter.DocumentTitle
+                };
+                var truncatedBind = new ToolCommand { ToolId = HtmlArtifactToolExecutor.BindDataToolId };
+                truncatedBind.Arguments["dataName"] = "boundedSheets";
+                truncatedBind.Arguments["sourceTool"] = "excel.inspect";
+                truncatedBind.Arguments["sourceArguments"] = new JObject { ["kind"] = "sheets" };
+                var truncatedBindResult = truncatedHtml.ExecuteControllerTool(truncatedBind, truncatedSession, false);
+                AssertTrue(truncatedBindResult.Success, "explicitly truncated source remains usable as bounded data");
+                AssertEqual("truncated", truncatedSession.HtmlWorkspace.DataSources.Single().Binding.PayloadCompleteness,
+                    "binding retains explicit source truncation evidence");
+
+                var inconsistent = HtmlWorkspaceCopyService.CloneCurrent(boundSession.HtmlWorkspace);
+                inconsistent.DataSources[0].Binding.ContentSha256 = new string('0', 64);
+                HtmlArtifactToolExecutor.NormalizeWorkspace(inconsistent);
+                AssertEqual("error", inconsistent.DataSources[0].Binding.Status,
+                    "recovery marks mismatched binding payload evidence as error");
+                AssertContains(inconsistent.DataSources[0].Binding.LastError, "integrity check",
+                    "recovery explains binding payload mismatch");
 
                 var gateEntries = 0;
                 var gateExits = 0;

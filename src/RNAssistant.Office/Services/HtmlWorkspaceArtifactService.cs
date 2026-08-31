@@ -99,6 +99,27 @@ namespace RNAssistant.Office.Services
             ValidateRevisionLineage(session);
         }
 
+        public static string PrepareExport(ChatSession session, string expectedActiveArtifactId)
+        {
+            if (session == null) throw new InvalidOperationException("Chat session is required.");
+            if (string.IsNullOrWhiteSpace(expectedActiveArtifactId) ||
+                string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId) ||
+                !string.Equals(
+                expectedActiveArtifactId ?? string.Empty,
+                session.ActiveHtmlArtifactId ?? string.Empty,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("HTML workspace changed; reload it before exporting.");
+            }
+            EnsureMutable(session);
+            var artifactId = CaptureCurrent(session, "HTML export checkpoint");
+            if (string.IsNullOrWhiteSpace(artifactId))
+            {
+                throw new InvalidOperationException("HTML workspace has no exportable revision.");
+            }
+            return artifactId;
+        }
+
         public static void RebuildNavigation(ChatSession session)
         {
             if (session == null || session.HtmlWorkspace == null) return;

@@ -791,7 +791,6 @@ namespace RNAssistant.Core.Storage
         private void SaveInternalLocked(ChatSession session, string path, bool allowRelocatedSession)
         {
             EnsureChartArtifacts(session);
-            EnsureWorkspaceArtifact(session);
             ExternalizeArtifacts(session);
             var exists = File.Exists(path);
             EventLogReadResult log = null;

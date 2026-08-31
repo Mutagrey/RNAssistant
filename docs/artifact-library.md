@@ -3,10 +3,9 @@
 Status: Phase 11 target contract. 11A1 and 11A2 implement the host-neutral commit-time
 boundary, explicit draft/preparing/committed labels and exact Library head/history
 projection. 11B1–11B3 complete the host-neutral Plan domain owner, exact whole-Markdown
-lineage, restore/removal UX and ready handoff by pinned URI. 11C1–11C2 make HTML
-whole-workspace lineage globally monotonic and add inert uploaded-HTML source preview
-plus explicit provenance-preserving import. Binding/recovery/export work and typed
-viewers remain later slices. The
+lineage, restore/removal UX and ready handoff by pinned URI. 11C1–11C3 complete the
+host-neutral HTML lineage, inert uploaded-source import, binding evidence, recovery
+and guarded exact export contour. Typed viewers remain later slices. The
 existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
@@ -236,7 +235,12 @@ Phase 11 is implemented as separate changes:
      300,000-character workspace-file bound, then creates a separate workspace
      revision with exact source URI/hash/relation provenance.
      [Evidence](stabilization/PHASE_11C2_HTML_IMPORT_PREVIEW.md).
-   - 11C3 — bindings, recovery and export with exact payload preservation.
+   - 11C3 — done host-neutral: storage cannot synthesize workspace revisions;
+     binding JSON carries exact hash and explicit completeness; explicit export
+     checkpoints the exact guarded workspace through the sole lineage owner and
+     returns its pinned URI/CAS hash before standalone assembly. Raw JSON strings
+     are not parsed/stringified during export.
+     [Evidence](stabilization/PHASE_11C3_HTML_BINDING_EXPORT.md).
 4. Typed viewers: text/Markdown first; image, PDF and audio as separate measured
    slices with their own security and Windows gates.
 

@@ -98,8 +98,8 @@ vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   ["app-html-workspace.js", "app-html-workspace-actions.js", "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"]
-    .forEach(asset => assert.ok(index.includes(asset + "?v=html-import-20260831-1"), asset));
-  assert.ok(index.includes("app-html-workspace.css?v=html-import-20260831-1"));
+    .forEach(asset => assert.ok(index.includes(asset + "?v=html-export-20260831-1"), asset));
+  assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"));
   console.log("PASS HTML upload import: changed UI graph uses one cache key");
   console.log("OK 5/5");
 }()).catch(error => {

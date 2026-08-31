@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -85,6 +87,79 @@ namespace RNAssistant.Harness
                 RuntimeThrows<InvalidOperationException>(() =>
                     service.Import(session, sourceUri, session.ActiveHtmlArtifactId, "pages/landing.html"));
                 AssertEqual(artifactCount, session.Artifacts.Count, "path collision appends no revision");
+            });
+        }
+
+        private static void HtmlExportCheckpointOwnsExactBindingPayload()
+        {
+            WithTempPaths(paths =>
+            {
+                const string firstJson = "{\"version\":1,\"value\":9007199254740993}";
+                var exportJson = "{\"duplicate\":1,\"duplicate\":2,\"value\":9007199254740993,\"text\":\"" +
+                    new string('x', 40000) + "\"}";
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "html-export", "Export.xlsx", "HTML export");
+                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<main>exact</main>", true);
+                HtmlArtifactToolExecutor.UpsertDataSource(session, "bound", firstJson);
+                var data = session.HtmlWorkspace.DataSources.Single();
+                data.Binding = new HtmlWorkspaceDataBinding
+                {
+                    ToolId = "excel.read_range",
+                    ArgumentsJson = "{\"sheet\":\"Data\",\"address\":\"A1:B2\",\"content\":\"values\"}",
+                    PayloadCompleteness = "bounded",
+                    ContentSha256 = TextPatternEngine.Sha256(firstJson)
+                };
+                HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML bound data");
+                store.Save(session);
+                var persistedHead = session.ActiveHtmlArtifactId;
+                var artifactCount = session.Artifacts.Count;
+
+                data.Json = exportJson;
+                data.Binding.ContentSha256 = TextPatternEngine.Sha256(exportJson);
+                data.Binding.PayloadCompleteness = "truncated";
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "save unrelated state" });
+                store.Save(session);
+                AssertEqual(persistedHead, session.ActiveHtmlArtifactId,
+                    "storage save does not manufacture an HTML revision outside the domain owner");
+                AssertEqual(artifactCount, session.Artifacts.Count,
+                    "storage save appends no hidden workspace revision");
+
+                var loaded = store.Load(session.Id);
+                AssertEqual(firstJson, loaded.HtmlWorkspace.DataSources.Single().Json,
+                    "uncheckpointed binding refresh is not mistaken for durable recovery state");
+                loaded.HtmlWorkspace.DataSources.Single().Json = exportJson;
+                loaded.HtmlWorkspace.DataSources.Single().Binding.ContentSha256 = TextPatternEngine.Sha256(exportJson);
+                loaded.HtmlWorkspace.DataSources.Single().Binding.PayloadCompleteness = "truncated";
+                var beforeExport = loaded.ActiveHtmlArtifactId;
+                var exportArtifactId = HtmlWorkspaceArtifactService.PrepareExport(loaded, beforeExport);
+                var exportArtifact = loaded.Artifacts.Single(item => item.Id == exportArtifactId);
+                AssertEqual(beforeExport, exportArtifact.ParentArtifactId, "export checkpoint keeps the exact active parent");
+                var exportSnapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(exportArtifact.InlineText);
+                AssertEqual(exportJson, exportSnapshot.DataSources.Single().Json,
+                    "export checkpoint preserves the complete JSON string byte-for-byte");
+                AssertEqual("truncated", exportSnapshot.DataSources.Single().Binding.PayloadCompleteness,
+                    "export checkpoint preserves explicit source completeness");
+                var exportCount = loaded.Artifacts.Count;
+                RuntimeThrows<InvalidOperationException>(() =>
+                    HtmlWorkspaceArtifactService.PrepareExport(loaded, null));
+                RuntimeThrows<InvalidOperationException>(() =>
+                    HtmlWorkspaceArtifactService.PrepareExport(loaded, "stale-head"));
+                AssertEqual(exportCount, loaded.Artifacts.Count, "stale export appends no revision");
+
+                store.Save(loaded);
+                var replayed = store.Load(loaded.Id);
+                var replayedExport = replayed.Artifacts.Single(item => item.Id == exportArtifactId);
+                AssertTrue(!string.IsNullOrWhiteSpace(replayedExport.ContentSha256),
+                    "export checkpoint has verified CAS identity");
+                AssertEqual(exportJson, replayed.HtmlWorkspace.DataSources.Single().Json,
+                    "export checkpoint replays the exact payload");
+                HtmlArtifactToolExecutor.UpsertFile(replayed, "index.html", "html", "<main>later</main>", true);
+                store.Save(replayed);
+                string error;
+                AssertTrue(store.TryActivateHtmlWorkspaceRevision(replayed, exportArtifactId, out error),
+                    "export checkpoint is an explicit recovery target");
+                AssertEqual(exportJson, replayed.HtmlWorkspace.DataSources.Single().Json,
+                    "recovery restores the exact exported binding payload");
             });
         }
 

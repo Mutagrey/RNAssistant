@@ -80,6 +80,32 @@ namespace RNAssistant.Office
             });
         }
 
+        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(
+            string chatId,
+            string expectedActiveHtmlArtifactId)
+        {
+            return WithReservedSession(LoadSession(chatId), session =>
+            {
+                var previousArtifactId = session.ActiveHtmlArtifactId;
+                var exportArtifactId = HtmlWorkspaceArtifactService.PrepareExport(
+                    session,
+                    expectedActiveHtmlArtifactId);
+                if (!string.Equals(previousArtifactId, exportArtifactId, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    SaveSessionChanges(session);
+                }
+                var artifact = (session.Artifacts ?? new System.Collections.Generic.List<ChatArtifact>()).Single(item =>
+                    item != null &&
+                    string.Equals(item.Id, exportArtifactId, System.StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, System.StringComparison.OrdinalIgnoreCase));
+                var response = HtmlWorkspaceState(session);
+                response.ExportRevisionArtifactId = artifact.Id;
+                response.ExportResourceUri = ChatResourceUri.CreateArtifactRevision(session, artifact).Uri;
+                response.ExportContentSha256 = artifact.ContentSha256;
+                return response;
+            });
+        }
+
         public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
         {
             return WithReservedSession(LoadSession(chatId), session =>

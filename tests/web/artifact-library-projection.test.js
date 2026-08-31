@@ -88,10 +88,10 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
     assert.ok(index.includes(asset + "?v=artifact-library-20260831-1"), asset + " has the Artifact Library cache key");
   });
   assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "artifact cards have the removal cache key");
-  assert.ok(index.includes("app-html-workspace.js?v=html-import-20260831-1"), "artifact actions have the current cache key");
-  assert.ok(index.includes("app-html-workspace-actions.js?v=html-import-20260831-1"), "artifact tool calls have the current cache key");
-  assert.ok(index.includes("app-html-workspace-artifacts.js?v=html-import-20260831-1"), "artifact detail has the current cache key");
-  assert.ok(index.includes("app-html-workspace-editor.js?v=html-import-20260831-1"), "artifact action bridge has the current cache key");
+  assert.ok(index.includes("app-html-workspace.js?v=html-export-20260831-1"), "artifact actions have the current cache key");
+  assert.ok(index.includes("app-html-workspace-actions.js?v=html-export-20260831-1"), "artifact tool calls have the current cache key");
+  assert.ok(index.includes("app-html-workspace-artifacts.js?v=html-export-20260831-1"), "artifact detail has the current cache key");
+  assert.ok(index.includes("app-html-workspace-editor.js?v=html-export-20260831-1"), "artifact action bridge has the current cache key");
   console.log("PASS artifact library: client lineage inference and Plan JSON label are removed");
 }
 

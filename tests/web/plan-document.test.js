@@ -65,9 +65,9 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const editor = fs.readFileSync(path.join(root, "web/js/app-html-workspace-editor.js"), "utf8");
   assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "removed message cards keep the tombstone cache key");
   ["app-html-workspace.js", "app-html-workspace-actions.js", "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=html-import-20260831-1"), asset + " has the current HTML/Plan action cache key");
+    assert.ok(index.includes(asset + "?v=html-export-20260831-1"), asset + " has the current HTML/Plan action cache key");
   });
-  assert.ok(index.includes("app-html-workspace.css?v=html-import-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
+  assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /result\.expectedRevisionArtifactId = artifactId\(selected\.item\)/);
   assert.match(actions, /expectedRevisionArtifactId: selected\.expectedRevisionArtifactId/);
   assert.match(detail, /expectedRevisionArtifactId: headArtifactId/);

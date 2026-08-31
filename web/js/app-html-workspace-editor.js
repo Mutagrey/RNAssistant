@@ -135,8 +135,12 @@
         $("refreshHtmlDataButton").title = boundCount ? "Перечитать " + boundCount + " привязанных наборов из Office" : "Нет привязанных данных";
       }
       if ($("exportHtmlWorkspaceButton")) {
-        $("exportHtmlWorkspaceButton").disabled = !files().some(function (file) { return fileKind(file) === "html"; });
-        $("exportHtmlWorkspaceButton").title = "Скачать автономный HTML с текущими данными, CSS и JavaScript";
+        var exportBlocked = !!state.htmlWorkspaceDirty || !!state.htmlWorkspaceExportPending ||
+          !state.activeHtmlArtifactId || !files().some(function (file) { return fileKind(file) === "html"; });
+        $("exportHtmlWorkspaceButton").disabled = exportBlocked;
+        $("exportHtmlWorkspaceButton").title = state.htmlWorkspaceDirty
+          ? "Сначала сохраните текущие изменения"
+          : "Зафиксировать exact workspace revision и скачать автономный HTML";
       }
       if ($("deleteHtmlWorkspaceButton")) {
         $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected || selected.type === "artifact" || (blocked && selected.type !== "plan");
@@ -259,8 +263,9 @@
       if (meta) {
         var binding = selected && selected.type === "data" ? dataBinding(selected.item) : null;
         var bindingStatus = binding ? String(bindingValue(binding, "Status", "status", "ready")) : "";
+        var payloadCompleteness = binding ? String(bindingValue(binding, "PayloadCompleteness", "payloadCompleteness", "bounded")) : "";
         meta.textContent = selected
-          ? (isPlan ? "План · Markdown · v" + artifactRevision(selected.item) : (isArtifact ? workspaceArtifacts.typeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? (binding ? "JSON · " + bindingValue(binding, "ToolId", "toolId", "Office") + " · " + bindingStatus + " · " + bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual") : "JSON data source · static") : (fileKind(selected.item) || "file"))))
+          ? (isPlan ? "План · Markdown · v" + artifactRevision(selected.item) : (isArtifact ? workspaceArtifacts.typeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? (binding ? "JSON · " + bindingValue(binding, "ToolId", "toolId", "Office") + " · " + bindingStatus + " · " + payloadCompleteness + " · " + bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual") : "JSON data source · static") : (fileKind(selected.item) || "file"))))
           : "";
         meta.title = binding && bindingValue(binding, "LastError", "lastError", "") ? bindingValue(binding, "LastError", "lastError", "") : "";
       }

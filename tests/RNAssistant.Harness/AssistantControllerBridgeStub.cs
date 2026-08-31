@@ -445,6 +445,20 @@ namespace RNAssistant.Office
                 Workspace = HtmlWorkspaceDto.From(null)
             };
         }
+        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(string chatId, string expectedActiveHtmlArtifactId)
+        {
+            LastChatId = chatId;
+            LastExpectedHtmlArtifactId = expectedActiveHtmlArtifactId;
+            return new HtmlWorkspaceResponse
+            {
+                ActiveChatId = chatId ?? string.Empty,
+                ActiveHtmlArtifactId = expectedActiveHtmlArtifactId,
+                ExportRevisionArtifactId = expectedActiveHtmlArtifactId,
+                ExportResourceUri = "rna://chat/" + chatId + "/artifact/" + expectedActiveHtmlArtifactId + "/revision/3",
+                ExportContentSha256 = new string('a', 64),
+                Workspace = HtmlWorkspaceDto.From(null)
+            };
+        }
         public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
         {
             LastChatId = chatId;

@@ -348,6 +348,7 @@ namespace RNAssistant.Harness
                 Test("storage: chart activity projects from artifact", ChartActivityProjectsFromArtifact),
                 Test("storage: compaction projects from artifact", CompactionProjectsFromArtifact),
                 Test("html import: inert preview and exact provenance", UploadedHtmlImportPreservesExactSource),
+                Test("html export: exact binding checkpoint and recovery", HtmlExportCheckpointOwnsExactBindingPayload),
                 Test("html lineage: branches use unique monotonic revisions", HtmlWorkspaceBranchesUseUniqueMonotonicRevisions),
                 Test("storage: html navigation projects from artifacts", HtmlNavigationProjectsFromArtifacts),
                 Test("storage: html redo branches are explicit and lazy", HtmlRedoBranchesAreExplicitAndLazy),
@@ -577,6 +578,7 @@ namespace RNAssistant.Harness
                 Test("bridge: typed vba", BridgeUsesTypedVbaPayload),
                 Test("bridge: typed html delete", BridgeUsesTypedHtmlWorkspaceDeletePayloads),
                 Test("bridge: typed html import", BridgeUsesTypedUploadedHtmlPayloads),
+                Test("bridge: typed html export", BridgeUsesTypedHtmlExportPayload),
                 Test("bridge: typed html network", BridgeUsesTypedHtmlNetworkPayloads),
                 Test("bridge: cancels addressed run", BridgeCancelsAddressedChatRun)
             };

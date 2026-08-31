@@ -38,6 +38,7 @@
     var planMutationPending = false;
     var planHandoffPending = false;
     var htmlImportPending = false;
+    state.htmlWorkspaceExportPending = false;
 
     function uploadedHtmlPreviewCache() {
       state.uploadedHtmlSourcePreviews = state.uploadedHtmlSourcePreviews || {};
@@ -318,6 +319,51 @@
       }
     }
 
+    async function exportWorkspace() {
+      if (state.bridgeUnavailable || state.htmlWorkspaceDirty || state.htmlWorkspaceExportPending ||
+          !state.activeChatId || !state.activeHtmlArtifactId) return false;
+      var chatId = state.activeChatId;
+      var expectedArtifactId = state.activeHtmlArtifactId;
+      state.htmlWorkspaceExportPending = true;
+      if (options.render) options.render();
+      try {
+        var response = await options.send("prepareHtmlWorkspaceExport", {
+          chatId: chatId,
+          expectedActiveHtmlArtifactId: expectedArtifactId
+        });
+        if (state.activeChatId !== chatId) return false;
+        var exportArtifactId = value(response, "ExportRevisionArtifactId", "exportRevisionArtifactId", "") || "";
+        var responseArtifactId = value(response, "ActiveHtmlArtifactId", "activeHtmlArtifactId", "") || "";
+        var resourceUri = value(response, "ExportResourceUri", "exportResourceUri", "") || "";
+        var contentSha256 = value(response, "ExportContentSha256", "exportContentSha256", "") || "";
+        if (!exportArtifactId || exportArtifactId !== responseArtifactId ||
+            !/^rna:\/\/chat\//.test(resourceUri) || !/^[a-f0-9]{64}$/i.test(contentSha256)) {
+          throw new Error("HTML export returned incomplete revision evidence.");
+        }
+        if (!options.applyWorkspaceResponse(response, chatId) || state.activeHtmlArtifactId !== exportArtifactId) {
+          throw new Error("HTML workspace changed before export.");
+        }
+        if (typeof options.downloadHtmlExport !== "function") {
+          throw new Error("HTML export download is unavailable.");
+        }
+        options.downloadHtmlExport({
+          workspace: state.htmlWorkspace,
+          revisionArtifactId: exportArtifactId,
+          resourceUri: resourceUri,
+          contentSha256: contentSha256
+        });
+        options.log("HTML экспортирован из exact revision " + resourceUri + ".");
+        return true;
+      } catch (error) {
+        options.log(error.detail || error.message, "error");
+        window.alert(error.message || "HTML не экспортирован.");
+        return false;
+      } finally {
+        state.htmlWorkspaceExportPending = false;
+        if (options.render) options.render();
+      }
+    }
+
     async function restore(direction) {
       var actionState = options.getActionState();
       var snapshotId = direction === "redo" ? actionState.redoSnapshotId : actionState.undoSnapshotId;
@@ -466,6 +512,7 @@
       createFile: createFile,
       createPlan: createPlan,
       deleteSelection: deleteSelection,
+      exportWorkspace: exportWorkspace,
       handoffPlan: handoffPlan,
       importUploadedHtml: importUploadedHtml,
       loadUploadedHtmlSource: loadUploadedHtmlSource,

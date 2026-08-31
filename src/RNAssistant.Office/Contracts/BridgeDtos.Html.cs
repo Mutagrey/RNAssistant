@@ -120,6 +120,12 @@ namespace RNAssistant.Office.Contracts
         public string TargetPath { get; set; }
     }
 
+    public sealed class HtmlWorkspaceExportPayload : ChatPayload
+    {
+        [JsonProperty("expectedActiveHtmlArtifactId")]
+        public string ExpectedActiveHtmlArtifactId { get; set; }
+    }
+
     public sealed class UploadedHtmlSourcePreviewDto
     {
         [JsonProperty("sourceResourceUri")] public string SourceResourceUri { get; set; }
@@ -160,6 +166,15 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("importedFromResourceUri", NullValueHandling = NullValueHandling.Ignore)]
         public string ImportedFromResourceUri { get; set; }
+
+        [JsonProperty("exportRevisionArtifactId", NullValueHandling = NullValueHandling.Ignore)]
+        public string ExportRevisionArtifactId { get; set; }
+
+        [JsonProperty("exportResourceUri", NullValueHandling = NullValueHandling.Ignore)]
+        public string ExportResourceUri { get; set; }
+
+        [JsonProperty("exportContentSha256", NullValueHandling = NullValueHandling.Ignore)]
+        public string ExportContentSha256 { get; set; }
     }
 
     public sealed class HtmlWorkspaceDto

@@ -961,6 +961,23 @@ namespace RNAssistant.Harness
             AssertEqual("pages/upload.html", controller.LastHtmlPath, "HTML import forwards explicit target path");
         }
 
+        private static void BridgeUsesTypedHtmlExportPayload()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var response = bridge.HandleMessageAsync(
+                "{\"id\":\"html-export\",\"type\":\"prepareHtmlWorkspaceExport\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-html\",\"expectedActiveHtmlArtifactId\":\"html-r3\"}}")
+                .GetAwaiter().GetResult();
+            var envelope = JObject.Parse(response);
+            AssertTrue(envelope["ok"].Value<bool>(), "HTML export bridge response ok");
+            AssertEqual("chat-html", controller.LastChatId, "HTML export targets the addressed chat");
+            AssertEqual("html-r3", controller.LastExpectedHtmlArtifactId, "HTML export forwards exact active guard");
+            AssertEqual("html-r3", (string)envelope["payload"]["exportRevisionArtifactId"],
+                "HTML export returns the guarded checkpoint id");
+        }
+
         private static void BridgeUsesTypedHtmlNetworkPayloads()
         {
             var controller = new AssistantController();

@@ -57,46 +57,6 @@ namespace RNAssistant.Core.Storage
             artifact.StorageContentByteLength = artifact.ContentByteLength;
         }
 
-        private void EnsureWorkspaceArtifact(ChatSession session)
-        {
-            if (session == null) return;
-            var workspace = session.HtmlWorkspace ?? new HtmlWorkspace();
-            var hasContent = (workspace.Files != null && workspace.Files.Any(item => item != null)) ||
-                (workspace.DataSources != null && workspace.DataSources.Any(item => item != null));
-            if (session.HtmlWorkspaceRecovery != null && !session.HtmlWorkspaceRecovery.CanMutate)
-            {
-                if (hasContent)
-                {
-                    throw new InvalidOperationException("HTML workspace mutation is blocked until a healthy revision is selected.");
-                }
-                return;
-            }
-            var current = FindArtifact(session, session.ActiveHtmlArtifactId);
-            if (!hasContent && current == null) return;
-            if (current != null) HydrateArtifact(current);
-
-            var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(workspace, "HTML workspace");
-            if (current != null && WorkspaceStateEquals(current.InlineText, snapshot)) return;
-            var artifact = new ChatArtifact
-            {
-                Kind = ChatArtifactKinds.HtmlWorkspace,
-                Title = "HTML workspace",
-                MimeType = "application/vnd.rnassistant.html-workspace+json",
-                ParentArtifactId = current == null ? null : current.Id,
-                Revision = current == null ? 1 : Math.Max(1, current.Revision + 1),
-                InlineText = SerializeWorkspaceState(snapshot),
-                MetadataJson = JsonConvert.SerializeObject(new
-                {
-                    activeFileId = snapshot.ActiveFileId,
-                    fileCount = snapshot.Files.Count,
-                    dataSourceCount = snapshot.DataSources.Count
-                })
-            };
-            session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
-            session.Artifacts.Add(artifact);
-            session.ActiveHtmlArtifactId = artifact.Id;
-        }
-
         private static void EnsureChartArtifacts(ChatSession session)
         {
             if (session == null) return;
@@ -298,36 +258,6 @@ namespace RNAssistant.Core.Storage
             {
                 return null;
             }
-        }
-
-        private static bool WorkspaceStateEquals(string existingJson, HtmlWorkspaceSnapshot candidate)
-        {
-            if (string.IsNullOrWhiteSpace(existingJson) || candidate == null) return false;
-            try
-            {
-                var existing = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(existingJson);
-                return existing != null &&
-                    string.Equals(existing.ActiveFileId, candidate.ActiveFileId, StringComparison.OrdinalIgnoreCase) &&
-                    JToken.DeepEquals(JArray.FromObject(existing.Files ?? new List<HtmlWorkspaceFile>()),
-                        JArray.FromObject(candidate.Files ?? new List<HtmlWorkspaceFile>())) &&
-                    JToken.DeepEquals(JArray.FromObject(existing.DataSources ?? new List<HtmlWorkspaceDataSource>()),
-                        JArray.FromObject(candidate.DataSources ?? new List<HtmlWorkspaceDataSource>()));
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
-        }
-
-        private static string SerializeWorkspaceState(HtmlWorkspaceSnapshot snapshot)
-        {
-            snapshot = snapshot ?? new HtmlWorkspaceSnapshot();
-            return JsonConvert.SerializeObject(new
-            {
-                snapshot.ActiveFileId,
-                Files = snapshot.Files ?? new List<HtmlWorkspaceFile>(),
-                DataSources = snapshot.DataSources ?? new List<HtmlWorkspaceDataSource>()
-            }, Formatting.None);
         }
 
         private void RebuildContextCheckpointProjection(ChatSession session)

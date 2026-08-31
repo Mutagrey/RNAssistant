@@ -84,6 +84,7 @@
     },
     switchChatMode: saveChatMode,
     submitPlanHandoff: submitPlanHandoff,
+    downloadHtmlExport: downloadHtmlWorkspaceExport,
     validatePlanDraft: workspaceArtifacts.validatePlanDraft,
     hideCreate: hideHtmlWorkspaceCreate,
     render: renderHtmlWorkspace
@@ -373,12 +374,18 @@
     updateHtmlWorkspaceStatus();
   }
 
-  function exportHtmlWorkspace() {
-    if (!files().some(function (file) { return fileKind(file) === "html"; })) return;
+  function downloadHtmlWorkspaceExport(exportState) {
+    exportState = exportState || {};
+    var exportedWorkspace = exportState.workspace || {};
+    var exportedFiles = prop(exportedWorkspace, "Files", "files", []) || [];
+    var exportedData = prop(exportedWorkspace, "DataSources", "dataSources", []) || [];
+    if (!exportedFiles.some(function (file) { return fileKind(file) === "html"; })) {
+      throw new Error("HTML export checkpoint has no HTML entry file.");
+    }
     var html = htmlPreview.build({
-      activeFileId: workspace().activeFileId,
-      dataSources: dataSources(),
-      files: files(),
+      activeFileId: prop(exportedWorkspace, "ActiveFileId", "activeFileId", ""),
+      dataSources: exportedData,
+      files: exportedFiles,
       hostBridge: false
     });
     var url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
@@ -389,7 +396,6 @@
     link.click();
     link.remove();
     window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-    log("HTML экспортирован как автономный файл.");
   }
 
   function bindHtmlWorkspaceActions() {
@@ -400,7 +406,7 @@
     $("redoHtmlWorkspaceButton").addEventListener("click", workspaceActions.redo);
     $("recoverHtmlWorkspaceButton").addEventListener("click", workspaceActions.recoverRevision);
     $("refreshHtmlDataButton").addEventListener("click", workspaceActions.refreshAll);
-    $("exportHtmlWorkspaceButton").addEventListener("click", exportHtmlWorkspace);
+    $("exportHtmlWorkspaceButton").addEventListener("click", workspaceActions.exportWorkspace);
     $("toggleHtmlSidebarButton").addEventListener("click", toggleHtmlWorkspaceSidebar);
     $("addPlanButton").addEventListener("click", workspaceActions.createPlan);
     $("addHtmlFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("html"); });

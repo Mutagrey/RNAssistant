@@ -396,6 +396,12 @@ namespace RNAssistant.Office.WebView
                             htmlImport.ExpectedActiveHtmlArtifactId,
                             htmlImport.TargetPath);
                         break;
+                    case "prepareHtmlWorkspaceExport":
+                        var htmlExport = Payload<HtmlWorkspaceExportPayload>(payload);
+                        responsePayload = _controller.PrepareHtmlWorkspaceExport(
+                            htmlExport.ChatId,
+                            htmlExport.ExpectedActiveHtmlArtifactId);
+                        break;
                     case "deleteHtmlWorkspaceFile":
                         var deleteHtmlFile = Payload<HtmlWorkspaceDeleteFilePayload>(payload);
                         responsePayload = _controller.DeleteHtmlWorkspaceFile(

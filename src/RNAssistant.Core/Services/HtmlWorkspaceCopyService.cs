@@ -108,6 +108,7 @@ namespace RNAssistant.Core.Services
                 DocumentTitle = binding.DocumentTitle,
                 Status = binding.Status,
                 LastError = binding.LastError,
+                PayloadCompleteness = binding.PayloadCompleteness,
                 ContentSha256 = binding.ContentSha256,
                 CreatedUtc = binding.CreatedUtc,
                 UpdatedUtc = binding.UpdatedUtc,

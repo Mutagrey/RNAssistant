@@ -2223,6 +2223,7 @@ namespace RNAssistant.Harness
                     Id = "index", Path = "index.html", Kind = "html", Content = "unique-cas-body",
                     CreatedUtc = timestamp, UpdatedUtc = timestamp
                 });
+                HtmlWorkspaceArtifactService.CaptureCurrent(first, "HTML workspace");
                 store.Save(first);
                 var firstArtifact = first.Artifacts.Single(item => item.Id == first.ActiveHtmlArtifactId);
 
@@ -2233,6 +2234,7 @@ namespace RNAssistant.Harness
                     Id = "index", Path = "index.html", Kind = "html", Content = "unique-cas-body",
                     CreatedUtc = timestamp, UpdatedUtc = timestamp
                 });
+                HtmlWorkspaceArtifactService.CaptureCurrent(second, "HTML workspace");
                 store.Save(second);
                 var secondArtifact = second.Artifacts.Single(item => item.Id == second.ActiveHtmlArtifactId);
 
