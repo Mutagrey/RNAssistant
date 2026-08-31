@@ -316,7 +316,8 @@ namespace RNAssistant.Office.WebView
                             confirmAgentTool.ChatId,
                             (phase, message, activity) => ReportProgress(id, confirmAgentTool.ChatId, confirmRunId, phase, message, activity),
                             cancellationToken,
-                            confirmRunId);
+                            confirmRunId,
+                            ReportChatState);
                         break;
                     case "cancelAgentTool":
                         var cancelAgentTool = Payload<PendingAgentToolPayload>(payload);

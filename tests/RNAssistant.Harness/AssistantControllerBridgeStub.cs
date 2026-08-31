@@ -342,7 +342,8 @@ namespace RNAssistant.Office
             string chatId = null,
             Action<string, string, ChatActivity> progress = null,
             CancellationToken cancellationToken = default(CancellationToken),
-            string runId = null)
+            string runId = null,
+            Action<ChatStateResponse> chatStateChanged = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
             LastChatId = chatId;
@@ -350,6 +351,10 @@ namespace RNAssistant.Office
             if (progress != null)
             {
                 progress("executing", "Testing confirm", new ChatActivity { Kind = "tool", Title = pendingId, Status = "running" });
+            }
+            if (chatStateChanged != null)
+            {
+                chatStateChanged(ChatState("Confirmed artifact", chatId));
             }
             return Task.FromResult(ChatState(pendingId, chatId));
         }

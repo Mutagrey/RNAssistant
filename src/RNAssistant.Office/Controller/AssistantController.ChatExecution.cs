@@ -394,19 +394,9 @@ namespace RNAssistant.Office
                         Status = "running"
                     });
                     _chatSessions.NotifySaved(session);
-                    if (chatStateChanged != null)
-                    {
-                        try
-                        {
-                            // The committed turn and exact resource revisions must reach the UI queue
-                            // before attachment helpers or the primary model can start transport.
-                            chatStateChanged(ChatState(session));
-                        }
-                        catch
-                        {
-                            // UI delivery is best-effort after the durable commit.
-                        }
-                    }
+                    // The committed turn and exact resource revisions must reach the UI queue
+                    // before attachment helpers or the primary model can start transport.
+                    ReportExternalChatState(chatStateChanged, session);
                     if (commitUserAttachments && appendedUserMessage != null)
                     {
                         _chatResourceIngestion.DeleteDrafts(appendedUserMessage);
@@ -462,6 +452,12 @@ namespace RNAssistant.Office
                         AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     }
                     PersistRunCheckpoint(session, runId, phase);
+                    if (string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Kernel persistence precedes this callback. Publish the complete
+                        // revisioned projection now so artifacts do not wait for run completion.
+                        ReportExternalChatState(chatStateChanged, session);
+                    }
                     ReportExternalProgress(progress, phase, message, activity);
                 };
 

@@ -329,5 +329,20 @@ namespace RNAssistant.Office
             }
         }
 
+        private void ReportExternalChatState(
+            Action<ChatStateResponse> chatStateChanged,
+            ChatSession session)
+        {
+            if (chatStateChanged == null) return;
+            try
+            {
+                chatStateChanged(ChatState(session));
+            }
+            catch
+            {
+                // WebView notifications cannot abort already persisted work.
+            }
+        }
+
     }
 }

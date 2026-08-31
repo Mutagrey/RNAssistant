@@ -21,6 +21,14 @@ Attachment chips now state their actual lifecycle: `Не отправлено` f
 retry draft, `Подготовка` for the optimistic pending turn and `Оригинал` only after a
 durable projection replaces it.
 
+## Live tool-result correction (2026-08-31)
+
+Each persisted `tool_result` now queues the same full revision-guarded chat state
+before later progress or the next model step. Generated chart/tool-result, Plan,
+Task List and HTML artifacts therefore become visible while the run continues.
+Confirmation continuation uses the same callback. No progress payload, artifact
+transport, store or client-side lineage path was added.
+
 ## Boundaries preserved
 
 - The append-only chat stream, CAS, artifact event schema and exact `ResourceRef`
@@ -36,17 +44,22 @@ durable projection replaces it.
 
 ## Verification
 
-- `node tests/web/artifact-commit-projection.test.js`: 3/3 pass; full push precedes a
+- `node tests/web/artifact-commit-projection.test.js`: 4/4 pass; full push precedes a
   fake model call, stale/background pushes are rejected and the production ordering plus
-  lifecycle labels are wired atomically.
+  lifecycle labels are wired atomically; durable tool-result publication precedes
+  later progress in normal and confirmation-continuation paths.
 - `node tests/web/run-view-state.test.js`: 5/5 pass after the affected cache-key update.
 - `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj --
   "bridge: typed sendChat"`: 1/1 pass; typed full scope is serialized.
 - `dotnet run --project demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -c
   Release -- --artifact-commit-test`: pass. The real controller commits one text draft,
   the bridge observer sees the exact revision before the fake transport, and a scripted
-  provider failure preserves the committed resource. Only the existing three PDF
+  provider failure preserves the committed resource. A second real-controller run sees
+  an HTML artifact push before the terminal response. Only the existing three PDF
   platform-analysis warnings were emitted.
+- Focused bridge cases `bridge: confirm ids` and `bridge: typed sendChat`: 1/1 each;
+  confirmation forwards the full-state callback and the ordinary typed send path is
+  unchanged.
 - `ValidateVersionFormat`, `git diff --check` and 270 local Markdown link targets in
   eight changed documents: pass; product remains `16.1.0-dev`.
 

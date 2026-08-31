@@ -29,6 +29,7 @@ namespace RNAssistant.MockDemo
                 try
                 {
                     await ExerciseFailedTurnPersistenceAsync().ConfigureAwait(false);
+                    await ExerciseLiveToolArtifactProjectionAsync().ConfigureAwait(false);
                     Console.WriteLine("PASS artifact-commit-projection");
                     return 0;
                 }
@@ -217,6 +218,54 @@ namespace RNAssistant.MockDemo
                     !string.Equals((string)artifact["resourceUri"], (string)committedReference["uri"], StringComparison.Ordinal)))
                 {
                     throw new InvalidOperationException("provider failure rolled back the committed resource");
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, true);
+                }
+            }
+        }
+
+        private static async Task ExerciseLiveToolArtifactProjectionAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "RNAssistant.MockDemo.LiveArtifact." + Guid.NewGuid().ToString("N"));
+            try
+            {
+                var terminalReturned = false;
+                var liveArtifactProjected = false;
+                var llm = new ScriptedDemoLlm("Excel");
+                var controller = new AssistantController(
+                    FakeOfficeAdapter.ForHost("Excel"),
+                    AppDataPaths.CreateForRoot(root),
+                    llm.CompleteAsync);
+                var bridge = new MockBridgeHost(controller, eventJson =>
+                {
+                    var message = JObject.Parse(eventJson);
+                    if (!string.Equals((string)message["type"], "chatState", StringComparison.Ordinal) ||
+                        !string.Equals((string)message["scope"], "full", StringComparison.Ordinal)) return;
+                    var artifacts = message["payload"]?["artifacts"] as JArray;
+                    if (!terminalReturned && artifacts != null && artifacts.OfType<JObject>().Any(artifact =>
+                        string.Equals((string)artifact["kind"], ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        liveArtifactProjected = true;
+                    }
+                });
+                var init = await SendAsync(bridge, "live-init", "init", null, null).ConfigureAwait(false);
+                var token = Payload(init)["bridgeToken"].ToString();
+                var chatId = Payload(init)["activeChatId"].ToString();
+                await SendAsync(
+                    bridge,
+                    "live-send",
+                    "sendChat",
+                    new { chatId = chatId, text = "Создай HTML dashboard с таблицей продаж." },
+                    token).ConfigureAwait(false);
+                terminalReturned = true;
+                if (!liveArtifactProjected)
+                {
+                    throw new InvalidOperationException("tool artifact was not projected before terminal response");
                 }
             }
             finally

@@ -9,6 +9,17 @@ Next step for tools: 11T1 переносит exact existing Excel find/replace f
 Required context: [master Phase 11T](STABILIZATION_MASTER_PLAN.md), [11T0 evidence](PHASE_11T0_EXCEL_BOUND_CUTOVER.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current Excel find/replace owner.
 Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1 and 11T0 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Remaining Office tools still move family-by-family; the final switch removes `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. Excel read/write compatibility commands/backends and execution-time target fallback are gone. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION and WQ-EXCEL are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
+Live artifact projection correction (2026-08-31): после каждого durable
+`tool_result` controller теперь ставит в WebView очередь существующую full
+revision-guarded chat projection до дальнейшего progress/следующего model step.
+Поэтому chart/tool-result, Plan, Task List и HTML artifacts появляются во время
+работы, а не только в terminal response; confirmation continuation использует тот
+же путь. Новый progress payload, store, transport или client lineage не добавлены.
+Web artifact test 4/4, focused bridge cases 1/1 + 1/1 и реальный MockDemo controller
+artifact test pass; только три прежних PDF platform warnings. Windows WebView2/
+Office не проверялись, текущий 11T1 next step и остальные R51 gates не меняются.
+[Evidence](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md).
+
 Phase 11T0/7D bound Excel cutover (2026-08-31): desktop, VSTO and native
 composition now bind one exact workbook to `ExcelDocumentSession`, capture the
 current `RuntimeKey` once for that object lifetime and expose one direct

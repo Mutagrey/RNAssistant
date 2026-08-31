@@ -596,11 +596,15 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "confirm response ok");
             AssertEqual("chat-confirm", controller.LastChatId, "confirm chat id");
             AssertTrue(!string.IsNullOrWhiteSpace(controller.LastRunId), "confirm run id forwarded");
-            AssertEqual(1, progressMessages.Count, "confirm progress count");
+            AssertEqual(2, progressMessages.Count, "confirm progress and live state count");
             var progress = JObject.Parse(progressMessages[0]);
             AssertEqual("chat-confirm", progress["payload"]["chatId"].Value<string>(), "confirm progress chat id");
             AssertEqual(controller.LastRunId, progress["payload"]["runId"].Value<string>(), "confirm progress run id");
             AssertEqual("executing", progress["payload"]["phase"].Value<string>(), "confirm progress phase");
+            var chatState = JObject.Parse(progressMessages[1]);
+            AssertEqual("chatState", chatState["type"].Value<string>(), "confirm live chat state type");
+            AssertEqual("full", chatState["scope"].Value<string>(), "confirm live chat state scope");
+            AssertEqual("chat-confirm", chatState["payload"]["activeChatId"].Value<string>(), "confirm live chat state id");
         }
 
         private static void BridgeUsesTypedChatModePayload()

@@ -58,6 +58,14 @@ per-chat revision guard. Model execution does not wait for a WebView acknowledge
 a missed best-effort delivery is recovered by selecting/reloading the chat and never
 affects durability.
 
+The same boundary applies to artifacts created while a conversation run is active.
+After each durable `tool_result` checkpoint, including a continuation after explicit
+confirmation, the controller queues the complete revisioned chat projection before
+reporting further progress or starting the next model step. Thus chart/tool-result,
+Plan, Task List and HTML artifacts do not wait for the terminal bridge response.
+This reuses the same full projection and revision guard; progress messages are not a
+second artifact transport.
+
 Progress text, the local pending card, a generated chat title and model output are
 not evidence that the resource was committed. Conversely, a model/provider error
 after this boundary does not return the resource to draft state.

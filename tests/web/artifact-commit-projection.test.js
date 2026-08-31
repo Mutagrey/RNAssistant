@@ -73,7 +73,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   const controller = fs.readFileSync(
     path.join(root, "src/RNAssistant.Office/Controller/AssistantController.ChatExecution.cs"), "utf8");
   const save = controller.indexOf("_conversationStore.Save(session);");
-  const queue = controller.indexOf("chatStateChanged(ChatState(session));", save);
+  const queue = controller.indexOf("ReportExternalChatState(chatStateChanged, session);", save);
   const helper = controller.indexOf("_attachmentAnalysisService.EnsureAsync(", queue);
   const primary = controller.indexOf("_conversationRunService.ExecuteAsync(", helper);
   assert.ok(save >= 0 && queue > save && helper > queue && primary > helper,
@@ -92,4 +92,23 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   console.log("PASS artifact commit: production boundary and lifecycle labels are wired atomically");
 }
 
-console.log("OK 3/3");
+{
+  const execution = fs.readFileSync(
+    path.join(root, "src/RNAssistant.Office/Controller/AssistantController.ChatExecution.cs"), "utf8");
+  const liveComment = execution.indexOf("artifacts do not wait for run completion");
+  const checkpoint = execution.lastIndexOf("PersistRunCheckpoint(session, runId, phase);", liveComment);
+  const liveProjection = execution.indexOf("ReportExternalChatState(chatStateChanged, session);", liveComment);
+  const progress = execution.indexOf("ReportExternalProgress(progress, phase, message, activity);", liveProjection);
+  assert.ok(liveComment >= 0 && checkpoint >= 0 && checkpoint < liveProjection && liveProjection < progress,
+    "durable tool-result checkpoint publishes the full artifact projection before progress continues");
+
+  const confirmation = fs.readFileSync(
+    path.join(root, "src/RNAssistant.Office/Controller/AssistantController.Agent.cs"), "utf8");
+  const confirmationCheckpoint = confirmation.indexOf("PersistRunCheckpoint(session, runId, phase);");
+  const confirmationProjection = confirmation.indexOf("ReportExternalChatState(chatStateChanged, session);", confirmationCheckpoint);
+  assert.ok(confirmationCheckpoint >= 0 && confirmationProjection > confirmationCheckpoint,
+    "confirmation continuation publishes the same live artifact projection");
+  console.log("PASS artifact commit: tool-result artifacts publish before terminal response");
+}
+
+console.log("OK 4/4");

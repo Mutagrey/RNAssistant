@@ -28,7 +28,8 @@ namespace RNAssistant.Office
             string chatId = null,
             Action<string, string, ChatActivity> progress = null,
             CancellationToken cancellationToken = default(CancellationToken),
-            string runId = null)
+            string runId = null,
+            Action<ChatStateResponse> chatStateChanged = null)
         {
             PendingAgentTool pending;
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
@@ -113,6 +114,10 @@ namespace RNAssistant.Office
                         AnnotateRunMessages(session, firstRunMessageIndex, runId);
                     }
                     PersistRunCheckpoint(session, runId, phase);
+                    if (string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ReportExternalChatState(chatStateChanged, session);
+                    }
                     ReportExternalProgress(progress, phase, message, activity);
                 };
 

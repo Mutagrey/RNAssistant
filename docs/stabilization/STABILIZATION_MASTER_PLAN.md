@@ -2495,6 +2495,8 @@ unknown effect or persist a second diagnostic index. Default export remains reda
 Artifact foundation отдельно доказывает: draft отсутствует в durable projection и
 context; CAS/message/artifact save завершается и monotonic UI projection ставится в
 очередь до первого fake model transport call без ожидания WebView acknowledgement;
+каждый последующий durable `tool_result` ставит ту же full revisioned projection в
+очередь до следующего progress/model step, включая confirmation continuation;
 provider failure после commit сохраняет user turn и
 resources; message cards остаются pinned к exact revision; immutable uploads не
 получают in-place mutation по расширению; stale projection не заменяет новую.
