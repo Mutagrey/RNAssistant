@@ -749,6 +749,92 @@ namespace RNAssistant.Harness
                 gateway, session, duplicateUri, ResourceRepresentations.Text, null, 128));
         }
 
+        private static void ResourceGatewayPreservesEmptyTextRepresentations()
+        {
+            var emptyHash = TextPatternEngine.Sha256(string.Empty);
+            var attachment = new ChatAttachment
+            {
+                Id = "empty-text",
+                Kind = "text",
+                FileName = "empty.txt",
+                ContentType = "text/plain",
+                ExtractedText = string.Empty,
+                ExtractedCharCount = 0,
+                ExtractedTextSha256 = emptyHash,
+                ExtractedTextByteLength = 0,
+                ContentSha256 = emptyHash,
+                ContentByteLength = 0
+            };
+            var message = new ChatMessage
+            {
+                Id = "empty-source",
+                Attachments = new List<ChatAttachment> { attachment }
+            };
+            var artifact = new ChatArtifact
+            {
+                Id = "attachment_empty-text",
+                Kind = ChatArtifactKinds.Attachment,
+                Title = attachment.FileName,
+                MimeType = attachment.ContentType,
+                SourceMessageId = message.Id,
+                ContentSha256 = attachment.ContentSha256,
+                ContentByteLength = attachment.ContentByteLength,
+                MetadataJson = "{\"attachmentId\":\"empty-text\"}"
+            };
+            var whitespace = " \r\n\t ";
+            var whitespaceArtifact = new ChatArtifact
+            {
+                Id = "whitespace-markdown",
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "Whitespace.md",
+                MimeType = "text/markdown",
+                InlineText = whitespace,
+                ContentSha256 = TextPatternEngine.Sha256(whitespace)
+            };
+            var unavailable = new ChatArtifact
+            {
+                Id = "missing-markdown-body",
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "Missing.md",
+                MimeType = "text/markdown",
+                InlineText = null,
+                ContentSha256 = new string('f', 64)
+            };
+            var session = new ChatSession
+            {
+                Messages = new List<ChatMessage> { message },
+                Artifacts = new List<ChatArtifact> { artifact, whitespaceArtifact, unavailable }
+            };
+            var gateway = new ResourceGatewayService();
+            var emptyUri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
+
+            var empty = ReadResource(
+                gateway, session, emptyUri, ResourceRepresentations.Text, null, 128).Result;
+            AssertEqual(string.Empty, empty.Text, "empty attachment text is preserved");
+            AssertEqual(0, empty.TotalCharacters, "empty attachment length remains exact");
+            AssertTrue(empty.Complete && !empty.Truncated, "empty attachment read is complete");
+            AssertEqual(emptyHash, empty.ContentSha256, "empty attachment keeps representation hash");
+            var emptyPage = new ArtifactViewerService(gateway).ReadPage(session, emptyUri, null);
+            AssertTrue(emptyPage.Complete && emptyPage.FullReadAllowed,
+                "empty exact text remains viewable and downloadable");
+
+            var whitespaceRead = ReadResource(
+                gateway,
+                session,
+                ChatResourceUri.CreateArtifactRevisionUri(session, whitespaceArtifact),
+                ResourceRepresentations.Text,
+                null,
+                128).Result;
+            AssertEqual(whitespace, whitespaceRead.Text, "whitespace-only Markdown is not treated as absent");
+            RuntimeThrows<InvalidOperationException>(() => ReadResource(
+                gateway,
+                session,
+                ChatResourceUri.CreateArtifactRevisionUri(session, unavailable),
+                ResourceRepresentations.Text,
+                null,
+                128));
+        }
+
         private static void LiveOfficeAndVbaResourcesAreBoundedAndGuarded()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

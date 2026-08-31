@@ -133,6 +133,7 @@ namespace RNAssistant.Office.Services
                     }
                     var readLimit = Math.Min(MaximumSearchCharactersPerArtifact, remaining);
                     var text = ReadText(session, artifact, readLimit);
+                    if (text == null) continue;
                     scannedCharacters += text.Length;
                     var textIndex = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
                     if (textIndex >= 0)
@@ -223,7 +224,7 @@ namespace RNAssistant.Office.Services
             }
 
             var content = ReadText(session, artifact, int.MaxValue);
-            if (string.IsNullOrWhiteSpace(content))
+            if (content == null)
             {
                 throw new InvalidOperationException(
                     "Resource representation is unavailable: " + exactUri + " (" + representation + ").");
@@ -329,21 +330,28 @@ namespace RNAssistant.Office.Services
 
         private string ReadText(ChatSession session, ChatArtifact artifact, int maxChars)
         {
-            if (artifact == null || maxChars <= 0) return string.Empty;
+            if (artifact == null || maxChars <= 0) return null;
             var attachment = FindExactAttachment(session, artifact);
-            if (attachment == null && !string.IsNullOrWhiteSpace(AttachmentId(artifact))) return string.Empty;
+            if (attachment == null && !string.IsNullOrWhiteSpace(AttachmentId(artifact))) return null;
             if (attachment != null)
             {
+                var hasExtractedText = attachment.ExtractedText != null ||
+                    attachment.ExtractedCharCount > 0 ||
+                    !string.IsNullOrWhiteSpace(attachment.ExtractedTextSha256) &&
+                    attachment.ExtractedTextByteLength.HasValue;
+                if (!hasExtractedText) return null;
                 var text = _readAttachmentText == null
-                    ? attachment.ExtractedText ?? string.Empty
+                    ? attachment.ExtractedText
                     : _readAttachmentText(attachment, maxChars) ?? string.Empty;
+                if (text == null) return null;
                 return text.Length <= maxChars ? text : text.Substring(0, maxChars);
             }
-            if (string.IsNullOrWhiteSpace(artifact.InlineText) && _loadArtifactBody != null)
+            if (artifact.InlineText == null && _loadArtifactBody != null)
             {
                 _loadArtifactBody(session, artifact.Id);
             }
-            var body = artifact.InlineText ?? string.Empty;
+            var body = artifact.InlineText;
+            if (body == null) return null;
             return body.Length <= maxChars ? body : body.Substring(0, maxChars);
         }
 

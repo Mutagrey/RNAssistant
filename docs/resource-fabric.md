@@ -51,6 +51,11 @@ provider never chooses an arbitrary first artifact.
 
 Every provider implements bounded `list`, `resolve`, `search`, and `read(ResourceReadRequest)`. The read request carries one `ResourceRef`, representation, opaque cursor, and character limit, so revision evidence cannot be lost between routing and the provider. Immutable text uses an offset internally because its URI is already pinned. Live Office/VBA chunks bind the internal position to the content hash; collection pages bind it to a deterministic collection fingerprint. Model-facing list/read results expose only the usable `nextCursor`, never the current-page cursor or raw offset. Continuation copies it unchanged into `cursor` only for the same operation and exact list query or resource representation. Reusing a cursor after drift fails with retryable `resource_revision_changed`; a cursor from another operation/query/resource fails non-retryably and must be omitted to restart.
 
+Text availability is based on exact body/extraction evidence, not on whether the
+text contains non-whitespace characters. A valid empty or whitespace-only immutable
+representation is returned as complete exact content; a missing body still fails
+closed.
+
 Search v1 is bounded case-insensitive literal search plus provider structure. Regex, embeddings, and a durable vector index are intentionally absent until they have a concrete use and bounded semantics. Skills are trusted instructions, not untrusted document resources: their complete revision-matched bodies are read through the unified `common.capabilities_read` id path shared with tool schemas. HTML files/data and plans remain subresources of the chat provider so ownership, revision lineage, and CAS checks are not duplicated. The existing host-neutral `IOfficeApplicationAdapter` supplies document/VBA reads; a second `IOfficeResourceAdapter` would only repeat that boundary.
 
 ## Conversation loop
