@@ -97,7 +97,8 @@ namespace RNAssistant.Harness
             {
                 adapter.AddExcelTableForTest(
                     "Data", "A1:B4", "SalesTable", true, string.Empty);
-                adapter.ExecuteTool(Command("excel.upsert_chart", "sheet", "Data", "chartName", "SalesChart"));
+                adapter.AddExcelChartForTest(
+                    "Data", "A1:B4", "SalesChart");
                 var session = NewSession(adapter);
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 foreach (var kind in new[] { "workbook", "sheets", "charts", "tables", "names", "shapes" })

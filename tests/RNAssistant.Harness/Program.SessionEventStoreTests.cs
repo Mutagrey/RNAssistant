@@ -29,18 +29,18 @@ namespace RNAssistant.Harness
     {
         private static void KernelSummaryReplaysOutcome(string outcome)
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
             {
                 var store = new ChatStore(FixturePaths.Value);
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "replay-run", TurnId = "replay-turn", RuntimeId = "runtime" };
                 store.Save(session);
-                if (outcome != "ok") adapter.QueueResult("excel.upsert_chart", ToolResult.Fail("Write failed", null,
+                if (outcome != "ok") adapter.QueueResult("word.replace_text", ToolResult.Fail("Write failed", null,
                     outcome == "unknown" ? "tool_effect_uncertain" : "write_rejected", false));
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.upsert_chart"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.upsert_chart\",\"arguments\":{\"chartName\":\"ReplayChart\"}}]}",
+                    LoadToolSchemaResponse("word.replace_text"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"word.replace_text\",\"arguments\":{\"find\":\"revenue\",\"replace\":\"sales\"}}]}",
                     "{\"message\":\"Everything done\",\"tool_calls\":[]}"
                 });
                 var modelCalls = 0;
@@ -74,7 +74,7 @@ namespace RNAssistant.Harness
                 AssertEqual(outcome == "ok" ? 1 : 0, result.RunViewState.UnverifiedWrites, "successful legacy write is not called verified");
                 AssertEqual(outcome == "error" ? 1 : 0, result.RunViewState.FailedCalls, "error call count");
                 AssertEqual(outcome == "error" ? 0 : 1, result.RunViewState.UnknownEffects, "unknown effect count");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.upsert_chart"), "single execution, no retry");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "word.replace_text"), "single execution, no retry");
                 AssertTrue(replay.LastRun.KernelState.InFlightTool == null, "terminal clears in-flight evidence");
             });
         }

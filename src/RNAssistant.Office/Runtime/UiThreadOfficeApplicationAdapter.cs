@@ -19,6 +19,7 @@ namespace RNAssistant.Office
         private readonly IExcelSheetBackend _excelSheetBackend;
         private readonly IExcelRangeMutationBackend _excelRangeMutationBackend;
         private readonly IExcelTableBackend _excelTableBackend;
+        private readonly IExcelChartBackend _excelChartBackend;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
@@ -32,6 +33,7 @@ namespace RNAssistant.Office
             IExcelSheetBackend excelSheetBackend = null;
             IExcelRangeMutationBackend excelRangeMutationBackend = null;
             IExcelTableBackend excelTableBackend = null;
+            IExcelChartBackend excelChartBackend = null;
             _dispatcher.Invoke(delegate
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
@@ -44,6 +46,7 @@ namespace RNAssistant.Office
                 excelRangeMutationBackend = excel == null
                     ? null : excel.ExcelRangeMutationBackend;
                 excelTableBackend = excel == null ? null : excel.ExcelTableBackend;
+                excelChartBackend = excel == null ? null : excel.ExcelChartBackend;
                 return true;
             });
             _documentSession = documentSession;
@@ -53,6 +56,7 @@ namespace RNAssistant.Office
             _excelSheetBackend = excelSheetBackend;
             _excelRangeMutationBackend = excelRangeMutationBackend;
             _excelTableBackend = excelTableBackend;
+            _excelChartBackend = excelChartBackend;
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
@@ -82,6 +86,7 @@ namespace RNAssistant.Office
             get { return _excelRangeMutationBackend; }
         }
         public IExcelTableBackend ExcelTableBackend { get { return _excelTableBackend; } }
+        public IExcelChartBackend ExcelChartBackend { get { return _excelChartBackend; } }
 
         public string GetDocumentSnapshot(int maxChars)
         {

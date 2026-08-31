@@ -38,7 +38,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Tool Result v1 / strict JSON | `Program.ToolResultWireTests.cs`; projection checks in `Program.ToolRuntimeTests.cs` | `tool result wire:`, `tool result materialization:` |
 | Native ToolRuntime / typed contracts and effect evidence | `Program.ToolRuntimeTests.cs`; native read in `Program.ResourceGatewayTests.cs` | `tool runtime:` |
 | Immutable ToolPack authority / finite core / atomic callable admission | `Program.ToolDiscoveryTests.cs`; confirmation and policy regressions in `Program.SimpleAgentTests.cs` and `Program.AgentSafetyTests.cs` | `tool pack:`, `agent: confirmation`, `protocol context: batch safety uses local authority` |
-| Typed Excel reads/writes/range/table mutations / native, HTML, bounds and effect evidence | `Program.ExcelReadTests.cs`, `Program.ExcelWriteTests.cs`, `Program.ExcelRangeMutationTests.cs`, `Program.ExcelTableTests.cs`; paired Agent regression in `Program.AgentSafetyTests.cs`; host access in `Program.ParserDesktopTests.cs` | `excel read:`, `excel write:`, `excel range mutation:`, `excel table:`, `protocol context: loop tracks only accepted calls`, `tools: html workspace updates session`, `host runtime:` |
+| Typed Excel reads/writes/range/table/chart families / native, HTML, bounds and effect evidence | `Program.ExcelReadTests.cs`, `Program.ExcelWriteTests.cs`, `Program.ExcelRangeMutationTests.cs`, `Program.ExcelTableTests.cs`, `Program.ExcelChartTests.cs`; paired Agent regression in `Program.AgentSafetyTests.cs`; host access in `Program.ParserDesktopTests.cs` | `excel read:`, `excel write:`, `excel range mutation:`, `excel table:`, `excel chart:`, `protocol context: loop tracks only accepted calls`, `tools: html workspace updates session`, `host runtime:` |
 | Host document gate / neutral bound session / direct context and catalog reads | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
 | Excel identity owner/helper protocol (no Office execution) | `Program.ParserDesktopTests.cs`; source-linked `OfficeHosts.Qualification` | `excel identity probe:` |
 | Qualification pack/catalog/runner/event/build authority | `Program.QualificationTests.cs`; strict manifest/coverage, fake action/verifier ports, pause/replay/fault barriers, real chat CAS and signed exact-build admission | `qualification:` |
@@ -180,6 +180,17 @@ the public id, so dual dispatch is observable. Real Excel `xlNo` header/range
 semantics, style localization, overlap/protection, rollback and partial COM effects
 remain WQ-EXCEL gates. See
 [Phase 11T4 evidence](../../docs/stabilization/PHASE_11T4_EXCEL_TABLES.md).
+
+## Typed Excel chart owner (Phase 11T5)
+
+`excel chart:` covers exact native ownership for `create_chat_chart`, `upsert_chart`
+and `delete_chart`, chat-artifact source reads, create/update/delete/default/strict-mode
+semantics, ambiguous names, collection/range bounds, verified no-change/change,
+pre-dispatch drift, unknown-after-dispatch/read-back divergence, dry-run and bound
+owner-STA/closed-workbook behavior. The fake generic chart route fails closed. These
+tests do not execute Excel Interop; live series formulas, axes/types, generated names,
+protection and partial COM effects remain WQ-EXCEL gates. See
+[Phase 11T5 evidence](../../docs/stabilization/PHASE_11T5_EXCEL_CHARTS.md).
 
 ## Typed VBA mutation outcome (Phase 6D)
 

@@ -3,7 +3,7 @@
 Дата фиксации: 2026-08-30; статус маршрута обновлён 2026-08-31.
 
 Статус: ordered migration route, не описание уже реализованной архитектуры. Phase
-10A–10D, WQ-A1–A5 и 11T0/7D–11T4 Excel switches завершены host-neutral. По
+10A–10D, WQ-A1–A5 и 11T0/7D–11T5 Excel switches завершены host-neutral. По
 принятому 2026-08-31 риску WQ0 не блокировал implementation; Windows evidence
 остаётся не выполненным. Section B и финальное удаление active legacy обязательны до Phase 12.
 Новые optional product capabilities этим не допускаются. Если другое предложение
@@ -126,7 +126,8 @@ effect, read-back и `ok/error/unknown`. Host backend получает bound doc
 3. [x] clear/sort/filter/format range — 11T3 direct typed/bound switch; host
    branches/methods and replaced helpers removed;
 4. [x] tables — 11T4 direct typed/bound creation; host branch/method removed;
-5. charts.
+5. [x] charts — 11T5 direct typed/bound chat source, upsert and delete; host
+   branches/methods and replaced chart helpers removed.
 
 Не создавать общий `IOfficeMutationService`: у разных domains различаются guards,
 verification и recovery semantics. Общими остаются `ToolRuntime`, `HostRuntime`,
@@ -186,6 +187,7 @@ Active legacy означает второй execution/catalog/result/history pat
 - [x] удалить Excel add/rename generic host branches/helpers в 11T2;
 - [x] удалить Excel clear/sort/filter/format generic host branches/helpers в 11T3;
 - [x] удалить Excel add-table generic host branch/method в 11T4;
+- [x] удалить Excel chat-chart/upsert/delete generic host branches/helpers в 11T5;
 - удалить VBA mutation/package adapters после direct typed host/backend switch;
 - удалить `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` и
   `ToolResultUiProjection` после последнего catalog/result/UI consumer;

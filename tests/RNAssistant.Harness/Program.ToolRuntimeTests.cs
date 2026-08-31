@@ -549,16 +549,16 @@ namespace RNAssistant.Harness
                 new { Source = LegacyResult.PartialFailure("Write may have changed state"), Status = ToolResultStatus.Unknown }
             };
             foreach (var item in cases)
-                WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+                WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
                 {
                     item.Source.ModelResourceRefs = new ResourceRef[] { null };
-                    var outcome = LegacyToolOutcomeAdapter.Map(new ToolPolicySnapshot("excel.upsert_chart", "revision", true), item.Source);
+                    var outcome = LegacyToolOutcomeAdapter.Map(new ToolPolicySnapshot("word.replace_text", "revision", true), item.Source);
                     RuntimeThrows<ArgumentException>(() => LegacyToolResultAdapter.Materialize(item.Source, outcome));
-                    adapter.QueueResult("excel.upsert_chart", item.Source);
+                    adapter.QueueResult("word.replace_text", item.Source);
                     var responses = new Queue<string>(new[]
                     {
-                        LoadToolSchemaResponse("excel.upsert_chart"),
-                        "{\"message\":\"Chart\",\"tool_calls\":[{\"name\":\"excel.upsert_chart\",\"arguments\":{\"chartName\":\"LegacyChart\"}}]}"
+                        LoadToolSchemaResponse("word.replace_text"),
+                        "{\"message\":\"Replace\",\"tool_calls\":[{\"name\":\"word.replace_text\",\"arguments\":{\"find\":\"revenue\",\"replace\":\"sales\"}}]}"
                     });
                     var modelCalls = 0;
                     LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -571,14 +571,14 @@ namespace RNAssistant.Harness
                     var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                         ChatModes.Agent, "Create chart", session, NewContext(adapter),
                         new AppSettings { AutoConfirmToolActions = true }, tools, null).GetAwaiter().GetResult();
-                    AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.upsert_chart"), "conversion failure never retries execution");
+                    AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "word.replace_text"), "conversion failure never retries execution");
                     AssertEqual(2, modelCalls, "conversion failure never triggers model repair");
                     var view = JObject.FromObject(result)["RunViewState"];
                     AssertEqual(item.Status == ToolResultStatus.Ok ? 1 : 0, (int)view["UnverifiedWrites"], "legacy success is preserved without fabricated verification");
                     AssertEqual(item.Status == ToolResultStatus.Error ? 1 : 0, (int)view["FailedCalls"], "known error count survives conversion failure");
                     AssertEqual(item.Status == ToolResultStatus.Error ? 0 : 1, (int)view["UnknownEffects"], "conversion failure creates no extra unknown effect");
                     var message = session.Messages.Single(entry => entry.ProtocolMessage && entry.Role != "assistant" &&
-                        entry.ToolName == "excel.upsert_chart");
+                        entry.ToolName == "word.replace_text");
                     ToolResultWireReadResult wire;
                     string error;
                     AssertTrue(ToolResultHistoryReader.TryRead(message, out wire, out error), "failed projection still closes the accepted exchange");

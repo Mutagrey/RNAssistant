@@ -29,6 +29,7 @@ namespace RNAssistant.Office.Runtime
             ExcelSheetToolAdapter excelSheets,
             ExcelRangeMutationToolAdapter excelRangeMutations,
             ExcelTableToolAdapter excelTables,
+            ExcelChartToolAdapter excelCharts,
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
         {
@@ -96,6 +97,15 @@ namespace RNAssistant.Office.Runtime
                     handler = new ExcelTableToolHandler(
                         excelTables, hostRuntime, session);
                 }
+                else if (ExcelChartToolIds.Owns(registration.Descriptor.Id))
+                {
+                    if (excelCharts == null || hostRuntime == null)
+                        throw new InvalidOperationException(
+                            "Excel chart handler dependencies are unavailable.");
+                    handler = new ExcelChartToolHandler(
+                        registration.Descriptor.Id, excelCharts,
+                        hostRuntime, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -118,7 +128,8 @@ namespace RNAssistant.Office.Runtime
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
-                ExcelRangeMutationToolIds.Owns(toolId) || ExcelTableToolIds.Owns(toolId);
+                ExcelRangeMutationToolIds.Owns(toolId) ||
+                ExcelTableToolIds.Owns(toolId) || ExcelChartToolIds.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -140,6 +151,8 @@ namespace RNAssistant.Office.Runtime
             if (ExcelRangeMutationToolIds.Owns(toolId))
                 return ExcelRangeMutationToolHandler.BindingFor(toolId);
             if (ExcelTableToolIds.Owns(toolId)) return ExcelTableToolHandler.Binding;
+            if (ExcelChartToolIds.Owns(toolId))
+                return ExcelChartToolHandler.BindingFor(toolId);
             return null;
         }
 

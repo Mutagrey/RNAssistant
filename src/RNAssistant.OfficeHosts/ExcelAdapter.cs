@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using Excel = Microsoft.Office.Interop.Excel;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
@@ -28,6 +26,7 @@ namespace RNAssistant.OfficeHosts
         private readonly ExcelSheetInteropBackend _excelSheetBackend;
         private readonly ExcelRangeMutationInteropBackend _excelRangeMutationBackend;
         private readonly ExcelTableInteropBackend _excelTableBackend;
+        private readonly ExcelChartInteropBackend _excelChartBackend;
         private readonly string _qualificationOwnerLabel;
 
         public ExcelAdapter(
@@ -51,6 +50,7 @@ namespace RNAssistant.OfficeHosts
             _excelRangeMutationBackend =
                 new ExcelRangeMutationInteropBackend(_documentSession);
             _excelTableBackend = new ExcelTableInteropBackend(_documentSession);
+            _excelChartBackend = new ExcelChartInteropBackend(_documentSession);
         }
 
         public string HostName { get { return "Excel"; } }
@@ -68,6 +68,7 @@ namespace RNAssistant.OfficeHosts
             get { return _excelRangeMutationBackend; }
         }
         public IExcelTableBackend ExcelTableBackend { get { return _excelTableBackend; } }
+        public IExcelChartBackend ExcelChartBackend { get { return _excelChartBackend; } }
 
         public string DocumentKey { get { return _documentSession.StableDocumentId; } }
         public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
@@ -290,12 +291,6 @@ namespace RNAssistant.OfficeHosts
             {
                 switch (command.ToolId)
                 {
-                    case "excel.create_chat_chart":
-                        return CreateChatChart(command);
-                    case "excel.upsert_chart":
-                        return UpsertChart(command);
-                    case "excel.delete_chart":
-                        return DeleteChart(command);
                     case "excel.vba_list_project_components_internal":
                         return ListVbaProjectComponents();
                     case "excel.vba_read_module":
@@ -332,173 +327,6 @@ namespace RNAssistant.OfficeHosts
                     .IndexOf(".vba_", StringComparison.OrdinalIgnoreCase) >= 0;
                 return ToolResult.Fail(ex.Message, null, isVba ? "vba_access_error" : "office_tool_error", !isVba);
             }
-        }
-
-        private ToolResult CreateChatChart(ToolCommand command)
-        {
-            var workbook = RequireWorkbook();
-            var sheetName = ToolArgumentReader.String(command.Arguments, "sheet", null);
-            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
-            Excel.Worksheet sheet = null;
-            var range = ResolveSelectionRange(workbook);
-            if (!string.IsNullOrWhiteSpace(address))
-            {
-                sheet = ResolveSheet(sheetName);
-                range = sheet.Range[address];
-            }
-            if (range == null)
-            {
-                return ToolResult.Fail("Select an Excel range first or provide sheet/address.");
-            }
-
-            sheet = range.Worksheet as Excel.Worksheet;
-            var rowCount = Convert.ToInt32(range.Rows.Count);
-            var columnCount = Convert.ToInt32(range.Columns.Count);
-            var cellCount = rowCount * columnCount;
-            if (cellCount > 10000)
-            {
-                return ToolResult.Fail("Selected range is too large for a chat chart: " + cellCount + " cells. Limit is 10000 cells.");
-            }
-
-            var rows = RangeToRows(range);
-            var artifact = new ChartArtifactBuilder().Build(
-                rows.Select(r => (IList<object>)r).ToList(),
-                new ChartArtifactSource
-                {
-                    Host = "Excel",
-                    Workbook = workbook.Name,
-                    Sheet = sheet == null ? string.Empty : sheet.Name,
-                    Address = range.Address[false, false],
-                    SourceMode = string.IsNullOrWhiteSpace(address) ? "selection" : "range"
-                },
-                ToolArgumentReader.String(command.Arguments, "title", "Excel chart"),
-                ToolArgumentReader.String(command.Arguments, "chartType", "auto"));
-
-            return ToolResult.Ok(
-                "Chat chart artifact created: " + artifact.Title,
-                JsonConvert.SerializeObject(artifact));
-        }
-
-        private ToolResult UpsertChart(ToolCommand command)
-        {
-            var mode = ToolArgumentReader.String(command.Arguments, "mode", "upsert");
-            var chartName = ToolArgumentReader.String(command.Arguments, "chartName", string.Empty);
-            Excel.Worksheet existingSheet;
-            var existing = FindChartObject(
-                ToolArgumentReader.String(command.Arguments, "sheet", string.Empty),
-                chartName,
-                out existingSheet);
-            if (existing != null)
-            {
-                if (string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail("Chart already exists: " + chartName + ". Use mode=upsert or updateOnly.", null, "chart_already_exists", false);
-                }
-                return UpdateChart(command);
-            }
-            if (string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail(string.IsNullOrWhiteSpace(chartName)
-                    ? "chartName is required for mode=updateOnly."
-                    : "Chart not found: " + chartName + ". Use mode=upsert or createOnly.", null, "chart_not_found", false);
-            }
-            return AddChart(command);
-        }
-
-        private ToolResult AddChart(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var sourceRange = ToolArgumentReader.String(command.Arguments, "sourceRange", "A1:B6");
-            var title = ToolArgumentReader.String(command.Arguments, "title", "Chart");
-            var chartType = ToolArgumentReader.String(command.Arguments, "chartType", "line");
-            var left = ToolArgumentReader.Int32(command.Arguments, "left", 300);
-            var top = ToolArgumentReader.Int32(command.Arguments, "top", 20);
-            var width = ToolArgumentReader.Int32(command.Arguments, "width", 480);
-            var height = ToolArgumentReader.Int32(command.Arguments, "height", 300);
-
-            var source = sheet.Range[sourceRange];
-            var chartObjects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
-            var chartObject = chartObjects.Add(left, top, width, height);
-            var chart = chartObject.Chart;
-            chart.SetSourceData(source);
-            chart.ChartType = ResolveChartType(chartType);
-            chart.HasTitle = true;
-            chart.ChartTitle.Caption = title;
-            var chartName = ToolArgumentReader.String(command.Arguments, "chartName", string.Empty);
-            if (!string.IsNullOrWhiteSpace(chartName))
-            {
-                chartObject.Name = chartName;
-            }
-            ApplyChartLabels(command, sheet, chart);
-            return ToolResult.Ok("Chart added: " + chartObject.Name, JsonConvert.SerializeObject(ChartDetails(sheet, chartObject)));
-        }
-
-        private ToolResult UpdateChart(ToolCommand command)
-        {
-            Excel.Worksheet sheet;
-            var chartObject = ResolveChartObject(
-                ToolArgumentReader.String(command.Arguments, "sheet", string.Empty),
-                ToolArgumentReader.String(command.Arguments, "chartName", string.Empty),
-                out sheet);
-            var chart = chartObject.Chart;
-
-            if (command.Arguments.ContainsKey("sourceRange"))
-            {
-                var sourceRange = ToolArgumentReader.String(command.Arguments, "sourceRange", string.Empty);
-                if (!string.IsNullOrWhiteSpace(sourceRange))
-                {
-                    chart.SetSourceData(sheet.Range[sourceRange]);
-                }
-            }
-            if (command.Arguments.ContainsKey("chartType"))
-            {
-                var chartType = ToolArgumentReader.String(command.Arguments, "chartType", string.Empty);
-                if (!string.IsNullOrWhiteSpace(chartType))
-                {
-                    chart.ChartType = ResolveChartType(chartType);
-                }
-            }
-            if (command.Arguments.ContainsKey("title"))
-            {
-                var title = ToolArgumentReader.String(command.Arguments, "title", string.Empty);
-                var hasTitle = !string.IsNullOrWhiteSpace(title);
-                chart.HasTitle = hasTitle;
-                if (hasTitle)
-                {
-                    chart.ChartTitle.Caption = title;
-                }
-            }
-            if (command.Arguments.ContainsKey("left"))
-            {
-                chartObject.Left = ToolArgumentReader.Int32(command.Arguments, "left", Convert.ToInt32(chartObject.Left));
-            }
-            if (command.Arguments.ContainsKey("top"))
-            {
-                chartObject.Top = ToolArgumentReader.Int32(command.Arguments, "top", Convert.ToInt32(chartObject.Top));
-            }
-            if (command.Arguments.ContainsKey("width"))
-            {
-                chartObject.Width = Math.Max(40, ToolArgumentReader.Int32(command.Arguments, "width", Convert.ToInt32(chartObject.Width)));
-            }
-            if (command.Arguments.ContainsKey("height"))
-            {
-                chartObject.Height = Math.Max(40, ToolArgumentReader.Int32(command.Arguments, "height", Convert.ToInt32(chartObject.Height)));
-            }
-
-            ApplyChartLabels(command, sheet, chart);
-            return ToolResult.Ok("Chart updated: " + chartObject.Name, JsonConvert.SerializeObject(ChartDetails(sheet, chartObject)));
-        }
-
-        private ToolResult DeleteChart(ToolCommand command)
-        {
-            Excel.Worksheet sheet;
-            var chartObject = ResolveChartObject(
-                ToolArgumentReader.String(command.Arguments, "sheet", string.Empty),
-                ToolArgumentReader.String(command.Arguments, "chartName", string.Empty),
-                out sheet);
-            var chartName = chartObject.Name;
-            chartObject.Delete();
-            return ToolResult.Ok("Chart deleted: " + chartName, JsonConvert.SerializeObject(new { sheet = sheet.Name, chartName = chartName }));
         }
 
         private ToolResult ListVbaProjectComponents()
@@ -768,209 +596,6 @@ namespace RNAssistant.OfficeHosts
             return start == null ? range : start.Resize[rows, columns];
         }
 
-        private Excel.ChartObject ResolveChartObject(string sheetName, string chartName, out Excel.Worksheet resolvedSheet)
-        {
-            if (string.IsNullOrWhiteSpace(chartName))
-            {
-                throw new InvalidOperationException("chartName is required.");
-            }
-
-            var chart = FindChartObject(sheetName, chartName, out resolvedSheet);
-            if (chart != null) return chart;
-            throw new InvalidOperationException("Chart not found: " + chartName);
-        }
-
-        private Excel.ChartObject FindChartObject(string sheetName, string chartName, out Excel.Worksheet resolvedSheet)
-        {
-            resolvedSheet = null;
-            if (string.IsNullOrWhiteSpace(chartName)) return null;
-
-            var workbook = RequireWorkbook();
-            foreach (Excel.Worksheet sheet in workbook.Worksheets)
-            {
-                if (!string.IsNullOrWhiteSpace(sheetName) &&
-                    !string.Equals(sheet.Name, sheetName, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var chartObjects = (Excel.ChartObjects)sheet.ChartObjects(Type.Missing);
-                var chartCount = chartObjects.Count;
-                for (var i = 1; i <= chartCount; i++)
-                {
-                    var chartObject = (Excel.ChartObject)chartObjects.Item(i);
-                    if (string.Equals(chartObject.Name, chartName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        resolvedSheet = sheet;
-                        return chartObject;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private static object ChartDetails(Excel.Worksheet sheet, Excel.ChartObject chartObject)
-        {
-            var chart = chartObject.Chart;
-            return new
-            {
-                sheet = sheet == null ? string.Empty : sheet.Name,
-                name = chartObject.Name,
-                title = ChartTitle(chart),
-                chartType = chart.ChartType.ToString(),
-                xAxisTitle = AxisTitle(chart, Excel.XlAxisType.xlCategory),
-                yAxisTitle = AxisTitle(chart, Excel.XlAxisType.xlValue),
-                series = ChartSeries(chart),
-                left = chartObject.Left,
-                top = chartObject.Top,
-                width = chartObject.Width,
-                height = chartObject.Height
-            };
-        }
-
-        private static List<object> ChartSeries(Excel.Chart chart)
-        {
-            var result = new List<object>();
-            try
-            {
-                var collection = (Excel.SeriesCollection)chart.SeriesCollection(Type.Missing);
-                var seriesCount = collection.Count;
-                for (var i = 1; i <= seriesCount; i++)
-                {
-                    try
-                    {
-                        var series = (Excel.Series)collection.Item(i);
-                        result.Add(new { name = Convert.ToString(series.Name), formula = Convert.ToString(series.Formula) });
-                    }
-                    catch
-                    {
-                    }
-                }
-            }
-            catch
-            {
-            }
-            return result;
-        }
-
-        private static string AxisTitle(Excel.Chart chart, Excel.XlAxisType axisType)
-        {
-            var axis = PrimaryAxis(chart, axisType);
-            if (axis == null)
-            {
-                return string.Empty;
-            }
-
-            try
-            {
-                if (!axis.HasTitle)
-                {
-                    return string.Empty;
-                }
-
-                var title = axis.AxisTitle;
-                return title == null ? string.Empty : Convert.ToString(title.Caption);
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
-
-        private static Excel.Axis PrimaryAxis(Excel.Chart chart, Excel.XlAxisType axisType)
-        {
-            if (chart == null)
-            {
-                return null;
-            }
-
-            try
-            {
-                // Avoid asking Excel for an Axis COM proxy when this chart type has no such axis.
-                if (!Convert.ToBoolean(chart.HasAxis[axisType, Excel.XlAxisGroup.xlPrimary]))
-                {
-                    return null;
-                }
-
-                return chart.Axes(axisType, Excel.XlAxisGroup.xlPrimary) as Excel.Axis;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static void ApplyChartLabels(ToolCommand command, Excel.Worksheet sheet, Excel.Chart chart)
-        {
-            if (command.Arguments.ContainsKey("categoryLabelsRange"))
-            {
-                var labelsRange = ToolArgumentReader.String(command.Arguments, "categoryLabelsRange", string.Empty);
-                if (!string.IsNullOrWhiteSpace(labelsRange))
-                {
-                    var labels = sheet.Range[labelsRange];
-                    var collection = (Excel.SeriesCollection)chart.SeriesCollection(Type.Missing);
-                    var seriesCount = collection.Count;
-                    for (var i = 1; i <= seriesCount; i++)
-                    {
-                        ((Excel.Series)collection.Item(i)).XValues = labels;
-                    }
-                }
-            }
-
-            ApplyAxisTitle(command, chart, "xAxisTitle", Excel.XlAxisType.xlCategory);
-            ApplyAxisTitle(command, chart, "yAxisTitle", Excel.XlAxisType.xlValue);
-        }
-
-        private static void ApplyAxisTitle(ToolCommand command, Excel.Chart chart, string argumentName, Excel.XlAxisType axisType)
-        {
-            if (!command.Arguments.ContainsKey(argumentName))
-            {
-                return;
-            }
-
-            var title = ToolArgumentReader.String(command.Arguments, argumentName, string.Empty);
-            var axis = PrimaryAxis(chart, axisType);
-            if (axis == null)
-            {
-                if (string.IsNullOrWhiteSpace(title))
-                {
-                    return;
-                }
-                throw new InvalidOperationException("Chart does not support the requested axis title: " + argumentName);
-            }
-
-            var hasTitle = !string.IsNullOrWhiteSpace(title);
-            axis.HasTitle = hasTitle;
-            if (hasTitle)
-            {
-                var axisTitle = axis.AxisTitle;
-                if (axisTitle == null)
-                {
-                    throw new InvalidOperationException("Excel did not create the requested axis title: " + argumentName);
-                }
-                axisTitle.Caption = title;
-            }
-        }
-
-        private static string ChartTitle(Excel.Chart chart)
-        {
-            try
-            {
-                if (chart == null || !chart.HasTitle)
-                {
-                    return string.Empty;
-                }
-
-                var title = chart.ChartTitle;
-                return title == null ? string.Empty : Convert.ToString(title.Caption);
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
-
         private static object ToCellValue(JToken token)
         {
             if (token == null || token.Type == JTokenType.Null)
@@ -986,23 +611,6 @@ namespace RNAssistant.OfficeHosts
                 return token.Value<bool>();
             }
             return token.Type == JTokenType.String ? token.Value<string>() : token.ToString(Formatting.None);
-        }
-
-        private static Excel.XlChartType ResolveChartType(string value)
-        {
-            switch ((value ?? string.Empty).ToLowerInvariant())
-            {
-                case "column":
-                case "col":
-                    return Excel.XlChartType.xlColumnClustered;
-                case "bar":
-                    return Excel.XlChartType.xlBarClustered;
-                case "pie":
-                    return Excel.XlChartType.xlPie;
-                case "line":
-                default:
-                    return Excel.XlChartType.xlLineMarkers;
-            }
         }
 
         private static void AppendRangeValues(StringBuilder builder, Excel.Range range, int maxChars)

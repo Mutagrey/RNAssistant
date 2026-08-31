@@ -10,5 +10,6 @@ namespace RNAssistant.Office.Domains.Excel
         IExcelSheetBackend ExcelSheetBackend { get; }
         IExcelRangeMutationBackend ExcelRangeMutationBackend { get; }
         IExcelTableBackend ExcelTableBackend { get; }
+        IExcelChartBackend ExcelChartBackend { get; }
     }
 }

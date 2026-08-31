@@ -21,6 +21,7 @@ namespace RNAssistant.Office
         private IExcelSheetBackend _excelSheetBackend;
         private IExcelRangeMutationBackend _excelRangeMutationBackend;
         private IExcelTableBackend _excelTableBackend;
+        private IExcelChartBackend _excelChartBackend;
         private volatile bool _innerInitialized;
         private bool _disposed;
 
@@ -92,6 +93,8 @@ namespace RNAssistant.Office
                         ? null : excel.ExcelRangeMutationBackend;
                     _excelTableBackend = excel == null
                         ? null : excel.ExcelTableBackend;
+                    _excelChartBackend = excel == null
+                        ? null : excel.ExcelChartBackend;
                     // Publish the owner-initialized session once. Rebinding requires
                     // another adapter; metadata access must not queue behind a run.
                     _innerInitialized = true;
@@ -152,6 +155,15 @@ namespace RNAssistant.Office
             {
                 EnsureInitialized();
                 return _excelTableBackend;
+            }
+        }
+
+        public IExcelChartBackend ExcelChartBackend
+        {
+            get
+            {
+                EnsureInitialized();
+                return _excelChartBackend;
             }
         }
 

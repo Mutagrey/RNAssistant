@@ -112,6 +112,8 @@
     <Compile Include="Domains\Excel\ExcelReadContracts.cs" />
     <Compile Include="Domains\Excel\ExcelReadService.cs" />
     <Compile Include="Domains\Excel\ExcelBackendProvider.cs" />
+    <Compile Include="Domains\Excel\ExcelChartContracts.cs" />
+    <Compile Include="Domains\Excel\ExcelChartService.cs" />
     <Compile Include="Domains\Excel\ExcelFindReplaceContracts.cs" />
     <Compile Include="Domains\Excel\ExcelFindReplaceService.cs" />
     <Compile Include="Domains\Excel\ExcelRangeMutationContracts.cs" />
@@ -125,6 +127,9 @@
     <Compile Include="Tools\ExcelReadToolAdapter.cs" />
     <Compile Include="Tools\ExcelReadToolHandler.cs" />
     <Compile Include="Tools\ExcelReadToolIds.cs" />
+    <Compile Include="Tools\ExcelChartToolAdapter.cs" />
+    <Compile Include="Tools\ExcelChartToolHandler.cs" />
+    <Compile Include="Tools\ExcelChartToolIds.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolAdapter.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolHandler.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolIds.cs" />

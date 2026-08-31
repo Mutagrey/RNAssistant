@@ -12,7 +12,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
@@ -27,6 +27,9 @@ namespace RNAssistant.Harness
         internal const string ExcelRangeMutationApplyOperation = "range_mutation.apply";
         internal const string ExcelTableReadOperation = "table.read";
         internal const string ExcelTableAddOperation = "table.add";
+        internal const string ExcelChartSourceReadOperation = "chart.read_source";
+        internal const string ExcelChartReadOperation = "chart.read";
+        internal const string ExcelChartApplyOperation = "chart.apply";
 
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public readonly List<string> ExcelBackendCalls = new List<string>();
@@ -34,6 +37,8 @@ namespace RNAssistant.Harness
         public readonly List<ToolCommand> ExcelRangeMutationRequests =
             new List<ToolCommand>();
         public readonly List<ToolCommand> ExcelTableRequests =
+            new List<ToolCommand>();
+        public readonly List<ToolCommand> ExcelChartRequests =
             new List<ToolCommand>();
         public string VbaModuleType = "StdModule";
         public readonly List<string> RanMacros = new List<string>();
@@ -48,12 +53,15 @@ namespace RNAssistant.Harness
         public bool ExcelSheetThrowAfterMutation { get; set; }
         public bool ExcelRangeMutationThrowAfterMutation { get; set; }
         public bool ExcelTableThrowAfterMutation { get; set; }
+        public bool ExcelChartThrowAfterMutation { get; set; }
         public Func<ExcelSheetCollectionSnapshot, ExcelSheetCollectionSnapshot>
             ExcelSheetReadTransform { get; set; }
         public Func<ExcelRangeMutationSnapshot, ExcelRangeMutationSnapshot>
             ExcelRangeMutationReadTransform { get; set; }
         public Func<ExcelTableCollectionSnapshot, ExcelTableCollectionSnapshot>
             ExcelTableReadTransform { get; set; }
+        public Func<ExcelChartCollectionSnapshot, ExcelChartCollectionSnapshot>
+            ExcelChartReadTransform { get; set; }
         public int VbaReportedLineCountOffset { get; set; }
         public string DocumentKeyValue { get; set; }
         public string RuntimeDocumentKeyValue { get; set; }
@@ -63,6 +71,7 @@ namespace RNAssistant.Harness
         private ExcelSheetBackendException _nextExcelSheetApplyFailure;
         private ExcelRangeMutationBackendException _nextExcelRangeMutationApplyFailure;
         private ExcelTableBackendException _nextExcelTableApplyFailure;
+        private ExcelChartBackendException _nextExcelChartApplyFailure;
 
         private readonly string _hostName;
         private string _documentTitle;
@@ -171,6 +180,10 @@ namespace RNAssistant.Harness
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
         public IExcelTableBackend ExcelTableBackend
+        {
+            get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
+        }
+        public IExcelChartBackend ExcelChartBackend
         {
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
@@ -332,6 +345,13 @@ namespace RNAssistant.Harness
         {
             _nextExcelTableApplyFailure =
                 new ExcelTableBackendException(message, errorCode, retryable);
+        }
+
+        public void QueueExcelChartApplyFailure(
+            string message, string errorCode, bool retryable)
+        {
+            _nextExcelChartApplyFailure =
+                new ExcelChartBackendException(message, errorCode, retryable);
         }
 
         private void BeginExcelBackendCall(string operation)
@@ -728,57 +748,14 @@ namespace RNAssistant.Harness
                     "excel_public_replace_moved", false);
             }
 
-            if (string.Equals(command.ToolId, "excel.upsert_chart", StringComparison.OrdinalIgnoreCase))
-            {
-                var requestedSheet = Argument(command, "sheet", string.Empty);
-                var sheetName = string.IsNullOrWhiteSpace(requestedSheet) ? "Sheet1" : requestedSheet;
-                var chartName = Argument(command, "chartName", string.Empty);
-                var mode = Argument(command, "mode", "upsert");
-                FakeSheet existingSheet;
-                FakeChart existing;
-                var found = TryFindChart(requestedSheet, chartName, out existingSheet, out existing);
-                if (found && string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail("Chart already exists: " + chartName);
-                }
-                if (!found && string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail("Chart not found: " + chartName);
-                }
-                if (found)
-                {
-                    if (command.Arguments.ContainsKey("sourceRange")) existing.SourceRange = Argument(command, "sourceRange", existing.SourceRange);
-                    if (command.Arguments.ContainsKey("chartType")) existing.ChartType = Argument(command, "chartType", existing.ChartType);
-                    if (command.Arguments.ContainsKey("title")) existing.Title = Argument(command, "title", existing.Title);
-                    return ToolResult.Ok("updated chart " + existing.Name, JsonConvert.SerializeObject(existing));
-                }
-                var sheet = EnsureSheet(sheetName);
-                var created = new FakeChart
-                {
-                    Name = string.IsNullOrWhiteSpace(chartName) ? "Chart " + (sheet.Charts.Count + 1) : chartName,
-                    SourceRange = Argument(command, "sourceRange", "A1:B6"),
-                    ChartType = Argument(command, "chartType", "line"),
-                    Title = Argument(command, "title", "Chart")
-                };
-                sheet.Charts.Add(created);
-                return ToolResult.Ok("added chart " + created.Title, JsonConvert.SerializeObject(created));
-            }
+            if (ExcelChartToolIds.Owns(command.ToolId))
+                return ToolResult.Fail(
+                    "Public Excel chart tools are owned by ToolRuntime.", null,
+                    "excel_public_chart_moved", false);
 
             if (string.Equals(command.ToolId, ExcelReadToolIds.Inspect, StringComparison.OrdinalIgnoreCase))
             {
                 return ToolResult.Fail("Public excel.inspect is owned by ToolRuntime.", null, "excel_public_read_moved", false);
-            }
-
-            if (string.Equals(command.ToolId, "excel.delete_chart", StringComparison.OrdinalIgnoreCase))
-            {
-                FakeSheet chartSheet;
-                FakeChart chart;
-                if (!TryFindChart(Argument(command, "sheet", string.Empty), Argument(command, "chartName", string.Empty), out chartSheet, out chart))
-                {
-                    return ToolResult.Fail("Chart not found: " + Argument(command, "chartName", string.Empty));
-                }
-                chartSheet.Charts.Remove(chart);
-                return ToolResult.Ok("deleted chart " + chart.Name);
             }
 
             if (string.Equals(command.ToolId, "excel.add_table", StringComparison.OrdinalIgnoreCase))
@@ -786,11 +763,6 @@ namespace RNAssistant.Harness
                 return ToolResult.Fail(
                     "Public excel.add_table is owned by ToolRuntime.", null,
                     "excel_public_table_moved", false);
-            }
-
-            if (string.Equals(command.ToolId, "excel.create_chat_chart", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("listed " + command.ToolId, "[]");
             }
 
             if (string.Equals(command.ToolId, "excel.rename_sheet", StringComparison.OrdinalIgnoreCase))
@@ -1584,7 +1556,18 @@ namespace RNAssistant.Harness
             public string Name { get; set; }
             public string SourceRange { get; set; }
             public string ChartType { get; set; }
+            public bool HasTitle { get; set; }
             public string Title { get; set; }
+            public string CategoryLabelsRange { get; set; }
+            public bool HasXAxisTitle { get; set; }
+            public string XAxisTitle { get; set; }
+            public bool HasYAxisTitle { get; set; }
+            public string YAxisTitle { get; set; }
+            public double Left { get; set; }
+            public double Top { get; set; }
+            public double Width { get; set; }
+            public double Height { get; set; }
+            public int SeriesCount { get; set; }
         }
 
         private sealed class FakeSlide
