@@ -97,7 +97,9 @@
     hasRefreshableData: function (policy) {
       return boundDataSources(policy === "on_preview" ? "on_preview" : "").length > 0;
     },
-    switchChatMode: saveChatMode,
+    switchChatMode: function (mode) {
+      return typeof window.saveChatMode === "function" ? window.saveChatMode(mode) : false;
+    },
     submitPlanHandoff: submitPlanHandoff,
     downloadHtmlExport: downloadHtmlWorkspaceExport,
     downloadArtifactText: downloadArtifactText,

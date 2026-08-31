@@ -209,8 +209,28 @@ function send(type, payload) {
       return;
     }
 
-    state.pending[id] = { resolve: resolve, reject: reject, type: type, payload: payload || {} };
-    window.chrome.webview.postMessage({ id: id, type: type, bridgeToken: state.bridgeToken || null, payload: payload || {} });
+    var normalizedPayload = payload || {};
+    var post = function () {
+      state.pending[id] = { resolve: resolve, reject: reject, type: type, payload: normalizedPayload };
+      window.chrome.webview.postMessage({ id: id, type: type, bridgeToken: state.bridgeToken || null, payload: normalizedPayload });
+    };
+
+    if (type !== "init" && !state.bridgeToken) {
+      if (!state.initializePromise) {
+        reject(new Error("WebView bridge is not initialized."));
+        return;
+      }
+      state.initializePromise.then(function () {
+        if (!state.bridgeToken) {
+          reject(new Error("WebView bridge is not initialized."));
+          return;
+        }
+        post();
+      }, reject);
+      return;
+    }
+
+    post();
   });
   promise.requestId = id;
   return promise;

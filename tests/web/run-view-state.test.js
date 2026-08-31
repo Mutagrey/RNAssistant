@@ -125,12 +125,13 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(/agent-run-history-state\.status-(?:blocked|refused|awaiting_user|planned)/.test(agentCss), false);
   assert.equal(/message-outcome\.status-(?:blocked|refused|awaiting_user|planned)/.test(chatCss), false);
   ["app-utils.js", "app-run-view-state.js", "app-agent-model.js", "app-agent-approval.js",
-    "app-agent.js", "app-chat-session.js"].forEach(asset => {
+    "app-agent.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=run-view-state-20260830-1"), asset + " uses the atomic cutover cache key");
   });
-  ["app-core.js", "app-chat-state.js", "app-messages.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=artifact-commit-20260831-1"), asset + " uses the artifact commit cache key");
-  });
+  assert.ok(index.includes("app-chat-session.js?v=artifact-library-20260831-1"), "chat session uses the artifact library cache key");
+  assert.ok(index.includes("app-core.js?v=bridge-bootstrap-20260831-1"), "core bridge bootstrap uses the bridge cache key");
+  assert.ok(index.includes("app-chat-state.js?v=artifact-text-20260831-1"), "chat state uses the current projection cache key");
+  assert.ok(index.includes("app-messages.js?v=artifact-commit-20260831-1"), "messages uses the artifact commit cache key");
   ["app-chat.css", "app-agent.css"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=run-view-state-20260830-1"), asset + " uses the atomic cutover cache key");
   });

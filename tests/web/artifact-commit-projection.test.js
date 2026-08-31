@@ -84,9 +84,8 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   assert.match(attachments, /preparing:\s*"Подготовка"/);
   assert.match(attachments, /committed:\s*"Оригинал"/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  ["app-core.js", "app-chat-state.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=artifact-library-20260831-1"), asset + " has the latest cache key");
-  });
+  assert.ok(index.includes("app-core.js?v=bridge-bootstrap-20260831-1"), "core bridge bootstrap has the bridge cache key");
+  assert.ok(index.includes("app-chat-state.js?v=artifact-text-20260831-1"), "chat state has the current projection cache key");
   ["app-messages.js", "app-attachments.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=artifact-commit-20260831-1"), asset + " retains the commit-boundary cache key");
   });
