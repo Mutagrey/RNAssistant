@@ -504,7 +504,7 @@
     metric(metrics, "Уникальные tool calls", tools, "neutral");
     metric(metrics, "Effect evidence", effects, effects ? "verified" : "neutral");
     metric(metrics, "Пробелы evidence", missing, missing ? "problem" : "neutral");
-    metric(metrics, "Итог", terminal ? statusLabel(rowStatus(terminal)) : "Нет terminal", terminal && isProblem(terminal) ? "problem" : "neutral");
+    metric(metrics, "Итог", terminal ? statusLabel(rowStatus(terminal)) : "Не найден в выборке", terminal && isProblem(terminal) ? "problem" : "neutral");
     summary.appendChild(metrics);
 
     var toolbar = document.createElement("div");

@@ -125,6 +125,13 @@ function findButton(root, prefix) {
   assert.equal(metrics[2].textContent, "2Уникальные tool calls");
   console.log("PASS run journal: chronological typed rows and run view evidence render without inference");
 
+  const toolSelection = rows.filter(item => item.ToolCallId === "call-1");
+  context.RNAssistantRunJournal.render(root, toolSelection, options);
+  assert.match(root.textContent, /Не найден в выборке/);
+  assert.doesNotMatch(root.textContent, /Нет terminal/);
+  console.log("PASS run journal: a correlation-filtered selection does not claim the run has no terminal");
+  context.RNAssistantRunJournal.render(root, rows, options);
+
   findButton(root, "Показать ответ модели").click();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(payloadEventId, "evt-3");
@@ -194,9 +201,11 @@ function findButton(root, prefix) {
   const activity = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-activity.js"), "utf8");
   const agent = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8");
   assert.ok(page.indexOf("app-run-journal.js") < page.indexOf("app-trajectory.js"));
-  ["app-run-journal.css", "app-run-journal.js", "app-trajectory.js", "app-agent.js"].forEach(asset => {
+  ["app-run-journal.css", "app-trajectory.js", "app-agent.js"].forEach(asset => {
     assert.ok(page.includes(asset + "?v=runtime-diagnostics-20260831-1"), asset + " uses the diagnostics cache key");
   });
+  assert.ok(page.includes("app-run-journal.js?v=runtime-diagnostics-20260831-2"),
+    "changed run-journal renderer uses a fresh cache key");
   assert.match(page, /option value="run-causal">Журнал запуска/);
   assert.match(trajectory, /pageSize:\s*view === "run-causal" \? 200 : 100/);
   assert.match(trajectory, /combined\.slice\(0, journalLimit\)/);
@@ -207,7 +216,7 @@ function findButton(root, prefix) {
   assert.match(agent, /appendAgentRunViewState\(body, runViewState, agentRunId\(items, finalMessage\)\)/);
   assert.equal(/JSON\.parse|fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   console.log("PASS run journal: integration defaults to bounded run-causal and exposes direct failed-activity navigation");
-  console.log("OK 7/7");
+  console.log("OK 8/8");
 }()).catch(error => {
   console.error(error);
   process.exitCode = 1;

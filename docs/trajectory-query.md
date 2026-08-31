@@ -63,7 +63,7 @@ earlier `tool.result.recorded` carrying `AcceptedCallOrigin` is exposed in
 `tool-execution`. It is never reinterpreted, rewritten or granted replay/execution
 authority.
 
-Diagnostics turns row correlations into navigation rather than another index: run/turn/step/tool-call filters reopen the relevant chat projection, artifact and parent ids open lineage, and a source-event action opens the bounded raw sequence range. Document-scoped VBA mutation rows use their recorded `SessionId` to navigate back to the originating chat without treating VBA as a chat artifact.
+Diagnostics turns row correlations into navigation rather than another index: run/turn/step/tool-call filters reopen the relevant chat projection, artifact and parent ids open lineage, and a source-event action opens the bounded raw sequence range. Summary metrics are scoped to the loaded selection: if a correlation/search/page filter excludes the run terminal, the journal says it was not found in that selection and never claims the canonical run has no terminal. Document-scoped VBA mutation rows use their recorded `SessionId` to navigate back to the originating chat without treating VBA as a chat artifact.
 
 The Phase 9C UI defaults Diagnostics to the latest known run, requests at most 200
 chronological rows per page and passes already loaded DTOs to `RNAssistantRunJournal`.

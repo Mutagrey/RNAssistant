@@ -1799,6 +1799,86 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void MessageOperationsRecordStateTransitionsOnce()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "message-operation-transitions", "Calls.xlsx", "Calls");
+                var accepted = AgentJsonProtocol.CreateToolCallMessage(
+                    new AgentToolCall
+                    {
+                        Id = "call-transition",
+                        Name = "excel.read_range",
+                        Arguments = new Dictionary<string, object> { ["range"] = "A1" }
+                    },
+                    "Read.",
+                    null,
+                    ToolResultRoles.User,
+                    new AcceptedToolCallOrigin("step-transition", "attempt-transition", 0));
+                accepted.RunId = "run-transition";
+                var activity = new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "Running.",
+                    RunId = "run-transition",
+                    Activity = new ChatActivity
+                    {
+                        RunId = "run-transition",
+                        ToolCallId = "call-transition",
+                        ToolId = "excel.read_range",
+                        Status = "running",
+                        ExecutionStatus = "executing"
+                    }
+                };
+                session.Messages.Add(accepted);
+                session.Messages.Add(activity);
+                store.Save(session);
+
+                accepted.Sequence = 1;
+                activity.Activity.ResultMessage = "Still running.";
+                store.Save(session);
+                AssertTrue(store.HasOpenToolExecution(session, "run-transition"),
+                    "a metadata update does not close the active execution");
+
+                activity.Activity.Status = "completed";
+                activity.Activity.ExecutionStatus = "completed";
+                store.Save(session);
+                AssertTrue(!store.HasOpenToolExecution(session, "run-transition"),
+                    "the terminal transition closes the active execution");
+
+                activity.Activity.DataJson = "{\"rows\":1}";
+                store.Save(session);
+                AssertTrue(!store.HasOpenToolExecution(session, "run-transition"),
+                    "post-terminal hydration does not create another execution boundary");
+
+                var operations = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                    .Where(item => item.Type == SessionEventTypes.SessionCommit)
+                    .SelectMany(item => ((JArray)item.Data["Operations"]).OfType<JObject>())
+                    .ToList();
+                var acceptedTypes = operations
+                    .Where(operation => (string)operation["Data"]?["Value"]?["Id"] == accepted.Id)
+                    .Select(operation => (string)operation["Type"])
+                    .ToArray();
+                var activityTypes = operations
+                    .Where(operation => (string)operation["Data"]?["Value"]?["Id"] == activity.Id)
+                    .Select(operation => (string)operation["Type"])
+                    .ToArray();
+                AssertTrue(acceptedTypes.SequenceEqual(new[]
+                {
+                    SessionOperationTypes.ToolCallRecorded,
+                    SessionOperationTypes.MessageUpdated
+                }), "accepted call is recorded once and later annotation is a message update");
+                AssertTrue(activityTypes.SequenceEqual(new[]
+                {
+                    SessionOperationTypes.ToolExecutionStarted,
+                    SessionOperationTypes.MessageUpdated,
+                    SessionOperationTypes.ToolExecutionFinished,
+                    SessionOperationTypes.MessageUpdated
+                }), "execution boundaries are emitted only for actual state transitions");
+            });
+        }
+
         private static void TrajectoryExportRedactsAndVerifiesBundle()
         {
             WithTempPaths(paths =>

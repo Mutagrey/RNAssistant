@@ -308,6 +308,7 @@ namespace RNAssistant.Harness
                 Test("storage: event log is canonical", SessionEventLogIsCanonical),
                 Test("storage: typed event port preserves classified wire", TypedEventPortPreservesClassifiedWire),
                 Test("storage: accepted call operation ignores result role", AcceptedCallOperationIgnoresResultRole),
+                Test("storage: message operations record state transitions once", MessageOperationsRecordStateTransitionsOnce),
                 Test("storage: natural list changes omit reorder", NaturalListChangesOmitReorder),
                 Test("storage: headers use artifact metadata", ChatHeadersUseArtifactMetadata),
                 Test("storage: header cache trusts only owned appends", HeaderCacheTrustsOnlyOwnedAppends),

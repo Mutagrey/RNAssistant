@@ -231,21 +231,20 @@ namespace RNAssistant.Core.Storage
             var status = activity == null ? null : (string)activity["Status"];
             var executionStatus = activity == null ? null : (string)activity["ExecutionStatus"];
             var toolCallId = activity == null ? null : (string)activity["ToolCallId"];
-            if (!string.IsNullOrWhiteSpace(toolCallId) && string.Equals(status, "running", StringComparison.OrdinalIgnoreCase))
-            {
-                return SessionOperationTypes.ToolExecutionStarted;
-            }
+            var previousActivity = previous == null ? null : previous["Activity"] as JObject;
             if (!string.IsNullOrWhiteSpace(toolCallId) &&
-                (string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(status, "waiting", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(executionStatus, "waiting_confirmation", StringComparison.OrdinalIgnoreCase)))
+                IsTerminalToolActivity(status, executionStatus) &&
+                !IsSameToolActivityState(previousActivity, activity, true))
             {
                 return SessionOperationTypes.ToolExecutionFinished;
             }
-            if ((bool?)item["ProtocolMessage"] == true)
+            if (!string.IsNullOrWhiteSpace(toolCallId) &&
+                string.Equals(status, "running", StringComparison.OrdinalIgnoreCase) &&
+                !IsSameToolActivityState(previousActivity, activity, false))
+            {
+                return SessionOperationTypes.ToolExecutionStarted;
+            }
+            if (previous == null && (bool?)item["ProtocolMessage"] == true)
             {
                 // Accepted calls are identified by the runtime-owned origin, not by
                 // the provider-specific native ToolCalls representation. Markdown
@@ -269,6 +268,37 @@ namespace RNAssistant.Core.Storage
                 return SessionOperationTypes.AssistantMessageAppended;
             }
             return fallback;
+        }
+
+        private static bool IsTerminalToolActivity(string status, string executionStatus)
+        {
+            return string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "waiting", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(executionStatus, "waiting_confirmation", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsSameToolActivityState(JObject previous, JObject current, bool terminal)
+        {
+            if (previous == null || current == null)
+            {
+                return false;
+            }
+            if (!string.Equals((string)previous["ToolCallId"], (string)current["ToolCallId"],
+                    StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals((string)previous["RunId"], (string)current["RunId"],
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            var previousStatus = (string)previous["Status"];
+            var previousExecutionStatus = (string)previous["ExecutionStatus"];
+            return terminal
+                ? IsTerminalToolActivity(previousStatus, previousExecutionStatus)
+                : string.Equals(previousStatus, "running", StringComparison.OrdinalIgnoreCase) &&
+                    !IsTerminalToolActivity(previousStatus, previousExecutionStatus);
         }
 
         private static void ApplyOperations(

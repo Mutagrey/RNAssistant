@@ -15,7 +15,17 @@ non-empty `choices[0].finish_reason`, bounded одну секунду ждёт o
 открытым. Final usage сохраняется; cancellation, JSON response path и общий request
 timeout не менялись. Red open-stream characterization заменён green regression;
 model diagnostics 4/4 и conversation streaming 4/4 pass. Реальный Qwen endpoint и
-Windows UI не проверялись; 11T2 остаётся следующим tool migration slice.
+Windows UI не проверялись; 11T3 остаётся следующим tool migration slice.
+
+Run Journal causal-boundary correction (2026-08-31): initial accepted call/result и
+tool execution start/finish теперь получают semantic operation только при создании
+сообщения или переходе состояния exact tool-call/run. Последующие annotation и
+result hydration того же message ID сохраняются как `message.updated`, поэтому один
+вызов больше не выглядит как несколько accepted/started/finished. Если узкий filter
+не содержит terminal row, UI пишет `Не найден в выборке`, а не делает глобальный
+вывод `Нет terminal`; renderer cache key обновлён. Storage transition regression 1/1,
+соседние storage/trajectory 5/5 и Run Journal 8/8 pass. Windows WebView/live run не
+проверялись; 11T3 остаётся следующим tool migration slice.
 
 Live artifact projection correction (2026-08-31): после каждого durable
 `tool_result` controller теперь ставит в WebView очередь существующую full
