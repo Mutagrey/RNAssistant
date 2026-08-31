@@ -27,11 +27,32 @@
   var boundDataSources = workspaceModel.boundDataSources;
   var selectedItem = workspaceModel.selectedItem;
   var ensureSelection = workspaceModel.ensureSelection;
+  var workspaceActions = null;
+
+  function submitPlanHandoff(revisionUri) {
+    var input = $("chatInput");
+    var form = $("chatForm");
+    if (!input || !form || typeof form.requestSubmit !== "function" || !revisionUri) return false;
+    input.value = "Выполни утверждённый план " + revisionUri +
+      ". Перед началом прочитай эту точную ревизию через common.resources_read.";
+    updateComposerInputState();
+    form.requestSubmit();
+    return true;
+  }
+
   var workspaceEditor = window.RNAssistantHtmlWorkspaceEditor.create({
     state: state,
     model: workspaceModel,
     preview: htmlPreview,
-    artifacts: workspaceArtifacts
+    artifacts: workspaceArtifacts,
+    planActions: {
+      handoffPlan: function (request) {
+        return workspaceActions && workspaceActions.handoffPlan(request);
+      },
+      restorePlanRevision: function (request) {
+        return workspaceActions && workspaceActions.restorePlanRevision(request);
+      }
+    }
   });
   var syncHtmlEditorToState = workspaceEditor.sync;
   var markHtmlWorkspaceDirty = workspaceEditor.markDirty;
@@ -40,7 +61,7 @@
   var setHtmlWorkspaceMode = workspaceEditor.setMode;
   var applyHtmlWorkspaceMode = workspaceEditor.applyMode;
   var renderHtmlWorkspaceEditor = workspaceEditor.render;
-  var workspaceActions = window.RNAssistantHtmlWorkspaceActions.create({
+  workspaceActions = window.RNAssistantHtmlWorkspaceActions.create({
     state: state,
     send: send,
     log: log,
@@ -52,6 +73,8 @@
     hasRefreshableData: function (policy) {
       return boundDataSources(policy === "on_preview" ? "on_preview" : "").length > 0;
     },
+    switchChatMode: saveChatMode,
+    submitPlanHandoff: submitPlanHandoff,
     validatePlanDraft: workspaceArtifacts.validatePlanDraft,
     hideCreate: hideHtmlWorkspaceCreate,
     render: renderHtmlWorkspace

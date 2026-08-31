@@ -361,6 +361,13 @@
   color: var(--muted);
 }
 
+.artifact-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .artifact-content-label {
   margin: 0 0 7px;
   color: var(--muted);

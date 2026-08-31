@@ -2,12 +2,24 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 Optional contours — отдельный ранний Artifact Library milestone явно допущен пользователем параллельно WQ
-Current task: 11B2 done host-neutral — guarded restore создаёт новый linear head, delete добавляет tombstone revision без `artifact.remove` и переписывания pinned message refs; removed Plan исключён из новых Library/resource/context projections, exact read отвечает `resource_removed`.
+Current task: 11B3 done host-neutral — server history wired к exact guarded restore, removal dry-run показывает все referencing message ids до confirmation, ready handoff revalidates и отправляет в Agent только active pinned `rna://` URI.
 Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо и этим milestone не закрываются. Phase 12 scope не расширен.
 
-Next step: отдельный 11B3 commit — exact Plan history restore/removal UX и ready-plan handoff только по pinned `rna://` URI; HTML/viewers не смешивать.
-Required context: [Artifact Library contract](../artifact-library.md), [Resource Fabric](../resource-fabric.md), [conversation protocol](../conversation-protocol.md), [11B2 evidence](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md), [master Phase 11](STABILIZATION_MASTER_PLAN.md#phase-11--optional-contours).
-Open gates / remaining legacy: 11A1–11A2 and 11B1–11B2 are done host-neutral, but R51 remains open for Plan history/removal/handoff UX, HTML unique revision/branch ownership, typed viewers, other committed-resource removal and Windows WebView lifecycle. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation and R54 Skill Library remain docs-only. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+Next step: отдельный 11C1 commit — HTML whole-workspace revision/branch ownership и unique monotonic revision audit/switch; inert import, viewer UX и bindings оставить последующим commits.
+Required context: [Artifact Library contract](../artifact-library.md), [architecture](../architecture.md), действующий HTML owner в `AssistantController.HtmlWorkspace.cs`/`HtmlWorkspaceArtifactService`, [11B3 evidence](PHASE_11B3_PLAN_HISTORY_HANDOFF.md), [master Phase 11](STABILIZATION_MASTER_PLAN.md#phase-11--optional-contours).
+Open gates / remaining legacy: 11A1–11A2 and 11B1–11B3 are done host-neutral, but R51 remains open for HTML unique revision/branch ownership, typed viewers, other committed-resource removal and Windows WebView lifecycle. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation and R54 Skill Library remain docs-only. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+
+Phase 11B3 Plan history/removal UX and handoff (2026-08-31): новый host-neutral
+Каждая non-head Plan revision получила `Восстановить` с exact server-projected
+current/source guards; action создаёт новый head через 11B2 owner и сериализует
+повторные UI mutations. Delete сначала выполняет dry-run, затем показывает revision
+count и все referencing message ids, и только после confirmation повторяет тот же
+exact guard. Ready handoff сверяет active raw artifact, status и byte-exact `rna://`,
+переключает Agent и отправляет только URI с `common.resources_read` instruction.
+Mutation/handoff logic удалена из detail renderer и осталась в тематическом actions
+owner. Web Plan 7/7, Artifact Library 3/3 и syntax четырёх changed JS modules pass;
+version format, diff и local Markdown links pass. Windows WebView2 interaction не
+проверялась. [Evidence](PHASE_11B3_PLAN_HISTORY_HANDOFF.md).
 
 Phase 11B2 Plan restore and tombstone removal (2026-08-31): новый host-neutral
 `PlanDocumentService` теперь владеет restore/delete: restore требует exact active
@@ -750,7 +762,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 9 | 9A–9D5 done host-neutral; Windows acceptance pending | through `9bbf088` | 9D5: 99 targeted harness, web 70/70, MockDemo compile | not performed | Diagnostics/viewer, typed persistence ports and immutable RunViewState switched; R37/WQ-UI open |
 | 10 | done host-neutral: 10A–10D | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [10D](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md) | 10D: architecture 4/4; source inclusion 1/1 | not performed | mandatory host-neutral route complete; WQ-A contract next, then WQ0; R49 fixed host-neutral |
 | 11A | done host-neutral: 11A1–11A2 | [11A1](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md), [11A2](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md) | 11A2: harness 9/9; web 10/10; MockDemo full self-test | not performed | Commit projection + exact Library heads/history/classes/labels; Plan/HTML/viewer slices and R51 Windows gates remain |
-| 11B | 11B1–11B2 done host-neutral; 11B3 pending | [11B1](PHASE_11B1_PLAN_REVISION_GUARD.md), [11B2](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md) | 11B2: plan document 2/2; plan mode 2/2; library 3/3; resource 1/1; source inclusion 1/1; web 7/7 | not performed | Exact Markdown/lineage and append-only restore/tombstone done; history/removal/handoff UX and Windows WebView remain |
+| 11B | done host-neutral: 11B1–11B3 | [11B1](PHASE_11B1_PLAN_REVISION_GUARD.md), [11B2](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md), [11B3](PHASE_11B3_PLAN_HISTORY_HANDOFF.md) | 11B3: web Plan 7/7; Artifact Library 3/3; JS syntax 4/4 | not performed | Complete exact Plan lineage/restore/removal/history/handoff contour; Windows WebView remains |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |

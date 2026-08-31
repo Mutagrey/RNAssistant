@@ -152,11 +152,14 @@
     root.appendChild(metadata);
   }
 
-  function appendLibraryHistory(root, artifact) {
+  function appendLibraryHistory(root, artifact, actions) {
+    actions = actions || {};
     var head = libraryHead(artifact);
     var history = prop(head, "History", "history", []) || [];
     var resourceClass = String(prop(head, "ResourceClass", "resourceClass", "") || "").toLowerCase();
     if ((resourceClass !== "versioned_document" && resourceClass !== "versioned_aggregate") || history.length < 2) return;
+    var isPlan = artifactKind(artifact) === "plan";
+    var headArtifactId = prop(head, "ArtifactId", "artifactId", "") || "";
     var details = document.createElement("details");
     details.className = "artifact-history";
     var summary = document.createElement("summary");
@@ -203,6 +206,27 @@
         copy.appendChild(relationText);
       }
       row.appendChild(copy);
+      var actionBox = document.createElement("div");
+      actionBox.className = "artifact-history-actions";
+      var revisionArtifactId = prop(revision, "ArtifactId", "artifactId", "") || "";
+      var isHead = !!prop(revision, "IsHead", "isHead", relation === "head");
+      if (isPlan && !isHead && typeof actions.restorePlanRevision === "function") {
+        var restoreButton = document.createElement("button");
+        restoreButton.type = "button";
+        restoreButton.className = "secondary compact";
+        restoreButton.textContent = "Восстановить";
+        restoreButton.disabled = !!state.bridgeUnavailable || !revisionArtifactId || !headArtifactId ||
+          String(state.activePlanDocumentArtifactId || "").toLowerCase() !== String(headArtifactId).toLowerCase();
+        restoreButton.addEventListener("click", function () {
+          actions.restorePlanRevision({
+            planId: planStableId(artifact),
+            expectedRevisionArtifactId: headArtifactId,
+            sourceRevisionArtifactId: revisionArtifactId,
+            revision: number
+          });
+        });
+        actionBox.appendChild(restoreButton);
+      }
       var button = document.createElement("button");
       button.type = "button";
       button.className = "secondary compact";
@@ -212,13 +236,15 @@
         if (!uri || typeof window.copyTextResult !== "function") return;
         window.copyTextResult(uri).then(function () { button.textContent = "Скопировано"; }).catch(function () {});
       });
-      row.appendChild(button);
+      actionBox.appendChild(button);
+      row.appendChild(actionBox);
       details.appendChild(row);
     });
     root.appendChild(details);
   }
 
-  function renderDetail(root, selected, editorValue) {
+  function renderDetail(root, selected, editorValue, actions) {
+    actions = actions || {};
     clearDetail(root);
     if (selected.type === "plan") {
       var planMetadata = {};
@@ -229,18 +255,17 @@
         handoff.type = "button";
         handoff.className = "primary";
         handoff.textContent = "Начать выполнение";
-        handoff.disabled = !!state.activeTaskListArtifactId || !prop(selected.item, "ResourceUri", "resourceUri", "");
+        handoff.disabled = !!state.activeTaskListArtifactId ||
+          !prop(selected.item, "ResourceUri", "resourceUri", "") ||
+          typeof actions.handoffPlan !== "function";
         if (state.activeTaskListArtifactId) handoff.title = "Сначала закройте активный Task List.";
-        handoff.addEventListener("click", async function () {
-          if (!await saveChatMode("agent")) return;
-          var input = $("chatInput");
-          var form = $("chatForm");
-          if (!input || !form) return;
+        handoff.addEventListener("click", function () {
           var revisionUri = prop(selected.item, "ResourceUri", "resourceUri", "") || "";
-          if (!revisionUri) return;
-          input.value = "Выполни утверждённый план " + revisionUri + ". Перед началом прочитай эту точную ревизию через common.resources_read.";
-          updateComposerInputState();
-          if (form.requestSubmit) form.requestSubmit();
+          if (!revisionUri || typeof actions.handoffPlan !== "function") return;
+          actions.handoffPlan({
+            expectedRevisionArtifactId: artifactId(selected.item),
+            revisionUri: revisionUri
+          });
         });
         root.appendChild(handoff);
       }
@@ -250,13 +275,13 @@
       body.innerHTML = markdown(editorValue || "_План пуст._");
       root.appendChild(body);
       if (typeof enhanceMarkdown === "function") enhanceMarkdown(body);
-      appendLibraryHistory(root, selected.item);
+      appendLibraryHistory(root, selected.item, actions);
       return;
     }
 
     appendMetadata(root, selected.item);
     appendArtifactContent(root, selected.item);
-    appendLibraryHistory(root, selected.item);
+    appendLibraryHistory(root, selected.item, actions);
   }
 
   function validatePlanDraft(artifact) {

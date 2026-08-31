@@ -2,9 +2,9 @@
 
 Status: Phase 11 target contract. 11A1 and 11A2 implement the host-neutral commit-time
 boundary, explicit draft/preparing/committed labels and exact Library head/history
-projection. 11B1 and 11B2 add the Plan domain owner, exact whole-Markdown preservation,
-linear exact-current guard, restore-as-new-head and append-only tombstone removal.
-Plan history/handoff UX, HTML mutation semantics and typed viewers remain later slices. The
+projection. 11B1–11B3 complete the host-neutral Plan domain owner, exact whole-Markdown
+lineage, restore/removal UX and ready handoff by pinned URI. HTML mutation semantics
+and typed viewers remain later slices. The
 existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
@@ -218,7 +218,10 @@ Phase 11 is implemented as separate changes:
    - 11B2 — done host-neutral: append-only restore-as-new-head and guarded tombstone
      removal preserve exact historical message refs and project `resource_removed`.
      [Evidence](stabilization/PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md).
-   - 11B3 — history restore/removal UX and exact ready-plan handoff verification.
+   - 11B3 — done host-neutral: historical revisions expose guarded
+     restore-as-new-head; removal preflight lists every referencing message before
+     confirmation; ready handoff revalidates and submits only the exact active pinned
+     URI. [Evidence](stabilization/PHASE_11B3_PLAN_HISTORY_HANDOFF.md).
 3. HTML: whole-workspace revisions/branches, source/preview/import, bindings,
    recovery and exact payload preservation.
 4. Typed viewers: text/Markdown first; image, PDF and audio as separate measured
