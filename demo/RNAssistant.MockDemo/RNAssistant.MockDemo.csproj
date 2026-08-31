@@ -113,6 +113,36 @@
     <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\common.ui-shell.v1.json"
                       Link="Office\Qualification\Packs\common.ui-shell.v1.json"
                       LogicalName="RNAssistant.Office.Qualification.Packs.common.ui-shell.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\common.quick.v1.json"
+                      Link="Office\Qualification\Packs\common.quick.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.common.quick.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\provider.live.v1.json"
+                      Link="Office\Qualification\Packs\provider.live.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.provider.live.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\storage.recovery.v1.json"
+                      Link="Office\Qualification\Packs\storage.recovery.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.storage.recovery.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\ui.webview.v1.json"
+                      Link="Office\Qualification\Packs\ui.webview.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.ui.webview.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\excel.wq0.identity.v1.json"
+                      Link="Office\Qualification\Packs\excel.wq0.identity.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.excel.wq0.identity.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\excel.read-write.v1.json"
+                      Link="Office\Qualification\Packs\excel.read-write.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.excel.read-write.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\excel.complex-task.v1.json"
+                      Link="Office\Qualification\Packs\excel.complex-task.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.excel.complex-task.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\vba.lifecycle.v1.json"
+                      Link="Office\Qualification\Packs\vba.lifecycle.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.vba.lifecycle.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\cross.full-run.v1.json"
+                      Link="Office\Qualification\Packs\cross.full-run.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.cross.full-run.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\release.candidate.v1.json"
+                      Link="Office\Qualification\Packs\release.candidate.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.release.candidate.v1.json" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll"

@@ -42,6 +42,56 @@ namespace RNAssistant.Harness
             AssertEqual(0, missing.Count,
                 "old-style production projects must explicitly include every source file: " +
                 string.Join(", ", missing.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray()));
+
+            var packRoot = Path.Combine(sourceRoot, "RNAssistant.Office", "Qualification", "Packs");
+            var packPaths = Directory.GetFiles(packRoot, "*.json", SearchOption.TopDirectoryOnly)
+                .Select(Path.GetFullPath)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var resourceProblems = new List<string>();
+            foreach (var relativeProject in new[]
+            {
+                "src/RNAssistant.Office/RNAssistant.Office.csproj",
+                "tests/RNAssistant.Harness/RNAssistant.Harness.csproj",
+                "demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj"
+            })
+            {
+                var projectPath = Path.Combine(root,
+                    relativeProject.Replace('/', Path.DirectorySeparatorChar));
+                var projectDirectory = Path.GetDirectoryName(projectPath);
+                var resources = XDocument.Load(projectPath).Descendants()
+                    .Where(element => element.Name.LocalName == "EmbeddedResource")
+                    .Select(element => new
+                    {
+                        Path = ResolveProjectInclude(projectDirectory, (string)element.Attribute("Include")),
+                        LogicalName = (string)element.Attribute("LogicalName") ??
+                            (string)element.Elements().FirstOrDefault(child => child.Name.LocalName == "LogicalName")
+                    })
+                    .Where(resource => resource.Path != null)
+                    .ToList();
+                foreach (var packPath in packPaths)
+                {
+                    var resource = resources.FirstOrDefault(candidate =>
+                        string.Equals(candidate.Path, packPath, StringComparison.OrdinalIgnoreCase));
+                    var fileName = Path.GetFileName(packPath);
+                    var expectedName = "RNAssistant.Office.Qualification.Packs." + fileName;
+                    if (resource == null)
+                        resourceProblems.Add(relativeProject + ": missing " + fileName);
+                    else if (!string.Equals(resource.LogicalName, expectedName, StringComparison.Ordinal))
+                        resourceProblems.Add(relativeProject + ": invalid LogicalName for " + fileName);
+                }
+            }
+            AssertEqual(0, resourceProblems.Count,
+                "production and source-linked hosts must embed every qualification pack under its canonical name: " +
+                string.Join(", ", resourceProblems.ToArray()));
+        }
+
+        private static string ResolveProjectInclude(string projectDirectory, string include)
+        {
+            if (string.IsNullOrWhiteSpace(include) || include.IndexOf('*') >= 0 || include.IndexOf('?') >= 0)
+                return null;
+            return Path.GetFullPath(Path.Combine(projectDirectory,
+                include.Replace('\\', Path.DirectorySeparatorChar)));
         }
 
         private static string FindHarnessRepositoryRoot()

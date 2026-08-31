@@ -2,12 +2,25 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 Optional contours — ранние Artifact Library и typed Office tools contours явно допущены пользователем параллельно WQ
-Current task: stabilization-wide regression audit in progress — WebView bootstrap and default Excel Agent callable-pack startup regressions fixed host-neutral; real Windows/live-provider gates remain open.
+Current task: stabilization-wide regression audit in progress — WebView bootstrap, default Excel Agent startup and MockDemo qualification composition regressions fixed host-neutral; real Windows/live-provider gates remain open.
 Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо. 11T не обходит WQ0/5B2/7D и не расширяет Phase 12 scope.
 
 Next step for tools: на реальном Windows выполнить WQ0, затем отдельными changes production 5B2 и 7D. До этого не создавать typed façade над legacy `ExecuteTool`; без Windows может продолжаться только уже допущенный независимый 11D2 viewer slice.
 Required context: [master WQ/Phase 11](STABILIZATION_MASTER_PLAN.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current 5B2/7D owners.
 Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. 11T is admitted but blocked before runtime work by WQ0/production 5B2/7D; all remaining built-in Office tool branches are mapped to family switches rather than a big-bang rewrite. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+
+MockDemo qualification composition regression fix (2026-08-31): WQ-A4/A5
+expanded `QualificationBuiltInCatalog` to the complete versioned suite, but the
+source-linked MockDemo assembly still embedded only coverage and the UI-shell pack.
+Constructing the production controller therefore failed on missing
+`common.quick.v1.json` before every demo model profile. MockDemo now embeds all
+canonical pack files with their exact production logical names. The production
+source-inclusion architecture test also compares every pack file and logical name
+across Office, Harness and MockDemo so later suite additions fail closed at build
+verification. Focused structure test and Release MockDemo full self-test (four model
+profiles plus failed-turn persistence) pass; only the three existing PDF CA1416
+warnings remain. Direct .NET Framework 4.8 helper build is unavailable on this Mac
+without the Windows targeting pack and remains part of the real Windows gate.
 
 Default Excel Agent callable-pack regression fix (2026-08-31): growth of the
 complete optional capability index pushed the mandatory Excel/VBA core request to
