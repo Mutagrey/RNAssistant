@@ -2,12 +2,13 @@
 
 Дата фиксации: 2026-08-30; статус маршрута обновлён 2026-08-31.
 
-Статус: backlog, не описание реализованной архитектуры и не разрешение расширять
-текущую фазу. Phase 10A–10D и WQ-A1–A5 завершены host-neutral; следующий обязательный
-runtime gate — Windows WQ0, затем production 5B2/7D, по `PROGRESS.md`. Section B
-допущен как ранний Phase 11T contour только после этого gate. Если другое предложение
-становится обязательным, сначала обновляются master plan/ADR и `MIGRATION_MAP.md` с
-owner, consumers и removal gate.
+Статус: ordered migration route, не описание уже реализованной архитектуры. Phase
+10A–10D и WQ-A1–A5 завершены host-neutral; следующий обязательный runtime gate —
+Windows WQ0, затем атомарный production 11T0/7D, по `PROGRESS.md`. Section B и
+финальное удаление active legacy явно обязательны до Phase 12. Новые optional product
+capabilities этим не допускаются. Если другое предложение становится обязательным,
+сначала обновляются master plan/ADR и `MIGRATION_MAP.md` с owner, consumers и removal
+gate.
 
 ## Целевой путь
 
@@ -39,15 +40,18 @@ store, model wire или UI-owned effect classification.
    canonical docs, migration statuses, project includes и checks.
 4. WQ-A создал data-only packs, production-path runner и встроенный WQ0 без второго
    executor/store; [qualification contract](../qualification.md) обязателен.
-5. При доступной Windows: in-app WQ0 -> 5B2 production `DocumentSession` -> 7D bound
-   Excel backend; неизвестную COM identity semantics не угадывать.
+5. При доступной Windows: выполнить in-app WQ0. Затем один production 11T0/7D
+   change атомарно вводит 5B2 bound `DocumentSession`/factories, прямой Excel backend
+   и удаляет compatibility commands/backends плюс execution fallback; неизвестную
+   COM identity semantics не угадывать.
 6. Затем ранний 11T переводит built-in Office tools по semantic families; каждый
-   switch удаляет свой legacy host path. До WQ0/5B2/7D не создавать compatibility
+   switch удаляет свой legacy host path. До WQ0/11T0/7D не создавать compatibility
    scaffolding, которое всё равно вызывает `ExecuteTool(ToolCommand)`.
-7. Milestone WQ и Phase 12 stable core. Оставшиеся VBA definition/result adapters
-   обслуживают действующий Phase 6 runtime; их optional direct-handler cleanup после
-   5B2 относится к отдельно admitted Phase 11 и не блокирует этот маршрут.
-8. Улучшения ниже — отдельные post-stable minor changes либо соответствующие
+7. После family switches обязательны direct VBA/controller/custom authoring
+   migrations и финальное удаление generic adapter catalog/dispatch, legacy
+   definition/result/UI bridges и старой trajectory inference.
+8. Milestone WQ и Phase 12 stable core.
+9. Остальные улучшения ниже — отдельные post-stable minor changes либо соответствующие
    independently admitted Phase 11 contours. Не включать их в 9D5/Phase 10.
 
 ## Когда нужен protocol или interface
@@ -164,6 +168,22 @@ contract. Generic `execute_actions`/arbitrary command list и batch writes за�
 - Windows Office qualification для COM semantics;
 - удаление host switch branch, legacy mapper и мёртвых helpers этого slice;
 - обновление canonical domain doc, `MIGRATION_MAP.md` и краткого progress evidence.
+
+### Final removal inventory
+
+Active legacy означает второй execution/catalog/result/history path, а не любое имя
+`Adapter` или `Compatibility`:
+
+- удалить generic `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`,
+  `OfficeToolExecutor` fallback и host tool-id switches после последнего family;
+- удалить internal Excel compatibility commands/backends в 11T0/7D;
+- удалить VBA mutation/package adapters после direct typed host/backend switch;
+- удалить `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` и
+  `ToolResultUiProjection` после последнего catalog/result/UI consumer;
+- удалить pre-R37 trajectory accepted-call inference; старые несовместимые evidence
+  не переинтерпретируются и требуют нового chat/reset;
+- сохранить narrow journal-store ports и model-compatibility diagnostics: они
+  используют одну authority и не являются legacy fallback.
 
 ## C. Versioned WebView bridge catalog
 

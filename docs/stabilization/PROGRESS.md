@@ -1,13 +1,22 @@
 # Stabilization progress
 
 Current target: 16.1.0
-Current phase: Phase 11 Optional contours — ранние Artifact Library и typed Office tools contours явно допущены пользователем параллельно WQ
-Current task: stabilization-wide regression audit complete host-neutral — WebView bootstrap, default Excel Agent startup, MockDemo qualification composition, attachment provenance and artifact identity regressions fixed; real Windows/live-provider gates remain open.
-Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо. 11T не обходит WQ0/5B2/7D и не расширяет Phase 12 scope.
+Current phase: Phase 11 migration contours — перенос всех существующих tools и удаление active legacy architecture явно обязательны до Phase 12; новые optional product features этим не добавлены
+Current task: remaining-legacy inventory and atomic 11T0/7D route fixed after the completed host-neutral regression audit; real Windows/live-provider gates remain open.
+Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy теперь обязательны, но реальные Windows/live-provider gates идут независимо и не могут быть закрыты локальными tests.
 
-Next step for tools: на реальном Windows выполнить WQ0, затем отдельными changes production 5B2 и 7D. До этого не создавать typed façade над legacy `ExecuteTool`; без Windows может продолжаться только уже допущенный независимый 11D2 viewer slice.
+Next step for tools: на реальном Windows выполнить WQ0; затем один атомарный production change 11T0/7D связывает retained workbook с `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой bound backend и удаляет compatibility commands/backends и `ActiveWorkbook`/descriptor execution fallback. Промежуточного production 5B2 поверх старого backend быть не должно.
 Required context: [master WQ/Phase 11](STABILIZATION_MASTER_PLAN.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current 5B2/7D owners.
-Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. 11T is admitted but blocked before runtime work by WQ0/production 5B2/7D; all remaining built-in Office tool branches are mapped to family switches rather than a big-bang rewrite. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. 11T0 runtime work is blocked by real WQ0; after it, existing Office tools move family-by-family and the final switch removes `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter`, remaining UI/domain compatibility projections and pre-R37 trajectory inference. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+
+Complete active-legacy removal decision (2026-08-31, docs-only): пользователь
+потребовал перенести все существующие tools на typed architecture и удалить legacy
+execution/history paths до Phase 12. Это не допускает big-bang rewrite и не добавляет
+новые Browser/Automation/product capabilities: каждый existing semantic family
+переключается отдельно с удалением последнего старого consumer. WQ0 остаётся внешним
+evidence prerequisite; следующий code change после него атомарно объединяет production
+5B2 и 7D, чтобы bound workbook никогда не сосуществовал в production с compatibility
+Excel backend. Canonical route и removal gates обновлены; runtime не менялся.
 
 Artifact identity authority audit completion (2026-08-31): normalization no longer
 selects one of duplicate case-insensitive artifact ids. Exact URI/reachability,
