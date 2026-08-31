@@ -484,7 +484,8 @@ namespace RNAssistant.Office.Services
             return (session == null ? null : session.Artifacts ?? new List<ChatArtifact>())
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
+                .Where(group => group.Count() == 1)
+                .Select(group => group.Single())
                 .ToList();
         }
 

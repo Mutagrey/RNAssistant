@@ -394,6 +394,7 @@ namespace RNAssistant.Harness
                 Test("excel write: dispatch fault classification", ExcelWriteClassifiesDispatchFaults),
                 Test("excel write: bound document scope", ExcelWriteUsesBoundDocumentScope),
                 Test("resources: gateway reads searches resolves and pages", ResourceGatewayReadsSearchesAndPages),
+                Test("resources: duplicate artifact ids fail closed", ResourceGatewayRejectsAmbiguousChatArtifacts),
                 Test("artifact viewer: exact bounded text and markdown", ArtifactViewerReadsExactBoundedTextAndMarkdown),
                 Test("resources: live Office and VBA are bounded and guarded", LiveOfficeAndVbaResourcesAreBoundedAndGuarded),
                 Test("artifacts: prompt uses bounded working set", ArtifactPromptUsesBoundedWorkingSet),

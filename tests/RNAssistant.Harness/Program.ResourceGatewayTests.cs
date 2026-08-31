@@ -700,6 +700,55 @@ namespace RNAssistant.Harness
                 session, ChatResourceUri.CreateArtifactRevisionUri(session, html), null));
         }
 
+        private static void ResourceGatewayRejectsAmbiguousChatArtifacts()
+        {
+            var session = new ChatSession();
+            var first = new ChatArtifact
+            {
+                Id = "duplicate-artifact",
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "First.md",
+                MimeType = "text/markdown",
+                InlineText = "FIRST_DUPLICATE_BODY",
+                ContentSha256 = TextPatternEngine.Sha256("FIRST_DUPLICATE_BODY")
+            };
+            var second = new ChatArtifact
+            {
+                Id = first.Id.ToUpperInvariant(),
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "Second.md",
+                MimeType = "text/markdown",
+                InlineText = "SECOND_DUPLICATE_BODY",
+                ContentSha256 = TextPatternEngine.Sha256("SECOND_DUPLICATE_BODY")
+            };
+            var unique = new ChatArtifact
+            {
+                Id = "unique-artifact",
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "Unique.md",
+                MimeType = "text/markdown",
+                InlineText = "UNIQUE_BODY",
+                ContentSha256 = TextPatternEngine.Sha256("UNIQUE_BODY")
+            };
+            session.Artifacts.Add(first);
+            session.Artifacts.Add(second);
+            session.Artifacts.Add(unique);
+            var gateway = new ResourceGatewayService();
+            var duplicateUri = ChatResourceUri.CreateArtifactRevisionUri(session, first);
+
+            var listed = gateway.List(
+                session, ChatArtifactResourceProvider.ProviderName, ChatArtifactKinds.Markdown, null, 10);
+            AssertEqual(1, listed.Items.Count, "ambiguous artifact identity is omitted from discovery");
+            AssertEqual(ChatResourceUri.CreateArtifactRevisionUri(session, unique), listed.Items[0].Reference.Uri,
+                "unrelated exact artifacts remain available");
+            AssertEqual(0, gateway.Search(
+                session, ChatArtifactResourceProvider.ProviderName, "DUPLICATE_BODY", null, 10, 128).Matches.Count,
+                "ambiguous artifact bodies are not searched through an arbitrary duplicate");
+            RuntimeThrows<KeyNotFoundException>(() => gateway.Resolve(session, duplicateUri));
+            RuntimeThrows<KeyNotFoundException>(() => ReadResource(
+                gateway, session, duplicateUri, ResourceRepresentations.Text, null, 128));
+        }
+
         private static void LiveOfficeAndVbaResourcesAreBoundedAndGuarded()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
