@@ -11,8 +11,6 @@ namespace RNAssistant.Office.Services
     internal sealed class ChatArtifactResourceProvider : IResourceProvider, IResourceMemberResolver
     {
         public const string ProviderName = "chat";
-        public const int MaximumReadCharacters = 32000;
-        private const int DefaultReadCharacters = 8000;
         private const int MaximumListItems = 50;
         private const int MaximumSearchResults = 20;
         private const int MaximumSearchCharacters = 1000000;
@@ -189,7 +187,11 @@ namespace RNAssistant.Office.Services
             var representation = request == null ? null : request.Representation;
             var maxChars = request == null ? 0 : request.MaxChars;
             representation = NormalizeRepresentation(representation, session, artifact);
-            maxChars = Math.Max(128, Math.Min(MaximumReadCharacters, maxChars <= 0 ? DefaultReadCharacters : maxChars));
+            maxChars = Math.Max(
+                ResourceReadRequest.MinimumCharacters,
+                Math.Min(
+                    ResourceReadRequest.MaximumCharacters,
+                    maxChars <= 0 ? ResourceReadRequest.DefaultCharacters : maxChars));
 
             if (representation == "metadata")
             {

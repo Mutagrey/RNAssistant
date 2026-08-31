@@ -36,7 +36,8 @@ namespace RNAssistant.Office.Tools
                         ToolArgumentReader.String(context.Arguments, "revision", null)),
                     Representation = ToolArgumentReader.String(context.Arguments, "representation", "auto"),
                     Cursor = ToolArgumentReader.String(context.Arguments, "cursor", string.Empty),
-                    MaxChars = ToolArgumentReader.Int32(context.Arguments, "maxChars", 8000)
+                    MaxChars = ToolArgumentReader.Int32(
+                        context.Arguments, "maxChars", ResourceReadRequest.DefaultCharacters)
                 });
             var result = RuntimeResult.Ok("Resource representation read.",
                 Serialize(selection.Result), selection.ResourceRefs);
@@ -53,7 +54,9 @@ namespace RNAssistant.Office.Tools
                 "\"revision\":{\"type\":\"string\",\"description\":\"Optional exact revision returned with the resource reference. Mutable reads fail if it has changed.\",\"minLength\":1,\"maxLength\":128}," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read; auto selects the provider's preferred bounded form.\",\"enum\":[\"auto\",\"metadata\",\"text\",\"structure\",\"source\",\"media\"],\"default\":\"auto\"}," +
                 "\"cursor\":{\"type\":\"string\",\"description\":\"Optional continuation: copy nextCursor only from the immediately preceding resources_read result for this exact uri, revision, and representation. Omit it for the first chunk or when nextCursor is absent. After resource_revision_changed omit both cursor and revision. Never reuse another result's cursor or calculate an offset.\",\"maxLength\":256}," +
-                "\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum text characters returned.\",\"minimum\":128,\"maximum\":32000,\"default\":8000}" +
+                "\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum text characters returned. The conservative default leaves room for an exact result and the next model step; after a context-too-large error retry with a smaller value.\",\"minimum\":" + ResourceReadRequest.MinimumCharacters +
+                ",\"maximum\":" + ResourceReadRequest.MaximumCharacters +
+                ",\"default\":" + ResourceReadRequest.DefaultCharacters + "}" +
                 "},\"required\":[\"uri\"],\"additionalProperties\":false}";
         }
     }

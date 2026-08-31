@@ -37,21 +37,26 @@ namespace RNAssistant.Harness
         {
             var settings = new AppSettings();
             var input = ModelContextBudget.InputBudgetTokens(settings);
-            AssertEqual((int)Math.Ceiling(input / (double)ModelContextBudget.ContinuationReserveDivisor),
+            var proportional = (int)Math.Ceiling(input / (double)ModelContextBudget.ContinuationReserveDivisor);
+            var responseAndEnvelope = ModelContextBudget.RequestedOutputTokens(settings) +
+                ModelContextBudget.MinimumContinuationReserveTokens;
+            AssertEqual(Math.Min(input - 1, Math.Max(proportional, responseAndEnvelope)),
                 ModelContextBudget.ContinuationReserveTokens(settings),
-                "default continuation reserve is proportional to the admitted input");
-            AssertEqual(ModelContextBudget.MinimumContinuationReserveTokens,
-                ModelContextBudget.ContinuationReserveTokens(new AppSettings
-                {
-                    ContextWindowOverrideTokens = 4096
-                }),
-                "small contexts retain the minimum continuation reserve");
+                "default continuation reserve covers the response, result envelope, and proportional headroom");
+            var smallSettings = new AppSettings
+            {
+                ContextWindowOverrideTokens = 4096
+            };
+            AssertEqual(ModelContextBudget.InputBudgetTokens(smallSettings) - 1,
+                ModelContextBudget.ContinuationReserveTokens(smallSettings),
+                "an undersized context fails composition instead of promising impossible continuation space");
             AssertEqual(ModelContextBudget.MaximumContinuationReserveTokens,
                 ModelContextBudget.ContinuationReserveTokens(new AppSettings
                 {
-                    ContextWindowOverrideTokens = 200000
+                    ContextWindowOverrideTokens = 200000,
+                    MaxTokens = 512
                 }),
-                "large contexts cap the continuation reserve");
+                "large contexts cap the proportional reserve when the response floor is smaller");
 
             var messages = new[] { new ChatMessage { Role = "user", Content = "Request" } };
             var options = new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonObject };

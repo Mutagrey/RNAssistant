@@ -15,7 +15,6 @@ namespace RNAssistant.Office.Services
         public const string FileKind = "html-file";
         public const string DataKind = "html-data";
         private const int MaximumItems = 50;
-        private const int MaximumReadCharacters = 32000;
         private const int MaximumSearchCharacters = 1000000;
         private const int MaximumSearchCharactersPerMember = 128000;
 

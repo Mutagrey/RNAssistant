@@ -137,7 +137,11 @@ namespace RNAssistant.Office.Services
             string cursorBinding)
         {
             offset = Math.Max(0, offset);
-            maxChars = Math.Max(128, Math.Min(MaximumReadCharacters, maxChars <= 0 ? 8000 : maxChars));
+            maxChars = Math.Max(
+                ResourceReadRequest.MinimumCharacters,
+                Math.Min(
+                    ResourceReadRequest.MaximumCharacters,
+                    maxChars <= 0 ? ResourceReadRequest.DefaultCharacters : maxChars));
             if (offset > member.Content.Length)
             {
                 throw new InvalidOperationException("Resource read offset exceeds the representation length.");

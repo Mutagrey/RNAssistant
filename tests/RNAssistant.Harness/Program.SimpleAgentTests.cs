@@ -1376,6 +1376,24 @@ namespace RNAssistant.Harness
 
         private static void AgentPreservesVbaResourceEvidenceWithinBudget()
         {
+            RunVbaResourceBudgetScenario(3000, false);
+        }
+
+        private static void AgentContinuesVbaResourceCursorWithinBudget()
+        {
+            RunVbaResourceBudgetScenario(1000, true);
+        }
+
+        private static void AgentClassifiesExhaustedVbaContinuationBudget()
+        {
+            RunVbaResourceBudgetScenario(4096, false, true);
+        }
+
+        private static void RunVbaResourceBudgetScenario(
+            int pageSize,
+            bool expectSecondPage,
+            bool expectProjectionBudgetStop = false)
+        {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 const string moduleName = "BudgetModule";
@@ -1386,6 +1404,8 @@ namespace RNAssistant.Harness
                 adapter.SetVbaModule(moduleName, source, "StdModule");
 
                 var calls = new List<Tuple<IReadOnlyList<ChatMessage>, LlmRequestOptions>>();
+                string componentUri = null;
+                string continuationCursor = null;
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(Tuple.Create((IReadOnlyList<ChatMessage>)messages.ToList(), options));
@@ -1414,8 +1434,9 @@ namespace RNAssistant.Harness
                         var reference = component["reference"] as JObject;
                         AssertTrue(reference != null && !string.IsNullOrWhiteSpace((string)reference["uri"]),
                             "VBA component exposes its exact resource URI");
+                        componentUri = (string)reference["uri"];
                         AssertTrue(wire["resources"] is JArray && ((JArray)wire["resources"]).OfType<JObject>()
-                            .Any(item => string.Equals((string)item["uri"], (string)reference["uri"], StringComparison.Ordinal)),
+                            .Any(item => string.Equals((string)item["uri"], componentUri, StringComparison.Ordinal)),
                             "listed VBA URIs are also exact Tool Result resources");
                         return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(
                             "Читаю исходник.", new[]
@@ -1425,25 +1446,80 @@ namespace RNAssistant.Harness
                                     Name = ResourceToolCatalog.ReadToolId,
                                     Arguments = new Dictionary<string, object>
                                     {
-                                        ["uri"] = (string)reference["uri"],
+                                        ["uri"] = componentUri,
                                         ["representation"] = ResourceRepresentations.Source,
-                                        ["maxChars"] = 8000
+                                        ["maxChars"] = pageSize
                                     }
                                 }
                             }) });
                     }
 
-                    var readWire = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
-                    AssertEqual("ok", (string)readWire["status"],
-                        "VBA source read remains successful: " + readWire.ToString(Formatting.None));
-                    var readData = readWire["data"] as JObject;
-                    AssertTrue(readData != null && readData["resource"] is JObject,
-                        "VBA source metadata is not replaced by a transport truncation wrapper");
-                    AssertContains((string)readData["text"], sourceMarker, "VBA source reaches the model");
-                    AssertTrue(!string.IsNullOrWhiteSpace((string)readData["nextCursor"]),
-                        "bounded VBA source keeps its exact continuation cursor");
-                    AssertTrue(readWire["resources"] is JArray && ((JArray)readWire["resources"]).Count == 1,
-                        "VBA source read retains the exact root resource reference");
+                    if (calls.Count == 3)
+                    {
+                        var readWire = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
+                        AssertEqual("ok", (string)readWire["status"],
+                            "first VBA source page remains successful: " + readWire.ToString(Formatting.None));
+                        var readData = readWire["data"] as JObject;
+                        AssertTrue(readData != null && readData["resource"] is JObject,
+                            "VBA source metadata is not replaced by a transport truncation wrapper");
+                        AssertEqual(source.Substring(0, pageSize), (string)readData["text"],
+                            "first provider-owned VBA page reaches the model intact");
+                        AssertContains((string)readData["text"], sourceMarker, "VBA source reaches the model");
+                        continuationCursor = (string)readData["nextCursor"];
+                        AssertTrue(!string.IsNullOrWhiteSpace(continuationCursor),
+                            "bounded VBA source keeps its exact continuation cursor");
+                        AssertTrue(readWire["resources"] is JArray && ((JArray)readWire["resources"]).Count == 1,
+                            "VBA source read retains the exact root resource reference");
+                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(
+                            "Читаю продолжение.", new[]
+                            {
+                                new ConversationToolCall
+                                {
+                                    Name = ResourceToolCatalog.ReadToolId,
+                                    Arguments = new Dictionary<string, object>
+                                    {
+                                        ["uri"] = componentUri,
+                                        ["representation"] = ResourceRepresentations.Source,
+                                        ["cursor"] = continuationCursor,
+                                        ["maxChars"] = pageSize
+                                    }
+                                }
+                            }) });
+                    }
+
+                    var continuedWire = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
+                    if (expectProjectionBudgetStop)
+                    {
+                        throw new InvalidOperationException(
+                            "an unprojectable continuation must stop before another model dispatch");
+                    }
+                    if (!expectSecondPage)
+                    {
+                        AssertEqual("error", (string)continuedWire["status"],
+                            "oversized continuation becomes an explicit model-visible resource error");
+                        AssertEqual("resource_evidence_context_too_large",
+                            (string)continuedWire.SelectToken("data.code"),
+                            "oversized continuation reports the exact budget boundary");
+                        AssertTrue(continuedWire.SelectToken("data.text") == null &&
+                            continuedWire.SelectToken("data.preview") == null,
+                            "oversized continuation never masquerades as partial successful evidence");
+                        return Task.FromResult(new LlmCompletionResult
+                        {
+                            Content = ModelProtocolWire.Write(
+                                "Продолжение требует меньшей страницы.", new ConversationToolCall[0])
+                        });
+                    }
+                    AssertEqual("ok", (string)continuedWire["status"],
+                        "continued VBA source page remains successful: " + continuedWire.ToString(Formatting.None));
+                    var continuedData = continuedWire["data"] as JObject;
+                    AssertTrue(continuedData != null && continuedData["resource"] is JObject,
+                        "continued VBA page keeps the structured resource evidence");
+                    AssertEqual(source.Substring(pageSize, pageSize), (string)continuedData["text"],
+                        "nextCursor selects the exact second provider page without overlap or omission");
+                    AssertTrue(!string.IsNullOrWhiteSpace((string)continuedData["nextCursor"]),
+                        "second bounded VBA page keeps the following continuation cursor");
+                    AssertTrue(continuedWire["resources"] is JArray && ((JArray)continuedWire["resources"]).Count == 1,
+                        "continued VBA source read retains the exact root resource reference");
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = ModelProtocolWire.Write("VBA прочитан.", new ConversationToolCall[0])
@@ -1451,10 +1527,11 @@ namespace RNAssistant.Harness
                 };
 
                 var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema };
+                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Прочитай VBA-модуль " + moduleName + ".",
-                    NewSession(adapter),
+                    "Прочитай VBA-модуль " + moduleName + " страницами по " + pageSize + " символов.",
+                    session,
                     NewContext(adapter),
                     settings,
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
@@ -1462,8 +1539,27 @@ namespace RNAssistant.Harness
                     null,
                     BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
 
-                AssertEqual("VBA прочитан.", result.AssistantText, "VBA resource loop completes");
-                AssertEqual(3, calls.Count, "list, source read, and final response use three model steps");
+                var requestTotals = string.Join(",", calls.Select(request =>
+                    ModelContextBudget.EstimateAdmittedRequestTokens(
+                        request.Item1,
+                        request.Item2,
+                        settings,
+                        ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings),
+                        ModelContextBudget.ContinuationReserveTokens(settings))).ToArray());
+                if (expectProjectionBudgetStop)
+                {
+                    AssertContains(result.AssistantText, "mandatory continuation reserve",
+                        "unprojectable exact evidence reports its budget boundary");
+                    AssertEqual(ModelProtocolFailureKind.PromptBudgetExceeded.ToString(),
+                        session.LastRun.KernelState.Summary.Reason,
+                        "result projection exhaustion remains a prompt-budget failure");
+                    AssertEqual(3, calls.Count,
+                        "no fourth model request is sent when even the explicit result cannot fit");
+                    return;
+                }
+                AssertEqual(expectSecondPage ? "VBA прочитан." : "Продолжение требует меньшей страницы.", result.AssistantText,
+                    "VBA resource loop completes; admitted requests=" + requestTotals);
+                AssertEqual(4, calls.Count, "list, two source pages, and final response use four model steps");
                 foreach (var request in calls)
                 {
                     var admitted = ModelContextBudget.EstimateAdmittedRequestTokens(

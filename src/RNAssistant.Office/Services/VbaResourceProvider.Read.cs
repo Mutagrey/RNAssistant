@@ -11,7 +11,6 @@ namespace RNAssistant.Office.Services
 {
     internal sealed partial class VbaResourceProvider
     {
-        private const int MaximumReadCharacters = 32000;
         private const int MaximumMaterializedCharacters = 1000000;
         private const int MaximumSearchCharacters = 1000000;
         private const int MaximumSearchCharactersPerResource = 128000;
@@ -382,7 +381,9 @@ namespace RNAssistant.Office.Services
             content = content ?? string.Empty;
             var offset = position == null ? 0 : position.Offset;
             var maxChars = request == null ? 0 : request.MaxChars;
-            maxChars = Math.Max(128, Math.Min(MaximumReadCharacters, maxChars <= 0 ? 8000 : maxChars));
+            maxChars = Math.Max(ResourceReadRequest.MinimumCharacters, Math.Min(
+                ResourceReadRequest.MaximumCharacters,
+                maxChars <= 0 ? ResourceReadRequest.DefaultCharacters : maxChars));
             var contentSha256 = descriptor.ContentSha256 ?? TextPatternEngine.Sha256(content);
             ResourceReadCursor.ValidateLive(request, position, contentSha256);
             if (offset > content.Length)

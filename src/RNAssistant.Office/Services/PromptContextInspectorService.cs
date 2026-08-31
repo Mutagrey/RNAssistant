@@ -379,16 +379,16 @@ namespace RNAssistant.Office.Services
                 sections.Add(new PromptContextSectionDto
                 {
                     Id = "continuation_reserve",
-                    Title = "Резерв следующего tool-result",
+                    Title = "Резерв следующего шага",
                     Tokens = continuationReserveTokens,
                     Count = 1,
-                    Detail = "Обязательный запас каждого conversation request",
+                    Detail = "Ответ модели, минимальный result envelope и пропорциональный запас",
                     Included = true,
                     Items = new List<PromptContextItemDto>
                     {
                         Item("continuation-reserve", "reserve", "Continuation reserve", string.Empty,
                             continuationReserveTokens,
-                            "Не отправляется как текст; admission сохраняет место для следующего bounded результата и его envelope.")
+                            "Не отправляется как текст; admission сохраняет место как минимум для разрешённого ответа модели и result envelope.")
                     }
                 });
             }

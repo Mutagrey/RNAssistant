@@ -231,9 +231,30 @@ largest inline
 projection that fits the same reserves. The replaced capability-only budget helper
 and fixed 1,200-token envelope guess are removed. Host-neutral `agent:` 36/36,
 `model protocol:` 15/15, `tool pack:` 6/6, `resources:` 10/10 and Prompt Inspector
-3/3 pass, including a default Excel/VBA list→source→cursor loop and explicit
+3/3 pass, including an Excel/VBA list→source→cursor loop and explicit
 oversized-evidence refusal. Windows WebView2/Office/VBE qualification is unchanged;
 the active Phase 11T next step is not advanced by this fix.
+
+Resource-result boundary follow-up (2026-09-01): повторный cursor-loop audit
+обнаружил, что прежний proportional continuation reserve мог быть меньше
+разрешённого ответа модели, а недоступная media/materialization projection могла
+закрыть успешное чтение как `status:ok` без доставленного evidence. Теперь reserve
+равен максимуму из proportional headroom и `max output + 512-token result envelope`;
+слишком малый context fail-closed уже при composition. Provider-owned text page по
+умолчанию уменьшена с 8,000 до 2,048 символов и остаётся lossless через exact
+`nextCursor`; явный больший page передаётся целиком либо возвращает
+`resource_evidence_context_too_large`, без transport preview. Read projection
+failure становится model-facing `error`, mutation outcome/effect не переписывается,
+а невозможность вместить даже compact error классифицируется как
+`PromptBudgetExceeded`, не infrastructure. Regression реально читает точную первую
+и вторую VBA pages, проверяет oversized continuation и media failure. Targeted
+`agent:` 39/39, `vba:` 91/91, `resources:` 10/10, `model protocol:` 15/15,
+`tool pack:` 6/6, token estimate 6/6 и Prompt Inspector 3/3 pass. Full harness на
+текущем составе — 575/579: все четыре failure уже воспроизводятся на чистом parent
+`32a6f7a` после Outlook switch (три legacy-Outlook kernel replay fixture и один
+legacy conversion fixture больше не dispatch), поэтому не исправляются внутри
+resource contour и должны быть удалены/перенесены текущим 11T9 legacy cleanup.
+Active 11T route и Windows WebView2/Office/VBE gates не меняются.
 
 Resource continuation scope fix (2026-08-31): prior immutable cursors were raw opaque
 offsets, while revision-bound cursors carried only offset plus data hash. Reusing a

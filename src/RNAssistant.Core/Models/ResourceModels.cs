@@ -71,6 +71,10 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceReadRequest
     {
+        public const int MinimumCharacters = 128;
+        public const int DefaultCharacters = 2048;
+        public const int MaximumCharacters = 32000;
+
         [Newtonsoft.Json.JsonProperty("reference")]
         public ResourceRef Reference { get; set; }
         [Newtonsoft.Json.JsonProperty("representation")]

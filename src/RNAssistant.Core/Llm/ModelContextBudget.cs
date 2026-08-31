@@ -56,10 +56,16 @@ namespace RNAssistant.Core.Llm
         public static int ContinuationReserveTokens(AppSettings settings, string model = null)
         {
             var input = Math.Max(1, InputBudgetTokens(settings, model));
-            return Math.Max(
+            var proportional = Math.Max(
                 MinimumContinuationReserveTokens,
                 Math.Min(MaximumContinuationReserveTokens,
                     (int)Math.Ceiling(input / (double)ContinuationReserveDivisor)));
+            var responseAndEnvelope = SaturatingSum(
+                RequestedOutputTokens(settings, model),
+                MinimumContinuationReserveTokens);
+            return Math.Min(
+                Math.Max(1, input - 1),
+                Math.Max(proportional, responseAndEnvelope));
         }
 
         public static int EstimateRequestTokens(

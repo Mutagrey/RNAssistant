@@ -6,6 +6,8 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools.Contracts;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -141,15 +143,32 @@ namespace RNAssistant.Office.Services
 
         internal static bool IsExactReadEvidence(ToolCommand command)
         {
-            var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
-            return id.StartsWith("common.resources_", StringComparison.OrdinalIgnoreCase) ||
-                id.StartsWith("common.capabilities_", StringComparison.OrdinalIgnoreCase);
+            return IsResourceEvidence(command) || IsCapabilityEvidence(command);
         }
 
         internal static bool IsResourceEvidence(ToolCommand command)
         {
             var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
-            return id.StartsWith("common.resources_", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(id, ResourceToolCatalog.ListToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(id, ResourceToolCatalog.ResolveToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(id, ResourceToolCatalog.SearchToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(id, ResourceToolCatalog.ReadToolId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static ToolResultStatus ProjectionFailureStatus(
+            ToolCommand command,
+            ToolResultStatus sourceStatus)
+        {
+            return IsExactReadEvidence(command) && sourceStatus == ToolResultStatus.Ok
+                ? ToolResultStatus.Error
+                : sourceStatus;
+        }
+
+        private static bool IsCapabilityEvidence(ToolCommand command)
+        {
+            var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
+            return string.Equals(id, CapabilityDiscoveryExecutor.SearchToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(id, CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase);
         }
 
         private static int EstimateProtocolDataTokens(string data, AppSettings settings)

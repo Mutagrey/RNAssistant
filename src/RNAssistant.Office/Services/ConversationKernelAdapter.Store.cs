@@ -122,21 +122,29 @@ namespace RNAssistant.Office.Services
                         _modelSession.AppendConfirmedResult(command, result);
                     else
                     {
-                        var prepared = await _modelSession.PrepareToolResultAsync(result, _runCancellation).ConfigureAwait(false);
+                        var prepared = await _modelSession.PrepareToolResultAsync(
+                            command, result, _runCancellation).ConfigureAwait(false);
                         result = prepared.Result;
                         _modelSession.AppendToolResult(command, prepared);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _preparationFailure = AgentModelResult.Failed(ex is OperationCanceledException
-                        ? ModelProtocolFailureKind.Cancelled : ModelProtocolFailureKind.Infrastructure, ex.Message);
+                    _preparationFailure = AgentModelResult.Failed(
+                        ex is OperationCanceledException
+                            ? ModelProtocolFailureKind.Cancelled
+                            : ex is PromptBudgetExceededException
+                                ? ModelProtocolFailureKind.PromptBudgetExceeded
+                                : ModelProtocolFailureKind.Infrastructure,
+                        ex.Message);
                     // Close the accepted exchange without copying a large/unprepared
                     // payload. This is projection failure, not new execution evidence.
                     if (!_session.Messages.Any(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == command.ToolCallId))
                     {
                         var fallback = AgentJsonProtocol.CreateToolResultMessage(command,
-                            new TerminalResult(result.Result.Status, "Result materialization failed: " + ex.Message,
+                            new TerminalResult(
+                                ToolResultResourceService.ProjectionFailureStatus(command, result.Result.Status),
+                                "Result materialization failed: " + ex.Message,
                                 new JObject { ["code"] = "result_materialization_failed", ["loaded"] = false,
                                     ["complete"] = false }.ToString(Formatting.None)), _input.Settings.ToolResultRole);
                         fallback.RunId = _session.LastRun.RunId;

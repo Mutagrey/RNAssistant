@@ -10,11 +10,13 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using ToolResultStatus = RNAssistant.Core.Tools.Contracts.ToolResultStatus;
 
 namespace RNAssistant.Harness
 {
@@ -313,6 +315,26 @@ namespace RNAssistant.Harness
             }
             AssertEqual("resource_revision_changed", listDrift == null ? null : listDrift.ErrorCode,
                 "resource list continuation fails instead of shifting across collection revisions");
+
+            var defaultArtifact = new ChatArtifact
+            {
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "Default page",
+                InlineText = new string('d', 3000)
+            };
+            pagingSession.Artifacts.Add(defaultArtifact);
+            var defaultRead = pagingGateway.Read(pagingSession, new ResourceReadRequest
+            {
+                Reference = ChatResourceUri.CreateArtifactRevision(pagingSession, defaultArtifact),
+                Representation = ResourceRepresentations.Text
+            }).Result;
+            AssertEqual(ResourceReadRequest.DefaultCharacters, defaultRead.ReturnedCharacters,
+                "default resource page leaves conservative room for exact evidence and continuation");
+            AssertTrue(!string.IsNullOrWhiteSpace(defaultRead.NextCursor),
+                "conservative default remains lossless through provider-owned paging");
+            AssertContains(ResourceReadToolHandler.Descriptor.ParametersJson,
+                "\"default\":" + ResourceReadRequest.DefaultCharacters,
+                "public resource schema advertises the same conservative default");
 
             var resolved = gateway.Resolve(session, resourceUri);
             AssertEqual(resourceUri, resolved.Resource.Reference.Uri, "resource resolve is exact");
@@ -1704,6 +1726,92 @@ namespace RNAssistant.Harness
                 AssertTrue(session.Messages.Where(message => message != null &&
                     (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal))
                     .All(message => message.ExcludeFromModelContext), "consumed media stays out of later steps");
+            });
+        }
+
+        private static void AgentResourceMediaProjectionFailureIsExplicit()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var settings = new AppSettings
+                {
+                    Model = "text-only",
+                    AgentResponseMode = AgentResponseModes.JsonObject
+                };
+                settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings
+                {
+                    SupportsImages = false,
+                    SupportsAudio = false,
+                    MaxContextTokens = 32768
+                };
+                settings.ModelCapabilities["vision-helper"] = new ModelCapabilitySettings
+                {
+                    SupportsImages = true,
+                    SupportsAudio = false,
+                    MaxContextTokens = 16384
+                };
+                settings.AttachmentModelPriority.Add("vision-helper");
+                var session = NewSession(adapter);
+                session.Model = settings.Model;
+                var store = new ChatStore(FixturePaths.Value);
+                store.Save(session);
+                using (var modelSession = ConversationModelSession.CreateAsync(
+                    adapter,
+                    null,
+                    new AttachmentAnalysisService((s, m, o, u, c) =>
+                        throw new InvalidOperationException("helper unavailable")),
+                    EventStore(store),
+                    ChatModes.Agent,
+                    "Read the image.",
+                    session,
+                    NewContext(adapter),
+                    settings,
+                    executor.GetControllerTools().ToList(),
+                    null,
+                    null,
+                    false,
+                    null,
+                    CancellationToken.None).GetAwaiter().GetResult())
+                {
+                    var command = new ToolCommand
+                    {
+                        ToolId = ResourceToolCatalog.ReadToolId,
+                        ToolCallId = "media_projection_failure"
+                    };
+                    var original = new ToolResultMaterialization(
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
+                            "Media read.",
+                            "{\"complete\":true}",
+                            new[] { new ResourceRef("rna://chat/projection/resource") }),
+                        new[]
+                        {
+                            new ChatAttachment
+                            {
+                                Id = "projection-image",
+                                Kind = "image",
+                                FileName = "projection.png",
+                                ContentType = "image/png",
+                                Size = 4
+                            }
+                        });
+                    var prepared = modelSession.PrepareToolResultAsync(
+                        command, original, CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(ToolResultStatus.Ok, original.Result.Status,
+                        "request-local media failure does not rewrite the executed read record");
+                    AssertEqual(ToolResultStatus.Error, prepared.Result.Result.Status,
+                        "unavailable resource evidence is an explicit model-facing read error");
+                    AssertEqual("artifact_media_unavailable",
+                        (string)JObject.Parse(prepared.Result.Result.DataJson)["code"],
+                        "resource projection failure has an actionable code");
+                    AssertEqual(ToolResultStatus.Ok,
+                        ToolResultResourceService.ProjectionFailureStatus(
+                            new ToolCommand { ToolId = "excel.add_sheet" }, ToolResultStatus.Ok),
+                        "projection failure cannot rewrite a known mutation outcome");
+                    AssertEqual(ToolResultStatus.Ok,
+                        ToolResultResourceService.ProjectionFailureStatus(
+                            new ToolCommand { ToolId = "common.resources_upsert" }, ToolResultStatus.Ok),
+                        "resource namespace prefixes do not classify future mutations as exact reads");
+                }
             });
         }
 

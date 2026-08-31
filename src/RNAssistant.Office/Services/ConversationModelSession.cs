@@ -108,7 +108,10 @@ namespace RNAssistant.Office.Services
             _messages.Add(accepted);
         }
 
-        internal async Task<PreparedToolResult> PrepareToolResultAsync(ToolResultMaterialization result, CancellationToken cancellationToken)
+        internal async Task<PreparedToolResult> PrepareToolResultAsync(
+            ToolCommand command,
+            ToolResultMaterialization result,
+            CancellationToken cancellationToken)
         {
             ChatMessage media = null;
             if ((result.ModelAttachments ?? new ChatAttachment[0]).Count > 0)
@@ -124,20 +127,22 @@ namespace RNAssistant.Office.Services
                 }
                 catch (Exception ex)
                 {
-                    result = ProjectionFailure(result, "Artifact media could not be prepared for the model: " + ex.Message,
+                    result = ProjectionFailure(command, result,
+                        "Artifact media could not be prepared for the model: " + ex.Message,
                         result.Result.DataJson, "artifact_media_unavailable");
                 }
             }
             return new PreparedToolResult(result, media);
         }
 
-        private static ToolResultMaterialization ProjectionFailure(ToolResultMaterialization source,
+        private static ToolResultMaterialization ProjectionFailure(ToolCommand command,
+            ToolResultMaterialization source,
             string message, string dataJson, string code)
         {
-            // A media projection failure cannot turn a known invocation into an
-            // unknown/failed effect. Tell the model what is missing explicitly.
+            // Preserve mutation outcome/effect authority. A read whose requested
+            // evidence cannot reach the model fails closed as a read result.
             return new ToolResultMaterialization(new RNAssistant.Core.Tools.Contracts.ToolResult(
-                source.Result.Status, message, new JObject
+                ToolResultResourceService.ProjectionFailureStatus(command, source.Result.Status), message, new JObject
                 {
                     ["code"] = code,
                     ["loaded"] = false,
@@ -346,6 +351,12 @@ namespace RNAssistant.Office.Services
                 ReplaceOversizedReadEvidence(command, result, availableForData);
                 message = AgentJsonProtocol.CreateToolResultMessage(
                     command, result, int.MaxValue, _settings.ToolResultRole, _settings);
+                if (!RequestFits(message))
+                {
+                    ReplaceWithCompactReadEvidenceError(command, result);
+                    message = AgentJsonProtocol.CreateToolResultMessage(
+                        command, result, int.MaxValue, _settings.ToolResultRole, _settings);
+                }
             }
             if (!RequestFits(message))
             {
@@ -496,6 +507,27 @@ namespace RNAssistant.Office.Services
                     : "Resource evidence did not fit the request with mandatory reserves. Request a smaller list limit or read maxChars, compact context, then retry.",
                 data.ToString(Formatting.None),
                 capability ? result.Resources : new ResourceRef[0]));
+        }
+
+        private static void ReplaceWithCompactReadEvidenceError(
+            ToolCommand command,
+            ToolResultMaterialization materialized)
+        {
+            var capability = !ToolResultResourceService.IsResourceEvidence(command);
+            var data = new JObject
+            {
+                ["code"] = capability
+                    ? "capability_evidence_context_too_large"
+                    : "resource_evidence_context_too_large",
+                ["complete"] = false
+            };
+            if (capability) data["loaded"] = false;
+            materialized.ReplaceResult(RNAssistant.Core.Tools.Contracts.ToolResult.Error(
+                capability
+                    ? "Capability evidence did not fit the reserved model context."
+                    : "Resource evidence did not fit the reserved model context; request a smaller page or compact context.",
+                data.ToString(Formatting.None),
+                capability ? materialized.Result.Resources : new ResourceRef[0]));
         }
 
         private async Task<ChatMessage> BuildArtifactMediaMessageAsync(
