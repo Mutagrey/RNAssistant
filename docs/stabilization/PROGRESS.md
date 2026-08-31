@@ -22,6 +22,13 @@ Version format, diff и 270 local Markdown link targets pass. Windows WebView2/r
 multi-window не проверялись; next 11A2 heads/history/kinds.
 [Evidence](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md).
 
+MockDemo v4 cleanup (2026-08-31): scripted responses больше не присваивают
+model-owned call IDs, completion определяется по Tool Result v1 `status=ok`, а HTML
+create/edit загружает exact `common.html_workspace_upsert` через
+`common.capabilities_read`; удалён вызов снятого `common.html_workspace_read`.
+Полный Release `--self-test`: четыре model profiles и failed-turn persistence pass;
+только три существующих CA1416 PDF warnings. Production runtime не менялся.
+
 Qualification Center requirements (2026-08-31, WQ-A0 docs-only): пользовательский запрос на встроенные расширяемые проверки оформлен в [canonical contract](../qualification.md) и [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md). Empty-chat card должна открывать отдельный wizard, а не вставлять prompt. Packs versioned/data-only, complex agent tasks идут через production runtime, pass принадлежит typed verifier evidence; dedicated qualification chat использует тот же events/CAS и causal journal. Первый pack — Excel WQ0 с in-app VSTO/native observations и narrow independent-client helper. PowerShell остаётся временным engineering fallback. Код/UI/helper не менялись; WQ0/5B2/R04 не закрыты. Docs diff/205 local links/anchors в затронутых документах и pre-commit `ValidateVersionFormat` — pass; build/tests не запускались.
 
 WQ-A1 host-neutral core (2026-08-31): добавлены strict schema v1 pack parser,

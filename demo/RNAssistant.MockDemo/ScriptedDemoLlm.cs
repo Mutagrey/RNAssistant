@@ -188,7 +188,7 @@ namespace RNAssistant.MockDemo
             {
                 return new[]
                 {
-                    Cmd("common.html_workspace_read"),
+                    Cmd("common.capabilities_read", "id", "common.html_workspace_upsert"),
                     Cmd("common.html_workspace_upsert", "resourceType", "data", "name", "sales", "content", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150},{\"month\":\"Mar\",\"sales\":180}],\"title\":\"Updated Sales HTML Dashboard\"}"),
                     Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "app.js", "content", "(function(){var data=window.RNAssistantData.sales||{};var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','updated');}());", "setActive", false)
                 };
@@ -196,6 +196,7 @@ namespace RNAssistant.MockDemo
 
             return new[]
             {
+                Cmd("common.capabilities_read", "id", "common.html_workspace_upsert"),
                 Cmd("common.html_workspace_upsert", "resourceType", "data", "name", "sales", "content", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150}],\"title\":\"Sales HTML Dashboard\"}"),
                 Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "styles.css", "content", "body{font-family:Segoe UI,Arial,sans-serif;margin:0;min-height:100vh;background:#f8fafc;color:#111827}.dashboard{min-height:100vh;padding:32px clamp(20px,4vw,56px);display:grid;align-content:start;gap:22px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;border-bottom:1px solid #d0d5dd;padding-bottom:18px}.hero h1{margin:0;font-size:clamp(28px,4vw,48px);font-weight:500}.hero p{margin:8px 0 0;color:#475467}.metric{margin:0;font-size:clamp(32px,5vw,56px);font-weight:500;color:#0f766e}.rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.row-card{display:flex;justify-content:space-between;gap:12px;border:1px solid #d0d5dd;border-radius:8px;padding:14px;background:#fff}"),
                 Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "app.js", "content", "(function(){var data=window.RNAssistantData.sales||{};var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','created');}());", "setActive", false),
@@ -250,7 +251,6 @@ namespace RNAssistant.MockDemo
                 {
                     new
                     {
-                        id = CallId(command),
                         name = command.ToolId,
                         arguments = command.Arguments
                     }
@@ -269,28 +269,25 @@ namespace RNAssistant.MockDemo
 
         private static DemoCommand NextPendingCommand(IEnumerable<DemoCommand> commands, IEnumerable<JObject> toolResults)
         {
-            return (commands ?? new DemoCommand[0]).FirstOrDefault(command => !CommandWasObserved(command, toolResults));
-        }
-
-        private static bool CommandWasObserved(DemoCommand command, IEnumerable<JObject> toolResults)
-        {
-            if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
+            var observed = (toolResults ?? new JObject[0])
+                .Where(result => result != null &&
+                    string.Equals((string)result["status"], "ok", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace((string)result["name"]))
+                .GroupBy(result => (string)result["name"], StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+            foreach (var command in commands ?? new DemoCommand[0])
             {
-                return false;
-            }
-
-            var callId = CallId(command);
-            foreach (var result in toolResults ?? new JObject[0])
-            {
-                if (result != null &&
-                    (bool?)result["ok"] == true &&
-                    string.Equals((string)result["name"], command.ToolId, StringComparison.Ordinal) &&
-                    string.Equals((string)result["tool_call_id"], callId, StringComparison.Ordinal))
+                int count;
+                if (command != null && observed.TryGetValue(command.ToolId, out count) && count > 0)
                 {
-                    return true;
+                    observed[command.ToolId] = count - 1;
+                    continue;
                 }
+
+                return command;
             }
-            return false;
+
+            return null;
         }
 
         private static DemoCommand Cmd(string toolId, params object[] keyValues)
@@ -371,23 +368,6 @@ namespace RNAssistant.MockDemo
         private static bool IsRepairRequest(string text)
         {
             return Contains(text, "FORMAT_REPAIR:");
-        }
-
-        private static string CallId(DemoCommand command)
-        {
-            var seed = (command == null ? string.Empty : command.ToolId ?? string.Empty) + "|" +
-                JsonConvert.SerializeObject(command == null ? null : command.Arguments, Formatting.None);
-            unchecked
-            {
-                uint hash = 2166136261;
-                foreach (var character in seed)
-                {
-                    hash ^= character;
-                    hash *= 16777619;
-                }
-                return "call_" + Regex.Replace(command == null ? "tool" : command.ToolId ?? "tool", "[^A-Za-z0-9_-]", "_") +
-                    "_" + hash.ToString("x8");
-            }
         }
 
         private static string LastNonEmptyLine(string value)
