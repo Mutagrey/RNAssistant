@@ -1694,18 +1694,24 @@ namespace RNAssistant.Harness
             AssertEqual("model.verdict", (string)missingVerdict.Data["expectedStage"], "terminal run exposes missing model verdict");
             AssertTrue(missingVerdict.SourceEventSeqs.SequenceEqual(new long[] { 19, 21 }), "gap links request and terminal evidence");
 
-            var missingDispatch = query.QueryView(events, new TrajectoryViewQueryRequest
+            var incompatibleRun = query.QueryView(events, new TrajectoryViewQueryRequest
             {
                 View = TrajectoryViews.RunCausal, RunId = "run-3", PageSize = 200
-            }).Rows.Single(item => item.Kind == "diagnostic.evidence.missing");
-            AssertEqual("tool.execution.start", (string)missingDispatch.Data["expectedStage"], "terminal run exposes missing tool dispatch evidence");
-            AssertEqual("call-missing", missingDispatch.ToolCallId, "tool gap retains allocated call id");
-            var compatibilityTool = query.QueryView(events, new TrajectoryViewQueryRequest
+            }).Rows;
+            var incompatibleResult = incompatibleRun.Single(item =>
+                item.Kind == SessionOperationTypes.ToolResultRecorded);
+            AssertEqual("incompatible", incompatibleResult.Status,
+                "pre-R37 misclassified operation is not reinterpreted as current evidence");
+            AssertEqual(true, (bool)incompatibleResult.Data["requiresReset"],
+                "incompatible retained evidence explicitly requires reset");
+            AssertTrue(!incompatibleRun.Any(item => item.Kind == "diagnostic.evidence.missing"),
+                "incompatible result is not promoted to an accepted call with invented dispatch expectations");
+            var incompatibleTools = query.QueryView(events, new TrajectoryViewQueryRequest
             {
                 View = TrajectoryViews.ToolExecution, RunId = "run-3", PageSize = 200
-            }).Rows.Single();
-            AssertEqual("queued", compatibilityTool.Status,
-                "current misclassified accepted-call history is not promoted to a completed result");
+            }).Rows;
+            AssertEqual(0, incompatibleTools.Count,
+                "pre-R37 operation grants neither accepted-call nor completed-result authority");
 
             var dto = TrajectoryViewRowDto.From(accepted);
             AssertEqual("attempt-2", dto.ModelAttemptId, "bridge DTO exposes attempt correlation");

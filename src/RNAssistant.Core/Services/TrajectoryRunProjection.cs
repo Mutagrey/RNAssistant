@@ -105,7 +105,7 @@ namespace RNAssistant.Core.Services
                 var operation = operations[operationIndex];
                 var operationType = Text(Property(operation, "Type"));
                 if (!IsCausalOperation(operationType)) continue;
-                if (IsAcceptedCallOperation(operationType, operation))
+                if (IsAcceptedCallOperation(operationType))
                 {
                     AddAcceptedCallRows(rows, item, operation, operationIndex);
                 }
@@ -188,7 +188,10 @@ namespace RNAssistant.Core.Services
             var value = Property(operationData, "Value") as JObject ?? new JObject();
             var activity = Property(value, "Activity") as JObject ?? new JObject();
             var origin = Property(value, "AcceptedCallOrigin") as JObject;
-            var status = OperationStatus(operationType, operationData, value, activity);
+            var incompatible = IsIncompatibleToolOperation(operationType, value);
+            var status = incompatible
+                ? "incompatible"
+                : OperationStatus(operationType, operationData, value, activity);
             var toolCallId = Text(Property(activity, "ToolCallId")) ?? Text(Property(value, "ToolCallId"));
             var toolId = Text(Property(activity, "ToolId")) ?? Text(Property(value, "ToolName"));
             var artifactId = IsArtifactOperation(operationType) ? Text(Property(value, "Id")) : null;
@@ -205,6 +208,11 @@ namespace RNAssistant.Core.Services
             Copy(data, activity, "PendingId", "pendingId");
             Copy(data, activity, "Retryable", "retryable");
             if (origin != null) data["acceptedCallOrigin"] = origin.DeepClone();
+            if (incompatible)
+            {
+                data["requiresReset"] = true;
+                data["incompatibleReason"] = "accepted_origin_on_tool_result";
+            }
 
             var row = new TrajectoryViewRow
             {
@@ -352,13 +360,15 @@ namespace RNAssistant.Core.Services
                 IsArtifactOperation(type);
         }
 
-        private static bool IsAcceptedCallOperation(string type, JObject operation)
+        private static bool IsAcceptedCallOperation(string type)
         {
-            if (Same(type, SessionOperationTypes.ToolCallRecorded)) return true;
-            var data = Property(operation, "Data") as JObject;
-            var value = Property(data, "Value") as JObject;
-            return Property(value, "AcceptedCallOrigin") is JObject &&
-                !string.IsNullOrWhiteSpace(Text(Property(value, "ToolCallId")));
+            return Same(type, SessionOperationTypes.ToolCallRecorded);
+        }
+
+        private static bool IsIncompatibleToolOperation(string type, JObject value)
+        {
+            return Same(type, SessionOperationTypes.ToolResultRecorded) &&
+                Property(value, "AcceptedCallOrigin") is JObject;
         }
 
         private static bool IsArtifactOperation(string type)

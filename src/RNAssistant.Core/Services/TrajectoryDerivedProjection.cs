@@ -133,10 +133,16 @@ namespace RNAssistant.Core.Services
                     var data = Property(operation, "Data") as JObject ?? new JObject();
                     var message = Property(data, "Value") as JObject;
                     var acceptedOrigin = Property(message, "AcceptedCallOrigin") as JObject;
-                    var acceptedCallId = Text(Property(message, "ToolCallId"));
-                    if (string.Equals(operationType, SessionOperationTypes.ToolCallRecorded, StringComparison.OrdinalIgnoreCase) ||
-                        acceptedOrigin != null && !string.IsNullOrWhiteSpace(acceptedCallId))
+                    if (string.Equals(operationType, SessionOperationTypes.ToolResultRecorded, StringComparison.OrdinalIgnoreCase) &&
+                        acceptedOrigin != null)
                     {
+                        // Pre-R37 persisted the wrong operation type. Current readers do
+                        // not reinterpret it as either an accepted call or a completed result.
+                        continue;
+                    }
+                    if (string.Equals(operationType, SessionOperationTypes.ToolCallRecorded, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var acceptedCallId = Text(Property(message, "ToolCallId"));
                         var calls = Property(message, "ToolCalls") as JArray;
                         var callList = calls == null ? new List<JObject>() : calls.OfType<JObject>().ToList();
                         if (callList.Count == 0)

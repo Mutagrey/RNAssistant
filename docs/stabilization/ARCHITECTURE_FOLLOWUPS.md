@@ -49,7 +49,8 @@ store, model wire или UI-owned effect classification.
    scaffolding, которое всё равно вызывает `ExecuteTool(ToolCommand)`.
 7. После family switches обязательны direct VBA/controller/custom authoring
    migrations и финальное удаление generic adapter catalog/dispatch, legacy
-   definition/result/UI bridges и старой trajectory inference.
+   definition/result/UI bridges; старая trajectory inference уже удалена отдельным
+   host-neutral slice.
 8. Milestone WQ и Phase 12 stable core.
 9. Остальные улучшения ниже — отдельные post-stable minor changes либо соответствующие
    independently admitted Phase 11 contours. Не включать их в 9D5/Phase 10.
@@ -180,8 +181,8 @@ Active legacy означает второй execution/catalog/result/history pat
 - удалить VBA mutation/package adapters после direct typed host/backend switch;
 - удалить `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` и
   `ToolResultUiProjection` после последнего catalog/result/UI consumer;
-- удалить pre-R37 trajectory accepted-call inference; старые несовместимые evidence
-  не переинтерпретируются и требуют нового chat/reset;
+- pre-R37 trajectory accepted-call inference удалена host-neutral; старые
+  несовместимые evidence не переинтерпретируются и требуют нового chat/reset;
 - сохранить narrow journal-store ports и model-compatibility diagnostics: они
   используют одну authority и не являются legacy fallback.
 

@@ -54,11 +54,14 @@ and terminal events and explicitly states that absence proves neither success no
 failure. Waiting/confirmation/user pauses do not create gaps. No effect is inferred
 from tool name, response prose or timestamps.
 
-Accepted call/result classification is owned by runtime `AcceptedCallOrigin`, not by
-the configured provider-facing tool-result role or presence of native `ToolCalls`.
-Phase 9A corrects new event writes accordingly. A read-only adapter recognizes the
-same origin on earlier current-v4 commits that were mislabeled `tool.result.recorded`;
-it never rewrites history or affects replay/execution.
+Accepted call/result classification at write time is owned by runtime
+`AcceptedCallOrigin`, not by the configured provider-facing tool-result role or
+presence of native `ToolCalls`. Phase 9A corrected current event writes accordingly.
+Trajectory readers now trust only the exact persisted current operation type: an
+earlier `tool.result.recorded` carrying `AcceptedCallOrigin` is exposed in
+`run-causal` as `incompatible` with `requiresReset=true` and is excluded from
+`tool-execution`. It is never reinterpreted, rewritten or granted replay/execution
+authority.
 
 Diagnostics turns row correlations into navigation rather than another index: run/turn/step/tool-call filters reopen the relevant chat projection, artifact and parent ids open lineage, and a source-event action opens the bounded raw sequence range. Document-scoped VBA mutation rows use their recorded `SessionId` to navigate back to the originating chat without treating VBA as a chat artifact.
 

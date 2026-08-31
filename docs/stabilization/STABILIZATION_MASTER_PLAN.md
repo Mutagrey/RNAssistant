@@ -2391,11 +2391,14 @@ endpoint.
    - 11T9: переключить VBA mutations/packages и остальные controller-owned existing
      tools на direct typed registrations/backends без `ToolDefinition`/legacy
      `ToolResult` roundtrip; durable journals/CAS остаются единственной authority;
+   - [x] independent host-neutral cleanup: удалить pre-R37 trajectory inference;
+     wrong-type retained operation остаётся exact incompatible/reset-only evidence
+     и не входит в tool-execution;
    - 11T10 final cleanup: после последнего consumer удалить
      `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches,
      `OfficeBuiltInToolCatalog` legacy DTO projection, `LegacyToolDefinitionAdapter`,
-     `LegacyToolResultAdapter`, `ToolResultUiProjection` и pre-R37 trajectory
-     inference. Custom tool/skill authoring получает versioned typed contracts в
+     `LegacyToolResultAdapter` и `ToolResultUiProjection`. Custom tool/skill
+     authoring получает versioned typed contracts в
      соответствующих 11J/11K slices. Ни один adapter/alias/dual dispatch не остаётся.
    Кандидаты и checklist закреплены в
    [Architecture follow-ups §B](ARCHITECTURE_FOLLOWUPS.md).
