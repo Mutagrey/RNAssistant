@@ -5,7 +5,8 @@ boundary, explicit draft/preparing/committed labels and exact Library head/histo
 projection. 11B1–11B3 complete the host-neutral Plan domain owner, exact whole-Markdown
 lineage, restore/removal UX and ready handoff by pinned URI. 11C1–11C3 complete the
 host-neutral HTML lineage, inert uploaded-source import, binding evidence, recovery
-and guarded exact export contour. Typed viewers remain later slices. The
+and guarded exact export contour. Typed viewer work starts with 11D1 text/Markdown;
+image, PDF and audio remain later independent slices. The
 existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
@@ -243,6 +244,12 @@ Phase 11 is implemented as separate changes:
      [Evidence](stabilization/PHASE_11C3_HTML_BINDING_EXPORT.md).
 4. Typed viewers: text/Markdown first; image, PDF and audio as separate measured
    slices with their own security and Windows gates.
+5. The Artifact milestone closes only after one Windows WebView pass covers the
+   Library, Plan and HTML together: reload, exact history navigation, stale
+   revisions, viewer cleanup and bounded large payloads. Product-wide Problems and
+   causal evidence links then belong to the Phase 11
+   [Issue Center](qualification.md#11-phase-11-issue-center), not to artifact
+   metadata or a new artifact class.
 
 Minimum tests prove: a draft is absent from durable projection/context; commit and
 UI projection precede the first fake model transport call; provider failure after

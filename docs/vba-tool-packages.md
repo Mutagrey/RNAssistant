@@ -92,8 +92,10 @@ Normalization/hash rules теперь принадлежат `Core.Tools.VbaText
 persistent install/remove/status и package recovery остаются в stable core. Они
 должны получить одного typed owner в 6I. Это не включает создание/редактирование
 dynamic tool definitions, новые package функции или pipelines: authoring остаётся
-отдельным Phase 11 contour. `mode=rename` не является package feature и переходит в
-typed mutation owner отдельным 6J.
+отдельным Phase 11 contour после read-only selected-endpoint inspector и Host Fabric
+pinning; его revision/history/import UX определён в
+[Tool Library](tool-library.md). `mode=rename` не является package feature и
+переходит в typed mutation owner отдельным 6J.
 
 6I закрывает R41 host-neutral. Session install и cleanup остаются двумя атомарными
 package mutations, но имеют один durable `LifecycleId`; тот же id входит в exact

@@ -2,12 +2,33 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 Optional contours — отдельный ранний Artifact Library milestone явно допущен пользователем параллельно WQ
-Current task: 11C3 done host-neutral — HTML binding completeness/integrity, recovery и guarded standalone export используют один exact whole-workspace checkpoint owner без hidden storage revisions.
+Current task: 11D1 in progress — bounded text/source и sanitized Markdown viewers через typed already-authorized representation.
 Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо и этим milestone не закрываются. Phase 12 scope не расширен.
 
-Next step: отдельный 11D1 commit — bounded text/source и sanitized Markdown viewers через typed already-authorized representation; media viewers оставить следующими отдельными slices.
+Next step: завершить отдельный 11D1 commit; image, PDF и audio оставить следующими отдельными slices.
 Required context: [Artifact Library contract](../artifact-library.md), [Resource Fabric](../resource-fabric.md), current Artifact Library/resource gateway/viewer owners, [11C3 evidence](PHASE_11C3_HTML_BINDING_EXPORT.md), [master Phase 11](STABILIZATION_MASTER_PLAN.md#phase-11--optional-contours).
-Open gates / remaining legacy: 11A1–11A2, 11B1–11B3 and 11C1–11C3 are done host-neutral, but R51 remains open for typed viewers, other committed-resource removal and Windows WebView lifecycle. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation and R54 Skill Library remain docs-only. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: 11A1–11A2, 11B1–11B3 and 11C1–11C3 are done host-neutral, but R51 remains open for typed viewers, other committed-resource removal and Windows WebView lifecycle. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library and R57 Issue Center remain docs-only. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+
+Approved Phase 11 priority: complete Artifact/Plan/HTML Workbench viewers → coherent
+Library UI and typed Issue Center → read-only selected-endpoint Tool Inspector →
+Excel Host Fabric core → independently qualify Word, PowerPoint and Outlook and add
+their endpoint adapters → unified all-host picker → custom Tool Library authoring →
+Skills authoring → Browser/Local Automation. Pipelines remain disabled. This order
+does not expand Phase 12 or replace real WQ gates. [Tool Library](../tool-library.md),
+[Issue Center](../qualification.md#11-phase-11-issue-center),
+[Host Fabric](../host-fabric.md).
+
+Phase 11 product-route review (2026-08-31, docs-only): tools are split into existing
+runtime execution, early read-only capability truth and later revisioned authoring.
+The target UI keeps Artifacts, Tools and Skills as separate Library authorities and
+adds a Problems projection over exact trajectory/qualification evidence with
+redacted issue export. Host Fabric proves Excel routing first; Word, PowerPoint and
+Outlook must each pass local tools/resources/effect gates before endpoint admission.
+Master plan, architecture, Artifact/Host/Qualification contracts, backlog and risks
+updated; runtime/UI behavior and Phase 12 release scope unchanged. Ten changed
+Markdown files have valid local link targets; `git diff --check` and pre-commit
+`ValidateVersionFormat` pass. Harness/Office/WebView tests were not run for docs-only
+planning.
 
 Phase 11C3 exact HTML binding recovery/export (2026-08-31):
 `HtmlWorkspaceArtifactService` остался единственным owner whole-workspace revisions;
@@ -802,7 +823,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 11B | done host-neutral: 11B1–11B3 | [11B1](PHASE_11B1_PLAN_REVISION_GUARD.md), [11B2](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md), [11B3](PHASE_11B3_PLAN_HISTORY_HANDOFF.md) | 11B3: web Plan 7/7; Artifact Library 3/3; JS syntax 4/4 | not performed | Complete exact Plan lineage/restore/removal/history/handoff contour; Windows WebView remains |
 | 11C | done host-neutral: 11C1–11C3 | [11C1](PHASE_11C1_HTML_LINEAGE.md), [11C2](PHASE_11C2_HTML_IMPORT_PREVIEW.md), [11C3](PHASE_11C3_HTML_BINDING_EXPORT.md) | 11C3: harness 8/8; web 21/21; JS syntax | not performed | Unique lineage, inert exact import and one guarded exact binding/recovery/export checkpoint path switched; Windows WebView/Office remains |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
-| 11 | in progress by explicit early milestone | 11A–11C evidence above | targeted per substep | not performed | Optional contour; not a Phase 12 gate |
+| 11 | in progress by explicit early milestone | 11A–11C evidence above; 11D1 worktree | targeted per substep | not performed | Artifact Workbench first; then Issue Center/Tool Inspector, Host Fabric and qualified host verticals; not a Phase 12 gate |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
 ## Phase 0 substeps

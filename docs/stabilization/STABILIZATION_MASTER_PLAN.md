@@ -2299,68 +2299,103 @@ Resource Fabric: drafts не являются artifacts, committed resources и�
 только exact `ResourceRef`, а UI projection/viewers не становятся вторым store,
 transport или execution authority.
 
+Приоритет пересмотрен 2026-08-31 вокруг четырёх пользовательских outcomes:
+полноценный Artifact/Plan/HTML Workbench, понятный UI, наблюдаемая работа tools и все
+Office hosts из одного окна. Read-only visibility идёт раньше authoring, а локальная
+работоспособность каждого host — раньше публикации его cross-process endpoint.
+
 Порядок:
 
-1. Artifact lifecycle/library foundation, отдельными commits:
+1. **11A — Artifact lifecycle/library foundation — done host-neutral:**
    - 11A1: separate draft/preparing/committed UI states and queue the full
      revision-guarded post-commit projection before attachment-helper or primary
-     model transport. Done host-neutral; Windows WebView remains open.
+     model transport. Windows WebView remains open.
    - 11A2: exact library head/history projection and cleanup of current kind/label
-     drift. Done host-neutral; no new resource transport or generic editor. Windows
-     WebView qualification remains open. [Evidence](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md).
-2. Plan, separate commits:
-   - 11B1: one domain service owns create/update; preserve exact whole Markdown and
-     require a unique linear exact-current head. Done host-neutral; Windows WebView
-     remains open. [Evidence](PHASE_11B1_PLAN_REVISION_GUARD.md).
-   - 11B2: restore-as-new-head plus guarded append-only tombstone removal, without
-     deleting exact historical message references. Done host-neutral; Windows
-     WebView remains open. [Evidence](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md).
-   - 11B3: history restore/removal UX and ready-plan handoff by pinned URI. Done
-     host-neutral; Windows WebView interaction remains open.
+     drift. No new resource transport or generic editor. Windows WebView remains
+     open. [Evidence](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md).
+2. **11B — Plan — done host-neutral:**
+   - 11B1: one domain service owns create/update, preserves exact whole Markdown and
+     requires a unique linear exact-current head.
+     [Evidence](PHASE_11B1_PLAN_REVISION_GUARD.md).
+   - 11B2: restore-as-new-head plus guarded append-only tombstone removal without
+     deleting exact historical message references.
+     [Evidence](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md).
+   - 11B3: history restore/removal UX and ready-plan handoff by pinned URI.
      [Evidence](PHASE_11B3_PLAN_HISTORY_HANDOFF.md).
-3. HTML, отдельными commits:
-   - 11C1: whole-workspace revision/branch owner uses one unique monotonic sequence
-     across all branches, preserves the exact active parent and fails closed on
-     ambiguous lineage. Done host-neutral; Windows WebView remains open.
+   Windows WebView interaction remains open for the complete contour.
+3. **11C — HTML — done host-neutral:**
+   - 11C1: one unique monotonic whole-workspace revision sequence across branches,
+     exact active parent and fail-closed ambiguous lineage.
      [Evidence](PHASE_11C1_HTML_LINEAGE.md).
-   - 11C2: inert uploaded-HTML import with explicit provenance and bounded
-     source/preview UX. Done host-neutral; Windows WebView interaction remains
-     open. [Evidence](PHASE_11C2_HTML_IMPORT_PREVIEW.md).
-   - 11C3: one domain-owned checkpoint path, binding completeness/integrity and
-     guarded exact export without silent payload truncation. Done host-neutral;
-     Windows WebView/Office interaction remains open.
+   - 11C2: inert uploaded-HTML import with provenance and bounded source/preview.
+     [Evidence](PHASE_11C2_HTML_IMPORT_PREVIEW.md).
+   - 11C3: one checkpoint owner, binding completeness/integrity and guarded exact
+     export without silent truncation.
      [Evidence](PHASE_11C3_HTML_BINDING_EXPORT.md).
-4. Typed artifact viewers: bounded text/source and Markdown first; image, PDF and
-   audio are separate measured slices with MIME/security/vendor/worker/lifetime and
-   Windows WebView gates. ViewerRegistry remains UI-only and cannot read bridge/CAS
-   or network itself.
-5. Skills authoring: installed skills remain global/host-scoped Library capability
-   packages, not chat artifacts. Add immutable custom package history, exact
-   version/revision UX, restore-as-new-head, tombstone, guarded editor conflicts and
-   explicit artifact import/export; preserve exact `common.capabilities_read` and
-   later-run catalog refresh. See [Skill Library](../skills.md).
-6. Dynamic tool definition authoring, new package features and optional direct-handler/typed-host removal of the remaining VBA definition/result adapters after 5B2; existing 6H-admitted VBA execution/lifecycle remains stable-core Phase 6 work and does not block Phase 12.
-7. Pipelines.
-8. Word.
-9. PowerPoint.
-10. Outlook.
-11. Host Fabric: cross-process endpoint registry/routing, exact run target pinning,
-    unified picker and optional Office-hosted launcher profiles. COM stays in the
-    owning add-in process; no silent ROT fallback or application-control bypass. See
-    [Host Fabric](../host-fabric.md).
-12. Browser as a separately permissioned session/package; HTML preview WebView is
-    not reused as browser authority.
-13. Local Automation LA0/LA1: ADR for workspace-owned sessions and policy, then
-    bounded read-only file/folder resources.
-14. Local Automation LA2: guarded file mutations, conflicts/recovery and
-    Recycle-Bin-first deletion.
-15. Local Automation LA4: typed non-shell process execution in a signed isolated
-    worker, unavailable in Office-hosted execution by default.
-16. Local Automation LA5: optional raw shell/PTY as a separate high-risk,
-    deny-by-default capability with per-call confirmation.
-17. Local Automation LA6: opening applications and desktop/computer control with
-    foreground target pinning and action evidence. See
+   Windows WebView/Office interaction remains open for the complete contour.
+4. **11D — complete Artifact Workbench viewers — in progress:**
+   - 11D1 — done host-neutral: exact revision-pinned text representation through
+     the shared gateway, fixed 32,000-character pages and a 512,000-character
+     document bound; full copy/download requires a contiguous stable-hash read,
+     while sanitized Markdown renders only when complete and retains exact Source.
+     [Evidence](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md).
+   - 11D2: image bytes, dimensions, fit/zoom/download and object-URL lifetime;
+   - 11D3: PDF pages plus extracted text, explicit scan/truncation state and a
+     separately admitted local renderer/worker;
+   - 11D4: bounded audio player and transcript relation without autoplay.
+   Every slice keeps `ViewerRegistry` UI-only and has its own MIME/security/vendor/
+   lifetime tests. The milestone ends with Windows WebView qualification of
+   Artifacts, Plan and HTML together, including reload, history and large payloads.
+5. **11E — coherent product UI and Issue Center:** one Library shell may expose
+   separate Artifacts, Tools and Skills sections without merging their authority.
+   Use one status vocabulary for draft/preparing/committed/running/error/unknown/
+   blocked/stale; preserve exact target and revision in every detail view. Add a
+   Problems projection, exact causal navigation and redacted `Copy issue`/evidence
+   export over existing trajectory and qualification owners, never a second log or
+   outcome inferred from prose. See [Qualification §11](../qualification.md#11-phase-11-issue-center).
+6. **11F — read-only Tool Inspector and host capability truth:** first show the
+   current local endpoint's exact built-in/custom/document-local tools, then reuse
+   the same DTO for the Host Fabric-selected endpoint; include origin, host/scope,
+   callable/blocked reason, policy, catalog/package revision, qualification state
+   and exact run/result links. It is a projection over runtime authority, not an
+   editor or second catalog. See [Tool Library](../tool-library.md).
+7. **11G — Host Fabric core on Excel:** endpoint/lease/target DTOs, fail-closed run
+   pinning, one-process inventory, then cross-process Excel through an approved
+   broker or separately admitted peer rendezvous. No ROT fallback or cross-process
+   COM. An initial picker proves target changes cannot retarget an accepted run.
+8. **11H — host parity, one independently qualified vertical at a time:** Word,
+   PowerPoint, then Outlook. Each slice first proves its local `DocumentSession`,
+   resources, built-in tools, confirmation/effect evidence, restart/fault behavior
+   and host pack; only then does it publish a Host Fabric endpoint adapter. VBA is
+   admitted only for Excel/Word/PowerPoint capabilities that actually exist.
+9. **11I — unified all-host experience:** one picker/filter/activation/auto-follow
+   UX, endpoint health and capability matrix across admitted Excel/Word/PowerPoint/
+   Outlook instances. Finish mixed-process, modal/busy, Save As, close/restart,
+   stale lease and in-flight target-switch gates. The Office-hosted launcher remains
+   a separate optional profile. See [Host Fabric](../host-fabric.md).
+10. **11J — custom Tool Library and authoring:** only after 11F and Host Fabric
+    target pinning. Add immutable package history, exact revision conflicts,
+    restore-as-new-head, tombstone, import/export provenance and disposable-document
+    test flow; switch UI/model authoring without changing an accepted run catalog.
+    Optional direct-handler/typed-host removal of remaining VBA definition/result
+    adapters is after production 5B2. Existing 6H-admitted package execution remains
+    stable-core Phase 6 work and does not block Phase 12. See
+    [Tool Library](../tool-library.md).
+11. **11K — Skills authoring:** installed skills remain global/host-scoped Library
+    capability packages, not chat artifacts. Add immutable package history, exact
+    version/revision UX, restore-as-new-head, tombstone, guarded conflicts and
+    explicit artifact import/export; preserve exact `common.capabilities_read` and
+    later-run catalog refresh. See [Skill Library](../skills.md).
+12. **11L — Browser:** a separately permissioned session/package. HTML preview
+    WebView is never reused as browser authority.
+13. **11M — Local Automation:** LA0 session-ownership ADR and LA1 bounded read-only
+    files first; LA2 guarded file mutations with Recycle-Bin-first delete; LA4 typed
+    non-shell execution in a signed isolated worker; LA5 raw shell/PTY and LA6
+    desktop control remain separate deny-by-default high-risk capabilities. See
     [Local Automation Agent](../local-automation-agent.md).
+14. **11N — Pipelines:** remain disabled. Reconsider only by another explicit
+    decision after the preceding runtime/tool/host contracts are qualified; no
+    compatibility with the removed format is required.
 
 ### Правило допуска
 
@@ -2380,6 +2415,18 @@ are separate, all COM executes at the owner endpoint, and endpoint loss cannot f
 back to another Office instance. Local Automation requires a prior session-ownership
 ADR, explicit grants and an isolated worker before any mutation/process tool is
 published; lack of permission cannot be worked around through Office.
+
+Tool Inspector separately proves that displayed availability, policy, revision and
+host scope come from the selected endpoint's immutable catalog snapshot and cannot
+grant execution authority. Tool authoring additionally proves append-only complete
+package revisions, exact-head conflicts, no built-in/skill shadowing, confirmed
+artifact import and next-run-only catalog refresh. Editor test uses the production
+ToolRuntime and disposable target rules; it cannot invoke an executor directly.
+
+Issue Center separately proves that every problem and navigation link retains exact
+source event IDs, run/tool/target/build revisions and authoritative outcome. It does
+not classify model prose, overwrite an old failure with a later pass, retry an
+unknown effect or persist a second diagnostic index. Default export remains redacted.
 
 Для HTML/Plan whole-content mutations отдельно проверить сохранение точного payload и revision lineage, отсутствие тихой обрезки и восстановление предыдущей revision. Валидный model envelope не является проверкой синтаксиса/работоспособности содержимого; UI/результат не обещает такую проверку без отдельного domain evidence. R29/R28 не считаются закрытыми самим включением optional contour.
 

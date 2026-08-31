@@ -2,8 +2,9 @@
 
 ## Status and scope
 
-This is a deferred Phase 11 target contract. It does not change the current WQ-A,
-WQ or Phase 12 route and does not qualify existing Office/COM behavior.
+This is a deferred Phase 11 target contract, prioritized after the Artifact
+Workbench, Issue Center and read-only Tool Inspector. It does not change the current
+WQ-A, WQ or Phase 12 route and does not qualify existing Office/COM behavior.
 
 The goal is one RNAssistant window, opened from any supported Office host, that can
 list and select documents/items owned by other running Excel, Word, PowerPoint and
@@ -121,8 +122,10 @@ Microsoft references:
    exact selection and active-run pinning.
 3. Cross-process Excel through the approved broker profile, then peer rendezvous if
    required; no ROT fallback.
-4. Word, PowerPoint and Outlook endpoint adapters only after their own Phase 11 host
-   contours are admitted.
+4. Word, PowerPoint and Outlook each complete their local DocumentSession,
+   resources/tools/effect-evidence and qualification vertical before its endpoint
+   adapter is admitted. Tool availability shown by the window comes from that
+   selected endpoint's exact catalog revision; see [Tool Library](tool-library.md).
 5. Unified picker, activation and auto-follow UX.
 6. Office-hosted launcher profile as a separate optional slice.
 

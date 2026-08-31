@@ -324,3 +324,35 @@ Coverage registry связывает каждый mandatory invariant/risk/capab
 Каждый этап — отдельный commit. Host-neutral tests не закрывают Windows gates; один
 pack/host failure исправляется у его owner и повторяет только затронутый scenario,
 затем общий smoke перед release.
+
+## 11. Phase 11 Issue Center
+
+Qualification Center отвечает на вопрос «прошёл ли заданный сценарий». Phase 11
+Issue Center рядом с ним отвечает на вопрос «где и почему сломался обычный run».
+Он строится только из существующих typed session events, `ITrajectoryQuery`, exact
+build metadata, endpoint/catalog revisions и qualification evidence. Это read-only
+projection, а не второй log, issue store или classifier по тексту ответа модели.
+
+В Problems автоматически попадают только source-owned состояния:
+
+- `error`, `unknown`, interrupted/open effect и mandatory append/recovery failure;
+- исчерпание provider/protocol attempts и native refusal;
+- stale/closed Host Fabric endpoint или document identity mismatch;
+- resource revision/removal/viewer failure;
+- missing/blocked capability и failed/blocked qualification assertion.
+
+Карточка проблемы показывает время, chat/run/step, host и exact target, build SHA,
+tool id/call id/catalog revision, resource refs, effect evidence, error code и
+полные source event ids. Из неё доступны переходы в exact run journal, Tool
+Inspector, artifact revision и соответствующий qualification pack.
+
+`Copy issue` формирует компактный redacted Markdown, а `Export evidence` — bounded
+causal bundle существующего trajectory exporter. Document text, prompts, paths и
+CAS bodies по умолчанию не включаются; пользователь явно выбирает их добавление.
+UI не предлагает автоматический retry после `unknown`, не превращает ручное
+«похоже, работает» в pass и не скрывает прежний failure после успешного повторного
+run. Новый attempt связан с предыдущим, но сохраняет собственный outcome.
+
+Обязательные UI gates: empty/loading/stale/error states, фильтры по host/tool/status,
+поиск по exact id, keyboard/focus/DPI, reload/live append, bounded large histories и
+одинаковая causal навигация из Chat, Library, Diagnostics и Qualification Center.
