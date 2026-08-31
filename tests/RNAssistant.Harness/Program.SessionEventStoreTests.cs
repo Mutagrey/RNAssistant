@@ -29,18 +29,18 @@ namespace RNAssistant.Harness
     {
         private static void KernelSummaryReplaysOutcome(string outcome)
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
             {
                 var store = new ChatStore(FixturePaths.Value);
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "replay-run", TurnId = "replay-turn", RuntimeId = "runtime" };
                 store.Save(session);
-                if (outcome != "ok") adapter.QueueResult("word.replace_text", ToolResult.Fail("Write failed", null,
+                if (outcome != "ok") adapter.QueueResult("powerpoint.add_slide", ToolResult.Fail("Write failed", null,
                     outcome == "unknown" ? "tool_effect_uncertain" : "write_rejected", false));
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("word.replace_text"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"word.replace_text\",\"arguments\":{\"find\":\"revenue\",\"replace\":\"sales\"}}]}",
+                    LoadToolSchemaResponse("powerpoint.add_slide"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"powerpoint.add_slide\",\"arguments\":{\"title\":\"Replay\"}}]}",
                     "{\"message\":\"Everything done\",\"tool_calls\":[]}"
                 });
                 var modelCalls = 0;
@@ -74,7 +74,7 @@ namespace RNAssistant.Harness
                 AssertEqual(outcome == "ok" ? 1 : 0, result.RunViewState.UnverifiedWrites, "successful legacy write is not called verified");
                 AssertEqual(outcome == "error" ? 1 : 0, result.RunViewState.FailedCalls, "error call count");
                 AssertEqual(outcome == "error" ? 0 : 1, result.RunViewState.UnknownEffects, "unknown effect count");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "word.replace_text"), "single execution, no retry");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "powerpoint.add_slide"), "single execution, no retry");
                 AssertTrue(replay.LastRun.KernelState.InFlightTool == null, "terminal clears in-flight evidence");
             });
         }

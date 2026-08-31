@@ -44,6 +44,7 @@
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelTable.cs" Link="FakeOfficeAdapter.ExcelTable.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelChart.cs" Link="FakeOfficeAdapter.ExcelChart.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelSheet.cs" Link="FakeOfficeAdapter.ExcelSheet.cs" />
+    <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.Word.cs" Link="FakeOfficeAdapter.Word.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentitySample.cs" Link="OfficeHosts\Qualification\ComIdentitySample.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentityLease.cs" Link="OfficeHosts\Qualification\ComIdentityLease.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ExcelProbeTarget.cs" Link="OfficeHosts\Qualification\ExcelProbeTarget.cs" />
@@ -65,6 +66,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Contracts\*.cs" Link="Office\Contracts\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Qualification\*.cs" Link="Office\Qualification\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Excel\*.cs" Link="Office\Domains\Excel\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Office\Domains\Word\*.cs" Link="Office\Domains\Word\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Diagnostics\RuntimeLog.cs" Link="Office\Diagnostics\RuntimeLog.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\*.cs" Link="Office\Agent\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Vba\VbaProjectSupport.cs" Link="OfficeHosts\Vba\VbaProjectSupport.cs" />

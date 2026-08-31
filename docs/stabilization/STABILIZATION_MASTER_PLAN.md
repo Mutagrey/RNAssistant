@@ -2399,7 +2399,12 @@ endpoint.
      chart collections/source ranges bounded, mutations use exact precondition and
      read-back, production host branches/helpers removed. Windows WQ-EXCEL открыт.
      [Evidence](PHASE_11T5_EXCEL_CHARTS.md);
-   - 11T6–11T8: Word, PowerPoint и Outlook по одному host vertical. Каждый сначала
+   - [x] 11T6 — все девять existing Word reads/mutations переведены на exact native
+     registrations, typed service и direct backend над bound `WordDocumentSession`;
+     desktop/VSTO factories связывают exact document/window, public host branches и
+     execution-time `ActiveDocument`/descriptor fallback удалены. Windows
+     WQ-SESSION/WQ-WORD открыт. [Evidence](PHASE_11T6_WORD_BOUND_VERTICAL.md);
+   - 11T7–11T8: PowerPoint и Outlook по одному host vertical. Каждый сначала
      получает собственный bound local `DocumentSession`, exact target/lifetime gate
      и host pack, затем его существующие reads и mutations переходят по semantic
      families;

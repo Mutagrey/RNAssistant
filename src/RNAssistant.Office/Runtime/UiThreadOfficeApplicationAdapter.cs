@@ -4,11 +4,12 @@ using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Qualification;
 
 namespace RNAssistant.Office
 {
-    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IQualificationHostPort
+    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IQualificationHostPort
     {
         private readonly IOfficeApplicationAdapter _inner;
         private readonly OfficeUiDispatcher _dispatcher;
@@ -20,6 +21,7 @@ namespace RNAssistant.Office
         private readonly IExcelRangeMutationBackend _excelRangeMutationBackend;
         private readonly IExcelTableBackend _excelTableBackend;
         private readonly IExcelChartBackend _excelChartBackend;
+        private readonly IWordBackend _wordBackend;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
@@ -34,6 +36,7 @@ namespace RNAssistant.Office
             IExcelRangeMutationBackend excelRangeMutationBackend = null;
             IExcelTableBackend excelTableBackend = null;
             IExcelChartBackend excelChartBackend = null;
+            IWordBackend wordBackend = null;
             _dispatcher.Invoke(delegate
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
@@ -47,6 +50,8 @@ namespace RNAssistant.Office
                     ? null : excel.ExcelRangeMutationBackend;
                 excelTableBackend = excel == null ? null : excel.ExcelTableBackend;
                 excelChartBackend = excel == null ? null : excel.ExcelChartBackend;
+                var word = _inner as IWordBackendProvider;
+                wordBackend = word == null ? null : word.WordBackend;
                 return true;
             });
             _documentSession = documentSession;
@@ -57,6 +62,7 @@ namespace RNAssistant.Office
             _excelRangeMutationBackend = excelRangeMutationBackend;
             _excelTableBackend = excelTableBackend;
             _excelChartBackend = excelChartBackend;
+            _wordBackend = wordBackend;
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
@@ -87,6 +93,7 @@ namespace RNAssistant.Office
         }
         public IExcelTableBackend ExcelTableBackend { get { return _excelTableBackend; } }
         public IExcelChartBackend ExcelChartBackend { get { return _excelChartBackend; } }
+        public IWordBackend WordBackend { get { return _wordBackend; } }
 
         public string GetDocumentSnapshot(int maxChars)
         {

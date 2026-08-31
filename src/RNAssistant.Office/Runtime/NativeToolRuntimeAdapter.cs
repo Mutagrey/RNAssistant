@@ -30,6 +30,7 @@ namespace RNAssistant.Office.Runtime
             ExcelRangeMutationToolAdapter excelRangeMutations,
             ExcelTableToolAdapter excelTables,
             ExcelChartToolAdapter excelCharts,
+            WordToolAdapter wordTools,
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
         {
@@ -106,6 +107,15 @@ namespace RNAssistant.Office.Runtime
                         registration.Descriptor.Id, excelCharts,
                         hostRuntime, session);
                 }
+                else if (WordToolIds.Owns(registration.Descriptor.Id))
+                {
+                    if (wordTools == null || hostRuntime == null)
+                        throw new InvalidOperationException(
+                            "Word handler dependencies are unavailable.");
+                    handler = new WordToolHandler(
+                        registration.Descriptor.Id, wordTools,
+                        hostRuntime, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -129,7 +139,8 @@ namespace RNAssistant.Office.Runtime
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
                 ExcelRangeMutationToolIds.Owns(toolId) ||
-                ExcelTableToolIds.Owns(toolId) || ExcelChartToolIds.Owns(toolId);
+                ExcelTableToolIds.Owns(toolId) || ExcelChartToolIds.Owns(toolId) ||
+                WordToolIds.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -153,6 +164,8 @@ namespace RNAssistant.Office.Runtime
             if (ExcelTableToolIds.Owns(toolId)) return ExcelTableToolHandler.Binding;
             if (ExcelChartToolIds.Owns(toolId))
                 return ExcelChartToolHandler.BindingFor(toolId);
+            if (WordToolIds.Owns(toolId))
+                return WordToolHandler.BindingFor(toolId);
             return null;
         }
 

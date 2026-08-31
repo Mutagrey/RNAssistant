@@ -358,6 +358,10 @@ namespace RNAssistant.Office.Tools
                         return _standaloneExcelRead == null
                             ? ToolResult.Fail("Excel read adapter is unavailable.", null, "excel_read_backend_missing", false)
                             : _standaloneExcelRead.ExecuteDataSource(sourceCommand, cancellationToken);
+                    if (sourceCommand != null && WordToolIds.IsRead(sourceCommand.ToolId))
+                        return _standaloneWordRead == null
+                            ? ToolResult.Fail("Word read adapter is unavailable.", null, "word_read_backend_missing", false)
+                            : _standaloneWordRead.ExecuteDataSource(sourceCommand, cancellationToken);
                     return _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
                 }
             }

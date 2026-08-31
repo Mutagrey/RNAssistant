@@ -13,6 +13,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Qualification;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
@@ -1169,15 +1170,16 @@ namespace RNAssistant.Harness
         {
             private readonly BoundTestDocument _document;
 
-            public BoundTestOfficeSession(IOfficeStaDispatcher dispatcher, BoundTestDocument document, string runtimeId, object gate)
+            public BoundTestOfficeSession(IOfficeStaDispatcher dispatcher, BoundTestDocument document, string runtimeId, object gate, string host = "Excel")
             {
                 StaDispatcher = dispatcher;
                 _document = document;
                 RuntimeDocumentId = runtimeId;
                 MutationGate = gate;
+                Host = string.IsNullOrWhiteSpace(host) ? "Excel" : host;
             }
 
-            public string Host { get { return "Excel"; } }
+            public string Host { get; private set; }
             public string StableDocumentId
             {
                 get
@@ -1209,7 +1211,7 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend
         {
             private readonly FakeOfficeAdapter _inner;
 
@@ -1229,6 +1231,7 @@ namespace RNAssistant.Harness
             public IExcelRangeMutationBackend ExcelRangeMutationBackend { get { return this; } }
             public IExcelTableBackend ExcelTableBackend { get { return this; } }
             public IExcelChartBackend ExcelChartBackend { get { return this; } }
+            public IWordBackend WordBackend { get { return this; } }
             public string HostName { get { return Session.Host; } }
             public string DocumentKey { get { return StaDispatcher.Invoke(() => Session.StableDocumentId); } }
             public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
@@ -1255,6 +1258,15 @@ namespace RNAssistant.Harness
             public ExcelChatChartSourceSnapshot ReadChatSource(ExcelChatChartSourceRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelChartSourceReadOperation); return _inner.ReadChatSource(request); }
             public ExcelChartCollectionSnapshot Read(ExcelChartReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelChartReadOperation); return _inner.Read(request); }
             public void Apply(ExcelChartApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelChartApplyOperation); _inner.Apply(request, markDispatchPossible); }
+            public WordTextSnapshot ReadText(WordTextReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.WordReadTextOperation); return _inner.ReadText(request); }
+            public IReadOnlyList<WordStorySnapshot> ReadStories(WordStoryReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.WordReadStoriesOperation); return _inner.ReadStories(request); }
+            public WordInspectionSnapshot Inspect(WordInspectRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.WordInspectOperation); return _inner.Inspect(request); }
+            public WordMutationBackendResult Write(WordWriteRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordWriteOperation); return _inner.Write(request, markDispatchPossible); }
+            public void ApplyReplacement(WordReplaceApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordReplaceOperation); _inner.ApplyReplacement(request, markDispatchPossible); }
+            public WordMutationBackendResult Format(WordFormatRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordFormatOperation); return _inner.Format(request, markDispatchPossible); }
+            public WordMutationBackendResult AddTable(WordTableRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordTableOperation); return _inner.AddTable(request, markDispatchPossible); }
+            public WordMutationBackendResult InsertPageBreak(WordPageBreakRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordPageBreakOperation); return _inner.InsertPageBreak(request, markDispatchPossible); }
+            public WordMutationBackendResult AddComment(WordCommentRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.WordCommentOperation); return _inner.AddComment(request, markDispatchPossible); }
         }
 
         private sealed class BoundTestQueuedDispatcher : IOfficeStaDispatcher

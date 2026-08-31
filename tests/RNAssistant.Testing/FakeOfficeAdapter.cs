@@ -8,11 +8,12 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
@@ -33,6 +34,7 @@ namespace RNAssistant.Harness
 
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public readonly List<string> ExcelBackendCalls = new List<string>();
+        public readonly List<string> WordBackendCalls = new List<string>();
         public readonly List<ToolCommand> ExcelSheetRequests = new List<ToolCommand>();
         public readonly List<ToolCommand> ExcelRangeMutationRequests =
             new List<ToolCommand>();
@@ -54,6 +56,7 @@ namespace RNAssistant.Harness
         public bool ExcelRangeMutationThrowAfterMutation { get; set; }
         public bool ExcelTableThrowAfterMutation { get; set; }
         public bool ExcelChartThrowAfterMutation { get; set; }
+        public bool WordThrowAfterMutation { get; set; }
         public Func<ExcelSheetCollectionSnapshot, ExcelSheetCollectionSnapshot>
             ExcelSheetReadTransform { get; set; }
         public Func<ExcelRangeMutationSnapshot, ExcelRangeMutationSnapshot>
@@ -87,6 +90,9 @@ namespace RNAssistant.Harness
         private string _activeExcelSheetName;
         private readonly List<FakeSlide> _slides;
         private readonly List<string> _wordComments;
+        private readonly List<WordTableSnapshot> _wordTables =
+            new List<WordTableSnapshot>();
+        private string _wordFormatToken = string.Empty;
         private string _wordText;
         private string _outlookSelection;
         private string _outlookDraft;
@@ -186,6 +192,15 @@ namespace RNAssistant.Harness
         public IExcelChartBackend ExcelChartBackend
         {
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
+        }
+        public IWordBackend WordBackend
+        {
+            get
+            {
+                return string.Equals(
+                    _hostName, "Word", StringComparison.OrdinalIgnoreCase)
+                    ? this : null;
+            }
         }
 
         public OfficeContext GetOfficeContext()
@@ -912,53 +927,11 @@ namespace RNAssistant.Harness
 
         private ToolResult ExecuteWordTool(ToolCommand command)
         {
-            if (string.Equals(command.ToolId, "word.read_text", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("read Word text", JsonConvert.SerializeObject(new { text = _wordText, comments = _wordComments.ToArray() }));
-            }
-
-            if (string.Equals(command.ToolId, "word.find_text", StringComparison.OrdinalIgnoreCase))
-            {
-                var query = Argument(command, "query", string.Empty);
-                var index = _wordText.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-                return ToolResult.Ok("found Word text", JsonConvert.SerializeObject(index < 0 ? new object[0] : new[] { new { start = index, end = index + query.Length } }));
-            }
-
-            if (string.Equals(command.ToolId, "word.inspect", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("read Word metadata", JsonConvert.SerializeObject(new { text = _wordText, comments = _wordComments.ToArray() }));
-            }
-
-            if (string.Equals(command.ToolId, "word.write_text", StringComparison.OrdinalIgnoreCase))
-            {
-                var mode = Argument(command, "mode", "insert");
-                if (string.Equals(mode, "replaceSelection", StringComparison.OrdinalIgnoreCase)) _wordText = Argument(command, "text", string.Empty);
-                else if (string.Equals(mode, "paragraph", StringComparison.OrdinalIgnoreCase)) _wordText += Environment.NewLine + Argument(command, "text", string.Empty);
-                else _wordText += Argument(command, "text", string.Empty);
-                return ToolResult.Ok("wrote Word text", JsonConvert.SerializeObject(new { text = _wordText }));
-            }
-
-            if (string.Equals(command.ToolId, "word.replace_text", StringComparison.OrdinalIgnoreCase))
-            {
-                _wordText = _wordText.Replace(Argument(command, "find", string.Empty), Argument(command, "replace", string.Empty));
-                return ToolResult.Ok("replaced Word text", JsonConvert.SerializeObject(new { text = _wordText }));
-            }
-
-            if (string.Equals(command.ToolId, "word.format_text", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.add_table", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "word.insert_page_break", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("applied " + command.ToolId);
-            }
-
-            if (string.Equals(command.ToolId, "word.add_comment", StringComparison.OrdinalIgnoreCase))
-            {
-                var text = Argument(command, "text", string.Empty);
-                _wordComments.Add(text);
-                return ToolResult.Ok("added Word comment", JsonConvert.SerializeObject(new { comments = _wordComments.ToArray() }));
-            }
-
-            return null;
+            return WordToolIds.Owns(command == null ? null : command.ToolId)
+                ? ToolResult.Fail(
+                    "Public Word tools require the typed Word backend.",
+                    null, "word_legacy_dispatch_removed", false)
+                : null;
         }
 
         private ToolResult ExecutePowerPointTool(ToolCommand command)

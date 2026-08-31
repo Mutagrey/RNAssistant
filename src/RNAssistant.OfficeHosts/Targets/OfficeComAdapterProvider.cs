@@ -39,7 +39,11 @@ namespace RNAssistant.OfficeHosts
             {
                 var application = (Word.Application)GetActiveOfficeObject("Word.Application");
                 ValidateTargetWindow("Word", application, target);
-                return new WordAdapter(application, target);
+                var document = ResolveWordDocument(application, target);
+                return new WordAdapter(
+                    document.Application ?? application,
+                    document,
+                    dispatcher);
             }
 
             if (string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase))
@@ -175,6 +179,101 @@ namespace RNAssistant.OfficeHosts
                 throw new InvalidOperationException("The requested Excel workbook is not open.");
             }
             return match;
+        }
+
+        private static Word.Document ResolveWordDocument(
+            Word.Application application,
+            OfficeTargetDescriptor target)
+        {
+            if (application == null)
+                throw new InvalidOperationException(
+                    "Word application is unavailable.");
+            if (!HasWordDocumentIdentity(target))
+            {
+                if (target == null || target.Hwnd == 0)
+                    throw new InvalidOperationException(
+                        "An exact Word window is required to bind the current document.");
+                Word.Document windowMatch = null;
+                foreach (Word.Document document in application.Documents)
+                {
+                    if (!HasWordWindow(document, target.Hwnd)) continue;
+                    if (windowMatch != null)
+                        throw new InvalidOperationException(
+                            "The requested Word window maps to more than one document.");
+                    windowMatch = document;
+                }
+                if (windowMatch == null)
+                    throw new InvalidOperationException(
+                        "The document for the requested Word window could not be resolved.");
+                return windowMatch;
+            }
+
+            Word.Document match = null;
+            foreach (Word.Document document in application.Documents)
+            {
+                if (!MatchesWordTarget(document, target)) continue;
+                if (match != null)
+                    throw new InvalidOperationException(
+                        "The requested Word document identity is ambiguous.");
+                match = document;
+            }
+            if (match == null)
+                throw new InvalidOperationException(
+                    "The requested Word document is not open.");
+            return match;
+        }
+
+        private static bool HasWordWindow(Word.Document document, long hwnd)
+        {
+            if (document == null || hwnd == 0) return false;
+            try
+            {
+                foreach (Word.Window window in document.Windows)
+                {
+                    if (NativeWindowInfo.ReadLongMemberPath(window, "Hwnd") == hwnd)
+                        return true;
+                }
+            }
+            catch
+            {
+            }
+            return false;
+        }
+
+        private static bool HasWordDocumentIdentity(
+            OfficeTargetDescriptor target)
+        {
+            return target != null &&
+                (!string.IsNullOrWhiteSpace(target.DocumentKey) ||
+                 !string.IsNullOrWhiteSpace(target.FullName) ||
+                 !string.IsNullOrWhiteSpace(target.Path) ||
+                 !string.IsNullOrWhiteSpace(target.Name));
+        }
+
+        private static bool MatchesWordTarget(
+            Word.Document document, OfficeTargetDescriptor target)
+        {
+            if (document == null || target == null) return false;
+            if (!string.IsNullOrWhiteSpace(target.DocumentKey))
+                return string.Equals(
+                    WordDocumentKey(document), target.DocumentKey.Trim(),
+                    StringComparison.OrdinalIgnoreCase);
+            var fullName = SafeString(delegate { return document.FullName; });
+            if (!string.IsNullOrWhiteSpace(target.FullName))
+                return SamePath(fullName, target.FullName);
+            if (!string.IsNullOrWhiteSpace(target.Path))
+                return SamePath(fullName, target.Path);
+            return string.Equals(
+                SafeString(delegate { return document.Name; }),
+                target.Name == null ? string.Empty : target.Name.Trim(),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string WordDocumentKey(Word.Document document)
+        {
+            return WordDocumentSession.StableKey(
+                document,
+                DocumentIdentity.RuntimeKey("Word", document));
         }
 
         private static bool HasExcelWindow(Excel.Workbook workbook, long hwnd)

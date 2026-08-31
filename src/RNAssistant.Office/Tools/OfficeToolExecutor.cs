@@ -12,6 +12,7 @@ using RNAssistant.Office.Services;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Vba;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Domains.Word;
 
 namespace RNAssistant.Office.Tools
 {
@@ -32,6 +33,7 @@ namespace RNAssistant.Office.Tools
         private readonly ExcelRangeMutationToolAdapter _excelRangeMutationAdapter;
         private readonly ExcelTableToolAdapter _excelTableAdapter;
         private readonly ExcelChartToolAdapter _excelChartAdapter;
+        private readonly WordToolAdapter _wordAdapter;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
         private readonly TaskListToolExecutor _taskListToolExecutor;
         private readonly PlanDocumentToolExecutor _planDocumentToolExecutor;
@@ -88,6 +90,9 @@ namespace RNAssistant.Office.Tools
             _excelChartAdapter = excelBackends == null ||
                 excelBackends.ExcelChartBackend == null
                 ? null : new ExcelChartToolAdapter(excelBackends.ExcelChartBackend);
+            var wordBackend = _adapter as IWordBackendProvider;
+            _wordAdapter = wordBackend == null || wordBackend.WordBackend == null
+                ? null : new WordToolAdapter(wordBackend.WordBackend);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(
                 _adapter, _adapterTools, BeginLiveOfficeRead, ExecuteOfficeDataSourceUnderCurrentAccess);
             _taskListToolExecutor = new TaskListToolExecutor();
@@ -126,7 +131,7 @@ namespace RNAssistant.Office.Tools
             return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _excelWriteAdapter,
                 _excelFindReplaceAdapter, _excelSheetAdapter,
                 _excelRangeMutationAdapter, _excelTableAdapter,
-                _excelChartAdapter, _hostRuntime,
+                _excelChartAdapter, _wordAdapter, _hostRuntime,
                 session, snapshot, settings, mode, trace);
         }
 
@@ -453,7 +458,8 @@ namespace RNAssistant.Office.Tools
                     ExcelSheetToolIds.Owns(command.ToolId) ||
                     ExcelRangeMutationToolIds.Owns(command.ToolId) ||
                     ExcelTableToolIds.Owns(command.ToolId) ||
-                    ExcelChartToolIds.IsMutation(command.ToolId)))
+                    ExcelChartToolIds.IsMutation(command.ToolId) ||
+                    WordToolIds.IsMutation(command.ToolId)))
                 {
                     var validation = ValidateCommandArguments(command, tool);
                     if (validation != null) return validation;
@@ -696,6 +702,14 @@ namespace RNAssistant.Office.Tools
                     return ToolResult.Fail("The bound Excel read backend is unavailable.", null,
                         "excel_backend_unavailable", false);
                 return _excelReadAdapter.ExecuteDataSource(command, cancellationToken);
+            }
+            if (command != null && WordToolIds.IsRead(command.ToolId))
+            {
+                if (_wordAdapter == null)
+                    return ToolResult.Fail(
+                        "The bound Word read backend is unavailable.", null,
+                        "word_backend_unavailable", false);
+                return _wordAdapter.ExecuteDataSource(command, cancellationToken);
             }
             return _adapter.ExecuteTool(command) ?? ToolResult.Fail("Office data source returned no result.");
         }

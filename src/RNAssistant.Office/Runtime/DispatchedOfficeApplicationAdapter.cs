@@ -4,11 +4,12 @@ using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Qualification;
 
 namespace RNAssistant.Office
 {
-    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IQualificationHostPort, IDisposable
+    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IQualificationHostPort, IDisposable
     {
         private readonly Func<IOfficeStaDispatcher, IOfficeApplicationAdapter> _adapterFactory;
         private readonly OfficeStaDispatcher _dispatcher;
@@ -22,6 +23,7 @@ namespace RNAssistant.Office
         private IExcelRangeMutationBackend _excelRangeMutationBackend;
         private IExcelTableBackend _excelTableBackend;
         private IExcelChartBackend _excelChartBackend;
+        private IWordBackend _wordBackend;
         private volatile bool _innerInitialized;
         private bool _disposed;
 
@@ -95,6 +97,8 @@ namespace RNAssistant.Office
                         ? null : excel.ExcelTableBackend;
                     _excelChartBackend = excel == null
                         ? null : excel.ExcelChartBackend;
+                    var word = _inner as IWordBackendProvider;
+                    _wordBackend = word == null ? null : word.WordBackend;
                     // Publish the owner-initialized session once. Rebinding requires
                     // another adapter; metadata access must not queue behind a run.
                     _innerInitialized = true;
@@ -164,6 +168,15 @@ namespace RNAssistant.Office
             {
                 EnsureInitialized();
                 return _excelChartBackend;
+            }
+        }
+
+        public IWordBackend WordBackend
+        {
+            get
+            {
+                EnsureInitialized();
+                return _wordBackend;
             }
         }
 
