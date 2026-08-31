@@ -37,7 +37,8 @@ namespace RNAssistant.Office.Services
                     ResourceReadCursor.RejectCursor(request);
                     return MetadataSelection(session, resourceUri, target);
                 }
-                var position = ResourceReadCursor.ParseRevisionBound(request);
+                var cursorBinding = ResourceReadCursor.ReadBinding(resourceUri, representation);
+                var position = ResourceReadCursor.ParseRevisionBound(request, cursorBinding);
                 if (target.Project)
                 {
                     var manifest = JsonConvert.SerializeObject(new
@@ -54,7 +55,8 @@ namespace RNAssistant.Office.Services
                         manifest,
                         false,
                         request,
-                        position);
+                        position,
+                        cursorBinding);
                 }
                 if (target.Module != null)
                 {
@@ -66,7 +68,8 @@ namespace RNAssistant.Office.Services
                         source.Code,
                         source.Truncated,
                         request,
-                        position);
+                        position,
+                        cursorBinding);
                 }
                 var backup = ReadBackup(target.Backup);
                 return SelectText(
@@ -76,7 +79,8 @@ namespace RNAssistant.Office.Services
                     backup.Code ?? string.Empty,
                     false,
                     request,
-                    position);
+                    position,
+                    cursorBinding);
             });
         }
 
@@ -372,7 +376,8 @@ namespace RNAssistant.Office.Services
             string content,
             bool sourceTruncated,
             ResourceReadRequest request,
-            ResourceReadPosition position)
+            ResourceReadPosition position,
+            string cursorBinding)
         {
             content = content ?? string.Empty;
             var offset = position == null ? 0 : position.Offset;
@@ -404,7 +409,7 @@ namespace RNAssistant.Office.Services
                     ReturnedCharacters = length,
                     TotalCharacters = content.Length,
                     NextCursor = next < content.Length
-                        ? ResourceReadCursor.CreateRevisionBound(next, contentSha256)
+                        ? ResourceReadCursor.CreateRevisionBound(next, contentSha256, cursorBinding)
                         : null,
                     Complete = complete,
                     Truncated = !complete,

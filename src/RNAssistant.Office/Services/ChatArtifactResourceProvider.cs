@@ -46,7 +46,8 @@ namespace RNAssistant.Office.Services
                     string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             var descriptors = filtered.Select(item => Describe(session, item, true)).ToList();
-            var position = ResourceReadCursor.ParseRevisionBound(cursor);
+            var cursorBinding = ResourceReadCursor.ListBinding(ProviderName, kind);
+            var position = ResourceReadCursor.ParseRevisionBound(cursor, cursorBinding);
             var collectionRevision = ResourceReadCursor.CollectionRevision(descriptors);
             ResourceReadCursor.ValidateContinuation(position, collectionRevision);
             ResourceReadCursor.ValidateCollectionOffset(position, descriptors.Count);
@@ -57,9 +58,9 @@ namespace RNAssistant.Office.Services
             {
                 Items = items.ToList(),
                 Total = filtered.Count,
-                Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision),
+                Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision, cursorBinding),
                 NextCursor = nextOffset < filtered.Count
-                    ? ResourceReadCursor.CreateRevisionBound(nextOffset, collectionRevision)
+                    ? ResourceReadCursor.CreateRevisionBound(nextOffset, collectionRevision, cursorBinding)
                     : null,
                 Truncated = nextOffset < filtered.Count
             };
@@ -229,10 +230,11 @@ namespace RNAssistant.Office.Services
                     ResourceRefs = new[] { exactReference }
                 };
             }
-            var offset = ResourceReadCursor.ParseImmutable(request);
+            var cursorBinding = ResourceReadCursor.ReadBinding(exactUri, representation);
+            var offset = ResourceReadCursor.ParseImmutable(request, cursorBinding);
             if (representation == ResourceRepresentations.Structure)
             {
-                var structure = _htmlResources.ReadStructure(session, artifact, offset, maxChars);
+                var structure = _htmlResources.ReadStructure(session, artifact, offset, maxChars, cursorBinding);
                 structure.Result.Resource = Describe(session, artifact, false);
                 return structure;
             }
@@ -265,7 +267,7 @@ namespace RNAssistant.Office.Services
                     Truncated = nextOffset < content.Length,
                     RawContentIncluded = true,
                     NextCursor = nextOffset < content.Length
-                        ? ResourceReadCursor.CreateImmutable(nextOffset)
+                        ? ResourceReadCursor.CreateImmutable(nextOffset, cursorBinding)
                         : null
                 },
                 ResourceRefs = new[] { exactReference }

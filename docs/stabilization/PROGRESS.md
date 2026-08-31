@@ -2,7 +2,7 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 migration contours — перенос всех существующих tools и удаление active legacy architecture явно обязательны до Phase 12; новые optional product features этим не добавлены
-Current task: atomic 11T0/7D production bound Excel cutover is complete host-neutral; 11T1 find/replace is the next typed-family migration. Real Windows/live-provider gates remain open.
+Current task: Resource Fabric cursor-scope fix and atomic 11T0/7D bound Excel cutover are complete host-neutral; 11T1 find/replace is the next typed-family migration. Real Windows/live-provider gates remain open.
 Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy обязательны. WQ0 больше не блокирует implementation: текущий `RuntimeKey` exact bound workbook принимается как lifetime assumption; реальные Windows/live-provider gates остаются deferred evidence и не могут быть закрыты локальными tests.
 
 Next step for tools: 11T1 переносит exact existing Excel find/replace family на typed request/domain service/direct bound backend/outcome path и удаляет заменённые host switch/helpers. Расширение schema и новые batch abstractions не входят в этот slice.
@@ -68,6 +68,20 @@ longer duplicated in the compact capability index; unloaded tools and skills ret
 selection metadata, and the mandatory Excel/VBA request now has an explicit prompt
 headroom regression. No event, id, store, verifier phase or generic batch abstraction
 was added. Focused harness and Web UI suites pass; Windows WebView2/Office remain
+unqualified.
+
+Resource continuation scope fix (2026-08-31): prior immutable cursors were raw opaque
+offsets, while revision-bound cursors carried only offset plus data hash. Reusing a
+cursor on another URI/query with identical content or collection hashes could
+therefore skip data silently; with different hashes it surfaced as revision drift
+and encouraged the repeated read loop visible in the supplied screenshots. Cursor
+v2 now independently binds list continuations to provider/kind and read continuations
+to canonical URI/normalized representation, while retaining content/collection drift
+guards. Cross-scope use returns non-retryable `resource_cursor_invalid`; live drift
+explicitly requires a fresh same-URI read with both cursor and revision omitted.
+Immutable and identical-source VBA cross-resource regressions, exact-list-query
+regression, normal continuation and stale-live-revision cases pass host-neutral.
+No retry/dedup state or second resource authority was added; Windows Office remains
 unqualified.
 
 Resource member reference fix (2026-08-31): HTML mutation results exposed only an

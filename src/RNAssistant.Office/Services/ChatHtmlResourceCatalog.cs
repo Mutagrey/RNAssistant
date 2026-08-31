@@ -42,7 +42,8 @@ namespace RNAssistant.Office.Services
                 .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             var descriptors = members.Select(Describe).ToList();
-            var position = ResourceReadCursor.ParseRevisionBound(cursor);
+            var cursorBinding = ResourceReadCursor.ListBinding(ChatArtifactResourceProvider.ProviderName, kind);
+            var position = ResourceReadCursor.ParseRevisionBound(cursor, cursorBinding);
             var collectionRevision = ResourceReadCursor.CollectionRevision(descriptors);
             ResourceReadCursor.ValidateContinuation(position, collectionRevision);
             ResourceReadCursor.ValidateCollectionOffset(position, descriptors.Count);
@@ -53,9 +54,9 @@ namespace RNAssistant.Office.Services
             {
                 Items = selected,
                 Total = members.Count,
-                Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision),
+                Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision, cursorBinding),
                 NextCursor = next < members.Count
-                    ? ResourceReadCursor.CreateRevisionBound(next, collectionRevision)
+                    ? ResourceReadCursor.CreateRevisionBound(next, collectionRevision, cursorBinding)
                     : null,
                 Truncated = next < members.Count
             };

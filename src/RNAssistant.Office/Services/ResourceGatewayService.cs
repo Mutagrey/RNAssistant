@@ -53,6 +53,7 @@ namespace RNAssistant.Office.Services
             var providers = _registry.All();
             if (string.IsNullOrWhiteSpace(providerId) && providers.Count > 1)
             {
+                ResourceReadCursor.RejectCursor(cursor);
                 return new ResourceListPage
                 {
                     Providers = providers.Select(item => item.Id).ToList(),
@@ -64,6 +65,8 @@ namespace RNAssistant.Office.Services
                 };
             }
             var provider = SelectProvider(providerId);
+            kind = (kind ?? string.Empty).Trim().ToLowerInvariant();
+            if (kind.Length == 0) kind = null;
             var result = WithProvider(provider, session, delegate
             {
                 return provider.List(session, kind, cursor, limit);

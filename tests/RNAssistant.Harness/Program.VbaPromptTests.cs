@@ -1985,6 +1985,10 @@ namespace RNAssistant.Harness
                 "common.vba_code_editing",
                 StringComparison.OrdinalIgnoreCase));
             AssertContains(editing.Description, "Use whenever a request changes VBA source", "catalog reliably triggers VBA editing guidance");
+            AssertContains(editing.BodyMarkdown, "kind omitted for the project plus live components",
+                "VBA discovery does not depend on hidden component-kind vocabulary");
+            AssertContains(editing.BodyMarkdown, "both cursor and revision omitted",
+                "VBA skill gives an explicit fresh-read recovery after revision drift");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
             AssertContains(editing.BodyMarkdown, "repeat the exact anchor block", "insertions use explicit exact replacement text");
             AssertContains(editing.BodyMarkdown, "mode=rename", "skill explains the strict rename branch");

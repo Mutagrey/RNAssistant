@@ -16,52 +16,78 @@ namespace RNAssistant.Office.Services
 
     internal static class ResourceReadCursor
     {
-        private const string RevisionCursorPrefix = "r1:";
+        private const string ImmutableCursorPrefix = "i2:";
+        private const string RevisionCursorPrefix = "r2:";
 
-        public static int ParseImmutable(ResourceReadRequest request)
+        public static string ListBinding(string provider, string kind)
+        {
+            return CreateBinding(
+                "list",
+                (provider ?? string.Empty).Trim().ToLowerInvariant(),
+                (kind ?? string.Empty).Trim().ToLowerInvariant());
+        }
+
+        public static string ReadBinding(string resourceUri, string representation)
+        {
+            return CreateBinding(
+                "read",
+                resourceUri ?? string.Empty,
+                (representation ?? string.Empty).Trim().ToLowerInvariant());
+        }
+
+        public static int ParseImmutable(ResourceReadRequest request, string binding)
         {
             var cursor = request == null ? null : request.Cursor;
             int offset;
             if (string.IsNullOrWhiteSpace(cursor)) return 0;
-            if (!TryParseOffset(cursor, out offset))
+            var parts = cursor.Split(':');
+            if (parts.Length != 3 || !string.Equals(parts[0], "i2", StringComparison.Ordinal) ||
+                !TryParseOffset(parts[1], out offset) ||
+                !IsBindingToken(parts[2]) ||
+                !string.Equals(parts[2], binding, StringComparison.Ordinal))
             {
                 throw InvalidCursor();
             }
             return offset;
         }
 
-        public static string CreateImmutable(int offset)
+        public static string CreateImmutable(int offset, string binding)
         {
-            if (offset < 0) throw new InvalidOperationException("Cannot create a resource cursor with a negative offset.");
-            return offset.ToString(CultureInfo.InvariantCulture);
+            if (offset < 0 || !IsBindingToken(binding))
+            {
+                throw new InvalidOperationException("Cannot create an immutable resource cursor without an exact binding.");
+            }
+            return ImmutableCursorPrefix + offset.ToString(CultureInfo.InvariantCulture) + ":" + binding;
         }
 
-        public static ResourceReadPosition ParseRevisionBound(ResourceReadRequest request)
+        public static ResourceReadPosition ParseRevisionBound(ResourceReadRequest request, string binding)
         {
-            return ParseRevisionBound(request == null ? null : request.Cursor);
+            return ParseRevisionBound(request == null ? null : request.Cursor, binding);
         }
 
-        public static ResourceReadPosition ParseRevisionBound(string cursor)
+        public static ResourceReadPosition ParseRevisionBound(string cursor, string binding)
         {
             if (string.IsNullOrWhiteSpace(cursor)) return new ResourceReadPosition();
             var parts = cursor.Split(':');
             int offset;
-            if (parts.Length != 3 || !string.Equals(parts[0], "r1", StringComparison.Ordinal) ||
+            if (parts.Length != 4 || !string.Equals(parts[0], "r2", StringComparison.Ordinal) ||
                 !TryParseOffset(parts[1], out offset) ||
-                !IsRevisionToken(parts[2]))
+                !IsRevisionToken(parts[2]) ||
+                !IsBindingToken(parts[3]) ||
+                !string.Equals(parts[3], binding, StringComparison.Ordinal))
             {
                 throw InvalidCursor();
             }
             return new ResourceReadPosition { Offset = offset, Revision = parts[2] };
         }
 
-        public static string CreateRevisionBound(int offset, string revision)
+        public static string CreateRevisionBound(int offset, string revision, string binding)
         {
-            if (offset < 0 || !IsRevisionToken(revision))
+            if (offset < 0 || !IsRevisionToken(revision) || !IsBindingToken(binding))
             {
-                throw new InvalidOperationException("Cannot create a resource cursor without a valid revision.");
+                throw new InvalidOperationException("Cannot create a resource cursor without a valid revision and exact binding.");
             }
-            return RevisionCursorPrefix + offset.ToString(CultureInfo.InvariantCulture) + ":" + revision;
+            return RevisionCursorPrefix + offset.ToString(CultureInfo.InvariantCulture) + ":" + revision + ":" + binding;
         }
 
         public static void ValidatePinned(ResourceReadRequest request, string actualRevision)
@@ -91,7 +117,7 @@ namespace RNAssistant.Office.Services
             if (string.IsNullOrWhiteSpace(expected) ||
                 string.Equals(expected, actualRevision, StringComparison.OrdinalIgnoreCase)) return;
             throw new ResourceRequestException(
-                "The mutable resource changed after the referenced revision was observed. Resolve or read it again before continuing.",
+                "The mutable resource changed after the referenced revision was observed. Start a fresh common.resources_read for the same URI and representation with both cursor and revision omitted.",
                 "resource_revision_changed",
                 true);
         }
@@ -101,7 +127,7 @@ namespace RNAssistant.Office.Services
             if (position == null || string.IsNullOrWhiteSpace(position.Revision) ||
                 string.Equals(position.Revision, actualRevision, StringComparison.OrdinalIgnoreCase)) return;
             throw new ResourceRequestException(
-                "The resource collection changed after the previous page was read. List it again from the first page.",
+                "The resource collection changed after the previous page was read. Call common.resources_list again with cursor omitted and keep the same provider and kind.",
                 "resource_revision_changed",
                 true);
         }
@@ -146,7 +172,12 @@ namespace RNAssistant.Office.Services
 
         public static void RejectCursor(ResourceReadRequest request)
         {
-            if (request != null && !string.IsNullOrWhiteSpace(request.Cursor)) throw InvalidCursor();
+            RejectCursor(request == null ? null : request.Cursor);
+        }
+
+        public static void RejectCursor(string cursor)
+        {
+            if (!string.IsNullOrWhiteSpace(cursor)) throw InvalidCursor();
         }
 
         private static bool IsRevisionToken(string value)
@@ -163,6 +194,26 @@ namespace RNAssistant.Office.Services
             return true;
         }
 
+        private static bool IsBindingToken(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length != 64) return false;
+            for (var index = 0; index < value.Length; index++)
+            {
+                var character = value[index];
+                if (!(character >= 'a' && character <= 'f') &&
+                    !(character >= '0' && character <= '9')) return false;
+            }
+            return true;
+        }
+
+        private static string CreateBinding(string operation, params string[] values)
+        {
+            var builder = new StringBuilder();
+            AppendField(builder, operation);
+            foreach (var value in values ?? new string[0]) AppendField(builder, value);
+            return TextPatternEngine.Sha256(builder.ToString());
+        }
+
         private static bool TryParseOffset(string value, out int offset)
         {
             return int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out offset) &&
@@ -176,7 +227,7 @@ namespace RNAssistant.Office.Services
         private static ResourceRequestException InvalidCursor()
         {
             return new ResourceRequestException(
-                "Resource continuation cursor is invalid for this exact operation or resource. Omit cursor and restart from the first page or first chunk; never reuse a cursor from another result.",
+                "Resource continuation cursor is invalid for this exact operation, query, URI, or representation. Omit cursor and restart from the first page or chunk; never reuse a cursor from another result.",
                 "resource_cursor_invalid",
                 false);
         }

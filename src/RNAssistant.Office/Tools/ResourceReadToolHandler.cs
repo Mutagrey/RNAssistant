@@ -11,7 +11,7 @@ namespace RNAssistant.Office.Tools
     {
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.ReadToolId,
-            "Read-only: Read one exact resource representation by canonical URI. Text is bounded and pageable; media is hydrated only for the next model step and base64 is never embedded in JSON. Continue only with nextCursor from the immediately preceding read of the same URI, revision, and representation.",
+            "Read-only: Read one exact resource representation by canonical URI. Text is bounded and pageable; media is hydrated only for the next model step and base64 is never embedded in JSON. Continue only with nextCursor from the immediately preceding read of the same URI, revision, and representation. After resource_revision_changed, restart that URI/representation with both cursor and revision omitted.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
@@ -52,7 +52,7 @@ namespace RNAssistant.Office.Tools
                 "\"uri\":{\"type\":\"string\",\"description\":\"Exact canonical URI from resources_list/search/resolve.\",\"minLength\":1,\"maxLength\":1000}," +
                 "\"revision\":{\"type\":\"string\",\"description\":\"Optional exact revision returned with the resource reference. Mutable reads fail if it has changed.\",\"minLength\":1,\"maxLength\":128}," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read; auto selects the provider's preferred bounded form.\",\"enum\":[\"auto\",\"metadata\",\"text\",\"structure\",\"source\",\"media\"],\"default\":\"auto\"}," +
-                "\"cursor\":{\"type\":\"string\",\"description\":\"Optional continuation: copy nextCursor only from the immediately preceding resources_read result for this exact uri, revision, and representation. Omit it for the first chunk or when nextCursor is absent. Never reuse a resources_list or another resource's cursor and never calculate an offset.\",\"maxLength\":256}," +
+                "\"cursor\":{\"type\":\"string\",\"description\":\"Optional continuation: copy nextCursor only from the immediately preceding resources_read result for this exact uri, revision, and representation. Omit it for the first chunk or when nextCursor is absent. After resource_revision_changed omit both cursor and revision. Never reuse another result's cursor or calculate an offset.\",\"maxLength\":256}," +
                 "\"maxChars\":{\"type\":\"integer\",\"description\":\"Maximum text characters returned.\",\"minimum\":128,\"maximum\":32000,\"default\":8000}" +
                 "},\"required\":[\"uri\"],\"additionalProperties\":false}";
         }

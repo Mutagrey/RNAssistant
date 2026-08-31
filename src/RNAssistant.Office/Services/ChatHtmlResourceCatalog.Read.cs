@@ -90,11 +90,17 @@ namespace RNAssistant.Office.Services
                     ResourceRefs = new[] { new ResourceRef(request.Reference.Uri, RevisionText(member)) }
                 };
             }
-            var offset = ResourceReadCursor.ParseImmutable(request);
-            return ReadText(member, representation, offset, maxChars);
+            var cursorBinding = ResourceReadCursor.ReadBinding(request.Reference.Uri, representation);
+            var offset = ResourceReadCursor.ParseImmutable(request, cursorBinding);
+            return ReadText(member, representation, offset, maxChars, cursorBinding);
         }
 
-        public ResourceReadSelection ReadStructure(ChatSession session, ChatArtifact artifact, int offset, int maxChars)
+        public ResourceReadSelection ReadStructure(
+            ChatSession session,
+            ChatArtifact artifact,
+            int offset,
+            int maxChars,
+            string cursorBinding)
         {
             var snapshot = LoadSnapshot(session, artifact);
             if (snapshot == null)
@@ -120,10 +126,15 @@ namespace RNAssistant.Office.Services
                 Title = artifact.Title,
                 Content = content,
                 ContentType = "application/json"
-            }, ResourceRepresentations.Structure, offset, maxChars);
+            }, ResourceRepresentations.Structure, offset, maxChars, cursorBinding);
         }
 
-        private ResourceReadSelection ReadText(HtmlMember member, string representation, int offset, int maxChars)
+        private ResourceReadSelection ReadText(
+            HtmlMember member,
+            string representation,
+            int offset,
+            int maxChars,
+            string cursorBinding)
         {
             offset = Math.Max(0, offset);
             maxChars = Math.Max(128, Math.Min(MaximumReadCharacters, maxChars <= 0 ? 8000 : maxChars));
@@ -148,7 +159,7 @@ namespace RNAssistant.Office.Services
                     ReturnedCharacters = length,
                     TotalCharacters = member.Content.Length,
                     NextCursor = next < member.Content.Length
-                        ? ResourceReadCursor.CreateImmutable(next)
+                        ? ResourceReadCursor.CreateImmutable(next, cursorBinding)
                         : null,
                     Complete = next >= member.Content.Length,
                     Truncated = next < member.Content.Length,

@@ -68,14 +68,9 @@ namespace RNAssistant.Office.Services
             {
                 Reference = new ResourceRef(resourceUri, revision.ToString(CultureInfo.InvariantCulture)),
                 Representation = ResourceRepresentations.Text,
-                Cursor = cursor
+                Cursor = cursor,
+                MaxChars = PageCharacters
             };
-            var offset = ResourceReadCursor.ParseImmutable(request);
-            if (offset >= MaximumDocumentCharacters)
-            {
-                throw new InvalidOperationException("Artifact viewer continuation exceeds the bounded document limit.");
-            }
-            request.MaxChars = Math.Min(PageCharacters, MaximumDocumentCharacters - offset);
             var selection = _gateway.Read(session, request);
             var result = selection == null ? null : selection.Result;
             if (result == null || !result.RawContentIncluded || result.Resource == null ||
@@ -85,7 +80,12 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Artifact text representation is unavailable.");
             }
             var text = result.Text ?? string.Empty;
-            if (result.Offset != offset || result.ReturnedCharacters != text.Length ||
+            var offset = result.Offset;
+            if (offset >= MaximumDocumentCharacters || text.Length > MaximumDocumentCharacters - offset)
+            {
+                throw new InvalidOperationException("Artifact viewer continuation exceeds the bounded document limit.");
+            }
+            if (result.ReturnedCharacters != text.Length ||
                 result.TotalCharacters < offset + text.Length ||
                 string.IsNullOrWhiteSpace(result.ContentSha256))
             {

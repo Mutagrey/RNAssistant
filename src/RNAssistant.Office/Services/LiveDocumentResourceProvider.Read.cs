@@ -46,7 +46,8 @@ namespace RNAssistant.Office.Services
                     ? ReadStructure(target)
                     : ReadText(target);
                 var sourceTruncated = content.Length >= MaximumMaterializedCharacters;
-                var position = ResourceReadCursor.ParseRevisionBound(request);
+                var cursorBinding = ResourceReadCursor.ReadBinding(resourceUri, representation);
+                var position = ResourceReadCursor.ParseRevisionBound(request, cursorBinding);
                 return SelectText(
                     session,
                     target,
@@ -54,7 +55,8 @@ namespace RNAssistant.Office.Services
                     content,
                     sourceTruncated,
                     request,
-                    position);
+                    position,
+                    cursorBinding);
             });
         }
 
@@ -200,7 +202,8 @@ namespace RNAssistant.Office.Services
             string content,
             bool sourceTruncated,
             ResourceReadRequest request,
-            ResourceReadPosition position)
+            ResourceReadPosition position,
+            string cursorBinding)
         {
             content = content ?? string.Empty;
             var offset = position == null ? 0 : position.Offset;
@@ -236,7 +239,7 @@ namespace RNAssistant.Office.Services
                     ReturnedCharacters = length,
                     TotalCharacters = content.Length,
                     NextCursor = next < content.Length
-                        ? ResourceReadCursor.CreateRevisionBound(next, contentSha256)
+                        ? ResourceReadCursor.CreateRevisionBound(next, contentSha256, cursorBinding)
                         : null,
                     Complete = complete,
                     Truncated = !complete,

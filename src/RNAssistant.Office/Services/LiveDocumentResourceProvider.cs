@@ -40,7 +40,8 @@ namespace RNAssistant.Office.Services
                 {
                     items.Add(Describe(session, "selection"));
                 }
-                var position = ResourceReadCursor.ParseRevisionBound(cursor);
+                var cursorBinding = ResourceReadCursor.ListBinding(ProviderName, kind);
+                var position = ResourceReadCursor.ParseRevisionBound(cursor, cursorBinding);
                 var collectionRevision = ResourceReadCursor.CollectionRevision(items);
                 ResourceReadCursor.ValidateContinuation(position, collectionRevision);
                 ResourceReadCursor.ValidateCollectionOffset(position, items.Count);
@@ -51,9 +52,9 @@ namespace RNAssistant.Office.Services
                 {
                     Items = selected,
                     Total = items.Count,
-                    Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision),
+                    Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision, cursorBinding),
                     NextCursor = next < items.Count
-                        ? ResourceReadCursor.CreateRevisionBound(next, collectionRevision)
+                        ? ResourceReadCursor.CreateRevisionBound(next, collectionRevision, cursorBinding)
                         : null,
                     Truncated = next < items.Count
                 };

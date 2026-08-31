@@ -242,7 +242,7 @@ namespace RNAssistant.Harness
                 pagingSession, ChatArtifactResourceProvider.ProviderName, ChatArtifactKinds.Markdown, null, 1);
             AssertTrue(!string.IsNullOrWhiteSpace(firstListPage.NextCursor),
                 "resource list exposes an opaque continuation");
-            AssertTrue(firstListPage.Cursor.StartsWith("r1:", StringComparison.Ordinal),
+            AssertTrue(firstListPage.Cursor.StartsWith("r2:", StringComparison.Ordinal),
                 "resource list keeps an internal revision-bound cursor");
             var firstListJson = JsonConvert.SerializeObject(firstListPage);
             AssertTrue(firstListJson.IndexOf("\"cursor\"", StringComparison.Ordinal) < 0,
@@ -275,6 +275,22 @@ namespace RNAssistant.Harness
                 "invalid cross-operation cursor is not retried unchanged");
             AssertContains(crossOperationCursor.Message, "Omit cursor",
                 "invalid cursor tells the model how to restart");
+            ResourceRequestException crossListQuery = null;
+            try
+            {
+                pagingGateway.List(
+                    pagingSession,
+                    ChatArtifactResourceProvider.ProviderName,
+                    null,
+                    firstListPage.NextCursor,
+                    1);
+            }
+            catch (ResourceRequestException ex)
+            {
+                crossListQuery = ex;
+            }
+            AssertEqual("resource_cursor_invalid", crossListQuery == null ? null : crossListQuery.ErrorCode,
+                "list cursor is bound to the exact provider and kind query even when rows match");
             pagingSession.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "Third", InlineText = "3" });
             ResourceRequestException listDrift = null;
             try
@@ -318,6 +334,52 @@ namespace RNAssistant.Harness
             var second = ReadResource(gateway, session, resourceUri, "text",
                 first.NextCursor, 128).Result;
             AssertTrue(second.Offset > 0, "resource cursor advances");
+
+            var sharedText = new string('q', 300);
+            var firstTwin = new ChatArtifact
+            {
+                Id = "cursor-twin-a",
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "Twin A",
+                InlineText = sharedText
+            };
+            var secondTwin = new ChatArtifact
+            {
+                Id = "cursor-twin-b",
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "Twin B",
+                InlineText = sharedText
+            };
+            var twinSession = new ChatSession
+            {
+                Artifacts = new List<ChatArtifact> { firstTwin, secondTwin }
+            };
+            var twinGateway = new ResourceGatewayService();
+            var firstTwinPage = ReadResource(
+                twinGateway,
+                twinSession,
+                ChatResourceUri.CreateArtifactRevisionUri(twinSession, firstTwin),
+                ResourceRepresentations.Text,
+                null,
+                128).Result;
+            ResourceRequestException immutableCrossResource = null;
+            try
+            {
+                ReadResource(
+                    twinGateway,
+                    twinSession,
+                    ChatResourceUri.CreateArtifactRevisionUri(twinSession, secondTwin),
+                    ResourceRepresentations.Text,
+                    firstTwinPage.NextCursor,
+                    128);
+            }
+            catch (ResourceRequestException ex)
+            {
+                immutableCrossResource = ex;
+            }
+            AssertEqual("resource_cursor_invalid",
+                immutableCrossResource == null ? null : immutableCrossResource.ErrorCode,
+                "immutable continuation is bound to the exact URI even when content hashes match");
 
             var search = gateway.Search(session, null, "NEEDLE", null, 10, 256);
             AssertEqual(1, search.Matches.Count, "resource text search count");
@@ -689,6 +751,10 @@ namespace RNAssistant.Harness
             AssertTrue(first.Truncated && !first.Complete && first.FullReadAllowed,
                 "bounded first page retains availability of an admitted exact full read");
             AssertEqual(artifact.ContentSha256, first.ContentSha256, "viewer returns representation hash evidence");
+            AssertEqual(
+                ResourceReadCursor.ReadBinding(uri, ResourceRepresentations.Text),
+                first.NextCursor.Split(':').Last(),
+                "viewer continuation remains bound to its exact URI and representation");
 
             var second = viewer.ReadPage(session, uri, first.NextCursor);
             AssertEqual(first.ReturnedCharacters, second.Offset, "viewer continuation is contiguous");
@@ -834,14 +900,20 @@ namespace RNAssistant.Harness
                 ContentSha256 = TextPatternEngine.Sha256(oversizedText)
             };
             session.Artifacts.Add(oversized);
+            var oversizedUri = ChatResourceUri.CreateArtifactRevisionUri(session, oversized);
+            var oversizedBinding = ResourceReadCursor.ReadBinding(
+                oversizedUri,
+                ResourceRepresentations.Text);
             var boundedEnd = viewer.ReadPage(
                 session,
-                ChatResourceUri.CreateArtifactRevisionUri(session, oversized),
-                "480000");
+                oversizedUri,
+                ResourceReadCursor.CreateImmutable(480000, oversizedBinding));
             AssertTrue(boundedEnd.ViewerLimitReached && boundedEnd.NextCursor == null && !boundedEnd.FullReadAllowed,
                 "viewer stops paging at the explicit document bound");
             RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(
-                session, ChatResourceUri.CreateArtifactRevisionUri(session, oversized), "512000"));
+                session,
+                oversizedUri,
+                ResourceReadCursor.CreateImmutable(512000, oversizedBinding)));
 
             var html = new ChatArtifact
             {
@@ -1096,10 +1168,10 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                adapter.SetVbaModule(
-                    "ResourceModule",
-                    "Option Explicit\nSub ResourceNeedle()\n" + new string('x', 220) + "\nEnd Sub",
-                    "StdModule");
+                var sharedVbaSource =
+                    "Option Explicit\nSub ResourceNeedle()\n" + new string('x', 220) + "\nEnd Sub";
+                adapter.SetVbaModule("ResourceModule", sharedVbaSource, "StdModule");
+                adapter.SetVbaModule("ResourceTwin", sharedVbaSource, "StdModule");
                 var session = NewSession(adapter);
                 var gateway = executor.ResourceGateway;
 
@@ -1220,6 +1292,25 @@ namespace RNAssistant.Harness
                     "VBA source read exposes continuation");
                 AssertTrue(!string.IsNullOrWhiteSpace(firstSource.Resource.Reference.Revision),
                     "VBA source read carries exact revision evidence");
+                var twinComponent = VbaComponent(executor, session, "ResourceTwin");
+                ResourceRequestException vbaCrossResource = null;
+                try
+                {
+                    ReadResource(
+                        gateway,
+                        session,
+                        twinComponent.Reference.Uri,
+                        ResourceRepresentations.Source,
+                        firstSource.NextCursor,
+                        128);
+                }
+                catch (ResourceRequestException ex)
+                {
+                    vbaCrossResource = ex;
+                }
+                AssertEqual("resource_cursor_invalid",
+                    vbaCrossResource == null ? null : vbaCrossResource.ErrorCode,
+                    "live continuation is bound to the exact VBA URI even when revisions match");
 
                 var firstComponentPage = gateway.List(
                     session,
@@ -1276,6 +1367,9 @@ namespace RNAssistant.Harness
                 }
                 AssertEqual("resource_revision_changed", vbaDrift == null ? null : vbaDrift.ErrorCode,
                     "VBA continuation fails instead of mixing source revisions");
+                AssertContains(vbaDrift == null ? null : vbaDrift.Message,
+                    "both cursor and revision omitted",
+                    "live revision drift gives one explicit fresh-read recovery action");
 
                 session.LastRun = new ChatRunRecord
                 {
