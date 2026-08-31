@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "id": "excel.wq0.identity",
+  "revision": "1",
+  "title": "Excel WQ0 · document identity",
+  "description": "Проверяет OXID/OID одной disposable Excel-книги через текущий in-process owner и независимые x64 clients: switch, Save As, second window, attach/detach, close/reopen и same-name workbook в другом процессе. Пакет доступен только на Windows x64 с same-build helper; WQ0 требует отдельные прогоны из VSTO и Desktop/native.",
+  "hosts": ["Excel"],
+  "suite": "release",
+  "workspacePolicy": "runner-owned",
+  "requirements": ["qualification.excel.wq0.v1", "windows-x64", "office-x64", "independent-client-helper"],
+  "coverage": ["WQ-A3.identity-owner", "WQ0.identity-candidate", "WQ-SESSION.identity"],
+  "steps": [
+    {
+      "id": "preflight",
+      "kind": "precondition",
+      "title": "Проверить Windows x64 и same-build helper",
+      "action": "excel.wq0.preflight",
+      "timeoutSeconds": 20
+    },
+    {
+      "id": "fixture",
+      "kind": "fixture",
+      "title": "Создать runner-owned disposable workbook",
+      "action": "excel.wq0.fixture.create",
+      "dependsOn": ["preflight"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "baseline",
+      "kind": "hostProbe",
+      "title": "Снять VSTO + client A/B baseline",
+      "action": "excel.wq0.capture.baseline",
+      "dependsOn": ["fixture"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "switch-active",
+      "kind": "userAction",
+      "title": "Переключить активную книгу и окно",
+      "instructionKey": "excel.wq0.switch-active",
+      "dependsOn": ["baseline"],
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "after-switch",
+      "kind": "hostProbe",
+      "title": "Проверить исходный bound target после switch",
+      "action": "excel.wq0.capture.switch",
+      "dependsOn": ["switch-active"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "save-as",
+      "kind": "userAction",
+      "title": "Выполнить Save As runner-owned книги",
+      "instructionKey": "excel.wq0.save-as",
+      "dependsOn": ["after-switch"],
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "after-save-as",
+      "kind": "hostProbe",
+      "title": "Проверить identity после Save As",
+      "action": "excel.wq0.capture.save-as",
+      "dependsOn": ["save-as"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "open-second-window",
+      "kind": "userAction",
+      "title": "Открыть второе окно той же книги",
+      "instructionKey": "excel.wq0.second-window",
+      "dependsOn": ["after-save-as"],
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "second-window",
+      "kind": "hostProbe",
+      "title": "Проверить identity второго окна",
+      "action": "excel.wq0.capture.second-window",
+      "dependsOn": ["open-second-window"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "rotate-client",
+      "kind": "hostProbe",
+      "title": "Release A, сохранить B и attach C",
+      "action": "excel.wq0.rotate-client",
+      "dependsOn": ["second-window"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "close-reopen",
+      "kind": "userAction",
+      "title": "Закрыть и заново открыть fixture",
+      "instructionKey": "excel.wq0.close-reopen",
+      "dependsOn": ["rotate-client"],
+      "timeoutSeconds": 600
+    },
+    {
+      "id": "rebind-reopened",
+      "kind": "hostProbe",
+      "title": "Сверить old closed и new lifetime",
+      "action": "excel.wq0.rebind-reopened",
+      "dependsOn": ["close-reopen"],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "prepare-other-process",
+      "kind": "userAction",
+      "title": "Открыть same-name книгу в другом Excel process",
+      "instructionKey": "excel.wq0.other-process",
+      "dependsOn": ["rebind-reopened"],
+      "timeoutSeconds": 900
+    },
+    {
+      "id": "other-process",
+      "kind": "hostProbe",
+      "title": "Снять независимое other-process observation",
+      "action": "excel.wq0.capture.other-process",
+      "dependsOn": ["prepare-other-process"],
+      "timeoutSeconds": 60
+    },
+    {
+      "id": "verify-identity",
+      "kind": "assertion",
+      "title": "Детерминированно сверить identity matrix",
+      "assertion": "excel.wq0.identity-matrix",
+      "dependsOn": ["other-process"],
+      "timeoutSeconds": 20
+    },
+    {
+      "id": "cleanup",
+      "kind": "cleanup",
+      "title": "Release clients и удалить runner-owned fixture",
+      "action": "excel.wq0.cleanup",
+      "dependsOn": ["verify-identity"],
+      "timeoutSeconds": 30
+    }
+  ]
+}

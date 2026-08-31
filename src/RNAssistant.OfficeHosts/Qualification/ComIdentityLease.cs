@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Threading;
 
-namespace RNAssistant.ExcelIdentityProbe
+namespace RNAssistant.OfficeHosts.Qualification
 {
     // Keeps the original marshal reference until explicit disposal on its creating STA.
     // No finalizer: CoReleaseMarshalData must not run on the finalizer apartment.

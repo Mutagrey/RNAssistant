@@ -7,6 +7,27 @@
       "hosts": ["*"],
       "suites": ["quick"],
       "mandatory": true
+    },
+    {
+      "id": "WQ-A3.identity-owner",
+      "owner": "OfficeHosts.Qualification",
+      "hosts": ["Excel"],
+      "suites": ["release"],
+      "mandatory": true
+    },
+    {
+      "id": "WQ0.identity-candidate",
+      "owner": "OfficeHosts.Identity",
+      "hosts": ["Excel"],
+      "suites": ["release"],
+      "mandatory": true
+    },
+    {
+      "id": "WQ-SESSION.identity",
+      "owner": "HostRuntime.DocumentSession",
+      "hosts": ["Excel"],
+      "suites": ["release"],
+      "mandatory": true
     }
   ]
 }

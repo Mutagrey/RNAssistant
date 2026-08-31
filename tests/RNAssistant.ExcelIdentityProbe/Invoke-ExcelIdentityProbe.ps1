@@ -9,11 +9,11 @@ if ($env:OS -ne "Windows_NT" -or -not [Environment]::Is64BitProcess -or
     [Threading.Thread]::CurrentThread.GetApartmentState() -ne "STA") {
     throw "Run with Windows PowerShell x64 -STA on the Windows qualification machine."
 }
-$probeAssembly = Join-Path $PSScriptRoot "bin\Debug\net48\RNAssistant.ExcelIdentityProbe.dll"
-if (-not (Test-Path $probeAssembly)) { throw "Build the diagnostic project in Debug first. See README.md." }
+$probeAssembly = Join-Path $PSScriptRoot "..\..\src\RNAssistant.OfficeHosts\bin\Debug\RNAssistant.OfficeHosts.dll"
+if (-not (Test-Path $probeAssembly)) { throw "Build RNAssistant.OfficeHosts in Debug first. See README.md." }
 Add-Type -Path $probeAssembly
-$application = [RNAssistant.ExcelIdentityProbe.ExcelProbeTarget]::ResolveApplication($Hwnd)
-$excelProcessId = [RNAssistant.ExcelIdentityProbe.ExcelProbeTarget]::ProcessId($Hwnd)
+$application = [RNAssistant.OfficeHosts.Qualification.ExcelProbeTarget]::ResolveApplication($Hwnd)
+$excelProcessId = [RNAssistant.OfficeHosts.Qualification.ExcelProbeTarget]::ProcessId($Hwnd)
 $excelProcess = Get-Process -Id $excelProcessId
 $excelStartedUtc = $excelProcess.StartTime.ToUniversalTime().ToString("o")
 $clientProcessId = [Diagnostics.Process]::GetCurrentProcess().Id
@@ -36,7 +36,7 @@ $workbook = $application.Workbooks.Item($WorkbookIndex)
 $savedBeforeBind = [bool]$workbook.Saved
 $lease = $null
 try {
-    $lease = [RNAssistant.ExcelIdentityProbe.ComIdentityLease]::Create($workbook)
+    $lease = [RNAssistant.OfficeHosts.Qualification.ComIdentityLease]::Create($workbook)
     $savedAfterBind = [bool]$workbook.Saved
     $scenario = "initial"
     do {
@@ -50,7 +50,7 @@ try {
         try {
             $isOpen = $false
             for ($index = 1; $index -le $application.Workbooks.Count; $index++) {
-                if ([RNAssistant.ExcelIdentityProbe.ExcelProbeTarget]::SameLocalObject($workbook, $application.Workbooks.Item($index))) {
+                if ([RNAssistant.OfficeHosts.Qualification.ExcelProbeTarget]::SameLocalObject($workbook, $application.Workbooks.Item($index))) {
                     $isOpen = $true
                     break
                 }

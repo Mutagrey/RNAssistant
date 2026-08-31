@@ -13,6 +13,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Qualification;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -20,6 +21,7 @@ using RNAssistant.Office.WebView;
 using RNAssistant.Desktop;
 using RNAssistant.OfficeHosts;
 using RNAssistant.OfficeHosts.Identity;
+using RNAssistant.OfficeHosts.Qualification;
 
 namespace RNAssistant.Harness
 {
@@ -948,17 +950,17 @@ namespace RNAssistant.Harness
         private static void ExcelIdentityProbeParsesObjectIdentity()
         {
             var packet = ExcelIdentityProbePacket();
-            var parsed = ExcelIdentityProbe.ComIdentitySample.Parse(packet);
+            var parsed = ComIdentitySample.Parse(packet);
             AssertEqual("fedcba9876543210:0123456789abcdef", parsed.Candidate, "unsigned little-endian OXID/OID decoded");
             // Interface id and ref-count metadata are not document identity.
             packet[24] = 32;
             packet[28] = 17;
             packet[48] = 99;
-            var otherInterface = ExcelIdentityProbe.ComIdentitySample.Parse(packet);
+            var otherInterface = ComIdentitySample.Parse(packet);
             AssertEqual(parsed.Candidate, otherInterface.Candidate, "IPID and reference counts do not alter candidate");
             AssertTrue(parsed.Ipid != otherInterface.Ipid, "interface observations remain distinguishable");
             packet[40] ^= 1;
-            AssertTrue(parsed.Candidate != ExcelIdentityProbe.ComIdentitySample.Parse(packet).Candidate,
+            AssertTrue(parsed.Candidate != ComIdentitySample.Parse(packet).Candidate,
                 "different object in same exporter has a different candidate");
         }
 
@@ -990,7 +992,7 @@ namespace RNAssistant.Harness
             {
                 try
                 {
-                    ExcelIdentityProbe.ComIdentitySample.Parse(sample);
+                    ComIdentitySample.Parse(sample);
                     throw new Exception("invalid OBJREF acquired a candidate identity");
                 }
                 catch (InvalidDataException) { }
@@ -1002,16 +1004,144 @@ namespace RNAssistant.Harness
             if (Environment.OSVersion.Platform == PlatformID.Win32NT) return;
             try
             {
-                ExcelIdentityProbe.ComIdentityLease.Create(new object());
+                ComIdentityLease.Create(new object());
                 throw new Exception("probe reached native work outside Windows");
             }
             catch (PlatformNotSupportedException) { }
             try
             {
-                ExcelIdentityProbe.ExcelProbeTarget.ResolveApplication(1);
+                ExcelProbeTarget.ResolveApplication(1);
                 throw new Exception("resolver reached native work outside Windows");
             }
             catch (PlatformNotSupportedException) { }
+        }
+
+        private static void ExcelIdentityHelperProtocolIsBounded()
+        {
+            var request = new ExcelIdentityHelperRequest
+            {
+                SchemaVersion = ExcelIdentityHelperProtocol.SchemaVersion,
+                Nonce = new string('a', 64),
+                Operation = "bind",
+                Hwnd = 42,
+                WorkbookIndex = 1,
+                Label = "client-A",
+                Scenario = "initial",
+                OwnerAssemblyMvid = new Guid("11111111-2222-3333-4444-555555555555").ToString("D")
+            };
+            var json = ExcelIdentityHelperProtocol.SerializeRequest(request);
+            var parsed = ExcelIdentityHelperProtocol.ParseRequest(json);
+            AssertEqual("bind", parsed.Operation, "helper operation remains typed");
+            AssertEqual(42L, parsed.Hwnd, "helper target is an explicit HWND");
+            AssertTrue(!json.Contains("command") && !json.Contains("script") && !json.Contains("url"),
+                "helper request has no generic execution field");
+
+            RuntimeThrows<InvalidDataException>(() => ExcelIdentityHelperProtocol.ParseRequest(
+                json.TrimEnd('}') + ",\"command\":\"cmd.exe\"}"));
+            RuntimeThrows<InvalidDataException>(() => ExcelIdentityHelperProtocol.ReadBoundedLine(
+                new StringReader(new string('x', ExcelIdentityHelperProtocol.MaximumMessageChars + 1) + "\n")));
+            var response = new ExcelIdentityHelperResponse
+            {
+                SchemaVersion = ExcelIdentityHelperProtocol.SchemaVersion,
+                Nonce = request.Nonce,
+                Type = "released",
+                Status = "released",
+                OwnerAssemblyMvid = request.OwnerAssemblyMvid
+            };
+            var responseJson = ExcelIdentityHelperProtocol.SerializeResponse(response);
+            RuntimeThrows<InvalidDataException>(() => ExcelIdentityHelperProtocol.ParseResponse(
+                responseJson, new string('b', 64)));
+        }
+
+        private static void ExcelWq0VerifierRequiresFullMatrix()
+        {
+            const string started = "2026-08-31T10:00:00.0000000Z";
+            var baseline = ExcelWq0ObservationSet("C:\\initial\\Identity-WQ0.xlsx", 1,
+                new[] { "client-A", "client-B" }, 1, 10, started, "0000000000000001", "0000000000000002");
+            var switched = ExcelWq0ObservationSet("C:\\initial\\Identity-WQ0.xlsx", 1,
+                new[] { "client-A", "client-B" }, 1, 10, started, "0000000000000001", "0000000000000002");
+            var savedAs = ExcelWq0ObservationSet("C:\\save-as\\Identity-WQ0.xlsx", 1,
+                new[] { "client-A", "client-B" }, 1, 10, started, "0000000000000001", "0000000000000002");
+            var secondWindow = ExcelWq0ObservationSet("C:\\save-as\\Identity-WQ0.xlsx", 2,
+                new[] { "client-A", "client-B" }, 1, 10, started, "0000000000000001", "0000000000000002");
+            var rotated = ExcelWq0ObservationSet("C:\\save-as\\Identity-WQ0.xlsx", 2,
+                new[] { "client-B", "client-C" }, 1, 10, started, "0000000000000001", "0000000000000002");
+            var reopened = ExcelWq0ObservationSet("C:\\save-as\\Identity-WQ0.xlsx", 1,
+                new[] { "client-D", "client-E" }, 1, 10, started, "0000000000000001", "0000000000000099");
+            var rebound = new JObject
+            {
+                ["oldClients"] = new JArray(new JObject { ["status"] = "closed" },
+                    new JObject { ["status"] = "closed" }),
+                ["newObservation"] = reopened
+            };
+            var foreign = ExcelWq0Observation("other-process", "C:\\other\\Identity-WQ0.xlsx", 1,
+                20, "2026-08-31T10:01:00.0000000Z", "0000000000000100", "0000000000000200");
+            var evidence = ExcelWq0Evidence(baseline, switched, savedAs, secondWindow, rotated,
+                rebound, new JObject { ["foreign"] = foreign });
+            var passed = ExcelWq0EvidenceVerifier.Verify(evidence, CancellationToken.None);
+            AssertEqual(QualificationStepOutcome.Passed, passed.Outcome,
+                "complete independent-client matrix passes typed verifier");
+
+            foreign["excelProcessId"] = 10;
+            foreign["excelProcessStartUtc"] = started;
+            foreign["oxid"] = "0000000000000001";
+            foreign["oid"] = "0000000000000002";
+            var failed = ExcelWq0EvidenceVerifier.Verify(ExcelWq0Evidence(baseline, switched, savedAs,
+                secondWindow, rotated, rebound, new JObject { ["foreign"] = foreign }), CancellationToken.None);
+            AssertEqual(QualificationStepOutcome.Failed, failed.Outcome,
+                "same scoped identity in foreign scenario cannot pass");
+            AssertEqual(QualificationStepOutcome.Blocked,
+                ExcelWq0EvidenceVerifier.Verify(new QualificationEvidenceSnapshot(null), CancellationToken.None).Outcome,
+                "missing persisted matrix blocks rather than passes");
+        }
+
+        private static QualificationEvidenceSnapshot ExcelWq0Evidence(JObject baseline, JObject switched,
+            JObject savedAs, JObject secondWindow, JObject rotated, JObject rebound, JObject other)
+        {
+            var values = new[]
+            {
+                new { Id = "baseline", Value = baseline },
+                new { Id = "after-switch", Value = switched },
+                new { Id = "after-save-as", Value = savedAs },
+                new { Id = "second-window", Value = secondWindow },
+                new { Id = "rotate-client", Value = rotated },
+                new { Id = "rebind-reopened", Value = rebound },
+                new { Id = "other-process", Value = other }
+            };
+            return new QualificationEvidenceSnapshot(values.Select(item => new QualificationRecordedStep(
+                item.Id, QualificationStepOutcome.Passed, QualificationEvidenceStrength.None,
+                item.Value.ToString(Formatting.None))));
+        }
+
+        private static JObject ExcelWq0ObservationSet(string path, int windowCount, string[] labels,
+            int saved, int processId, string processStart, string oxid, string oid)
+        {
+            return new JObject
+            {
+                ["inProcess"] = ExcelWq0Observation("host-owner", path, windowCount,
+                    processId, processStart, oxid, oid, saved != 0),
+                ["clients"] = new JArray(labels.Select(label => ExcelWq0Observation(label, path,
+                    windowCount, processId, processStart, oxid, oid, saved != 0)))
+            };
+        }
+
+        private static JObject ExcelWq0Observation(string label, string path, int windowCount,
+            int processId, string processStart, string oxid, string oid, bool saved = true)
+        {
+            return new JObject
+            {
+                ["label"] = label,
+                ["status"] = "observed",
+                ["excelProcessId"] = processId,
+                ["excelProcessStartUtc"] = processStart,
+                ["oxid"] = oxid,
+                ["oid"] = oid,
+                ["name"] = "Identity-WQ0.xlsx",
+                ["fullName"] = path,
+                ["savedBeforeRead"] = saved,
+                ["savedAfterRead"] = saved,
+                ["windowCount"] = windowCount
+            };
         }
 
         private static byte[] ExcelIdentityProbePacket()

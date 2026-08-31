@@ -118,6 +118,20 @@
   text-transform: uppercase;
 }
 
+.qualification-suite-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.qualification-suite-select {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
 .qualification-pack {
   width: 100%;
   margin-bottom: 8px;

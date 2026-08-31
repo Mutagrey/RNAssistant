@@ -6,6 +6,7 @@
     catalog: null,
     run: null,
     selectedPackId: "",
+    suite: "quick",
     activeChatId: "",
     activeChatRun: null,
     activeProbeVersion: 0,
@@ -96,6 +97,11 @@
     if (!root) return;
     root.replaceChildren();
     var packs = center.catalog ? arrayValue(center.catalog, "packs") : [];
+    var suiteSelect = $("qualificationSuiteSelect");
+    if (suiteSelect) {
+      suiteSelect.value = center.suite;
+      suiteSelect.disabled = center.busy || !!center.run && !isTerminal(value(center.run, "status", ""));
+    }
     packs.forEach(function (pack) {
       var id = String(value(pack, "id", ""));
       var available = !!value(pack, "available", false);
@@ -228,9 +234,15 @@
       node.textContent = "";
       return;
     }
-    node.textContent = key === "qualification.shell.acknowledge"
-      ? "Проверьте, что список шагов виден и этот блок раскрывает явное действие. Затем нажмите «Подтвердить и продолжить»."
-      : "Выполните указанный ручной шаг и подтвердите продолжение.";
+    var instructions = {
+      "qualification.shell.acknowledge": "Проверьте, что список шагов виден и этот блок раскрывает явное действие. Затем нажмите «Подтвердить и продолжить».",
+      "excel.wq0.switch-active": "Переключитесь на control workbook, затем обратно на runner-owned Identity-WQ0.xlsx. Вернитесь в этот Qualification Center и продолжите.",
+      "excel.wq0.save-as": "В результате шага fixture раскройте JSON и найдите expectedSaveAsPath. Выполните Save As runner-owned книги точно в этот путь, затем продолжите.",
+      "excel.wq0.second-window": "Для runner-owned книги выполните View → New Window. Оба окна должны остаться открыты до следующего шага.",
+      "excel.wq0.close-reopen": "Закройте runner-owned книгу, не закрывая control workbook, и снова откройте её из текущего Save As path. Затем вернитесь сюда.",
+      "excel.wq0.other-process": "Запустите отдельный Excel x64 process и откройте в нём disposable книгу с видимым именем Identity-WQ0.xlsx, но из другого каталога. Control workbook и reopened fixture оставьте открытыми."
+    };
+    node.textContent = instructions[key] || "Выполните указанный ручной шаг и подтвердите продолжение.";
   }
 
   function renderActions(pack, runStatus) {
@@ -297,6 +309,7 @@
       String(state.activeChatId || "");
     if (chat && typeof applyChatState === "function") applyChatState(chat);
     if (center.run) center.selectedPackId = String(value(center.run, "packId", center.selectedPackId));
+    if (center.run && value(center.run, "suite", "")) center.suite = String(value(center.run, "suite", "quick"));
   }
 
   function activeQualificationRun() {
@@ -346,18 +359,26 @@
     });
   }
 
+  function loadCatalog() {
+    return send("getQualificationCatalog", { chatId: state.activeChatId || null, suite: center.suite })
+      .then(function (catalog) {
+        center.catalog = catalog || null;
+        var packs = center.catalog ? arrayValue(center.catalog, "packs") : [];
+        if (!packs.some(function (pack) { return String(value(pack, "id", "")) === center.selectedPackId; }))
+          center.selectedPackId = packs.length ? String(value(packs[0], "id", "")) : "";
+        return catalog;
+      });
+  }
+
   function loadQualificationCenter() {
     center.busy = true;
     center.error = "";
     renderQualificationCenter();
-    return send("getQualificationCatalog", { chatId: state.activeChatId || null, suite: "quick" })
-      .then(function (catalog) {
-        center.catalog = catalog || null;
-        var packs = center.catalog ? arrayValue(center.catalog, "packs") : [];
-        if (!center.selectedPackId && packs.length) center.selectedPackId = String(value(packs[0], "id", ""));
-        return send("getQualificationRun", { chatId: state.activeChatId || null, runId: null });
+    return send("getQualificationRun", { chatId: state.activeChatId || null, runId: null })
+      .then(function (response) {
+        applyQualificationResponse(response);
+        return loadCatalog();
       })
-      .then(function (response) { applyQualificationResponse(response); })
       .catch(function (error) {
         center.error = error && error.message ? error.message : "Qualification Center is unavailable.";
       })
@@ -451,6 +472,21 @@
     if (close) close.addEventListener("click", closeQualificationCenter);
     if (overlay) overlay.addEventListener("click", function (event) {
       if (event.target === overlay) closeQualificationCenter();
+    });
+    var suite = $("qualificationSuiteSelect");
+    if (suite) suite.addEventListener("change", function () {
+      if (center.busy) return;
+      center.suite = String(suite.value || "quick");
+      center.selectedPackId = "";
+      center.busy = true;
+      center.error = "";
+      renderQualificationCenter();
+      loadCatalog().catch(function (error) {
+        center.error = error && error.message ? error.message : "Qualification catalog is unavailable.";
+      }).finally(function () {
+        center.busy = false;
+        renderQualificationCenter();
+      });
     });
     $("startQualificationButton").addEventListener("click", startQualification);
     $("continueQualificationButton").addEventListener("click", function () { advanceQualification(false); });

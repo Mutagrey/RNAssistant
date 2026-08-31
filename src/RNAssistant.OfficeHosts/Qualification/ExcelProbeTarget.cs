@@ -1,9 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace RNAssistant.ExcelIdentityProbe
+namespace RNAssistant.OfficeHosts.Qualification
 {
     public static class ExcelProbeTarget
     {
@@ -58,6 +59,21 @@ namespace RNAssistant.ExcelIdentityProbe
             return processId;
         }
 
+        public static IReadOnlyList<long> ListTopLevelWindows()
+        {
+            ComIdentityLease.RequireWindowsSta();
+            var result = new List<long>();
+            EnumWindows((window, state) =>
+            {
+                var name = new StringBuilder(64);
+                if (GetClassName(window, name, name.Capacity) != 0 &&
+                    string.Equals(name.ToString(), "XLMAIN", StringComparison.OrdinalIgnoreCase))
+                    result.Add(window.ToInt64());
+                return true;
+            }, IntPtr.Zero);
+            return result.AsReadOnly();
+        }
+
         private static bool IsExcelWindow(IntPtr hwnd)
         {
             var name = new StringBuilder(64);
@@ -67,6 +83,8 @@ namespace RNAssistant.ExcelIdentityProbe
         private delegate bool EnumChildProc(IntPtr hwnd, IntPtr state);
         [DllImport("user32.dll")]
         private static extern bool EnumChildWindows(IntPtr parent, EnumChildProc callback, IntPtr state);
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumChildProc callback, IntPtr state);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassName(IntPtr hwnd, StringBuilder name, int count);
         [DllImport("user32.dll")]

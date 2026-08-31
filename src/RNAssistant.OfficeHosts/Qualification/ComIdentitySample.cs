@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace RNAssistant.ExcelIdentityProbe
+namespace RNAssistant.OfficeHosts.Qualification
 {
     // Diagnostic candidate only. Never accepts or unmarshals a packet from disk/network.
     public sealed class ComIdentitySample

@@ -39,9 +39,11 @@
   <ItemGroup>
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="FakeOfficeAdapter.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="FakeOfficeAdapter.ExcelWrite.cs" />
-    <Compile Include="..\RNAssistant.ExcelIdentityProbe\ComIdentitySample.cs" Link="ExcelIdentityProbe\ComIdentitySample.cs" />
-    <Compile Include="..\RNAssistant.ExcelIdentityProbe\ComIdentityLease.cs" Link="ExcelIdentityProbe\ComIdentityLease.cs" />
-    <Compile Include="..\RNAssistant.ExcelIdentityProbe\ExcelProbeTarget.cs" Link="ExcelIdentityProbe\ExcelProbeTarget.cs" />
+    <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentitySample.cs" Link="OfficeHosts\Qualification\ComIdentitySample.cs" />
+    <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentityLease.cs" Link="OfficeHosts\Qualification\ComIdentityLease.cs" />
+    <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ExcelProbeTarget.cs" Link="OfficeHosts\Qualification\ExcelProbeTarget.cs" />
+    <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ExcelIdentityHelperProtocol.cs" Link="OfficeHosts\Qualification\ExcelIdentityHelperProtocol.cs" />
+    <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ExcelWq0EvidenceVerifier.cs" Link="OfficeHosts\Qualification\ExcelWq0EvidenceVerifier.cs" />
     <Compile Include="..\..\src\RNAssistant.Core\Models\*.cs" Link="Core\Models\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\*.cs" Link="Core\Llm\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\ModelProtocol\*.cs" Link="Core\ModelProtocol\%(Filename)%(Extension)" />
@@ -115,5 +117,8 @@
     <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\common.ui-shell.v1.json"
                       Link="Office\Qualification\Packs\common.ui-shell.v1.json"
                       LogicalName="RNAssistant.Office.Qualification.Packs.common.ui-shell.v1.json" />
+    <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\excel.wq0.identity.v1.json"
+                      Link="Office\Qualification\Packs\excel.wq0.identity.v1.json"
+                      LogicalName="RNAssistant.Office.Qualification.Packs.excel.wq0.identity.v1.json" />
   </ItemGroup>
 </Project>

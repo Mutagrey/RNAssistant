@@ -1,6 +1,9 @@
 # Excel identity qualification probe — Phase 5B2
 
-**Diagnostic candidate only; not connected to production factories or locks.**
+**Engineering fallback only.** The decoder/lease owner now lives in
+`RNAssistant.OfficeHosts.Qualification`; the in-app `excel.wq0.identity` pack uses
+the same owner and the bounded same-build x64 helper. This script remains useful
+for independent comparison, but its output cannot set qualification status.
 Run only on Windows x64 + Office x64 + VS 2022. Do not run Office validation on the
 development Mac. The harness tests parsing and the non-Windows refusal, not Excel.
 
@@ -13,7 +16,8 @@ candidate, while IPID is recorded separately. This is a hypothesis for Excel,
 not proof that all Excel proxies expose one stable identity.
 [Microsoft: STDOBJREF](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dcom/5ee74828-43a8-400b-9629-2bb4e707d7ec).
 
-`ComIdentityLease.Create(workbook)` marshals IUnknown with `MSHCTX_LOCAL` and
+`RNAssistant.OfficeHosts.Qualification.ComIdentityLease.Create(workbook)` marshals
+IUnknown with `MSHCTX_LOCAL` and
 `MSHLFLAGS_NORMAL` and retains that packet until disposal. Keeping the reference
 is part of the candidate ownership mechanism: repeated snapshots alone do not
 prove identity stability when clients attach/detach. `ReadAgain()` creates and
@@ -40,10 +44,10 @@ Use disposable test workbooks. The script does not write cells, properties or VB
 save, close, quit, or activate Office. Manual Save As/close/reopen actions below
 are performed by the tester. Output includes workbook paths; review before sharing.
 
-Build the diagnostic DLL on Windows with the .NET 4.8 targeting pack installed:
+Build the owner assembly on Windows with the .NET 4.8 targeting pack installed:
 
 ```powershell
-dotnet build tests/RNAssistant.ExcelIdentityProbe/RNAssistant.ExcelIdentityProbe.csproj -c Debug
+dotnet msbuild src/RNAssistant.OfficeHosts/RNAssistant.OfficeHosts.csproj -p:Configuration=Debug -nologo
 ```
 
 Obtain the desired Excel HWND (for example, inspect `MainWindowHandle` for the
@@ -114,7 +118,7 @@ coverage leaves the identity gate open. After identity qualification, production
 `ExcelDocumentSession`/factory wiring and the full gate/write/read-back/confirmation
 matrix still require their own Windows tests; this probe cannot close R04.
 
-Owner: HostRuntime/OfficeHosts, removal gate: 5B2 candidate decision. If rejected,
-remove the candidate implementation. If accepted, move the qualified reader into
-OfficeHosts and point diagnostic consumers at that implementation, deleting the
-duplicate probe reader/resolver. This is not a compatibility adapter.
+Owner: `OfficeHosts.Qualification`. There is no duplicate diagnostic decoder or
+resolver. Removal gate: 5B2 candidate decision; if the candidate is rejected,
+remove this owner, helper, pack and fallback together. This is not a compatibility
+adapter.

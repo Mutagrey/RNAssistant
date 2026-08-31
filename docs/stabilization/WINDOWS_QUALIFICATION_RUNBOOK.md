@@ -19,15 +19,16 @@ host-neutral миграции. Он не заменяет targeted tests под�
 старое evidence применяется только к неизменившимся контурам.
 
 По согласованному [Milestone WQ-A](STABILIZATION_MASTER_PLAN.md#milestone-wq-a--in-app-qualification-center)
-основной пользовательский путь будет встроен в [Qualification Center](../qualification.md):
-pack wizard, automatic assertions и report без ручных scripts. Пока WQ-A3 не реализован,
-команды ниже остаются engineering fallback и не считаются встроенным UI evidence.
+основной пользовательский путь встроен в [Qualification Center](../qualification.md):
+выберите suite `release` и pack `excel.wq0.identity`. Pack wizard, automatic
+assertion и report работают без scripts. Команды из probe README остаются только
+engineering fallback и сами не считаются встроенным UI evidence.
 
 ## 2. WQ0 — blocking identity probe для 5B2
 
-Выполняется до production identity/factory switch. Целевой путь — встроенный pack
-`excel.wq0.identity` WQ-A3; до его реализации команды и формат наблюдений заданы в
-[Excel identity probe README](../../tests/RNAssistant.ExcelIdentityProbe/README.md).
+Выполняется до production identity/factory switch через встроенный pack
+`excel.wq0.identity`. Если pack недоступен, сначала исправить packaging/bitness;
+не подменять его pass результатами [PowerShell fallback](../../tests/RNAssistant.ExcelIdentityProbe/README.md).
 
 Проверить:
 

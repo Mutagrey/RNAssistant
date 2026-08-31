@@ -38,6 +38,7 @@ class Element {
   replaceChildren(...children) { this.childNodes = []; children.forEach(child => this.appendChild(child)); }
   addEventListener(name, handler) { (this.handlers[name] ||= []).push(handler); }
   click() { if (!this.disabled) (this.handlers.click || []).forEach(handler => handler({ target: this })); }
+  change() { if (!this.disabled) (this.handlers.change || []).forEach(handler => handler({ target: this })); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   getAttribute(name) { return this.attributes[name]; }
   focus() { this.ownerDocument.activeElement = this; }
@@ -67,6 +68,7 @@ function runState(status, currentStepId) {
     productVersion: "16.1.0-dev",
     buildCommit: "unavailable",
     channel: "development",
+    suite: "quick",
     status,
     currentStepId,
     canResume: status === "awaiting_user",
@@ -84,7 +86,7 @@ function runState(status, currentStepId) {
 const document = new FakeDocument();
 [
   ["qualificationCenterOverlay"], ["qualificationCenterDialog"], ["closeQualificationCenterButton", "button"],
-  ["qualificationCenterStatus"], ["qualificationPackList"], ["qualificationRunTitle"],
+  ["qualificationCenterStatus"], ["qualificationPackList"], ["qualificationSuiteSelect", "select"], ["qualificationRunTitle"],
   ["qualificationRunDescription"], ["qualificationRunStatus"], ["qualificationProvenance"],
   ["qualificationUserInstruction"], ["qualificationSteps"], ["startQualificationButton", "button"],
   ["continueQualificationButton", "button"], ["cancelQualificationButton", "button"],
@@ -116,7 +118,7 @@ const context = vm.createContext({
   $: id => document.getElementById(id),
   send(type, payload) {
     requests.push({ type, payload });
-    if (type === "getQualificationCatalog") return Promise.resolve({ schemaVersion: 1, host: "Excel", suite: "quick", packs: [pack], missingCoverage: [] });
+    if (type === "getQualificationCatalog") return Promise.resolve({ schemaVersion: 1, host: "Excel", suite: payload.suite, packs: payload.suite === "quick" ? [pack] : [], missingCoverage: [] });
     if (type === "getQualificationRun") return Promise.resolve({ schemaVersion: 1, chat: { activeChatId: state.activeChatId }, run: null });
     if (type === "startQualification") return Promise.resolve({ schemaVersion: 1, chat: { activeChatId: "qualification-chat" }, run: runState("awaiting_user", "acknowledge") });
     if (type === "advanceQualification") return Promise.resolve({ schemaVersion: 1, chat: { activeChatId: "qualification-chat" }, run: runState("passed", null) });
@@ -147,9 +149,16 @@ async function flush() { await Promise.resolve(); await Promise.resolve(); await
 (async function run() {
   context.bindQualificationActions();
   await context.openQualificationCenter();
-  assert.deepEqual(requests.slice(0, 2).map(item => item.type), ["getQualificationCatalog", "getQualificationRun"]);
+  assert.deepEqual(requests.slice(0, 2).map(item => item.type), ["getQualificationRun", "getQualificationCatalog"]);
   assert.equal(document.ids.qualificationCenterOverlay.classList.contains("hidden"), false);
   assert.match(document.ids.qualificationRunDescription.textContent, /Shell only/);
+  document.ids.qualificationSuiteSelect.value = "release";
+  document.ids.qualificationSuiteSelect.change();
+  await flush();
+  assert.equal(requests.at(-1).payload.suite, "release");
+  document.ids.qualificationSuiteSelect.value = "quick";
+  document.ids.qualificationSuiteSelect.change();
+  await flush();
   console.log("PASS qualification center: empty/diagnostics entry opens catalog and restores active chat run");
 
   document.ids.startQualificationButton.click();

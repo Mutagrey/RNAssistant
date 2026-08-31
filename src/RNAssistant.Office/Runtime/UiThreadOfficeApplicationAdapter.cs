@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Qualification;
 
 namespace RNAssistant.Office
 {
-    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider
+    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IQualificationHostPort
     {
         private readonly IOfficeApplicationAdapter _inner;
         private readonly OfficeUiDispatcher _dispatcher;
@@ -133,6 +134,73 @@ namespace RNAssistant.Office
             {
                 var catalog = _inner as IOfficeDocumentCatalog;
                 return catalog != null && catalog.OpenDocument(path);
+            });
+        }
+
+        public IReadOnlyList<string> QualificationCapabilities
+        {
+            get
+            {
+                return _dispatcher.Invoke(delegate
+                {
+                    var provider = _inner as IQualificationHostPort;
+                    return provider == null
+                        ? (IReadOnlyList<string>)new string[0]
+                        : provider.QualificationCapabilities.ToArray();
+                });
+            }
+        }
+
+        public bool SupportsQualificationAction(QualificationStep step)
+        {
+            return _dispatcher.Invoke(delegate
+            {
+                var provider = _inner as IQualificationHostPort;
+                return provider != null && provider.SupportsQualificationAction(step);
+            });
+        }
+
+        public QualificationActionResult ExecuteQualificationAction(
+            QualificationStepExecutionContext context,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            return _dispatcher.Invoke(delegate
+            {
+                var provider = _inner as IQualificationHostPort;
+                if (provider == null) throw new InvalidOperationException("Host qualification is unavailable.");
+                return provider.ExecuteQualificationAction(context, cancellationToken);
+            });
+        }
+
+        public bool SupportsQualificationAssertion(QualificationStep step)
+        {
+            return _dispatcher.Invoke(delegate
+            {
+                var provider = _inner as IQualificationHostPort;
+                return provider != null && provider.SupportsQualificationAssertion(step);
+            });
+        }
+
+        public QualificationVerificationResult VerifyQualificationAssertion(
+            QualificationStepExecutionContext context,
+            QualificationEvidenceSnapshot evidence,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            return _dispatcher.Invoke(delegate
+            {
+                var provider = _inner as IQualificationHostPort;
+                if (provider == null) throw new InvalidOperationException("Host qualification is unavailable.");
+                return provider.VerifyQualificationAssertion(context, evidence, cancellationToken);
+            });
+        }
+
+        public void ReleaseQualificationResources()
+        {
+            _dispatcher.Invoke(delegate
+            {
+                var provider = _inner as IQualificationHostPort;
+                if (provider != null) provider.ReleaseQualificationResources();
+                return true;
             });
         }
     }

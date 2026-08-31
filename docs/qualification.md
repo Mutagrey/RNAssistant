@@ -1,8 +1,10 @@
 # Qualification Center и расширяемые test packs
 
-Статус: WQ-A2 UI shell реализован host-neutral; production agent/host adapters,
-Excel WQ0, full suites, immutable build evidence и Windows/Office qualification
-остаются WQ-A3–A5.
+Статус: WQ-A3 реализован host-neutral: UI подключён к узкому host port, встроен
+`excel.wq0.identity`, а decoder/lease/helper имеют одного owner в `OfficeHosts`.
+Реальный WQ0 остаётся открытым до запуска пакета на Windows x64 + Office x64.
+Production agent suites, immutable build evidence и Windows/Office qualification
+остаются WQ-A4/A5 и Milestone WQ.
 
 ## 1. Назначение
 
@@ -39,11 +41,13 @@ Harness проверяет pure/host-neutral contracts до сборки кан�
 6. связанный causal run journal и общий JSON viewer;
 7. экспорт bounded redacted report.
 
-WQ-A2 поставляет только встроенный read-only quick pack
+WQ-A2 поставляет встроенный read-only quick pack
 `common.ui-shell`. Он проверяет UI/bridge/runner/event round-trip с явным
 manual checkpoint и typed verifier, но не квалифицирует Office, COM,
-live provider, model loop и document tools. Full/release suites и host packs появятся
-только в WQ-A3/A4. Exact immutable build commit остаётся `unavailable` до
+live provider, model loop и document tools. WQ-A3 добавляет release suite selector и
+Windows-gated `excel.wq0.identity`: на другой платформе либо без same-build helper
+пакет виден как недоступный и не может стартовать. Остальные full/release packs
+появятся в WQ-A4. Exact immutable build commit остаётся `unavailable` до
 BuildEvidenceManifest в WQ-A5; UI не фабрикует его из working tree.
 
 Wizard может просить переключить книгу, выполнить Save As, закрыть/открыть документ,
@@ -73,6 +77,10 @@ Build pipeline -> immutable BuildEvidenceManifest -> Qualification UI
   встроенный exact allowlisted shell pack и один UI. Application service каждый
   раз восстанавливает run из validated chat events; production adapter к
   conversation/host runtime и host probes ещё не подключены.
+- WQ-A3 добавляет `IQualificationHostPort`. UI-thread и dedicated-STA wrappers
+  сохраняют owner apartment; exact action/assertion IDs реализует только host owner.
+  Verifier получает завершённые action evidence из уже записанного event stream,
+  а не из UI или model narrative.
 - `agentTask` всегда проходит через обычные `ConversationRunService`, `AgentKernel`,
   `ToolRuntime`, `HostRuntime` и production domain handlers. Test mode не расширяет
   callable tools и не отключает confirmation/policy.
@@ -231,6 +239,10 @@ BuildEvidenceManifest создаётся сборочным/release contour по
 - different books и same-name books в разных Excel processes;
 - release/cleanup и отсутствие document mutation.
 
+Один run фиксирует текущий in-process owner call site. Полный WQ0 требует два
+согласованных run одного exact build: из VSTO и из Desktop/native attachment;
+отсутствующий call site остаётся `BLOCKED`, а не выводится из другого запуска.
+
 Helper не является generic process runner: один versioned request/response contract,
 one-time local channel, explicit HWND/target, no network, no shell и bounded output.
 Identity decoder/lease имеют одного owner; существующий PowerShell probe остаётся
@@ -286,8 +298,10 @@ Coverage registry связывает каждый mandatory invariant/risk/capab
    Diagnostics entry, Qualification Center, stepper, durable resume, exact journal/
    shared JSON navigation и bounded report над read-only `common.ui-shell`.
    [Evidence](stabilization/WQ_A2_QUALIFICATION_CENTER.md).
-4. **WQ-A3 — Excel WQ0:** единый identity owner, in-process observation и narrow x64
-   helper; удалить duplicate diagnostic decoder после switch; Windows qualification.
+4. **WQ-A3 — Excel WQ0 — host-neutral implementation done:** единый identity owner,
+   in-process observation, narrow same-build x64 helper, release-suite UI и удаление
+   duplicate diagnostic decoder. Реальная Windows qualification остаётся открытым
+   gate. [Evidence](stabilization/WQ_A3_EXCEL_WQ0.md).
 5. **WQ-A4 — suites:** common/provider/storage/UI, затем один host pack за раз;
    fixtures, deterministic verifiers и coverage gates.
 6. **WQ-A5 — release integration:** immutable BuildEvidenceManifest и release suite;

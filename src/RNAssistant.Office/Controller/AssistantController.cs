@@ -106,7 +106,8 @@ namespace RNAssistant.Office
                 () => _settingsService.LoadStorageProtector(),
                 _trajectoryQuery);
             _chatSessions = new ChatSessionService(_adapter, _conversationStore, _vbaJournalStore);
-            _qualification = new QualificationApplicationService(_eventStore);
+            _qualification = new QualificationApplicationService(
+                _eventStore, _adapter as IQualificationHostPort);
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _chatRuns.Get;
             _chatSessions.RunSessionsProvider = _chatRuns.Sessions;

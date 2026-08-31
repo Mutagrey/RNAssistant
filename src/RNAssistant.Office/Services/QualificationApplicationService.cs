@@ -11,24 +11,37 @@ using RNAssistant.Office.Qualification;
 
 namespace RNAssistant.Office.Services
 {
-    public sealed class QualificationApplicationService
+    public sealed class QualificationApplicationService : IDisposable
     {
         public const string ShellCapability = "qualification.shell.v1";
 
         private readonly IEventStore _events;
         private readonly QualificationPackCatalog _catalog;
+        private readonly IQualificationHostPort _host;
         private readonly IReadOnlyList<string> _capabilities;
 
         public QualificationApplicationService(IEventStore events)
-            : this(events, QualificationBuiltInCatalog.Load())
+            : this(events, QualificationBuiltInCatalog.Load(), null)
         {
         }
 
-        internal QualificationApplicationService(IEventStore events, QualificationPackCatalog catalog)
+        public QualificationApplicationService(IEventStore events, IQualificationHostPort host)
+            : this(events, QualificationBuiltInCatalog.Load(), host)
+        {
+        }
+
+        internal QualificationApplicationService(IEventStore events, QualificationPackCatalog catalog,
+            IQualificationHostPort host = null)
         {
             _events = events ?? throw new ArgumentNullException(nameof(events));
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
-            _capabilities = Array.AsReadOnly(new[] { ShellCapability });
+            _host = host;
+            var capabilities = new[] { ShellCapability }
+                .Concat(host == null ? new string[0] : host.QualificationCapabilities ?? new string[0])
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            _capabilities = Array.AsReadOnly(capabilities);
         }
 
         public QualificationPack GetPack(string packId)
@@ -54,7 +67,7 @@ namespace RNAssistant.Office.Services
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
             var pack = _catalog.Get(packId);
-            EnsureShellPack(pack, session.Host);
+            EnsurePack(pack, session.Host);
             var journal = Journal(session);
             var latestRunId = journal.FindLatestRunId();
             if (latestRunId != null && !HasDurableTerminal(journal.Read(latestRunId)))
@@ -106,6 +119,11 @@ namespace RNAssistant.Office.Services
             return session != null && Journal(session).FindLatestRunId() != null;
         }
 
+        public void Dispose()
+        {
+            if (_host != null) _host.ReleaseQualificationResources();
+        }
+
         private QualificationRunState Restore(
             QualificationRunner runner,
             QualificationEventJournal journal,
@@ -122,29 +140,24 @@ namespace RNAssistant.Office.Services
             if (!string.Equals(pack.Revision, start.PackRevision, StringComparison.Ordinal) ||
                 !string.Equals(pack.ContentSha256, start.PackSha256, StringComparison.Ordinal))
                 throw new InvalidOperationException("Qualification pack changed; this run cannot be resumed with a different manifest.");
-            EnsureShellPack(pack, host);
+            EnsurePack(pack, host);
             return runner.Restore(pack, CurrentContext(host), runId.Trim());
         }
 
-        private void EnsureShellPack(QualificationPack pack, string host)
+        private void EnsurePack(QualificationPack pack, string host)
         {
             var availability = _catalog.List(host, pack.Suite, _capabilities)
                 .FirstOrDefault(item => string.Equals(item.Pack.Id, pack.Id, StringComparison.OrdinalIgnoreCase));
             if (availability == null || !availability.Available)
                 throw new InvalidOperationException("Qualification pack is unavailable for this host or build.");
-            if (!string.Equals(pack.WorkspacePolicy, "read-only", StringComparison.Ordinal) ||
-                pack.Steps.Any(step => step.Kind == QualificationStepKind.AgentTask ||
-                    step.Kind == QualificationStepKind.HostProbe ||
-                    step.Kind == QualificationStepKind.Fixture ||
-                    step.Kind == QualificationStepKind.Confirmation ||
-                    step.Kind == QualificationStepKind.Restart ||
-                    step.Kind == QualificationStepKind.Fault))
-                throw new InvalidOperationException("WQ-A2 accepts only the read-only shell pack.");
         }
 
         private QualificationRunner Runner(QualificationEventJournal journal)
         {
-            return new QualificationRunner(new ShellActions(), new ShellVerifier(journal), journal);
+            return new QualificationRunner(
+                new ApplicationActions(new ShellActions(), _host),
+                new ApplicationVerifier(new ShellVerifier(journal), _host, journal),
+                journal);
         }
 
         private QualificationEventJournal Journal(ChatSession session)
@@ -250,6 +263,86 @@ namespace RNAssistant.Office.Services
                         "Durable shell evidence matched.")
                     : QualificationVerificationResult.Failed("shell_evidence_mismatch",
                         "Required durable shell evidence is missing.", expectedJson, actualJson));
+            }
+        }
+
+        private sealed class ApplicationActions : IQualificationActionExecutor
+        {
+            private readonly IQualificationActionExecutor _shell;
+            private readonly IQualificationHostPort _host;
+
+            internal ApplicationActions(IQualificationActionExecutor shell, IQualificationHostPort host)
+            {
+                _shell = shell;
+                _host = host;
+            }
+
+            public bool Supports(QualificationStep step)
+            {
+                return _shell.Supports(step) || _host != null && _host.SupportsQualificationAction(step);
+            }
+
+            public Task<QualificationActionResult> ExecuteAsync(
+                QualificationStepExecutionContext context,
+                CancellationToken cancellationToken)
+            {
+                var shell = _shell.Supports(context.Step);
+                var host = _host != null && _host.SupportsQualificationAction(context.Step);
+                if (shell == host)
+                    throw new InvalidOperationException(shell
+                        ? "Qualification action has more than one owner."
+                        : "Qualification action is not allowlisted.");
+                return shell
+                    ? _shell.ExecuteAsync(context, cancellationToken)
+                    : Task.FromResult(_host.ExecuteQualificationAction(context, cancellationToken));
+            }
+        }
+
+        private sealed class ApplicationVerifier : IQualificationVerifier
+        {
+            private readonly IQualificationVerifier _shell;
+            private readonly IQualificationHostPort _host;
+            private readonly IQualificationRunJournal _journal;
+
+            internal ApplicationVerifier(IQualificationVerifier shell, IQualificationHostPort host,
+                IQualificationRunJournal journal)
+            {
+                _shell = shell;
+                _host = host;
+                _journal = journal;
+            }
+
+            public bool Supports(QualificationStep step)
+            {
+                return _shell.Supports(step) || _host != null && _host.SupportsQualificationAssertion(step);
+            }
+
+            public Task<QualificationVerificationResult> VerifyAsync(
+                QualificationStepExecutionContext context,
+                CancellationToken cancellationToken)
+            {
+                var shell = _shell.Supports(context.Step);
+                var host = _host != null && _host.SupportsQualificationAssertion(context.Step);
+                if (shell == host)
+                    throw new InvalidOperationException(shell
+                        ? "Qualification assertion has more than one owner."
+                        : "Qualification assertion is not allowlisted.");
+                if (shell) return _shell.VerifyAsync(context, cancellationToken);
+                var evidence = _journal.Read(context.RunId)
+                    .Where(item => item.Kind == QualificationRunEventKind.StepCompleted)
+                    .Select(item => new QualificationRecordedStep(
+                        item.Data.StepId,
+                        QualificationManifestParser.ParseOutcome(item.Data.StepOutcome),
+                        ParseStrength(item.Data.EvidenceStrength),
+                        item.Data.ActualJson));
+                return Task.FromResult(_host.VerifyQualificationAssertion(
+                    context, new QualificationEvidenceSnapshot(evidence), cancellationToken));
+            }
+
+            private static QualificationEvidenceStrength ParseStrength(string value)
+            {
+                QualificationEvidenceStrength result;
+                return Enum.TryParse(value, true, out result) ? result : QualificationEvidenceStrength.None;
             }
         }
     }

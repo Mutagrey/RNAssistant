@@ -87,6 +87,7 @@
     <Compile Include="Qualification\QualificationCatalog.cs" />
     <Compile Include="Qualification\QualificationBuiltInCatalog.cs" />
     <Compile Include="Qualification\QualificationContracts.cs" />
+    <Compile Include="Qualification\QualificationHostPort.cs" />
     <Compile Include="Qualification\QualificationEventJournal.cs" />
     <Compile Include="Qualification\QualificationManifest.cs" />
     <Compile Include="Qualification\QualificationRunner.cs" />
@@ -249,6 +250,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Qualification\Packs\common.ui-shell.v1.json">
       <LogicalName>RNAssistant.Office.Qualification.Packs.common.ui-shell.v1.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Qualification\Packs\excel.wq0.identity.v1.json">
+      <LogicalName>RNAssistant.Office.Qualification.Packs.excel.wq0.identity.v1.json</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>

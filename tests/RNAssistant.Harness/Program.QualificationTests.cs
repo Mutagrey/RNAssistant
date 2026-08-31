@@ -445,6 +445,48 @@ namespace RNAssistant.Harness
                 "manual acknowledgement and cancel flags are not inferred");
         }
 
+        private static void QualificationHostPortOwnsActionsAndVerifier()
+        {
+            var builtIn = QualificationBuiltInCatalog.Load();
+            var requirements = new[]
+            {
+                "qualification.excel.wq0.v1", "windows-x64", "office-x64", "independent-client-helper"
+            };
+            var wq0 = builtIn.List("Excel", "release", requirements).Single();
+            AssertEqual("excel.wq0.identity", wq0.Pack.Id, "embedded WQ0 pack id");
+            AssertTrue(wq0.Available, "exact host requirements admit embedded WQ0 pack");
+            AssertEqual(0, builtIn.MissingCoverage("Excel", "release").Count,
+                "embedded WQ0 owns mandatory release identity coverage");
+            AssertTrue(!builtIn.List("Excel", "release", new string[0]).Single().Available,
+                "WQ0 is blocked without Windows/helper capabilities");
+
+            var coverage = QualificationCoverageRegistry.Parse(
+                "{\"schemaVersion\":1,\"entries\":[{\"id\":\"host.port\",\"owner\":\"test\"," +
+                "\"hosts\":[\"Excel\"],\"suites\":[\"quick\"],\"mandatory\":true}]}");
+            var pack = new QualificationManifestParser().Parse("{" +
+                "\"schemaVersion\":1,\"id\":\"excel.host-port\",\"revision\":\"1\"," +
+                "\"title\":\"Host port\",\"hosts\":[\"Excel\"],\"suite\":\"quick\"," +
+                "\"workspacePolicy\":\"read-only\",\"requirements\":[\"fake.host\"]," +
+                "\"coverage\":[\"host.port\"],\"steps\":[" +
+                "{\"id\":\"probe\",\"kind\":\"hostProbe\",\"action\":\"fake.host.probe\"}," +
+                "{\"id\":\"verify\",\"kind\":\"assertion\",\"assertion\":\"fake.host.verify\",\"dependsOn\":[\"probe\"]}]}");
+            var catalog = new QualificationPackCatalog(coverage, new[] { pack });
+            var host = new FakeQualificationHostPort();
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Excel", "qualification-host", "Qualification.xlsx", "Host port");
+                var service = new QualificationApplicationService(EventStore(store), catalog, host);
+                var run = service.StartAsync(session, pack.Id, null, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(QualificationRunStatus.Passed, run.Status,
+                    "typed host verifier owns terminal pass");
+                AssertEqual(1, host.ActionCalls, "host action executes once");
+                AssertEqual(1, host.VerifierCalls, "host verifier executes once");
+                AssertTrue(host.SawPersistedProbe, "host verifier receives persisted action evidence");
+            });
+        }
+
         private static QualificationPack ParseQualificationPack(string steps = null)
         {
             return new QualificationManifestParser().Parse(
@@ -566,6 +608,57 @@ namespace RNAssistant.Harness
             {
                 Calls++;
                 return Task.FromResult(Result);
+            }
+        }
+
+        private sealed class FakeQualificationHostPort : IQualificationHostPort
+        {
+            internal int ActionCalls;
+            internal int VerifierCalls;
+            internal bool SawPersistedProbe;
+
+            public IReadOnlyList<string> QualificationCapabilities
+            {
+                get { return new[] { "fake.host" }; }
+            }
+
+            public bool SupportsQualificationAction(QualificationStep step)
+            {
+                return step != null && step.Action == "fake.host.probe";
+            }
+
+            public QualificationActionResult ExecuteQualificationAction(
+                QualificationStepExecutionContext context,
+                CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ActionCalls++;
+                return QualificationActionResult.Passed("{\"host\":\"observed\"}");
+            }
+
+            public bool SupportsQualificationAssertion(QualificationStep step)
+            {
+                return step != null && step.Assertion == "fake.host.verify";
+            }
+
+            public QualificationVerificationResult VerifyQualificationAssertion(
+                QualificationStepExecutionContext context,
+                QualificationEvidenceSnapshot evidence,
+                CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                VerifierCalls++;
+                var probe = evidence.Find("probe");
+                SawPersistedProbe = probe != null && probe.Outcome == QualificationStepOutcome.Passed &&
+                    probe.ActualJson == "{\"host\":\"observed\"}";
+                return SawPersistedProbe
+                    ? QualificationVerificationResult.Passed("{\"persisted\":true}", "{\"persisted\":true}")
+                    : QualificationVerificationResult.Failed("missing", "Missing persisted probe.",
+                        "{\"persisted\":true}", "{\"persisted\":false}");
+            }
+
+            public void ReleaseQualificationResources()
+            {
             }
         }
 

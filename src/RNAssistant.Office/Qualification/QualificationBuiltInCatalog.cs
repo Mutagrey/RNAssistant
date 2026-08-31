@@ -11,6 +11,8 @@ namespace RNAssistant.Office.Qualification
             "RNAssistant.Office.Qualification.Packs.coverage.v1.json";
         internal const string ShellPackResource =
             "RNAssistant.Office.Qualification.Packs.common.ui-shell.v1.json";
+        internal const string ExcelWq0PackResource =
+            "RNAssistant.Office.Qualification.Packs.excel.wq0.identity.v1.json";
 
         public static QualificationPackCatalog Load()
         {
@@ -21,8 +23,12 @@ namespace RNAssistant.Office.Qualification
         {
             if (assembly == null) throw new ArgumentNullException(nameof(assembly));
             var coverage = QualificationCoverageRegistry.Parse(Read(assembly, CoverageResource));
-            var pack = new QualificationManifestParser().Parse(Read(assembly, ShellPackResource));
-            return new QualificationPackCatalog(coverage, new[] { pack });
+            var parser = new QualificationManifestParser();
+            return new QualificationPackCatalog(coverage, new[]
+            {
+                parser.Parse(Read(assembly, ShellPackResource)),
+                parser.Parse(Read(assembly, ExcelWq0PackResource))
+            });
         }
 
         private static string Read(Assembly assembly, string name)

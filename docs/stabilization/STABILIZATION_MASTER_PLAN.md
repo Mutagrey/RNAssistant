@@ -2210,8 +2210,10 @@ policy/effect semantics. Текущий PowerShell WQ0 остаётся engineer
      chat, durable resume, UI shell и exact allowlisted read-only `common.ui-shell`
      реализованы host-neutral; Office/model/full-suite claims не делаются.
      [Evidence](WQ_A2_QUALIFICATION_CENTER.md).
-4. **WQ-A3 Excel WQ0:** один identity collector owner, VSTO/native observations и
-   narrow same-build x64 helper для независимых client leases; реальная Windows проверка.
+4. **WQ-A3 Excel WQ0:** host-neutral implementation завершена: один identity
+   collector owner, VSTO/native observation port, embedded pack и narrow same-build
+   x64 helper для независимых client leases. Реальная Windows qualification остаётся
+   отдельным обязательным gate; readiness не закрывает WQ0/5B2/R04.
 5. **WQ-A4 suites:** common/provider/storage/UI и по одному host pack, versioned
    fixtures, deterministic final-state verifiers и coverage gates.
 6. **WQ-A5 release integration:** immutable BuildEvidenceManifest и complete release suite.

@@ -119,6 +119,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("productVersion")] public string ProductVersion { get; set; }
         [JsonProperty("buildCommit")] public string BuildCommit { get; set; }
         [JsonProperty("channel")] public string Channel { get; set; }
+        [JsonProperty("suite")] public string Suite { get; set; }
         [JsonProperty("capabilities")] public IReadOnlyList<string> Capabilities { get; set; }
         [JsonProperty("status")] public string Status { get; set; }
         [JsonProperty("currentStepId")] public string CurrentStepId { get; set; }
@@ -153,6 +154,7 @@ namespace RNAssistant.Office.Contracts
                 ProductVersion = run.Context.ProductVersion,
                 BuildCommit = run.Context.BuildCommit,
                 Channel = run.Context.Channel,
+                Suite = run.Pack.Suite,
                 Capabilities = run.Context.Capabilities,
                 Status = QualificationManifestParser.RunStatusName(run.Status),
                 CurrentStepId = run.CurrentStepIndex >= 0 && run.CurrentStepIndex < run.Pack.Steps.Count

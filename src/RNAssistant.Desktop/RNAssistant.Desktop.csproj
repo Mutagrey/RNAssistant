@@ -59,6 +59,11 @@
       <Project>{4F22E15B-1EFA-4A21-98EA-BF8BDF40EB7E}</Project>
       <Name>RNAssistant.OfficeHosts</Name>
     </ProjectReference>
+    <ProjectReference Include="..\RNAssistant.ExcelIdentityHelper\RNAssistant.ExcelIdentityHelper.csproj">
+      <Project>{D6AC26D7-C0F2-4863-BB61-8AD2AAB54F01}</Project>
+      <Name>RNAssistant.ExcelIdentityHelper</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DesktopActivation.cs" />
@@ -82,6 +87,10 @@
     </Content>
     <Content Include="..\..\vendor\webview2-runtime\**\*.*">
       <Link>vendor\webview2-runtime\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\RNAssistant.ExcelIdentityHelper\bin\$(Platform)\$(Configuration)\RNAssistant.ExcelIdentityHelper.exe">
+      <Link>RNAssistant.ExcelIdentityHelper.exe</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
