@@ -7,6 +7,8 @@
     <NativeProject>$(RepoRoot)src\RNAssistant.NativeHostCli\RNAssistant.NativeHostCli.vcxproj</NativeProject>
     <DesktopProject>$(RepoRoot)src\RNAssistant.Desktop\RNAssistant.Desktop.csproj</DesktopProject>
     <PublisherProject>$(MSBuildThisFileDirectory)RNAssistant.NativePortable.proj</PublisherProject>
+    <TempX64Destination Condition="'$(TempX64Destination)' == ''">C:\Temp\RNAssistant\</TempX64Destination>
+    <TempX86Destination Condition="'$(TempX86Destination)' == ''">C:\Temp\RNAssistant-x86\</TempX86Destination>
   </PropertyGroup>
 
   <Target Name="Doctor">
@@ -36,6 +38,9 @@
     <MSBuild Projects="$(PublisherProject)" Targets="Publish"
              Properties="Configuration=$(Configuration);Architecture=x64"
              BuildInParallel="false" />
+    <MSBuild Projects="$(PublisherProject)" Targets="Publish"
+             Properties="Configuration=$(Configuration);Architecture=x64;Destination=$(TempX64Destination)"
+             BuildInParallel="false" />
   </Target>
 
   <Target Name="NativeX86" DependsOnTargets="BuildManaged">
@@ -45,6 +50,9 @@
              BuildInParallel="false" />
     <MSBuild Projects="$(PublisherProject)" Targets="Publish"
              Properties="Configuration=$(Configuration);Architecture=x86"
+             BuildInParallel="false" />
+    <MSBuild Projects="$(PublisherProject)" Targets="Publish"
+             Properties="Configuration=$(Configuration);Architecture=x86;Destination=$(TempX86Destination)"
              BuildInParallel="false" />
   </Target>
 

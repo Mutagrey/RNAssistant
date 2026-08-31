@@ -59,10 +59,11 @@ build-local.cmd doctor
 
 The command uses Visual Studio `MSBuild.exe` directly. It does not install or
 register add-ins, change PowerShell policy, create certificates, access the
-network or terminate Office. Outputs are written to
-`artifacts\portable\Release\x64` and `artifacts\portable\Release\x86`; the build
-log is `artifacts\build-local.log`. Close Office before replacing a portable
-folder because the native DLL remains loaded in the Office process.
+network or terminate Office. Outputs are written both to
+`artifacts\portable\Release\x64` / `x86` and directly to
+`C:\Temp\RNAssistant` / `C:\Temp\RNAssistant-x86`; the build log is
+`artifacts\build-local.log`. Close Office before building because the native DLL
+remains loaded in the Office process and cannot be replaced.
 
 The x86 output intentionally omits the x64-only native PDF rendering binaries.
 The complete supported target remains Office x64. Package/import the VBA and

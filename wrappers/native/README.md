@@ -24,8 +24,9 @@ build-local.cmd
 ```
 
 Use `build-local.cmd x64` or `build-local.cmd x86` for one architecture. Output
-is written under `artifacts\portable\Release`. The x86 package does not contain
-the x64-only native PDF rendering binaries.
+is written under `artifacts\portable\Release` and also published directly to
+`C:\Temp\RNAssistant` (x64) or `C:\Temp\RNAssistant-x86` (x86). The x86 package
+does not contain the x64-only native PDF rendering binaries.
 
 Expected layout:
 

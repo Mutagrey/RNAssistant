@@ -6,7 +6,7 @@
     <RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</RepoRoot>
     <NativePlatform Condition="'$(Architecture)' == 'x64'">x64</NativePlatform>
     <NativePlatform Condition="'$(Architecture)' == 'x86'">Win32</NativePlatform>
-    <Destination>$(RepoRoot)artifacts\portable\$(Configuration)\$(Architecture)\</Destination>
+    <Destination Condition="'$(Destination)' == ''">$(RepoRoot)artifacts\portable\$(Configuration)\$(Architecture)\</Destination>
     <NativeOutput>$(RepoRoot)artifacts\$(Configuration)\$(NativePlatform)\</NativeOutput>
     <CoreOutput>$(RepoRoot)src\RNAssistant.Core\bin\$(Configuration)\</CoreOutput>
     <OfficeOutput>$(RepoRoot)src\RNAssistant.Office\bin\$(Configuration)\</OfficeOutput>
