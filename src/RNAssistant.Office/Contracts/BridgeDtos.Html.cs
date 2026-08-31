@@ -107,8 +107,20 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class HtmlWorkspaceResponse
     {
+        [JsonProperty("sessionRevision")]
+        public long SessionRevision { get; set; }
+
         [JsonProperty("activeChatId")]
         public string ActiveChatId { get; set; }
+
+        [JsonProperty("activeHtmlArtifactId")]
+        public string ActiveHtmlArtifactId { get; set; }
+
+        [JsonProperty("artifacts")]
+        public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
+
+        [JsonProperty("artifactLibrary")]
+        public ArtifactLibraryProjectionDto ArtifactLibrary { get; set; }
 
         [JsonProperty("workspace")]
         public HtmlWorkspaceDto Workspace { get; set; }

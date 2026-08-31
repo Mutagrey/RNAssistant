@@ -564,6 +564,7 @@ namespace RNAssistant.Office
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
                 Messages = session == null ? new List<ChatMessage>() : ChatCloneService.CloneMessages(session.Messages),
                 Artifacts = ChatArtifactDto.From(session),
+                ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
                 ActiveTaskListArtifactId = session == null ? string.Empty : session.ActiveTaskListArtifactId,

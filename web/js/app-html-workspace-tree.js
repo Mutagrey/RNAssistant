@@ -64,6 +64,15 @@
     return "system";
   }
 
+  function artifactCategory(artifact) {
+    if (artifact && artifact.category) return artifact.category;
+    var kind = String(artifact && artifact.kind || "").toLowerCase();
+    if (["attachment", "image", "audio", "file"].indexOf(kind) >= 0) return "files";
+    if (kind === "chart") return "generated";
+    if (["task_list", "compaction", "tool_result"].indexOf(kind) >= 0) return "system";
+    return "authored";
+  }
+
   function groupNode(key, title, count, children, iconKind) {
     return {
       key: groupKey(key),
@@ -234,14 +243,17 @@
 
     [
       artifactGroup("Планы", "artifact-plans", options.plans || [], query, "plan"),
-      artifactGroup("Созданные", "artifact-created", artifacts.filter(function (artifact) {
-        return ["markdown", "chart"].indexOf(artifact.kind) >= 0;
+      artifactGroup("Документы", "artifact-authored", artifacts.filter(function (artifact) {
+        return artifactCategory(artifact) === "authored";
       }), query, "artifact"),
-      artifactGroup("Файлы", "artifact-attachments", artifacts.filter(function (artifact) {
-        return ["attachment", "image", "audio", "file"].indexOf(artifact.kind) >= 0;
+      artifactGroup("Файлы и медиа", "artifact-files", artifacts.filter(function (artifact) {
+        return artifactCategory(artifact) === "files";
       }), query, "artifact"),
-      artifactGroup("Служебные", "artifact-system", artifacts.filter(function (artifact) {
-        return ["plan_document", "task_list", "markdown", "chart", "attachment", "image", "audio", "file", "html_workspace"].indexOf(artifact.kind) < 0;
+      artifactGroup("Созданные снимки", "artifact-generated", artifacts.filter(function (artifact) {
+        return artifactCategory(artifact) === "generated";
+      }), query, "artifact"),
+      artifactGroup("Служебные данные", "artifact-system", artifacts.filter(function (artifact) {
+        return artifactCategory(artifact) === "system";
       }), query, "artifact")
     ].forEach(function (node) { if (node) nodes.push(node); });
 

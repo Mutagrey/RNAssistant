@@ -2,12 +2,27 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 Optional contours — отдельный ранний Artifact Library milestone явно допущен пользователем параллельно WQ
-Current task: 11A1 done host-neutral — после mandatory CAS/link/chat save полный revisioned chat state с committed message и exact artifact refs синхронно ставится в WebView queue до attachment helper и primary model transport; UI различает draft/preparing/original.
+Current task: 11A1–11A2 done host-neutral — commit-time full projection дополнена server-owned exact Artifact Library heads/history, immutable/versioned/derived classes и исправленными Plan/original/snapshot labels.
 Execution mode: Phase 11 baseline интегрирован поверх завершённых host-neutral WQ-A1–A5; все реальные Windows/live-provider gates идут независимо и этим milestone не закрываются. Phase 12 scope не расширен.
 
-Next step: отдельный 11A2 commit — server-owned exact Artifact Library heads/history projection, immutable-original versus versioned labels и cleanup `plan_document`/JSON/version drift. Plan mutations/viewer остаются следующим slice.
-Required context: [Artifact Library contract](../artifact-library.md), [Resource Fabric](../resource-fabric.md), [architecture](../architecture.md), [11A1 evidence](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md), [master Phase 11](STABILIZATION_MASTER_PLAN.md#phase-11--optional-contours).
-Open gates / remaining legacy: 11A1 is done host-neutral, but R51 remains open for exact Library heads/history, Plan/HTML ownership, viewers, removal and Windows WebView lifecycle. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation and R54 Skill Library remain docs-only. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+Next step: отдельный Phase 11 Plan slice — сверить exact-current guard и Markdown payload lineage, затем append-only restore-as-new-head/delete semantics и pinned ready-plan handoff; HTML и viewers не смешивать с ним.
+Required context: [Artifact Library contract](../artifact-library.md), [Resource Fabric](../resource-fabric.md), [architecture](../architecture.md), [11A1 evidence](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md), [11A2 evidence](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md), [master Phase 11](STABILIZATION_MASTER_PLAN.md#phase-11--optional-contours).
+Open gates / remaining legacy: 11A1–11A2 are done host-neutral, but R51 remains open for Plan append-only restore/delete semantics, HTML unique revision/branch ownership, typed viewers, committed-resource removal and Windows WebView lifecycle. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. WQ0 and production 5B2/R04 remain prerequisites for 7D; production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation and R54 Skill Library remain docs-only. Legacy adapters remain only for consumers/removal gates in `MIGRATION_MAP.md`. Product 16.1.0-dev, no release/tag.
+
+Phase 11A2 Artifact Library projection (2026-08-31): новый host-neutral
+`ArtifactLibraryProjectionService` строит из replayed session один revision-stamped
+read-only DTO с server-owned resource class/group/display kind, exact head URI и
+полной exact history. Plan/Task List группируются по logical id; HTML head выбирает
+active pointer и сохраняет ancestor/alternative branch relations; immutable charts/
+snapshots не схлопываются по parent. Raw artifacts остаются exact source message
+cards/viewers. Client lineage/max-revision inference удалён, original/derived/vN
+labels больше не зависят от extension или `Revision>1`; Plan называется Markdown,
+не JSON. Direct HTML responses обновляют artifacts/library под тем же revision guard.
+Harness 9/9 targeted, web 10/10 и JS syntax pass; MockDemo full self-test pass для
+четырёх profiles + failed-turn persistence (три прежних CA1416 PDF warnings).
+Version format, diff и 304 local Markdown link targets pass. Windows WebView2/reload/
+multi-window не проверялись; Plan/HTML mutation и viewer slices не закрыты.
+[Evidence](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md).
 
 Phase 11A1 artifact commit projection (2026-08-31): после durable attachment CAS,
 message/artifact linking и mandatory chat save controller синхронно отправляет full
@@ -19,7 +34,7 @@ Composer/message chips различают `Не отправлено`, `Подг
 Provider failure после boundary сохраняет user turn/resource. MockDemo focused
 controller case pass; bridge 1/1, web 3/3 + reused updated run-view 5/5 pass.
 Version format, diff и 270 local Markdown link targets pass. Windows WebView2/reload/
-multi-window не проверялись; next 11A2 heads/history/kinds.
+multi-window не проверялись; heads/history/kinds subsequently completed in 11A2.
 [Evidence](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md).
 
 MockDemo v4 cleanup (2026-08-31): scripted responses больше не присваивают
@@ -710,7 +725,8 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 8 | 8A–8D done host-neutral; WQ-PACK pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md), [8C](PHASE_8C_TOOL_PACK_EVENTS.md), [8D](PHASE_8D_RESOURCE_DATA_PLANE.md) | 8D: 74 distinct targeted pass; MockDemo compile | not performed | Execution/callable authority, durable reconstruction and four native resource handlers switched; WQ-PACK open |
 | 9 | 9A–9D5 done host-neutral; Windows acceptance pending | through `9bbf088` | 9D5: 99 targeted harness, web 70/70, MockDemo compile | not performed | Diagnostics/viewer, typed persistence ports and immutable RunViewState switched; R37/WQ-UI open |
 | 10 | done host-neutral: 10A–10D | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [10D](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md) | 10D: architecture 4/4; source inclusion 1/1 | not performed | mandatory host-neutral route complete; WQ-A contract next, then WQ0; R49 fixed host-neutral |
-| WQ-A | A0–A4 done host-neutral; A5 pending | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A4: qualification 12/12 | not performed | Canonical suites and fail-closed readiness/coverage gates embedded; exact production adapters/live evidence and immutable build provenance remain open |
+| 11A | done host-neutral: 11A1–11A2 | [11A1](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md), [11A2](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md) | 11A2: harness 9/9; web 10/10; MockDemo full self-test | not performed | Commit projection + exact Library heads/history/classes/labels; Plan/HTML/viewer slices and R51 Windows gates remain |
+| WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
 | 11 | pending | — | — | — | Optional contours после stable либо отдельный согласованный milestone; не gate Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
 

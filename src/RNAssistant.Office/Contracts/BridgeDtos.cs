@@ -607,6 +607,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("artifacts")]
         public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
 
+        [JsonProperty("artifactLibrary")]
+        public ArtifactLibraryProjectionDto ArtifactLibrary { get; set; }
+
         [JsonProperty("activeContextCheckpointId")]
         public string ActiveContextCheckpointId { get; set; }
 
@@ -696,6 +699,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("artifacts")]
         public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
+
+        [JsonProperty("artifactLibrary")]
+        public ArtifactLibraryProjectionDto ArtifactLibrary { get; set; }
 
         [JsonProperty("activeContextCheckpointId")]
         public string ActiveContextCheckpointId { get; set; }

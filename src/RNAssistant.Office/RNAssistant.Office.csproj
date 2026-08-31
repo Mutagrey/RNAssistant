@@ -60,6 +60,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Contracts\ArtifactLibraryDtos.cs" />
     <Compile Include="Contracts\BridgeDtos.cs" />
     <Compile Include="Contracts\BridgeDtos.Diagnostics.cs" />
     <Compile Include="Contracts\BridgeDtos.Html.cs" />
@@ -151,6 +152,7 @@
     <Compile Include="Vba\VbaWholeModuleWriteContracts.cs" />
     <Compile Include="Vba\VbaVerifier.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
+    <Compile Include="Services\ArtifactLibraryProjectionService.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatResourceReferenceService.cs" />
     <Compile Include="Services\ChatResourcePromptIndex.cs" />

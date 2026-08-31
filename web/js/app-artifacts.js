@@ -9,11 +9,64 @@
   }
 
   function artifactId(artifact) { return value(artifact, "Id", "id", ""); }
-  function artifactKind(artifact) { return String(value(artifact, "Kind", "kind", "file") || "file").toLowerCase(); }
+  function artifactKind(artifact) {
+    var kind = String(value(artifact, "DisplayKind", "displayKind", value(artifact, "Kind", "kind", "file")) || "file").toLowerCase();
+    return kind === "plan_document" ? "plan" : kind;
+  }
   function artifactTitle(artifact) { return value(artifact, "Title", "title", "Артефакт") || "Артефакт"; }
   function artifactRevision(artifact) { return Number(value(artifact, "Revision", "revision", 1) || 1); }
-  function artifactInlineText(artifact) { return value(artifact, "InlineText", "inlineText", "") || ""; }
-  function artifactParentId(artifact) { return value(artifact, "ParentArtifactId", "parentArtifactId", "") || ""; }
+
+  function artifactLibraryHeads() {
+    var projection = state.artifactLibrary || {};
+    return value(projection, "Heads", "heads", []) || [];
+  }
+
+  function libraryHistory(head) {
+    return value(head, "History", "history", []) || [];
+  }
+
+  function libraryHeadForArtifact(artifact) {
+    var embedded = value(artifact, "LibraryHead", "libraryHead", null);
+    if (embedded) return embedded;
+    var id = String(artifactId(artifact) || "").toLowerCase();
+    if (!id) return null;
+    return artifactLibraryHeads().filter(function (head) {
+      if (String(value(head, "ArtifactId", "artifactId", "")).toLowerCase() === id) return true;
+      return libraryHistory(head).some(function (revision) {
+        return String(value(revision, "ArtifactId", "artifactId", "")).toLowerCase() === id;
+      });
+    })[0] || null;
+  }
+
+  function artifactResourceClass(artifact) {
+    var head = libraryHeadForArtifact(artifact);
+    return String(value(head, "ResourceClass", "resourceClass", "") || "").toLowerCase();
+  }
+
+  function artifactLibraryGroup(artifact) {
+    var head = libraryHeadForArtifact(artifact);
+    return String(value(head, "Group", "group", "") || "").toLowerCase();
+  }
+
+  function artifactVersionLabel(artifact) {
+    var resourceClass = artifactResourceClass(artifact);
+    if (resourceClass === "immutable_original") return "Оригинал";
+    if (resourceClass === "derived_resource") return "Производный";
+    if (resourceClass === "versioned_document" || resourceClass === "versioned_aggregate") {
+      return "v" + artifactRevision(artifact);
+    }
+    return "";
+  }
+
+  function libraryHeadArtifact(head) {
+    var artifact = artifactById(value(head, "ArtifactId", "artifactId", ""));
+    if (!artifact) return null;
+    var result = {};
+    Object.keys(artifact).forEach(function (key) { result[key] = artifact[key]; });
+    result.displayKind = value(head, "DisplayKind", "displayKind", artifactKind(artifact));
+    result.libraryHead = head;
+    return result;
+  }
 
   function artifactById(id) {
     var normalized = String(id || "").toLowerCase();
@@ -59,6 +112,7 @@
       attachment: "Вложение",
       file: "Файл",
       chart: "Диаграмма",
+      task_list: "Task list",
       compaction: "Checkpoint",
       tool_result: "Результат",
       html: "HTML",
@@ -72,14 +126,26 @@
   }
 
   function kindCategory(kind) {
-    kind = String(kind || "").toLowerCase();
+    var artifact = kind && typeof kind === "object" ? kind : null;
+    var group = artifact ? artifactLibraryGroup(artifact) : "";
+    if (group === "authored_documents") return "authored";
+    if (group === "files_media") return "files";
+    if (group === "generated_snapshots") return "generated";
+    if (group === "system_evidence") return "system";
+    kind = artifact ? artifactKind(artifact) : String(kind || "").toLowerCase();
     if (["attachment", "image", "audio", "file"].indexOf(kind) >= 0) return "files";
-    if (["tool_result", "compaction"].indexOf(kind) >= 0) return "system";
-    return "created";
+    if (["tool_result", "compaction", "task_list"].indexOf(kind) >= 0) return "system";
+    if (["chart"].indexOf(kind) >= 0) return "generated";
+    return "authored";
   }
 
   function categoryLabel(category) {
-    return { created: "Созданные", files: "Файлы", system: "Служебные" }[category] || "Ресурсы";
+    return {
+      authored: "Документы",
+      files: "Файлы и медиа",
+      generated: "Созданные снимки",
+      system: "Служебные данные"
+    }[category] || "Ресурсы";
   }
 
   function iconSvg(kind) {
@@ -105,24 +171,11 @@
     return icons[kind] || icons.file;
   }
 
-  function planValue(artifact) {
-    if (artifactKind(artifact) !== "plan") return null;
-    try { return JSON.parse(artifactInlineText(artifact)); } catch (error) { return null; }
-  }
-
-  function planId(artifact) {
-    var plan = planValue(artifact);
-    return plan && (plan.id || plan.Id) || "";
-  }
-
   function planMeta(artifact) {
-    var plan = planValue(artifact);
-    var steps = plan && (plan.steps || plan.Steps);
-    if (!Array.isArray(steps) || !steps.length) return "План";
-    var completed = steps.filter(function (step) {
-      return String((step && (step.status || step.Status)) || "pending").toLowerCase() === "completed";
-    }).length;
-    return completed + "/" + steps.length + " шагов";
+    var head = libraryHeadForArtifact(artifact);
+    var status = String(value(head, "Status", "status", "") || "").toLowerCase();
+    var labels = { draft: "Черновик", ready: "Готов", completed: "Завершён", blocked: "Заблокирован" };
+    return labels[status] || "План";
   }
 
   function formatBytes(bytes) {
@@ -135,12 +188,13 @@
 
   function artifactMeta(artifact) {
     var kind = artifactKind(artifact);
-    if (kind === "plan") return planMeta(artifact) + " · v" + artifactRevision(artifact);
+    var versionLabel = artifactVersionLabel(artifact);
+    if (kind === "plan") return [planMeta(artifact), versionLabel].filter(Boolean).join(" · ");
     var mimeType = value(artifact, "MimeType", "mimeType", "") || "";
     var bytes = formatBytes(value(artifact, "ContentByteLength", "contentByteLength", 0));
     var parts = [kindLabel(kind)];
-    if (["html_workspace", "markdown", "chart"].indexOf(kind) >= 0 || artifactRevision(artifact) > 1) {
-      parts.push("v" + artifactRevision(artifact));
+    if (versionLabel) {
+      parts.push(versionLabel);
     } else if (bytes) {
       parts.push(bytes);
     } else if (mimeType && mimeType.indexOf("/") >= 0) {
@@ -149,53 +203,21 @@
     return parts.join(" · ");
   }
 
-  function artifactLineageRoot(artifact, byId) {
-    var current = artifact;
-    var visited = {};
-    while (current && artifactParentId(current)) {
-      var id = String(artifactId(current) || "").toLowerCase();
-      if (!id || visited[id]) break;
-      visited[id] = true;
-      var parent = byId[String(artifactParentId(current)).toLowerCase()];
-      if (!parent || artifactKind(parent) !== artifactKind(artifact)) break;
-      current = parent;
-    }
-    return current ? artifactId(current) : artifactId(artifact);
-  }
-
   function artifactResourceHeads(sourceArtifacts) {
-    var artifacts = (Array.isArray(sourceArtifacts) ? sourceArtifacts : (state.artifacts || []))
-      .filter(function (artifact) { return !!artifact && !!artifactId(artifact); });
-    var lineageArtifacts = (state.artifacts || []).filter(function (artifact) { return !!artifact && !!artifactId(artifact); });
-    var byId = {};
-    var heads = {};
-    lineageArtifacts.concat(artifacts).forEach(function (artifact) {
-      byId[String(artifactId(artifact)).toLowerCase()] = artifact;
-    });
-    artifacts.forEach(function (artifact) {
-      var kind = artifactKind(artifact);
-      var stableId = kind === "plan" ? planId(artifact) : "";
-      var key = kind + ":" + (kind === "html_workspace" ? "active" : (stableId || artifactLineageRoot(artifact, byId)));
-      var current = heads[key];
-      var isActive = artifactId(artifact) === state.activeHtmlArtifactId || artifactId(artifact) === state.activePlanArtifactId;
-      var currentIsActive = current && (artifactId(current) === state.activeHtmlArtifactId || artifactId(current) === state.activePlanArtifactId);
-      if (!current || (isActive && !currentIsActive) || (!currentIsActive && (
-        artifactRevision(artifact) > artifactRevision(current) ||
-        (artifactRevision(artifact) === artifactRevision(current) && String(value(artifact, "CreatedUtc", "createdUtc", "")) > String(value(current, "CreatedUtc", "createdUtc", "")))
-      ))) {
-        heads[key] = artifact;
-      }
-    });
-    return Object.keys(heads).map(function (key) { return heads[key]; }).sort(function (left, right) {
-      var leftCategory = ["created", "files", "system"].indexOf(kindCategory(artifactKind(left)));
-      var rightCategory = ["created", "files", "system"].indexOf(kindCategory(artifactKind(right)));
-      if (leftCategory !== rightCategory) return leftCategory - rightCategory;
-      return String(value(right, "CreatedUtc", "createdUtc", "")).localeCompare(String(value(left, "CreatedUtc", "createdUtc", "")));
+    if (!Array.isArray(sourceArtifacts)) {
+      return artifactLibraryHeads().map(libraryHeadArtifact).filter(Boolean);
+    }
+    var seen = {};
+    return sourceArtifacts.filter(function (artifact) {
+      var id = String(artifactId(artifact) || "").toLowerCase();
+      if (!id || seen[id]) return false;
+      seen[id] = true;
+      return true;
     });
   }
 
   function chatDockResourceHeads() {
-    var activePlanId = String(state.activePlanArtifactId || "").toLowerCase();
+    var activePlanId = String(state.activePlanDocumentArtifactId || "").toLowerCase();
     return artifactResourceHeads().filter(function (artifact) {
       var isActivePlan = activePlanId && artifactKind(artifact) === "plan" &&
         String(artifactId(artifact)).toLowerCase() === activePlanId;
@@ -229,7 +251,7 @@
     var kind = artifactKind(artifact);
     var card = document.createElement("button");
     card.type = "button";
-    card.className = "chat-artifact-card kind-" + kind + " category-" + kindCategory(kind);
+    card.className = "chat-artifact-card kind-" + kind + " category-" + kindCategory(artifact);
     card.dataset.artifactId = artifactId(artifact);
     card.title = "Открыть во вкладке «Артефакты»";
     card.setAttribute("aria-label", "Открыть " + kindLabel(kind) + " «" + artifactTitle(artifact) + "»");
@@ -422,8 +444,8 @@
       return;
     }
 
-    ["created", "files", "system"].forEach(function (category) {
-      var groupItems = filtered.filter(function (artifact) { return kindCategory(artifactKind(artifact)) === category; });
+    ["authored", "files", "generated", "system"].forEach(function (category) {
+      var groupItems = filtered.filter(function (artifact) { return kindCategory(artifact) === category; });
       if (!groupItems.length) return;
       var section = document.createElement("section");
       section.className = "chat-resource-group";
@@ -504,7 +526,10 @@
     categoryLabel: categoryLabel,
     iconSvg: iconSvg,
     kindLabel: kindLabel,
-    meta: artifactMeta
+    meta: artifactMeta,
+    libraryHead: libraryHeadForArtifact,
+    resourceClass: artifactResourceClass,
+    versionLabel: artifactVersionLabel
   };
   window.artifactResourceHeads = artifactResourceHeads;
   window.messageResourceRefs = messageResourceRefs;

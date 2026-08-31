@@ -228,6 +228,9 @@ function applyChatState(response) {
   if (response.artifacts !== undefined || response.Artifacts !== undefined) {
     state.artifacts = response.artifacts || response.Artifacts || [];
   }
+  if (response.artifactLibrary !== undefined || response.ArtifactLibrary !== undefined) {
+    state.artifactLibrary = response.artifactLibrary || response.ArtifactLibrary || { sessionRevision: incomingRevision || 0, heads: [] };
+  }
   if (response.activeContextCheckpointId !== undefined || response.ActiveContextCheckpointId !== undefined) {
     state.activeContextCheckpointId = response.activeContextCheckpointId || response.ActiveContextCheckpointId || "";
   }

@@ -41,7 +41,8 @@
     }
 
     function artifactKind(artifact) {
-      return String(prop(artifact, "Kind", "kind", "file") || "file").toLowerCase();
+      var kind = String(prop(artifact, "DisplayKind", "displayKind", prop(artifact, "Kind", "kind", "file")) || "file").toLowerCase();
+      return kind === "plan_document" ? "plan" : kind;
     }
 
     function artifactTitle(artifact) {
@@ -75,11 +76,11 @@
 
     function latestPlanArtifacts() {
       if (typeof artifactResourceHeads === "function") {
-        return artifactResourceHeads().filter(function (artifact) { return artifactKind(artifact) === "plan_document"; });
+        return artifactResourceHeads().filter(function (artifact) { return artifactKind(artifact) === "plan"; });
       }
       var latest = {};
       (state.artifacts || []).forEach(function (artifact) {
-        if (artifactKind(artifact) !== "plan_document") return;
+        if (artifactKind(artifact) !== "plan") return;
         var id = planStableId(artifact);
         if (!latest[id] || artifactRevision(artifact) > artifactRevision(latest[id])) latest[id] = artifact;
       });
@@ -218,7 +219,7 @@
         return;
       }
 
-      if (state.activePlanArtifactId && artifactById(state.activePlanArtifactId)) {
+      if (state.activePlanDocumentArtifactId && artifactById(state.activePlanDocumentArtifactId)) {
         state.htmlWorkspaceSelection = { type: "plan", id: state.activePlanDocumentArtifactId };
         return;
       }

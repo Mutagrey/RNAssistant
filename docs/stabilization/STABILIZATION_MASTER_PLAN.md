@@ -2306,7 +2306,8 @@ transport или execution authority.
      revision-guarded post-commit projection before attachment-helper or primary
      model transport. Done host-neutral; Windows WebView remains open.
    - 11A2: exact library head/history projection and cleanup of current kind/label
-     drift. No new resource transport or generic editor.
+     drift. Done host-neutral; no new resource transport or generic editor. Windows
+     WebView qualification remains open. [Evidence](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md).
 2. Plan: Markdown preview/source, guarded exact whole-content revisions, history,
    restore-as-new-head, explicit delete and ready-plan handoff by pinned URI.
 3. HTML: whole-workspace revisions/branches, inert upload import, source/preview,

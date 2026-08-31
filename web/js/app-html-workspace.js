@@ -105,6 +105,7 @@
       mimeType: prop(artifact, "MimeType", "mimeType", ""),
       relativePath: prop(artifact, "RelativePath", "relativePath", ""),
       text: artifactInlineText(artifact),
+      category: visuals && typeof visuals.category === "function" ? visuals.category(artifact) : "authored",
       meta: visuals && typeof visuals.meta === "function"
         ? visuals.meta(artifact)
         : (kind === "plan" ? workspaceArtifacts.planSummary(artifact) : workspaceArtifacts.typeLabel(kind))
@@ -114,12 +115,16 @@
   function renderHtmlWorkspaceList() {
     var search = $("htmlWorkspaceSearchInput");
     var resourceHeads = typeof artifactResourceHeads === "function" ? artifactResourceHeads() : (state.artifacts || []);
+    var libraryArtifacts = resourceHeads.filter(function (artifact) {
+      var kind = artifactKind(artifact);
+      return kind !== "plan" && kind !== "html_workspace";
+    });
     workspaceTree.render({
       root: $("htmlWorkspaceTree"),
       query: search ? search.value : "",
       files: files().map(workspaceTreeFile),
       dataSources: dataSources().map(workspaceTreeData),
-      artifacts: resourceHeads.map(workspaceTreeArtifact),
+      artifacts: libraryArtifacts.map(workspaceTreeArtifact),
       plans: latestPlanArtifacts().map(workspaceTreeArtifact),
       selected: state.htmlWorkspaceSelection || {},
       onSelect: selectHtmlWorkspaceItem,
@@ -142,6 +147,18 @@
   function applyHtmlWorkspaceResponse(response, expectedChatId) {
     if (expectedChatId && state.activeChatId !== expectedChatId) return false;
     response = response || {};
+    var responseChatId = response.activeChatId || response.ActiveChatId || state.activeChatId;
+    var revision = window.RNAssistantRunViewState.sessionRevision(response);
+    if (!window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, responseChatId, revision)) return false;
+    if (response.artifacts !== undefined || response.Artifacts !== undefined) {
+      state.artifacts = response.artifacts || response.Artifacts || [];
+    }
+    if (response.artifactLibrary !== undefined || response.ArtifactLibrary !== undefined) {
+      state.artifactLibrary = response.artifactLibrary || response.ArtifactLibrary || { sessionRevision: revision || 0, heads: [] };
+    }
+    if (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined) {
+      state.activeHtmlArtifactId = response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || "";
+    }
     state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
     state.htmlWorkspaceDirty = false;
     renderHtmlWorkspace();

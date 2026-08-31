@@ -1,8 +1,9 @@
 # Artifact Library and Viewers
 
-Status: Phase 11 target contract. 11A1 implements the host-neutral commit-time
-projection boundary and explicit draft/preparing/committed labels; exact Library
-head/history projection remains 11A2. The existing Resource Fabric ingestion, CAS,
+Status: Phase 11 target contract. 11A1 and 11A2 implement the host-neutral commit-time
+boundary, explicit draft/preparing/committed labels and exact Library head/history
+projection. Plan/HTML mutation semantics and typed viewers remain later slices. The
+existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
 introduce another artifact transport or store.
@@ -109,6 +110,17 @@ the active pointer through an explicit undo/redo branch operation; the next save
 creates a new child and the UI keeps alternative branches visible. No revision is
 silently overwritten or renumbered.
 
+The current bridge projection is `artifactLibrary { sessionRevision, heads[] }`.
+`ArtifactLibraryProjectionService` derives it from the replayed `ChatSession`; it is
+never persisted separately. Each head carries the server-owned class, group,
+normalized display kind, exact head URI and history entries with exact parent/
+restore relations. HTML selects `ActiveHtmlArtifactId`, including an older undo or
+branch target, instead of guessing the largest revision. The raw `artifacts[]`
+projection remains available only for exact message cards and existing viewers;
+the client no longer computes library lineage from it. Direct HTML editor responses
+carry the same revisioned library projection so save/undo cannot leave the library
+stale until reload.
+
 Message cards resolve their pinned revision even when a newer head exists. If the
 resource was explicitly removed, the message shows a stable `Resource removed`
 placeholder rather than falling forward to another revision.
@@ -178,9 +190,10 @@ GC. Clear Chat/Data remains a separate explicit operation.
 
 Phase 11 is implemented as separate changes:
 
-1. Artifact lifecycle/library foundation: draft/committed UI states, commit-time
-   revisioned projection, exact head/history presentation and current kind/label
-   cleanup.
+1. Artifact lifecycle/library foundation — done host-neutral in 11A1/11A2: draft/
+   committed UI states, commit-time revisioned projection, exact head/history
+   presentation and current kind/label cleanup. Windows WebView qualification stays
+   open.
 2. Plan: Markdown preview/source, guarded whole-content revisions, history,
    restore-as-new-head, delete and exact ready-plan handoff.
 3. HTML: whole-workspace revisions/branches, source/preview/import, bindings,

@@ -24,6 +24,7 @@ var state = {
   bridgeToken: "",
   messages: [],
   artifacts: [],
+  artifactLibrary: { sessionRevision: 0, heads: [] },
   activeContextCheckpointId: "",
   activeHtmlArtifactId: "",
   activeTaskListArtifactId: "",

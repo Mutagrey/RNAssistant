@@ -260,7 +260,7 @@
         var binding = selected && selected.type === "data" ? dataBinding(selected.item) : null;
         var bindingStatus = binding ? String(bindingValue(binding, "Status", "status", "ready")) : "";
         meta.textContent = selected
-          ? (isPlan ? "План · JSON · v" + artifactRevision(selected.item) : (isArtifact ? workspaceArtifacts.typeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? (binding ? "JSON · " + bindingValue(binding, "ToolId", "toolId", "Office") + " · " + bindingStatus + " · " + bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual") : "JSON data source · static") : (fileKind(selected.item) || "file"))))
+          ? (isPlan ? "План · Markdown · v" + artifactRevision(selected.item) : (isArtifact ? workspaceArtifacts.typeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? (binding ? "JSON · " + bindingValue(binding, "ToolId", "toolId", "Office") + " · " + bindingStatus + " · " + bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual") : "JSON data source · static") : (fileKind(selected.item) || "file"))))
           : "";
         meta.title = binding && bindingValue(binding, "LastError", "lastError", "") ? bindingValue(binding, "LastError", "lastError", "") : "";
       }
@@ -268,7 +268,7 @@
       var editButton = document.querySelector('.html-workspace-mode-button[data-html-mode="edit"]');
       if (previewButton) previewButton.textContent = isPlan ? "План" : "Просмотр";
       if (editButton) {
-        editButton.textContent = isPlan ? "JSON" : "Код";
+        editButton.textContent = isPlan ? "Источник" : "Код";
         editButton.classList.toggle("hidden", isArtifact);
         editButton.disabled = blocked && !isPlan;
       }

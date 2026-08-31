@@ -321,6 +321,46 @@
   overflow-wrap: anywhere;
 }
 
+.artifact-history {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.artifact-history > summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: var(--label-font-weight);
+}
+
+.artifact-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.artifact-history-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.artifact-history-copy code {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.artifact-history-source,
+.artifact-history-relation {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
 .artifact-content-label {
   margin: 0 0 7px;
   color: var(--muted);

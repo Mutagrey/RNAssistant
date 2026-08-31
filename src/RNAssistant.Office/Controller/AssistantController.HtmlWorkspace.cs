@@ -2,6 +2,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using System.Linq;
 using System.Threading;
@@ -145,7 +146,11 @@ namespace RNAssistant.Office
         {
             return new HtmlWorkspaceResponse
             {
+                SessionRevision = session == null ? 0 : session.Revision,
                 ActiveChatId = session.Id,
+                ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
+                Artifacts = ChatArtifactDto.From(session),
+                ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
                 Workspace = HtmlWorkspaceDto.From(
                     session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
                     session == null ? null : session.HtmlWorkspaceRecovery),

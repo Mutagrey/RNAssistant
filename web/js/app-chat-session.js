@@ -301,6 +301,7 @@ function applyInitState(init) {
   state.documents = init.documents || init.Documents || [];
   state.messages = init.messages || [];
   state.artifacts = init.artifacts || init.Artifacts || [];
+  state.artifactLibrary = init.artifactLibrary || init.ArtifactLibrary || { sessionRevision: 0, heads: [] };
   state.activeContextCheckpointId = init.activeContextCheckpointId || init.ActiveContextCheckpointId || "";
   state.activeHtmlArtifactId = init.activeHtmlArtifactId || init.ActiveHtmlArtifactId || "";
   state.activeTaskListArtifactId = init.activeTaskListArtifactId || init.ActiveTaskListArtifactId || "";
@@ -359,9 +360,10 @@ function applyBridgeUnavailableState(error) {
   state.liveStreamContent = null;
   if (typeof resetLiveReasoning === "function") resetLiveReasoning();
   state.artifacts = [];
+  state.artifactLibrary = { sessionRevision: 0, heads: [] };
   state.activeContextCheckpointId = "";
   state.activeHtmlArtifactId = "";
-  state.activePlanArtifactId = "";
+  state.activePlanDocumentArtifactId = "";
   state.tools = [];
   state.skills = [];
   if (typeof acceptToolLibraryState === "function") acceptToolLibraryState();

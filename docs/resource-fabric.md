@@ -81,8 +81,10 @@ full monotonic `sessionRevision` projection containing the committed turn and ex
 artifact revisions before attachment-helper or primary model transport. Model
 execution does not wait for WebView acknowledgement; missed delivery recovers by
 chat reload. Model failure after this boundary never rolls the committed resource
-back to a draft. Exact Library head/history projection remains Phase 11A2. The full
-user-visible lifecycle is defined in [Artifact Library and Viewers](artifact-library.md).
+back to a draft. Phase 11A2 derives exact Library heads/history from the replayed
+session, keeps message cards pinned to raw exact revisions and selects the active HTML
+branch pointer instead of a client-guessed maximum revision. The full user-visible
+lifecycle is defined in [Artifact Library and Viewers](artifact-library.md).
 
 Helper output is query-specific evidence for that model step. It is not silently treated as a complete durable description. Reusable OCR/transcription may be stored as a derived artifact revision with explicit provenance: source URI, extractor/model, parameters, timestamp, and content hash.
 
