@@ -65,20 +65,13 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        public bool TryRead(
+        public ResourceReadSelection ReadMember(
             ChatSession session,
+            ChatArtifact artifact,
             ResourceReadRequest request,
-            out ResourceReadSelection selection)
+            ChatArtifactResourceProvider.ChatArtifactAddress address)
         {
-            var resourceUri = request == null || request.Reference == null
-                ? string.Empty
-                : request.Reference.Uri;
-            HtmlMember member;
-            if (!TryFind(session, resourceUri, out member))
-            {
-                selection = null;
-                return false;
-            }
+            var member = FindRequiredMember(session, artifact, address);
             ResourceReadCursor.ValidatePinned(request, RevisionText(member));
             var representation = request == null ? null : request.Representation;
             var maxChars = request == null ? 0 : request.MaxChars;
@@ -86,7 +79,7 @@ namespace RNAssistant.Office.Services
             if (representation == ResourceRepresentations.Metadata)
             {
                 ResourceReadCursor.RejectCursor(request);
-                selection = new ResourceReadSelection
+                return new ResourceReadSelection
                 {
                     Result = new ResourceReadResult
                     {
@@ -94,13 +87,11 @@ namespace RNAssistant.Office.Services
                         Representation = ResourceRepresentations.Metadata,
                         Complete = true
                     },
-                    ResourceRefs = new[] { new ResourceRef(resourceUri, RevisionText(member)) }
+                    ResourceRefs = new[] { new ResourceRef(request.Reference.Uri, RevisionText(member)) }
                 };
-                return true;
             }
             var offset = ResourceReadCursor.ParseImmutable(request);
-            selection = ReadText(member, representation, offset, maxChars);
-            return true;
+            return ReadText(member, representation, offset, maxChars);
         }
 
         public ResourceReadSelection ReadStructure(ChatSession session, ChatArtifact artifact, int offset, int maxChars)
@@ -108,7 +99,11 @@ namespace RNAssistant.Office.Services
             var snapshot = LoadSnapshot(session, artifact);
             if (snapshot == null)
             {
-                throw new InvalidOperationException("HTML workspace revision body is unavailable or invalid.");
+                throw ChatArtifactResourceProvider.ResourceError(
+                    "resource_corrupt",
+                    "The HTML workspace revision body is unavailable or invalid.",
+                    false,
+                    "Select another healthy revision before reading its structure.");
             }
             var content = JsonConvert.SerializeObject(new
             {

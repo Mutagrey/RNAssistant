@@ -95,6 +95,40 @@ namespace RNAssistant.Harness
                 var readRecord = execute(ResourceToolCatalog.ReadToolId, calls[ResourceToolCatalog.ReadToolId]);
                 AssertTrue(readRecord.Result.Resources.Any(reference => reference.Uri == resourceUri),
                     "native resource read retains the exact ResourceRef in typed result data");
+                HtmlArtifactToolExecutor.UpsertFile(
+                    session,
+                    "nested/report.html",
+                    "html",
+                    "<main>Resolved through native tool</main>",
+                    true);
+                var htmlArtifact = session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId);
+                var nativeMemberResolve = execute(ResourceToolCatalog.ResolveToolId,
+                    JsonConvert.SerializeObject(new
+                    {
+                        parentUri = ChatResourceUri.CreateArtifactRevisionUri(session, htmlArtifact),
+                        memberPath = "nested/report.html",
+                        memberType = "file"
+                    }));
+                AssertEqual(ToolExecutionOutcome.Ok, nativeMemberResolve.Outcome,
+                    "native resource resolver accepts the path alternative");
+                AssertEqual("nested/report.html",
+                    (string)JObject.Parse(nativeMemberResolve.Result.DataJson).SelectToken("resource.title"),
+                    "native path resolution returns the exact member descriptor");
+                var foreignSegments = ResourceUri.Parse(
+                    ChatResourceUri.CreateArtifactRevisionUri(session, htmlArtifact)).Segments.ToArray();
+                foreignSegments[0] = "foreign-chat";
+                var foreignResolve = execute(ResourceToolCatalog.ResolveToolId,
+                    JsonConvert.SerializeObject(new
+                    {
+                        uri = ResourceUri.Create(ChatArtifactResourceProvider.ProviderName, foreignSegments)
+                    }));
+                var foreignData = JObject.Parse(foreignResolve.Result.DataJson);
+                AssertEqual(ToolExecutionOutcome.Error, foreignResolve.Outcome,
+                    "foreign chat resolution is a typed runtime error");
+                AssertEqual("active_chat_mismatch", (string)foreignData["code"],
+                    "resource runtime preserves the precise error code");
+                AssertContains(foreignResolve.Message, "owning chat",
+                    "resource runtime includes actionable recovery guidance");
                 var invalidManual = executor.Execute(Command(ResourceToolCatalog.ListToolId, "limit", 51), tools,
                     new AppSettings(), false, true, session);
                 AssertTrue(!invalidManual.Success && invalidManual.ErrorCode == "invalid_arguments",
@@ -379,6 +413,45 @@ namespace RNAssistant.Harness
             HtmlArtifactToolExecutor.UpsertDataSource(htmlSession, "rows", "{\"items\":[1,2]}");
 
             var htmlGateway = new ResourceGatewayService();
+            var mutation = new HtmlArtifactToolExecutor().ExecuteControllerTool(
+                Command(
+                    HtmlArtifactToolExecutor.UpsertToolId,
+                    "resourceType", "file",
+                    "name", "reports/oil-production-chart.html",
+                    "content", "<main>Oil chart</main>",
+                    "setActive", false),
+                htmlSession,
+                false);
+            AssertTrue(mutation.Success, "HTML mutation succeeds before canonical-ref assertions");
+            var mutationData = JObject.Parse(mutation.DataJson);
+            AssertEqual(2, (int)mutationData["version"], "HTML mutation result version");
+            var mutationArtifactUri = (string)mutationData.SelectToken("artifactRef.uri");
+            AssertTrue(!string.IsNullOrWhiteSpace(mutationArtifactUri),
+                "HTML mutation returns the exact artifact revision URI");
+            var mutationMember = ((JArray)mutationData["members"])
+                .OfType<JObject>()
+                .Single(item => (string)item["path"] == "reports/oil-production-chart.html");
+            var mutationMemberUri = (string)mutationMember["uri"];
+            AssertTrue(!string.IsNullOrWhiteSpace(mutationMemberUri) &&
+                mutationMemberUri.IndexOf("oil-production", StringComparison.OrdinalIgnoreCase) < 0,
+                "HTML mutation returns an opaque canonical member URI");
+            AssertContains(ReadResource(
+                    htmlGateway,
+                    htmlSession,
+                    mutationMemberUri,
+                    ResourceRepresentations.Source,
+                    null,
+                    128).Result.Text,
+                "Oil chart",
+                "member URI returned by mutation is directly readable");
+            var resolvedByPath = htmlGateway.ResolveMember(
+                htmlSession,
+                mutationArtifactUri,
+                "reports/oil-production-chart.html",
+                "file");
+            AssertEqual(mutationMemberUri, resolvedByPath.Resource.Reference.Uri,
+                "central path resolver returns the same canonical member URI");
+
             var oldScriptResource = htmlGateway.List(
                 htmlSession,
                 ChatArtifactResourceProvider.ProviderName,
@@ -401,7 +474,7 @@ namespace RNAssistant.Harness
             AssertTrue(boundedSource.Truncated && !string.IsNullOrWhiteSpace(boundedSource.NextCursor),
                 "HTML member read exposes the common continuation cursor");
 
-            var missingMemberRejected = false;
+            ResourceRequestException missingMember = null;
             try
             {
                 var address = ResourceUri.Parse(oldScriptResource.Reference.Uri);
@@ -415,12 +488,95 @@ namespace RNAssistant.Harness
                     null,
                     128);
             }
-            catch (KeyNotFoundException)
+            catch (ResourceRequestException ex)
             {
-                missingMemberRejected = true;
+                missingMember = ex;
             }
-            AssertTrue(missingMemberRejected,
+            AssertEqual("member_not_found", missingMember == null ? null : missingMember.ErrorCode,
                 "unknown HTML member URI cannot fall back to the parent artifact");
+
+            var simpleMember = htmlGateway.List(
+                htmlSession,
+                ChatArtifactResourceProvider.ProviderName,
+                ChatHtmlResourceCatalog.FileKind,
+                null,
+                20).Items.Single(item => item.Title == "index.html");
+            var noncanonicalAddress = ResourceUri.Parse(simpleMember.Reference.Uri);
+            var noncanonicalSegments = noncanonicalAddress.Segments.ToArray();
+            noncanonicalSegments[7] = "index.html";
+            ResourceRequestException noncanonicalMember = null;
+            try
+            {
+                htmlGateway.Resolve(
+                    htmlSession,
+                    ResourceUri.Create(ChatArtifactResourceProvider.ProviderName, noncanonicalSegments));
+            }
+            catch (ResourceRequestException ex)
+            {
+                noncanonicalMember = ex;
+            }
+            AssertEqual("noncanonical_member_uri",
+                noncanonicalMember == null ? null : noncanonicalMember.ErrorCode,
+                "human-readable member key is classified instead of generic not-found");
+
+            var missingRevisionAddress = ResourceUri.Parse(mutationArtifactUri);
+            var missingRevisionSegments = missingRevisionAddress.Segments.ToArray();
+            missingRevisionSegments[4] = "999";
+            ResourceRequestException missingRevision = null;
+            try
+            {
+                htmlGateway.Resolve(htmlSession,
+                    ResourceUri.Create(ChatArtifactResourceProvider.ProviderName, missingRevisionSegments));
+            }
+            catch (ResourceRequestException ex)
+            {
+                missingRevision = ex;
+            }
+            AssertEqual("revision_not_found", missingRevision == null ? null : missingRevision.ErrorCode,
+                "missing artifact revision has a precise error");
+
+            var foreignAddress = ResourceUri.Parse(mutationArtifactUri);
+            var foreignSegments = foreignAddress.Segments.ToArray();
+            foreignSegments[0] = "another-chat";
+            ResourceRequestException chatMismatch = null;
+            try
+            {
+                htmlGateway.Resolve(htmlSession,
+                    ResourceUri.Create(ChatArtifactResourceProvider.ProviderName, foreignSegments));
+            }
+            catch (ResourceRequestException ex)
+            {
+                chatMismatch = ex;
+            }
+            AssertEqual("active_chat_mismatch", chatMismatch == null ? null : chatMismatch.ErrorCode,
+                "foreign chat URI has a precise error");
+
+            var corruptHtml = new ChatArtifact
+            {
+                Id = "corrupt-html",
+                Kind = ChatArtifactKinds.HtmlWorkspace,
+                Revision = 1000,
+                InlineText = "{invalid"
+            };
+            htmlSession.Artifacts.Add(corruptHtml);
+            ResourceRequestException corrupt = null;
+            try
+            {
+                htmlGateway.Resolve(htmlSession, ChatResourceUri.CreateArtifactRevisionUri(htmlSession, corruptHtml));
+            }
+            catch (ResourceRequestException ex)
+            {
+                corrupt = ex;
+            }
+            AssertEqual("resource_corrupt", corrupt == null ? null : corrupt.ErrorCode,
+                "corrupt HTML revision fails exact resolution explicitly");
+            AssertTrue(!htmlGateway.List(
+                    htmlSession,
+                    ChatArtifactResourceProvider.ProviderName,
+                    ChatArtifactKinds.HtmlWorkspace,
+                    null,
+                    50).Items.Any(item => item.Reference.Uri.IndexOf("corrupt-html", StringComparison.Ordinal) >= 0),
+                "corrupt HTML revision is excluded from discovery");
 
             var dataResource = htmlGateway.List(
                 htmlSession,
@@ -747,9 +903,16 @@ namespace RNAssistant.Harness
             AssertEqual(0, gateway.Search(
                 session, ChatArtifactResourceProvider.ProviderName, "DUPLICATE_BODY", null, 10, 128).Matches.Count,
                 "ambiguous artifact bodies are not searched through an arbitrary duplicate");
-            RuntimeThrows<KeyNotFoundException>(() => gateway.Resolve(session, duplicateUri));
-            RuntimeThrows<KeyNotFoundException>(() => ReadResource(
-                gateway, session, duplicateUri, ResourceRepresentations.Text, null, 128));
+            ResourceRequestException ambiguousResolve = null;
+            ResourceRequestException ambiguousRead = null;
+            try { gateway.Resolve(session, duplicateUri); }
+            catch (ResourceRequestException ex) { ambiguousResolve = ex; }
+            try { ReadResource(gateway, session, duplicateUri, ResourceRepresentations.Text, null, 128); }
+            catch (ResourceRequestException ex) { ambiguousRead = ex; }
+            AssertEqual("resource_corrupt", ambiguousResolve == null ? null : ambiguousResolve.ErrorCode,
+                "ambiguous exact resolve is classified as corrupt persistence");
+            AssertEqual("resource_corrupt", ambiguousRead == null ? null : ambiguousRead.ErrorCode,
+                "ambiguous exact read is classified as corrupt persistence");
             AssertEqual(null, ChatResourceUri.ResolveArtifactRevision(session, first.Id),
                 "ambiguous id cannot create a shared resource reference");
             string referencedId;
@@ -833,6 +996,14 @@ namespace RNAssistant.Harness
                 HtmlWorkspaceArtifactService.Restore(htmlSession, htmlSession.ActiveHtmlArtifactId));
             AssertEqual(0, HtmlWorkspaceNavigationService.GetRecoveryCandidates(htmlSession, null).Count,
                 "HTML recovery never offers an ambiguous revision candidate");
+            var htmlGateway = new ResourceGatewayService();
+            AssertEqual(0, htmlGateway.List(
+                    htmlSession,
+                    ChatArtifactResourceProvider.ProviderName,
+                    ChatHtmlResourceCatalog.FileKind,
+                    null,
+                    20).Items.Count,
+                "ambiguous active HTML artifact exposes no member through discovery");
         }
 
         private static void ResourceGatewayPreservesEmptyTextRepresentations()

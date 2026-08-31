@@ -40,6 +40,12 @@ namespace RNAssistant.Office.Services
         ResourceReadSelection Read(ChatSession session, ResourceReadRequest request);
     }
 
+    internal interface IResourceMemberResolver
+    {
+        ResourceDescriptor ResolveMember(ChatSession session, string parentUri,
+            string memberPath, string memberType);
+    }
+
     internal interface ILiveOfficeResourceProvider : IResourceProvider
     {
     }

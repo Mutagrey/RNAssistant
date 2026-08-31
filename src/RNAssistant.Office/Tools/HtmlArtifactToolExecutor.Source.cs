@@ -233,17 +233,20 @@ namespace RNAssistant.Office.Tools
                 if (dryRun)
                 {
                     preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                    return ToolResult.Ok("Dry run: would apply HTML workspace patch to " + file.Path + ".", preview.ToString(Formatting.None));
+                    return ToolResult.Ok("Dry run: would apply HTML workspace patch to " + file.Path + ".",
+                        AddWorkspaceResourceRefs(session, preview).ToString(Formatting.None));
                 }
                 if (!changed)
                 {
                     preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                    return ToolResult.Ok("HTML workspace patch made no content changes: " + file.Path + ".", preview.ToString(Formatting.None));
+                    return ToolResult.Ok("HTML workspace patch made no content changes: " + file.Path + ".",
+                        AddWorkspaceResourceRefs(session, preview).ToString(Formatting.None));
                 }
 
                 var saved = UpsertFile(session, file.Path, file.Kind, patch.Text, false);
                 preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                return ToolResult.Ok("HTML workspace patch applied: " + saved.Path + ".", preview.ToString(Formatting.None));
+                return ToolResult.Ok("HTML workspace patch applied: " + saved.Path + ".",
+                    AddWorkspaceResourceRefs(session, preview).ToString(Formatting.None));
             }
             catch (StructuredTextPatchException ex)
             {

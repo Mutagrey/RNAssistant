@@ -663,10 +663,10 @@ namespace RNAssistant.Office.Tools
 
         private static string DataBindingResultJson(ChatSession session, string name, string sourceTool, string transform, string refreshPolicy, string status, bool saved, int jsonCharacters)
         {
-            return new JObject
+            return AddWorkspaceResourceRefs(session, new JObject
             {
                 ["type"] = "rnassistant.htmlDataBinding",
-                ["version"] = 1,
+                ["version"] = 2,
                 ["name"] = name,
                 ["sourceTool"] = sourceTool,
                 ["transform"] = transform,
@@ -675,7 +675,7 @@ namespace RNAssistant.Office.Tools
                 ["saved"] = saved,
                 ["jsonCharacters"] = jsonCharacters,
                 ["revisionArtifactId"] = session == null ? null : session.ActiveHtmlArtifactId
-            }.ToString(Formatting.None);
+            }).ToString(Formatting.None);
         }
 
         private static string NormalizeTransform(string value)

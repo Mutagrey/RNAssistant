@@ -86,6 +86,29 @@ namespace RNAssistant.Office.Services
             });
         }
 
+        public ResourceResolveResult ResolveMember(ChatSession session, string parentUri,
+            string memberPath, string memberType)
+        {
+            var provider = ProviderFor(parentUri);
+            var resolver = provider as IResourceMemberResolver;
+            if (resolver == null)
+            {
+                throw new ResourceRequestException(
+                    "This resource provider does not expose path-addressable members. " +
+                    "Resolve the exact URI returned by resource discovery.",
+                    "resource_member_resolve_unsupported",
+                    false);
+            }
+            return WithProvider(provider, session, delegate
+            {
+                return new ResourceResolveResult
+                {
+                    Resource = resolver.ResolveMember(session, parentUri, memberPath, memberType),
+                    Complete = true
+                };
+            });
+        }
+
         public ResourceSearchResult Search(
             ChatSession session,
             string providerId,
@@ -144,9 +167,23 @@ namespace RNAssistant.Office.Services
             ResourceAddress address;
             if (!ResourceUri.TryParse(resourceUri, out address))
             {
-                throw new InvalidOperationException("A canonical resource URI is required.");
+                throw new ResourceRequestException(
+                    "A canonical resource URI is required. Copy an exact rna:// URI from a tool result or resource descriptor.",
+                    "invalid_resource_uri",
+                    false);
             }
-            return _registry.Get(address.Provider);
+            try
+            {
+                return _registry.Get(address.Provider);
+            }
+            catch (KeyNotFoundException)
+            {
+                throw new ResourceRequestException(
+                    "Unknown resource provider in URI: " + address.Provider +
+                    ". Use an exact URI returned by common.resources_list or a mutation result.",
+                    "invalid_resource_uri",
+                    false);
+            }
         }
     }
 }

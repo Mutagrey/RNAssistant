@@ -61,16 +61,109 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public bool TryResolve(ChatSession session, string resourceUri, out ResourceDescriptor descriptor)
+        public ResourceDescriptor ResolveMember(
+            ChatSession session,
+            ChatArtifact artifact,
+            ChatArtifactResourceProvider.ChatArtifactAddress address)
         {
-            HtmlMember member;
-            if (!TryFind(session, resourceUri, out member))
+            return Describe(FindRequiredMember(session, artifact, address));
+        }
+
+        private HtmlMember FindRequiredMember(
+            ChatSession session,
+            ChatArtifact artifact,
+            ChatArtifactResourceProvider.ChatArtifactAddress address)
+        {
+            if (address == null || !address.IsMember)
             {
-                descriptor = null;
-                return false;
+                throw new ArgumentException("An exact member address is required.", "address");
             }
-            descriptor = Describe(member);
-            return true;
+            var members = RequiredMembers(session, artifact);
+            var member = members.FirstOrDefault(item =>
+                string.Equals(item.MemberType, address.MemberType, StringComparison.Ordinal) &&
+                string.Equals(item.MemberKey, address.MemberKey, StringComparison.Ordinal));
+            if (member != null) return member;
+            if (!IsCanonicalMemberKey(address.MemberKey))
+            {
+                throw ChatArtifactResourceProvider.ResourceError(
+                    "noncanonical_member_uri",
+                    "The member URI contains a human-readable path instead of the opaque canonical member key.",
+                    false,
+                    "Call common.resources_resolve with parentUri and memberPath, or copy a member URI from mutation/list output.");
+            }
+            throw ChatArtifactResourceProvider.ResourceError(
+                "member_not_found",
+                "The requested member does not exist in this artifact revision.",
+                false,
+                "Resolve the member path under the exact parent revision or list that member kind again.");
+        }
+
+        public ResourceDescriptor ResolveMemberPath(
+            ChatSession session,
+            ChatArtifact artifact,
+            string memberPath,
+            string memberType)
+        {
+            memberPath = (memberPath ?? string.Empty).Trim();
+            memberType = (memberType ?? string.Empty).Trim().ToLowerInvariant();
+            if (memberPath.Length == 0 ||
+                memberType.Length > 0 && memberType != "file" && memberType != "data")
+            {
+                throw ChatArtifactResourceProvider.ResourceError(
+                    "invalid_resource_uri",
+                    "A valid memberPath and optional file/data memberType are required.",
+                    false,
+                    "Use the exact path/name shown in the artifact structure.");
+            }
+            var matches = RequiredMembers(session, artifact)
+                .Where(item => (memberType.Length == 0 || string.Equals(
+                        item.MemberType,
+                        memberType,
+                        StringComparison.Ordinal)) &&
+                    string.Equals(item.Title, memberPath, StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            if (matches.Count == 1) return Describe(matches[0]);
+            if (matches.Count > 1)
+            {
+                throw ChatArtifactResourceProvider.ResourceError(
+                    "member_ambiguous",
+                    "More than one member has this path/name.",
+                    false,
+                    "Repeat resolution with memberType set to file or data.");
+            }
+            throw ChatArtifactResourceProvider.ResourceError(
+                "member_not_found",
+                "No member with this path/name exists in the artifact revision.",
+                false,
+                "Read the parent structure or list its member kind and use an exact returned path.");
+        }
+
+        internal IReadOnlyList<ResourceDescriptor> DescribeMembers(ChatSession session, ChatArtifact artifact)
+        {
+            return RequiredMembers(session, artifact).Select(Describe).ToList();
+        }
+
+        internal bool IsReadableRevision(ChatSession session, ChatArtifact artifact)
+        {
+            return artifact == null || !string.Equals(
+                    artifact.Kind,
+                    ChatArtifactKinds.HtmlWorkspace,
+                    StringComparison.OrdinalIgnoreCase)
+                ? true
+                : LoadSnapshot(session, artifact) != null;
+        }
+
+        internal void ValidateRevision(
+            ChatSession session,
+            ChatArtifact artifact)
+        {
+            if (IsReadableRevision(session, artifact)) return;
+            throw ChatArtifactResourceProvider.ResourceError(
+                "resource_corrupt",
+                "The HTML workspace revision body is unavailable or invalid.",
+                false,
+                "Select another healthy revision; do not reconstruct member URIs manually.");
         }
 
         private IEnumerable<HtmlMember> ActiveMembers(ChatSession session)
@@ -83,6 +176,14 @@ namespace RNAssistant.Office.Services
         {
             var snapshot = LoadSnapshot(session, artifact);
             if (snapshot == null) return new HtmlMember[0];
+            return Members(session, artifact, snapshot);
+        }
+
+        private static IEnumerable<HtmlMember> Members(
+            ChatSession session,
+            ChatArtifact artifact,
+            HtmlWorkspaceSnapshot snapshot)
+        {
             var members = new List<HtmlMember>();
             members.AddRange((snapshot.Files ?? new List<HtmlWorkspaceFile>())
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
@@ -119,27 +220,31 @@ namespace RNAssistant.Office.Services
             return members;
         }
 
-        private bool TryFind(ChatSession session, string resourceUri, out HtmlMember member)
+        private IReadOnlyList<HtmlMember> RequiredMembers(
+            ChatSession session,
+            ChatArtifact artifact)
         {
-            member = null;
-            if (session == null) return false;
-            ResourceAddress address;
-            string artifactId;
-            int revision;
-            if (!ResourceUri.TryParse(resourceUri, out address) ||
-                address.Segments.Count != 8 ||
-                !string.Equals(address.Segments[5], "member", StringComparison.Ordinal) ||
-                !ChatResourceUri.TryParseArtifactRevision(
-                    session.Id,
-                    new ResourceRef(resourceUri),
-                    out artifactId,
-                    out revision)) return false;
-            var artifact = FindArtifact(session, artifactId);
-            if (artifact == null || Math.Max(1, artifact.Revision) != revision) return false;
-            member = Members(session, artifact).FirstOrDefault(item =>
-                string.Equals(item.MemberType, address.Segments[6], StringComparison.Ordinal) &&
-                string.Equals(item.MemberKey, address.Segments[7], StringComparison.Ordinal));
-            return member != null;
+            if (artifact == null || !string.Equals(
+                artifact.Kind,
+                ChatArtifactKinds.HtmlWorkspace,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                throw ChatArtifactResourceProvider.ResourceError(
+                    "member_not_found",
+                    "This artifact revision has no HTML workspace members.",
+                    false,
+                    "Resolve the artifact root and use one of its advertised representations.");
+            }
+            var snapshot = LoadSnapshot(session, artifact);
+            if (snapshot == null)
+            {
+                throw ChatArtifactResourceProvider.ResourceError(
+                    "resource_corrupt",
+                    "The HTML workspace revision body is unavailable or invalid.",
+                    false,
+                    "Select another healthy revision; do not reconstruct member URIs manually.");
+            }
+            return Members(session, artifact, snapshot).ToList();
         }
 
         private HtmlWorkspaceSnapshot LoadSnapshot(ChatSession session, ChatArtifact artifact)
@@ -215,14 +320,24 @@ namespace RNAssistant.Office.Services
 
         private static ChatArtifact FindArtifact(ChatSession session, string artifactId)
         {
-            return (session == null ? null : session.Artifacts ?? new List<ChatArtifact>())
-                .FirstOrDefault(item => item != null &&
-                    string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
+            var matches = (session == null ? null : session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null &&
+                    string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            return matches.Count == 1 ? matches[0] : null;
         }
 
         private static string MemberKey(string type, string id)
         {
             return TextPatternEngine.Sha256((type ?? string.Empty) + "\n" + (id ?? string.Empty));
+        }
+
+        private static bool IsCanonicalMemberKey(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) && value.Length == 64 &&
+                value.All(character => character >= '0' && character <= '9' ||
+                    character >= 'a' && character <= 'f');
         }
 
         private static string RevisionText(HtmlMember member)

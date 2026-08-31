@@ -8,7 +8,7 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed class ChatArtifactResourceProvider : IResourceProvider
+    internal sealed class ChatArtifactResourceProvider : IResourceProvider, IResourceMemberResolver
     {
         public const string ProviderName = "chat";
         public const int MaximumReadCharacters = 32000;
@@ -41,6 +41,7 @@ namespace RNAssistant.Office.Services
             }
             limit = Math.Max(1, Math.Min(MaximumListItems, limit <= 0 ? 20 : limit));
             var filtered = OrderedArtifacts(session)
+                .Where(item => _htmlResources.IsReadableRevision(session, item))
                 .Where(item => string.IsNullOrWhiteSpace(kind) ||
                     string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -66,15 +67,32 @@ namespace RNAssistant.Office.Services
 
         public ResourceDescriptor Resolve(ChatSession session, string resourceUri)
         {
-            ResourceDescriptor htmlResource;
-            if (_htmlResources.TryResolve(session, resourceUri, out htmlResource)) return htmlResource;
-            var artifact = FindByUri(session, resourceUri);
-            if (artifact == null)
-            {
-                throw new KeyNotFoundException("Resource not found in the active chat: " + resourceUri);
-            }
+            var address = ParseAddress(session, resourceUri);
+            var artifact = FindExactArtifact(session, address.ArtifactId);
+            EnsureRevision(artifact, address.Revision);
+            _htmlResources.ValidateRevision(session, artifact);
+            if (address.IsMember) return _htmlResources.ResolveMember(session, artifact, address);
             EnsureNotRemoved(session, artifact, resourceUri);
             return Describe(session, artifact, false);
+        }
+
+        public ResourceDescriptor ResolveMember(ChatSession session, string parentUri,
+            string memberPath, string memberType)
+        {
+            var address = ParseAddress(session, parentUri);
+            if (address.IsMember)
+            {
+                throw ResourceError(
+                    "invalid_resource_uri",
+                    "parentUri must identify an artifact revision, not one of its members. " +
+                    "Copy the parent ResourceRef from the member descriptor.",
+                    false,
+                    null);
+            }
+            var artifact = FindExactArtifact(session, address.ArtifactId);
+            EnsureRevision(artifact, address.Revision);
+            EnsureNotRemoved(session, artifact, parentUri);
+            return _htmlResources.ResolveMemberPath(session, artifact, memberPath, memberType);
         }
 
         public ResourceSearchResult Search(
@@ -100,7 +118,8 @@ namespace RNAssistant.Office.Services
                 scanTruncated = html.ScanTruncated;
             }
 
-            foreach (var artifact in OrderedArtifacts(session))
+            foreach (var artifact in OrderedArtifacts(session).Where(item =>
+                _htmlResources.IsReadableRevision(session, item)))
             {
                 if (matches.Count >= limit) break;
                 if (!string.IsNullOrWhiteSpace(kind) &&
@@ -154,19 +173,14 @@ namespace RNAssistant.Office.Services
 
         public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
         {
-            ResourceReadSelection htmlSelection;
-            if (_htmlResources.TryRead(
-                session,
-                request,
-                out htmlSelection)) return htmlSelection;
             var resourceUri = request == null || request.Reference == null
                 ? string.Empty
                 : request.Reference.Uri;
-            var artifact = FindByUri(session, resourceUri);
-            if (artifact == null)
-            {
-                throw new KeyNotFoundException("Resource not found in the active chat: " + resourceUri);
-            }
+            var address = ParseAddress(session, resourceUri);
+            var artifact = FindExactArtifact(session, address.ArtifactId);
+            EnsureRevision(artifact, address.Revision);
+            _htmlResources.ValidateRevision(session, artifact);
+            if (address.IsMember) return _htmlResources.ReadMember(session, artifact, request, address);
             EnsureNotRemoved(session, artifact, resourceUri);
             var exactReference = ChatResourceUri.CreateArtifactRevision(session, artifact);
             var exactUri = exactReference.Uri;
@@ -472,19 +486,110 @@ namespace RNAssistant.Office.Services
                 string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static ChatArtifact FindByUri(ChatSession session, string resourceUri)
+        internal static ChatArtifactAddress ParseAddress(ChatSession session, string resourceUri)
         {
-            ResourceAddress address;
-            if (!ResourceUri.TryParse(resourceUri, out address) || address.Segments.Count != 5)
+            ResourceAddress parsed;
+            if (!ResourceUri.TryParse(resourceUri, out parsed) ||
+                !string.Equals(parsed.Provider, ProviderName, StringComparison.Ordinal) ||
+                (parsed.Segments.Count != 5 && parsed.Segments.Count != 8) ||
+                !string.Equals(parsed.Segments[1], "artifact", StringComparison.Ordinal) ||
+                !string.Equals(parsed.Segments[3], "revision", StringComparison.Ordinal) ||
+                parsed.Segments.Count == 8 &&
+                    (!string.Equals(parsed.Segments[5], "member", StringComparison.Ordinal) ||
+                     (!string.Equals(parsed.Segments[6], "file", StringComparison.Ordinal) &&
+                      !string.Equals(parsed.Segments[6], "data", StringComparison.Ordinal))))
             {
-                return null;
+                throw new ResourceRequestException(
+                    "The chat resource URI has an invalid canonical shape. Copy the exact URI returned by a resource descriptor " +
+                    "or use common.resources_resolve with parentUri and memberPath.",
+                    "invalid_resource_uri",
+                    false);
             }
+            string actualSessionId;
             string artifactId;
             int revision;
-            if (session == null || !ChatResourceUri.TryParseArtifactRevision(
-                session.Id, new ResourceRef(resourceUri), out artifactId, out revision)) return null;
-            var artifact = Find(session, artifactId);
-            return artifact != null && Math.Max(1, artifact.Revision) == revision ? artifact : null;
+            if (!ChatResourceUri.TryParseArtifactRevision(
+                new ResourceRef(resourceUri), out actualSessionId, out artifactId, out revision))
+            {
+                throw new ResourceRequestException(
+                    "The chat resource URI has an invalid artifact revision. Copy an exact revision-pinned URI returned by a resource descriptor.",
+                    "invalid_resource_uri",
+                    false);
+            }
+            var address = new ChatArtifactAddress
+            {
+                ArtifactId = artifactId,
+                Revision = revision,
+                MemberType = parsed.Segments.Count == 8 ? parsed.Segments[6] : null,
+                MemberKey = parsed.Segments.Count == 8 ? parsed.Segments[7] : null
+            };
+            if (session == null || !string.Equals(actualSessionId, session.Id, StringComparison.Ordinal))
+            {
+                throw new ResourceRequestException(
+                    "The resource belongs to a different chat. Switch to the owning chat or resolve a reference from the active chat.",
+                    "active_chat_mismatch",
+                    false);
+            }
+            return address;
+        }
+
+        private static ChatArtifact FindExactArtifact(
+            ChatSession session,
+            string artifactId)
+        {
+            var matches = (session == null ? null : session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && string.Equals(
+                    item.Id,
+                    artifactId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            if (matches.Count == 0)
+            {
+                throw ResourceError(
+                    "artifact_not_found",
+                    "The artifact does not exist in the active chat.",
+                    false,
+                    "List chat resources again and use an exact returned URI.");
+            }
+            if (matches.Count > 1)
+            {
+                throw ResourceError(
+                    "resource_corrupt",
+                    "The artifact identity is ambiguous in the active chat.",
+                    false,
+                    "Do not retry this URI; start a new chat or repair the persisted stream.");
+            }
+            return matches[0];
+        }
+
+        private static void EnsureRevision(ChatArtifact artifact, int revision)
+        {
+            if (artifact != null && Math.Max(1, artifact.Revision) == revision) return;
+            throw ResourceError(
+                "revision_not_found",
+                "The requested artifact revision does not exist.",
+                false,
+                "Use an exact revision URI returned by resource discovery or mutation output.");
+        }
+
+        internal static ResourceRequestException ResourceError(
+            string code,
+            string message,
+            bool retryable,
+            string recoveryHint)
+        {
+            return new ResourceRequestException(message + (string.IsNullOrWhiteSpace(recoveryHint)
+                ? string.Empty : " " + recoveryHint), code, retryable);
+        }
+
+        internal sealed class ChatArtifactAddress
+        {
+            internal string ArtifactId;
+            internal int Revision;
+            internal string MemberType;
+            internal string MemberKey;
+            internal bool IsMember { get { return !string.IsNullOrWhiteSpace(MemberType); } }
         }
 
         private static List<ChatArtifact> Artifacts(ChatSession session)

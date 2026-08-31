@@ -482,19 +482,50 @@ namespace RNAssistant.Office.Tools
         private static string WorkspaceMutationJson(ChatSession session, string itemType, string itemId)
         {
             var workspace = NormalizedWorkspaceCopy(session == null ? null : session.HtmlWorkspace);
-            return JsonConvert.SerializeObject(new
+            return AddWorkspaceResourceRefs(session, new JObject
             {
-                type = "rnassistant.htmlWorkspaceMutation",
-                version = 1,
-                itemType = itemType,
-                itemId = itemId,
-                revisionArtifactId = session == null ? null : session.ActiveHtmlArtifactId,
-                activeFileId = workspace.ActiveFileId,
-                fileCount = workspace.Files.Count,
-                dataSourceCount = workspace.DataSources.Count,
-                boundDataSourceCount = workspace.DataSources.Count(item => item != null && item.Binding != null),
-                updatedUtc = workspace.UpdatedUtc
-            });
+                ["type"] = "rnassistant.htmlWorkspaceMutation",
+                ["version"] = 2,
+                ["itemType"] = itemType,
+                ["itemId"] = itemId,
+                ["revisionArtifactId"] = session == null ? null : session.ActiveHtmlArtifactId,
+                ["activeFileId"] = workspace.ActiveFileId,
+                ["fileCount"] = workspace.Files.Count,
+                ["dataSourceCount"] = workspace.DataSources.Count,
+                ["boundDataSourceCount"] = workspace.DataSources.Count(item => item != null && item.Binding != null),
+                ["updatedUtc"] = workspace.UpdatedUtc
+            }).ToString(Formatting.None);
+        }
+
+        private static JObject AddWorkspaceResourceRefs(ChatSession session, JObject data)
+        {
+            var artifact = (session == null ? null : session.Artifacts ?? new List<ChatArtifact>())
+                .Where(item => item != null && string.Equals(
+                    item.Id,
+                    session.ActiveHtmlArtifactId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            var exactArtifact = artifact.Count == 1 ? artifact[0] : null;
+            var artifactRef = exactArtifact == null
+                ? null
+                : ChatResourceUri.CreateArtifactRevision(session, exactArtifact);
+            var members = exactArtifact == null
+                ? new object[0]
+                : new ChatHtmlResourceCatalog(null).DescribeMembers(session, exactArtifact)
+                    .Select(item => (object)new
+                    {
+                        memberType = string.Equals(item.Kind, ChatHtmlResourceCatalog.FileKind, StringComparison.Ordinal)
+                            ? "file" : "data",
+                        path = item.Title,
+                        uri = item.Reference.Uri,
+                        revision = item.Reference.Revision
+                    })
+                    .ToArray();
+            data = data ?? new JObject();
+            data["artifactRef"] = artifactRef == null ? JValue.CreateNull() : JToken.FromObject(artifactRef);
+            data["members"] = JArray.FromObject(members);
+            return data;
         }
 
         private static List<HtmlWorkspaceSnapshot> NormalizeSnapshots(List<HtmlWorkspaceSnapshot> snapshots)

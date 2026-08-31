@@ -52,6 +52,16 @@ arbitrary first artifact.
 
 Every provider implements bounded `list`, `resolve`, `search`, and `read(ResourceReadRequest)`. The read request carries one `ResourceRef`, representation, opaque cursor, and character limit, so revision evidence cannot be lost between routing and the provider. Immutable text uses an offset internally because its URI is already pinned. Live Office/VBA chunks bind the internal position to the content hash; collection pages bind it to a deterministic collection fingerprint. Model-facing list/read results expose only the usable `nextCursor`, never the current-page cursor or raw offset. Continuation copies it unchanged into `cursor` only for the same operation and exact list query or resource representation. Reusing a cursor after drift fails with retryable `resource_revision_changed`; a cursor from another operation/query/resource fails non-retryably and must be omitted to restart.
 
+HTML workspace mutations return the exact artifact `ResourceRef` plus the current
+member paths and opaque member URIs. `common.resources_resolve` accepts either one
+exact URI or an exact parent revision URI plus `memberPath` and optional
+`memberType`; only this central resolver translates a human-readable path into a
+member key. Exact chat resolution distinguishes invalid URI, active-chat mismatch,
+missing artifact/revision/member, noncanonical member key and corrupt persisted
+payload. Tool errors include the stable code and a recovery hint; the enclosing
+Tool Result `tool_call_id` remains the correlation identity, so Resource Fabric does
+not introduce a second correlation protocol.
+
 Text availability is based on exact body/extraction evidence, not on whether the
 text contains non-whitespace characters. A valid empty or whitespace-only immutable
 representation is returned as complete exact content; a missing body still fails

@@ -27,6 +27,18 @@ artifact provenance cannot move between source messages or bodies. Focused resou
 attachment and tool-result regressions pass; full host-neutral harness 539/539 and
 `git diff --check` pass. No Office/COM/WebView path or Windows gate changed.
 
+Resource member reference fix (2026-08-31): HTML mutation results exposed only an
+internal revision artifact id, while exact member discovery used an opaque SHA-256
+key. The model could therefore reconstruct a plausible path URI that always fell
+through to generic not-found. Mutations now return the exact artifact `ResourceRef`
+and current member URIs; the existing `common.resources_resolve` supports one
+central parent-revision + member-path lookup. Exact chat resolution now separates
+invalid URI, chat mismatch, artifact/revision/member absence, noncanonical member
+keys and corrupt payload, with recovery guidance in the typed Tool Result. No new
+resource store, transport or correlation id was added. Verification: `resources:`
+10/10, native resource runtime 1/1, HTML workspace/source 2/2; four existing
+Windows-only COM analyzer warnings. Windows/WebView2/Office were not run.
+
 Empty-text Resource Fabric regression fix (2026-08-31): exact resource reads used
 `IsNullOrWhiteSpace` as an availability test, so valid empty and whitespace-only text
 attachments/documents were rejected as missing despite exact hash/body evidence.
