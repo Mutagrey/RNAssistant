@@ -2385,8 +2385,13 @@ endpoint.
      typed service/direct bound backend с exact collection pre-state/read-back;
      production host branches/methods удалены. Windows WQ-EXCEL открыт.
      [Evidence](PHASE_11T2_EXCEL_SHEETS.md);
-   - 11T3–11T5: переносить оставшиеся существующие Excel capabilities по families:
-     clear/sort/filter/format, tables, charts;
+   - [x] 11T3 — existing `excel.clear_range`/`excel.sort_range`/
+     `excel.filter_range`/`excel.format_range` переведены на typed service/direct
+     bound backend с bounded exact target/pre-state token и operation-specific
+     read-back; production host branches/methods/replaced helpers удалены. Windows
+     WQ-EXCEL открыт. [Evidence](PHASE_11T3_EXCEL_RANGE_MUTATIONS.md);
+   - 11T4–11T5: переносить оставшиеся существующие Excel capabilities по families:
+     tables, charts;
    - 11T6–11T8: Word, PowerPoint и Outlook по одному host vertical. Каждый сначала
      получает собственный bound local `DocumentSession`, exact target/lifetime gate
      и host pack, затем его существующие reads и mutations переходят по semantic

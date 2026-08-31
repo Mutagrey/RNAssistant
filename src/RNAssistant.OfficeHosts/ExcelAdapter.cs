@@ -26,6 +26,7 @@ namespace RNAssistant.OfficeHosts
         private readonly ExcelInteropBackend _excelBackend;
         private readonly ExcelFindReplaceInteropBackend _excelFindReplaceBackend;
         private readonly ExcelSheetInteropBackend _excelSheetBackend;
+        private readonly ExcelRangeMutationInteropBackend _excelRangeMutationBackend;
         private readonly string _qualificationOwnerLabel;
 
         public ExcelAdapter(
@@ -46,6 +47,8 @@ namespace RNAssistant.OfficeHosts
             _excelBackend = new ExcelInteropBackend(_documentSession);
             _excelFindReplaceBackend = new ExcelFindReplaceInteropBackend(_documentSession);
             _excelSheetBackend = new ExcelSheetInteropBackend(_documentSession);
+            _excelRangeMutationBackend =
+                new ExcelRangeMutationInteropBackend(_documentSession);
         }
 
         public string HostName { get { return "Excel"; } }
@@ -58,6 +61,10 @@ namespace RNAssistant.OfficeHosts
             get { return _excelFindReplaceBackend; }
         }
         public IExcelSheetBackend ExcelSheetBackend { get { return _excelSheetBackend; } }
+        public IExcelRangeMutationBackend ExcelRangeMutationBackend
+        {
+            get { return _excelRangeMutationBackend; }
+        }
 
         public string DocumentKey { get { return _documentSession.StableDocumentId; } }
         public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
@@ -288,14 +295,6 @@ namespace RNAssistant.OfficeHosts
                         return UpsertChart(command);
                     case "excel.delete_chart":
                         return DeleteChart(command);
-                    case "excel.format_range":
-                        return FormatRange(command);
-                    case "excel.clear_range":
-                        return ClearRange(command);
-                    case "excel.sort_range":
-                        return SortRange(command);
-                    case "excel.filter_range":
-                        return FilterRange(command);
                     case "excel.vba_list_project_components_internal":
                         return ListVbaProjectComponents();
                     case "excel.vba_read_module":
@@ -525,151 +524,6 @@ namespace RNAssistant.OfficeHosts
             var chartName = chartObject.Name;
             chartObject.Delete();
             return ToolResult.Ok("Chart deleted: " + chartName, JsonConvert.SerializeObject(new { sheet = sheet.Name, chartName = chartName }));
-        }
-
-        private ToolResult FormatRange(ToolCommand command)
-        {
-            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
-            var autoFit = ToolArgumentReader.String(command.Arguments, "autoFit", string.Empty);
-            var hasFormatting = command.Arguments.ContainsKey("numberFormat") ||
-                command.Arguments.ContainsKey("bold") ||
-                command.Arguments.ContainsKey("italic") ||
-                command.Arguments.ContainsKey("fillColor") ||
-                command.Arguments.ContainsKey("fontColor") ||
-                command.Arguments.ContainsKey("horizontalAlignment");
-            if (!hasFormatting && string.IsNullOrWhiteSpace(autoFit))
-            {
-                return ToolResult.Fail("Provide at least one formatting field or autoFit operation.");
-            }
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var range = string.IsNullOrWhiteSpace(address)
-                ? (!hasFormatting && !string.IsNullOrWhiteSpace(autoFit) ? sheet.UsedRange : sheet.Range["A1"])
-                : sheet.Range[address];
-            var numberFormat = ToolArgumentReader.String(command.Arguments, "numberFormat", string.Empty);
-            if (!string.IsNullOrWhiteSpace(numberFormat))
-            {
-                range.NumberFormat = numberFormat;
-            }
-            if (command.Arguments.ContainsKey("bold"))
-            {
-                range.Font.Bold = ToolArgumentReader.Boolean(command.Arguments, "bold", false);
-            }
-            if (command.Arguments.ContainsKey("italic"))
-            {
-                range.Font.Italic = ToolArgumentReader.Boolean(command.Arguments, "italic", false);
-            }
-
-            var fillColor = ToolArgumentReader.String(command.Arguments, "fillColor", string.Empty);
-            if (!string.IsNullOrWhiteSpace(fillColor))
-            {
-                range.Interior.Color = OleColor(fillColor);
-            }
-            var fontColor = ToolArgumentReader.String(command.Arguments, "fontColor", string.Empty);
-            if (!string.IsNullOrWhiteSpace(fontColor))
-            {
-                range.Font.Color = OleColor(fontColor);
-            }
-
-            var horizontal = ToolArgumentReader.String(command.Arguments, "horizontalAlignment", string.Empty);
-            if (!string.IsNullOrWhiteSpace(horizontal))
-            {
-                range.HorizontalAlignment = ResolveHorizontalAlignment(horizontal);
-            }
-
-            if (string.Equals(autoFit, "columns", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(autoFit, "both", StringComparison.OrdinalIgnoreCase))
-            {
-                range.Columns.AutoFit();
-            }
-            if (string.Equals(autoFit, "rows", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(autoFit, "both", StringComparison.OrdinalIgnoreCase))
-            {
-                range.Rows.AutoFit();
-            }
-
-            return ToolResult.Ok("Range formatted: " + sheet.Name + "!" + range.Address[false, false]);
-        }
-
-        private ToolResult ClearRange(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
-            if (string.IsNullOrWhiteSpace(address))
-            {
-                return ToolResult.Fail("address is required.");
-            }
-
-            var clearWhat = ToolArgumentReader.String(command.Arguments, "clearWhat", "values");
-            var range = sheet.Range[address];
-            if (string.Equals(clearWhat, "formats", StringComparison.OrdinalIgnoreCase))
-            {
-                range.ClearFormats();
-            }
-            else if (string.Equals(clearWhat, "all", StringComparison.OrdinalIgnoreCase))
-            {
-                range.Clear();
-            }
-            else
-            {
-                range.ClearContents();
-            }
-
-            return ToolResult.Ok("Range cleared: " + sheet.Name + "!" + address + " (" + clearWhat + ")");
-        }
-
-        private ToolResult SortRange(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
-            if (string.IsNullOrWhiteSpace(address))
-            {
-                return ToolResult.Fail("address is required.");
-            }
-
-            var range = sheet.Range[address];
-            var keyColumn = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "keyColumn", 1));
-            var columnCount = Convert.ToInt32(range.Columns.Count);
-            if (keyColumn > columnCount)
-            {
-                return ToolResult.Fail("keyColumn is outside the sort range.");
-            }
-
-            var descending = ToolArgumentReader.Boolean(command.Arguments, "descending", false);
-            var hasHeaders = ToolArgumentReader.Boolean(command.Arguments, "hasHeaders", true);
-            var key = range.Columns[keyColumn] as Excel.Range;
-            if (key == null)
-            {
-                return ToolResult.Fail("Sort key column could not be resolved.");
-            }
-
-            range.Sort(
-                Key1: key,
-                Order1: descending ? Excel.XlSortOrder.xlDescending : Excel.XlSortOrder.xlAscending,
-                Header: hasHeaders ? Excel.XlYesNoGuess.xlYes : Excel.XlYesNoGuess.xlNo,
-                Orientation: Excel.XlSortOrientation.xlSortColumns);
-            return ToolResult.Ok("Range sorted: " + sheet.Name + "!" + address);
-        }
-
-        private ToolResult FilterRange(ToolCommand command)
-        {
-            var sheet = ResolveSheet(ToolArgumentReader.String(command.Arguments, "sheet", null));
-            var address = ToolArgumentReader.String(command.Arguments, "address", string.Empty);
-            if (string.IsNullOrWhiteSpace(address))
-            {
-                return ToolResult.Fail("address is required.");
-            }
-
-            var field = Math.Max(1, ToolArgumentReader.Int32(command.Arguments, "field", 1));
-            var criteria = ToolArgumentReader.String(command.Arguments, "criteria", string.Empty);
-            var range = sheet.Range[address];
-            var columnCount = Convert.ToInt32(range.Columns.Count);
-            if (field > columnCount)
-            {
-                return ToolResult.Fail("field is outside the filter range.");
-            }
-
-            range.AutoFilter(field, string.IsNullOrWhiteSpace(criteria) ? Type.Missing : criteria, Excel.XlAutoFilterOperator.xlAnd, Type.Missing, true);
-            return ToolResult.Ok("Range filtered: " + sheet.Name + "!" + address);
         }
 
         private ToolResult ListVbaProjectComponents()
@@ -1174,37 +1028,6 @@ namespace RNAssistant.OfficeHosts
                 default:
                     return Excel.XlChartType.xlLineMarkers;
             }
-        }
-
-        private static Excel.XlHAlign ResolveHorizontalAlignment(string value)
-        {
-            switch ((value ?? string.Empty).ToLowerInvariant())
-            {
-                case "left":
-                    return Excel.XlHAlign.xlHAlignLeft;
-                case "right":
-                    return Excel.XlHAlign.xlHAlignRight;
-                case "center":
-                case "centre":
-                    return Excel.XlHAlign.xlHAlignCenter;
-                default:
-                    return Excel.XlHAlign.xlHAlignGeneral;
-            }
-        }
-
-        private static int OleColor(string value)
-        {
-            var text = (value ?? string.Empty).Trim().TrimStart('#');
-            int rgb;
-            if (text.Length != 6 || !int.TryParse(text, System.Globalization.NumberStyles.HexNumber, null, out rgb))
-            {
-                return 0;
-            }
-
-            var r = (rgb >> 16) & 0xFF;
-            var g = (rgb >> 8) & 0xFF;
-            var b = rgb & 0xFF;
-            return r + (g << 8) + (b << 16);
         }
 
         private static void AppendRangeValues(StringBuilder builder, Excel.Range range, int maxChars)

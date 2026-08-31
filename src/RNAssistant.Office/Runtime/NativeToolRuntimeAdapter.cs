@@ -27,6 +27,7 @@ namespace RNAssistant.Office.Runtime
         internal NativeToolRuntimeAdapter(ResourceGatewayService gateway, ExcelReadToolAdapter excelReads,
             ExcelWriteToolAdapter excelWrites, ExcelFindReplaceToolAdapter excelFindReplace,
             ExcelSheetToolAdapter excelSheets,
+            ExcelRangeMutationToolAdapter excelRangeMutations,
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
         {
@@ -77,6 +78,15 @@ namespace RNAssistant.Office.Runtime
                     handler = new ExcelSheetToolHandler(
                         registration.Descriptor.Id, excelSheets, hostRuntime, session);
                 }
+                else if (ExcelRangeMutationToolIds.Owns(registration.Descriptor.Id))
+                {
+                    if (excelRangeMutations == null || hostRuntime == null)
+                        throw new InvalidOperationException(
+                            "Excel range mutation handler dependencies are unavailable.");
+                    handler = new ExcelRangeMutationToolHandler(
+                        registration.Descriptor.Id, excelRangeMutations,
+                        hostRuntime, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -98,7 +108,8 @@ namespace RNAssistant.Office.Runtime
                 string.Equals(toolId, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
-                ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId);
+                ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
+                ExcelRangeMutationToolIds.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -117,6 +128,8 @@ namespace RNAssistant.Office.Runtime
                 return ExcelFindReplaceToolHandler.BindingFor(toolId);
             if (ExcelSheetToolIds.Owns(toolId))
                 return ExcelSheetToolHandler.BindingFor(toolId);
+            if (ExcelRangeMutationToolIds.Owns(toolId))
+                return ExcelRangeMutationToolHandler.BindingFor(toolId);
             return null;
         }
 

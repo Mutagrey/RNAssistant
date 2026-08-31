@@ -2,12 +2,12 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 migration contours — перенос всех существующих tools и удаление active legacy architecture явно обязательны до Phase 12; новые optional product features этим не добавлены
-Current task: 11T2 Excel sheet lifecycle is complete host-neutral over the bound workbook; 11T3 clear/sort/filter/format is the next typed-family migration. Real Windows/live-provider gates remain open.
+Current task: 11T3 Excel clear/sort/filter/format is complete host-neutral over the bound workbook; 11T4 tables is the next typed-family migration. Real Windows/live-provider gates remain open.
 Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy обязательны. WQ0 больше не блокирует implementation: текущий `RuntimeKey` exact bound workbook принимается как lifetime assumption; реальные Windows/live-provider gates остаются deferred evidence и не могут быть закрыты локальными tests.
 
-Next step for tools: 11T3 переносит exact existing Excel clear/sort/filter/format family на typed requests/domain services/direct bound backend/outcome paths и удаляет заменённые host switch/helpers. Расширение schemas и generic action lists не входят в этот slice.
-Required context: [master Phase 11T](STABILIZATION_MASTER_PLAN.md), [11T2 evidence](PHASE_11T2_EXCEL_SHEETS.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current Excel range-mutation owners.
-Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1 and 11T0–11T2 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Remaining Office tools still move family-by-family; the final switch removes `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. Excel read/write compatibility commands/backends, execution-time target fallback, find/replace and sheet-lifecycle host branches/helpers are gone. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION and WQ-EXCEL are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+Next step for tools: 11T4 переносит exact existing Excel table family на typed requests/domain service/direct bound backend/outcome path и удаляет заменённые host switch/helpers. Расширение schemas и generic action lists не входят в этот slice.
+Required context: [master Phase 11T](STABILIZATION_MASTER_PLAN.md), [11T3 evidence](PHASE_11T3_EXCEL_RANGE_MUTATIONS.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current Excel table owner.
+Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1 and 11T0–11T3 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Remaining Office tools still move family-by-family; the final switch removes `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. Excel read/write compatibility commands/backends, execution-time target fallback, find/replace, sheet-lifecycle and range-mutation host branches/helpers are gone. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION and WQ-EXCEL are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
 Model SSE terminal incident fix (2026-08-31): streaming reader теперь распознаёт
 non-empty `choices[0].finish_reason`, bounded одну секунду ждёт optional final usage
@@ -15,7 +15,7 @@ non-empty `choices[0].finish_reason`, bounded одну секунду ждёт o
 открытым. Final usage сохраняется; cancellation, JSON response path и общий request
 timeout не менялись. Red open-stream characterization заменён green regression;
 model diagnostics 4/4 и conversation streaming 4/4 pass. Реальный Qwen endpoint и
-Windows UI не проверялись; 11T3 остаётся следующим tool migration slice.
+Windows UI не проверялись; mandatory tool migration route продолжается независимо.
 
 Run Journal causal-boundary correction (2026-08-31): initial accepted call/result и
 tool execution start/finish теперь получают semantic operation только при создании
@@ -25,7 +25,7 @@ result hydration того же message ID сохраняются как `message
 не содержит terminal row, UI пишет `Не найден в выборке`, а не делает глобальный
 вывод `Нет terminal`; renderer cache key обновлён. Storage transition regression 1/1,
 соседние storage/trajectory 5/5 и Run Journal 8/8 pass. Windows WebView/live run не
-проверялись; 11T3 остаётся следующим tool migration slice.
+проверялись; mandatory tool migration route продолжается независимо.
 
 Live artifact projection correction (2026-08-31): после каждого durable
 `tool_result` controller теперь ставит в WebView очередь существующую full
@@ -78,6 +78,21 @@ host-neutral harness 549/549, architecture 4/4 and source inclusion 1/1 pass;
 MockDemo and C# 7.3 syntax checks pass. Real protected-workbook, COM partial-effect,
 rollback and case-only rename behavior remains WQ-EXCEL evidence.
 [Evidence](PHASE_11T2_EXCEL_SHEETS.md).
+
+Phase 11T3 Excel range mutations (2026-08-31): `excel.clear_range`,
+`excel.sort_range`, `excel.filter_range` and `excel.format_range` now use exact native
+registrations, typed requests/outcomes, one domain service and a narrow backend over
+the workbook retained by `ExcelDocumentSession`. The domain preserves public schemas
+and defaults, bounds one contiguous target to 100000 cells and classifies explicit
+no-change/change/error/unknown. The backend rechecks an operation-specific pre-state
+token immediately before dispatch; content/order/filter/format and autofit dimensions
+are read back from the same target. Production `ExcelAdapter` branches, methods and
+replaced color/alignment helpers are removed. Full host-neutral harness 553/553,
+architecture 4/4 and source inclusion 1/1 pass; MockDemo builds, and all 366
+production C# sources parse under C# 7.3 constraints. Real Excel sorting locale, AutoFilter
+criteria normalization, Normal-style/conditional formatting, protected/large ranges,
+autofit and partial COM effects remain WQ-EXCEL evidence.
+[Evidence](PHASE_11T3_EXCEL_RANGE_MUTATIONS.md).
 
 Pre-R37 trajectory inference removal (2026-08-31): `TrajectoryRunProjection` and
 `TrajectoryDerivedProjection` no longer reinterpret a persisted

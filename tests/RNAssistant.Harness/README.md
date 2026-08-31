@@ -38,7 +38,7 @@ Verification scope and evidence reuse follow [master plan §22.1](../../docs/sta
 | Tool Result v1 / strict JSON | `Program.ToolResultWireTests.cs`; projection checks in `Program.ToolRuntimeTests.cs` | `tool result wire:`, `tool result materialization:` |
 | Native ToolRuntime / typed contracts and effect evidence | `Program.ToolRuntimeTests.cs`; native read in `Program.ResourceGatewayTests.cs` | `tool runtime:` |
 | Immutable ToolPack authority / finite core / atomic callable admission | `Program.ToolDiscoveryTests.cs`; confirmation and policy regressions in `Program.SimpleAgentTests.cs` and `Program.AgentSafetyTests.cs` | `tool pack:`, `agent: confirmation`, `protocol context: batch safety uses local authority` |
-| Typed Excel reads/writes / native, HTML, bounds and effect evidence | `Program.ExcelReadTests.cs`, `Program.ExcelWriteTests.cs`; paired Agent regression in `Program.AgentSafetyTests.cs`; host access in `Program.ParserDesktopTests.cs` | `excel read:`, `excel write:`, `protocol context: loop tracks only accepted calls`, `tools: html workspace updates session`, `host runtime:` |
+| Typed Excel reads/writes/range mutations / native, HTML, bounds and effect evidence | `Program.ExcelReadTests.cs`, `Program.ExcelWriteTests.cs`, `Program.ExcelRangeMutationTests.cs`; paired Agent regression in `Program.AgentSafetyTests.cs`; host access in `Program.ParserDesktopTests.cs` | `excel read:`, `excel write:`, `excel range mutation:`, `protocol context: loop tracks only accepted calls`, `tools: html workspace updates session`, `host runtime:` |
 | Host document gate / neutral bound session / direct context and catalog reads | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
 | Excel identity owner/helper protocol (no Office execution) | `Program.ParserDesktopTests.cs`; source-linked `OfficeHosts.Qualification` | `excel identity probe:` |
 | Qualification pack/catalog/runner/event/build authority | `Program.QualificationTests.cs`; strict manifest/coverage, fake action/verifier ports, pause/replay/fault barriers, real chat CAS and signed exact-build admission | `qualification:` |
@@ -158,6 +158,17 @@ closed/switched-document refusal. The fake generic host path rejects both public
 so dual dispatch is observable. Real Excel protected workbook structure, COM rollback
 and case-only rename remain WQ-EXCEL gates. See
 [Phase 11T2 evidence](../../docs/stabilization/PHASE_11T2_EXCEL_SHEETS.md).
+
+## Typed Excel range mutation owner (Phase 11T3)
+
+`excel range mutation:` covers exact native ownership for clear/sort/filter/format,
+public defaults, separate values/formats clear behavior, whole-row sorting, filter
+state, verified no-op/change, selector rejection, exact pre-dispatch drift,
+post-dispatch failure/read-back divergence and closed bound-document refusal. The fake
+generic host rejects all four public ids, so dual dispatch is observable. Real Excel
+sort locale, AutoFilter normalization, mixed/conditional formatting, autofit,
+protected ranges and partial COM effects remain WQ-EXCEL gates. See
+[Phase 11T3 evidence](../../docs/stabilization/PHASE_11T3_EXCEL_RANGE_MUTATIONS.md).
 
 ## Typed VBA mutation outcome (Phase 6D)
 

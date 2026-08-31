@@ -114,6 +114,8 @@
     <Compile Include="Domains\Excel\ExcelBackendProvider.cs" />
     <Compile Include="Domains\Excel\ExcelFindReplaceContracts.cs" />
     <Compile Include="Domains\Excel\ExcelFindReplaceService.cs" />
+    <Compile Include="Domains\Excel\ExcelRangeMutationContracts.cs" />
+    <Compile Include="Domains\Excel\ExcelRangeMutationService.cs" />
     <Compile Include="Domains\Excel\ExcelSheetContracts.cs" />
     <Compile Include="Domains\Excel\ExcelSheetService.cs" />
     <Compile Include="Domains\Excel\ExcelWriteContracts.cs" />
@@ -124,6 +126,9 @@
     <Compile Include="Tools\ExcelFindReplaceToolAdapter.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolHandler.cs" />
     <Compile Include="Tools\ExcelFindReplaceToolIds.cs" />
+    <Compile Include="Tools\ExcelRangeMutationToolAdapter.cs" />
+    <Compile Include="Tools\ExcelRangeMutationToolHandler.cs" />
+    <Compile Include="Tools\ExcelRangeMutationToolIds.cs" />
     <Compile Include="Tools\ExcelSheetToolAdapter.cs" />
     <Compile Include="Tools\ExcelSheetToolHandler.cs" />
     <Compile Include="Tools\ExcelSheetToolIds.cs" />

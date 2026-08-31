@@ -35,12 +35,12 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "replay-run", TurnId = "replay-turn", RuntimeId = "runtime" };
                 store.Save(session);
-                if (outcome != "ok") adapter.QueueResult("excel.format_range", ToolResult.Fail("Write failed", null,
+                if (outcome != "ok") adapter.QueueResult("excel.add_table", ToolResult.Fail("Write failed", null,
                     outcome == "unknown" ? "tool_effect_uncertain" : "write_rejected", false));
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.format_range"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.format_range\",\"arguments\":{\"numberFormat\":\"0\"}}]}",
+                    LoadToolSchemaResponse("excel.add_table"),
+                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.add_table\",\"arguments\":{\"sourceRange\":\"A1:B2\"}}]}",
                     "{\"message\":\"Everything done\",\"tool_calls\":[]}"
                 });
                 var modelCalls = 0;
@@ -74,7 +74,7 @@ namespace RNAssistant.Harness
                 AssertEqual(outcome == "ok" ? 1 : 0, result.RunViewState.UnverifiedWrites, "successful legacy write is not called verified");
                 AssertEqual(outcome == "error" ? 1 : 0, result.RunViewState.FailedCalls, "error call count");
                 AssertEqual(outcome == "error" ? 0 : 1, result.RunViewState.UnknownEffects, "unknown effect count");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.format_range"), "single execution, no retry");
+                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.add_table"), "single execution, no retry");
                 AssertTrue(replay.LastRun.KernelState.InFlightTool == null, "terminal clears in-flight evidence");
             });
         }

@@ -12,7 +12,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
@@ -23,10 +23,14 @@ namespace RNAssistant.Harness
         internal const string ExcelSheetReadOperation = "sheet.read";
         internal const string ExcelSheetAddOperation = "sheet.add";
         internal const string ExcelSheetRenameOperation = "sheet.rename";
+        internal const string ExcelRangeMutationReadOperation = "range_mutation.read";
+        internal const string ExcelRangeMutationApplyOperation = "range_mutation.apply";
 
         public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public readonly List<string> ExcelBackendCalls = new List<string>();
         public readonly List<ToolCommand> ExcelSheetRequests = new List<ToolCommand>();
+        public readonly List<ToolCommand> ExcelRangeMutationRequests =
+            new List<ToolCommand>();
         public string VbaModuleType = "StdModule";
         public readonly List<string> RanMacros = new List<string>();
         public bool FailUnknownSkills { get; set; }
@@ -38,8 +42,11 @@ namespace RNAssistant.Harness
         public bool ExcelWriteThrowAfterMutation { get; set; }
         public bool ExcelReplaceThrowAfterMutation { get; set; }
         public bool ExcelSheetThrowAfterMutation { get; set; }
+        public bool ExcelRangeMutationThrowAfterMutation { get; set; }
         public Func<ExcelSheetCollectionSnapshot, ExcelSheetCollectionSnapshot>
             ExcelSheetReadTransform { get; set; }
+        public Func<ExcelRangeMutationSnapshot, ExcelRangeMutationSnapshot>
+            ExcelRangeMutationReadTransform { get; set; }
         public int VbaReportedLineCountOffset { get; set; }
         public string DocumentKeyValue { get; set; }
         public string RuntimeDocumentKeyValue { get; set; }
@@ -47,6 +54,7 @@ namespace RNAssistant.Harness
         private ExcelInspectSnapshot _nextExcelInspectSnapshot;
         private ExcelWriteBackendException _nextExcelWriteApplyFailure;
         private ExcelSheetBackendException _nextExcelSheetApplyFailure;
+        private ExcelRangeMutationBackendException _nextExcelRangeMutationApplyFailure;
 
         private readonly string _hostName;
         private string _documentTitle;
@@ -56,6 +64,9 @@ namespace RNAssistant.Harness
         private readonly Dictionary<string, FakeVbaModule> _vbaModules;
         private readonly Dictionary<string, FakeSheet> _sheets;
         private readonly List<string> _excelSheetOrder;
+        private readonly Dictionary<string, string> _excelRangeFormats;
+        private readonly Dictionary<string, string> _excelRangeFilters;
+        private readonly Dictionary<string, string> _excelRangeAutoFits;
         private string _activeExcelSheetName;
         private readonly List<FakeSlide> _slides;
         private readonly List<string> _wordComments;
@@ -84,6 +95,12 @@ namespace RNAssistant.Harness
             _vbaModules = new Dictionary<string, FakeVbaModule>(StringComparer.OrdinalIgnoreCase);
             _sheets = new Dictionary<string, FakeSheet>(StringComparer.OrdinalIgnoreCase);
             _excelSheetOrder = new List<string>();
+            _excelRangeFormats = new Dictionary<string, string>(
+                StringComparer.OrdinalIgnoreCase);
+            _excelRangeFilters = new Dictionary<string, string>(
+                StringComparer.OrdinalIgnoreCase);
+            _excelRangeAutoFits = new Dictionary<string, string>(
+                StringComparer.OrdinalIgnoreCase);
             _slides = new List<FakeSlide>();
             _wordComments = new List<string>();
             _wordText = documentSnapshot ?? string.Empty;
@@ -138,6 +155,10 @@ namespace RNAssistant.Harness
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
         public IExcelSheetBackend ExcelSheetBackend
+        {
+            get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
+        }
+        public IExcelRangeMutationBackend ExcelRangeMutationBackend
         {
             get { return string.Equals(_hostName, "Excel", StringComparison.OrdinalIgnoreCase) ? this : null; }
         }
@@ -284,6 +305,14 @@ namespace RNAssistant.Harness
         {
             _nextExcelSheetApplyFailure =
                 new ExcelSheetBackendException(message, errorCode, retryable);
+        }
+
+        public void QueueExcelRangeMutationApplyFailure(
+            string message, string errorCode, bool retryable)
+        {
+            _nextExcelRangeMutationApplyFailure =
+                new ExcelRangeMutationBackendException(
+                    message, errorCode, retryable);
         }
 
         private void BeginExcelBackendCall(string operation)
@@ -753,17 +782,11 @@ namespace RNAssistant.Harness
                     "excel_public_sheet_moved", false);
             }
 
-            if (string.Equals(command.ToolId, "excel.clear_range", StringComparison.OrdinalIgnoreCase))
+            if (ExcelRangeMutationToolIds.Owns(command.ToolId))
             {
-                ClearRange(Argument(command, "sheet", "Sheet1"), Argument(command, "address", "A1:A1"));
-                return ToolResult.Ok("cleared range");
-            }
-
-            if (string.Equals(command.ToolId, "excel.sort_range", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "excel.filter_range", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(command.ToolId, "excel.format_range", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("applied " + command.ToolId);
+                return ToolResult.Fail(
+                    "Public Excel range mutations are owned by ToolRuntime.",
+                    null, "excel_public_range_mutation_moved", false);
             }
 
             return null;

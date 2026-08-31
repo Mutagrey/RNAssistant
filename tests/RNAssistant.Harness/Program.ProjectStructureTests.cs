@@ -342,12 +342,16 @@ namespace RNAssistant.Harness
                 hostsRoot, "Excel", "ExcelFindReplaceInteropBackend.cs");
             var excelSheetBackendPath = Path.Combine(
                 hostsRoot, "Excel", "ExcelSheetInteropBackend.cs");
+            var excelRangeMutationBackendPath = Path.Combine(
+                hostsRoot, "Excel", "ExcelRangeMutationInteropBackend.cs");
             var excelSessionPath = Path.Combine(hostsRoot, "Excel", "ExcelDocumentSession.cs");
             var excelAdapterPath = Path.Combine(hostsRoot, "ExcelAdapter.cs");
             var excelFactoryPath = Path.Combine(hostsRoot, "Targets", "OfficeComAdapterProvider.cs");
             AssertTrue(File.Exists(excelBackendPath) &&
                 File.Exists(excelFindReplaceBackendPath) &&
-                File.Exists(excelSheetBackendPath) && File.Exists(excelSessionPath),
+                File.Exists(excelSheetBackendPath) &&
+                File.Exists(excelRangeMutationBackendPath) &&
+                File.Exists(excelSessionPath),
                 "production Excel families require one bound session and direct backends");
             foreach (var removedPath in new[]
             {
@@ -364,6 +368,8 @@ namespace RNAssistant.Harness
             var excelBackendSource = File.ReadAllText(excelBackendPath);
             var excelFindReplaceBackendSource = File.ReadAllText(excelFindReplaceBackendPath);
             var excelSheetBackendSource = File.ReadAllText(excelSheetBackendPath);
+            var excelRangeMutationBackendSource =
+                File.ReadAllText(excelRangeMutationBackendPath);
             var excelSessionSource = File.ReadAllText(excelSessionPath);
             var excelAdapterSource = File.ReadAllText(excelAdapterPath);
             var excelFactorySource = File.ReadAllText(excelFactoryPath);
@@ -390,13 +396,23 @@ namespace RNAssistant.Harness
                 excelSheetBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
                 "Excel sheet backend must use only typed bound-document contracts");
             AssertTrue(
+                excelRangeMutationBackendSource.IndexOf("session.BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
+                excelRangeMutationBackendSource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
+                excelRangeMutationBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                excelRangeMutationBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
+                "Excel range mutation backend must use only typed bound-document contracts");
+            AssertTrue(
                 excelAdapterSource.IndexOf("private Excel.Workbook ActiveWorkbook(", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("OfficeTargetDescriptor", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("_target.", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("case \"excel.find_cells\"", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("case \"excel.replace_cells\"", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("case \"excel.add_sheet\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.rename_sheet\"", StringComparison.Ordinal) < 0,
+                excelAdapterSource.IndexOf("case \"excel.rename_sheet\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.clear_range\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.sort_range\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.filter_range\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.format_range\"", StringComparison.Ordinal) < 0,
                 "Excel execution adapter must not retain ActiveWorkbook or descriptor fallback");
             AssertTrue(
                 excelFactorySource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&

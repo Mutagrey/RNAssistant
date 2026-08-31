@@ -29,6 +29,7 @@ namespace RNAssistant.Office.Tools
         private readonly ExcelWriteToolAdapter _excelWriteAdapter;
         private readonly ExcelFindReplaceToolAdapter _excelFindReplaceAdapter;
         private readonly ExcelSheetToolAdapter _excelSheetAdapter;
+        private readonly ExcelRangeMutationToolAdapter _excelRangeMutationAdapter;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
         private readonly TaskListToolExecutor _taskListToolExecutor;
         private readonly PlanDocumentToolExecutor _planDocumentToolExecutor;
@@ -75,6 +76,10 @@ namespace RNAssistant.Office.Tools
                 ? null : new ExcelFindReplaceToolAdapter(excelBackends.ExcelFindReplaceBackend);
             _excelSheetAdapter = excelBackends == null || excelBackends.ExcelSheetBackend == null
                 ? null : new ExcelSheetToolAdapter(excelBackends.ExcelSheetBackend);
+            _excelRangeMutationAdapter = excelBackends == null ||
+                excelBackends.ExcelRangeMutationBackend == null
+                ? null : new ExcelRangeMutationToolAdapter(
+                    excelBackends.ExcelRangeMutationBackend);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(
                 _adapter, _adapterTools, BeginLiveOfficeRead, ExecuteOfficeDataSourceUnderCurrentAccess);
             _taskListToolExecutor = new TaskListToolExecutor();
@@ -111,7 +116,8 @@ namespace RNAssistant.Office.Tools
             AppSettings settings, string mode, bool trace = true)
         {
             return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _excelWriteAdapter,
-                _excelFindReplaceAdapter, _excelSheetAdapter, _hostRuntime,
+                _excelFindReplaceAdapter, _excelSheetAdapter,
+                _excelRangeMutationAdapter, _hostRuntime,
                 session, snapshot, settings, mode, trace);
         }
 
@@ -435,7 +441,8 @@ namespace RNAssistant.Office.Tools
             {
                 if (dryRun && (ExcelWriteToolIds.Owns(command.ToolId) ||
                     ExcelFindReplaceToolIds.IsMutation(command.ToolId) ||
-                    ExcelSheetToolIds.Owns(command.ToolId)))
+                    ExcelSheetToolIds.Owns(command.ToolId) ||
+                    ExcelRangeMutationToolIds.Owns(command.ToolId)))
                 {
                     var validation = ValidateCommandArguments(command, tool);
                     if (validation != null) return validation;

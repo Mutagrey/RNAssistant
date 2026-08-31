@@ -1214,7 +1214,7 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend
         {
             private readonly FakeOfficeAdapter _inner;
 
@@ -1231,6 +1231,7 @@ namespace RNAssistant.Harness
             public IExcelWriteBackend ExcelWriteBackend { get { return this; } }
             public IExcelFindReplaceBackend ExcelFindReplaceBackend { get { return this; } }
             public IExcelSheetBackend ExcelSheetBackend { get { return this; } }
+            public IExcelRangeMutationBackend ExcelRangeMutationBackend { get { return this; } }
             public string HostName { get { return Session.Host; } }
             public string DocumentKey { get { return StaDispatcher.Invoke(() => Session.StableDocumentId); } }
             public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
@@ -1250,6 +1251,8 @@ namespace RNAssistant.Harness
             public ExcelSheetCollectionSnapshot Read() { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelSheetReadOperation); return _inner.Read(); }
             public void Add(ExcelAddSheetApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelSheetAddOperation); _inner.Add(request, markDispatchPossible); }
             public void Rename(ExcelRenameSheetApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelSheetRenameOperation); _inner.Rename(request, markDispatchPossible); }
+            public ExcelRangeMutationSnapshot Read(ExcelRangeMutationReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelRangeMutationReadOperation); return _inner.Read(request); }
+            public void Apply(ExcelRangeMutationApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelRangeMutationApplyOperation); _inner.Apply(request, markDispatchPossible); }
         }
 
         private sealed class BoundTestQueuedDispatcher : IOfficeStaDispatcher

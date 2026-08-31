@@ -17,6 +17,7 @@ namespace RNAssistant.Office
         private readonly IExcelWriteBackend _excelWriteBackend;
         private readonly IExcelFindReplaceBackend _excelFindReplaceBackend;
         private readonly IExcelSheetBackend _excelSheetBackend;
+        private readonly IExcelRangeMutationBackend _excelRangeMutationBackend;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
@@ -28,6 +29,7 @@ namespace RNAssistant.Office
             IExcelWriteBackend excelWriteBackend = null;
             IExcelFindReplaceBackend excelFindReplaceBackend = null;
             IExcelSheetBackend excelSheetBackend = null;
+            IExcelRangeMutationBackend excelRangeMutationBackend = null;
             _dispatcher.Invoke(delegate
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
@@ -37,6 +39,8 @@ namespace RNAssistant.Office
                 excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
                 excelFindReplaceBackend = excel == null ? null : excel.ExcelFindReplaceBackend;
                 excelSheetBackend = excel == null ? null : excel.ExcelSheetBackend;
+                excelRangeMutationBackend = excel == null
+                    ? null : excel.ExcelRangeMutationBackend;
                 return true;
             });
             _documentSession = documentSession;
@@ -44,6 +48,7 @@ namespace RNAssistant.Office
             _excelWriteBackend = excelWriteBackend;
             _excelFindReplaceBackend = excelFindReplaceBackend;
             _excelSheetBackend = excelSheetBackend;
+            _excelRangeMutationBackend = excelRangeMutationBackend;
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
@@ -68,6 +73,10 @@ namespace RNAssistant.Office
             get { return _excelFindReplaceBackend; }
         }
         public IExcelSheetBackend ExcelSheetBackend { get { return _excelSheetBackend; } }
+        public IExcelRangeMutationBackend ExcelRangeMutationBackend
+        {
+            get { return _excelRangeMutationBackend; }
+        }
 
         public string GetDocumentSnapshot(int maxChars)
         {
