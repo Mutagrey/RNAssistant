@@ -32,11 +32,13 @@ packs и собрать immutable evidence bundle; затем release contour п
 рядом с тем же `RNAssistant.Office.dll` и перезапуска приложения выполнить
 `release.candidate`; rebuilt binary требует нового полного evidence.
 
-## 2. WQ0 — blocking identity probe для 5B2
+## 2. WQ0 — deferred identity diagnostic для 11T0/7D
 
-Выполняется до production identity/factory switch через встроенный pack
-`excel.wq0.identity`. Если pack недоступен, сначала исправить packaging/bitness;
-не подменять его pass результатами [PowerShell fallback](../../tests/RNAssistant.ExcelIdentityProbe/README.md).
+По принятому 2026-08-31 риску WQ0 не блокирует production identity/factory switch:
+11T0/7D фиксирует текущий `RuntimeKey` на lifetime exact bound workbook и удаляет
+active-document fallback. Pack `excel.wq0.identity` выполняется затем как обязательная
+release qualification. Если pack недоступен, это остаётся `BLOCKED`, а не pass;
+не подменять его результатами [PowerShell fallback](../../tests/RNAssistant.ExcelIdentityProbe/README.md).
 
 Проверить:
 
@@ -45,8 +47,9 @@ packs и собрать immutable evidence bundle; затем release contour п
 - switch active workbook, close/reopen и Save As;
 - retained marshal reference, release/cleanup и отсутствие ложного равенства.
 
-Результат WQ0 — design evidence, а не общий pass Phase 5. После выбора identity нужен
-отдельный 5B2 switch и его targeted проверки; затем сценарии WQ-SESSION ниже.
+Результат WQ0 — diagnostic evidence, а не общий pass Phase 5. Failure исправляется
+в bound-session identity/lifetime contract без восстановления `ActiveWorkbook` или
+descriptor fallback; затем повторяются WQ-SESSION scenarios ниже.
 
 ## 3. Финальный прогон candidate
 

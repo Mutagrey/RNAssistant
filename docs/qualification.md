@@ -255,12 +255,14 @@ timestamps и file hashes. Он остаётся sidecar: встраивание
 Helper не является generic process runner: один versioned request/response contract,
 one-time local channel, explicit HWND/target, no network, no shell и bounded output.
 Identity decoder/lease имеют одного owner; существующий PowerShell probe остаётся
-engineering fallback до switch, затем duplicate reader удаляется.
+engineering fallback при дефекте qualification runner и не даёт release pass.
 
 Pass требует согласованного `(process id, process start, OXID, OID)` для одной live
 книги, различия разных lifetimes/targets и полный cleanup. `IPID`, path, HWND,
-IUnknown address и generated GUID не принимаются как shared identity. Результат WQ0
-разрешает отдельный production 5B2 design/switch, но сам его не закрывает.
+IUnknown address и generated GUID не принимаются как shared identity. По принятому
+2026-08-31 риску результат WQ0 не разрешает и не блокирует production 11T0/7D
+switch. Он проверяет bound-lifetime допущение перед release; failure требует
+исправить новый identity/session contract без возврата legacy fallback.
 
 ## 8. Начальный catalog полноценных задач
 

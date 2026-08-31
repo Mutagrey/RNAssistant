@@ -1,8 +1,9 @@
 # ADR-0005: Bound document sessions and host access
 
-Status: accepted. Phase 5A extracted the access boundary; 5B1 introduces its neutral
-session contract and operation gate. Actual Excel binding/identity remains 5B2,
-including Windows qualification.
+Status: accepted. Phase 5A extracted the access boundary; 5B1 introduced its neutral
+session contract and operation gate. The 2026-08-31 accepted-risk decision removes
+WQ0 as a blocking prerequisite and re-owns the actual Excel binding plus legacy
+removal in one 11T0/7D switch. Windows qualification remains unperformed.
 
 ## Context
 
@@ -18,7 +19,7 @@ that a live object survived close/reopen or an active-window change.
   catalog policy and domain preparation stay with their current owners. The runtime
   receives only the document expectation, access flags and the synchronous operation;
   it does not receive a chat session, controller, model client or tool catalog.
-- Phase 5B1 introduces `IOfficeDocumentSession`; 5B2 adds `ExcelDocumentSession` under the
+- Phase 5B1 introduces `IOfficeDocumentSession`; 11T0/7D adds `ExcelDocumentSession` under the
   [Document Session v1 contract](../stabilization/STABILIZATION_MASTER_PLAN.md#79-document-session-v1).
   A session holds one live document object, its stable/runtime identities, STA
   dispatcher, liveness check and gate. Descriptor/active-document resolution occurs
@@ -86,17 +87,19 @@ a successful empty list remains cacheable. Closed bound sessions cannot reuse
 cached document tools. The former direct
 controller capture and catalog guard-only scope are removed.
 
-This independently switches the remaining read roots while the prerequisite
-Windows identity qualification blocks factory switching. Neutral fixtures cover
-root isolation, owner dispatch, failure cleanup, target/close rejection and cache
-behavior, not real controller/WebView/COM execution.
+This independently switches the remaining read roots. The former prerequisite
+Windows identity gate was later retired by the accepted-risk decision below;
+neutral fixtures still cover only root isolation, owner dispatch, failure cleanup,
+target/close rejection and cache behavior, not real controller/WebView/COM
+execution.
 
-## 5B2 identity candidate — qualification pending
+## 5B2 identity candidate — diagnostic only
 
 The diagnostic candidate is a retained standard COM marshal reference and its
-OXID/OID, scoped by the local Excel process and creation time. It is not yet the
-production runtime identity. The isolated [Excel identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md)
-records independent observations without modifying workbooks or switching factories.
+OXID/OID, scoped by the local Excel process and creation time. It is not production
+runtime identity. The isolated [Excel identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md)
+records independent observations without modifying workbooks or switching factories;
+it is optional regression evidence, not a cutover prerequisite.
 Only OBJREF_STANDARD/IUnknown is supported; any other format or cross-client mismatch
 blocks the candidate. No fallback to local pointer, path, HWND or a generated ID.
 
@@ -108,17 +111,17 @@ must remain separate from a retained COM reference. The diagnostic reader/resolv
 has no production consumer and is removed or replaced by the qualified implementation
 at the 5B2 candidate decision; it is not an additional runtime path.
 
-## Remaining switch and qualification
+## Production switch and deferred qualification
 
-Phase 5B2 replaces the remaining legacy identity/binding together with all Excel factories and access
-consumers. The active-workbook fallback and repeated descriptor lookup still have
-live consumers; their removal requires the bound switch and Windows tests recorded
-in the [migration map](../stabilization/MIGRATION_MAP.md).
+The next 11T0/7D change replaces the remaining legacy identity/binding together
+with all Excel factories and access consumers. The active-workbook fallback and
+repeated descriptor lookup still have live consumers; their removal is atomic with
+the bound switch recorded in the [migration map](../stabilization/MIGRATION_MAP.md).
 
-One live identity must be shared by desktop, VSTO and native clients/proxies. The
+One live identity should be shared by desktop, VSTO and native clients/proxies. The
 current local `IUnknown` address is not proof of that identity across apartments or
-processes; a path, HWND or per-adapter GUID is not a substitute. The identity and
-ownership mechanism must be chosen and qualified before switching factories.
+processes; a path, HWND or per-adapter GUID is not a substitute. This uncertainty is
+an accepted deferred risk rather than a factory-switch blocker.
 The direct context/catalog access switch delivered above does not qualify this
 production identity mechanism or its UI/STA behavior.
 
@@ -126,3 +129,21 @@ Fake host checks can cover ordering, cancellation and access release. They canno
 close the Windows x64 + Office + VS 2022 gates for STA/COM identity, workbook switches,
 close/reopen, Save As, multiple windows/chats, manual/resource access or UI waits.
 R04 remains open; Excel effect verification itself remains Phase 7.
+
+## 2026-08-31 accepted-risk cutover decision
+
+By explicit user decision, WQ0 no longer blocks production binding. One atomic
+11T0/7D switch binds the workbook selected at pane/target creation, creates one
+`ExcelDocumentSession`, passes only its `BoundDocumentObject` to the direct interop
+backend, and deletes the compatibility backend plus execution-time
+`ActiveWorkbook`/descriptor lookup. No nullable/unbound session or typed wrapper
+over `ExecuteTool(ToolCommand)` is an allowed intermediate state.
+
+The first implementation captures the existing `DocumentIdentity.RuntimeKey` once
+for that bound object and lifetime. This is explicit risk acceptance, not proof that
+independently resolved proxies/processes share an identity. WQ0 remains optional
+diagnostic/regression tooling and is still required as part of release qualification;
+it is not runtime authority or a pre-cutover gate. Windows close/reopen, Save As,
+multi-window/client and cross-proxy scenarios remain unperformed qualification.
+Failures found later are fixed against the bound-session contract; legacy
+active-document fallback must not return.

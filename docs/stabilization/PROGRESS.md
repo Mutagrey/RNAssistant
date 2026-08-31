@@ -2,12 +2,12 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 migration contours — перенос всех существующих tools и удаление active legacy architecture явно обязательны до Phase 12; новые optional product features этим не добавлены
-Current task: pre-R37 trajectory accepted-call inference removed host-neutral after fixing the mandatory remaining-legacy route; real Windows/live-provider gates remain open.
-Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy теперь обязательны, но реальные Windows/live-provider gates идут независимо и не могут быть закрыты локальными tests.
+Current task: accepted-risk WQ0 decision synchronized; atomic 11T0/7D production bound Excel cutover is next. Real Windows/live-provider gates remain open.
+Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy обязательны. WQ0 больше не блокирует implementation: текущий `RuntimeKey` exact bound workbook принимается как lifetime assumption; реальные Windows/live-provider gates остаются deferred evidence и не могут быть закрыты локальными tests.
 
-Next step for tools: на реальном Windows выполнить WQ0; затем один атомарный production change 11T0/7D связывает retained workbook с `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой bound backend и удаляет compatibility commands/backends и `ActiveWorkbook`/descriptor execution fallback. Промежуточного production 5B2 поверх старого backend быть не должно.
+Next step for tools: один атомарный production change 11T0/7D связывает exact выбранный workbook с `ExcelDocumentSession`, фиксирует его текущий `RuntimeKey` на bound lifetime, переключает factories и typed Excel read/write на прямой backend и удаляет compatibility commands/backends и `ActiveWorkbook`/descriptor execution fallback. Промежуточного production 5B2 поверх старого backend быть не должно; WQ0 выполняется позже как diagnostic/regression.
 Required context: [master WQ/Phase 11](STABILIZATION_MASTER_PLAN.md), [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md), [architecture follow-ups](ARCHITECTURE_FOLLOWUPS.md), [migration map](MIGRATION_MAP.md), current 5B2/7D owners.
-Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. 11T0 runtime work is blocked by real WQ0; after it, existing Office tools move family-by-family and the final switch removes `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime and WQ-SESSION are open. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3 and 11D1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. 11T0 is the next runtime step under accepted identity risk; afterward existing Office tools move family-by-family and the final switch removes `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, host tool-id switches, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and remaining UI/domain compatibility projections. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO/helper compile, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0 and WQ-SESSION are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
 Pre-R37 trajectory inference removal (2026-08-31): `TrajectoryRunProjection` and
 `TrajectoryDerivedProjection` no longer reinterpret a persisted
@@ -17,14 +17,17 @@ metadata; `tool-execution` grants it neither call nor completed-result authority
 No history is rewritten or deleted. Focused trajectory harness 4/4 passes; Windows
 Diagnostics/WebView qualification remains open.
 
-Complete active-legacy removal decision (2026-08-31, docs-only): пользователь
+Accepted-risk WQ0 decision and complete active-legacy removal (2026-08-31,
+docs-only): пользователь
 потребовал перенести все существующие tools на typed architecture и удалить legacy
 execution/history paths до Phase 12. Это не допускает big-bang rewrite и не добавляет
 новые Browser/Automation/product capabilities: каждый existing semantic family
-переключается отдельно с удалением последнего старого consumer. WQ0 остаётся внешним
-evidence prerequisite; следующий code change после него атомарно объединяет production
-5B2 и 7D, чтобы bound workbook никогда не сосуществовал в production с compatibility
-Excel backend. Canonical route и removal gates обновлены; runtime не менялся.
+переключается отдельно с удалением последнего старого consumer. По явному решению
+WQ0 больше не prerequisite: 11T0/7D атомарно принимает текущий `RuntimeKey` exact
+bound workbook на его lifetime, чтобы bound workbook никогда не сосуществовал в
+production с compatibility Excel backend. WQ0 остаётся deferred Windows evidence;
+при выявленном расхождении исправляется новый bound contract без возврата legacy.
+Canonical route и removal gates обновлены; runtime этим решением не менялся.
 
 Artifact identity authority audit completion (2026-08-31): normalization no longer
 selects one of duplicate case-insensitive artifact ids. Exact URI/reachability,
@@ -473,19 +476,21 @@ Deferred Windows qualification mode (2026-08-29, docs-only decision): польз
 cleanup и отдельный commit; статус до реального прогона — только `done host-neutral`.
 Накопленные COM/VSTO/WebView/live-provider scenarios сведены в
 [Windows qualification runbook](WINDOWS_QUALIFICATION_RUNBOOK.md) и обязательный
-Milestone WQ перед Phase 12. Неизвестная Office semantics не угадывается: WQ0 Excel
-identity probe остаётся prerequisite production factory switch. Непроверенный build —
+Milestone WQ перед Phase 12. На дату решения WQ0 Excel identity probe считался
+prerequisite production factory switch; это условие отменено принятым риском
+2026-08-31, а сам WQ0 сохранён обязательным release evidence. Непроверенный build —
 `16.1.0-dev` qualification candidate, не stable/beta/RC. 9C UI и Phase 6C–6G
 mutation slices выполнены отдельными host-neutral changes; 6H зафиксировал scope,
 6I package runtime/R41 и 6J rename/R42 выполнены host-neutral; 7A audit и 7B typed
-Excel reads и verified `write_range` завершены host-neutral; 7D ждёт WQ0/5B2, а
+Excel reads и verified `write_range` завершены host-neutral; 7D позже объединён с
+accepted-risk atomic 11T0/5B2 без ожидания WQ0, а
 Phase 8A immutable execution snapshot, 8B callable lifecycle/admission, 8C durable
 reconstruction и 8D resource data-plane cutover завершены host-neutral; 9D1 audit,
 9D2 same-process fail-stop reload/reconciliation, 9D3 typed event
 classification/`IEventStore`, 9D4 minimal `IConversationStore` и 9D5 immutable
 `RunViewState` завершены host-neutral; 10A audit, 10B1/10B2 host moves и 10C1 façade
 move, resource projection 10C2 и final audit 10D также завершены; следующий этап —
-Windows Milestone WQ, начиная с WQ0.
+Windows Milestone WQ. Текущий следующий runtime step уточнён в заголовке документа.
 Windows WQ-UI/VBE/Excel не считаются
 закрытыми локальными проверками.
 
@@ -706,7 +711,8 @@ cancellation, unreadable/divergent state после boundary — non-retryable `
 Ragged tables null-pad детерминированно; 100000-cell/dimension bounds проверяются до
 COM matrix allocation/assignment. Public host case и четыре старых write helpers
 удалены. Временные read/apply internal commands и current resolver явно остаются до
-7D после WQ0/5B2. 15 distinct focused write/read/catalog/HTML/source checks pass;
+atomic 11T0/7D; прежний WQ0 prerequisite отменён решением 2026-08-31. 15 distinct
+focused write/read/catalog/HTML/source checks pass;
 MockDemo compile — 0 errors / 3 existing CA1416. Real Excel formula/value
 normalization, mixed formulas, protected sheets, COM fault timing, close/switch и
 production factories остаются WQ-EXCEL. Version/diff checks pass; 176 local links
@@ -954,18 +960,18 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 3 | done host-neutral | 3A: `f01c3f2`; 3B1: `c1628ce`; 3B2: `15dea46` | 130 unique targeted cases; MockDemo compile; [evidence](PHASE_3B2_KERNEL_CUTOVER.md) | not performed | Production kernel switch + minimal real-store replay; Phase 4 отдельно |
 | 2/3 R29 | done host-neutral | `6a256f0` | 141 unique targeted cases; MockDemo compile; [evidence](R29_RUNTIME_CALL_IDS.md) | not performed | Runtime IDs + v4; no v3 fallback, product version unchanged |
 | 4 | done host-neutral: 4A + 4B | 85cc3f4 (4A); b754443 (4B) | 4B: 127 distinct targeted pass; MockDemo 0 errors / 3 existing CA1416 | not performed | [ToolRuntime](PHASE_4A_TOOL_RUNTIME.md), [v1 wire/cleanup](PHASE_4B_TOOL_RESULT_V1.md); domain/Windows gates remain |
-| 5 | 5A + 5B1 done host-neutral; 5B2 read switch done, identity probe ready | 3a6c2aa (5A); a1b3d80 (5B1); 1ea3ce0 (5B2) | [read checks](#phase-5b2--direct-contextcatalog-reads), [probe checks](#phase-5b2--identity-qualification-probe) | not performed | Production binding blocked on identity qualification |
+| 5 | 5A + 5B1 done host-neutral; 5B2 read switch done, identity probe ready; production binding is atomic 11T0/7D | 3a6c2aa (5A); a1b3d80 (5B1); 1ea3ce0 (5B2) | [read checks](#phase-5b2--direct-contextcatalog-reads), [probe checks](#phase-5b2--identity-qualification-probe) | not performed | Production binding is next under explicit `RuntimeKey` lifetime assumption; Windows identity evidence open |
 | 6 | 6A–6J done host-neutral | `e0360f3` (6A); `62010c8` (R33); `dde18cf` (6B); through `cd0bd61` (6G); [6H](PHASE_6H_VBA_PACKAGE_SCOPE.md); [6I](PHASE_6I_VBA_PACKAGE_LIFECYCLE.md); [6J](PHASE_6J_VBA_RENAME.md) | 6I package + 6J rename fault matrices; full VBA regression in linked reports | deferred | Full VBA/Windows gate open; R41/R42 runtime fixed host-neutral |
-| 7 | 7A–7C done host-neutral; 7D pending WQ0/5B2 | [7A](PHASE_7A_EXCEL_SCOPE.md); [7B](PHASE_7B_EXCEL_READ.md); [7C](PHASE_7C_EXCEL_WRITE.md) | 7C: 15 distinct focused cases; MockDemo compile | not performed | Typed reads and verified write_range switched; WQ-EXCEL and bound production backend open |
+| 7 | 7A–7C done host-neutral; atomic 11T0/7D pending | [7A](PHASE_7A_EXCEL_SCOPE.md); [7B](PHASE_7B_EXCEL_READ.md); [7C](PHASE_7C_EXCEL_WRITE.md) | 7C: 15 distinct focused cases; MockDemo compile | not performed | Typed reads and verified write_range switched; direct bound backend next, WQ0/WQ-EXCEL evidence open |
 | 8 | 8A–8D done host-neutral; WQ-PACK pending | [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md), [8C](PHASE_8C_TOOL_PACK_EVENTS.md), [8D](PHASE_8D_RESOURCE_DATA_PLANE.md) | 8D: 74 distinct targeted pass; MockDemo compile | not performed | Execution/callable authority, durable reconstruction and four native resource handlers switched; WQ-PACK open |
 | 9 | 9A–9D5 done host-neutral; Windows acceptance pending | through `9bbf088` | 9D5: 99 targeted harness, web 70/70, MockDemo compile | not performed | Diagnostics/viewer, typed persistence ports and immutable RunViewState switched; R37/WQ-UI open |
-| 10 | done host-neutral: 10A–10D | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [10D](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md) | 10D: architecture 4/4; source inclusion 1/1 | not performed | mandatory host-neutral route complete; WQ-A contract next, then WQ0; R49 fixed host-neutral |
+| 10 | done host-neutral: 10A–10D | [10A](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [10D](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md) | 10D: architecture 4/4; source inclusion 1/1 | not performed | mandatory structural route complete; WQ-A complete, 11T migration active; R49 fixed host-neutral |
 | 11A | done host-neutral: 11A1–11A2 | [11A1](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md), [11A2](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md) | 11A2: harness 9/9; web 10/10; MockDemo full self-test | not performed | Commit projection + exact Library heads/history/classes/labels; Plan/HTML/viewer slices and R51 Windows gates remain |
 | 11B | done host-neutral: 11B1–11B3 | [11B1](PHASE_11B1_PLAN_REVISION_GUARD.md), [11B2](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md), [11B3](PHASE_11B3_PLAN_HISTORY_HANDOFF.md) | 11B3: web Plan 7/7; Artifact Library 3/3; JS syntax 4/4 | not performed | Complete exact Plan lineage/restore/removal/history/handoff contour; Windows WebView remains |
 | 11C | done host-neutral: 11C1–11C3 | [11C1](PHASE_11C1_HTML_LINEAGE.md), [11C2](PHASE_11C2_HTML_IMPORT_PREVIEW.md), [11C3](PHASE_11C3_HTML_BINDING_EXPORT.md) | 11C3: harness 8/8; web 21/21; JS syntax | not performed | Unique lineage, inert exact import and one guarded exact binding/recovery/export checkpoint path switched; Windows WebView/Office remains |
 | 11D | in progress: 11D1 done host-neutral | [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md) | harness 4/4; web 48/48; JS syntax | not performed | Exact bounded text/source + complete-only sanitized Markdown switched; image/PDF/audio and Windows WebView remain |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
-| 11 | in progress by explicit early milestone | 11A–11D1 evidence above | targeted per substep | not performed | Artifact Workbench first; then Issue Center/Tool Inspector, Host Fabric and qualified host verticals; not a Phase 12 gate |
+| 11 | in progress; 11T existing-tool migration/final legacy cleanup mandatory | 11A–11D1 evidence above; 11T pending | targeted per substep | not performed | 11T0/7D next, then all existing families and final generic-dispatch/adapter removal before Phase 12; new optional product contours are not gates |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
 ## Phase 0 substeps
@@ -1595,9 +1601,10 @@ call sites. Runtime, schemas, factories, COM и tests не менялись.
 Зафиксирован ordered route: 7B атомарно переключает весь `excel.inspect` selector
 family и `excel.read_range` на typed read owner/native handlers; HTML data использует
 тот же read adapter. 7C отдельно переносит только `excel.write_range` с exact
-before/read-back и typed effect evidence. 7D после WQ0/5B2 подаёт extracted interop
+before/read-back и typed effect evidence. Atomic 11T0/7D подаёт extracted interop
 backend только bound workbook и удаляет compatibility resolver/internal command
-seam. Ни один substep не расширяет scope на другие Excel mutations.
+seam; WQ0 больше не блокирует implementation. Ни один substep не расширяет scope на
+другие Excel mutations.
 
 `inspect(kind=charts)` означает только metadata read внутри уже существующего public
 tool; `create_chat_chart`, chart/table mutations и formatting исключены. Range limit
@@ -1614,13 +1621,13 @@ harness не запускались. Следующий отдельный ша�
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
 | Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Unmigrated Office/domain handlers → kernel records | Remaining mandatory 7D where applicable or admitted 11T handler slices; R23 remains |
-| LegacyToolDefinitionAdapter | ToolRuntime | Current legacy catalog/schema/authoring and execution consumers listed in `MIGRATION_MAP.md`; resource projection removed | Actual 5B2/7D, admitted 11T built-in switch or 11J authoring switch; `ProjectRead` removed in 10C2, no resource dependency |
+| LegacyToolDefinitionAdapter | ToolRuntime | Current legacy catalog/schema/authoring and execution consumers listed in `MIGRATION_MAP.md`; resource projection removed | Atomic 11T0/7D where applicable, mandatory 11T built-in switches and 11J authoring switch; `ProjectRead` removed in 10C2, no resource dependency |
 | LegacyToolResultAdapter | ToolRuntime | Active legacy domain executors → typed result materialization | Remaining mandatory 7D where applicable or admitted 11T handler slices; no old-history reader |
 | ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 runtime state switched; remaining manual/domain presentation consumers leave with 7D or admitted 11T slices |
-| Unbound host identity/access | HostRuntime / host factories | Production adapters, including gated context/catalog reads | 5B2 bound Excel/common lifetime identity + Windows gates; neutral gate не удаляет этот legacy |
-| `VbaMutationDocumentContextAdapter` / `VbaMutationReaderAdapter` / `VbaMutationBackendAdapter` | VBA / Tools | Typed mutation service over current wide host and legacy read/mutation results; backend serves patch, whole write/rename, delete and restore | Document context: WQ0/5B2. Remaining direct-handler/typed-host cleanup: separate optional Phase 11 slice after 5B2; not a Phase 10/12 blocker |
-| `VbaPackageToolAdapter` / `VbaPackageBackendAdapter` | VBA / Tools | Existing 6I package service over current ToolDefinition/host command/result seams | Separate optional Phase 11 dynamic-tool/package direct-handler slice after 5B2; one-way mapping only, no domain legacy result/history |
-| `VbaMutationToolResultMapper` | VBA / Tools | Current VBA executor → legacy handler boundary | Separate optional Phase 11 direct typed ToolRuntime handler switch after 5B2; no model-history reader; completed Phase 8 is not its removal gate |
+| Unbound host identity/access | HostRuntime / host factories | Production adapters, including gated context/catalog reads | Atomic 11T0/7D bound Excel switch first; other hosts in mandatory 11T6–11T8. Windows gates remain evidence, not fallback owners |
+| `VbaMutationDocumentContextAdapter` / `VbaMutationReaderAdapter` / `VbaMutationBackendAdapter` | VBA / Tools | Typed mutation service over current wide host and legacy read/mutation results; backend serves patch, whole write/rename, delete and restore | Document context after 11T0; mandatory 11T9 direct-handler/typed-host cleanup before Phase 12 |
+| `VbaPackageToolAdapter` / `VbaPackageBackendAdapter` | VBA / Tools | Existing 6I package service over current ToolDefinition/host command/result seams | Mandatory 11T9/11J direct-handler/authoring switch before Phase 12; one-way mapping only, no domain legacy result/history |
+| `VbaMutationToolResultMapper` | VBA / Tools | Current VBA executor → legacy handler boundary | Mandatory 11T9 direct typed ToolRuntime handler switch before Phase 12; no model-history reader |
 
 `VbaMutationJournalStoreAdapter`, `VbaPackageJournalStoreAdapter` и
 `VbaRenameJournalStoreAdapter` — permanent narrow ports к тому же

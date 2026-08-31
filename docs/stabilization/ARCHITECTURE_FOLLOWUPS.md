@@ -3,12 +3,12 @@
 Дата фиксации: 2026-08-30; статус маршрута обновлён 2026-08-31.
 
 Статус: ordered migration route, не описание уже реализованной архитектуры. Phase
-10A–10D и WQ-A1–A5 завершены host-neutral; следующий обязательный runtime gate —
-Windows WQ0, затем атомарный production 11T0/7D, по `PROGRESS.md`. Section B и
-финальное удаление active legacy явно обязательны до Phase 12. Новые optional product
-capabilities этим не допускаются. Если другое предложение становится обязательным,
-сначала обновляются master plan/ADR и `MIGRATION_MAP.md` с owner, consumers и removal
-gate.
+10A–10D и WQ-A1–A5 завершены host-neutral. По принятому 2026-08-31 риску WQ0 больше
+не блокирует следующий atomic 11T0/7D bound Excel switch; Windows evidence остаётся
+не выполненным. Section B и финальное удаление active legacy обязательны до Phase 12.
+Новые optional product capabilities этим не допускаются. Если другое предложение
+становится обязательным, сначала обновляются master plan/ADR и `MIGRATION_MAP.md` с
+owner, consumers и removal gate.
 
 ## Целевой путь
 
@@ -40,13 +40,14 @@ store, model wire или UI-owned effect classification.
    canonical docs, migration statuses, project includes и checks.
 4. WQ-A создал data-only packs, production-path runner и встроенный WQ0 без второго
    executor/store; [qualification contract](../qualification.md) обязателен.
-5. При доступной Windows: выполнить in-app WQ0. Затем один production 11T0/7D
-   change атомарно вводит 5B2 bound `DocumentSession`/factories, прямой Excel backend
-   и удаляет compatibility commands/backends плюс execution fallback; неизвестную
-   COM identity semantics не угадывать.
+5. Один production 11T0/7D change атомарно вводит bound `ExcelDocumentSession`/
+   factories, фиксирует текущий `RuntimeKey` на lifetime exact выбранной книги,
+   подключает прямой Excel backend и удаляет compatibility commands/backends плюс
+   execution-time active-document fallback. Это явное допущение до Windows evidence.
 6. Затем ранний 11T переводит built-in Office tools по semantic families; каждый
-   switch удаляет свой legacy host path. До WQ0/11T0/7D не создавать compatibility
-   scaffolding, которое всё равно вызывает `ExecuteTool(ToolCommand)`.
+   switch удаляет свой legacy host path. Не создавать compatibility scaffolding,
+   которое всё равно вызывает `ExecuteTool(ToolCommand)`; WQ0 выполняется позже как
+   diagnostic/regression и не возвращает прежний gate.
 7. После family switches обязательны direct VBA/controller/custom authoring
    migrations и финальное удаление generic adapter catalog/dispatch, legacy
    definition/result/UI bridges; старая trajectory inference уже удалена отдельным
@@ -95,7 +96,8 @@ string-based host dispatch.
 
 ### Gate и DoD
 
-- Начинать после 5B2/7D для stable Excel либо внутри отдельного Phase 11 host contour.
+- Начинать с атомарного 11T0/7D bound Excel switch; WQ0 не является prerequisite,
+  но qualification не считается выполненной.
 - Один change переключает одну capability family и удаляет заменённый path.
 - Tests подтверждают document identity, dispatcher/lifetime и отсутствие второго
   dispatch route; COM behavior отдельно квалифицируется на Windows.

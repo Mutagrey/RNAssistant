@@ -1470,13 +1470,13 @@ Compatibility adapter имеет владельца, срок удаления �
 3. **Qualified** — статус допустим только после прогона затронутых сценариев на
    зафиксированном Windows build и сохранения evidence.
 
-Открытый Windows gate не блокирует следующий независимый host-neutral slice. Если
-следующий switch зависит от неизвестного реального поведения COM/VSTO/WebView2,
-семантику нельзя выбирать по fake-host тестам или предположению: зависимый switch
-остаётся blocked, готовится минимальный probe, а работа продолжается только в
-независимом контуре. Первый такой обязательный probe — 5B2 Excel lifetime identity;
-его результаты нужны **до** production identity/factory switch. Это один design-input
-gate, а не требование постоянно прогонять всю программу на Windows.
+Открытый Windows gate не блокирует следующий host-neutral slice. Если switch зависит
+от неизвестного реального поведения COM/VSTO/WebView2, допущение и риск фиксируются
+явно, готовится минимальный probe, а статус остаётся только `done host-neutral` до
+qualification. Решением 2026-08-31 production 11T0/7D принимает текущий
+`DocumentIdentity.RuntimeKey`, захваченный один раз на lifetime exact bound workbook;
+WQ0 проверяет это допущение как diagnostic/regression evidence, но не блокирует
+implementation. Он и полный Windows matrix обязательны до Phase 12/release.
 
 После host-neutral реализации обязательных контуров создаётся воспроизводимый
 `16.1.0-dev` qualification candidate. Он не называется stable, beta или RC. Единый
@@ -1772,15 +1772,17 @@ Evidence: [Phase 3B2 cutover](PHASE_3B2_KERNEL_CUTOVER.md). Host-neutral DoD з�
 - 5B1: нейтральный session port и общий operation gate; guard/preparation, manual/resource/editor access, STA handoff и cancellation. Production Excel binding этим подэтапом не вводится, R04 открыт.
 - 5B2: ExcelDocumentSession/factories и единая runtime lifetime identity для desktop/VSTO/native; direct context/catalog reads и полный identity/lifetime/Windows switch. Локальный IUnknown pointer, path/HWND или per-adapter GUID не подменяют identity одного живого документа.
 
-Production checklist 5B2 закрывается только внутри post-WQ0 атомарного 11T0/7D:
-bound session/factories, прямой Excel read/write backend и удаление compatibility
-execution path переключаются одним change без промежуточного production состояния.
+Production checklist 5B2 закрывается только внутри атомарного 11T0/7D: bound
+session/factories, захваченный на lifetime текущий `RuntimeKey`, прямой Excel
+read/write backend и удаление compatibility execution path переключаются одним
+change без промежуточного production состояния. WQ0 остаётся последующим evidence,
+а не prerequisite.
 
 ### Выполнить
 
 - [x] 5B1: ввести `IOfficeDocumentSession` и нейтрального consumer в HostRuntime; production providers появятся только в 5B2.
 - [x] 5B2: подготовить отдельный [identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md) кандидата OXID/OID с retained marshal reference; production identity не переключать по результатам parser tests.
-- [ ] 5B2: квалифицировать candidate lifetime и равенство desktop/VSTO/native на Windows до выбора production identity и switch factories.
+- [ ] 5B2/WQ0: квалифицировать принятое lifetime identity допущение и равенство desktop/VSTO/native на Windows; это обязательное release evidence, не blocker implementation.
 - [ ] Ввести `ExcelDocumentSession`.
 - [x] 5A: выделить текущую document access/serialization из `OfficeToolExecutor` в `HostRuntime`; старые helpers удалить.
 - [ ] 5B2: выделить выбор/удержание workbook из `ExcelAdapter`; write/read-back должны получать тот же bound object. Charts/formatting и прочие host adapters не рефакторить попутно.
@@ -2018,7 +2020,7 @@ consumer map и порядок — в [6H evidence](PHASE_6H_VBA_PACKAGE_SCOPE.m
 - [x] 7C: перенести только `excel.write_range` в typed write owner/native handler; прочие Excel mutations остаются legacy. [Evidence](PHASE_7C_EXCEL_WRITE.md).
 - [x] 7C: добавить exact before/read-back verification и различать `VerifiedNoChange`, `VerifiedChange`, definite pre-dispatch `error` и non-retryable post-dispatch `unknown`.
 - [x] 7C: сохранить deterministic null-padding ragged tables и применить size limits до COM matrix allocation/assignment.
-- [ ] 11T0/7D после real WQ0: одним production change ввести 5B2 bound session/factories, передать extracted interop backend только `ExcelDocumentSession.BoundDocumentObject` и удалить internal compatibility backend плюс `ActiveWorkbook`/descriptor execution fallback.
+- [ ] 11T0/7D: одним production change ввести 5B2 bound session/factories, захватить текущий `RuntimeKey` exact workbook на bound lifetime, передать extracted interop backend только `ExcelDocumentSession.BoundDocumentObject` и удалить internal compatibility backend плюс `ActiveWorkbook`/descriptor execution fallback; WQ0 оставить открытым deferred evidence.
 - [ ] Добавить host-neutral tests:
   - [x] все `inspect` selectors и общий Agent/manual/HTML read owner;
   - [x] values;
@@ -2269,13 +2271,13 @@ evidence и карта владельцев заданы в
 1. Завершить WQ-A1–A5: runner/UI, встроенный `excel.wq0.identity`, suite catalog и
    exact-build release evidence; manual probe
    остаётся только engineering fallback при дефекте самого runner-а.
-2. На первом Windows candidate выполнить WQ0 для 5B2 и зафиксировать observations.
-   Затем атомарный 11T0/7D change выбирает production identity/factory semantics,
-   вводит direct bound Excel backend, удаляет compatibility execution path и повторяет
-   его host-neutral проверки до Windows WQ-SESSION/WQ-EXCEL.
+2. До Windows candidate атомарно выполнить 11T0/7D: bound Excel session/factories,
+   direct backend и удаление compatibility execution path с текущим `RuntimeKey` как
+   явным lifetime assumption.
 3. Собрать один versioned `16.1.0-dev` candidate из известного commit; полный
    host-neutral harness, architecture tests и compatible BuildEvidenceManifest зелёные.
-4. Выполнить packs/runbook по контурам: baseline/controller, DocumentSession, VBA,
+4. На этом exact build выполнить WQ0 как diagnostic/regression принятого identity
+   assumption, затем packs/runbook по контурам: baseline/controller, DocumentSession, VBA,
    Excel, Resource/ToolPack, persistence/UI/WebView и сквозные fault/restart scenarios.
 5. Для каждого failure сохранить causal export/source IDs, expected/actual и назначить
    owner Phase 5–9 либо cross-cutting gate. Не исправлять разные контуры одним commit.
@@ -2301,9 +2303,10 @@ core параллельно WQ. Последующим явным решение
 execution/history paths должны быть перенесены или удалены до Phase 12; это делает
 11T и финальную legacy cleanup обязательными, но не добавляет новые optional Browser,
 Automation или иные product capabilities. Каждый semantic contour остаётся отдельным
-изменением. Production 11T начинается только после реального WQ0; следующий code
-change атомарно объединяет production 5B2 и 7D, не оставляя промежуточного bound
-`DocumentSession` поверх compatibility backend. Typed façade над
+изменением. Production 11T начинается с атомарного 11T0/7D под явно принятым
+`RuntimeKey` lifetime assumption и не оставляет промежуточного bound
+`DocumentSession` поверх compatibility backend. WQ0 остаётся последующим обязательным
+Windows evidence. Typed façade над
 `ExecuteTool(ToolCommand)` или nullable/unbound `DocumentSession` не считается
 миграцией и не разрешён как способ обойти gate.
 
@@ -2316,10 +2319,9 @@ transport или execution authority.
 
 Приоритет пересмотрен 2026-08-31 вокруг четырёх пользовательских outcomes:
 полноценный Artifact/Plan/HTML Workbench, надёжные typed Office tools, понятный UI и
-все Office hosts из одного окна. 11T становится первым Office-runtime контуром сразу
-после WQ0 и атомарного 11T0/7D; пока этот Windows gate недоступен, могут продолжаться
-только уже
-допущенные независимые Artifact slices. Read-only visibility идёт раньше authoring,
+все Office hosts из одного окна. 11T становится первым Office-runtime контуром с
+атомарного 11T0/7D; отсутствие Windows не блокирует его host-neutral implementation,
+но оставляет WQ0/WQ-SESSION/WQ-EXCEL открытыми. Read-only visibility идёт раньше authoring,
 а локальная работоспособность каждого host — раньше публикации его cross-process
 endpoint.
 
@@ -2365,15 +2367,14 @@ endpoint.
    Every slice keeps `ViewerRegistry` UI-only and has its own MIME/security/vendor/
    lifetime tests. The milestone ends with Windows WebView qualification of
    Artifacts, Plan and HTML together, including reload, history and large payloads.
-5. **11T — typed Office tools и удаление legacy host dispatch — admitted, gate
-   open:**
-   - 11T0/7D: real Windows WQ0 является отдельным evidence prerequisite. После него
-     один атомарный production change связывает retained workbook с
+5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
+   - 11T0/7D: один атомарный production change связывает exact выбранный workbook с
      `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой
      bound backend, затем физически удаляет compatibility commands/backends и
-     `ActiveWorkbook`/descriptor execution fallback. Не оставлять промежуточный
-     production 5B2 над `_adapter.ExecuteTool` и не угадывать COM identity/lifetime
-     на fake host;
+     `ActiveWorkbook`/descriptor execution fallback. Текущий `RuntimeKey` захватывается
+     один раз на bound lifetime как явное допущение. Не оставлять промежуточный
+     production 5B2 над `_adapter.ExecuteTool`; WQ0/WQ-SESSION/WQ-EXCEL остаются
+     обязательным deferred evidence и не возвращают fallback;
    - 11T1–11T5: переносить существующие Excel capabilities по families:
      find/replace, sheet lifecycle, clear/sort/filter/format, tables, charts;
    - 11T6–11T8: Word, PowerPoint и Outlook по одному host vertical. Каждый сначала
@@ -2893,8 +2894,9 @@ Release qualification
 Optional contours — отдельные последующие milestones
 ```
 
-Основной маршрут: Phases 0–10 host-neutral → Milestone WQ-A → WQ0 → обязательные
-11T existing-tool migrations и active-legacy cleanup → Milestone WQ → Phase 12 →
+Основной маршрут: Phases 0–10 host-neutral → Milestone WQ-A → обязательные
+11T existing-tool migrations и active-legacy cleanup → Milestone WQ, включая WQ0 →
+Phase 12 →
 stable core. Остальные новые optional Phase 11 product contours не блокируют этот
 маршрут.
 
