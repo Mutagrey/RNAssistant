@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Services
     {
         public ToolPolicySnapshot Describe(ToolCall call)
         {
-            if (NativeToolRuntimeAdapter.Owns(call.Name)) return _nativeTools.Describe(call);
+            if (_nativeTools.Handles(call.Name)) return _nativeTools.Describe(call);
             return _toolPack.Describe(call.Name);
         }
 
@@ -27,7 +27,7 @@ namespace RNAssistant.Office.Services
                 return new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched,
                     DateTime.UtcNow, "Model input preparation failed; remaining calls were not dispatched.", mayHaveDispatched: false);
             cancellationToken.ThrowIfCancellationRequested();
-            if (NativeToolRuntimeAdapter.Owns(context.Call.Name))
+            if (_nativeTools.Handles(context.Call.Name))
             {
                 var record = await _nativeTools.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
                 var nativeMaterialization = _nativeTools.TakeMaterialization(record);

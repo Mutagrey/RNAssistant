@@ -29,14 +29,23 @@
           if (!tool) throw new Error("VBA package was not found after saving.");
         }
         var response = await options.send(action, { id: tool.Id, dryRun: false });
-        var result = response.result || response.Result || {};
-        state.tools = response.tools || response.Tools || state.tools;
+        var result = response && response.result;
+        if (!result || result.contractVersion !== 1 ||
+            !["ok", "error", "unknown"].includes(result.status) ||
+            !["none", "verified_no_change", "verified_change", "unknown"].includes(result.effect)) {
+          throw new Error("VBA package action returned an incompatible result contract.");
+        }
+        state.tools = Array.isArray(response.tools) ? response.tools : state.tools;
         state.selectedToolIndex = findToolIndex(state.tools, tool.Id);
         state.selectedToolComponentIndex = 0;
         options.renderTools();
         outputKind = "json";
         outputValue = result;
-        options.log(result.Message || result.message || "VBA package state updated.");
+        if (result.status !== "ok") {
+          throw new Error(result.message || result.code ||
+            "VBA package state could not be verified.");
+        }
+        options.log(result.message || "VBA package state updated.");
       } catch (error) {
         outputValue = error.detail || error.message;
         options.log(error.message, "error");

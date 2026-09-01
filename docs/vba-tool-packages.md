@@ -108,6 +108,16 @@ journal. Поэтому потерянный terminal/cleanup блокирует
 Uninstall над точным неизменённым session-owned package. Старый marker без lifecycle
 распознаётся для явной cleanup, но не получает выдуманную durable correlation.
 
+11J2 переводит вход package lifecycle на `ToolPackageSource` contract v1. Он
+содержит полный code/component/schema/host/scope snapshot, отдельные human
+`PackageVersion` и deterministic content `Revision`; Agent исполняет exact id через
+binding `vba.custom.package.execute.v1`, а Tools UI install/remove/status использует
+тот же source. Result contract v1 отдельно несёт status, source revision, dispatch и
+effect. Обычная строка из arbitrary VBA macro не доказывает effect, поэтому после
+dispatch execution остаётся `unknown`; install/remove получают verified
+change/no-change только из journal/read-back. Старые package/result projections и
+PascalCase UI fallback удалены. Immutable history и Host Fabric этим не заявляются.
+
 ## Жизненный цикл
 
 - Run существующего document-local tool вызывает его напрямую.

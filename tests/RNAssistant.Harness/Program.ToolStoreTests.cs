@@ -167,7 +167,10 @@ namespace RNAssistant.Harness
                 }
 
                 var macro = excelExecutor.RunVbaMacro("Module1.DemoMacro", NewSession(excel));
-                AssertTrue(macro.Success, "typed macro execution keeps the hidden backend usable");
+                AssertEqual("unknown", macro.Status,
+                    "typed macro execution does not infer an unverified effect");
+                AssertEqual(false, macro.Retryable,
+                    "dispatched macro is not automatically retryable");
                 AssertEqual("Module1.DemoMacro", excel.RanMacros.Last(), "typed macro name reaches the adapter");
             });
         }

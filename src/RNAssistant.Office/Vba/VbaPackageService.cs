@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -26,7 +27,7 @@ namespace RNAssistant.Office.Vba
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public VbaPackagePreparationResult PreparePackage(VbaPackageSourceDefinition source)
+        public VbaPackagePreparationResult PreparePackage(ToolPackageSource source)
         {
             if (source == null || string.IsNullOrWhiteSpace(source.Code))
             {
@@ -48,8 +49,18 @@ namespace RNAssistant.Office.Vba
                     "vba_manifest_metadata_mismatch");
             }
 
-            var supplied = new Dictionary<string, VbaPackageSourceComponent>(StringComparer.OrdinalIgnoreCase);
-            foreach (var component in source.Components ?? new VbaPackageSourceComponent[0])
+            if (!string.Equals(manifest.PackageVersion, source.PackageVersion,
+                    StringComparison.Ordinal) ||
+                !string.Equals(manifest.EntryPoint, source.EntryPoint,
+                    StringComparison.Ordinal))
+            {
+                return PreparationError(
+                    "VBA manifest version/entry point does not match the captured package source.",
+                    "vba_manifest_metadata_mismatch");
+            }
+
+            var supplied = new Dictionary<string, ToolPackageSourceComponent>(StringComparer.OrdinalIgnoreCase);
+            foreach (var component in source.Components ?? new ToolPackageSourceComponent[0])
             {
                 if (component == null || string.IsNullOrWhiteSpace(component.Name)) continue;
                 if (supplied.ContainsKey(component.Name))
@@ -65,7 +76,7 @@ namespace RNAssistant.Office.Vba
             var resolved = new List<VbaPackageComponent>();
             foreach (var declared in manifest.Components)
             {
-                VbaPackageSourceComponent suppliedComponent;
+                ToolPackageSourceComponent suppliedComponent;
                 supplied.TryGetValue(declared.Name, out suppliedComponent);
                 var isEntry = string.Equals(declared.Name, entryName, StringComparison.OrdinalIgnoreCase);
                 var code = isEntry ? source.Code : suppliedComponent == null ? string.Empty : suppliedComponent.Code;
@@ -114,6 +125,15 @@ namespace RNAssistant.Office.Vba
             {
                 return PreparationError(schemaError, "vba_argument_schema_invalid");
             }
+            JToken capturedSchema;
+            if (!TryCanonicalSchema(source.ArgumentSchemaJson,
+                    out capturedSchema) ||
+                !JToken.DeepEquals(Canonicalize(schema), capturedSchema))
+            {
+                return PreparationError(
+                    "VBA manifest argument schema does not match the captured package source.",
+                    "vba_manifest_metadata_mismatch");
+            }
 
             return new VbaPackagePreparationResult
             {
@@ -136,6 +156,37 @@ namespace RNAssistant.Office.Vba
             return string.Equals(type, "StdModule", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryCanonicalSchema(string json,
+            out JToken schema)
+        {
+            try
+            {
+                schema = Canonicalize(JToken.Parse(json ?? string.Empty));
+                return true;
+            }
+            catch (JsonException)
+            {
+                schema = null;
+                return false;
+            }
+        }
+
+        private static JToken Canonicalize(JToken token)
+        {
+            var value = token as JObject;
+            if (value != null)
+            {
+                var sorted = new JObject();
+                foreach (var property in value.Properties()
+                    .OrderBy(property => property.Name, StringComparer.Ordinal))
+                    sorted[property.Name] = Canonicalize(property.Value);
+                return sorted;
+            }
+            var array = token as JArray;
+            return array == null ? token.DeepClone() :
+                new JArray(array.Select(Canonicalize));
         }
 
         private static VbaPackagePreparationResult PreparationError(string message, string code)

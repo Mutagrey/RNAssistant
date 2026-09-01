@@ -236,11 +236,15 @@ marker+journal-aware state, one session lifecycle correlation, persistent and
 temporary execution, explicit orphan cleanup, prepare/backend/read-back/terminal
 faults, cancellation, marker drift/strip, probe/preparation and pre-run races,
 post-prepare backend CAS, undeclared catalog components and mixed multi-component
-recovery. The shared COM helper guard is exercised against a fake VBProject; the
+recovery. Since 11J2 it also checks immutable `ToolPackageSource` v1 revision
+pinning, exact native custom-id routing without a case alias, no dispatch before
+confirmation, result v1 and conservative `unknown` effect after arbitrary macro
+dispatch. The shared COM helper guard is exercised against a fake VBProject; the
 full `vba:` filter retains document discovery, code-only UserForm, macro failure,
 VBE normalization, journal/CAS and rename regressions. These are fake-host ordering
 checks; real VBIDE/Trust Access/crash behavior remains Windows qualification. See
-[Phase 6I evidence](../../docs/stabilization/PHASE_6I_VBA_PACKAGE_LIFECYCLE.md).
+[Phase 6I evidence](../../docs/stabilization/PHASE_6I_VBA_PACKAGE_LIFECYCLE.md) and
+[Phase 11J2 evidence](../../docs/stabilization/PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md).
 
 ## VBA rename owner (Phase 6J)
 
@@ -356,3 +360,7 @@ dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj
 COM/VSTO behavior remains Windows-only: validate with Windows x64, Office and VS 2022.
 
 Tool editor smoke after pipeline removal: `node tests/web/tools-editor.test.js` exercises VBA draft creation, editor source synchronization and built-in clone rejection against the shipped HTML IDs. This is not Windows/WebView layout validation.
+
+Typed package-action normalization: `node tests/web/tool-package-actions.test.js`
+checks that install/remove accepts only result contract v1 with exact lowercase
+fields/effects and rejects the deleted PascalCase compatibility shape.

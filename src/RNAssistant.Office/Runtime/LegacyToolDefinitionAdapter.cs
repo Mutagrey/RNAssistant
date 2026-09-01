@@ -58,7 +58,8 @@ namespace RNAssistant.Office.Runtime
                 PolicyFor(definition, mode),
                 capturedBinding,
                 new ToolPackageMetadata(definition.PackageVersion, definition.StoragePath, definition.Code,
-                    JsonConvert.SerializeObject(definition.Components ?? new List<VbaToolComponent>()), definition.InstallationStatus));
+                    JsonConvert.SerializeObject(definition.Components ?? new List<VbaToolComponent>()),
+                    definition.InstallationStatus, definition.Readme));
         }
     }
 }

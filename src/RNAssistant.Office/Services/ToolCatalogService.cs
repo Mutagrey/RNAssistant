@@ -86,7 +86,11 @@ namespace RNAssistant.Office.Services
                         string.Equals(existing.Executor, "vba", StringComparison.OrdinalIgnoreCase) &&
                         matchedGlobalPackageIds.Add(discovered.Id))
                     {
-                        existing.InstallationStatus = _toolExecutor.GetVbaInstallationStatus(existing, discovered);
+                        existing.InstallationStatus = _toolExecutor
+                            .GetVbaInstallationStatus(
+                                ToolPackageSource.Capture(existing),
+                                ToolPackageSource.Capture(discovered))
+                            .Status;
                         if (existing.InstallationStatus == "modified_local" || existing.InstallationStatus == "partial")
                         {
                             existing.Limitations = "Document VBA components differ from the global package.";

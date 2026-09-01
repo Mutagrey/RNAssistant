@@ -21,6 +21,7 @@ namespace RNAssistant.Office.Runtime
         private readonly ToolRuntime _runtime;
         private readonly bool _trace;
         private readonly ChatSession _session;
+        private readonly HashSet<string> _ownedToolIds;
         private readonly object _projectionSync = new object();
         private readonly Dictionary<string, IReadOnlyList<ChatAttachment>> _resourceReadAttachments =
             new Dictionary<string, IReadOnlyList<ChatAttachment>>(StringComparer.Ordinal);
@@ -42,7 +43,7 @@ namespace RNAssistant.Office.Runtime
             : this(gateway, excelReads, excelWrites, excelFindReplace,
                 excelSheets, excelRangeMutations, excelTables, excelCharts,
                 wordTools, powerPointTools, outlookTools, null, null, null,
-                null, null, null, null, false, hostRuntime,
+                null, null, null, null, false, false, hostRuntime,
                 session, snapshot, settings, mode, null, trace)
         {
         }
@@ -63,7 +64,7 @@ namespace RNAssistant.Office.Runtime
             ToolAuthoringService toolAuthoring,
             IReadOnlyList<ToolDefinition> discoveryCatalog,
             IReadOnlyList<SkillDefinition> skillCatalog,
-            bool manualRun,
+            bool manualRun, bool dryRun,
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode,
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
@@ -71,9 +72,13 @@ namespace RNAssistant.Office.Runtime
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
-            foreach (var registration in snapshot.Registrations.Where(item => Owns(item.Descriptor.Id)))
+            _ownedToolIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var registration in snapshot.Registrations.Where(OwnsRegistration))
             {
-                var binding = BindingFor(registration.Descriptor.Id);
+                var packageRegistration = VbaPackageToolHandler.Owns(registration);
+                var binding = packageRegistration
+                    ? registration.Binding
+                    : BindingFor(registration.Descriptor.Id);
                 if (binding == null ||
                     !string.Equals(binding.HandlerId, registration.Binding.HandlerId, StringComparison.Ordinal) ||
                     !string.Equals(binding.EntryPoint, registration.Binding.EntryPoint, StringComparison.Ordinal))
@@ -241,6 +246,15 @@ namespace RNAssistant.Office.Runtime
                         : new ToolAuthoringReadToolHandler(
                             registration.Descriptor.Id, toolAuthoring);
                 }
+                else if (packageRegistration)
+                {
+                    if (vbaTools == null || hostRuntime == null)
+                        throw new InvalidOperationException(
+                            "VBA package handler dependencies are unavailable.");
+                    handler = new VbaPackageToolHandler(
+                        ToolPackageSource.Capture(registration), vbaTools,
+                        hostRuntime, session, dryRun);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -248,6 +262,7 @@ namespace RNAssistant.Office.Runtime
                     handler = new ExcelWriteToolHandler(excelWrites, hostRuntime, session);
                 }
                 registry.Register(registration, handler);
+                _ownedToolIds.Add(registration.Descriptor.Id);
             }
             var policy = ConversationRunPolicy.For(mode);
             _runtime = new ToolRuntime(registry, policy.Mode,
@@ -277,6 +292,18 @@ namespace RNAssistant.Office.Runtime
                 CapabilityToolCatalog.Owns(toolId) ||
                 PromptToolCatalog.Owns(toolId) ||
                 ToolAuthoringCatalog.Owns(toolId);
+        }
+
+        internal bool Handles(string exactToolId)
+        {
+            return exactToolId != null && _ownedToolIds.Contains(exactToolId);
+        }
+
+        private static bool OwnsRegistration(ToolRegistration registration)
+        {
+            return registration != null && registration.Descriptor != null &&
+                (Owns(registration.Descriptor.Id) ||
+                 VbaPackageToolHandler.Owns(registration));
         }
 
         internal static ToolBinding BindingFor(string toolId)

@@ -4,6 +4,7 @@ using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -39,6 +40,7 @@ namespace RNAssistant.Office.Services
         private static ToolRegistration Capture(ToolDefinition definition, string mode)
         {
             var binding = NativeToolRuntimeAdapter.BindingFor(definition.Id) ??
+                VbaPackageToolHandler.BindingFor(definition) ??
                 LegacyToolDefinitionAdapter.BindingFor(definition);
             return LegacyToolDefinitionAdapter.Adapt(definition, binding, mode,
                 ConversationPromptComposer.BuildDescription(definition));

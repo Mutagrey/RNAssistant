@@ -287,13 +287,35 @@ namespace RNAssistant.Office
         {
             LastToolId = id;
             LastDryRun = dryRun;
-            return new VbaToolPackageResponse { Result = ToolResult.Ok("installed"), Tools = new ToolDefinition[0] };
+            return new VbaToolPackageResponse
+            {
+                Result = new VbaPackageResultDto
+                {
+                    ContractVersion = 1,
+                    Status = "ok",
+                    Success = true,
+                    Message = "installed",
+                    Effect = "verified_change"
+                },
+                Tools = new ToolDefinition[0]
+            };
         }
 
         public VbaToolPackageResponse UninstallVbaTool(string id)
         {
             LastToolId = id;
-            return new VbaToolPackageResponse { Result = ToolResult.Ok("uninstalled"), Tools = new ToolDefinition[0] };
+            return new VbaToolPackageResponse
+            {
+                Result = new VbaPackageResultDto
+                {
+                    ContractVersion = 1,
+                    Status = "ok",
+                    Success = true,
+                    Message = "uninstalled",
+                    Effect = "verified_change"
+                },
+                Tools = new ToolDefinition[0]
+            };
         }
 
         public IReadOnlyList<SkillDefinition> GetSkills() { return new SkillDefinition[0]; }

@@ -44,9 +44,12 @@ separate `common.tools_definition_read`, `common.tools_validate`,
 exact Agent-only operations use native typed handlers; confirmed upsert/delete bind
 accepted arguments to the current effective definition, reject stale state, mark the
 storage boundary and require read-back verification. They cannot alter the immutable
-ToolPack of the accepted run. The flat store and current Library package actions
-remain until the following 11J package/UI slice; immutable history is not claimed by
-this switch.
+ToolPack of the accepted run. Since 11J2, execution and Library install/remove/status
+capture one complete `ToolPackageSource` v1. Its deterministic content revision is
+separate from the manifest package version and is pinned with the native handler in
+the accepted run. Library actions return typed result v1 with status, source revision,
+dispatch and effect evidence; PascalCase/legacy result fallbacks are unsupported.
+This does not make the flat store immutable history.
 
 ## Read-only Tool Inspector first
 
@@ -109,10 +112,12 @@ artifact.
 3. Append-only custom package revisions, restore/tombstone and import/export.
 4. Guarded Library editor switch, conflicts and disposable-document test flow.
 5. Model authoring switch and later-run catalog refresh.
-6. Optional remaining VBA definition/result adapter removal after production 5B2.
+6. Existing VBA package definition/result adapter removal (completed host-neutral in
+   11J2); Windows VBE/Library qualification remains required.
 
 Host-neutral tests cover catalog projection, stale endpoint behavior, scope and
 revision conflicts, no-shadow rules and run-boundary refresh. Windows x64 + Office
 x64 tests cover actual custom-package discovery/install/run/cleanup in Excel, Word
-and PowerPoint, target changes during an editor session and endpoint loss. UI success
-or `ToolResult ok` alone never proves an Office effect.
+and PowerPoint, target changes during an editor session and endpoint loss. UI status
+alone never proves an Office effect; install/remove require package journal/read-back,
+and arbitrary VBA macro execution remains unknown after dispatch.

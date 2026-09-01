@@ -582,13 +582,25 @@ namespace RNAssistant.Harness
                 !File.Exists(Path.Combine(officeRoot, "Tools",
                     "ToolAuthoringExecutor.cs")),
                 "tool authoring must use typed services and exact native handlers");
+            AssertTrue(
+                File.Exists(Path.Combine(coreRoot, "Tools",
+                    "ToolPackageSource.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "VbaPackageToolHandler.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools",
+                    "VbaPackageToolAdapter.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools",
+                    "VbaLegacyResultProjection.cs")),
+                "custom VBA packages must use the versioned source/result boundary and exact native handler");
             foreach (var removedAdapter in new[]
             {
                 "VbaMutationDocumentContextAdapter",
                 "VbaMutationReaderAdapter",
                 "VbaMutationBackendAdapter",
                 "VbaPackageBackendAdapter",
-                "VbaMutationToolResultMapper"
+                "VbaMutationToolResultMapper",
+                "VbaPackageToolAdapter",
+                "VbaLegacyResultProjection"
             })
             {
                 AssertTrue(!officeProductionSources.Any(source =>

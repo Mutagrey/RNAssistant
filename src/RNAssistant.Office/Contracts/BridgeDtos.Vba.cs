@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Contracts
 {
@@ -280,10 +281,61 @@ namespace RNAssistant.Office.Contracts
         }
     }
 
+    public sealed class VbaPackageResultDto
+    {
+        [JsonProperty("contractVersion")]
+        public int ContractVersion { get; set; }
+
+        [JsonProperty("sourceRevision")]
+        public string SourceRevision { get; set; }
+
+        [JsonProperty("status")]
+        public string Status { get; set; }
+
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("message")]
+        public string Message { get; set; }
+
+        [JsonProperty("code", NullValueHandling = NullValueHandling.Ignore)]
+        public string Code { get; set; }
+
+        [JsonProperty("retryable", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? Retryable { get; set; }
+
+        [JsonProperty("mayHaveDispatched")]
+        public bool MayHaveDispatched { get; set; }
+
+        [JsonProperty("effect")]
+        public string Effect { get; set; }
+
+        [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
+        public JObject Data { get; set; }
+
+        internal static VbaPackageResultDto From(VbaPackageResult result)
+        {
+            if (result == null) return null;
+            return new VbaPackageResultDto
+            {
+                ContractVersion = result.ContractVersion,
+                SourceRevision = result.SourceRevision,
+                Status = VbaPackageResult.StatusText(result.Status),
+                Success = result.Status == VbaMutationOutcomeStatus.Ok,
+                Message = result.Message,
+                Code = result.ErrorCode,
+                Retryable = result.Retryable,
+                MayHaveDispatched = result.MayHaveDispatched,
+                Effect = VbaPackageResult.EffectText(result.Effect),
+                Data = result.Data
+            };
+        }
+    }
+
     public sealed class VbaToolPackageResponse
     {
         [JsonProperty("result")]
-        public ToolResult Result { get; set; }
+        public VbaPackageResultDto Result { get; set; }
 
         [JsonProperty("tools")]
         public IReadOnlyList<ToolDefinition> Tools { get; set; }

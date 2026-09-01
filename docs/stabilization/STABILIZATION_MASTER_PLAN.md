@@ -2529,10 +2529,11 @@ endpoint.
       dispatch before storage mutation and verify exact effective read-back or
       absence. `ToolAuthoringExecutor` and its controller branch are removed.
       [Evidence](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md);
-    - [ ] 11J2 — move existing custom package execution plus Tools UI
+    - [x] 11J2 — move existing custom package execution plus Tools UI
       install/remove/status to the versioned typed package source/result boundary,
       then delete `VbaPackageToolAdapter` and `VbaLegacyResultProjection` from that
       contour. Do not claim immutable package history or Host Fabric qualification.
+      [Evidence](PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md).
 12. **11K — Skills authoring:** installed skills remain global/host-scoped Library
     capability packages, not chat artifacts. Add immutable package history, exact
     version/revision UX, restore-as-new-head, tombstone, guarded conflicts and

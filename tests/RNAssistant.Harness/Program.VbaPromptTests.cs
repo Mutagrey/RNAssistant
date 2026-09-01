@@ -1147,7 +1147,10 @@ namespace RNAssistant.Harness
                 using (var accessDeadline = new CancellationTokenSource(2000))
                 {
                     var available = otherExecutor.RunVbaMacro("Module1.Main", NewSession(adapter), accessDeadline.Token);
-                    AssertTrue(available.Success, "another executor acquires document access while confirmation waits");
+                    AssertEqual("unknown", available.Status,
+                        "another executor dispatches while confirmation waits without inferring effect");
+                    AssertEqual("Module1.Main", adapter.RanMacros.Last(),
+                        "another executor acquires document access while confirmation waits");
                 }
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"changed elsewhere\"\nEnd Sub";
                 pending.Record = persisted;
@@ -2327,7 +2330,20 @@ namespace RNAssistant.Harness
                     BuiltIn = false,
                     MutatesDocument = true,
                     RequiresConfirmation = true,
-                    RiskLevel = 3
+                    RiskLevel = 3,
+                    PackageVersion = "1.0.0",
+                    EntryPoint = "Main",
+                    ArgumentOrder = new List<string> { "value" },
+                    Components = new List<VbaToolComponent>
+                    {
+                        new VbaToolComponent
+                        {
+                            Name = "RNA_CustomVba",
+                            Type = "StdModule",
+                            FileName = "RNA_CustomVba.bas",
+                            Code = code
+                        }
+                    }
                 };
                 adapter.QueueResult("excel.run_macro", ToolResult.Fail("macro failed", null, "macro_failed", true));
                 var command = Command(tool.Id, "value", "test");
@@ -2336,8 +2352,10 @@ namespace RNAssistant.Harness
                 var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertTrue(!result.Success, "custom macro result");
-                AssertEqual("failed", result.Status, "custom macro failure status");
-                AssertEqual(true, result.Retryable, "custom macro retryable");
+                AssertEqual("unknown", result.Status,
+                    "post-dispatch custom macro failure does not infer effect");
+                AssertEqual(false, result.Retryable,
+                    "post-dispatch custom macro failure is not automatically retryable");
                 AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_CustomVba"), "temporary module cleaned after failure");
                 AssertContains(result.DataJson, "sessionInstalled", "session lifecycle recorded");
             });

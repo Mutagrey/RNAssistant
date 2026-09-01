@@ -136,8 +136,13 @@ namespace RNAssistant.Harness
 
                 var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
 
-                AssertTrue(result.Success, "session VBA tool succeeds");
+                AssertEqual("unknown", result.Status,
+                    "arbitrary package macro effect remains explicit unknown");
+                AssertEqual("vba_package_effect_unknown", result.ErrorCode,
+                    "typed package result does not infer verified success from macro output");
                 AssertEqual("fake-vba-result", result.Message, "String output wrapped by runtime");
+                AssertEqual("unknown", (string)JObject.Parse(result.DataJson)["effect"],
+                    "package result carries typed effect evidence");
                 var run = adapter.Executed.Last(item => string.Equals(item.ToolId, "excel.run_macro", StringComparison.OrdinalIgnoreCase));
                 AssertEqual("[\"hello\",2,1.5,true]", Convert.ToString(run.Arguments["argumentsJson"]), "typed positional arguments and default");
                 AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "entry module cleaned");
@@ -151,28 +156,112 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaPackageNativeRuntimePinsVersionedSource()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
+                delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var tool = BuildVbaPackageToolForTest();
+                var capturedSource = ToolPackageSource.Capture(tool);
+                var snapshot = ToolPackSnapshotFactory.Capture(
+                    "agent", adapter.HostName, new[] { tool });
+                var registration = snapshot.Find(tool.Id);
+
+                AssertTrue(registration != null,
+                    "custom package registration is captured");
+                AssertEqual(VbaPackageToolHandler.HandlerId,
+                    registration.Binding.HandlerId,
+                    "custom package uses exact native binding");
+                AssertEqual(ToolPackageSource.CurrentContractVersion,
+                    capturedSource.ContractVersion,
+                    "package source contract version is explicit");
+                AssertEqual(capturedSource.Revision,
+                    ToolPackageSource.Capture(registration).Revision,
+                    "definition and pinned registration produce one source revision");
+
+                tool.Code = "invalid source after snapshot";
+                var session = NewSession(adapter);
+                var runtime = executor.CreateNativeRuntime(
+                    session, snapshot,
+                    new AppSettings { AutoConfirmToolActions = false },
+                    "agent", false,
+                    (execution, preparation) => "package-pending",
+                    discoveryCatalog: new[] { tool });
+                AssertTrue(runtime.Handles("excel.echo_vba"),
+                    "exact custom package id is native-owned");
+                AssertTrue(!runtime.Handles("EXCEL.ECHO_VBA"),
+                    "custom package execution has no case alias");
+
+                var command = Command("excel.echo_vba", "text", "hello",
+                    "count", 2, "ratio", 1.5);
+                var pending = runtime.ExecuteCommand(
+                    command, 1, false, CancellationToken.None);
+                AssertEqual("package-pending", pending.PendingId,
+                    "package execution pauses before dispatch");
+                AssertEqual(0, adapter.RanMacros.Count,
+                    "unconfirmed package does not reach VBA");
+
+                var result = runtime.ExecuteCommand(
+                    command, 1, true, CancellationToken.None);
+
+                AssertEqual("unknown", result.Status,
+                    "arbitrary macro effect remains unknown after dispatch");
+                AssertEqual(1, adapter.RanMacros.Count,
+                    "runtime executes the source captured before catalog drift");
+                AssertEqual("unknown_tool", runtime.ExecuteCommand(
+                    Command("EXCEL.ECHO_VBA", "text", "hello",
+                        "count", 2, "ratio", 1.5),
+                    1, false, CancellationToken.None).ErrorCode,
+                    "case-changed package id is rejected without dispatch");
+            });
+        }
+
         private static void VbaToolPersistentInstallRequiresMacroDocumentAndTracksOwnership()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tool = BuildVbaPackageToolForTest();
-                var blocked = executor.InstallVbaTool(tool, false);
+                var source = ToolPackageSource.Capture(tool);
+                var blocked = executor.InstallVbaTool(
+                    source, false);
                 AssertEqual("vba_macro_enabled_document_required", blocked.ErrorCode, "non-macro document blocked");
+                AssertEqual(false, blocked.MayHaveDispatched,
+                    "precondition failure stays before package dispatch");
+                AssertEqual(VbaPackageEffectEvidence.None, blocked.Effect,
+                    "precondition failure has no package effect evidence");
 
                 adapter.SetDocumentTitle("Harness.xlsm");
-                var installed = executor.InstallVbaTool(tool, false);
+                var installed = executor.InstallVbaTool(
+                    source, false);
                 AssertTrue(installed.Success, "macro-enabled install succeeds");
+                AssertEqual(VbaPackageResult.CurrentContractVersion,
+                    installed.ContractVersion, "package result contract is versioned");
+                AssertEqual(source.Revision, installed.SourceRevision,
+                    "package result identifies the exact source revision");
+                AssertEqual(true, installed.MayHaveDispatched,
+                    "install records the backend dispatch boundary");
+                AssertEqual(VbaPackageEffectEvidence.VerifiedChange,
+                    installed.Effect, "install change comes from journal read-back");
                 AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "RNAssistantPackage:", "ownership marker installed");
-                AssertEqual("installed", executor.GetVbaInstallationStatus(tool), "installation status");
+                AssertEqual("installed", executor.GetVbaInstallationStatus(
+                    source).Status, "installation status");
 
-                var removed = executor.RemoveVbaTool(tool);
+                var removed = executor.RemoveVbaTool(
+                    source);
                 AssertTrue(removed.Success, "owned package uninstalled");
+                AssertEqual(true, removed.MayHaveDispatched,
+                    "remove records the backend dispatch boundary");
+                AssertEqual(VbaPackageEffectEvidence.VerifiedChange,
+                    removed.Effect, "remove change comes from journal read-back");
                 AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "owned entry removed");
 
                 adapter.SetVbaModule("RNA_Echo", tool.Components[0].Code, "StdModule");
                 adapter.SetVbaModule("RNA_EchoService", tool.Components[1].Code, "ClassModule");
-                var notOwned = executor.RemoveVbaTool(tool);
+                var notOwned = executor.RemoveVbaTool(
+                    source);
                 AssertEqual("vba_component_not_owned", notOwned.ErrorCode, "unmarked local source preserved");
+                AssertEqual(false, notOwned.MayHaveDispatched,
+                    "ownership rejection stays before package dispatch");
                 AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "<RNAssistantTool>", "unmarked source remains");
             });
         }
@@ -189,7 +278,8 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "run-package", TurnId = "turn-package" };
 
-                var installed = executor.InstallVbaTool(tool, false, session);
+                var installed = executor.InstallVbaTool(
+                    ToolPackageSource.Capture(tool), false, session);
 
                 AssertTrue(installed.Success, "journaled package install succeeds");
                 var installData = JObject.Parse(installed.DataJson);
@@ -204,7 +294,8 @@ namespace RNAssistant.Harness
                 AssertEqual("committed", records[0].Terminal.Status, "install terminal is committed");
                 AssertTrue(records[0].Terminal.Components.All(component => component.MatchesIntendedAfter), "every installed component is verified");
 
-                var removed = executor.RemoveVbaTool(tool, session);
+                var removed = executor.RemoveVbaTool(
+                    ToolPackageSource.Capture(tool), session);
 
                 AssertTrue(removed.Success, "journaled package removal succeeds");
                 records = journal.ListPackageMutations("Excel", "doc");
@@ -289,7 +380,7 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var store = new VbaJournalStore(paths);
                 var tool = BuildVbaPackageToolForTest();
-                var source = VbaPackageToolAdapter.ToSource(tool);
+                var source = ToolPackageSource.Capture(tool);
                 var failing = new FaultingPackageJournal(new VbaPackageJournalStoreAdapter(store))
                 {
                     FailNextComplete = true
@@ -382,9 +473,11 @@ namespace RNAssistant.Harness
                     false);
 
                 AssertEqual("vba_session_cleanup_required", result.ErrorCode, "marker drift blocks execution");
-                AssertEqual("recovery_required", executor.GetVbaInstallationStatus(tool), "marker drift has explicit status");
+                AssertEqual("recovery_required", executor.GetVbaInstallationStatus(
+                    ToolPackageSource.Capture(tool)).Status, "marker drift has explicit status");
                 AssertEqual(0, adapter.RanMacros.Count, "drifted marker is never run");
-                AssertEqual("vba_package_drift", executor.RemoveVbaTool(tool).ErrorCode,
+                AssertEqual("vba_package_drift", executor.RemoveVbaTool(
+                    ToolPackageSource.Capture(tool)).ErrorCode,
                     "ambiguous marker cannot be removed automatically");
                 AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "lifecycle=wrong", "ambiguous code is preserved");
             });
@@ -396,7 +489,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var store = new VbaJournalStore(paths);
-                var source = VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest());
+                var source = ToolPackageSource.Capture(BuildVbaPackageToolForTest());
                 var failing = new FaultingPackageJournal(new VbaPackageJournalStoreAdapter(store))
                 {
                     FailNextComplete = true
@@ -435,7 +528,7 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var store = new VbaJournalStore(paths);
                 var tool = BuildVbaPackageToolForTest();
-                var source = VbaPackageToolAdapter.ToSource(tool);
+                var source = ToolPackageSource.Capture(tool);
                 var readCount = 0;
                 adapter.BeforeExecuteTool = command =>
                 {
@@ -490,7 +583,7 @@ namespace RNAssistant.Harness
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
 
                 var outcome = service.Execute(
-                    PackageExecution(VbaPackageToolAdapter.ToSource(tool)),
+                    PackageExecution(ToolPackageSource.Capture(tool)),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status, "pre-run drift is definite error");
@@ -509,19 +602,16 @@ namespace RNAssistant.Harness
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var tool = BuildVbaPackageToolForTest();
-                var live = VbaPackageToolAdapter.ToSource(tool).Components.ToList();
-                live.Add(new VbaPackageSourceComponent
-                {
-                    Name = "RNA_Unexpected",
-                    Type = "StdModule",
-                    Code = "Option Explicit"
-                });
+                var live = ToolPackageSource.Capture(tool).Components.ToList();
+                live.Add(new ToolPackageSourceComponent(
+                    "RNA_Unexpected", "StdModule", null,
+                    "Option Explicit"));
                 var service = CreatePackageService(
                     adapter,
                     new VbaPackageJournalStoreAdapter(new VbaJournalStore(paths)));
 
                 var status = service.ClassifyDocumentSnapshot(
-                    VbaPackageToolAdapter.ToSource(tool),
+                    ToolPackageSource.Capture(tool),
                     live);
 
                 AssertEqual("modified_local", status,
@@ -544,7 +634,7 @@ namespace RNAssistant.Harness
 
                 var outcome = service.InstallPersistent(new VbaPackageInstallRequest
                 {
-                    Source = VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())
+                    Source = ToolPackageSource.Capture(BuildVbaPackageToolForTest())
                 }, CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status, "prepare failure is definite error");
@@ -564,7 +654,7 @@ namespace RNAssistant.Harness
                 adapter.ThrowOnToolId = "excel.vba_install_package_internal";
 
                 var outcome = service.Execute(
-                    PackageExecution(VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())),
+                    PackageExecution(ToolPackageSource.Capture(BuildVbaPackageToolForTest())),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status, "throw before mutation is definite error");
@@ -600,7 +690,7 @@ namespace RNAssistant.Harness
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
 
                 var outcome = service.Execute(
-                    PackageExecution(VbaPackageToolAdapter.ToSource(tool)),
+                    PackageExecution(ToolPackageSource.Capture(tool)),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Ok, outcome.Status, "verified intended install wins backend throw");
@@ -638,7 +728,7 @@ namespace RNAssistant.Harness
 
                 var outcome = service.InstallPersistent(new VbaPackageInstallRequest
                 {
-                    Source = VbaPackageToolAdapter.ToSource(tool)
+                    Source = ToolPackageSource.Capture(tool)
                 }, CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
@@ -677,7 +767,7 @@ namespace RNAssistant.Harness
 
                 var outcome = service.InstallPersistent(new VbaPackageInstallRequest
                 {
-                    Source = VbaPackageToolAdapter.ToSource(tool)
+                    Source = ToolPackageSource.Capture(tool)
                 }, CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
@@ -759,7 +849,7 @@ namespace RNAssistant.Harness
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
 
                 var outcome = service.Execute(
-                    PackageExecution(VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())),
+                    PackageExecution(ToolPackageSource.Capture(BuildVbaPackageToolForTest())),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status, "lost read-back is unknown");
@@ -784,7 +874,7 @@ namespace RNAssistant.Harness
                 {
                     service.InstallPersistent(new VbaPackageInstallRequest
                     {
-                        Source = VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())
+                        Source = ToolPackageSource.Capture(BuildVbaPackageToolForTest())
                     }, cancellation.Token);
                 }
                 catch (OperationCanceledException)
@@ -820,7 +910,7 @@ namespace RNAssistant.Harness
                 try
                 {
                     service.Execute(
-                        PackageExecution(VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest())),
+                        PackageExecution(ToolPackageSource.Capture(BuildVbaPackageToolForTest())),
                         cancellation.Token);
                 }
                 catch (OperationCanceledException)
@@ -845,7 +935,7 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var store = new VbaJournalStore(paths);
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
-                var source = VbaPackageToolAdapter.ToSource(BuildVbaPackageToolForTest());
+                var source = ToolPackageSource.Capture(BuildVbaPackageToolForTest());
                 adapter.QueueResult(
                     "excel.run_macro",
                     ToolResult.Fail("macro failed", null, "macro_failed", false));
@@ -880,7 +970,7 @@ namespace RNAssistant.Harness
                     adapter,
                     new VbaPackageJournalStoreAdapter(new VbaJournalStore(paths)));
 
-                var prepared = service.PreparePackage(VbaPackageToolAdapter.ToSource(tool));
+                var prepared = service.PreparePackage(ToolPackageSource.Capture(tool));
 
                 AssertTrue(!prepared.Success, "source ownership marker is rejected");
                 AssertEqual("vba_package_source_marker_reserved", prepared.Error.ErrorCode, "reserved marker code");
@@ -959,7 +1049,7 @@ namespace RNAssistant.Harness
                     StringComparer.OrdinalIgnoreCase);
         }
 
-        private static VbaPackageExecutionRequest PackageExecution(VbaPackageSourceDefinition source)
+        private static VbaPackageExecutionRequest PackageExecution(ToolPackageSource source)
         {
             return new VbaPackageExecutionRequest
             {
@@ -1059,14 +1149,17 @@ namespace RNAssistant.Harness
                 AssertTrue(!File.Exists(Path.Combine(saved.StoragePath, "src", "RNA_FormToolForm.frm")), "Designer .frm is never persisted");
                 AssertEqual("MSForm", saved.Components.Single(component => component.Name == "RNA_FormToolForm").Type, "MSForm type roundtrips");
 
-                var installed = executor.InstallVbaTool(saved, false);
+                var installed = executor.InstallVbaTool(
+                    ToolPackageSource.Capture(saved), false);
                 AssertTrue(installed.Success, "code-only UserForm package installs");
-                AssertEqual("installed", executor.GetVbaInstallationStatus(saved), "code-only package read-back includes type/profile");
+                AssertEqual("installed", executor.GetVbaInstallationStatus(
+                    ToolPackageSource.Capture(saved)).Status, "code-only package read-back includes type/profile");
                 AssertContains(adapter.GetVbaModuleCode("RNA_FormToolForm"), "Controls.Add", "installed form keeps code-only builder");
                 AssertEqual("MSForm", journal.ListPackageMutations("Excel", "doc").Single().Prepared.Components
                     .Single(component => component.ModuleName == "RNA_FormToolForm").IntendedAfterComponentType,
                     "package journal records MSForm intent");
-                AssertTrue(executor.RemoveVbaTool(saved).Success, "owned code-only UserForm package uninstalls");
+                AssertTrue(executor.RemoveVbaTool(
+                    ToolPackageSource.Capture(saved)).Success, "owned code-only UserForm package uninstalls");
 
                 var designerExport = BuildVbaUserFormPackageForTest();
                 designerExport.Components[1].Code =
@@ -1164,10 +1257,12 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
                 var tool = BuildVbaPackageToolForTest();
 
-                var installed = executor.InstallVbaTool(tool, false);
+                var installed = executor.InstallVbaTool(
+                    ToolPackageSource.Capture(tool), false);
 
                 AssertTrue(installed.Success, "VBE-formatted package install succeeds");
-                AssertEqual("installed", executor.GetVbaInstallationStatus(tool), "VBE-formatted package probe matches source");
+                AssertEqual("installed", executor.GetVbaInstallationStatus(
+                    ToolPackageSource.Capture(tool)).Status, "VBE-formatted package probe matches source");
                 AssertTrue(
                     !string.Equals(
                         VbaTextCanonicalizer.PackageCodeSha256(tool.Components[1].Code),
@@ -1186,7 +1281,8 @@ namespace RNAssistant.Harness
                     installRecord.Terminal.Components.All(component => !string.IsNullOrWhiteSpace(component.ActualComparableCodeSha256)),
                     "package terminal persists comparable actual hashes");
 
-                var removed = executor.RemoveVbaTool(tool);
+                var removed = executor.RemoveVbaTool(
+                    ToolPackageSource.Capture(tool));
 
                 AssertTrue(removed.Success, "VBE-formatted owned package uninstalls");
                 AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "VBE-formatted entry module removed");
@@ -1274,7 +1370,12 @@ namespace RNAssistant.Harness
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
-                AssertTrue(result.Success, "document VBA tool runs");
+                AssertEqual("unknown", result.Status,
+                    "document VBA tool dispatch does not infer an unverified effect");
+                AssertEqual(false, result.Retryable,
+                    "document VBA tool dispatch is not automatically retryable");
+                AssertEqual("RNA_Echo.Echo", adapter.RanMacros.Last(),
+                    "document VBA tool reaches the exact package entry point");
                 AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "<RNAssistantTool>", "document source is not removed after run");
 
                 store.SaveOne(tool);

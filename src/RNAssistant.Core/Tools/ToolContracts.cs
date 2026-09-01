@@ -109,15 +109,18 @@ namespace RNAssistant.Core.Tools
         public string Source { get; private set; }
         public string ComponentsJson { get; private set; }
         public string InstallationStatus { get; private set; }
+        public string Readme { get; private set; }
 
         public ToolPackageMetadata(string version = null, string storagePath = null, string source = null,
-            string componentsJson = null, string installationStatus = null)
+            string componentsJson = null, string installationStatus = null,
+            string readme = null)
         {
             Version = version;
             StoragePath = storagePath;
             Source = source;
             ComponentsJson = componentsJson;
             InstallationStatus = installationStatus;
+            Readme = readme;
         }
     }
 

@@ -306,8 +306,11 @@ URI into the new chat scope. Missing terminal results
 alone do not invent a failure: in-flight calls and typed confirmation/user-input
 pauses remain controlled by the kernel. Cancelling old pending work remains possible.
 
-Native `resources_list` passes its typed result directly to materialization.
-`LegacyToolResultAdapter` converts active domain results once using the recorded
+Native handlers pass typed results directly to materialization. Existing custom VBA
+packages do the same since 11J2: their exact registration captures
+`ToolPackageSource` contract v1, and arbitrary macro dispatch produces `unknown`
+effect evidence even when VBA returns a normal string. `LegacyToolResultAdapter`
+converts only the still-unmigrated Skill authoring domain result using the recorded
 runtime outcome; it never reads old history. `ToolResultUiProjection` serves only
 existing activity/manual-command consumers and is never fed back to the model
 writer. Pending/awaiting-user and proven non-dispatch are runtime controls/evidence,

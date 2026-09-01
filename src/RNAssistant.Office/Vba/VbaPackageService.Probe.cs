@@ -88,14 +88,14 @@ namespace RNAssistant.Office.Vba
         }
 
         public string ClassifyDocumentSnapshot(
-            VbaPackageSourceDefinition globalSource,
-            IReadOnlyList<VbaPackageSourceComponent> liveComponents)
+            ToolPackageSource globalSource,
+            IReadOnlyList<ToolPackageSourceComponent> liveComponents)
         {
             var preparation = PreparePackage(globalSource);
             if (!preparation.Success) return "invalid";
             var package = preparation.Package;
             var expectedHash = PackageHash(package);
-            var live = (liveComponents ?? new VbaPackageSourceComponent[0])
+            var live = (liveComponents ?? new ToolPackageSourceComponent[0])
                 .Where(component => component != null && !string.IsNullOrWhiteSpace(component.Name))
                 .GroupBy(component => component.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
@@ -106,7 +106,7 @@ namespace RNAssistant.Office.Vba
                 StringComparer.OrdinalIgnoreCase);
             foreach (var component in package.Components)
             {
-                VbaPackageSourceComponent current;
+                ToolPackageSourceComponent current;
                 if (!live.TryGetValue(component.Name, out current))
                 {
                     observations.Add(PackageComponentObservation.Missing(component));

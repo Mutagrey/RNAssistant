@@ -154,7 +154,8 @@ namespace RNAssistant.Core.Tools
                 source.PackageMetadata.StoragePath,
                 source.PackageMetadata.Source,
                 source.PackageMetadata.ComponentsJson,
-                source.PackageMetadata.InstallationStatus);
+                source.PackageMetadata.InstallationStatus,
+                source.PackageMetadata.Readme);
             var expected = RegistrationRevision(descriptor, policy, binding, package);
             if (!string.Equals(source.Revision, expected, StringComparison.Ordinal))
                 throw new InvalidOperationException("Tool registration revision does not match its captured contract: " + descriptor.Id);
@@ -170,7 +171,8 @@ namespace RNAssistant.Core.Tools
                 ["storagePath"] = Value(package.StoragePath),
                 ["sourceSha256"] = Hash(package.Source ?? string.Empty),
                 ["componentsSha256"] = Hash(package.ComponentsJson ?? string.Empty),
-                ["installationStatus"] = Value(package.InstallationStatus)
+                ["installationStatus"] = Value(package.InstallationStatus),
+                ["readmeSha256"] = Hash(package.Readme ?? string.Empty)
             };
         }
 

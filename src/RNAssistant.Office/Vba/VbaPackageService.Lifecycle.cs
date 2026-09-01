@@ -64,6 +64,7 @@ namespace RNAssistant.Office.Vba
                     true,
                     lifecycleId,
                     request.Correlation,
+                    request.MarkDispatchPossible,
                     cancellationToken);
                 if (install.Status != VbaMutationOutcomeStatus.Ok) return install;
                 sessionInstalled = true;
@@ -90,6 +91,8 @@ namespace RNAssistant.Office.Vba
                     var entry = package.Components.First(component =>
                         string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
                         (component.Code ?? string.Empty).IndexOf("<RNAssistantTool>", StringComparison.Ordinal) >= 0);
+                    if (request.MarkDispatchPossible != null)
+                        request.MarkDispatchPossible();
                     run = _backend.RunMacro(new VbaPackageRunActionRequest
                     {
                         MacroName = entry.Name + "." + package.EntryPoint,
@@ -127,6 +130,7 @@ namespace RNAssistant.Office.Vba
                         lifecycleId,
                         SessionMarker(package, lifecycleId),
                         request.Correlation,
+                        request.MarkDispatchPossible,
                         CancellationToken.None);
                 }
             }
@@ -203,6 +207,7 @@ namespace RNAssistant.Office.Vba
                 false,
                 null,
                 request.Correlation,
+                request.MarkDispatchPossible,
                 cancellationToken);
         }
 
@@ -244,6 +249,7 @@ namespace RNAssistant.Office.Vba
                     null,
                     probe.OwnershipMarker,
                     request.Correlation,
+                    request.MarkDispatchPossible,
                     cancellationToken);
             }
             if ((probe.State == VbaPackageInstallationState.SessionOwned ||
@@ -256,6 +262,7 @@ namespace RNAssistant.Office.Vba
                     probe.LifecycleId,
                     probe.OwnershipMarker,
                     request.Correlation,
+                    request.MarkDispatchPossible,
                     cancellationToken);
             }
             return VbaMutationOutcome.Error(
@@ -265,10 +272,11 @@ namespace RNAssistant.Office.Vba
                 false);
         }
 
-        public string GetInstallationStatus(VbaPackageSourceDefinition source)
+        public VbaPackageStatusResult GetInstallationStatus(ToolPackageSource source)
         {
             var preparation = PreparePackage(source);
-            return preparation.Success ? StatusText(Probe(preparation.Package).State) : "invalid";
+            return new VbaPackageStatusResult(source,
+                preparation.Success ? StatusText(Probe(preparation.Package).State) : "invalid");
         }
 
         public VbaMutationOutcome ReconcilePendingMutations()

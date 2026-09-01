@@ -2,12 +2,12 @@
 
 Current target: 16.1.0
 Current phase: Phase 11 migration contours — перенос всех существующих tools и удаление active legacy architecture явно обязательны до Phase 12; новые optional product features этим не добавлены
-Current task: 11J1 is done host-neutral: all four `common.tools_*` authoring operations use exact native Agent handlers with guarded verified mutations, and `ToolAuthoringExecutor` is gone. Mandatory 11J2 custom package execution/UI cutover is next. Real Windows/live-provider gates remain open.
+Current task: 11J2 is done host-neutral: existing custom VBA package execution and Tools UI install/remove/status use one versioned typed source/result boundary and exact native handler; both package compatibility projections are gone. Mandatory 11K Skill authoring is next. Real Windows/live-provider gates remain open.
 Execution mode: Phase 11 migration baseline интегрирован поверх завершённых host-neutral WQ-A1–A5. Existing-tool migration и удаление active legacy обязательны. WQ0 больше не блокирует implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принимается как lifetime assumption; реальные Windows/live-provider gates остаются deferred evidence и не могут быть закрыты локальными tests.
 
-Next step for tools: mandatory 11J2 переводит existing custom package execution и Tools UI install/remove/status на versioned typed package source/result contracts и удаляет `VbaPackageToolAdapter`/`VbaLegacyResultProjection` из этого контура; затем 11K переводит Skill authoring, а 11T10 удаляет final generic catalog/dispatch and legacy definition/result/UI adapters.
-Required context: [master Phase 11J](STABILIZATION_MASTER_PLAN.md), [11J1 evidence](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md), [Tool Library](../tool-library.md), [VBA packages](../vba-tool-packages.md), [migration map](MIGRATION_MAP.md), current `ToolStore`/package execution/UI consumers and focused tool-store/VBA package/UI tests.
-Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1, 11T0–11T9B, 11T9C1–11T9C6 and 11J1 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, Plan question, Plan Document, Task List, HTML workspace, capability discovery/read, prompt read/save and custom Tool authoring execution uses direct typed native handlers; their replaced compatibility commands/controller executors and execution-time active-document/source fallback are gone. Existing custom package execution/UI and Skill authoring plus final cleanup still must remove the remaining controller enum, `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter`, `ToolResultUiProjection` and package/UI projections. `VbaPackageToolAdapter` and `VbaLegacyResultProjection` remain only for custom package/manual/reconciliation UI until 11J2. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+Next step for tools: mandatory 11K переводит existing Skill UI/model authoring на versioned typed contracts и удаляет последний controller/legacy result consumer; затем 11T10 удаляет final generic catalog/dispatch and legacy definition/result/UI adapters.
+Required context: [master Phase 11K](STABILIZATION_MASTER_PLAN.md), [11J2 evidence](PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md), [Skills](../skills.md), [migration map](MIGRATION_MAP.md), current `SkillStore`/`SkillToolExecutor`/UI consumers and focused skill/capability/ToolRuntime tests.
+Open gates / remaining legacy: 11A1–11A2, 11B1–11B3, 11C1–11C3, 11D1, 11T0–11T9B, 11T9C1–11T9C6 and 11J1–11J2 are done host-neutral, but R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, Plan question, Plan Document, Task List, HTML workspace, capability discovery/read, prompt read/save and custom Tool authoring execution uses direct typed native handlers; replaced compatibility commands/controller executors and execution-time active-document/source fallback are gone. Skill authoring and final cleanup still must remove the remaining controller enum, `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` and `ToolResultUiProjection`. Permanent narrow journal ports and current model-compatibility diagnostics are not legacy because they do not create a second authority. Mandatory host-neutral route 0–10 and WQ-A1–A5 implementation are complete, while all real Windows/live-provider gates remain open; catalog/evidence admission tests are not scenario evidence. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence, not implementation blockers. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
 Model SSE terminal incident fix (2026-08-31): streaming reader теперь распознаёт
 non-empty `choices[0].finish_reason`, bounded одну секунду ждёт optional final usage
@@ -289,6 +289,23 @@ inclusion, MockDemo and version checks are recorded in the linked evidence. Exis
 custom package execution/Tools UI and Windows Library/VBE remain open for 11J2 and
 qualification respectively.
 [Evidence](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md).
+
+Phase 11J2 typed custom package execution/UI (2026-09-01): every existing
+global/document-local VBA package is captured as complete immutable
+`ToolPackageSource` contract v1 with a deterministic content revision distinct from
+its human package version. Exact custom ids bind to
+`vba.custom.package.execute.v1` and execute through native `ToolRuntime`; source,
+schema, host and entry point stay pinned with the run registration. Backend dispatch
+is marked immediately before install/run/remove. Arbitrary macro dispatch remains
+`unknown`; persistent install/remove return change/no-change only from package
+journal/read-back. Tools UI accepts only typed result v1 for install/remove and uses
+the typed source for status. `VbaPackageToolAdapter`,
+`VbaLegacyResultProjection`, the legacy custom dispatch branch and PascalCase UI
+fallback are deleted without aliases. Focused package 23/23, session execution 1/1,
+typed VBA bridge 1/1 and web package action 1/1 pass; remaining checks are recorded
+in the linked evidence. Immutable package history, Host Fabric and Windows/VBE are
+not claimed.
+[Evidence](PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md).
 
 Pre-R37 trajectory inference removal (2026-08-31): `TrajectoryRunProjection` and
 `TrajectoryDerivedProjection` no longer reinterpret a persisted
@@ -1322,7 +1339,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 11C | done host-neutral: 11C1–11C3 | [11C1](PHASE_11C1_HTML_LINEAGE.md), [11C2](PHASE_11C2_HTML_IMPORT_PREVIEW.md), [11C3](PHASE_11C3_HTML_BINDING_EXPORT.md) | 11C3: harness 8/8; web 21/21; JS syntax | not performed | Unique lineage, inert exact import and one guarded exact binding/recovery/export checkpoint path switched; Windows WebView/Office remains |
 | 11D | in progress: 11D1 done host-neutral | [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md) | harness 4/4; web 48/48; JS syntax | not performed | Exact bounded text/source + complete-only sanitized Markdown switched; image/PDF/audio and Windows WebView remain |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
-| 11 | in progress; 11T0–11T9B + 11T9C1–11T9C6 + 11J1 done host-neutral, remaining package/UI and Skill migration plus final legacy cleanup mandatory | 11A–11D1 evidence above; [11J1](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md) | 11J1: Tool CRUD 1/1; Tools 36/36; pipelines 3/3; architecture/source inclusion/MockDemo/version evidence in report | not performed | 11J2 custom package execution/UI next, then 11K Skills and final generic-dispatch/adapter removal before Phase 12 |
+| 11 | in progress; 11T0–11T9B + 11T9C1–11T9C6 + 11J1–11J2 done host-neutral, remaining Skill migration plus final legacy cleanup mandatory | 11A–11D1 evidence above; [11J1](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md), [11J2](PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md) | 11J2: package 23/23; session execution 1/1; typed VBA bridge/web package action; architecture/source inclusion/MockDemo/version evidence in report | not performed | 11K Skills next, then final generic-dispatch/adapter removal before Phase 12 |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
 ## Phase 0 substeps
@@ -1971,12 +1988,10 @@ harness не запускались. Следующий отдельный ша�
 
 | Adapter | Owner | Consumers | Removal phase |
 |---|---|---|---|
-| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Custom package execution/UI and Skill authoring controller handler → kernel records | Tool authoring bypasses it after 11J1; 11J2/11K remove the remaining consumers; R23 remains |
-| LegacyToolDefinitionAdapter | ToolRuntime | Current package/Skill/generic catalog and execution consumers listed in `MIGRATION_MAP.md`; resource and Tool-authoring execution paths removed | 11J2 package, 11K Skill and 11T10 final generic removal; `ProjectRead` removed in 10C2, no resource dependency |
-| LegacyToolResultAdapter | ToolRuntime | Custom package execution and Skill authoring controller executor → typed result materialization | Office/VBA/Plan/HTML/capability/prompt/Tool-authoring families bypass it after 11J1; 11J2/11K remove remaining consumers; no old-history reader |
+| Legacy ToolResult → LegacyToolOutcomeAdapter | ToolRuntime | Skill authoring controller handler → kernel records | Package execution bypasses it after 11J2; 11K removes the final consumer; R23 remains |
+| LegacyToolDefinitionAdapter | ToolRuntime | Current generic ToolDefinition snapshot/catalog and Skill legacy consumers listed in `MIGRATION_MAP.md`; package execution consumes only captured typed source | 11K Skill and 11T10 final generic removal; `ProjectRead` removed in 10C2, no resource dependency |
+| LegacyToolResultAdapter | ToolRuntime | Skill authoring controller executor → typed result materialization | Every other runtime family, including package execution, bypasses it after 11J2; 11K removes the final consumer; no old-history reader |
 | ToolResultUiProjection | Application / UI | Native manual commands and Activity projection; never model writer | Phase 9 runtime state switched; remaining manual/domain presentation consumers leave with mandatory 11T slices |
-| `VbaPackageToolAdapter` | VBA / Tools | Remaining `ToolDefinition` → typed package source mapping for custom package execution/UI | 11J2 typed versioned package source switch; host command/result backend was deleted in 11T9A |
-| `VbaLegacyResultProjection` | VBA / Tools | Custom package/manual/reconciliation UI boundaries → legacy `ToolResult` | Public Agent use removed in 11T9B; 11J2 removes remaining UI/package use; no model-history reader |
 
 `VbaMutationJournalStoreAdapter`, `VbaPackageJournalStoreAdapter` и
 `VbaRenameJournalStoreAdapter` — permanent narrow ports к тому же

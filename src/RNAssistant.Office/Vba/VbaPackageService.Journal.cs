@@ -18,6 +18,7 @@ namespace RNAssistant.Office.Vba
             bool sessionOnly,
             string lifecycleId,
             VbaMutationCorrelation correlation,
+            Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
             var marker = sessionOnly
@@ -49,6 +50,7 @@ namespace RNAssistant.Office.Vba
                         }).ToList(),
                     Marker = marker
                 }),
+                markDispatchPossible,
                 cancellationToken);
         }
 
@@ -58,6 +60,7 @@ namespace RNAssistant.Office.Vba
             string lifecycleId,
             string expectedMarker,
             VbaMutationCorrelation correlation,
+            Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(expectedMarker))
@@ -88,6 +91,7 @@ namespace RNAssistant.Office.Vba
                     ExpectedComparableHashes = expected,
                     ExpectedMarker = expectedMarker
                 }),
+                markDispatchPossible,
                 cancellationToken);
         }
 
@@ -190,6 +194,7 @@ namespace RNAssistant.Office.Vba
         private VbaMutationOutcome ExecuteJournaledPackageMutation(
             VbaPackageMutationPreparation prepared,
             Func<VbaMutationActionResult> action,
+            Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
             TracePackageMutation(prepared, SessionEventKind.DomainEffectPrepared, null);
@@ -206,6 +211,7 @@ namespace RNAssistant.Office.Vba
             VbaMutationActionResult actionResult;
             try
             {
+                if (markDispatchPossible != null) markDispatchPossible();
                 TracePackageMutation(prepared, SessionEventKind.DomainEffectDispatched, null);
                 actionResult = action == null ? null : action();
             }

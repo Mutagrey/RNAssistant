@@ -59,21 +59,6 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        public ToolResult RunMacro(string macroName)
-        {
-            macroName = (macroName ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(macroName))
-            {
-                return ToolResult.Fail("macroName is required.", null, "vba_macro_name_required", true);
-            }
-            return VbaLegacyResultProjection.ToToolResult(
-                _backend.RunMacro(new VbaRunMacroRequest
-                {
-                    MacroName = macroName,
-                    Arguments = new object[0]
-                }));
-        }
-
         ToolResult IVbaResourceSource.ListResourceModules()
         {
             var reconciliationError = ReconcilePendingMutations();

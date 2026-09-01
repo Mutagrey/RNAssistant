@@ -4,6 +4,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
 
@@ -17,12 +18,17 @@ namespace RNAssistant.Office
                 string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(item.Executor, "vba", StringComparison.OrdinalIgnoreCase));
             if (tool == null) throw new InvalidOperationException("Global VBA tool not found: " + id);
+            var source = ToolPackageSource.Capture(tool);
             var result = WithReservedSession(LoadSession(null), session =>
             {
-                return _toolExecutor.InstallVbaTool(tool, dryRun, session);
+                return _toolExecutor.InstallVbaTool(source, dryRun, session);
             });
             if (!dryRun) _toolCatalog.InvalidateDocumentVbaTools();
-            return new VbaToolPackageResponse { Result = result, Tools = GetTools() };
+            return new VbaToolPackageResponse
+            {
+                Result = VbaPackageResultDto.From(result),
+                Tools = GetTools()
+            };
         }
 
         public VbaToolPackageResponse UninstallVbaTool(string id)
@@ -31,12 +37,17 @@ namespace RNAssistant.Office
                 string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(item.Executor, "vba", StringComparison.OrdinalIgnoreCase));
             if (tool == null) throw new InvalidOperationException("Global VBA tool not found: " + id);
+            var source = ToolPackageSource.Capture(tool);
             var result = WithReservedSession(LoadSession(null), session =>
             {
-                return _toolExecutor.RemoveVbaTool(tool, session);
+                return _toolExecutor.RemoveVbaTool(source, session);
             });
             _toolCatalog.InvalidateDocumentVbaTools();
-            return new VbaToolPackageResponse { Result = result, Tools = GetTools() };
+            return new VbaToolPackageResponse
+            {
+                Result = VbaPackageResultDto.From(result),
+                Tools = GetTools()
+            };
         }
 
         public VbaProjectResponse GetVbaProject()

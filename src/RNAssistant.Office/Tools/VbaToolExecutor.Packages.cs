@@ -1,112 +1,152 @@
-using System.Collections.Generic;
+using System;
 using System.Threading;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Tools
 {
     internal sealed partial class VbaToolExecutor
     {
-        public ToolResult ExecuteCustomTool(
-            ToolDefinition tool,
-            ToolCommand command,
-            AppSettings settings,
+        internal VbaPackageResult ExecuteCustomPackage(
+            ToolPackageSource source,
+            JObject arguments,
             bool dryRun,
-            bool manualRun,
+            ToolExecutionContext execution,
             ChatSession session,
+            Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
             if (!dryRun)
             {
-                var reconciliationError = ReconcilePendingMutations();
-                if (reconciliationError != null) return reconciliationError;
+                var reconciliation = ReconcilePendingMutationOutcome();
+                if (reconciliation != null)
+                    return VbaPackageResult.Execution(
+                        source, reconciliation, false);
             }
-            JObject arguments;
-            try
+            var dispatched = false;
+            Action dispatch = delegate
             {
-                arguments = JObject.FromObject(command == null
-                    ? new Dictionary<string, object>()
-                    : command.Arguments ?? new Dictionary<string, object>());
-            }
-            catch (JsonException ex)
-            {
-                return ToolResult.Fail(
-                    "VBA tool arguments are invalid: " + ex.Message,
-                    null,
-                    "vba_arguments_invalid",
-                    true);
-            }
+                dispatched = true;
+                if (markDispatchPossible != null) markDispatchPossible();
+            };
             var outcome = _packageService.Execute(
                 new VbaPackageExecutionRequest
                 {
-                    Source = VbaPackageToolAdapter.ToSource(tool),
-                    Arguments = arguments,
+                    Source = source,
+                    Arguments = arguments == null
+                        ? new JObject() : (JObject)arguments.DeepClone(),
                     DryRun = dryRun,
-                    Correlation = MutationCorrelation(command, session)
+                    Correlation = MutationCorrelation(execution, session),
+                    MarkDispatchPossible = dispatch
                 },
                 cancellationToken);
-            return VbaLegacyResultProjection.ToToolResult(outcome);
+            return VbaPackageResult.Execution(source, outcome, dispatched);
         }
 
-        public ToolResult InstallCustomTool(
-            ToolDefinition tool,
+        internal VbaPackageResult InstallCustomPackage(
+            ToolPackageSource source,
             bool dryRun,
             ChatSession session = null,
-            ToolCommand command = null,
             bool reconcile = true,
+            Action markDispatchPossible = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             if (reconcile && !dryRun)
             {
-                var reconciliationError = ReconcilePendingMutations();
-                if (reconciliationError != null) return reconciliationError;
+                var reconciliation = ReconcilePendingMutationOutcome();
+                if (reconciliation != null)
+                    return VbaPackageResult.Lifecycle(
+                        source, reconciliation, false);
             }
+            var dispatched = false;
+            Action dispatch = delegate
+            {
+                dispatched = true;
+                if (markDispatchPossible != null) markDispatchPossible();
+            };
             var outcome = _packageService.InstallPersistent(
                 new VbaPackageInstallRequest
                 {
-                    Source = VbaPackageToolAdapter.ToSource(tool),
+                    Source = source,
                     DryRun = dryRun,
-                    Correlation = MutationCorrelation(command, session)
+                    Correlation = MutationCorrelation(
+                        (ToolExecutionContext)null, session),
+                    MarkDispatchPossible = dispatch
                 },
                 cancellationToken);
-            return VbaLegacyResultProjection.ToToolResult(outcome);
+            return VbaPackageResult.Lifecycle(source, outcome, dispatched);
         }
 
-        public ToolResult RemoveCustomTool(
-            ToolDefinition tool,
+        internal VbaPackageResult RemoveCustomPackage(
+            ToolPackageSource source,
             ChatSession session = null,
-            ToolCommand command = null,
             bool reconcile = true,
+            Action markDispatchPossible = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             if (reconcile)
             {
-                var reconciliationError = ReconcilePendingMutations();
-                if (reconciliationError != null) return reconciliationError;
+                var reconciliation = ReconcilePendingMutationOutcome();
+                if (reconciliation != null)
+                    return VbaPackageResult.Lifecycle(
+                        source, reconciliation, false);
             }
+            var dispatched = false;
+            Action dispatch = delegate
+            {
+                dispatched = true;
+                if (markDispatchPossible != null) markDispatchPossible();
+            };
             var outcome = _packageService.RemoveOwned(
                 new VbaPackageRemoveRequest
                 {
-                    Source = VbaPackageToolAdapter.ToSource(tool),
-                    Correlation = MutationCorrelation(command, session)
+                    Source = source,
+                    Correlation = MutationCorrelation(
+                        (ToolExecutionContext)null, session),
+                    MarkDispatchPossible = dispatch
                 },
                 cancellationToken);
-            return VbaLegacyResultProjection.ToToolResult(outcome);
+            return VbaPackageResult.Lifecycle(source, outcome, dispatched);
         }
 
-        public string GetInstallationStatus(ToolDefinition tool)
+        internal VbaPackageStatusResult GetInstallationStatus(
+            ToolPackageSource source)
         {
-            return _packageService.GetInstallationStatus(VbaPackageToolAdapter.ToSource(tool));
+            return _packageService.GetInstallationStatus(source);
         }
 
-        public string GetInstallationStatus(ToolDefinition globalTool, ToolDefinition documentTool)
+        internal VbaPackageStatusResult GetInstallationStatus(
+            ToolPackageSource globalSource,
+            ToolPackageSource documentSource)
         {
-            var live = VbaPackageToolAdapter.ToSource(documentTool);
-            return _packageService.ClassifyDocumentSnapshot(
-                VbaPackageToolAdapter.ToSource(globalTool),
-                live == null ? null : live.Components);
+            return new VbaPackageStatusResult(globalSource,
+                _packageService.ClassifyDocumentSnapshot(
+                    globalSource,
+                    documentSource == null
+                        ? null : documentSource.Components));
+        }
+
+        private static VbaMutationCorrelation MutationCorrelation(
+            ToolExecutionContext execution,
+            ChatSession session)
+        {
+            return new VbaMutationCorrelation
+            {
+                SessionId = SessionId(session),
+                RunId = execution == null
+                    ? session == null || session.LastRun == null
+                        ? null : session.LastRun.RunId
+                    : execution.RunId,
+                TurnId = execution == null
+                    ? session == null || session.LastRun == null
+                        ? null : session.LastRun.TurnId
+                    : execution.TurnId,
+                StepId = execution == null ? null : execution.StepId,
+                ToolCallId = execution == null || execution.Call == null
+                    ? null : execution.Call.Id
+            };
         }
     }
 }

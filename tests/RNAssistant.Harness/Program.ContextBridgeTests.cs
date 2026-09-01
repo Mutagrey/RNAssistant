@@ -880,6 +880,36 @@ namespace RNAssistant.Harness
                 .GetResult();
             AssertTrue(JObject.Parse(runResponseJson)["ok"].Value<bool>(), "VBA run bridge response ok");
             AssertEqual("Module1.Main", controller.LastModuleName, "run macro name");
+
+            var installResponse = JObject.Parse(bridge.HandleMessageAsync(
+                "{\"id\":\"b5-install\",\"type\":\"installVbaTool\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"id\":\"excel.echo_vba\",\"dryRun\":true}}")
+                .GetAwaiter().GetResult());
+            AssertTrue(installResponse["ok"].Value<bool>(),
+                "VBA package install bridge response ok");
+            AssertEqual(1, (int)installResponse.SelectToken(
+                "payload.result.contractVersion"),
+                "VBA package result contract is versioned");
+            AssertEqual("ok", (string)installResponse.SelectToken(
+                "payload.result.status"),
+                "VBA package result has typed status");
+            AssertEqual("verified_change", (string)installResponse.SelectToken(
+                "payload.result.effect"),
+                "VBA package result has typed effect evidence");
+            AssertEqual("excel.echo_vba", controller.LastToolId,
+                "package id reaches typed controller");
+            AssertTrue(controller.LastDryRun,
+                "package dry-run flag reaches typed controller");
+
+            var uninstallResponse = JObject.Parse(bridge.HandleMessageAsync(
+                "{\"id\":\"b5-uninstall\",\"type\":\"uninstallVbaTool\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"id\":\"excel.echo_vba\"}}")
+                .GetAwaiter().GetResult());
+            AssertTrue(uninstallResponse["ok"].Value<bool>(),
+                "VBA package uninstall bridge response ok");
+            AssertEqual(1, (int)uninstallResponse.SelectToken(
+                "payload.result.contractVersion"),
+                "uninstall uses the same package result contract");
         }
 
         private static void BridgeReportsModelConnectionDiagnostics()

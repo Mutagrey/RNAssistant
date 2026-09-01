@@ -154,7 +154,8 @@ namespace RNAssistant.Office.Tools
                 ToolPreparationResult, string> pendingRegistrar = null,
             IReadOnlyList<ToolDefinition> discoveryCatalog = null,
             IReadOnlyList<SkillDefinition> skillCatalog = null,
-            bool manualRun = false)
+            bool manualRun = false,
+            bool dryRun = false)
         {
             return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _excelWriteAdapter,
                 _excelFindReplaceAdapter, _excelSheetAdapter,
@@ -164,7 +165,7 @@ namespace RNAssistant.Office.Tools
                 _capabilityCatalogService, _promptSettingsService,
                 _toolAuthoringService,
                 discoveryCatalog, skillCatalog,
-                manualRun, _hostRuntime,
+                manualRun, dryRun, _hostRuntime,
                 session, snapshot, settings, mode, pendingRegistrar, trace);
         }
 
@@ -174,14 +175,16 @@ namespace RNAssistant.Office.Tools
                 ToolPreparationResult, string> pendingRegistrar = null,
             IReadOnlyList<ToolDefinition> discoveryCatalog = null,
             IReadOnlyList<SkillDefinition> skillCatalog = null,
-            bool manualRun = false)
+            bool manualRun = false,
+            bool dryRun = false)
         {
             var catalogList = (catalog ?? new ToolDefinition[0]).ToArray();
             return CreateNativeRuntime(session,
                 ToolPackSnapshotFactory.Capture(
                     mode, _adapter.HostName, catalogList),
                 settings, mode, trace, pendingRegistrar,
-                discoveryCatalog ?? catalogList, skillCatalog, manualRun);
+                discoveryCatalog ?? catalogList, skillCatalog, manualRun,
+                dryRun);
         }
 
         internal List<ToolDefinition> AvailableConversationToolsForSession(
@@ -246,7 +249,7 @@ namespace RNAssistant.Office.Tools
             {
                 // Native handlers own their exact document scope. Wrapping them here
                 // would create a second operation root and defeat synchronous reentry.
-                var result = command != null && NativeToolRuntimeAdapter.Owns(command.ToolId)
+                var result = command != null && IsNativeTool(command.ToolId, context.Tools)
                     ? ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken)
                     : _hostRuntime.ExecuteForExpectedDocument(
                         DocumentTarget(session),
@@ -339,12 +342,13 @@ namespace RNAssistant.Office.Tools
             ChatSession session = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecuteDirectMutation(
-                session,
-                false,
-                true,
-                cancellationToken,
-                () => _vbaExecutor.RunMacro(macroName));
+            var tool = VbaToolCatalog.GetTools().First(item =>
+                string.Equals(item.Id, VbaToolCatalog.RunMacro,
+                    StringComparison.Ordinal));
+            var command = new ToolCommand { ToolId = tool.Id };
+            command.Arguments["macroName"] = macroName;
+            return Execute(command, new[] { tool }, new AppSettings(),
+                false, true, session, cancellationToken);
         }
 
         public ToolResult ValidateToolDefinition(ToolDefinition tool)
@@ -380,57 +384,45 @@ namespace RNAssistant.Office.Tools
             return snapshot;
         }
 
-        public ToolResult InstallVbaTool(
-            ToolDefinition tool,
+        internal VbaPackageResult InstallVbaTool(
+            ToolPackageSource source,
             bool dryRun,
             ChatSession session = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (dryRun)
-            {
-                return _hostRuntime.ExecuteForExpectedDocument(DocumentTarget(session), true, cancellationToken,
-                    () => _vbaExecutor.InstallCustomTool(
-                        tool,
-                        true,
-                        session,
+            return ExecutePackageMutation(source, session, dryRun,
+                cancellationToken, markDispatch =>
+                    _vbaExecutor.InstallCustomPackage(
+                        source, dryRun, session,
+                        markDispatchPossible: markDispatch,
                         cancellationToken: cancellationToken));
-            }
-            return ExecuteDirectMutation(
-                session,
-                false,
-                true,
-                cancellationToken,
-                () => _vbaExecutor.InstallCustomTool(
-                    tool,
-                    false,
-                    session,
-                    cancellationToken: cancellationToken));
         }
 
-        public ToolResult RemoveVbaTool(
-            ToolDefinition tool,
+        internal VbaPackageResult RemoveVbaTool(
+            ToolPackageSource source,
             ChatSession session = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecuteDirectMutation(
-                session,
-                false,
-                true,
-                cancellationToken,
-                () => _vbaExecutor.RemoveCustomTool(
-                    tool,
-                    session,
-                    cancellationToken: cancellationToken));
+            return ExecutePackageMutation(source, session, false,
+                cancellationToken, markDispatch =>
+                    _vbaExecutor.RemoveCustomPackage(
+                        source, session,
+                        markDispatchPossible: markDispatch,
+                        cancellationToken: cancellationToken));
         }
 
-        public string GetVbaInstallationStatus(ToolDefinition tool)
+        internal VbaPackageStatusResult GetVbaInstallationStatus(
+            ToolPackageSource source)
         {
-            return _vbaExecutor.GetInstallationStatus(tool);
+            return _vbaExecutor.GetInstallationStatus(source);
         }
 
-        internal string GetVbaInstallationStatus(ToolDefinition globalTool, ToolDefinition documentTool)
+        internal VbaPackageStatusResult GetVbaInstallationStatus(
+            ToolPackageSource globalSource,
+            ToolPackageSource documentSource)
         {
-            return _vbaExecutor.GetInstallationStatus(globalTool, documentTool);
+            return _vbaExecutor.GetInstallationStatus(
+                globalSource, documentSource);
         }
 
         private ToolResult ExecuteCommandSafely(ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken)
@@ -494,7 +486,7 @@ namespace RNAssistant.Office.Tools
                     false);
             }
 
-            if (NativeToolRuntimeAdapter.Owns(command.ToolId))
+            if (IsNativeTool(command.ToolId, new[] { tool }))
             {
                 if (dryRun && (ExcelWriteToolIds.Owns(command.ToolId) ||
                     ExcelFindReplaceToolIds.IsMutation(command.ToolId) ||
@@ -525,6 +517,7 @@ namespace RNAssistant.Office.Tools
                 var nativeSettings = context.Settings;
                 var nativeConfirmed = manualRun;
                 if (manualRun && (VbaToolCatalog.Owns(command.ToolId) ||
+                    VbaPackageToolHandler.IsDefinition(tool) ||
                     PromptToolCatalog.IsMutation(command.ToolId) ||
                     ToolAuthoringCatalog.IsMutation(command.ToolId)))
                 {
@@ -536,7 +529,8 @@ namespace RNAssistant.Office.Tools
                 return CreateNativeRuntime(context.Session, new[] { tool }, nativeSettings,
                     ChatModes.Normalize(context.Session == null ? null : context.Session.Mode), false,
                     (execution, preparation) => Guid.NewGuid().ToString("N"),
-                    context.DiscoveryCatalog, context.SkillCatalog, manualRun)
+                    context.DiscoveryCatalog, context.SkillCatalog, manualRun,
+                    dryRun)
                     .ExecuteCommand(command, remainingSteps, nativeConfirmed, cancellationToken);
             }
 
@@ -649,19 +643,6 @@ namespace RNAssistant.Office.Tools
         private ToolResult ExecuteResolvedCommand(ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken, ToolDefinition customTool)
         {
 
-            if (customTool != null && string.Equals(customTool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return _vbaExecutor.ExecuteCustomTool(
-                    customTool,
-                    command,
-                    context.Settings,
-                    dryRun,
-                    manualRun,
-                    context.Session,
-                    cancellationToken);
-            }
-
             if (customTool != null)
             {
                 return ToolResult.Fail("Tool executor is not runnable yet: " + customTool.Executor);
@@ -682,24 +663,33 @@ namespace RNAssistant.Office.Tools
             return _adapter.ExecuteTool(command);
         }
 
-        private ToolResult ExecuteDirectMutation(
+        private VbaPackageResult ExecutePackageMutation(
+            ToolPackageSource source,
             ChatSession session,
-            bool mutatesSharedLocalState,
-            bool mutatesDocument,
+            bool dryRun,
             CancellationToken cancellationToken,
-            Func<ToolResult> action)
+            Func<Action, VbaPackageResult> action)
         {
+            var dispatched = false;
+            Action markDispatch = delegate { dispatched = true; };
             try
             {
-                return _hostRuntime.ExecuteForExpectedDocument(
-                    DocumentTarget(session),
-                    true,
-                    cancellationToken,
-                    () => _hostRuntime.ExecuteMutation(DocumentTarget(session), mutatesSharedLocalState, mutatesDocument, cancellationToken, action));
+                if (dryRun)
+                {
+                    return _hostRuntime.ReadDocument(
+                        DocumentTarget(session), cancellationToken,
+                        () => action(markDispatch));
+                }
+                return _hostRuntime.ExecuteDocumentMutation(
+                    DocumentTarget(session), cancellationToken,
+                    () => action(markDispatch));
             }
             catch (HostRuntime.MutationLockException ex)
             {
-                return MutationLockFailure(ex);
+                return VbaPackageResult.Error(source, ex.Message,
+                    ex.Retryable ? "tool_mutation_busy" :
+                        "tool_mutation_lock_unavailable",
+                    ex.Retryable, dispatched);
             }
             catch (OperationCanceledException)
             {
@@ -707,13 +697,26 @@ namespace RNAssistant.Office.Tools
             }
             catch (Exception ex)
             {
-                return ToolResult.Fail(
-                    "VBA mutation failed. " + DeepestMessage(ex) +
-                        " The document effect may have been applied; inspect state before retrying.",
-                    null,
-                    "tool_effect_uncertain",
-                    false);
+                return VbaPackageResult.Error(source,
+                    "VBA package operation failed. " + DeepestMessage(ex) +
+                    (dispatched
+                        ? " The document effect may have been applied; inspect state before retrying."
+                        : string.Empty),
+                    dispatched ? "tool_effect_uncertain" :
+                        "vba_package_operation_failed",
+                    false, dispatched);
             }
+        }
+
+        private static bool IsNativeTool(string exactToolId,
+            IEnumerable<ToolDefinition> tools)
+        {
+            if (NativeToolRuntimeAdapter.Owns(exactToolId)) return true;
+            var definition = (tools ?? new ToolDefinition[0])
+                .FirstOrDefault(item => item != null &&
+                    string.Equals(item.Id, exactToolId,
+                        StringComparison.Ordinal));
+            return VbaPackageToolHandler.IsDefinition(definition);
         }
 
         private IDisposable BeginLiveOfficeRead(ChatSession session)

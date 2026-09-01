@@ -50,8 +50,18 @@ namespace RNAssistant.Office.Tools
         private RNAssistant.Core.Models.ToolResult ReconcilePendingMutations()
         {
             var outcome = ReconcilePendingMutationOutcome();
-            return outcome == null ? null :
-                VbaLegacyResultProjection.ToToolResult(outcome);
+            if (outcome == null) return null;
+            var data = outcome.Data;
+            var dataJson = data == null || !data.HasValues
+                ? null : data.ToString(Newtonsoft.Json.Formatting.None);
+            return outcome.Status == VbaMutationOutcomeStatus.Unknown
+                ? RNAssistant.Core.Models.ToolResult.PartialFailure(
+                    outcome.Message, dataJson,
+                    string.IsNullOrWhiteSpace(outcome.ErrorCode)
+                        ? "vba_mutation_unknown" : outcome.ErrorCode)
+                : RNAssistant.Core.Models.ToolResult.Fail(
+                    outcome.Message, dataJson, outcome.ErrorCode,
+                    outcome.Retryable);
         }
     }
 }
