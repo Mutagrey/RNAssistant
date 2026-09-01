@@ -1781,7 +1781,7 @@ namespace RNAssistant.Harness
                     new ConversationRunInput(settings, NewContext(adapter), tools), null).GetAwaiter().GetResult();
 
                 AssertEqual("Skill сохранён.", final.AssistantText, "continued final response");
-                AssertRunViewState(final, session, "unknown", 1, 0, 0);
+                AssertRunViewState(final, session, "clean", 1, 0, 0);
                 AssertEqual(3, session.LastRun.IterationsUsed, "confirmation continuation keeps cumulative iteration budget");
                 AssertEqual(2, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
                 var replay = FlattenSimple(calls[2]);

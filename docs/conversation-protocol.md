@@ -309,9 +309,11 @@ pauses remain controlled by the kernel. Cancelling old pending work remains poss
 Native handlers pass typed results directly to materialization. Existing custom VBA
 packages do the same since 11J2: their exact registration captures
 `ToolPackageSource` contract v1, and arbitrary macro dispatch produces `unknown`
-effect evidence even when VBA returns a normal string. `LegacyToolResultAdapter`
-converts only the still-unmigrated Skill authoring domain result using the recorded
-runtime outcome; it never reads old history. `ToolResultUiProjection` serves only
+effect evidence even when VBA returns a normal string. Since 11K1,
+`common.skills_upsert/delete` also return a versioned native result with explicit
+dispatch/change evidence after complete-package read-back. The remaining
+`LegacyToolResultAdapter` is confined to the generic ToolDefinition fallback that
+11T10 removes; it never reads old history. `ToolResultUiProjection` serves only
 existing activity/manual-command consumers and is never fed back to the model
 writer. Pending/awaiting-user and proven non-dispatch are runtime controls/evidence,
 not inferred from prose or `data.code`. Known outcome/evidence is saved before

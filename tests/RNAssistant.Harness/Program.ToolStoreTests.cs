@@ -750,10 +750,81 @@ namespace RNAssistant.Harness
                 .GetAwaiter().GetResult();
         }
 
+        private static ToolExecutionRecord ExecuteSkillAuthoringNative(
+            NativeToolRuntimeAdapter runtime,
+            string toolId,
+            JObject arguments)
+        {
+            var call = new ToolCall(
+                "skill_authoring_" + Guid.NewGuid().ToString("N"),
+                toolId,
+                (arguments ?? new JObject()).ToString(Formatting.None));
+            var policy = runtime.Describe(call);
+            if (policy == null)
+                throw new InvalidOperationException(
+                    "Skill authoring native policy was not captured: " +
+                    toolId);
+            return runtime.ExecuteAsync(
+                    new ToolExecutionContext(
+                        call, policy, "run-skill-authoring-native",
+                        "turn-skill-authoring-native", call.Id + ":1",
+                        DateTime.UtcNow, false, 5),
+                    CancellationToken.None)
+                .GetAwaiter().GetResult();
+        }
+
+        private static ToolExecutionRecord ConfirmSkillAuthoringNative(
+            NativeToolRuntimeAdapter runtime,
+            ToolExecutionRecord pending)
+        {
+            if (pending == null || pending.Outcome !=
+                ToolExecutionOutcome.AwaitingConfirmation)
+                throw new InvalidOperationException(
+                    "A native pending skill authoring mutation is required.");
+            var source = pending.Context;
+            return runtime.ExecuteAsync(
+                    new ToolExecutionContext(
+                        source.Call, source.Policy, source.RunId,
+                        source.TurnId, source.StepId, DateTime.UtcNow,
+                        true, 5, pending.PreparedStateJson),
+                    CancellationToken.None)
+                .GetAwaiter().GetResult();
+        }
+
         private static void AgentSkillCrudPreservesOmittedFields()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                var definitions = executor.GetControllerTools()
+                    .Where(tool => SkillAuthoringCatalog.Owns(tool.Id))
+                    .ToList();
+                AssertEqual(2, definitions.Count,
+                    "complete skill authoring family registered");
+                AssertTrue(definitions.All(tool =>
+                        string.Join(",", tool.RuntimePolicy.AllowedModes) == "agent" &&
+                        tool.RuntimePolicy.Effect == ToolEffect.Write &&
+                        tool.RuntimePolicy.Verification == ToolVerification.Tool &&
+                        tool.RuntimePolicy.RequiresConfirmation),
+                    "skill authoring uses Agent-only confirmed write policy");
+                var native = executor.CreateNativeRuntime(
+                    NewSession(adapter), definitions,
+                    new AppSettings { AutoConfirmToolActions = false },
+                    "agent", false,
+                    (execution, preparation) => "skill_authoring_pending");
+                AssertTrue(native.Describe(new ToolCall(
+                        "skill_authoring_exact",
+                        SkillAuthoringCatalog.UpsertToolId, "{}")) != null,
+                    "exact skill authoring id has a native binding");
+                AssertTrue(native.Describe(new ToolCall(
+                        "skill_authoring_alias",
+                        SkillAuthoringCatalog.UpsertToolId.ToUpperInvariant(),
+                        "{}")) == null,
+                    "skill authoring has no case alias");
+                AssertEqual("skills.upsert.v1",
+                    NativeToolRuntimeAdapter.BindingFor(
+                        SkillAuthoringCatalog.UpsertToolId).HandlerId,
+                    "skill upsert binding");
+
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var create = Command(
                     "common.skills_upsert",
@@ -764,8 +835,31 @@ namespace RNAssistant.Harness
                     "version", "1.0.0",
                     "bodyMarkdown", "# Review style\n\nPreserve workbook conventions.",
                     "enabled", true);
-                var created = executor.Execute(create, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
-                AssertTrue(created.Success, "skill create succeeds");
+                AssertEqual("waiting_confirmation",
+                    executor.Execute(create, tools, new AppSettings(),
+                        false, false).Status,
+                    "skill create waits for confirmation");
+                var createPending = ExecuteSkillAuthoringNative(
+                    native, SkillAuthoringCatalog.UpsertToolId,
+                    JObject.FromObject(create.Arguments));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,
+                    createPending.Outcome,
+                    "native skill create waits for confirmation");
+                AssertTrue(!new SkillStore(FixturePaths.Value).Load().Any(),
+                    "skill preparation does not write storage");
+                var created = ConfirmSkillAuthoringNative(
+                    native, createPending);
+                AssertEqual(ToolExecutionOutcome.Ok, created.Outcome,
+                    "confirmed skill create succeeds");
+                AssertEqual(ToolDispatchEvidence.MayHaveDispatched,
+                    created.Evidence.Dispatch,
+                    "skill create marks dispatch");
+                AssertEqual(ToolEffectEvidence.VerifiedChange,
+                    created.Evidence.Effect,
+                    "skill create verifies read-back");
+                AssertEqual(1, (int)JObject.Parse(
+                    created.Result.DataJson)["contractVersion"],
+                    "skill authoring result contract is versioned");
 
                 var update = Command("common.skills_upsert", "id", "excel.review_style", "description", "Review workbook formatting consistently.");
                 var updated = executor.Execute(update, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -779,10 +873,59 @@ namespace RNAssistant.Harness
                 AssertEqual("# Review style\n\nPreserve workbook conventions.",
                     (string)JObject.Parse(read.DataJson)["bodyMarkdown"],
                     "skill persistence does not accumulate separator blank lines");
-                AssertContains(read.DataJson, "\"revision\":\"" + SkillRevision.Compute(new SkillDefinition
-                {
-                    BodyMarkdown = "# Review style\n\nPreserve workbook conventions."
-                }) + "\"", "skill read returns body revision");
+                var storedAfterUpdate = new SkillStore(FixturePaths.Value)
+                    .Load().Single(skill =>
+                        skill.Id == "excel.review_style");
+                AssertContains(read.DataJson, "\"revision\":\"" +
+                    SkillRevision.Compute(storedAfterUpdate) + "\"",
+                    "skill read returns complete package revision");
+
+                var unchangedPending = ExecuteSkillAuthoringNative(
+                    native, SkillAuthoringCatalog.UpsertToolId,
+                    new JObject
+                    {
+                        ["id"] = "excel.review_style",
+                        ["description"] =
+                            "Review workbook formatting consistently."
+                    });
+                var unchanged = ConfirmSkillAuthoringNative(
+                    native, unchangedPending);
+                AssertEqual(ToolDispatchEvidence.NotDispatched,
+                    unchanged.Evidence.Dispatch,
+                    "unchanged skill update avoids storage dispatch");
+                AssertEqual(ToolEffectEvidence.VerifiedNoChange,
+                    unchanged.Evidence.Effect,
+                    "unchanged skill update is explicit");
+
+                var stalePending = ExecuteSkillAuthoringNative(
+                    native, SkillAuthoringCatalog.UpsertToolId,
+                    new JObject
+                    {
+                        ["id"] = "excel.review_style",
+                        ["description"] = "Intended description"
+                    });
+                var externalStore = new SkillStore(FixturePaths.Value);
+                var external = externalStore.Load().Single(skill =>
+                    skill.Id == "excel.review_style");
+                external.Description = "External description";
+                externalStore.SaveOne(external);
+                var stale = ConfirmSkillAuthoringNative(native, stalePending);
+                AssertEqual(ToolExecutionOutcome.Error, stale.Outcome,
+                    "stale skill preparation is rejected");
+                AssertEqual(ToolDispatchEvidence.NotDispatched,
+                    stale.Evidence.Dispatch,
+                    "stale skill update does not dispatch");
+                AssertContains(stale.Result.DataJson,
+                    "skill_package_changed",
+                    "stale skill update exposes stable error code");
+
+                var restore = Command("common.skills_upsert",
+                    "id", "excel.review_style", "description",
+                    "Review workbook formatting consistently.");
+                AssertTrue(executor.Execute(restore, tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false, false).Success,
+                    "skill can be updated after explicit refresh");
 
                 var referenceUpsert = Command(
                     "common.skills_upsert",
@@ -862,6 +1005,14 @@ namespace RNAssistant.Harness
             windows.BodyMarkdown += "\r\nChanged.";
             AssertTrue(!string.Equals(SkillRevision.Compute(unix), SkillRevision.Compute(windows), StringComparison.Ordinal),
                 "skill revision changes with Markdown body");
+
+            windows.BodyMarkdown = unix.BodyMarkdown;
+            windows.Description = "Changed metadata.";
+            AssertTrue(!string.Equals(
+                    SkillRevision.Compute(unix),
+                    SkillRevision.Compute(windows),
+                    StringComparison.Ordinal),
+                "skill revision includes package front matter");
 
             AssertEqual("Skill description is required.", SkillStore.ValidateDefinition(new SkillDefinition
             {

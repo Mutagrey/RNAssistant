@@ -11,9 +11,9 @@ namespace RNAssistant.Core.Storage
     public sealed class SkillStore
     {
         public const int MaximumSkillReferenceCharacters = 500000;
+        public const long MaximumSkillReferenceBytes = 2100000;
+        public const int MaximumSkillReferences = 64;
         private const long MaxSkillFileBytes = 2100000;
-        private const long MaxSkillReferenceFileBytes = 2100000;
-        private const int MaxSkillReferences = 64;
         private readonly AppDataPaths _paths;
 
         public SkillStore(AppDataPaths paths)
@@ -158,7 +158,7 @@ namespace RNAssistant.Core.Storage
                     return false;
                 }
                 var info = new FileInfo(path);
-                if (!info.Exists || info.Length > MaxSkillReferenceFileBytes ||
+                if (!info.Exists || info.Length > MaximumSkillReferenceBytes ||
                     (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
                 {
                     error = "Skill reference is unavailable: " + normalizedPath;
@@ -232,7 +232,7 @@ namespace RNAssistant.Core.Storage
                 return false;
             }
             var value = content ?? string.Empty;
-            if (value.Length > MaximumSkillReferenceCharacters || Encoding.UTF8.GetByteCount(value) > MaxSkillReferenceFileBytes)
+            if (value.Length > MaximumSkillReferenceCharacters || Encoding.UTF8.GetByteCount(value) > MaximumSkillReferenceBytes)
             {
                 error = "Skill reference is too large.";
                 return false;
@@ -246,9 +246,9 @@ namespace RNAssistant.Core.Storage
             }
             var existing = current.FirstOrDefault(item => item != null &&
                 string.Equals(item.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));
-            if (existing == null && current.Count >= MaxSkillReferences)
+            if (existing == null && current.Count >= MaximumSkillReferences)
             {
-                error = "Skill reference limit reached: " + MaxSkillReferences + ".";
+                error = "Skill reference limit reached: " + MaximumSkillReferences + ".";
                 return false;
             }
             if (existing != null) normalizedPath = existing.Path;
@@ -535,13 +535,13 @@ namespace RNAssistant.Core.Storage
                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(path => path, StringComparer.Ordinal)
                     .ToArray();
-                if (files.Length > MaxSkillReferences || files
+                if (files.Length > MaximumSkillReferences || files
                     .GroupBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
                     .Any(group => group.Count() > 1)) return null;
                 foreach (var file in files)
                 {
                     var info = new FileInfo(file);
-                    if (!info.Exists || info.Length > MaxSkillReferenceFileBytes ||
+                    if (!info.Exists || info.Length > MaximumSkillReferenceBytes ||
                         (File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
                     {
                         return null;
@@ -617,6 +617,16 @@ namespace RNAssistant.Core.Storage
             {
                 return BitConverter.ToString(sha.ComputeHash(value ?? new byte[0])).Replace("-", string.Empty).ToLowerInvariant();
             }
+        }
+
+        public static string ComputeReferenceRevision(string content)
+        {
+            return Sha256(new UTF8Encoding(false).GetBytes(content ?? string.Empty));
+        }
+
+        public static long ComputeReferenceByteLength(string content)
+        {
+            return new UTF8Encoding(false).GetByteCount(content ?? string.Empty);
         }
 
         private static SkillDefinition Parse(string[] lines, string original)

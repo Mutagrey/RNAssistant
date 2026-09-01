@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Tools
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly IReadOnlyList<ToolDefinition> _adapterTools;
         private readonly VbaToolExecutor _vbaExecutor;
-        private readonly SkillToolExecutor _skillExecutor;
+        private readonly SkillAuthoringService _skillAuthoringService;
         private readonly CapabilityCatalogService _capabilityCatalogService;
         private readonly ToolAuthoringService _toolAuthoringService;
         private readonly PromptSettingsService _promptSettingsService;
@@ -40,7 +40,7 @@ namespace RNAssistant.Office.Tools
         private readonly OutlookToolAdapter _outlookAdapter;
         private readonly HtmlWorkspaceToolService _htmlWorkspaceService;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
-        private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
+        private readonly ISet<string> _controllerToolIds;
         private readonly HostRuntime _hostRuntime;
 
         internal HostRuntime DocumentRuntime { get { return _hostRuntime; } }
@@ -59,12 +59,18 @@ namespace RNAssistant.Office.Tools
         {
             _adapter = adapter;
             _adapterTools = (_adapter.GetBuiltInTools() ?? new ToolDefinition[0]).ToArray();
+            _controllerToolIds = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
             _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore);
-            _skillExecutor = new SkillToolExecutor(adapter, skillStore);
             _capabilityCatalogService = new CapabilityCatalogService(
                 adapter, skillStore);
             _toolAuthoringService = new ToolAuthoringService(
                 adapter, toolStore, id => IsProtectedToolId(id));
+            _skillAuthoringService = new SkillAuthoringService(
+                adapter, skillStore, id => IsProtectedToolId(id) ||
+                    toolStore != null && toolStore.Load().Any(tool =>
+                        tool != null && string.Equals(tool.Id, id,
+                            StringComparison.OrdinalIgnoreCase)));
             _promptSettingsService = new PromptSettingsService(
                 loadSettings, saveSettings);
             _hostRuntime = new HostRuntime(adapter, paths);
@@ -110,31 +116,31 @@ namespace RNAssistant.Office.Tools
                 _adapter, _adapterTools, BeginLiveOfficeRead,
                 ExecuteHtmlDataSourceUnderCurrentAccess);
             var controllerTools = new List<ToolDefinition>();
-            _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
             if (_vbaExecutor.HostSupportsVba())
                 RegisterControllerTools(controllerTools,
-                    VbaToolCatalog.GetTools(), ControllerExecutorKind.Native);
-            RegisterControllerTools(controllerTools, _skillExecutor.GetControllerTools(), ControllerExecutorKind.Skill);
+                    VbaToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
-                CapabilityToolCatalog.GetTools(), ControllerExecutorKind.Native);
+                SkillAuthoringCatalog.GetTools(_skillAuthoringService));
             RegisterControllerTools(controllerTools,
-                ToolAuthoringCatalog.GetTools(_toolAuthoringService),
-                ControllerExecutorKind.Native);
+                CapabilityToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
-                PromptToolCatalog.GetTools(_promptSettingsService),
-                ControllerExecutorKind.Native);
-            RegisterControllerTools(controllerTools, ResourceToolCatalog.GetControllerTools(), ControllerExecutorKind.Native);
+                ToolAuthoringCatalog.GetTools(_toolAuthoringService));
             RegisterControllerTools(controllerTools,
-                HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService),
-                ControllerExecutorKind.Native);
+                PromptToolCatalog.GetTools(_promptSettingsService));
             RegisterControllerTools(controllerTools,
-                TaskListToolCatalog.GetTools(), ControllerExecutorKind.Native);
+                ResourceToolCatalog.GetControllerTools());
             RegisterControllerTools(controllerTools,
-                PlanDocumentToolCatalog.GetTools(), ControllerExecutorKind.Native);
+                HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService));
             RegisterControllerTools(controllerTools,
-                UserQuestionToolCatalog.GetTools(), ControllerExecutorKind.Native);
+                TaskListToolCatalog.GetTools());
+            RegisterControllerTools(controllerTools,
+                PlanDocumentToolCatalog.GetTools());
+            RegisterControllerTools(controllerTools,
+                UserQuestionToolCatalog.GetTools());
             _controllerTools = controllerTools.ToArray();
-            var duplicate = _adapterTools.FirstOrDefault(tool => tool != null && _controllerExecutors.ContainsKey(tool.Id ?? string.Empty));
+            var duplicate = _adapterTools.FirstOrDefault(tool =>
+                tool != null && _controllerToolIds.Contains(
+                    tool.Id ?? string.Empty));
             if (duplicate != null)
             {
                 throw new InvalidOperationException("Duplicate built-in tool id: " + duplicate.Id);
@@ -163,7 +169,7 @@ namespace RNAssistant.Office.Tools
                 _excelChartAdapter, _wordAdapter, _powerPointAdapter,
                 _outlookAdapter, _vbaExecutor, _htmlWorkspaceService,
                 _capabilityCatalogService, _promptSettingsService,
-                _toolAuthoringService,
+                _toolAuthoringService, _skillAuthoringService,
                 discoveryCatalog, skillCatalog,
                 manualRun, dryRun, _hostRuntime,
                 session, snapshot, settings, mode, pendingRegistrar, trace);
@@ -500,6 +506,7 @@ namespace RNAssistant.Office.Tools
                     VbaToolCatalog.Owns(command.ToolId) ||
                     PromptToolCatalog.IsMutation(command.ToolId) ||
                     ToolAuthoringCatalog.IsMutation(command.ToolId) ||
+                    SkillAuthoringCatalog.IsMutation(command.ToolId) ||
                     PlanDocumentToolCatalog.Owns(command.ToolId) ||
                     TaskListToolCatalog.Owns(command.ToolId) ||
                     HtmlWorkspaceToolCatalog.IsMutation(command.ToolId)))
@@ -519,7 +526,8 @@ namespace RNAssistant.Office.Tools
                 if (manualRun && (VbaToolCatalog.Owns(command.ToolId) ||
                     VbaPackageToolHandler.IsDefinition(tool) ||
                     PromptToolCatalog.IsMutation(command.ToolId) ||
-                    ToolAuthoringCatalog.IsMutation(command.ToolId)))
+                    ToolAuthoringCatalog.IsMutation(command.ToolId) ||
+                    SkillAuthoringCatalog.IsMutation(command.ToolId)))
                 {
                     // A direct UI action is already authorized, but a guarded
                     // handler must still prepare and consume its exact state.
@@ -547,26 +555,11 @@ namespace RNAssistant.Office.Tools
                 return ToolResult.Fail(safety.Error);
             }
 
-            ControllerExecutorKind controllerKind;
-            var isController = _controllerExecutors.TryGetValue(command.ToolId, out controllerKind);
             if (ToolSafetyPolicy.RequiresConfirmation(tool, safety, context.Settings, dryRun, manualRun))
             {
-                ToolResult preview = null;
-                if (isController)
-                {
-                    preview = ExecuteControllerTool(
-                        controllerKind,
-                        CloneCommand(command),
-                        context,
-                        true,
-                        true,
-                        cancellationToken);
-                    if (preview != null && !preview.Success) return preview;
-                }
                 var waiting = ToolResult.WaitingConfirmation(
-                    preview == null
-                        ? "Tool requires confirmation before execution: " + command.ToolId
-                        : "Confirmation required. " + preview.Message);
+                    "Tool requires confirmation before execution: " +
+                    command.ToolId);
                 return waiting;
             }
 
@@ -646,12 +639,6 @@ namespace RNAssistant.Office.Tools
             if (customTool != null)
             {
                 return ToolResult.Fail("Tool executor is not runnable yet: " + customTool.Executor);
-            }
-
-            ControllerExecutorKind controllerExecutor;
-            if (_controllerExecutors.TryGetValue(command.ToolId, out controllerExecutor))
-            {
-                return ExecuteControllerTool(controllerExecutor, command, context, dryRun, manualRun, cancellationToken);
             }
 
             if (dryRun)
@@ -828,22 +815,9 @@ namespace RNAssistant.Office.Tools
             return current == null ? "Unknown error." : current.Message;
         }
 
-        private ToolResult ExecuteControllerTool(ControllerExecutorKind executor, ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            switch (executor)
-            {
-                case ControllerExecutorKind.Skill:
-                    return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.SkillCatalog);
-                case ControllerExecutorKind.Native:
-                    return ToolResult.Fail("Native tool did not enter its registered handler.", null,
-                        "native_handler_unavailable", false);
-                default:
-                    return ToolResult.Fail("Unknown controller executor for tool: " + command.ToolId);
-            }
-        }
-
-        private void RegisterControllerTools(ICollection<ToolDefinition> target, IEnumerable<ToolDefinition> tools, ControllerExecutorKind executor)
+        private void RegisterControllerTools(
+            ICollection<ToolDefinition> target,
+            IEnumerable<ToolDefinition> tools)
         {
             foreach (var tool in tools ?? new ToolDefinition[0])
             {
@@ -852,12 +826,12 @@ namespace RNAssistant.Office.Tools
                     continue;
                 }
 
-                if (_controllerExecutors.ContainsKey(tool.Id))
+                if (_controllerToolIds.Contains(tool.Id))
                 {
                     throw new InvalidOperationException("Duplicate controller tool id: " + tool.Id);
                 }
 
-                _controllerExecutors.Add(tool.Id, executor);
+                _controllerToolIds.Add(tool.Id);
                 target.Add(tool);
             }
         }
@@ -881,8 +855,7 @@ namespace RNAssistant.Office.Tools
             if (_adapterTools.Any(candidate => candidate != null &&
                 string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase))) return true;
 
-            ControllerExecutorKind controller;
-            if (_controllerExecutors.TryGetValue(id, out controller))
+            if (_controllerToolIds.Contains(id))
             {
                 return VbaToolCatalog.Owns(id) ||
                     HtmlWorkspaceToolCatalog.RequiresOfficeDocument(id);
@@ -903,8 +876,8 @@ namespace RNAssistant.Office.Tools
         internal bool IsProtectedToolId(string id)
         {
             return !string.IsNullOrWhiteSpace(id) &&
-                (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
-                 _controllerExecutors.ContainsKey(id));
+                 (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
+                 _controllerToolIds.Contains(id));
         }
 
         private static void AddTools(ICollection<ToolDefinition> result, ISet<string> seen, IEnumerable<ToolDefinition> tools)
@@ -919,23 +892,6 @@ namespace RNAssistant.Office.Tools
                 seen.Add(tool.Id);
                 result.Add(tool);
             }
-        }
-
-        private static ToolCommand CloneCommand(ToolCommand command)
-        {
-            var clone = new ToolCommand
-            {
-                ToolId = command == null ? string.Empty : command.ToolId,
-                Description = command == null ? string.Empty : command.Description,
-                ToolCallId = command == null ? string.Empty : command.ToolCallId,
-                RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson,
-                RuntimeStepId = command == null ? null : command.RuntimeStepId
-            };
-            if (command != null && command.Arguments != null)
-            {
-                foreach (var pair in command.Arguments) clone.Arguments[pair.Key] = pair.Value;
-            }
-            return clone;
         }
 
         private static ToolResult UnknownTool(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
@@ -1038,10 +994,5 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private enum ControllerExecutorKind
-        {
-            Skill,
-            Native,
-        }
     }
 }

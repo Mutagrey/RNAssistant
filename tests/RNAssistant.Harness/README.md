@@ -246,6 +246,17 @@ checks; real VBIDE/Trust Access/crash behavior remains Windows qualification. Se
 [Phase 6I evidence](../../docs/stabilization/PHASE_6I_VBA_PACKAGE_LIFECYCLE.md) and
 [Phase 11J2 evidence](../../docs/stabilization/PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md).
 
+## Skill authoring native runtime (Phase 11K1)
+
+The `skills:` filter covers the complete current-package revision, core/reference
+CRUD and collision/validation behavior. The CRUD case also verifies exact native
+`common.skills_upsert/delete` registration, Agent-only confirmed-write policy,
+versioned result data, no dispatch before confirmation, verified change/no-change
+and rejection of a stale prepared package. Focused `agent: confirmation`,
+`protocol context:` and `kernel replay:`/`kernel recovery:` cases keep durable
+confirmation and effect evidence across continuation and faults. See
+[Phase 11K1 evidence](../../docs/stabilization/PHASE_11K1_SKILL_AUTHORING_NATIVE_RUNTIME.md).
+
 ## VBA rename owner (Phase 6J)
 
 `vba: rename` covers the direct typed owner, both-name/source-type confirmation

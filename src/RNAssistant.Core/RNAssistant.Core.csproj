@@ -100,6 +100,7 @@
     <Compile Include="Tools\ToolExecutionRecord.cs" />
     <Compile Include="Tools\ToolContracts.cs" />
     <Compile Include="Tools\ToolPackageSource.cs" />
+    <Compile Include="Tools\SkillPackageSource.cs" />
     <Compile Include="Tools\ToolPackSnapshot.cs" />
     <Compile Include="Tools\ToolExecutionEvidence.cs" />
     <Compile Include="Tools\ToolHandlerContracts.cs" />

@@ -29,20 +29,25 @@ ids share one namespace and a collision fails request construction.
 
 Current custom persistence is atomic current-file replacement, not revision
 history. `version` is a manual label. Runtime separately computes `revision` as a
-SHA-256 package fingerprint over the normalized core body and ordered reference
-revisions. Editing the core or any reference changes the package revision, but old
-package bodies are not retained and delete removes the custom package directory.
+versioned SHA-256 package fingerprint over the stable id, host, complete normalized
+front matter/body and ordered reference paths/revisions. Editing package metadata,
+the core or any reference changes the package revision, but old package bodies are
+not retained and delete removes the custom package directory.
 
 The existing Library UI already owns skills under `Library → Instructions → Skills`.
 It supports Markdown edit/preview, references, enable/disable, clone and custom
 delete; built-ins are read-only. It does not currently expose useful revision
 history, restore, provenance or a complete version display.
 
-Agent-side core/reference upsert and delete use `common.skills_upsert/delete` and
-confirmation policy. Direct UI Save/Delete is an explicit manual operation guarded
-against an active run. A mutation becomes available through a freshly built catalog
-on the next run boundary; it does not rewrite the immutable catalog of an already
-accepted model step.
+Agent-side core/reference upsert and delete use exact Agent-only native
+`common.skills_upsert/delete` handlers and a versioned result contract. Preparation
+binds the accepted arguments and complete current package revision; confirmation
+rejects stale state before dispatch, and read-back distinguishes verified change,
+verified no-change and unknown effect. Direct UI Save/Delete is an explicit manual
+operation guarded against an active run; 11K2 moves that existing editor boundary
+to the same typed package source/result vocabulary. A mutation becomes available
+through a freshly built catalog on the next run boundary; it does not rewrite the
+immutable catalog of an already accepted model step.
 
 ## Model context
 

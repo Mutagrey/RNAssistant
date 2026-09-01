@@ -2539,6 +2539,21 @@ endpoint.
     version/revision UX, restore-as-new-head, tombstone, guarded conflicts and
     explicit artifact import/export; preserve exact `common.capabilities_read` and
     later-run catalog refresh. See [Skill Library](../skills.md).
+    The mandatory existing-tool/legacy-removal entrance is split from the optional
+    R54 Library expansion so the latter is not claimed by a runtime adapter cutover:
+    - [x] 11K1 — move existing `common.skills_upsert/delete` to exact Agent-only
+      native handlers over a complete versioned current-package snapshot. Persist a
+      bounded accepted-arguments/current-package guard through confirmation, reject
+      stale state before dispatch, verify exact read-back/absence and delete
+      `SkillToolExecutor` plus the final controller executor branch.
+      [Evidence](PHASE_11K1_SKILL_AUTHORING_NATIVE_RUNTIME.md);
+    - 11K2 — move the existing Skills editor/reference bridge to versioned typed
+      package/result DTOs and the same guarded mutation owner; remove direct
+      UI-to-`SkillStore` mutation and unversioned result shapes. This closes the
+      mandatory existing Skill contour before 11T10.
+    Immutable package journal/history, restore/tombstone and artifact import/export
+    remain explicit R54 product slices after the mandatory active-legacy route; no
+    flat-store dual-write or compatibility history is introduced meanwhile.
 13. **11L — Browser:** a separately permissioned session/package. HTML preview
     WebView is never reused as browser authority.
 14. **11M — Local Automation:** LA0 session-ownership ADR and LA1 bounded read-only

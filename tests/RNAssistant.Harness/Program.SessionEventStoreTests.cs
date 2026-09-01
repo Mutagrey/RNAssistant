@@ -176,7 +176,10 @@ namespace RNAssistant.Harness
                 var responses = KernelConfirmationResponses();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
-                service.ExecuteAsync(ChatModes.Agent, "Create a skill", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
+                service.ExecuteAsync(ChatModes.Agent, "Create a skill", session,
+                    NewContext(adapter), settingsForRun, tools, null,
+                    (pendingSession, pendingCommand, result) => "pending_replay")
+                    .GetAwaiter().GetResult();
                 var pending = AssertKernelReplay(session);
                 AssertEqual(RunLifecycle.AwaitingConfirmation, pending.LastRun.KernelState.Summary.Lifecycle, "pending replay lifecycle");
                 AssertEqual(0, pending.LastRun.KernelState.Summary.ToolCounts.WriteOk, "confirmation has not dispatched a mutation");
@@ -193,7 +196,10 @@ namespace RNAssistant.Harness
                 var resumed = service.ConfirmAsync(pendingId, command, pending,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Completed, resumed.RunViewState.Lifecycle, "resumed invocation ends through kernel");
-                AssertEqual(1, resumed.RunViewState.UnverifiedWrites, "confirmed legacy write remains unverified");
+                AssertEqual(1, resumed.RunViewState.VerifiedWrites,
+                    "confirmed native skill write retains verification");
+                AssertEqual(0, resumed.RunViewState.UnverifiedWrites,
+                    "confirmed native skill write is not unverified");
                 AssertEqual(2, pending.LastRun.ToolStepsUsed, "confirmation replaces reserved step");
                 AssertEqual("new-process-run", pending.LastRun.KernelState.Summary.RunId, "confirmation resumes under the new runtime run");
                 AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(pending), "confirmation preserves the original accepted IDs and origins without allocating again");
@@ -223,7 +229,11 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
-                service.ExecuteAsync(ChatModes.Agent, "Create skill", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
+                service.ExecuteAsync(ChatModes.Agent, "Create skill", session,
+                    NewContext(adapter), settingsForRun, tools, null,
+                    (pendingSession, command, pendingResult) =>
+                        "pending_replay_cancel")
+                    .GetAwaiter().GetResult();
                 var pending = AssertKernelReplay(session);
                 var acceptedCalls = AcceptedCallIdentitiesJson(pending);
                 var result = service.ConfirmAsync(pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId,
@@ -260,7 +270,11 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
-                service.ExecuteAsync(ChatModes.Agent, "Create skill", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
+                service.ExecuteAsync(ChatModes.Agent, "Create skill", session,
+                    NewContext(adapter), settingsForRun, tools, null,
+                    (pendingSession, command, pendingResult) =>
+                        "pending_replay_preparation")
+                    .GetAwaiter().GetResult();
                 var loaded = AssertKernelReplay(session);
                 var acceptedCalls = AcceptedCallIdentitiesJson(loaded);
                 var result = service.ConfirmAsync(loaded.LastRun.KernelState.Summary.PendingConfirmation.PendingId, PendingCommand(loaded), loaded,
@@ -271,8 +285,12 @@ namespace RNAssistant.Harness
                         throw new InvalidOperationException("context preparation fault");
                     }).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Failed, result.RunViewState.Lifecycle, "local preparation failure stops the kernel");
-                AssertEqual(1, result.RunViewState.UnverifiedWrites, "preparation cannot invent verification for a successful legacy mutation");
-                AssertEqual(1, result.RunViewState.UnknownEffects, "unverified legacy effect stays explicit");
+                AssertEqual(1, result.RunViewState.VerifiedWrites,
+                    "later model preparation failure preserves verified skill mutation evidence");
+                AssertEqual(0, result.RunViewState.UnverifiedWrites,
+                    "later model preparation failure cannot degrade verified evidence");
+                AssertEqual(0, result.RunViewState.UnknownEffects,
+                    "verified skill mutation does not become unknown after model preparation failure");
                 AssertEqual(1, responses.Count, "failed preparation never reaches another model request");
                 AssertEqual(acceptedCalls, AcceptedCallIdentitiesJson(loaded), "preparation failure does not replace confirmed call identity or origin");
                 AssertKernelReplay(loaded);
@@ -396,8 +414,11 @@ namespace RNAssistant.Harness
                 var service = CreateConversationRunService(adapter, executor,
                     (appSettings, messages, options, stream, token) =>
                         Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
-                service.ExecuteAsync(ChatModes.Agent, "Create skill", session, NewContext(adapter),
-                    settings, tools, null).GetAwaiter().GetResult();
+                service.ExecuteAsync(ChatModes.Agent, "Create skill", session,
+                    NewContext(adapter), settings, tools, null,
+                    (pendingSession, pendingCommand, pendingResult) =>
+                        "pending_replay_store_failure")
+                    .GetAwaiter().GetResult();
                 var pending = AssertKernelReplay(session);
                 var pendingId = pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId;
                 var command = PendingCommand(pending);

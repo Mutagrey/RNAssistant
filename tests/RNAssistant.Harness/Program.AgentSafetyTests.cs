@@ -627,7 +627,10 @@ namespace RNAssistant.Harness
                     "new runtime RunId restores logical-turn IDs, including compacted-away schema discovery");
                 var last = service.ConfirmAsync("pending_context", confirmed, session,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
-                AssertEqual(1, last.RunViewState.UnverifiedWrites, "confirmed legacy fixture write is not called verified");
+                AssertEqual(1, last.RunViewState.VerifiedWrites,
+                    "confirmed native skill write keeps read-back verification");
+                AssertEqual(0, last.RunViewState.UnverifiedWrites,
+                    "native skill authoring does not create an unverified write");
                 AssertEqual(3, requests.Count, "one model step after confirmation");
                 var continuation = requests[2];
                 AssertTrue(continuation.CallContext.IsComplete, "confirmation context is complete");

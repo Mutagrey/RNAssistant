@@ -8,36 +8,65 @@ namespace RNAssistant.Core.Models
 {
     public static class SkillRevision
     {
+        public const int CurrentContractVersion = 1;
+
         public static string Compute(SkillDefinition skill)
         {
-            var body = skill == null ? string.Empty : skill.BodyMarkdown ?? string.Empty;
-            var bodyRevision = ComputeMarkdown(body);
+            var canonical = new StringBuilder();
+            Append(canonical, "contractVersion",
+                CurrentContractVersion.ToString());
+            Append(canonical, "id", skill == null ? null : skill.Id);
+            Append(canonical, "host", skill == null ? null : skill.Host);
+            Append(canonical, "name", skill == null ? null : skill.Name);
+            Append(canonical, "description",
+                skill == null ? null : skill.Description);
+            Append(canonical, "version", skill == null ? null : skill.Version);
+            Append(canonical, "enabled",
+                skill != null && skill.Enabled ? "true" : "false");
+            Append(canonical, "bodyMarkdown", NormalizeMarkdown(
+                skill == null ? null : skill.BodyMarkdown));
             var references = (skill == null ? null : skill.References) ?? new List<SkillReferenceMetadata>();
-            if (references.Count == 0) return bodyRevision;
-
-            var canonical = new StringBuilder(bodyRevision);
             foreach (var reference in references
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Path))
                 .OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.Path, StringComparer.Ordinal))
             {
-                canonical.Append('\n');
-                canonical.Append((reference.Path ?? string.Empty).Replace('\\', '/').ToLowerInvariant());
-                canonical.Append('\0');
-                canonical.Append(reference.Revision ?? string.Empty);
+                Append(canonical, "referencePath",
+                    (reference.Path ?? string.Empty).Replace('\\', '/')
+                        .ToLowerInvariant());
+                Append(canonical, "referenceRevision",
+                    (reference.Revision ?? string.Empty).ToLowerInvariant());
             }
             return ComputeMarkdown(canonical.ToString());
         }
 
         public static string ComputeMarkdown(string markdown)
         {
-            var body = (markdown ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            var body = NormalizeMarkdown(markdown);
             using (var sha = SHA256.Create())
             {
                 return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(body)))
                     .Replace("-", string.Empty)
                     .ToLowerInvariant();
             }
+        }
+
+        private static string NormalizeMarkdown(string markdown)
+        {
+            return (markdown ?? string.Empty)
+                .Replace("\r\n", "\n").Replace('\r', '\n');
+        }
+
+        private static void Append(
+            StringBuilder target, string name, string value)
+        {
+            value = value ?? string.Empty;
+            target.Append(name);
+            target.Append(':');
+            target.Append(value.Length);
+            target.Append(':');
+            target.Append(value);
+            target.Append('\n');
         }
     }
 

@@ -538,6 +538,10 @@ namespace RNAssistant.Harness
                 officeToolExecutorSource.IndexOf(
                     "ControllerExecutorKind.ToolAuthoring", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
+                    "ControllerExecutorKind", StringComparison.Ordinal) < 0 &&
+                officeToolExecutorSource.IndexOf(
+                    "ExecuteControllerTool(", StringComparison.Ordinal) < 0 &&
+                officeToolExecutorSource.IndexOf(
                     "PrepareControllerTool", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
                     "PreviewPreparedControllerTool", StringComparison.Ordinal) < 0 &&
@@ -548,6 +552,14 @@ namespace RNAssistant.Harness
                 !vbaToolSources.Any(source => source.IndexOf(
                     "RuntimeGuardJson", StringComparison.Ordinal) >= 0),
                 "migrated native families must not retain controller execution or VBA compatibility guard paths");
+            AssertTrue(
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "SkillAuthoringToolHandler.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "SkillAuthoringService.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools",
+                    "SkillToolExecutor.cs")),
+                "skill authoring must use its exact native handler without a controller executor");
             AssertTrue(
                 File.Exists(Path.Combine(officeRoot, "Tools",
                     "UserQuestionToolHandler.cs")) &&

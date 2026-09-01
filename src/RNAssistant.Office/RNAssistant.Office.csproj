@@ -270,7 +270,12 @@
     <Compile Include="Tools\OfficeToolExecutor.cs" />
     <Compile Include="Tools\OfficeBuiltInToolCatalog.cs" />
     <Compile Include="Tools\ControllerToolDefinition.cs" />
-    <Compile Include="Tools\SkillToolExecutor.cs" />
+    <Compile Include="Tools\SkillAuthoringCatalog.cs" />
+    <Compile Include="Tools\SkillAuthoringCatalog.Schemas.cs" />
+    <Compile Include="Tools\SkillAuthoringContracts.cs" />
+    <Compile Include="Tools\SkillAuthoringService.cs" />
+    <Compile Include="Tools\SkillAuthoringService.Mutations.cs" />
+    <Compile Include="Tools\SkillAuthoringToolHandler.cs" />
     <Compile Include="Tools\CapabilityCatalogService.cs" />
     <Compile Include="Tools\CapabilityCatalogService.SkillReads.cs" />
     <Compile Include="Tools\CapabilityToolCatalog.cs" />

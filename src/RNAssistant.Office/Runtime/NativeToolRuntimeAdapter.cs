@@ -43,7 +43,7 @@ namespace RNAssistant.Office.Runtime
             : this(gateway, excelReads, excelWrites, excelFindReplace,
                 excelSheets, excelRangeMutations, excelTables, excelCharts,
                 wordTools, powerPointTools, outlookTools, null, null, null,
-                null, null, null, null, false, false, hostRuntime,
+                null, null, null, null, null, false, false, hostRuntime,
                 session, snapshot, settings, mode, null, trace)
         {
         }
@@ -62,6 +62,7 @@ namespace RNAssistant.Office.Runtime
             CapabilityCatalogService capabilityTools,
             PromptSettingsService promptTools,
             ToolAuthoringService toolAuthoring,
+            SkillAuthoringService skillAuthoring,
             IReadOnlyList<ToolDefinition> discoveryCatalog,
             IReadOnlyList<SkillDefinition> skillCatalog,
             bool manualRun, bool dryRun,
@@ -246,6 +247,15 @@ namespace RNAssistant.Office.Runtime
                         : new ToolAuthoringReadToolHandler(
                             registration.Descriptor.Id, toolAuthoring);
                 }
+                else if (SkillAuthoringCatalog.Owns(
+                    registration.Descriptor.Id))
+                {
+                    if (skillAuthoring == null)
+                        throw new InvalidOperationException(
+                            "Skill authoring handler dependencies are unavailable.");
+                    handler = new SkillAuthoringToolHandler(
+                        registration.Descriptor.Id, skillAuthoring);
+                }
                 else if (packageRegistration)
                 {
                     if (vbaTools == null || hostRuntime == null)
@@ -291,7 +301,8 @@ namespace RNAssistant.Office.Runtime
                 HtmlWorkspaceToolCatalog.Owns(toolId) ||
                 CapabilityToolCatalog.Owns(toolId) ||
                 PromptToolCatalog.Owns(toolId) ||
-                ToolAuthoringCatalog.Owns(toolId);
+                ToolAuthoringCatalog.Owns(toolId) ||
+                SkillAuthoringCatalog.Owns(toolId);
         }
 
         internal bool Handles(string exactToolId)
@@ -356,6 +367,8 @@ namespace RNAssistant.Office.Runtime
                 return ToolAuthoringMutationToolHandler.BindingFor(toolId);
             if (ToolAuthoringCatalog.Owns(toolId))
                 return ToolAuthoringReadToolHandler.BindingFor(toolId);
+            if (SkillAuthoringCatalog.Owns(toolId))
+                return SkillAuthoringToolHandler.BindingFor(toolId);
             return null;
         }
 
