@@ -2547,10 +2547,11 @@ endpoint.
       stale state before dispatch, verify exact read-back/absence and delete
       `SkillToolExecutor` plus the final controller executor branch.
       [Evidence](PHASE_11K1_SKILL_AUTHORING_NATIVE_RUNTIME.md);
-    - 11K2 — move the existing Skills editor/reference bridge to versioned typed
+    - [x] 11K2 — move the existing Skills editor/reference bridge to versioned typed
       package/result DTOs and the same guarded mutation owner; remove direct
       UI-to-`SkillStore` mutation and unversioned result shapes. This closes the
       mandatory existing Skill contour before 11T10.
+      [Evidence](PHASE_11K2_SKILLS_UI_TYPED_BOUNDARY.md).
     Immutable package journal/history, restore/tombstone and artifact import/export
     remain explicit R54 product slices after the mandatory active-legacy route; no
     flat-store dual-write or compatibility history is introduced meanwhile.

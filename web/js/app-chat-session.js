@@ -276,7 +276,7 @@ function applyInitState(init) {
   state.hasApiKey = !!(init.hasApiKey || init.HasApiKey);
   state.hasHistorySecret = !!(init.hasHistorySecret || init.HasHistorySecret);
   state.tools = init.tools || [];
-  state.skills = init.skills || [];
+  state.skills = skillLibraryItemsFromContract(init.skills);
   if (typeof acceptToolLibraryState === "function") acceptToolLibraryState();
   if (typeof acceptSkillLibraryState === "function") acceptSkillLibraryState();
   state.toolsPath = init.toolsPath || "";

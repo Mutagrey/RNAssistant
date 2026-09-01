@@ -50,14 +50,15 @@ namespace RNAssistant.Office.Tools
                 beforeRevision, intendedRevision,
                 !string.Equals(beforeRevision, intendedRevision,
                     StringComparison.Ordinal));
-            preview["type"] = "rnassistant.skillAuthoringPreview";
+            preview.Type = "rnassistant.skillAuthoringPreview";
             return new SkillAuthoringPreparation(
                 SkillAuthoringOutcome.Ok(
                     "Confirmation required to " + OperationLabel(operation) +
                     " skill " + id + ".",
-                    preview.ToString(Formatting.None),
+                    preview,
                     SkillAuthoringEffect.None),
-                prepared);
+                prepared,
+                beforeRevision);
         }
 
         internal SkillAuthoringOutcome ExecuteMutation(
@@ -106,7 +107,7 @@ namespace RNAssistant.Office.Tools
                     ResultData(id, (string)prepared["operation"],
                         (string)prepared["referencePath"],
                         (string)prepared["beforeRevision"],
-                        beforeRevision, false).ToString(Formatting.None),
+                        beforeRevision, false),
                     "skill_package_changed", true);
             }
 
@@ -136,8 +137,7 @@ namespace RNAssistant.Office.Tools
                 return SkillAuthoringOutcome.Ok(
                     "Custom skill is already up to date: " + id,
                     ResultData(id, operation, referencePath,
-                        beforeRevision, intendedRevision, false)
-                        .ToString(Formatting.None),
+                        beforeRevision, intendedRevision, false),
                     SkillAuthoringEffect.VerifiedNoChange);
             }
 
@@ -159,13 +159,13 @@ namespace RNAssistant.Office.Tools
                 beforeRevision, actualRevision,
                 !string.Equals(beforeRevision, actualRevision,
                     StringComparison.Ordinal));
-            data["expectedRevision"] = intendedRevision;
+            data.ExpectedRevision = intendedRevision;
             if (string.Equals(actualRevision, intendedRevision,
                 StringComparison.Ordinal))
             {
                 return SkillAuthoringOutcome.Ok(
                     SuccessMessage(id, operation),
-                    data.ToString(Formatting.None),
+                    data,
                     SkillAuthoringEffect.VerifiedChange);
             }
             if (string.Equals(actualRevision, beforeRevision,
@@ -175,7 +175,7 @@ namespace RNAssistant.Office.Tools
                     string.IsNullOrWhiteSpace(mutationError)
                         ? "Custom skill mutation was not applied: " + id
                         : mutationError,
-                    data.ToString(Formatting.None),
+                    data,
                     "skill_authoring_not_applied", false,
                     SkillAuthoringEffect.VerifiedNoChange);
             }
@@ -185,7 +185,7 @@ namespace RNAssistant.Office.Tools
                 ". Inspect the Skill Library before retrying." +
                 (string.IsNullOrWhiteSpace(mutationError)
                     ? string.Empty : " " + mutationError),
-                data.ToString(Formatting.None),
+                data,
                 "skill_authoring_verification_failed");
         }
 
@@ -261,22 +261,21 @@ namespace RNAssistant.Office.Tools
             return source == null ? string.Empty : source.Revision;
         }
 
-        private static JObject ResultData(
+        private static SkillAuthoringResultData ResultData(
             string id, string operation, string referencePath,
             string previousRevision, string revision, bool changed)
         {
-            return new JObject
+            return new SkillAuthoringResultData
             {
-                ["type"] = "rnassistant.skillAuthoringResult",
-                ["contractVersion"] =
+                Type = "rnassistant.skillAuthoringResult",
+                ContractVersion =
                     SkillAuthoringOutcome.CurrentContractVersion,
-                ["id"] = id ?? string.Empty,
-                ["operation"] = operation ?? string.Empty,
-                ["referencePath"] = referencePath == null
-                    ? JValue.CreateNull() : new JValue(referencePath),
-                ["previousRevision"] = previousRevision ?? string.Empty,
-                ["revision"] = revision ?? string.Empty,
-                ["changed"] = changed
+                Id = id ?? string.Empty,
+                Operation = operation ?? string.Empty,
+                ReferencePath = referencePath,
+                PreviousRevision = previousRevision ?? string.Empty,
+                Revision = revision ?? string.Empty,
+                Changed = changed
             };
         }
 

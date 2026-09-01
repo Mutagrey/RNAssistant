@@ -153,10 +153,10 @@ function applyLibraryCatalogState(response) {
     }
     changed = true;
   }
-  if (response.skills !== undefined || response.Skills !== undefined) {
+  if (response.skills !== undefined) {
     var selectedSkill = state.skills[state.selectedSkillIndex];
-    var selectedSkillId = selectedSkill && (selectedSkill.Id || selectedSkill.id) || "";
-    var responseSkills = response.skills || response.Skills || [];
+    var selectedSkillId = selectedSkill && selectedSkill.Id || "";
+    var responseSkills = skillLibraryItemsFromContract(response.skills);
     if (state.skillLibraryDirty && typeof reconcileSkillLibraryCatalog === "function") {
       reconcileSkillLibraryCatalog(responseSkills);
     } else {
@@ -167,7 +167,7 @@ function applyLibraryCatalogState(response) {
     }
     if (selectedSkillId) {
       state.selectedSkillIndex = state.skills.findIndex(function (skill) {
-        return String(skill && (skill.Id || skill.id) || "").toLowerCase() === String(selectedSkillId).toLowerCase();
+        return String(skill && skill.Id || "").toLowerCase() === String(selectedSkillId).toLowerCase();
       });
     }
     changed = true;

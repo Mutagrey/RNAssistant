@@ -985,6 +985,140 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SkillUiMutationsUseTypedRevisionGuards()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
+                (executor, adapter) =>
+            {
+                var store = new SkillStore(FixturePaths.Value);
+                var original = store.SaveOne(new SkillDefinition
+                {
+                    Id = "excel.ui_guard",
+                    Host = "Excel",
+                    Name = "UI guard",
+                    Description = "Original description.",
+                    Version = "1.0.0",
+                    BodyMarkdown = "# UI guard",
+                    Enabled = true
+                });
+                var originalRevision = SkillRevision.Compute(original);
+                var update = executor.ExecuteSkillLibraryMutation(
+                    new SkillLibraryCoreMutation
+                    {
+                        Kind = "upsert",
+                        BaseId = original.Id,
+                        ExpectedRevision = originalRevision,
+                        Intended = new SkillDefinition
+                        {
+                            Id = original.Id,
+                            Host = original.Host,
+                            Name = original.Name,
+                            Description = "Updated description.",
+                            Version = original.Version,
+                            BodyMarkdown = original.BodyMarkdown,
+                            Enabled = original.Enabled
+                        }
+                    });
+                AssertEqual(SkillAuthoringOutcomeStatus.Ok,
+                    update.Outcome.Status,
+                    "typed UI core update succeeds");
+                AssertEqual(SkillAuthoringEffect.VerifiedChange,
+                    update.Outcome.Effect,
+                    "typed UI core update verifies read-back");
+                AssertTrue(update.DispatchPossible,
+                    "typed UI core update marks dispatch");
+                AssertTrue(update.Package != null &&
+                    update.Package.Revision != originalRevision,
+                    "typed UI core update returns the new package revision");
+
+                var stale = executor.ExecuteSkillLibraryMutation(
+                    new SkillLibraryCoreMutation
+                    {
+                        Kind = "upsert",
+                        BaseId = original.Id,
+                        ExpectedRevision = originalRevision,
+                        Intended = original
+                    });
+                AssertEqual(SkillAuthoringOutcomeStatus.Error,
+                    stale.Outcome.Status,
+                    "stale UI core update is rejected");
+                AssertEqual("skill_package_changed",
+                    stale.Outcome.ErrorCode,
+                    "stale UI core update has a stable code");
+                AssertTrue(!stale.DispatchPossible,
+                    "stale UI core update does not dispatch");
+
+                var reference = executor
+                    .ExecuteSkillLibraryReferenceMutation(
+                        "upsert", original.Id,
+                        "references/rules.md", "# Rules",
+                        update.Package.Revision);
+                AssertEqual(SkillAuthoringOutcomeStatus.Ok,
+                    reference.Outcome.Status,
+                    "typed UI reference update succeeds");
+                AssertEqual(SkillAuthoringEffect.VerifiedChange,
+                    reference.Outcome.Effect,
+                    "typed UI reference update verifies package read-back");
+                var read = executor.ReadSkillLibraryReference(
+                    original.Id, "references/rules.md",
+                    reference.Package.Revision);
+                AssertEqual("# Rules", read.Content,
+                    "typed UI reference read is revision-bound");
+                var staleRead = false;
+                try
+                {
+                    executor.ReadSkillLibraryReference(
+                        original.Id, "references/rules.md",
+                        update.Package.Revision);
+                }
+                catch (InvalidOperationException)
+                {
+                    staleRead = true;
+                }
+                AssertTrue(staleRead,
+                    "stale UI reference read fails closed");
+
+                var deletedReference = executor
+                    .ExecuteSkillLibraryReferenceMutation(
+                        "delete", original.Id,
+                        "references/rules.md", null,
+                        reference.Package.Revision);
+                AssertEqual(SkillAuthoringOutcomeStatus.Ok,
+                    deletedReference.Outcome.Status,
+                    "typed UI reference delete succeeds");
+                AssertTrue(deletedReference.Package.References.Count == 0,
+                    "typed UI reference delete returns exact package metadata");
+
+                var renamed = executor.ExecuteSkillLibraryMutation(
+                    new SkillLibraryCoreMutation
+                    {
+                        Kind = "upsert",
+                        BaseId = original.Id,
+                        ExpectedRevision =
+                            deletedReference.Package.Revision,
+                        Intended = new SkillDefinition
+                        {
+                            Id = "excel.ui_guard_renamed",
+                            Host = "Excel",
+                            Name = "UI guard renamed",
+                            Description = "Updated description.",
+                            Version = "1.0.0",
+                            BodyMarkdown = "# UI guard",
+                            Enabled = true
+                        }
+                    });
+                AssertEqual(SkillAuthoringOutcomeStatus.Ok,
+                    renamed.Outcome.Status,
+                    "typed UI rename succeeds through the domain owner");
+                AssertEqual("excel.ui_guard_renamed",
+                    renamed.Package.Id,
+                    "typed UI rename returns the exact new identity");
+                AssertTrue(!store.Load().Any(skill =>
+                        skill.Id == original.Id),
+                    "typed UI rename removes the old identity without alias");
+            });
+        }
+
         private static void SkillRevisionAndValidationAreDeterministic()
         {
             var unix = new SkillDefinition

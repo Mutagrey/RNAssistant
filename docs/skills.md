@@ -44,10 +44,15 @@ Agent-side core/reference upsert and delete use exact Agent-only native
 binds the accepted arguments and complete current package revision; confirmation
 rejects stale state before dispatch, and read-back distinguishes verified change,
 verified no-change and unknown effect. Direct UI Save/Delete is an explicit manual
-operation guarded against an active run; 11K2 moves that existing editor boundary
-to the same typed package source/result vocabulary. A mutation becomes available
-through a freshly built catalog on the next run boundary; it does not rewrite the
-immutable catalog of an already accepted model step.
+operation guarded against an active run. The editor now receives only the versioned
+`rnassistant.skillLibrary` package DTO, sends explicit revision-guarded mutations
+instead of reconciling a raw catalog, and consumes versioned mutation/reference
+results. Core, rename, delete and reference changes pass through the same
+`SkillAuthoringService`; the controller no longer owns or mutates `SkillStore`.
+There is no unversioned/PascalCase response fallback or storage-path identity in the
+UI. A mutation becomes available through a freshly built catalog on the next run
+boundary; it does not rewrite the immutable catalog of an already accepted model
+step.
 
 ## Model context
 

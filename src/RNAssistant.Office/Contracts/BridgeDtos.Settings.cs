@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -40,51 +39,6 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("dryRun")]
         public bool DryRun { get; set; }
-    }
-
-    public sealed class SaveSkillsPayload
-    {
-        [JsonProperty("skills")]
-        public List<SkillDefinition> Skills { get; set; }
-    }
-
-    public class SkillReferencePayload
-    {
-        [JsonProperty("skillId")]
-        public string SkillId { get; set; }
-
-        [JsonProperty("path")]
-        public string Path { get; set; }
-    }
-
-    public sealed class SaveSkillReferencePayload : SkillReferencePayload
-    {
-        [JsonProperty("content")]
-        public string Content { get; set; }
-    }
-
-    public sealed class SkillReferenceResponse
-    {
-        [JsonProperty("skillId")]
-        public string SkillId { get; set; }
-
-        [JsonProperty("path")]
-        public string Path { get; set; }
-
-        [JsonProperty("content")]
-        public string Content { get; set; }
-
-        [JsonProperty("deleted")]
-        public bool Deleted { get; set; }
-
-        [JsonProperty("packageRevision")]
-        public string PackageRevision { get; set; }
-
-        [JsonProperty("reference")]
-        public SkillReferenceMetadata Reference { get; set; }
-
-        [JsonProperty("references")]
-        public List<SkillReferenceMetadata> References { get; set; }
     }
 
     public sealed class SettingsResponse

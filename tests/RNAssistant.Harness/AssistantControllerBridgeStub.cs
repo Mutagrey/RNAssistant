@@ -64,7 +64,15 @@ namespace RNAssistant.Office
         public bool LastQualificationAcknowledged { get; private set; }
         public bool LastQualificationCancel { get; private set; }
 
-        public InitResponse Initialize() { return new InitResponse { Host = "Excel", Title = "Harness.xlsx" }; }
+        public InitResponse Initialize()
+        {
+            return new InitResponse
+            {
+                Host = "Excel",
+                Title = "Harness.xlsx",
+                Skills = EmptySkillLibrary()
+            };
+        }
         public ChatStateResponse ListChats() { return ChatState(); }
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
@@ -318,44 +326,110 @@ namespace RNAssistant.Office
             };
         }
 
-        public IReadOnlyList<SkillDefinition> GetSkills() { return new SkillDefinition[0]; }
+        public SkillLibraryResponse GetSkills()
+        {
+            return EmptySkillLibrary();
+        }
 
-        public IReadOnlyList<SkillDefinition> SaveSkills(IEnumerable<SkillDefinition> skills)
+        public SkillLibraryMutationResponse SaveSkills(
+            SaveSkillsPayload payload)
         {
-            LastSkillsJson = JsonConvert.SerializeObject(skills ?? new SkillDefinition[0]);
-            return new SkillDefinition[0];
+            LastSkillsJson = JsonConvert.SerializeObject(
+                payload == null ? null : payload.Mutations);
+            return new SkillLibraryMutationResponse
+            {
+                Type = SkillLibraryMutationResponse.ContractType,
+                ContractVersion = SkillLibraryResponse.CurrentContractVersion,
+                Results = new List<SkillMutationResultDto>(),
+                Library = EmptySkillLibrary()
+            };
         }
-        public SkillReferenceResponse ReadSkillReference(string skillId, string path)
+        public SkillReferenceResponse ReadSkillReference(
+            SkillReferencePayload payload)
         {
-            LastSkillReferenceId = skillId;
-            LastSkillReferencePath = path;
-            return SkillReferenceResult(skillId, path, "reference", false);
+            LastSkillReferenceId = payload == null ? null : payload.SkillId;
+            LastSkillReferencePath = payload == null ? null : payload.Path;
+            return SkillReferenceResult(
+                LastSkillReferenceId, LastSkillReferencePath,
+                "reference", false, "read_reference");
         }
-        public SkillReferenceResponse SaveSkillReference(string skillId, string path, string content)
+        public SkillReferenceResponse SaveSkillReference(
+            SaveSkillReferencePayload payload)
         {
-            LastSkillReferenceId = skillId;
-            LastSkillReferencePath = path;
-            LastSkillReferenceContent = content;
-            return SkillReferenceResult(skillId, path, content, false);
+            LastSkillReferenceId = payload == null ? null : payload.SkillId;
+            LastSkillReferencePath = payload == null ? null : payload.Path;
+            LastSkillReferenceContent = payload == null ? null : payload.Content;
+            return SkillReferenceResult(
+                LastSkillReferenceId, LastSkillReferencePath,
+                LastSkillReferenceContent, false, "update_reference");
         }
-        public SkillReferenceResponse DeleteSkillReference(string skillId, string path)
+        public SkillReferenceResponse DeleteSkillReference(
+            SkillReferencePayload payload)
         {
-            LastSkillReferenceId = skillId;
-            LastSkillReferencePath = path;
-            return SkillReferenceResult(skillId, path, null, true);
+            LastSkillReferenceId = payload == null ? null : payload.SkillId;
+            LastSkillReferencePath = payload == null ? null : payload.Path;
+            return SkillReferenceResult(
+                LastSkillReferenceId, LastSkillReferencePath,
+                null, true, "delete_reference");
         }
-        private static SkillReferenceResponse SkillReferenceResult(string skillId, string path, string content, bool deleted)
+        private static SkillReferenceResponse SkillReferenceResult(
+            string skillId, string path, string content,
+            bool deleted, string operation)
         {
-            var reference = new SkillReferenceMetadata { Path = path, Revision = "ref", ByteLength = content == null ? 0 : content.Length };
+            var reference = deleted ? null : new SkillReferenceDto
+            {
+                Path = path,
+                Revision = "ref",
+                ByteLength = content == null ? 0 : content.Length
+            };
             return new SkillReferenceResponse
             {
-                SkillId = skillId,
+                Type = SkillReferenceResponse.ContractType,
+                ContractVersion = SkillLibraryResponse.CurrentContractVersion,
+                Result = new SkillMutationResultDto
+                {
+                    Type = "rnassistant.skillMutationResult",
+                    ContractVersion = SkillLibraryResponse.CurrentContractVersion,
+                    Status = "ok",
+                    Message = "ok",
+                    Dispatch = deleted ? "may_have_dispatched" : "not_dispatched",
+                    Effect = deleted ? "verified_change" : "none",
+                    Id = skillId,
+                    Operation = operation,
+                    ReferencePath = path,
+                    Revision = "package",
+                    PreviousRevision = "package",
+                    Changed = deleted
+                },
+                Skill = new SkillPackageDto
+                {
+                    Revision = "package",
+                    Id = skillId,
+                    Host = "Common",
+                    Name = skillId,
+                    Description = "stub",
+                    Version = "1.0.0",
+                    BodyMarkdown = "# Stub",
+                    Enabled = true,
+                    BuiltIn = false,
+                    References = deleted
+                        ? new List<SkillReferenceDto>()
+                        : new List<SkillReferenceDto> { reference }
+                },
                 Path = path,
                 Content = content,
                 Deleted = deleted,
-                PackageRevision = "package",
-                Reference = reference,
-                References = deleted ? new List<SkillReferenceMetadata>() : new List<SkillReferenceMetadata> { reference }
+                Reference = reference
+            };
+        }
+
+        private static SkillLibraryResponse EmptySkillLibrary()
+        {
+            return new SkillLibraryResponse
+            {
+                Type = SkillLibraryResponse.ContractType,
+                ContractVersion = SkillLibraryResponse.CurrentContractVersion,
+                Skills = new List<SkillPackageDto>()
             };
         }
         public ChatStateResponse ConfirmAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
@@ -575,7 +649,27 @@ namespace RNAssistant.Office
                     null, null, "ok", DateTime.UtcNow),
                 Message = "ok",
                 Tools = new[] { new ToolDefinition { Id = "common.generated_tool" } },
-                Skills = new[] { new SkillDefinition { Id = "common.generated_skill" } }
+                Skills = new SkillLibraryResponse
+                {
+                    Type = SkillLibraryResponse.ContractType,
+                    ContractVersion = SkillLibraryResponse.CurrentContractVersion,
+                    Skills = new List<SkillPackageDto>
+                    {
+                        new SkillPackageDto
+                        {
+                            Revision = new string('a', 64),
+                            Id = "common.generated_skill",
+                            Host = "Common",
+                            Name = "Generated skill",
+                            Description = "Generated skill.",
+                            Version = "1.0.0",
+                            BodyMarkdown = "# Generated",
+                            Enabled = true,
+                            BuiltIn = false,
+                            References = new List<SkillReferenceDto>()
+                        }
+                    }
+                }
             });
         }
 

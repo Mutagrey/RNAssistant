@@ -282,22 +282,22 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "saveSkills":
                         var saveSkills = Payload<SaveSkillsPayload>(payload);
-                        responsePayload = _controller.SaveSkills(saveSkills.Skills ?? new List<SkillDefinition>());
+                        responsePayload = _controller.SaveSkills(saveSkills);
                         break;
                     case "readSkillReference":
                         var readSkillReference = Payload<SkillReferencePayload>(payload);
-                        responsePayload = _controller.ReadSkillReference(readSkillReference.SkillId, readSkillReference.Path);
+                        responsePayload = _controller.ReadSkillReference(
+                            readSkillReference);
                         break;
                     case "saveSkillReference":
                         var saveSkillReference = Payload<SaveSkillReferencePayload>(payload);
                         responsePayload = _controller.SaveSkillReference(
-                            saveSkillReference.SkillId,
-                            saveSkillReference.Path,
-                            saveSkillReference.Content);
+                            saveSkillReference);
                         break;
                     case "deleteSkillReference":
                         var deleteSkillReference = Payload<SkillReferencePayload>(payload);
-                        responsePayload = _controller.DeleteSkillReference(deleteSkillReference.SkillId, deleteSkillReference.Path);
+                        responsePayload = _controller.DeleteSkillReference(
+                            deleteSkillReference);
                         break;
                     case "runTool":
                         var runTool = Payload<RunToolPayload>(payload);

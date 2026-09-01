@@ -689,7 +689,7 @@ namespace RNAssistant.Office.Contracts
         public string ToolsPath { get; set; }
 
         [JsonProperty("skills")]
-        public IReadOnlyList<SkillDefinition> Skills { get; set; }
+        public SkillLibraryResponse Skills { get; set; }
 
         [JsonProperty("skillsPath")]
         public string SkillsPath { get; set; }
@@ -743,7 +743,7 @@ namespace RNAssistant.Office.Contracts
         public IReadOnlyList<ToolDefinition> Tools { get; set; }
 
         [JsonProperty("skills")]
-        public IReadOnlyList<SkillDefinition> Skills { get; set; }
+        public SkillLibraryResponse Skills { get; set; }
     }
 
     public sealed class ChatResourceDraftResponse

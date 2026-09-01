@@ -366,6 +366,27 @@ namespace RNAssistant.Office.Tools
                     validation.ErrorCode, validation.Retryable);
         }
 
+        internal SkillManualMutationResult ExecuteSkillLibraryMutation(
+            SkillLibraryCoreMutation mutation)
+        {
+            return _skillAuthoringService.ExecuteManualCoreMutation(mutation);
+        }
+
+        internal SkillReferenceReadResult ReadSkillLibraryReference(
+            string skillId, string path, string expectedRevision)
+        {
+            return _skillAuthoringService.ReadManualReference(
+                skillId, path, expectedRevision);
+        }
+
+        internal SkillManualMutationResult ExecuteSkillLibraryReferenceMutation(
+            string kind, string skillId, string path, string content,
+            string expectedRevision)
+        {
+            return _skillAuthoringService.ExecuteManualReferenceMutation(
+                kind, skillId, path, content, expectedRevision);
+        }
+
         internal bool RequiresSessionLeaseForManualRun(
             string toolId,
             IEnumerable<ToolDefinition> tools)

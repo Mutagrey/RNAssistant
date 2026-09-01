@@ -35,103 +35,230 @@ namespace RNAssistant.Office
             }
         }
 
-        public IReadOnlyList<SkillDefinition> GetSkills()
+        public SkillLibraryResponse GetSkills()
         {
-            return _skillCatalog.GetVisibleSkills();
+            return SkillLibraryResponse.From(
+                _skillCatalog.GetVisibleSkills());
         }
 
-        public IReadOnlyList<SkillDefinition> SaveSkills(IEnumerable<SkillDefinition> skills)
+        public SkillLibraryMutationResponse SaveSkills(
+            SaveSkillsPayload payload)
         {
             using (_chatRuns.ReserveMaintenance())
             {
                 EnsureNoActiveRuns();
-                var custom = (skills ?? new SkillDefinition[0]).Where(s => s != null && !s.BuiltIn).ToList();
-                var builtInIds = new HashSet<string>(
-                    _skillCatalog.GetVisibleSkills().Where(s => s.BuiltIn).Select(s => s.Id),
-                    StringComparer.OrdinalIgnoreCase);
-                var collision = custom.FirstOrDefault(s => builtInIds.Contains(s.Id ?? string.Empty));
-                if (collision != null) throw new InvalidOperationException("Built-in skill id is reserved: " + collision.Id);
-                _skillStore.Save(custom, _adapter.HostName);
-                return GetSkills();
-            }
-        }
-
-        public SkillReferenceResponse ReadSkillReference(string skillId, string path)
-        {
-            var skill = RequireCustomSkill(skillId);
-            string content;
-            string error;
-            SkillReferenceMetadata metadata;
-            if (!_skillStore.TryReadReference(skill, path, out content, out metadata, out error))
-            {
-                throw new InvalidOperationException(error);
-            }
-            return SkillReferenceResult(skill, metadata, content, false);
-        }
-
-        public SkillReferenceResponse SaveSkillReference(string skillId, string path, string content)
-        {
-            using (_chatRuns.ReserveMaintenance())
-            {
-                EnsureNoActiveRuns();
-                var skill = RequireCustomSkill(skillId);
-                string error;
-                SkillReferenceMetadata metadata;
-                if (!_skillStore.TrySaveReference(skill, path, content, out metadata, out error))
+                var mutations = ValidateSkillLibraryPayload(payload);
+                var results = new List<SkillMutationResultDto>();
+                foreach (var mutation in mutations)
                 {
-                    throw new InvalidOperationException(error);
+                    var result = _toolExecutor.ExecuteSkillLibraryMutation(
+                        mutation);
+                    results.Add(SkillMutationResultDto.From(result));
+                    if (result.Outcome.Status !=
+                        SkillAuthoringOutcomeStatus.Ok) break;
                 }
-                return SkillReferenceResult(RequireCustomSkill(skillId), metadata, content ?? string.Empty, false);
+                return new SkillLibraryMutationResponse
+                {
+                    Type = SkillLibraryMutationResponse.ContractType,
+                    ContractVersion =
+                        SkillLibraryResponse.CurrentContractVersion,
+                    Results = results,
+                    Library = GetSkills()
+                };
             }
         }
 
-        public SkillReferenceResponse DeleteSkillReference(string skillId, string path)
+        public SkillReferenceResponse ReadSkillReference(
+            SkillReferencePayload payload)
+        {
+            ValidateSkillReferencePayload(payload);
+            var read = _toolExecutor.ReadSkillLibraryReference(
+                payload.SkillId, payload.Path,
+                payload.ExpectedPackageRevision);
+            return new SkillReferenceResponse
+            {
+                Type = SkillReferenceResponse.ContractType,
+                ContractVersion =
+                    SkillLibraryResponse.CurrentContractVersion,
+                Result = SkillMutationResultDto.Read(
+                    read.Package.Id, read.Reference.Path,
+                    read.Package.Revision),
+                Skill = SkillPackageDto.From(read.Package),
+                Path = read.Reference.Path,
+                Content = read.Content,
+                Deleted = false,
+                Reference = SkillReferenceDto.From(read.Reference)
+            };
+        }
+
+        public SkillReferenceResponse SaveSkillReference(
+            SaveSkillReferencePayload payload)
         {
             using (_chatRuns.ReserveMaintenance())
             {
                 EnsureNoActiveRuns();
-                var skill = RequireCustomSkill(skillId);
-                string normalizedPath;
-                string error = null;
-                if (!RNAssistant.Core.Storage.SkillStore.TryNormalizeReferencePath(path, out normalizedPath) ||
-                    !_skillStore.TryDeleteReference(skill, normalizedPath, out error))
-                {
-                    throw new InvalidOperationException(error ?? "Invalid skill reference path.");
-                }
-                return SkillReferenceResult(RequireCustomSkill(skillId), new SkillReferenceMetadata
-                {
-                    Path = normalizedPath,
-                    ByteLength = 0,
-                    Revision = string.Empty
-                }, null, true);
+                ValidateSkillReferencePayload(payload);
+                var result = _toolExecutor
+                    .ExecuteSkillLibraryReferenceMutation(
+                        "upsert", payload.SkillId, payload.Path,
+                        payload.Content,
+                        payload.ExpectedPackageRevision);
+                return SkillReferenceMutationResult(
+                    result, payload.Path, payload.Content, false);
             }
         }
 
-        private SkillDefinition RequireCustomSkill(string id)
+        public SkillReferenceResponse DeleteSkillReference(
+            SkillReferencePayload payload)
         {
-            var skill = _skillStore.Load().FirstOrDefault(item => item != null &&
-                string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (skill == null) throw new InvalidOperationException("Custom skill not found: " + (id ?? string.Empty));
-            return skill;
+            using (_chatRuns.ReserveMaintenance())
+            {
+                EnsureNoActiveRuns();
+                ValidateSkillReferencePayload(payload);
+                var result = _toolExecutor
+                    .ExecuteSkillLibraryReferenceMutation(
+                        "delete", payload.SkillId, payload.Path,
+                        null, payload.ExpectedPackageRevision);
+                return SkillReferenceMutationResult(
+                    result, payload.Path, null, true);
+            }
         }
 
-        private static SkillReferenceResponse SkillReferenceResult(
-            SkillDefinition skill,
-            SkillReferenceMetadata reference,
+        private static IReadOnlyList<SkillLibraryCoreMutation>
+            ValidateSkillLibraryPayload(SaveSkillsPayload payload)
+        {
+            if (payload == null ||
+                !string.Equals(payload.Type,
+                    SaveSkillsPayload.ContractType,
+                    StringComparison.Ordinal) ||
+                payload.ContractVersion !=
+                    SkillLibraryResponse.CurrentContractVersion)
+            {
+                throw new InvalidOperationException(
+                    "Unsupported Skill Library mutation contract.");
+            }
+            var source = payload.Mutations ??
+                new List<SkillCoreMutationPayload>();
+            if (source.Count > 256)
+                throw new InvalidOperationException(
+                    "Skill Library mutation limit exceeded: 256.");
+            var baseIds = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            var targetIds = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            var result = new List<SkillLibraryCoreMutation>();
+            foreach (var item in source)
+            {
+                if (item == null ||
+                    !string.Equals(item.Kind, "upsert",
+                        StringComparison.Ordinal) &&
+                    !string.Equals(item.Kind, "delete",
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "Skill Library mutation kind is invalid.");
+                }
+                var baseId = item.BaseId ?? string.Empty;
+                var expected = item.ExpectedRevision ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(baseId) &&
+                    !baseIds.Add(baseId))
+                {
+                    throw new InvalidOperationException(
+                        "Duplicate Skill Library base id: " + baseId);
+                }
+                if (string.Equals(item.Kind, "delete",
+                    StringComparison.Ordinal))
+                {
+                    if (string.IsNullOrWhiteSpace(baseId) ||
+                        string.IsNullOrWhiteSpace(expected))
+                    {
+                        throw new InvalidOperationException(
+                            "Skill delete requires baseId and expectedRevision.");
+                    }
+                    result.Add(new SkillLibraryCoreMutation
+                    {
+                        Kind = item.Kind,
+                        BaseId = baseId,
+                        ExpectedRevision = expected
+                    });
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(item.Id) ||
+                    !targetIds.Add(item.Id))
+                {
+                    throw new InvalidOperationException(
+                        "Skill upsert id is missing or duplicated: " +
+                        (item.Id ?? string.Empty));
+                }
+                if (string.IsNullOrWhiteSpace(baseId) !=
+                    string.IsNullOrWhiteSpace(expected))
+                {
+                    throw new InvalidOperationException(
+                        "Existing skill upsert requires both baseId and expectedRevision; a new skill requires neither.");
+                }
+                result.Add(new SkillLibraryCoreMutation
+                {
+                    Kind = item.Kind,
+                    BaseId = baseId,
+                    ExpectedRevision = expected,
+                    Intended = new SkillDefinition
+                    {
+                        Id = item.Id,
+                        Host = item.Host,
+                        Name = item.Name,
+                        Description = item.Description,
+                        Version = item.Version,
+                        BodyMarkdown = item.BodyMarkdown,
+                        Enabled = item.Enabled,
+                        BuiltIn = false
+                    }
+                });
+            }
+            return result;
+        }
+
+        private static void ValidateSkillReferencePayload(
+            SkillReferencePayload payload)
+        {
+            if (payload == null || !string.Equals(payload.Type,
+                    SkillReferencePayload.ContractType,
+                    StringComparison.Ordinal) ||
+                payload.ContractVersion !=
+                    SkillLibraryResponse.CurrentContractVersion ||
+                string.IsNullOrWhiteSpace(payload.SkillId) ||
+                string.IsNullOrWhiteSpace(
+                    payload.ExpectedPackageRevision))
+            {
+                throw new InvalidOperationException(
+                    "Unsupported or incomplete skill reference contract.");
+            }
+        }
+
+        private static SkillReferenceResponse SkillReferenceMutationResult(
+            SkillManualMutationResult result,
+            string path,
             string content,
             bool deleted)
         {
+            var package = result == null ? null : result.Package;
+            var reference = package == null ? null :
+                package.References.FirstOrDefault(item => item != null &&
+                    string.Equals(item.Path, path,
+                        StringComparison.OrdinalIgnoreCase));
             return new SkillReferenceResponse
             {
-                SkillId = skill == null ? string.Empty : skill.Id,
-                Path = reference == null ? string.Empty : reference.Path,
-                Content = content,
-                Deleted = deleted,
-                PackageRevision = SkillRevision.Compute(skill),
-                Reference = reference,
-                References = skill == null || skill.References == null
-                    ? new List<SkillReferenceMetadata>()
-                    : new List<SkillReferenceMetadata>(skill.References)
+                Type = SkillReferenceResponse.ContractType,
+                ContractVersion =
+                    SkillLibraryResponse.CurrentContractVersion,
+                Result = SkillMutationResultDto.From(result),
+                Skill = SkillPackageDto.From(package),
+                Path = reference == null ? path : reference.Path,
+                Content = deleted || result == null ||
+                    result.Outcome.Status != SkillAuthoringOutcomeStatus.Ok
+                        ? null : content ?? string.Empty,
+                Deleted = deleted && result != null &&
+                    result.Outcome.Status == SkillAuthoringOutcomeStatus.Ok,
+                Reference = SkillReferenceDto.From(reference)
             };
         }
 

@@ -560,6 +560,26 @@ namespace RNAssistant.Harness
                 !File.Exists(Path.Combine(officeRoot, "Tools",
                     "SkillToolExecutor.cs")),
                 "skill authoring must use its exact native handler without a controller executor");
+            var skillControllerSources = SourceFiles(Path.Combine(
+                    officeRoot, "Controller"))
+                .Select(File.ReadAllText)
+                .ToArray();
+            AssertTrue(!skillControllerSources.Any(source =>
+                    source.IndexOf("_skillStore", StringComparison.Ordinal) >= 0),
+                "Skills UI controller must call the typed authoring owner instead of mutating SkillStore");
+            AssertTrue(
+                typeof(RNAssistant.Office.Contracts.SaveSkillsPayload)
+                    .GetProperty("Skills") == null &&
+                typeof(RNAssistant.Office.Contracts.SaveSkillsPayload)
+                    .GetProperty("Mutations").PropertyType ==
+                    typeof(List<RNAssistant.Office.Contracts.SkillCoreMutationPayload>) &&
+                typeof(RNAssistant.Office.Contracts.InitResponse)
+                    .GetProperty("Skills").PropertyType ==
+                    typeof(RNAssistant.Office.Contracts.SkillLibraryResponse) &&
+                typeof(RNAssistant.Office.Contracts.SendChatResponse)
+                    .GetProperty("Skills").PropertyType ==
+                    typeof(RNAssistant.Office.Contracts.SkillLibraryResponse),
+                "Skills bridge must expose only versioned package/result DTOs and explicit mutations");
             AssertTrue(
                 File.Exists(Path.Combine(officeRoot, "Tools",
                     "UserQuestionToolHandler.cs")) &&

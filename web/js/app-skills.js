@@ -1,4 +1,111 @@
 var skillReferenceLoadSequence = 0;
+var skillLibraryContractVersion = 1;
+var skillLibraryContractType = "rnassistant.skillLibrary";
+var skillLibraryMutationRequestType = "rnassistant.skillLibraryMutationRequest";
+var skillLibraryMutationResultType = "rnassistant.skillLibraryMutationResult";
+var skillReferenceRequestType = "rnassistant.skillReferenceRequest";
+var skillReferenceResultType = "rnassistant.skillReferenceResult";
+
+function skillReferenceFromContract(reference) {
+  if (!reference || typeof reference.path !== "string" ||
+    typeof reference.revision !== "string" ||
+    typeof reference.byteLength !== "number" || reference.byteLength < 0) {
+    throw new Error("Некорректный typed reference навыка.");
+  }
+  return {
+    Path: reference.path,
+    ByteLength: reference.byteLength,
+    Revision: reference.revision
+  };
+}
+
+function skillFromContract(skill) {
+  if (!skill || typeof skill.revision !== "string" || !skill.revision ||
+    typeof skill.id !== "string" || !skill.id ||
+    typeof skill.host !== "string" || typeof skill.name !== "string" ||
+    typeof skill.description !== "string" || typeof skill.version !== "string" ||
+    typeof skill.bodyMarkdown !== "string" || typeof skill.enabled !== "boolean" ||
+    typeof skill.builtIn !== "boolean" || !Array.isArray(skill.references)) {
+    throw new Error("Некорректный typed package навыка.");
+  }
+  return {
+    Id: skill.id,
+    Host: skill.host,
+    Name: skill.name,
+    Description: skill.description,
+    Version: skill.version,
+    BodyMarkdown: skill.bodyMarkdown,
+    Enabled: skill.enabled,
+    BuiltIn: skill.builtIn,
+    Revision: skill.revision,
+    References: skill.references.map(skillReferenceFromContract),
+    _baseId: skill.builtIn ? "" : skill.id,
+    _baseRevision: skill.builtIn ? "" : skill.revision
+  };
+}
+
+function skillLibraryItemsFromContract(contract) {
+  if (!contract || contract.type !== skillLibraryContractType ||
+    contract.contractVersion !== skillLibraryContractVersion ||
+    !Array.isArray(contract.skills)) {
+    throw new Error("Некорректный typed Skill Library contract.");
+  }
+  return contract.skills.map(skillFromContract);
+}
+
+function requireSkillMutationResult(result) {
+  if (!result || result.type !== "rnassistant.skillMutationResult" ||
+    result.contractVersion !== skillLibraryContractVersion ||
+    ["ok", "error", "unknown"].indexOf(result.status) < 0 ||
+    typeof result.message !== "string" || typeof result.dispatch !== "string" ||
+    typeof result.effect !== "string") {
+    throw new Error("Некорректный typed результат изменения навыка.");
+  }
+  return result;
+}
+
+function skillLibraryMutationFromContract(response) {
+  if (!response || response.type !== skillLibraryMutationResultType ||
+    response.contractVersion !== skillLibraryContractVersion ||
+    !Array.isArray(response.results)) {
+    throw new Error("Некорректный typed результат Skill Library.");
+  }
+  var results = response.results.map(requireSkillMutationResult);
+  return {
+    skills: skillLibraryItemsFromContract(response.library),
+    results: results,
+    failure: results.filter(function (result) { return result.status !== "ok"; })[0] || null
+  };
+}
+
+function skillReferenceFromResponse(response, expectedOperation) {
+  if (!response || response.type !== skillReferenceResultType ||
+    response.contractVersion !== skillLibraryContractVersion ||
+    typeof response.path !== "string") {
+    throw new Error("Некорректный typed результат reference навыка.");
+  }
+  var result = requireSkillMutationResult(response.result);
+  var expectedOperations = Array.isArray(expectedOperation)
+    ? expectedOperation : [expectedOperation];
+  if (expectedOperations.indexOf(result.operation) < 0) {
+    throw new Error("Операция typed результата reference не совпадает с запросом.");
+  }
+  if (result.status !== "ok") {
+    var failure = new Error(result.message || "Операция reference не выполнена.");
+    failure.detail = result.message;
+    failure.code = result.code || "skill_reference_failed";
+    throw failure;
+  }
+  return {
+    result: result,
+    skill: skillFromContract(response.skill),
+    path: response.path,
+    content: response.content === null || response.content === undefined
+      ? null : String(response.content),
+    deleted: response.deleted === true,
+    reference: response.reference ? skillReferenceFromContract(response.reference) : null
+  };
+}
 
 function skillEditorValue() {
   return typeof getCodeEditorValue === "function"
@@ -12,7 +119,7 @@ function setSkillEditorValue(value) {
 }
 
 function skillReferencePath(reference) {
-  return (reference && (reference.Path || reference.path)) || "";
+  return (reference && reference.Path) || "";
 }
 
 function ensureSkillReferenceState(skill) {
@@ -48,8 +155,8 @@ function skillLibraryComparable(skill) {
 }
 
 function skillLibraryIdentity(skill) {
-  var storagePath = String(skill && (skill.StoragePath || skill.storagePath) || "").toLowerCase();
-  return storagePath ? "path:" + storagePath : "id:" + String(skill && (skill.Id || skill.id) || "").toLowerCase();
+  var baseId = String(skill && skill._baseId || "").toLowerCase();
+  return "id:" + (baseId || String(skill && skill.Id || "").toLowerCase());
 }
 
 function skillLibraryRecords(skills) {
@@ -58,6 +165,8 @@ function skillLibraryRecords(skills) {
       entity: skill,
       identity: skillLibraryIdentity(skill),
       id: String(skill.Id || "").toLowerCase(),
+      baseId: skill._baseId || "",
+      revision: skill._baseRevision || "",
       comparable: skillLibraryComparable(skill)
     };
   });
@@ -290,16 +399,25 @@ async function loadSelectedSkillReference(skill, path) {
     setCodeEditorReadOnly("skillBodyInput", true);
   }
   try {
-    var response = await send("readSkillReference", { skillId: skill.Id || "", path: path });
+    var response = await send("readSkillReference", {
+      type: skillReferenceRequestType,
+      contractVersion: skillLibraryContractVersion,
+      skillId: skill.Id || "",
+      path: path,
+      expectedPackageRevision: skill._baseRevision || ""
+    });
+    var typed = skillReferenceFromResponse(response, "read_reference");
     if (skill._referenceLoadTokens[path] !== requestId || skill._referenceLoading[path] !== requestId ||
       !(skill.References || []).some(function (item) {
         return skillReferencePath(item).toLowerCase() === path.toLowerCase();
       })) return;
     if (skill._referenceDirty[path]) return;
-    skill._referenceDrafts[path] = (response && response.content) || "";
+    skill._referenceDrafts[path] = typed.content || "";
     skill._referenceLoaded[path] = true;
     delete skill._referenceDirty[path];
-    mergeSkillReferenceMetadata(skill, response && response.references);
+    mergeSkillReferenceMetadata(skill, typed.skill.References);
+    skill.Revision = typed.skill.Revision;
+    skill._baseRevision = typed.skill._baseRevision;
     if (state.skills[state.selectedSkillIndex] === skill && selectedSkillReferencePath(skill) === path) {
       setSkillEditorValue(skill._referenceDrafts[path]);
       renderSkillPreview();
@@ -393,20 +511,40 @@ function applyInstructionMode() {
   if (mode === "preview") renderSkillPreview();
 }
 
-function readSkills() {
+function skillLibraryMutations() {
   syncSelectedSkillFromEditor();
-  return state.skills.map(function (skill) {
-    return {
-      Id: skill.Id || "",
-      Host: skill.Host || "Common",
-      Name: skill.Name || skill.Id || "",
-      Description: skill.Description || "",
-      Version: skill.Version || "1.0.0",
-      BodyMarkdown: skill.BodyMarkdown || "",
-      Enabled: skill.Enabled !== false,
-      BuiltIn: !!skill.BuiltIn
-    };
+  var current = skillLibraryRecords(state.skills);
+  var baseline = state.skillLibraryBaselineItems || [];
+  var currentIndex = skillRecordIndex(current);
+  var baselineIndex = skillRecordIndex(baseline);
+  var mutations = [];
+  current.forEach(function (record) {
+    var previous = matchingSkillRecord(baselineIndex, record);
+    var changed = !previous || JSON.stringify(record.comparable) !== JSON.stringify(previous.comparable);
+    if (!changed) return;
+    var skill = record.entity;
+    mutations.push({
+      kind: "upsert",
+      baseId: previous ? previous.baseId : "",
+      expectedRevision: previous ? previous.revision : "",
+      id: skill.Id || "",
+      host: skill.Host || "Common",
+      name: skill.Name || skill.Id || "",
+      description: skill.Description || "",
+      version: skill.Version || "1.0.0",
+      bodyMarkdown: skill.BodyMarkdown || "",
+      enabled: skill.Enabled !== false
+    });
   });
+  baseline.forEach(function (record) {
+    if (matchingSkillRecord(currentIndex, record)) return;
+    mutations.push({
+      kind: "delete",
+      baseId: record.baseId,
+      expectedRevision: record.revision
+    });
+  });
+  return mutations;
 }
 
 function selectedSkillContext() {
@@ -469,12 +607,27 @@ async function saveSelectedSkillResource() {
   var skill = state.skills[state.selectedSkillIndex];
   if (!skill) return;
   var selectedId = skill.Id || "";
-  var response = await send("saveSkills", { skills: readSkills() });
-  state.skills = preserveSkillReferenceState(response || []);
+  var response = await send("saveSkills", {
+    type: skillLibraryMutationRequestType,
+    contractVersion: skillLibraryContractVersion,
+    mutations: skillLibraryMutations()
+  });
+  var coreResult = skillLibraryMutationFromContract(response);
+  state.skills = coreResult.failure
+    ? reconcileSkillLibraryCatalog(coreResult.skills)
+    : preserveSkillReferenceState(coreResult.skills);
   state.selectedSkillIndex = state.skills.findIndex(function (item) {
     return String((item && item.Id) || "").toLowerCase() === String(selectedId).toLowerCase();
   });
   if (state.selectedSkillIndex < 0 && state.skills.length) state.selectedSkillIndex = 0;
+  if (coreResult.failure) {
+    var coreError = new Error(coreResult.failure.message || "Навыки не сохранены.");
+    coreError.detail = coreResult.failure.message;
+    coreError.code = coreResult.failure.code || "skill_library_mutation_failed";
+    updateSkillLibraryDirty();
+    renderSkills();
+    throw coreError;
+  }
   var savedReferences = 0;
   for (var skillIndex = 0; skillIndex < state.skills.length; skillIndex += 1) {
     var saved = state.skills[skillIndex];
@@ -487,12 +640,19 @@ async function saveSelectedSkillResource() {
       var referencePath = dirtyPaths[pathIndex];
       var referenceContent = saved._referenceDrafts[referencePath] || "";
       var referenceResponse = await send("saveSkillReference", {
+        type: skillReferenceRequestType,
+        contractVersion: skillLibraryContractVersion,
         skillId: saved.Id || "",
         path: referencePath,
-        content: referenceContent
+        content: referenceContent,
+        expectedPackageRevision: saved._baseRevision || ""
       });
-      mergeSkillReferenceMetadata(saved, referenceResponse && referenceResponse.references);
-      saved._referenceDrafts[referencePath] = (referenceResponse && referenceResponse.content) || referenceContent;
+      var typedReference = skillReferenceFromResponse(referenceResponse,
+        ["create_reference", "update_reference"]);
+      mergeSkillReferenceMetadata(saved, typedReference.skill.References);
+      saved.Revision = typedReference.skill.Revision;
+      saved._baseRevision = typedReference.skill._baseRevision;
+      saved._referenceDrafts[referencePath] = typedReference.content || referenceContent;
       saved._referenceLoaded[referencePath] = true;
       delete saved._referenceDirty[referencePath];
       savedReferences += 1;
@@ -547,8 +707,18 @@ async function deleteSelectedSkillReference() {
   if (reference && reference.Pending) {
     skill.References = skill.References.filter(function (item) { return skillReferencePath(item) !== path; });
   } else {
-    var response = await send("deleteSkillReference", { skillId: skill.Id || "", path: path });
-    mergeSkillReferenceMetadata(skill, response && response.references);
+    var response = await send("deleteSkillReference", {
+      type: skillReferenceRequestType,
+      contractVersion: skillLibraryContractVersion,
+      skillId: skill.Id || "",
+      path: path,
+      expectedPackageRevision: skill._baseRevision || ""
+    });
+    var typed = skillReferenceFromResponse(response, "delete_reference");
+    if (!typed.deleted) throw new Error("Удаление reference не подтверждено read-back.");
+    mergeSkillReferenceMetadata(skill, typed.skill.References);
+    skill.Revision = typed.skill.Revision;
+    skill._baseRevision = typed.skill._baseRevision;
   }
   delete skill._referenceDrafts[path];
   delete skill._referenceLoaded[path];
@@ -578,7 +748,10 @@ function bindSkillActions() {
       BodyMarkdown: "# Новый навык\n\nИспользуйте этот навык, когда...\n",
       References: [],
       Enabled: true,
-      BuiltIn: false
+      BuiltIn: false,
+      Revision: "",
+      _baseId: "",
+      _baseRevision: ""
     });
     state.selectedSkillIndex = state.skills.length - 1;
     state.selectedInstructionKind = "skill";
@@ -603,7 +776,10 @@ function bindSkillActions() {
       BodyMarkdown: source.BodyMarkdown || "",
       References: [],
       Enabled: true,
-      BuiltIn: false
+      BuiltIn: false,
+      Revision: "",
+      _baseId: "",
+      _baseRevision: ""
     });
     state.selectedSkillIndex = state.skills.length - 1;
     state.selectedInstructionKind = "skill";

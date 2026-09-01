@@ -626,7 +626,7 @@ namespace RNAssistant.Office
                     ? (IReadOnlyList<object>)new object[0]
                     : completion.ToolResults ?? new object[0],
                 Tools = _toolCatalog.GetVisibleTools(),
-                Skills = _skillCatalog.GetVisibleSkills(),
+                Skills = GetSkills(),
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),

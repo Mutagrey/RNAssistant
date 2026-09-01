@@ -468,6 +468,7 @@ namespace RNAssistant.Harness
                 Test("skills: revision and validation are deterministic", SkillRevisionAndValidationAreDeterministic),
                 Test("skills: references are revisioned and paged", SkillReferencesAreRevisionedAndPaged),
                 Test("skills: ids do not collide and disabled reads fail", SkillIdsDoNotCollideAndDisabledReadsFail),
+                Test("skills: UI mutations use typed revision guards", SkillUiMutationsUseTypedRevisionGuards),
                 Test("tools: unknown and disabled fail", UnknownAndDisabledToolsFail),
                 Test("tools: removed ids are unknown", RemovedToolIdsAreUnknown),
                 Test("tools: compact catalog rejects removed aliases", CompactToolCatalogRejectsRemovedAliases),

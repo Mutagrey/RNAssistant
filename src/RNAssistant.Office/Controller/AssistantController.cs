@@ -32,7 +32,6 @@ namespace RNAssistant.Office
         private readonly UploadedHtmlResourceService _uploadedHtmlResources;
         private readonly ArtifactViewerService _artifactViewer;
         private readonly ToolStore _toolStore;
-        private readonly SkillStore _skillStore;
         private readonly VbaJournalStore _vbaJournalStore;
         private readonly CasMaintenanceService _casMaintenanceService;
         private readonly ITrajectoryQuery _trajectoryQuery;
@@ -79,12 +78,12 @@ namespace RNAssistant.Office
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore);
             _toolStore = new ToolStore(_paths);
-            _skillStore = new SkillStore(_paths);
+            var skillStore = new SkillStore(_paths);
             _vbaJournalStore = new VbaJournalStore(_paths, () => _settingsService.LoadStorageProtector());
             _toolExecutor = new OfficeToolExecutor(
                 _adapter,
                 _vbaJournalStore,
-                _skillStore,
+                skillStore,
                 _toolStore,
                 () => _settingsService.Load(),
                 settings => _settingsService.Save(settings),
@@ -97,7 +96,7 @@ namespace RNAssistant.Office
             _artifactViewer = new ArtifactViewerService(_toolExecutor.ResourceGateway);
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _officeContextCapture = new OfficeContextCaptureService(_adapter, _toolExecutor.DocumentRuntime);
-            _skillCatalog = new SkillCatalogService(_adapter, _skillStore);
+            _skillCatalog = new SkillCatalogService(_adapter, skillStore);
             _chatRuns = new ChatRunRegistry(_paths);
             _casMaintenanceService = new CasMaintenanceService(
                 _paths,
@@ -221,7 +220,7 @@ namespace RNAssistant.Office
                 HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret()),
                 Tools = _toolCatalog.GetVisibleTools(),
                 ToolsPath = _paths.ToolsDirectory,
-                Skills = _skillCatalog.GetVisibleSkills(),
+                Skills = GetSkills(),
                 SkillsPath = _paths.SkillsDirectory,
                 Context = ChatCloneService.CloneContext(context),
                 Messages = ChatCloneService.CloneMessages(session.Messages),
