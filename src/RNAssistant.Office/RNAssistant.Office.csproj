@@ -271,7 +271,11 @@
     <Compile Include="Tools\OfficeBuiltInToolCatalog.cs" />
     <Compile Include="Tools\ControllerToolDefinition.cs" />
     <Compile Include="Tools\SkillToolExecutor.cs" />
-    <Compile Include="Tools\CapabilityDiscoveryExecutor.cs" />
+    <Compile Include="Tools\CapabilityCatalogService.cs" />
+    <Compile Include="Tools\CapabilityCatalogService.SkillReads.cs" />
+    <Compile Include="Tools\CapabilityToolCatalog.cs" />
+    <Compile Include="Tools\CapabilityToolContracts.cs" />
+    <Compile Include="Tools\CapabilityToolHandler.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.Schemas.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.Validation.cs" />

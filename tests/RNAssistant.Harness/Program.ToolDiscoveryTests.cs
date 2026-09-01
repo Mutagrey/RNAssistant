@@ -36,9 +36,9 @@ namespace RNAssistant.Harness
                         Enabled = true
                     }
                 };
-                CapabilityDiscoveryExecutor.BindReadSchema(catalog, skills);
+                CapabilityCatalogService.BindReadSchema(catalog, skills);
 
-                var compact = CapabilityDiscoveryExecutor.BuildPromptCatalog(catalog, skills, catalog);
+                var compact = CapabilityCatalogService.BuildPromptCatalog(catalog, skills, catalog);
                 AssertTrue(((JArray)compact["items"]).OfType<JObject>().Any(item =>
                     (string)item["id"] == "excel.add_sheet" && (string)item["kind"] == "tool"),
                     "compact catalog contains exact tool ids with kind");
@@ -47,9 +47,64 @@ namespace RNAssistant.Harness
                     "compact catalog contains exact skill ids with kind");
                 AssertEqual(true, (bool)compact["idEnumEnforced"],
                     "bounded catalogs also constrain the reader schema to exact ids");
-                var reader = catalog.Single(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId);
+                var reader = catalog.Single(tool => tool.Id == CapabilityToolCatalog.ReadToolId);
                 AssertContains(reader.ArgumentSchemaJson, "excel.add_sheet", "reader enum contains exact tool id");
                 AssertContains(reader.ArgumentSchemaJson, "excel.review_workbook", "reader enum contains exact skill id");
+                var capabilityDefinitions = catalog
+                    .Where(tool => CapabilityToolCatalog.Owns(tool.Id))
+                    .ToArray();
+                AssertEqual(2, capabilityDefinitions.Length,
+                    "exact capability family is complete");
+                foreach (var definition in capabilityDefinitions)
+                {
+                    AssertTrue(definition.RuntimePolicy != null,
+                        definition.Id + " owns a typed policy");
+                    AssertEqual(ToolEffect.Read,
+                        definition.RuntimePolicy.Effect,
+                        definition.Id + " is read-only");
+                    AssertEqual(ToolVerification.None,
+                        definition.RuntimePolicy.Verification,
+                        definition.Id + " does not manufacture verification");
+                    AssertTrue(definition.RuntimePolicy.IndependentLocalRead,
+                        definition.Id + " is an independent local read");
+                    AssertEqual("agent,plan",
+                        string.Join(",", definition.RuntimePolicy.AllowedModes),
+                        definition.Id + " is restricted to Agent and Plan");
+                }
+                var nativeRuntime = executor.CreateNativeRuntime(
+                    NewSession(adapter), capabilityDefinitions,
+                    new AppSettings(), ChatModes.Agent, false, null,
+                    catalog, skills, false);
+                foreach (var definition in capabilityDefinitions)
+                {
+                    AssertTrue(nativeRuntime.Describe(new ToolCall(
+                            "exact_" + definition.Name,
+                            definition.Id, "{}")) != null,
+                        definition.Id + " has an exact native binding");
+                    AssertTrue(nativeRuntime.Describe(new ToolCall(
+                            "alias_" + definition.Name,
+                            definition.Id.ToUpperInvariant(), "{}")) == null,
+                        definition.Id + " has no case alias");
+                }
+                var nativeSearchCall = new ToolCall(
+                    "native_capability_search",
+                    CapabilityToolCatalog.SearchToolId,
+                    "{\"query\":\"excel.review_workbook\"}");
+                var nativeSearchPolicy = nativeRuntime.Describe(nativeSearchCall);
+                var nativeSearch = nativeRuntime.ExecuteAsync(
+                    new ToolExecutionContext(
+                        nativeSearchCall, nativeSearchPolicy,
+                        "run", "turn", "step", DateTime.UtcNow,
+                        false, 1), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(ToolExecutionOutcome.Ok, nativeSearch.Outcome,
+                    "capability search executes through its native handler");
+                AssertEqual(ToolDispatchEvidence.NotDispatched,
+                    nativeSearch.Evidence.Dispatch,
+                    "local capability search has no dispatch boundary");
+                AssertEqual(ToolEffectEvidence.None,
+                    nativeSearch.Evidence.Effect,
+                    "capability search remains effect-free");
                 AssertTrue(!executor.GetControllerTools().Any(tool =>
                     string.Equals(tool.Id, "common.tools_read", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(tool.Id, "common.tools_list", StringComparison.OrdinalIgnoreCase) ||
@@ -58,7 +113,7 @@ namespace RNAssistant.Harness
                     "removed split discovery ids have no aliases");
 
                 var search = executor.Execute(
-                    Command(CapabilityDiscoveryExecutor.SearchToolId, "query", "excel.review_workbook", "limit", 2),
+                    Command(CapabilityToolCatalog.SearchToolId, "query", "excel.review_workbook", "limit", 2),
                     catalog,
                     new AppSettings(),
                     false,
@@ -74,7 +129,7 @@ namespace RNAssistant.Harness
                     "search contains no exact schemas");
 
                 var read = executor.Execute(
-                    Command(CapabilityDiscoveryExecutor.ReadToolId, "id", "excel.add_sheet"),
+                    Command(CapabilityToolCatalog.ReadToolId, "id", "excel.add_sheet"),
                     catalog,
                     new AppSettings(),
                     false,
@@ -94,13 +149,25 @@ namespace RNAssistant.Harness
                     "exact descriptor names the tool");
                 AssertTrue(data.SelectToken("descriptor.function.parameters") is JObject,
                     "exact descriptor includes strict parameters");
+                var wrongCaseRead = executor.Execute(
+                    Command(CapabilityToolCatalog.ReadToolId,
+                        "id", "EXCEL.ADD_SHEET"),
+                    catalog,
+                    new AppSettings(),
+                    false,
+                    false,
+                    null,
+                    AppSettings.DefaultMaxAgentToolSteps,
+                    skills);
+                AssertTrue(!wrongCaseRead.Success,
+                    "capability ids have no case-insensitive read alias");
                 AssertEqual(
-                    CapabilityDiscoveryExecutor.Revision(catalog.Single(tool => tool.Id == "excel.add_sheet")),
+                    CapabilityCatalogService.Revision(catalog.Single(tool => tool.Id == "excel.add_sheet")),
                     (string)data["revision"],
                     "schema revision is deterministic");
 
                 var skillRead = executor.Execute(
-                    Command(CapabilityDiscoveryExecutor.ReadToolId, "id", "excel.review_workbook"),
+                    Command(CapabilityToolCatalog.ReadToolId, "id", "excel.review_workbook"),
                     catalog,
                     new AppSettings(),
                     false,
@@ -115,7 +182,7 @@ namespace RNAssistant.Harness
                 var collisionDetected = false;
                 try
                 {
-                    CapabilityDiscoveryExecutor.ThrowOnCollision(catalog, new[]
+                    CapabilityCatalogService.ThrowOnCollision(catalog, new[]
                     {
                         new SkillDefinition { Id = "excel.add_sheet", Enabled = true }
                     });
@@ -137,8 +204,8 @@ namespace RNAssistant.Harness
                     Enabled = true,
                     AgentCanRun = true
                 })).ToList();
-                CapabilityDiscoveryExecutor.BindReadSchema(largeCatalog, skills);
-                var completeCatalog = CapabilityDiscoveryExecutor.BuildPromptCatalog(
+                CapabilityCatalogService.BindReadSchema(largeCatalog, skills);
+                var completeCatalog = CapabilityCatalogService.BuildPromptCatalog(
                     largeCatalog,
                     skills,
                     largeCatalog);
@@ -156,7 +223,7 @@ namespace RNAssistant.Harness
                 AssertTrue(promptTail["summary"] == null && promptTail["name"] == null &&
                     promptTail["mutatesDocument"] == null && (bool)promptTail["schemaLoaded"],
                     "active schema metadata is not duplicated in the compact index");
-                var optionalCatalog = CapabilityDiscoveryExecutor.BuildPromptCatalog(
+                var optionalCatalog = CapabilityCatalogService.BuildPromptCatalog(
                     largeCatalog,
                     skills,
                     catalog);
@@ -168,7 +235,7 @@ namespace RNAssistant.Harness
                         .IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
                     "complete prompt index remains schema-free");
                 var tailSearch = executor.Execute(
-                    Command(CapabilityDiscoveryExecutor.SearchToolId, "query", "excel.synthetic_299"),
+                    Command(CapabilityToolCatalog.SearchToolId, "query", "excel.synthetic_299"),
                     largeCatalog,
                     new AppSettings(),
                     false,
@@ -185,7 +252,7 @@ namespace RNAssistant.Harness
                 AssertTrue(tailSearch.DataJson.IndexOf("schemaLoaded", StringComparison.Ordinal) < 0,
                     "search does not claim working-set state it cannot observe");
                 var tailRead = executor.Execute(
-                    Command(CapabilityDiscoveryExecutor.ReadToolId, "id", "excel.synthetic_299"),
+                    Command(CapabilityToolCatalog.ReadToolId, "id", "excel.synthetic_299"),
                     largeCatalog,
                     new AppSettings(),
                     false,
@@ -282,8 +349,8 @@ namespace RNAssistant.Harness
                 };
                 var catalog = ConversationRunService.PrepareToolsForRun(
                     executor.GetControllerTools().Where(tool =>
-                        tool.Id == CapabilityDiscoveryExecutor.ReadToolId));
-                CapabilityDiscoveryExecutor.BindReadSchema(catalog, skills);
+                        tool.Id == CapabilityToolCatalog.ReadToolId));
+                CapabilityCatalogService.BindReadSchema(catalog, skills);
                 var settings = new AppSettings
                 {
                     AgentResponseMode = AgentResponseModes.JsonObject,
@@ -314,10 +381,10 @@ namespace RNAssistant.Harness
                     modelSession.AppendToolCall(new AgentToolCall
                     {
                         Id = callId,
-                        Name = CapabilityDiscoveryExecutor.ReadToolId,
+                        Name = CapabilityToolCatalog.ReadToolId,
                         Arguments = new Dictionary<string, object> { { "id", skillId } }
                     }, string.Empty, null, FixtureCallOrigin("oversized-capability-step"));
-                    var command = Command(CapabilityDiscoveryExecutor.ReadToolId, "id", skillId);
+                    var command = Command(CapabilityToolCatalog.ReadToolId, "id", skillId);
                     command.ToolCallId = callId;
                     var result = executor.Execute(
                         command,
@@ -334,7 +401,7 @@ namespace RNAssistant.Harness
 
                     var request = modelSession.CreateRequest("after-oversized-capability",
                         new ModelProtocolCallContext(new string[0]));
-                    var wire = LastToolResult(request.AcceptedMessages, CapabilityDiscoveryExecutor.ReadToolId);
+                    var wire = LastToolResult(request.AcceptedMessages, CapabilityToolCatalog.ReadToolId);
                     AssertEqual("error", (string)wire["status"],
                         "oversized capability cannot remain a successful partial result");
                     AssertEqual("capability_evidence_context_too_large", (string)wire.SelectToken("data.code"),
@@ -428,7 +495,7 @@ namespace RNAssistant.Harness
             {
                 var catalog = ConversationRunService.PrepareToolsForRun(
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()));
-                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                CapabilityCatalogService.BindReadSchema(catalog, null);
                 var snapshot = ToolPackSnapshotFactory.Capture("agent", adapter.HostName, catalog);
                 var inspect = snapshot.Find(ExcelReadToolIds.Inspect);
                 AssertTrue(inspect != null, "runnable snapshot contains the native Excel read");
@@ -461,14 +528,25 @@ namespace RNAssistant.Harness
                         .Find(ExcelReadToolIds.Inspect).Revision != inspect.Revision,
                     "the complete model-visible descriptor is pinned");
 
-                var legacy = catalog.Single(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId);
-                var beforeBinding = ToolPackSnapshotFactory.ExecutionFingerprint(catalog, legacy.Id);
+                var capabilityRead = catalog.Single(tool =>
+                    tool.Id == CapabilityToolCatalog.ReadToolId);
+                var beforeBinding = ToolPackSnapshotFactory.ExecutionFingerprint(
+                    catalog, capabilityRead.Id);
+                AssertEqual(CapabilityToolHandler.BindingFor(
+                        CapabilityToolCatalog.ReadToolId).HandlerId,
+                    snapshot.Find(CapabilityToolCatalog.ReadToolId)
+                        .Binding.HandlerId,
+                    "capability reader captures its native binding");
                 AssertEqual(string.Empty,
-                    ToolPackSnapshotFactory.ExecutionFingerprint(catalog.Concat(new[] { legacy.Clone() }), legacy.Id),
+                    ToolPackSnapshotFactory.ExecutionFingerprint(
+                        catalog.Concat(new[] { capabilityRead.Clone() }),
+                        capabilityRead.Id),
                     "a duplicate current registration fails the pre-dispatch fingerprint closed");
-                legacy.EntryPoint = "replacement-entry";
-                AssertTrue(beforeBinding != ToolPackSnapshotFactory.ExecutionFingerprint(catalog, legacy.Id),
-                    "same tool id cannot hide a replaced legacy binding");
+                capabilityRead.EntryPoint = "replacement-entry";
+                AssertEqual(beforeBinding,
+                    ToolPackSnapshotFactory.ExecutionFingerprint(
+                        catalog, capabilityRead.Id),
+                    "legacy projection fields cannot replace the native capability binding");
             });
         }
 
@@ -491,7 +569,7 @@ namespace RNAssistant.Harness
                     .ToList();
                 var catalog = ConversationRunService.PrepareToolsForRun(
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).Concat(optionalTools));
-                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                CapabilityCatalogService.BindReadSchema(catalog, null);
                 const string runId = "run-tool-pack";
                 var toolPack = CallableToolPack.Create(
                     ChatModes.Agent,
@@ -579,7 +657,7 @@ namespace RNAssistant.Harness
                 var planPack = CallableToolPack.Create(ChatModes.Plan, adapter.HostName, runId, catalog);
                 AssertTrue(!planPack.Tools.Any(tool => tool.Id == "excel.read_range"),
                     "Plan does not inherit the Agent Excel core");
-                AssertTrue(planPack.Tools.Any(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId),
+                AssertTrue(planPack.Tools.Any(tool => tool.Id == CapabilityToolCatalog.ReadToolId),
                     "Plan keeps exact capability discovery in its bootstrap core");
             });
         }
@@ -616,9 +694,9 @@ namespace RNAssistant.Harness
                     AgentCanRun = true
                 }).ToArray();
                 var catalog = ConversationRunService.PrepareToolsForRun(
-                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId)
+                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityToolCatalog.ReadToolId)
                         .Concat(optionalTools));
-                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                CapabilityCatalogService.BindReadSchema(catalog, null);
                 var settings = new AppSettings
                 {
                     AgentResponseMode = AgentResponseModes.JsonSchema,
@@ -652,10 +730,10 @@ namespace RNAssistant.Harness
                         modelSession.AppendToolCall(new AgentToolCall
                         {
                             Id = callId,
-                            Name = CapabilityDiscoveryExecutor.ReadToolId,
+                            Name = CapabilityToolCatalog.ReadToolId,
                             Arguments = new Dictionary<string, object> { { "id", tool.Id } }
                         }, string.Empty, null, FixtureCallOrigin("overflow-step"));
-                        var command = Command(CapabilityDiscoveryExecutor.ReadToolId, "id", tool.Id);
+                        var command = Command(CapabilityToolCatalog.ReadToolId, "id", tool.Id);
                         command.ToolCallId = callId;
                         var result = executor.Execute(command, catalog, settings, false, false);
                         AssertTrue(result.Success, "large schema read succeeds before admission");
@@ -747,9 +825,9 @@ namespace RNAssistant.Harness
                     AgentCanRun = true
                 };
                 var catalog = ConversationRunService.PrepareToolsForRun(
-                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId)
+                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityToolCatalog.ReadToolId)
                         .Concat(new[] { optional }));
-                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                CapabilityCatalogService.BindReadSchema(catalog, null);
                 var settings = new AppSettings { ContextWindowOverrideTokens = 16384, MaxTokens = 1024, AutoCompressContext = true };
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "compaction-run", TurnId = "compaction-turn" };
@@ -757,7 +835,7 @@ namespace RNAssistant.Harness
                 session.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
                 {
                     Id = "read_before_compaction",
-                    Name = CapabilityDiscoveryExecutor.ReadToolId,
+                    Name = CapabilityToolCatalog.ReadToolId,
                     Arguments = new Dictionary<string, object> { { "id", optional.Id } }
                 }, string.Empty, null, ToolResultRoles.User, FixtureCallOrigin("before-compaction-step")));
                 var evidence = ReadSchemaEvidence(executor, catalog, optional.Id, "read_before_compaction");
@@ -846,9 +924,9 @@ namespace RNAssistant.Harness
                     AgentCanRun = true
                 };
                 var catalog = ConversationRunService.PrepareToolsForRun(
-                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityDiscoveryExecutor.ReadToolId)
+                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityToolCatalog.ReadToolId)
                         .Concat(new[] { optional, secondOptional }));
-                CapabilityDiscoveryExecutor.BindReadSchema(catalog, null);
+                CapabilityCatalogService.BindReadSchema(catalog, null);
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "durable-run-1", TurnId = "durable-turn" };
                 var evidence = ReadSchemaEvidence(executor, catalog, optional.Id, "durable-read");
@@ -878,7 +956,7 @@ namespace RNAssistant.Harness
                     "accepted extension pins the exact resulting callable revision");
                 AssertEqual(optional.Id, durableData.RequestedSchemas.Single().Id,
                     "accepted extension persists only the exact requested delta");
-                AssertEqual(CapabilityDiscoveryExecutor.Revision(optional),
+                AssertEqual(CapabilityCatalogService.Revision(optional),
                     durableData.RequestedSchemas.Single().Revision,
                     "accepted extension pins the requested descriptor revision");
                 var secondEvidence = ReadSchemaEvidence(executor, catalog, secondOptional.Id, "durable-read-2");
@@ -983,7 +1061,7 @@ namespace RNAssistant.Harness
             string toolId,
             string callId)
         {
-            var command = Command(CapabilityDiscoveryExecutor.ReadToolId, "id", toolId);
+            var command = Command(CapabilityToolCatalog.ReadToolId, "id", toolId);
             command.ToolCallId = callId;
             var result = executor.Execute(command, catalog, new AppSettings(), false, false);
             AssertTrue(result.Success, "schema read succeeds for " + toolId);

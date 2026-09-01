@@ -600,7 +600,7 @@ namespace RNAssistant.Harness
                     (pendingSession, command, result) => { confirmed = command; return "pending_context"; }).GetAwaiter().GetResult();
                 AssertTrue(first.WaitingForConfirmation && confirmed != null, "real runtime pauses after the accepted confirmation-required call");
                 var schemaCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
-                    message.ToolName == CapabilityDiscoveryExecutor.ReadToolId);
+                    message.ToolName == CapabilityToolCatalog.ReadToolId);
                 var skillCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
                     message.ToolName == "common.skills_upsert");
                 var schemaId = schemaCall.ToolCallId;

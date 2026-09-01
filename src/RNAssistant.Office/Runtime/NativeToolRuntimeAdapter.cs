@@ -41,7 +41,8 @@ namespace RNAssistant.Office.Runtime
             bool trace = true)
             : this(gateway, excelReads, excelWrites, excelFindReplace,
                 excelSheets, excelRangeMutations, excelTables, excelCharts,
-                wordTools, powerPointTools, outlookTools, null, null, hostRuntime,
+                wordTools, powerPointTools, outlookTools, null, null, null,
+                null, null, false, hostRuntime,
                 session, snapshot, settings, mode, null, trace)
         {
         }
@@ -57,6 +58,10 @@ namespace RNAssistant.Office.Runtime
             OutlookToolAdapter outlookTools,
             VbaToolExecutor vbaTools,
             HtmlWorkspaceToolService htmlWorkspaceTools,
+            CapabilityCatalogService capabilityTools,
+            IReadOnlyList<ToolDefinition> discoveryCatalog,
+            IReadOnlyList<SkillDefinition> skillCatalog,
+            bool manualRun,
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode,
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
@@ -199,6 +204,16 @@ namespace RNAssistant.Office.Runtime
                         registration.Descriptor.Id, session,
                         htmlWorkspaceTools);
                 }
+                else if (CapabilityToolCatalog.Owns(
+                    registration.Descriptor.Id))
+                {
+                    if (capabilityTools == null)
+                        throw new InvalidOperationException(
+                            "Capability handler dependencies are unavailable.");
+                    handler = new CapabilityToolHandler(
+                        registration.Descriptor.Id, capabilityTools,
+                        discoveryCatalog, skillCatalog, manualRun);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -231,7 +246,8 @@ namespace RNAssistant.Office.Runtime
                     StringComparison.Ordinal) ||
                 PlanDocumentToolCatalog.Owns(toolId) ||
                 TaskListToolCatalog.Owns(toolId) ||
-                HtmlWorkspaceToolCatalog.Owns(toolId);
+                HtmlWorkspaceToolCatalog.Owns(toolId) ||
+                CapabilityToolCatalog.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -272,6 +288,8 @@ namespace RNAssistant.Office.Runtime
                 return TaskListToolHandler.BindingFor(toolId);
             if (HtmlWorkspaceToolCatalog.Owns(toolId))
                 return HtmlWorkspaceToolHandler.BindingFor(toolId);
+            if (CapabilityToolCatalog.Owns(toolId))
+                return CapabilityToolHandler.BindingFor(toolId);
             return null;
         }
 

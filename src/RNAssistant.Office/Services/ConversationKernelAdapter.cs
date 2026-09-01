@@ -106,13 +106,13 @@ namespace RNAssistant.Office.Services
             _input = input ?? throw new ArgumentNullException(nameof(input));
             _catalog = ConversationRunService.PrepareToolsForRun(input.Tools);
             _skills = _policy.SelectSkills(input.Skills);
-            CapabilityDiscoveryExecutor.ThrowOnCollision(_catalog, _skills);
+            CapabilityCatalogService.ThrowOnCollision(_catalog, _skills);
             _catalog = _policy.SelectTools(_executor.AvailableConversationToolsForSession(_catalog, _session));
-            CapabilityDiscoveryExecutor.BindReadSchema(_catalog, _skills);
+            CapabilityCatalogService.BindReadSchema(_catalog, _skills);
             _toolPack = ToolPackSnapshotFactory.Capture(_policy.Mode, _adapter.HostName, _catalog);
             _nativeTools = _executor.CreateNativeRuntime(
                 _session, _toolPack, _input.Settings, _policy.Mode,
-                true, RegisterNativePending);
+                true, RegisterNativePending, _catalog, _skills, false);
         }
 
         internal ChatTurnResult Result(RunSummary summary)

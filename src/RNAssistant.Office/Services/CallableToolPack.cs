@@ -17,8 +17,8 @@ namespace RNAssistant.Office.Services
             ResourceToolCatalog.ResolveToolId,
             ResourceToolCatalog.SearchToolId,
             ResourceToolCatalog.ReadToolId,
-            CapabilityDiscoveryExecutor.SearchToolId,
-            CapabilityDiscoveryExecutor.ReadToolId);
+            CapabilityToolCatalog.SearchToolId,
+            CapabilityToolCatalog.ReadToolId);
 
         private static readonly HashSet<string> ExcelCoreToolIds = ExactIds(
             "excel.inspect",
@@ -131,7 +131,7 @@ namespace RNAssistant.Office.Services
         public JObject CapabilityContext(IEnumerable<SkillDefinition> skills)
         {
             if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return null;
-            var result = CapabilityDiscoveryExecutor.BuildPromptCatalog(_catalog, skills, Tools);
+            var result = CapabilityCatalogService.BuildPromptCatalog(_catalog, skills, Tools);
             result["policy"] = "tool-pack";
             result["profile"] = ProfileId();
             result["snapshotRevision"] = Revision;
@@ -233,7 +233,7 @@ namespace RNAssistant.Office.Services
                     Mode = _mode,
                     Host = _host,
                     Profile = ProfileId(),
-                    CatalogRevision = CapabilityDiscoveryExecutor.ToolCatalogRevision(_catalog),
+                    CatalogRevision = CapabilityCatalogService.ToolCatalogRevision(_catalog),
                     PreviousSnapshotRevision = previousRevision,
                     SnapshotRevision = revision,
                     Admitted = admitted,
@@ -273,7 +273,7 @@ namespace RNAssistant.Office.Services
                         !seen.Add(reference.Id) || _coreIds.Contains(reference.Id) ||
                         _optionalSet.Contains(reference.Id) ||
                         !_catalogById.TryGetValue(reference.Id, out tool) ||
-                        !string.Equals(reference.Revision, CapabilityDiscoveryExecutor.Revision(tool), StringComparison.Ordinal))
+                        !string.Equals(reference.Revision, CapabilityCatalogService.Revision(tool), StringComparison.Ordinal))
                     {
                         valid = false;
                         break;
@@ -345,7 +345,7 @@ namespace RNAssistant.Office.Services
                 Content = "TOOL_PACK_STATE:\n" + new JObject
                 {
                     ["profile"] = ProfileId(),
-                    ["catalogRevision"] = CapabilityDiscoveryExecutor.ToolCatalogRevision(_catalog),
+                    ["catalogRevision"] = CapabilityCatalogService.ToolCatalogRevision(_catalog),
                     ["previousSnapshotRevision"] = previousRevision,
                     ["snapshotRevision"] = revision,
                     ["requestedSchemas"] = admitted
@@ -372,7 +372,7 @@ namespace RNAssistant.Office.Services
                 .Select(id => new JObject
                 {
                     ["id"] = id,
-                    ["revision"] = CapabilityDiscoveryExecutor.Revision(_catalogById[id])
+                    ["revision"] = CapabilityCatalogService.Revision(_catalogById[id])
                 }));
         }
 
@@ -384,7 +384,7 @@ namespace RNAssistant.Office.Services
                 .Select(id => new ToolPackSchemaRevision
                 {
                     Id = id,
-                    Revision = CapabilityDiscoveryExecutor.Revision(_catalogById[id])
+                    Revision = CapabilityCatalogService.Revision(_catalogById[id])
                 })
                 .ToList();
         }
@@ -430,7 +430,7 @@ namespace RNAssistant.Office.Services
             string error;
             if (!ToolResultHistoryReader.TryRead(message, out result, out error) ||
                 result.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
-                !string.Equals(result.Name, CapabilityDiscoveryExecutor.ReadToolId, StringComparison.Ordinal) ||
+                !string.Equals(result.Name, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(result.Result.DataJson)) return false;
             JObject data;
             try
@@ -455,9 +455,9 @@ namespace RNAssistant.Office.Services
             ToolDefinition tool;
             if (string.IsNullOrWhiteSpace(id) || !_catalogById.TryGetValue(id, out tool) ||
                 !string.Equals(id, tool.Id, StringComparison.Ordinal)) return false;
-            if (!string.Equals((string)data["revision"], CapabilityDiscoveryExecutor.Revision(tool), StringComparison.Ordinal)) return false;
+            if (!string.Equals((string)data["revision"], CapabilityCatalogService.Revision(tool), StringComparison.Ordinal)) return false;
             var descriptor = data["descriptor"] as JObject;
-            return descriptor != null && JToken.DeepEquals(descriptor, CapabilityDiscoveryExecutor.Descriptor(tool));
+            return descriptor != null && JToken.DeepEquals(descriptor, CapabilityCatalogService.Descriptor(tool));
         }
 
         private static HashSet<string> ExactIds(params string[] ids)

@@ -167,8 +167,7 @@ namespace RNAssistant.Office.Services
         private static bool IsCapabilityEvidence(ToolCommand command)
         {
             var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
-            return string.Equals(id, CapabilityDiscoveryExecutor.SearchToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(id, CapabilityDiscoveryExecutor.ReadToolId, StringComparison.OrdinalIgnoreCase);
+            return CapabilityToolCatalog.Owns(id);
         }
 
         private static int EstimateProtocolDataTokens(string data, AppSettings settings)

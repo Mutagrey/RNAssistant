@@ -10,11 +10,9 @@ using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class CapabilityDiscoveryExecutor
+    internal sealed partial class CapabilityCatalogService
     {
-        public const string SearchToolId = "common.capabilities_search";
-        public const string ReadToolId = "common.capabilities_read";
-        public const int MaximumDescriptorCharacters = 24000;
+        internal const int MaximumDescriptorCharacters = 24000;
 
         private const int MaximumSearchPageSize = 20;
         private const int MaximumQueryCharacters = 200;
@@ -22,56 +20,34 @@ namespace RNAssistant.Office.Tools
         private const int MaximumPromptSummaryCharacters = 96;
         private const int MaximumSummaryCharacters = 160;
 
-        private readonly SkillToolExecutor _skillExecutor;
-
-        public CapabilityDiscoveryExecutor(SkillToolExecutor skillExecutor)
-        {
-            _skillExecutor = skillExecutor;
-        }
-
-        public IEnumerable<ToolDefinition> GetControllerTools()
-        {
-            yield return ControllerToolDefinition.Create(
-                SearchToolId,
-                "Common",
-                "Read-only: Filter the complete compact RUNTIME_CONTEXT.capabilities catalog by id or metadata. Results identify tools and skills but load neither; use the exact id with common.capabilities_read.",
-                SearchSchema(),
-                name: "capabilities_search",
-                scope: "session",
-                independentLocalRead: true);
-            yield return ControllerToolDefinition.Create(
-                ReadToolId,
-                "Common",
-                "Read-only: Read one exact capability id from RUNTIME_CONTEXT.capabilities or capabilities_search. A tool result loads its exact callable schema; a skill result loads its complete Markdown body. Never invent or derive an id.",
-                ReadSchema(null, null),
-                name: "capabilities_read",
-                scope: "session",
-                independentLocalRead: true);
-        }
-
-        public ToolResult ExecuteControllerTool(
-            ToolCommand command,
+        internal CapabilityToolOutcome Execute(
+            string toolId,
+            IDictionary<string, object> arguments,
             IReadOnlyList<ToolDefinition> runnableCatalog,
             IReadOnlyList<SkillDefinition> skills,
             bool manualRun)
         {
-            if (command == null) return ToolResult.Fail("Capability command is empty.");
+            arguments = arguments ??
+                new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             var tools = NormalizeTools(runnableCatalog);
-            var enabledSkills = NormalizeSkills(_skillExecutor == null
-                ? skills
-                : _skillExecutor.CapabilityCatalog(manualRun, skills));
+            var enabledSkills = NormalizeSkills(
+                CapabilitySkills(manualRun, skills));
             var collision = FindCollision(tools, enabledSkills);
             if (!string.IsNullOrWhiteSpace(collision)) return CollisionFailure(collision);
 
-            if (string.Equals(command.ToolId, SearchToolId, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(toolId, CapabilityToolCatalog.SearchToolId,
+                StringComparison.Ordinal))
             {
-                return Search(command, tools, enabledSkills);
+                return Search(arguments, tools, enabledSkills);
             }
-            if (string.Equals(command.ToolId, ReadToolId, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(toolId, CapabilityToolCatalog.ReadToolId,
+                StringComparison.Ordinal))
             {
-                return Read(command, tools, enabledSkills, manualRun);
+                return Read(arguments, tools, enabledSkills);
             }
-            return ToolResult.Fail("Unknown capability discovery command: " + command.ToolId);
+            return CapabilityToolOutcome.Error(
+                "Unknown capability tool: " + toolId, null,
+                "unknown_tool", false);
         }
 
         internal static JObject Descriptor(ToolDefinition tool)
@@ -144,7 +120,8 @@ namespace RNAssistant.Office.Tools
             var skillCatalog = NormalizeSkills(skills);
             ThrowOnCollision(toolCatalog, skillCatalog);
             var reader = (tools ?? new List<ToolDefinition>()).FirstOrDefault(tool => tool != null &&
-                string.Equals(tool.Id, ReadToolId, StringComparison.OrdinalIgnoreCase));
+                string.Equals(tool.Id, CapabilityToolCatalog.ReadToolId,
+                    StringComparison.Ordinal));
             if (reader == null) return;
             var allIds = toolCatalog.Select(tool => tool.Id)
                 .Concat(skillCatalog.Select(skill => skill.Id))
@@ -168,7 +145,8 @@ namespace RNAssistant.Office.Tools
             int expectedIds)
         {
             var reader = (tools ?? new ToolDefinition[0]).FirstOrDefault(tool => tool != null &&
-                string.Equals(tool.Id, ReadToolId, StringComparison.OrdinalIgnoreCase));
+                string.Equals(tool.Id, CapabilityToolCatalog.ReadToolId,
+                    StringComparison.Ordinal));
             if (reader == null || string.IsNullOrWhiteSpace(reader.ArgumentSchemaJson)) return false;
             try
             {
@@ -193,22 +171,22 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private ToolResult Read(
-            ToolCommand command,
+        private CapabilityToolOutcome Read(
+            IDictionary<string, object> arguments,
             IReadOnlyList<ToolDefinition> tools,
-            IReadOnlyList<SkillDefinition> skills,
-            bool manualRun)
+            IReadOnlyList<SkillDefinition> skills)
         {
-            var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty).Trim();
+            var id = ToolArgumentReader.String(
+                arguments, "id", string.Empty).Trim();
             var tool = tools.FirstOrDefault(candidate =>
-                string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase));
+                string.Equals(candidate.Id, id, StringComparison.Ordinal));
             var skill = skills.FirstOrDefault(candidate =>
-                string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase));
+                string.Equals(candidate.Id, id, StringComparison.Ordinal));
             if (tool == null && skill == null)
             {
                 var records = Records(tools, skills).ToList();
                 var suggestions = Suggest(id, records, 5);
-                return ToolResult.Fail(
+                return CapabilityToolOutcome.Error(
                     "Capability not found: " + id + ". Use an exact id from RUNTIME_CONTEXT.capabilities or common.capabilities_search; never invent an id.",
                     new JObject
                     {
@@ -221,9 +199,11 @@ namespace RNAssistant.Office.Tools
             }
             if (tool != null)
             {
-                if (HasArgument(command, "referencePath") || HasArgument(command, "offset") || HasArgument(command, "maxChars"))
+                if (HasArgument(arguments, "referencePath") ||
+                    HasArgument(arguments, "offset") ||
+                    HasArgument(arguments, "maxChars"))
                 {
-                    return ToolResult.Fail(
+                    return CapabilityToolOutcome.Error(
                         "Skill reference arguments cannot be used with tool capability " + id + ".",
                         null,
                         "capability_reference_not_supported",
@@ -231,17 +211,15 @@ namespace RNAssistant.Office.Tools
                 }
                 return ReadTool(tool);
             }
-            return _skillExecutor == null
-                ? ToolResult.Fail("Skill reader is unavailable.", null, "capability_reader_unavailable", false)
-                : _skillExecutor.ReadCapability(command, manualRun, skills);
+            return ReadSkill(arguments, skill);
         }
 
-        private static ToolResult ReadTool(ToolDefinition tool)
+        private static CapabilityToolOutcome ReadTool(ToolDefinition tool)
         {
             var descriptor = Descriptor(tool);
             if (descriptor == null)
             {
-                return ToolResult.Fail(
+                return CapabilityToolOutcome.Error(
                     "Tool has no valid callable schema: " + tool.Id,
                     null,
                     "invalid_tool_schema",
@@ -250,7 +228,7 @@ namespace RNAssistant.Office.Tools
             var compact = descriptor.ToString(Formatting.None);
             if (compact.Length > MaximumDescriptorCharacters)
             {
-                return ToolResult.Fail(
+                return CapabilityToolOutcome.Error(
                     "Tool descriptor exceeds the callable-pack descriptor limit: " + tool.Id,
                     JsonConvert.SerializeObject(new
                     {
@@ -261,7 +239,9 @@ namespace RNAssistant.Office.Tools
                     "tool_schema_too_large",
                     false);
             }
-            return ToolResult.Ok("Tool schema returned for callable-state evaluation: " + tool.Id, new JObject
+            return CapabilityToolOutcome.Ok(
+                "Tool schema returned for callable-state evaluation: " + tool.Id,
+                new JObject
             {
                 ["kind"] = "tool-schema",
                 ["id"] = tool.Id,
@@ -274,28 +254,33 @@ namespace RNAssistant.Office.Tools
             }.ToString(Formatting.None));
         }
 
-        private static ToolResult Search(
-            ToolCommand command,
+        private static CapabilityToolOutcome Search(
+            IDictionary<string, object> arguments,
             IReadOnlyList<ToolDefinition> tools,
             IReadOnlyList<SkillDefinition> skills)
         {
-            var query = ToolArgumentReader.String(command.Arguments, "query", string.Empty).Trim();
+            var query = ToolArgumentReader.String(
+                arguments, "query", string.Empty).Trim();
             if (query.Length == 0)
             {
-                return ToolResult.Fail("Capability search query is required.", null, "capability_query_required", true);
+                return CapabilityToolOutcome.Error(
+                    "Capability search query is required.", null,
+                    "capability_query_required", true);
             }
             if (query.Length > MaximumQueryCharacters)
             {
-                return ToolResult.Fail(
+                return CapabilityToolOutcome.Error(
                     "Capability search query exceeds " + MaximumQueryCharacters + " characters.",
                     null,
                     "capability_query_too_large",
                     true);
             }
-            var kind = ToolArgumentReader.String(command.Arguments, "kind", string.Empty).Trim().ToLowerInvariant();
-            var cursor = Math.Max(0, ToolArgumentReader.Int32(command.Arguments, "cursor", 0));
+            var kind = ToolArgumentReader.String(
+                arguments, "kind", string.Empty).Trim().ToLowerInvariant();
+            var cursor = Math.Max(0, ToolArgumentReader.Int32(
+                arguments, "cursor", 0));
             var limit = Math.Max(1, Math.Min(MaximumSearchPageSize,
-                ToolArgumentReader.Int32(command.Arguments, "limit", 10)));
+                ToolArgumentReader.Int32(arguments, "limit", 10)));
             var matches = Records(tools, skills)
                 .Where(record => string.IsNullOrWhiteSpace(kind) || string.Equals(record.Kind, kind, StringComparison.Ordinal))
                 .Where(record => record.SearchText.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
@@ -306,7 +291,8 @@ namespace RNAssistant.Office.Tools
             var page = matches.Skip(cursor).Take(limit)
                 .Select(record => Metadata(record, null, MaximumSummaryCharacters)).ToArray();
             var next = cursor + page.Length;
-            return ToolResult.Ok("Capability metadata search completed.", new JObject
+            return CapabilityToolOutcome.Ok(
+                "Capability metadata search completed.", new JObject
             {
                 ["kind"] = "capability-search-page",
                 ["catalogRevision"] = CatalogRevision(tools, skills),
@@ -494,9 +480,9 @@ namespace RNAssistant.Office.Tools
                 .FirstOrDefault(id => toolIds.Contains(id));
         }
 
-        private static ToolResult CollisionFailure(string id)
+        private static CapabilityToolOutcome CollisionFailure(string id)
         {
-            return ToolResult.Fail(
+            return CapabilityToolOutcome.Error(
                 "Capability id is used by both a tool and a skill: " + id + ". Rename one definition.",
                 JsonConvert.SerializeObject(new { id }),
                 "capability_id_collision",
@@ -524,7 +510,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static string SearchSchema()
+        internal static string SearchSchema()
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"query\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200,\"description\":\"Literal query over capability ids and compact metadata.\"}," +
@@ -534,7 +520,9 @@ namespace RNAssistant.Office.Tools
                 "\"required\":[\"query\"],\"additionalProperties\":false}";
         }
 
-        private static string ReadSchema(IEnumerable<string> allowedIds, IEnumerable<string> skillIds)
+        internal static string ReadSchema(
+            IEnumerable<string> allowedIds,
+            IEnumerable<string> skillIds)
         {
             var id = new JObject
             {
@@ -605,9 +593,10 @@ namespace RNAssistant.Office.Tools
             }.ToString(Formatting.None);
         }
 
-        private static bool HasArgument(ToolCommand command, string name)
+        private static bool HasArgument(
+            IDictionary<string, object> arguments, string name)
         {
-            return command != null && command.Arguments != null && command.Arguments.ContainsKey(name);
+            return arguments != null && arguments.ContainsKey(name);
         }
 
         private sealed class CapabilityRecord

@@ -24,7 +24,7 @@ namespace RNAssistant.Office.Tools
         private readonly IReadOnlyList<ToolDefinition> _adapterTools;
         private readonly VbaToolExecutor _vbaExecutor;
         private readonly SkillToolExecutor _skillExecutor;
-        private readonly CapabilityDiscoveryExecutor _capabilityDiscoveryExecutor;
+        private readonly CapabilityCatalogService _capabilityCatalogService;
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
         private readonly PromptToolExecutor _promptToolExecutor;
         private readonly ResourceGatewayService _resourceGateway;
@@ -61,7 +61,8 @@ namespace RNAssistant.Office.Tools
             _adapterTools = (_adapter.GetBuiltInTools() ?? new ToolDefinition[0]).ToArray();
             _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore);
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
-            _capabilityDiscoveryExecutor = new CapabilityDiscoveryExecutor(_skillExecutor);
+            _capabilityCatalogService = new CapabilityCatalogService(
+                adapter, skillStore);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
             _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
             _hostRuntime = new HostRuntime(adapter, paths);
@@ -112,7 +113,8 @@ namespace RNAssistant.Office.Tools
                 RegisterControllerTools(controllerTools,
                     VbaToolCatalog.GetTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools, _skillExecutor.GetControllerTools(), ControllerExecutorKind.Skill);
-            RegisterControllerTools(controllerTools, _capabilityDiscoveryExecutor.GetControllerTools(), ControllerExecutorKind.CapabilityDiscovery);
+            RegisterControllerTools(controllerTools,
+                CapabilityToolCatalog.GetTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
             RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
             RegisterControllerTools(controllerTools, ResourceToolCatalog.GetControllerTools(), ControllerExecutorKind.Native);
@@ -143,25 +145,35 @@ namespace RNAssistant.Office.Tools
         internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, ToolPackSnapshot snapshot,
             AppSettings settings, string mode, bool trace = true,
             Func<RNAssistant.Core.Tools.ToolExecutionContext,
-                ToolPreparationResult, string> pendingRegistrar = null)
+                ToolPreparationResult, string> pendingRegistrar = null,
+            IReadOnlyList<ToolDefinition> discoveryCatalog = null,
+            IReadOnlyList<SkillDefinition> skillCatalog = null,
+            bool manualRun = false)
         {
             return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _excelWriteAdapter,
                 _excelFindReplaceAdapter, _excelSheetAdapter,
                 _excelRangeMutationAdapter, _excelTableAdapter,
                 _excelChartAdapter, _wordAdapter, _powerPointAdapter,
                 _outlookAdapter, _vbaExecutor, _htmlWorkspaceService,
-                _hostRuntime,
+                _capabilityCatalogService, discoveryCatalog, skillCatalog,
+                manualRun, _hostRuntime,
                 session, snapshot, settings, mode, pendingRegistrar, trace);
         }
 
         internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolDefinition> catalog,
             AppSettings settings, string mode, bool trace = true,
             Func<RNAssistant.Core.Tools.ToolExecutionContext,
-                ToolPreparationResult, string> pendingRegistrar = null)
+                ToolPreparationResult, string> pendingRegistrar = null,
+            IReadOnlyList<ToolDefinition> discoveryCatalog = null,
+            IReadOnlyList<SkillDefinition> skillCatalog = null,
+            bool manualRun = false)
         {
+            var catalogList = (catalog ?? new ToolDefinition[0]).ToArray();
             return CreateNativeRuntime(session,
-                ToolPackSnapshotFactory.Capture(mode, _adapter.HostName, catalog),
-                settings, mode, trace, pendingRegistrar);
+                ToolPackSnapshotFactory.Capture(
+                    mode, _adapter.HostName, catalogList),
+                settings, mode, trace, pendingRegistrar,
+                discoveryCatalog ?? catalogList, skillCatalog, manualRun);
         }
 
         internal List<ToolDefinition> AvailableConversationToolsForSession(
@@ -510,7 +522,8 @@ namespace RNAssistant.Office.Tools
                 }
                 return CreateNativeRuntime(context.Session, new[] { tool }, nativeSettings,
                     ChatModes.Normalize(context.Session == null ? null : context.Session.Mode), false,
-                    (execution, preparation) => Guid.NewGuid().ToString("N"))
+                    (execution, preparation) => Guid.NewGuid().ToString("N"),
+                    context.DiscoveryCatalog, context.SkillCatalog, manualRun)
                     .ExecuteCommand(command, remainingSteps, nativeConfirmed, cancellationToken);
             }
 
@@ -812,12 +825,6 @@ namespace RNAssistant.Office.Tools
             {
                 case ControllerExecutorKind.Skill:
                     return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.SkillCatalog);
-                case ControllerExecutorKind.CapabilityDiscovery:
-                    return _capabilityDiscoveryExecutor.ExecuteControllerTool(
-                        command,
-                        context.DiscoveryCatalog,
-                        context.SkillCatalog,
-                        manualRun);
                 case ControllerExecutorKind.ToolAuthoring:
                     return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
                 case ControllerExecutorKind.Prompt:
@@ -1046,7 +1053,6 @@ namespace RNAssistant.Office.Tools
         private enum ControllerExecutorKind
         {
             Skill,
-            CapabilityDiscovery,
             ToolAuthoring,
             Prompt,
             Native,

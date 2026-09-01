@@ -184,7 +184,7 @@ namespace RNAssistant.Office.Services
                 },
                 ["tools"] = BuildTools(tools),
                 ["capabilities"] = !string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal)
-                    ? (JToken)(capabilityCatalog ?? CapabilityDiscoveryExecutor.BuildPromptCatalog(tools, skills, tools))
+                    ? (JToken)(capabilityCatalog ?? CapabilityCatalogService.BuildPromptCatalog(tools, skills, tools))
                     : new JObject
                     {
                         ["items"] = new JArray(),

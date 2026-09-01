@@ -160,7 +160,7 @@ namespace RNAssistant.Office.Services
                     !string.Equals(tool.CapabilityStatus, "partial", StringComparison.OrdinalIgnoreCase)) continue;
                 var descriptor = ConversationPromptComposer.BuildTool(tool);
                 if (descriptor == null || descriptor.ToString(Formatting.None).Length >
-                    CapabilityDiscoveryExecutor.MaximumDescriptorCharacters) continue;
+                    CapabilityCatalogService.MaximumDescriptorCharacters) continue;
                 tool.MutatesDocument = profile.MutatesDocument;
                 tool.MutatesLocalState = profile.MutatesLocalState;
                 tool.RequiresConfirmation = profile.RequiresConfirmation;

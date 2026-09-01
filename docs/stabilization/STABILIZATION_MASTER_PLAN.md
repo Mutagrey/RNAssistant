@@ -2461,7 +2461,12 @@ endpoint.
        controller executor, legacy command/result path and generic Office source
        fallback are removed; bind/refresh call only typed bound read backends.
        [Evidence](PHASE_11T9C4_HTML_NATIVE_RUNTIME.md);
-     - 11T9C5 — capability discovery/read family;
+     - [x] 11T9C5 — `common.capabilities_search/read` use exact native
+       Agent/Plan handlers over the immutable run tool/skill catalogs. The
+       controller executor/class path and skill-reader dependency on
+       `SkillToolExecutor` are removed; schema/skill evidence and ToolPack
+       admission semantics remain unchanged.
+       [Evidence](PHASE_11T9C5_CAPABILITIES_NATIVE_RUNTIME.md);
      - 11T9C6 — prompt read/save family;
    - [x] independent host-neutral cleanup: удалить pre-R37 trajectory inference;
      wrong-type retained operation остаётся exact incompatible/reset-only evidence

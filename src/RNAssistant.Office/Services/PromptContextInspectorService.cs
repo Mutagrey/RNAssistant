@@ -93,8 +93,8 @@ namespace RNAssistant.Office.Services
             var policy = ConversationRunPolicy.For(mode);
             var runnableCatalog = ConversationRunService.PrepareToolsForMode(mode, tools);
             var enabledSkills = policy.SelectSkills(skills);
-            CapabilityDiscoveryExecutor.ThrowOnCollision(runnableCatalog, enabledSkills);
-            CapabilityDiscoveryExecutor.BindReadSchema(runnableCatalog, enabledSkills);
+            CapabilityCatalogService.ThrowOnCollision(runnableCatalog, enabledSkills);
+            CapabilityCatalogService.BindReadSchema(runnableCatalog, enabledSkills);
             var toolPack = CallableToolPack.Create(
                 mode,
                 _adapter == null ? string.Empty : _adapter.HostName,

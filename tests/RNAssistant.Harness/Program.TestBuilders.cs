@@ -105,7 +105,7 @@ namespace RNAssistant.Harness
                 {
                     new
                     {
-                        name = CapabilityDiscoveryExecutor.ReadToolId,
+                        name = CapabilityToolCatalog.ReadToolId,
                         arguments = new { id = toolId }
                     }
                 }
