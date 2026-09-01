@@ -6,6 +6,7 @@
   var FILTERS = [
     { id: "all", label: "Все" },
     { id: "problems", label: "Проблемы" },
+    { id: "api", label: "API body" },
     { id: "model", label: "Модель" },
     { id: "tools", label: "Tools" },
     { id: "effects", label: "Эффекты" }
@@ -82,6 +83,10 @@
 
   function matchesFilter(row, filter) {
     if (filter === "problems") return isProblem(row);
+    if (filter === "api") {
+      var payload = payloadAction(row);
+      return !!(payload && payload.api);
+    }
     if (filter === "model") return isModel(row);
     if (filter === "tools") return isTool(row);
     if (filter === "effects") return isEffect(row);
@@ -305,13 +310,31 @@
     var ids = sourceIds(row);
     if (ids.length !== 1) return null;
     if (kind === "model.request.prepared" || kind === "llm.request") {
-      return { eventId: ids[0], label: "Показать запрос модели", title: "Фактический запрос модели" };
+      return {
+        eventId: ids[0],
+        label: "Обновить API request body",
+        title: "API request body",
+        badge: "API request body",
+        api: true
+      };
     }
     if (kind === "llm.response") {
-      return { eventId: ids[0], label: "Показать ответ модели", title: "Фактический ответ модели" };
+      return {
+        eventId: ids[0],
+        label: "Обновить API response body",
+        title: "API response body",
+        badge: "API response body",
+        api: true
+      };
     }
     if (kind === "model.attempt.rejected" || kind === "agent.response.rejected") {
-      return { eventId: ids[0], label: "Показать отклонённый ответ", title: "Отклонённый ответ модели" };
+      return {
+        eventId: ids[0],
+        label: "Обновить отклонённый body",
+        title: "Отклонённый body модели",
+        badge: "Отклонённый body",
+        api: false
+      };
     }
     return null;
   }
@@ -320,36 +343,50 @@
     var definition = payloadAction(row);
     if (!definition || typeof options.onLoadPayload !== "function") return null;
     var section = document.createElement("section");
-    section.className = "rn-run-journal-payload hidden";
+    section.className = "rn-run-journal-payload";
     appendText(section, "h4", "", definition.title);
     var host = document.createElement("div");
     host.className = "rn-run-journal-payload-host";
+    host.textContent = "Body загрузится автоматически при раскрытии строки.";
     section.appendChild(host);
 
-    var button = actionButton(definition.label, function () {
+    var state = "idle";
+    var button;
+    function loadPayload(force) {
+      if (state === "loading" || (state === "loaded" && !force)) {
+        return Promise.resolve();
+      }
+      state = "loading";
       button.disabled = true;
       button.textContent = "Загружаю…";
-      Promise.resolve(options.onLoadPayload(definition.eventId)).then(function (response) {
+      host.textContent = "Загружаю body…";
+      return Promise.resolve().then(function () {
+        return options.onLoadPayload(definition.eventId);
+      }).then(function (response) {
         var text = value(response, "Text", "text", "");
         var truncated = !!value(response, "TextTruncated", "textTruncated", false);
         var contentType = String(value(response, "ContentType", "contentType", "") || "");
-        section.classList.remove("hidden");
         if (/json/i.test(contentType)) {
           mountJson(host, text, truncated ? "preview" : "full");
         } else {
           host.textContent = text + (truncated ? "\n\n[Показан только bounded preview.]" : "");
         }
-        button.textContent = "Payload загружен";
+        state = "loaded";
+        button.textContent = definition.label;
       }).catch(function (error) {
-        section.classList.remove("hidden");
+        state = "error";
         host.textContent = "Не удалось загрузить payload: " + (error && error.message ? error.message : String(error));
         button.textContent = "Повторить";
       }).then(function () {
         button.disabled = false;
       });
-    });
+    }
+    button = actionButton(definition.label, function () { loadPayload(true); });
     actions.appendChild(button);
-    return section;
+    return {
+      section: section,
+      load: function () { return loadPayload(false); }
+    };
   }
 
   function actionButton(label, onClick) {
@@ -406,6 +443,10 @@
     head.className = "rn-run-journal-row-head";
     appendText(head, "span", "rn-run-journal-layer", layer(row));
     appendText(head, "span", "rn-run-journal-title", titleLabel(row));
+    var payloadDefinition = payloadAction(row);
+    if (payloadDefinition) {
+      appendText(head, "span", "rn-run-journal-api-body", payloadDefinition.badge);
+    }
     var status = appendText(head, "span", "rn-run-journal-status", statusLabel(rowStatus(row)));
     status.setAttribute("data-status", rowStatus(row));
     main.appendChild(head);
@@ -431,9 +472,9 @@
     var actions = document.createElement("div");
     actions.className = "rn-run-journal-actions";
     appendNavigationActions(actions, row, options);
-    var payloadSection = appendPayloadAction(actions, row, options);
+    var payloadView = appendPayloadAction(actions, row, options);
     if (actions.childElementCount) body.appendChild(actions);
-    if (payloadSection) body.appendChild(payloadSection);
+    if (payloadView) body.appendChild(payloadView.section);
 
     var dataSection = document.createElement("section");
     dataSection.className = "rn-run-journal-json-section";
@@ -457,13 +498,19 @@
 
     details.addEventListener("toggle", function () {
       if (typeof options.onExpandedChange === "function") options.onExpandedChange(id, details.open);
-      if (details.open) setDetailsMounted(details, row, true);
+      if (details.open) {
+        setDetailsMounted(details, row, true);
+        if (payloadView) payloadView.load();
+      }
       else {
         setDetailsMounted(details, row, false);
         details.setAttribute("data-mounted", "false");
       }
     });
-    if (details.open) setDetailsMounted(details, row, true);
+    if (details.open) {
+      setDetailsMounted(details, row, true);
+      if (payloadView) payloadView.load();
+    }
     return details;
   }
 

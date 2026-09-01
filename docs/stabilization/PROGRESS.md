@@ -26,6 +26,16 @@ inclusion 1/1 pass; MockDemo builds and version/diff checks pass. Real Windows/C
 VSTO pane lifetime, VBE and WebView qualification remain open.
 [Evidence](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md).
 
+Run Journal API-body visibility correction (2026-09-01): persisted
+`llm.request` and `llm.response` CAS body rows now have visible `API request body` /
+`API response body` markers plus a dedicated filter. Expanding either row performs
+the existing bounded lazy `getChatEventPayload` read automatically, so inspecting
+the raw body needs one action instead of a second hidden button; explicit refresh
+remains available. Rejected model bodies keep a distinct label and are not called
+raw API responses. No event, CAS, bridge operation, transport or durable projection
+was added. Run Journal 9/9 and JavaScript syntax checks pass. Real Windows WebView2
+rendering remains part of Milestone WQ; the next step and Phase 12 gate do not change.
+
 Model SSE terminal incident fix (2026-08-31): streaming reader теперь распознаёт
 non-empty `choices[0].finish_reason`, bounded одну секунду ждёт optional final usage
 или `[DONE]` и завершает response, даже если совместимый endpoint оставил соединение

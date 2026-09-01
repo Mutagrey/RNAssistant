@@ -100,7 +100,7 @@ function findButton(root, prefix) {
   const root = new Element("div");
   let filter = "";
   let navigation = null;
-  let payloadEventId = null;
+  const payloadEventIds = [];
   const expanded = {};
   const options = {
     filter: "all", expanded, activeRunId: "run-1",
@@ -108,8 +108,11 @@ function findButton(root, prefix) {
     onExpandedChange(id, open) { expanded[id] = open; },
     onNavigate(field, value, view) { navigation = { field, value, view }; },
     onLoadPayload(eventId) {
-      payloadEventId = eventId;
-      return Promise.resolve({ Text: "{\"message\":\"done\",\"tool_calls\":[]}", ContentType: "application/json", TextTruncated: false });
+      payloadEventIds.push(eventId);
+      const text = eventId === "evt-2"
+        ? "{\"model\":\"test\",\"messages\":[]}"
+        : "{\"message\":\"done\",\"tool_calls\":[]}";
+      return Promise.resolve({ Text: text, ContentType: "application/json", TextTruncated: false });
     },
     onExpandedSet(ids, open) { ids.forEach(id => { expanded[id] = open; }); }
   };
@@ -120,6 +123,9 @@ function findButton(root, prefix) {
   assert.equal(root.querySelectorAll(".rn-run-journal-row").length, 8);
   assert.match(root.textContent, /Получен исходный ответ модели/);
   assert.match(root.textContent, /Эффект подтверждён/);
+  assert.equal(root.querySelectorAll(".rn-run-journal-api-body").length, 3);
+  assert.match(root.textContent, /API request body/);
+  assert.match(root.textContent, /API response body/);
   const metrics = root.querySelectorAll(".rn-run-journal-metric");
   assert.equal(metrics[1].textContent, "3Проблемы");
   assert.equal(metrics[2].textContent, "2Уникальные tool calls");
@@ -132,13 +138,41 @@ function findButton(root, prefix) {
   console.log("PASS run journal: a correlation-filtered selection does not claim the run has no terminal");
   context.RNAssistantRunJournal.render(root, rows, options);
 
-  findButton(root, "Показать ответ модели").click();
+  const requestRow = root.querySelectorAll(".rn-run-journal-row")
+    .find(item => item.getAttribute("data-row-id") === rows[1].Id);
+  requestRow.open = true;
+  requestRow.dispatch("toggle");
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(payloadEventId, "evt-3");
-  assert.match(root.textContent, /Фактический ответ модели/);
+  assert.deepEqual(payloadEventIds, ["evt-2"]);
+  assert.match(requestRow.textContent, /messages/);
+  requestRow.open = false;
+  requestRow.dispatch("toggle");
+
+  const responseRow = root.querySelectorAll(".rn-run-journal-row")
+    .find(item => item.getAttribute("data-row-id") === rows[2].Id);
+  responseRow.open = true;
+  responseRow.dispatch("toggle");
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(payloadEventIds, ["evt-2", "evt-3"]);
+  assert.match(responseRow.textContent, /API response body/);
   assert.match(root.textContent, /tool_calls/);
+  assert.ok(findButton(responseRow, "Обновить API response body"));
   assert.doesNotMatch(root.textContent, /attempt attempt-1/);
-  console.log("PASS run journal: model request/response payload is available directly while correlation IDs stay collapsed");
+  responseRow.open = false;
+  responseRow.dispatch("toggle");
+  console.log("PASS run journal: one row expansion loads persisted API request/response bodies while correlation IDs stay collapsed");
+
+  findButton(root, "API body").click();
+  assert.equal(filter, "api");
+  const apiFiltered = context.RNAssistantRunJournal.render(root, rows,
+    Object.assign({}, options, { filter }));
+  assert.equal(apiFiltered.displayed, 2);
+  assert.equal(root.querySelectorAll(".rn-run-journal-row").length, 2);
+  assert.match(root.textContent, /API request body/);
+  assert.match(root.textContent, /API response body/);
+  console.log("PASS run journal: dedicated API filter isolates exact request and response body rows");
+
+  context.RNAssistantRunJournal.render(root, rows, options);
 
   findButton(root, "Проблемы").click();
   assert.equal(filter, "problems");
@@ -201,11 +235,13 @@ function findButton(root, prefix) {
   const activity = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-activity.js"), "utf8");
   const agent = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8");
   assert.ok(page.indexOf("app-run-journal.js") < page.indexOf("app-trajectory.js"));
-  ["app-run-journal.css", "app-trajectory.js", "app-agent.js"].forEach(asset => {
+  ["app-trajectory.js", "app-agent.js"].forEach(asset => {
     assert.ok(page.includes(asset + "?v=runtime-diagnostics-20260831-1"), asset + " uses the diagnostics cache key");
   });
-  assert.ok(page.includes("app-run-journal.js?v=runtime-diagnostics-20260831-2"),
-    "changed run-journal renderer uses a fresh cache key");
+  ["app-run-journal.css", "app-run-journal.js"].forEach(asset => {
+    assert.ok(page.includes(asset + "?v=runtime-diagnostics-20260901-1"),
+      asset + " uses the fresh API body visibility cache key");
+  });
   assert.match(page, /option value="run-causal">Журнал запуска/);
   assert.match(trajectory, /pageSize:\s*view === "run-causal" \? 200 : 100/);
   assert.match(trajectory, /combined\.slice\(0, journalLimit\)/);
@@ -216,7 +252,7 @@ function findButton(root, prefix) {
   assert.match(agent, /appendAgentRunViewState\(body, runViewState, agentRunId\(items, finalMessage\)\)/);
   assert.equal(/JSON\.parse|fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   console.log("PASS run journal: integration defaults to bounded run-causal and exposes direct failed-activity navigation");
-  console.log("OK 8/8");
+  console.log("OK 9/9");
 }()).catch(error => {
   console.error(error);
   process.exitCode = 1;

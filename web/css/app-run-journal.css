@@ -266,6 +266,21 @@
   white-space: nowrap;
 }
 
+.rn-run-journal-api-body {
+  flex: 0 0 auto;
+  max-width: 150px;
+  overflow: hidden;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  color: var(--accent-strong);
+  font-size: 8.5px;
+  font-weight: var(--label-font-weight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tone-problem .rn-run-journal-status {
   border-color: color-mix(in srgb, var(--danger) 36%, var(--line));
   background: color-mix(in srgb, var(--danger) 7%, var(--panel));
@@ -312,6 +327,10 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
+}
+
+.rn-run-journal-payload {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
 }
 
 .rn-run-journal-payload h4,

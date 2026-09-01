@@ -24,7 +24,7 @@ Filters compose with AND:
 - `current`, `shadowed` or `log-only` visibility;
 - case-insensitive tokenized full-text search over event metadata and materialized event data.
 
-CAS payload bodies are intentionally excluded from full-text search and remain lazy. Their hash, content type and size metadata remain searchable/visible, and Diagnostics loads a bounded body preview only by explicit event id.
+CAS payload bodies are intentionally excluded from full-text search and remain lazy. Their hash, content type and size metadata remain searchable/visible, and Diagnostics loads a bounded body preview only after explicit row expansion by exact event id.
 
 Every returned raw-event row retains `sourceEventSeqs`, `sourceEventIds`, and deduplicated revision evidence in `resourceRefs`.
 
@@ -68,12 +68,13 @@ Diagnostics turns row correlations into navigation rather than another index: ru
 The Phase 9C UI defaults Diagnostics to the latest known run, requests at most 200
 chronological rows per page and passes already loaded DTOs to `RNAssistantRunJournal`.
 It keeps filters, expansion and scroll in UI memory only. Expanded rows show accepted
-arguments, executor result/data and typed effect evidence. Model request/response rows
-load their exact persisted CAS payload directly through the existing Diagnostics
-callback; the journal itself still reads no bridge, network, CAS or storage. Projection
-correlation IDs are collapsed under a technical section, while the source-range action
-still returns to raw JSONL rows. Missing evidence and `ui.projected` retain their
-non-proof wording.
+arguments, executor result/data and typed effect evidence. Exact API request/response
+rows have a visible body badge and a dedicated filter; expanding one row automatically
+loads its bounded persisted CAS body preview through the existing Diagnostics callback,
+while a manual refresh remains available. The journal itself still reads no bridge, network, CAS or
+storage. Projection correlation IDs are collapsed under a technical section, while the
+source-range action still returns to raw JSONL rows. Missing evidence and `ui.projected`
+retain their non-proof wording.
 
 New `llm.response` events keep compact actual token usage inline beside the immutable CAS response reference. Older streams fall back to token usage in replayable assistant-message operations. Cost is shown only when the provider persisted it in `usage`; RNAssistant does not recalculate historical cost from mutable current price tables.
 
