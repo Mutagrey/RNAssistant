@@ -242,7 +242,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var bind = Command(HtmlArtifactToolExecutor.BindDataToolId,
+                var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId,
                     "dataName", "sales",
                     "sourceTool", ExcelReadToolIds.ReadRange,
                     "sourceArguments", new JObject
@@ -258,7 +258,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.ReadRange),
                     "HTML bind never dispatches the public id to the host");
 
-                var refresh = executor.Execute(Command(HtmlArtifactToolExecutor.RefreshDataToolId, "name", "sales"),
+                var refresh = executor.Execute(Command(HtmlWorkspaceToolCatalog.RefreshDataToolId, "name", "sales"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(refresh.Success, "HTML refresh succeeds through the same adapter");
                 AssertEqual(2, adapter.ExcelBackendCalls.Count(operation =>

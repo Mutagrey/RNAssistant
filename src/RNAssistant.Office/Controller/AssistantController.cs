@@ -233,7 +233,7 @@ namespace RNAssistant.Office
                 ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, chatSettings),
                 HtmlWorkspace = HtmlWorkspaceDto.From(
-                    session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
+                    session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
                     session == null ? null : session.HtmlWorkspaceRecovery),
                 QuickAction = DequeueQuickAction()
             };

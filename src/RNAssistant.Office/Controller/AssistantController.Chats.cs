@@ -571,7 +571,7 @@ namespace RNAssistant.Office
                 ActivePlanDocumentArtifactId = session == null ? string.Empty : session.ActivePlanDocumentArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, ResolveChatSettings(session)),
                 HtmlWorkspace = HtmlWorkspaceDto.From(
-                    session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
+                    session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
                     session == null ? null : session.HtmlWorkspaceRecovery)
             };
         }

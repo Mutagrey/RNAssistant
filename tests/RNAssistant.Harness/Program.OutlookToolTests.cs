@@ -68,7 +68,7 @@ namespace RNAssistant.Harness
                     var reads = adapter.OutlookBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.OutlookReadMailOperation);
                     var bound = executor.Execute(Command(
-                        HtmlArtifactToolExecutor.BindDataToolId,
+                        HtmlWorkspaceToolCatalog.BindDataToolId,
                         "dataName", "outlook_mail",
                         "sourceTool", OutlookToolIds.ReadMail,
                         "sourceArguments", new JObject

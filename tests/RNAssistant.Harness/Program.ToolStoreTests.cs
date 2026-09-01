@@ -393,7 +393,7 @@ namespace RNAssistant.Harness
 
                 var promptTools = ConversationPromptComposer.BuildTools(tools);
                 var bindParameters = (JObject)promptTools.OfType<JObject>()
-                    .Single(item => string.Equals((string)item.SelectToken("function.name"), HtmlArtifactToolExecutor.BindDataToolId, StringComparison.OrdinalIgnoreCase))
+                    .Single(item => string.Equals((string)item.SelectToken("function.name"), HtmlWorkspaceToolCatalog.BindDataToolId, StringComparison.OrdinalIgnoreCase))
                     .SelectToken("function.parameters");
                 AssertTrue(bindParameters["properties"] == null && bindParameters["anyOf"] is JArray,
                     "prompt removes the misleading HTML bind union envelope");

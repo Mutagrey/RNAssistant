@@ -9,7 +9,7 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed partial class HtmlArtifactToolExecutor
+    internal sealed partial class HtmlWorkspaceToolService
     {
         private static readonly TimeSpan HtmlInspectionTimeout = TimeSpan.FromMilliseconds(250);
         private static readonly Regex HtmlCommentPattern = InspectionRegex("<!--.*?-->", RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -31,7 +31,7 @@ namespace RNAssistant.Office.Tools
         private static readonly Regex DataIndexPattern = InspectionRegex("\\bRNAssistantData\\s*\\[\\s*(?:\"(?<value>[^\"]+)\"|'(?<value>[^']+)')\\s*\\]", RegexOptions.None);
         private static readonly Regex DataAccessorPattern = InspectionRegex("\\bRNAssistant\\s*\\.\\s*data\\s*\\.\\s*(?:get|meta)\\s*\\(\\s*(?:\"(?<value>[^\"]+)\"|'(?<value>[^']+)')", RegexOptions.None);
 
-        private static string InspectWorkspaceSchema()
+        internal static string InspectWorkspaceSchema()
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"entryName\":{\"type\":\"string\",\"description\":\"Optional exact HTML entry path; defaults to the active HTML file.\",\"maxLength\":260}," +
@@ -40,15 +40,21 @@ namespace RNAssistant.Office.Tools
                 "},\"required\":[],\"additionalProperties\":false}";
         }
 
-        private static ToolResult InspectWorkspace(ChatSession session, ToolCommand command, CancellationToken cancellationToken)
+        private static HtmlWorkspaceToolOutcome InspectWorkspace(
+            ChatSession session,
+            IDictionary<string, object> arguments,
+            CancellationToken cancellationToken)
         {
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
-                var requestedEntry = ToolArgumentReader.String(command.Arguments, "entryName", string.Empty).Trim();
-                var includeWarnings = ToolArgumentReader.Boolean(command.Arguments, "includeWarnings", true);
-                var maxIssues = Math.Max(1, Math.Min(500, ToolArgumentReader.Int32(command.Arguments, "maxIssues", 100)));
+                var requestedEntry = ToolArgumentReader.String(
+                    arguments, "entryName", string.Empty).Trim();
+                var includeWarnings = ToolArgumentReader.Boolean(
+                    arguments, "includeWarnings", true);
+                var maxIssues = Math.Max(1, Math.Min(500,
+                    ToolArgumentReader.Int32(arguments, "maxIssues", 100)));
                 var entry = ResolveInspectionEntry(workspace, requestedEntry);
                 var collector = new HtmlInspectionCollector(maxIssues, includeWarnings);
                 var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -88,7 +94,7 @@ namespace RNAssistant.Office.Tools
                 var errors = collector.ErrorCount;
                 var warnings = collector.WarningCount;
                 var message = "HTML workspace static inspection found " + errors + " error(s) and " + warnings + " warning(s).";
-                return ToolResult.Ok(message, new JObject
+                return HtmlWorkspaceToolOutcome.Ok(message, new JObject
                 {
                     ["type"] = "rnassistant.htmlWorkspaceInspection",
                     ["version"] = 1,
@@ -109,11 +115,13 @@ namespace RNAssistant.Office.Tools
                     ["truncated"] = errors + (includeWarnings ? warnings : 0) > collector.Returned.Count,
                     ["warningsIncluded"] = includeWarnings,
                     ["issues"] = new JArray(collector.Returned)
-                }.ToString(Formatting.None));
+                }.ToString(Formatting.None), HtmlWorkspaceEffect.None);
             }
             catch (RegexMatchTimeoutException)
             {
-                return ToolResult.Fail("HTML workspace inspection exceeded its regex time limit.", null, "html_workspace_inspection_timeout", true);
+                return HtmlWorkspaceToolOutcome.Error(
+                    "HTML workspace inspection exceeded its regex time limit.",
+                    null, "html_workspace_inspection_timeout", true);
             }
         }
 

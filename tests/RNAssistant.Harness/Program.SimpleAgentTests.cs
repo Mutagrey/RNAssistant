@@ -2004,7 +2004,7 @@ namespace RNAssistant.Harness
                 {
                     new ConversationToolCall
                     {
-                        Name = HtmlArtifactToolExecutor.UpsertToolId,
+                        Name = HtmlWorkspaceToolCatalog.UpsertToolId,
                         Arguments = new Dictionary<string, object>
                         {
                             ["resourceType"] = "file", ["name"] = "report.html", ["content"] = html, ["setActive"] = true
@@ -2013,7 +2013,7 @@ namespace RNAssistant.Harness
                 });
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse(HtmlArtifactToolExecutor.UpsertToolId), rawWrite, rawWrite,
+                    LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.UpsertToolId), rawWrite, rawWrite,
                     ModelProtocolWire.Write("Done.", new ConversationToolCall[0])
                 });
                 var requestCount = 0;
@@ -2032,7 +2032,7 @@ namespace RNAssistant.Harness
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "valid calls complete without repair");
                 AssertEqual(4, requestCount, "two independently accepted writes require no extra model attempt");
                 var accepted = session.Messages.Where(message => message.Role == "assistant" &&
-                    message.ToolName == HtmlArtifactToolExecutor.UpsertToolId && message.AcceptedCallOrigin != null).ToList();
+                    message.ToolName == HtmlWorkspaceToolCatalog.UpsertToolId && message.AcceptedCallOrigin != null).ToList();
                 AssertEqual(2, accepted.Count, "identical payloads are not deduplicated or rejected as ID collisions");
                 AssertEqual(2, accepted.Select(message => message.ToolCallId).Distinct().Count(), "repeated writes have distinct runtime IDs");
                 foreach (var message in accepted)

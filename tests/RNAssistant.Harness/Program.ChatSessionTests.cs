@@ -143,10 +143,10 @@ namespace RNAssistant.Harness
                 var deletedWithArtifact = store.Create("Excel", "book-1", "Book1.xlsx", "First");
                 store.Create("Excel", "book-1", "Book1.xlsx", "Second");
                 var keptWithArtifact = store.Create("Excel", "book-2", "Book2.xlsx", "Keep");
-                HtmlArtifactToolExecutor.UpsertFile(deletedWithArtifact, "index.html", "html", "delete", true);
+                HtmlWorkspaceToolService.UpsertFile(deletedWithArtifact, "index.html", "html", "delete", true);
                 HtmlWorkspaceArtifactService.CaptureCurrent(deletedWithArtifact, "Delete");
                 store.Save(deletedWithArtifact);
-                HtmlArtifactToolExecutor.UpsertFile(keptWithArtifact, "index.html", "html", "keep", true);
+                HtmlWorkspaceToolService.UpsertFile(keptWithArtifact, "index.html", "html", "keep", true);
                 HtmlWorkspaceArtifactService.CaptureCurrent(keptWithArtifact, "Keep");
                 store.Save(keptWithArtifact);
 

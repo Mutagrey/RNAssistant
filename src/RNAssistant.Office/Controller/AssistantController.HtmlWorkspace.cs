@@ -36,7 +36,7 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlArtifactToolExecutor.UpsertFile(session, path, kind, content, setActive);
+                HtmlWorkspaceToolService.UpsertFile(session, path, kind, content, setActive);
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -46,7 +46,7 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlArtifactToolExecutor.UpsertDataSource(session, name, json);
+                HtmlWorkspaceToolService.UpsertDataSource(session, name, json);
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -110,7 +110,7 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlArtifactToolExecutor.DeleteFile(session, path);
+                HtmlWorkspaceToolService.DeleteFile(session, path);
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -120,7 +120,7 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlArtifactToolExecutor.DeleteDataSource(session, name);
+                HtmlWorkspaceToolService.DeleteDataSource(session, name);
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -130,7 +130,7 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlArtifactToolExecutor.SetActiveFile(session, path);
+                HtmlWorkspaceToolService.SetActiveFile(session, path);
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -206,7 +206,7 @@ namespace RNAssistant.Office
                 Artifacts = ChatArtifactDto.From(session),
                 ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
                 Workspace = HtmlWorkspaceDto.From(
-                    session == null ? null : HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace),
+                    session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
                     session == null ? null : session.HtmlWorkspaceRecovery),
                 RedoChoiceRequired = redoChoiceRequired
             };

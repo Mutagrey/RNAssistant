@@ -62,6 +62,16 @@ payload. Tool errors include the stable code and a recovery hint; the enclosing
 Tool Result `tool_call_id` remains the correlation identity, so Resource Fabric does
 not introduce a second correlation protocol.
 
+All eight public `common.html_workspace_*` / `common.html_data_*` operations use
+exact Agent-only native registrations. Static inspection is a source-owned
+independent `Read`; the seven mutations are `Write + ToolVerification` and mark
+dispatch immediately before the first possible chat-workspace change. Their typed
+handler returns exact revision/member `ResourceRef` values at Tool Result root.
+There is no HTML controller executor or `ToolCommand`/legacy `ToolResult`
+roundtrip. Bind/refresh call only the already-bound typed Excel, Word, PowerPoint,
+or Outlook read adapter under the shared document gate; an unknown source cannot
+fall through to generic host dispatch.
+
 Text availability is based on exact body/extraction evidence, not on whether the
 text contains non-whitespace characters. A valid empty or whitespace-only immutable
 representation is returned as complete exact content; a missing body still fails
@@ -158,7 +168,7 @@ new working-set/compaction admission. Exact resolve/read reports non-retryable
 `resource_removed`, so discovery remains read-only and never becomes a second Plan
 mutation path.
 
-HTML data bindings intentionally persist an approved typed read-only `toolId + arguments` contract, document identity, transform, last-good exact JSON, its SHA-256 and explicit `complete|bounded|truncated` evidence. A generic resource URI cannot represent parameterized reads such as an Excel range without recreating a tool contract inside the URI. Bind and refresh therefore revalidate the current tool schema and execute inside the shared document gate; failure retains the last-good value. Refresh is not independently durable: the sole HTML lineage owner checkpoints it at the next chat turn or guarded export, and ordinary storage saves cannot create revisions. Export returns that exact revision-pinned resource URI and CAS hash before local standalone assembly; the raw JSON string is not normalized through a JavaScript number/object round trip. Charts are immutable data snapshots with a human-readable source locator as provenance, not live bindings; current data requires regeneration or an explicit HTML binding.
+HTML data bindings intentionally persist an approved typed read-only `toolId + arguments` contract, document identity, transform, last-good exact JSON, its SHA-256 and explicit `complete|bounded|truncated` evidence. A generic resource URI cannot represent parameterized reads such as an Excel range without recreating a tool contract inside the URI. Bind and refresh therefore revalidate the current tool schema and execute the exact typed read backend inside the shared document gate; failure retains the last-good value, and no generic adapter command is available as fallback. Refresh is not independently durable: the sole HTML lineage owner checkpoints it at the next chat turn or guarded export, and ordinary storage saves cannot create revisions. Export returns that exact revision-pinned resource URI and CAS hash before local standalone assembly; the raw JSON string is not normalized through a JavaScript number/object round trip. Charts are immutable data snapshots with a human-readable source locator as provenance, not live bindings; current data requires regeneration or an explicit HTML binding.
 
 ## Audit decisions
 

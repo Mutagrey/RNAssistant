@@ -15,17 +15,8 @@ using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed partial class HtmlArtifactToolExecutor
+    internal sealed partial class HtmlWorkspaceToolService
     {
-        public const string InspectWorkspaceToolId = "common.html_workspace_inspect";
-        public const string UpsertToolId = "common.html_workspace_upsert";
-        public const string ApplyPatchToolId = "common.html_workspace_apply_patch";
-        public const string DeleteToolId = "common.html_workspace_delete";
-        public const string SetActiveToolId = "common.html_workspace_set_active";
-        public const string BindDataToolId = "common.html_data_bind";
-        public const string RefreshDataToolId = "common.html_data_refresh";
-        public const string FreezeDataToolId = "common.html_data_freeze";
-
         private const int MaxHtmlChars = 300000;
         private const int MaxDataChars = 300000;
         private const int MaxWorkspaceItems = 100;
@@ -34,23 +25,26 @@ namespace RNAssistant.Office.Tools
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly Dictionary<string, ToolDefinition> _dataSourceTools;
         private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
-        private readonly Func<ToolCommand, CancellationToken, ToolResult> _executeOfficeDataSource;
+        private readonly Func<string, IDictionary<string, object>,
+            CancellationToken, HtmlDataSourceReadOutcome> _executeOfficeDataSource;
         private readonly ExcelReadToolAdapter _standaloneExcelRead;
         private readonly WordToolAdapter _standaloneWordRead;
         private readonly PowerPointToolAdapter _standalonePowerPointRead;
         private readonly OutlookToolAdapter _standaloneOutlookRead;
 
-        public HtmlArtifactToolExecutor()
+        public HtmlWorkspaceToolService()
             : this(null, null, null, null)
         {
         }
 
-        public HtmlArtifactToolExecutor(IOfficeApplicationAdapter adapter, IEnumerable<ToolDefinition> adapterTools)
+        public HtmlWorkspaceToolService(
+            IOfficeApplicationAdapter adapter,
+            IEnumerable<ToolDefinition> adapterTools)
             : this(adapter, adapterTools, null, null)
         {
         }
 
-        internal HtmlArtifactToolExecutor(
+        internal HtmlWorkspaceToolService(
             IOfficeApplicationAdapter adapter,
             IEnumerable<ToolDefinition> adapterTools,
             Func<ChatSession, IDisposable> beginLiveOfficeRead)
@@ -58,11 +52,12 @@ namespace RNAssistant.Office.Tools
         {
         }
 
-        internal HtmlArtifactToolExecutor(
+        internal HtmlWorkspaceToolService(
             IOfficeApplicationAdapter adapter,
             IEnumerable<ToolDefinition> adapterTools,
             Func<ChatSession, IDisposable> beginLiveOfficeRead,
-            Func<ToolCommand, CancellationToken, ToolResult> executeOfficeDataSource)
+            Func<string, IDictionary<string, object>, CancellationToken,
+                HtmlDataSourceReadOutcome> executeOfficeDataSource)
         {
             _adapter = adapter;
             _beginLiveOfficeRead = beginLiveOfficeRead;
@@ -88,159 +83,193 @@ namespace RNAssistant.Office.Tools
                 .ToDictionary(tool => tool.Id, tool => tool.Clone(), StringComparer.OrdinalIgnoreCase);
         }
 
-        public IEnumerable<ToolDefinition> GetControllerTools()
+        internal bool HasDataSourceTools
         {
-            yield return ControllerToolDefinition.Create(InspectWorkspaceToolId, "Common", "Read-only: Run bounded static preflight diagnostics for one HTML entry and the CSS, classic scripts, and data injected into it. Does not execute JavaScript or render WebView.", InspectWorkspaceSchema(), name: "html_workspace_inspect", scope: "session");
-            yield return ControllerToolDefinition.Create(UpsertToolId, "Common", "Workspace: Write the complete content of one file or JSON data source. File kind is inferred from its extension; default upsert creates or updates, while strict modes can require one state.", UpsertWorkspaceSchema(), mutatesLocalState: true, name: "html_workspace_upsert", scope: "session");
-            yield return ControllerToolDefinition.Create(ApplyPatchToolId, "Common", "Workspace: Apply ordered structured text edits atomically to one existing HTML/CSS/JavaScript file. Runtime reads current source and records one recoverable workspace revision.", ApplyPatchSchema(), mutatesLocalState: true, name: "html_workspace_apply_patch", scope: "session");
-            yield return ControllerToolDefinition.Create(DeleteToolId, "Common", "Workspace: Delete one exact file or JSON data source. Workspace history keeps the operation recoverable.", "{\"type\":\"object\",\"properties\":{\"resourceType\":{\"type\":\"string\",\"enum\":[\"file\",\"data\"],\"description\":\"Resource to delete: file or data.\"},\"name\":{\"type\":\"string\",\"description\":\"Exact workspace-relative file path or data-source name.\",\"maxLength\":260}},\"required\":[\"resourceType\",\"name\"],\"additionalProperties\":false}", mutatesLocalState: true, riskLevel: 1, name: "html_workspace_delete", scope: "session");
-            yield return ControllerToolDefinition.Create(SetActiveToolId, "Common", "Workspace: Select the active HTML file displayed on the HTML tab for the active chat.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact workspace-relative HTML file path.\",\"default\":\"index.html\",\"maxLength\":260}},\"required\":[],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_workspace_set_active", scope: "session");
-            if (_dataSourceTools.Count > 0)
-            {
-                yield return ControllerToolDefinition.Create(BindDataToolId, "Common", BuildBindDescription(), BuildBindSchema(), mutatesLocalState: true, name: "html_data_bind", scope: "session");
-            }
-            yield return ControllerToolDefinition.Create(RefreshDataToolId, "Common", "Workspace: Re-run a bound read-only Office source and replace its JSON without another model request. Omit name to refresh all matching bound sources.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Optional exact bound data-source name; omit to refresh all matching sources.\",\"maxLength\":128},\"policy\":{\"type\":\"string\",\"enum\":[\"all\",\"on_preview\"],\"description\":\"Refresh all bound sources or only sources configured for preview refresh.\",\"default\":\"all\"}},\"required\":[],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_data_refresh", scope: "session");
-            yield return ControllerToolDefinition.Create(FreezeDataToolId, "Common", "Workspace: Keep the current JSON of one bound data source but remove its Office binding so future refreshes cannot overwrite it.", "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact bound data-source name.\",\"maxLength\":128}},\"required\":[\"name\"],\"additionalProperties\":false}", mutatesLocalState: true, name: "html_data_freeze", scope: "session");
+            get { return _dataSourceTools.Count > 0; }
         }
 
-        internal bool RequiresOfficeDocument(string toolId)
+        internal HtmlWorkspaceToolOutcome Execute(
+            string toolId,
+            IDictionary<string, object> arguments,
+            ChatSession session,
+            Action markDispatchPossible,
+            CancellationToken cancellationToken)
         {
-            return string.Equals(toolId, BindDataToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, RefreshDataToolId, StringComparison.OrdinalIgnoreCase);
-        }
-
-        public ToolResult ExecuteControllerTool(ToolCommand command, ChatSession session, bool dryRun, CancellationToken cancellationToken = default(CancellationToken))
-        {
-            if (command == null)
+            arguments = arguments ??
+                new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            var dispatched = false;
+            Action mark = delegate
             {
-                return ToolResult.Fail("Tool command is empty.");
-            }
-
+                if (dispatched) return;
+                dispatched = true;
+                if (markDispatchPossible != null) markDispatchPossible();
+            };
             try
             {
                 if (session == null)
-                {
-                    return ToolResult.Fail("HTML workspace requires an active chat session.");
-                }
+                    return HtmlWorkspaceToolOutcome.Error(
+                        "HTML workspace requires an active chat session.", null,
+                        "html_workspace_session_required", false);
 
-                if (string.Equals(command.ToolId, InspectWorkspaceToolId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return InspectWorkspace(session, command, cancellationToken);
-                }
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.InspectWorkspaceToolId,
+                    StringComparison.Ordinal))
+                    return InspectWorkspace(session, arguments, cancellationToken);
 
-                if (string.Equals(command.ToolId, ApplyPatchToolId, StringComparison.OrdinalIgnoreCase))
+                HtmlWorkspaceArtifactService.EnsureMutable(session);
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.ApplyPatchToolId,
+                    StringComparison.Ordinal))
                 {
-                    HtmlWorkspaceArtifactService.EnsureMutable(session);
-                    return ApplyWorkspacePatch(session, command, dryRun, cancellationToken);
+                    return ApplyWorkspacePatch(
+                        session, arguments, mark, cancellationToken);
                 }
-
-                if (string.Equals(command.ToolId, BindDataToolId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.BindDataToolId,
+                    StringComparison.Ordinal))
                 {
-                    HtmlWorkspaceArtifactService.EnsureMutable(session);
-                    return BindDataSource(session, command, dryRun, cancellationToken);
+                    return BindDataSource(
+                        session, arguments, mark, cancellationToken);
                 }
-
-                if (string.Equals(command.ToolId, RefreshDataToolId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.RefreshDataToolId,
+                    StringComparison.Ordinal))
                 {
-                    HtmlWorkspaceArtifactService.EnsureMutable(session);
-                    return RefreshDataSources(session, command, dryRun, cancellationToken);
+                    return RefreshDataSources(
+                        session, arguments, mark, cancellationToken);
                 }
-
-                if (string.Equals(command.ToolId, FreezeDataToolId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.FreezeDataToolId,
+                    StringComparison.Ordinal))
                 {
-                    HtmlWorkspaceArtifactService.EnsureMutable(session);
-                    return FreezeDataSource(session, command, dryRun);
+                    return FreezeDataSource(session, arguments, mark);
                 }
-
-                if (string.Equals(command.ToolId, UpsertToolId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.UpsertToolId,
+                    StringComparison.Ordinal))
                 {
-                    HtmlWorkspaceArtifactService.EnsureMutable(session);
-                    var resourceType = ToolArgumentReader.String(command.Arguments, "resourceType", string.Empty);
-                    var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
-                    var content = ToolArgumentReader.String(command.Arguments, "content", string.Empty);
-                    var setActive = ToolArgumentReader.Boolean(command.Arguments, "setActive", true);
-                    var mode = ToolArgumentReader.String(command.Arguments, "mode", "upsert");
+                    var resourceType = ToolArgumentReader.String(
+                        arguments, "resourceType", string.Empty);
+                    var name = ToolArgumentReader.String(
+                        arguments, "name", string.Empty);
+                    var content = ToolArgumentReader.String(
+                        arguments, "content", string.Empty);
+                    var setActive = ToolArgumentReader.Boolean(
+                        arguments, "setActive", true);
+                    var mode = ToolArgumentReader.String(
+                        arguments, "mode", "upsert");
                     var modeError = ValidateWorkspaceUpsertMode(session, resourceType, name, mode);
                     if (modeError != null) return modeError;
                     if (string.Equals(resourceType, "file", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (dryRun)
-                        {
-                            ValidateFile(name, string.Empty, content);
-                            var normalizedPath = NormalizePath(name);
-                            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), FileId(normalizedPath), content, null, null);
-                            return ToolResult.Ok("Dry run: would save HTML workspace file " + normalizedPath + ".", WorkspaceMutationJson(session, "file", normalizedPath));
-                        }
+                        ValidateFile(name, string.Empty, content);
+                        var normalizedPath = NormalizePath(name);
+                        ValidateWorkspaceCapacity(
+                            NormalizedWorkspaceCopy(session.HtmlWorkspace),
+                            FileId(normalizedPath), content, null, null);
+                        mark();
                         var file = UpsertFile(session, name, string.Empty, content, setActive);
-                        return ToolResult.Ok("HTML workspace file saved: " + file.Path, WorkspaceMutationJson(session, "file", file.Path));
+                        return HtmlWorkspaceToolOutcome.Ok(
+                            "HTML workspace file saved: " + file.Path,
+                            WorkspaceMutationJson(session, "file", file.Path),
+                            HtmlWorkspaceEffect.VerifiedChange);
                     }
                     if (string.Equals(resourceType, "data", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (dryRun)
-                        {
-                            ValidateDataSource(name, content);
-                            var normalizedName = NormalizeDataName(name);
-                            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), null, null, DataSourceId(normalizedName), content);
-                            return ToolResult.Ok("Dry run: would save HTML workspace data source " + normalizedName + ".", WorkspaceMutationJson(session, "data", normalizedName));
-                        }
+                        ValidateDataSource(name, content);
+                        var normalizedName = NormalizeDataName(name);
+                        ValidateWorkspaceCapacity(
+                            NormalizedWorkspaceCopy(session.HtmlWorkspace),
+                            null, null, DataSourceId(normalizedName), content);
+                        mark();
                         var data = UpsertDataSource(session, name, content);
-                        return ToolResult.Ok("HTML workspace data saved: " + data.Name, WorkspaceMutationJson(session, "data", data.Name));
+                        return HtmlWorkspaceToolOutcome.Ok(
+                            "HTML workspace data saved: " + data.Name,
+                            WorkspaceMutationJson(session, "data", data.Name),
+                            HtmlWorkspaceEffect.VerifiedChange);
                     }
-                    return ToolResult.Fail("resourceType must be file or data.");
+                    return HtmlWorkspaceToolOutcome.Error(
+                        "resourceType must be file or data.", null,
+                        "invalid_arguments", true);
                 }
 
-                if (string.Equals(command.ToolId, DeleteToolId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.DeleteToolId,
+                    StringComparison.Ordinal))
                 {
-                    HtmlWorkspaceArtifactService.EnsureMutable(session);
-                    var resourceType = ToolArgumentReader.String(command.Arguments, "resourceType", string.Empty);
-                    var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
+                    var resourceType = ToolArgumentReader.String(
+                        arguments, "resourceType", string.Empty);
+                    var name = ToolArgumentReader.String(
+                        arguments, "name", string.Empty);
                     if (string.Equals(resourceType, "file", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (dryRun)
-                        {
-                            FindFile(NormalizedWorkspaceCopy(session.HtmlWorkspace), name, false);
-                            return ToolResult.Ok("Dry run: would delete HTML workspace file " + NormalizePath(name) + ".", WorkspaceMutationJson(session, "file", NormalizePath(name)));
-                        }
+                        FindFile(NormalizedWorkspaceCopy(session.HtmlWorkspace), name, false);
+                        mark();
                         var file = DeleteFile(session, name);
-                        return ToolResult.Ok("HTML workspace file deleted: " + file.Path, WorkspaceMutationJson(session, "file", file.Path));
+                        return HtmlWorkspaceToolOutcome.Ok(
+                            "HTML workspace file deleted: " + file.Path,
+                            WorkspaceMutationJson(session, "file", file.Path),
+                            HtmlWorkspaceEffect.VerifiedChange);
                     }
                     if (string.Equals(resourceType, "data", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (dryRun)
-                        {
-                            FindDataSource(NormalizedWorkspaceCopy(session.HtmlWorkspace), name);
-                            return ToolResult.Ok("Dry run: would delete HTML workspace data source " + NormalizeDataName(name) + ".", WorkspaceMutationJson(session, "data", NormalizeDataName(name)));
-                        }
+                        FindDataSource(NormalizedWorkspaceCopy(session.HtmlWorkspace), name);
+                        mark();
                         var data = DeleteDataSource(session, name);
-                        return ToolResult.Ok("HTML workspace data source deleted: " + data.Name, WorkspaceMutationJson(session, "data", data.Name));
+                        return HtmlWorkspaceToolOutcome.Ok(
+                            "HTML workspace data source deleted: " + data.Name,
+                            WorkspaceMutationJson(session, "data", data.Name),
+                            HtmlWorkspaceEffect.VerifiedChange);
                     }
-                    return ToolResult.Fail("resourceType must be file or data.");
+                    return HtmlWorkspaceToolOutcome.Error(
+                        "resourceType must be file or data.", null,
+                        "invalid_arguments", true);
                 }
 
-                if (string.Equals(command.ToolId, SetActiveToolId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.SetActiveToolId,
+                    StringComparison.Ordinal))
                 {
-                    HtmlWorkspaceArtifactService.EnsureMutable(session);
-                    var path = ToolArgumentReader.String(command.Arguments, "name", "index.html");
-                    if (dryRun)
-                    {
-                        FindFile(NormalizedWorkspaceCopy(session.HtmlWorkspace), path, true);
-                        return ToolResult.Ok("Dry run: would select HTML workspace file " + NormalizePath(path) + ".", WorkspaceMutationJson(session, "file", NormalizePath(path)));
-                    }
-
+                    var path = ToolArgumentReader.String(
+                        arguments, "name", "index.html");
+                    FindFile(NormalizedWorkspaceCopy(session.HtmlWorkspace), path, true);
+                    mark();
                     var file = SetActiveFile(session, path);
-                    return ToolResult.Ok("HTML workspace active file selected: " + file.Path, WorkspaceMutationJson(session, "file", file.Path));
+                    return HtmlWorkspaceToolOutcome.Ok(
+                        "HTML workspace active file selected: " + file.Path,
+                        WorkspaceMutationJson(session, "file", file.Path),
+                        HtmlWorkspaceEffect.VerifiedChange);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (JsonException ex)
             {
-                return ToolResult.Fail("Invalid HTML workspace JSON data source: " + ex.Message);
+                return Failure(dispatched,
+                    "Invalid HTML workspace JSON data source: " + ex.Message,
+                    "invalid_html_workspace_json", true);
             }
             catch (InvalidOperationException ex)
             {
-                return ToolResult.Fail(ex.Message);
+                return Failure(dispatched, ex.Message,
+                    "invalid_html_workspace", true);
             }
 
-            return ToolResult.Fail("Unknown HTML workspace tool: " + command.ToolId);
+            return HtmlWorkspaceToolOutcome.Error(
+                "Unknown HTML workspace tool: " + toolId, null,
+                "unknown_tool", false);
+        }
+
+        private static HtmlWorkspaceToolOutcome Failure(
+            bool dispatched, string message, string code, bool retryable)
+        {
+            return dispatched
+                ? HtmlWorkspaceToolOutcome.Unknown(message, null,
+                    "html_workspace_effect_unknown")
+                : HtmlWorkspaceToolOutcome.Error(
+                    message, null, code, retryable);
         }
 
         public static HtmlWorkspace NormalizeWorkspace(HtmlWorkspace workspace)

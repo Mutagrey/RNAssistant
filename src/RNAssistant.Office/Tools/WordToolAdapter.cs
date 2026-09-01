@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Models;
 using RNAssistant.Office.Domains.Word;
 
 namespace RNAssistant.Office.Tools
@@ -104,22 +103,6 @@ namespace RNAssistant.Office.Tools
                     Text = ToolArgumentReader.String(arguments, "text", string.Empty)
                 }, markDispatchPossible, cancellationToken);
             return Invalid("Unsupported Word tool: " + toolId, "unknown_tool");
-        }
-
-        internal ToolResult ExecuteDataSource(
-            ToolCommand command, CancellationToken cancellationToken)
-        {
-            if (command == null)
-                return ToolResult.Fail(
-                    "Word read command is empty.", null,
-                    "word_read_command_missing", false);
-            var outcome = Execute(
-                command.ToolId, command.Arguments, null, cancellationToken);
-            return outcome.Status == WordOutcomeStatus.Ok
-                ? ToolResult.Ok(outcome.Message, outcome.DataJson)
-                : ToolResult.Fail(
-                    outcome.Message, outcome.DataJson,
-                    outcome.ErrorCode, outcome.Retryable);
         }
 
         private static WordReplaceRequest ReplaceRequest(

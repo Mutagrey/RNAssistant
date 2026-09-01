@@ -9,9 +9,9 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed partial class HtmlArtifactToolExecutor
+    internal sealed partial class HtmlWorkspaceToolService
     {
-        private static string UpsertWorkspaceSchema()
+        internal static string UpsertWorkspaceSchema()
         {
             var properties = new JObject
             {
@@ -59,7 +59,7 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static string ApplyPatchSchema()
+        internal static string ApplyPatchSchema()
         {
             var find = new JObject
             {
@@ -154,14 +154,17 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static ToolResult ValidateWorkspaceUpsertMode(ChatSession session, string resourceType, string name, string mode)
+        private static HtmlWorkspaceToolOutcome ValidateWorkspaceUpsertMode(
+            ChatSession session, string resourceType, string name, string mode)
         {
             mode = (mode ?? "upsert").Trim();
             if (!string.Equals(mode, "upsert", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
             {
-                return ToolResult.Fail("mode must be upsert, createOnly, or updateOnly.", null, "invalid_arguments", false);
+                return HtmlWorkspaceToolOutcome.Error(
+                    "mode must be upsert, createOnly, or updateOnly.", null,
+                    "invalid_arguments", false);
             }
 
             var workspace = NormalizedWorkspaceCopy(session == null ? null : session.HtmlWorkspace);
@@ -183,29 +186,35 @@ namespace RNAssistant.Office.Tools
 
             if (exists && string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
             {
-                return ToolResult.Fail("HTML workspace " + resourceType + " already exists: " + name + ".", null, "html_workspace_item_exists", false);
+                return HtmlWorkspaceToolOutcome.Error(
+                    "HTML workspace " + resourceType + " already exists: " +
+                    name + ".", null, "html_workspace_item_exists", false);
             }
             if (!exists && string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
             {
-                return ToolResult.Fail("HTML workspace " + resourceType + " was not found: " + name + ".", null, "html_workspace_item_not_found", false);
+                return HtmlWorkspaceToolOutcome.Error(
+                    "HTML workspace " + resourceType + " was not found: " +
+                    name + ".", null, "html_workspace_item_not_found", false);
             }
             return null;
         }
 
-        private static ToolResult ApplyWorkspacePatch(
+        private static HtmlWorkspaceToolOutcome ApplyWorkspacePatch(
             ChatSession session,
-            ToolCommand command,
-            bool dryRun,
+            IDictionary<string, object> arguments,
+            Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
+                var name = ToolArgumentReader.String(
+                    arguments, "name", string.Empty);
                 var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
                 var file = FindFile(workspace, name, false);
                 var before = file.Content ?? string.Empty;
-                var patch = StructuredTextPatchEngine.Apply(before, ReadPatchOperations(command), MaxHtmlChars);
+                var patch = StructuredTextPatchEngine.Apply(
+                    before, ReadPatchOperations(arguments), MaxHtmlChars);
                 ValidateFile(file.Path, file.Kind, patch.Text);
                 ValidateWorkspaceCapacity(workspace, file.Id, patch.Text, null, null);
                 var changed = !string.Equals(before, patch.Text, StringComparison.Ordinal);
@@ -215,7 +224,7 @@ namespace RNAssistant.Office.Tools
                     ["version"] = 1,
                     ["name"] = file.Path,
                     ["kind"] = file.Kind,
-                    ["saved"] = !dryRun && changed,
+                    ["saved"] = changed,
                     ["changed"] = changed,
                     ["oldCharacters"] = before.Length,
                     ["newCharacters"] = patch.Text.Length,
@@ -230,38 +239,45 @@ namespace RNAssistant.Office.Tools
                         ["message"] = item.Message
                     }))
                 };
-                if (dryRun)
-                {
-                    preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                    return ToolResult.Ok("Dry run: would apply HTML workspace patch to " + file.Path + ".",
-                        AddWorkspaceResourceRefs(session, preview).ToString(Formatting.None));
-                }
                 if (!changed)
                 {
                     preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                    return ToolResult.Ok("HTML workspace patch made no content changes: " + file.Path + ".",
-                        AddWorkspaceResourceRefs(session, preview).ToString(Formatting.None));
+                    return HtmlWorkspaceToolOutcome.Ok(
+                        "HTML workspace patch made no content changes: " +
+                        file.Path + ".",
+                        AddWorkspaceResourceRefs(session, preview)
+                            .ToString(Formatting.None),
+                        HtmlWorkspaceEffect.VerifiedNoChange);
                 }
 
+                markDispatchPossible();
                 var saved = UpsertFile(session, file.Path, file.Kind, patch.Text, false);
                 preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                return ToolResult.Ok("HTML workspace patch applied: " + saved.Path + ".",
-                    AddWorkspaceResourceRefs(session, preview).ToString(Formatting.None));
+                return HtmlWorkspaceToolOutcome.Ok(
+                    "HTML workspace patch applied: " + saved.Path + ".",
+                    AddWorkspaceResourceRefs(session, preview)
+                        .ToString(Formatting.None),
+                    HtmlWorkspaceEffect.VerifiedChange);
             }
             catch (StructuredTextPatchException ex)
             {
-                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, true);
+                return HtmlWorkspaceToolOutcome.Error(
+                    ex.Message, null, ex.ErrorCode, true);
             }
             catch (JsonException ex)
             {
-                return ToolResult.Fail("Invalid HTML workspace patch: " + ex.Message, null, "text_patch_invalid", true);
+                return HtmlWorkspaceToolOutcome.Error(
+                    "Invalid HTML workspace patch: " + ex.Message, null,
+                    "text_patch_invalid", true);
             }
         }
 
-        private static List<StructuredTextPatchOperation> ReadPatchOperations(ToolCommand command)
+        private static List<StructuredTextPatchOperation> ReadPatchOperations(
+            IDictionary<string, object> arguments)
         {
             object raw;
-            if (command == null || command.Arguments == null || !command.Arguments.TryGetValue("patch", out raw) || raw == null)
+            if (arguments == null ||
+                !arguments.TryGetValue("patch", out raw) || raw == null)
             {
                 return new List<StructuredTextPatchOperation>();
             }

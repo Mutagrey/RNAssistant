@@ -38,7 +38,7 @@ namespace RNAssistant.Office.Tools
         private readonly WordToolAdapter _wordAdapter;
         private readonly PowerPointToolAdapter _powerPointAdapter;
         private readonly OutlookToolAdapter _outlookAdapter;
-        private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
+        private readonly HtmlWorkspaceToolService _htmlWorkspaceService;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
         private readonly HostRuntime _hostRuntime;
@@ -103,8 +103,9 @@ namespace RNAssistant.Office.Tools
             _outlookAdapter = outlookBackend == null ||
                 outlookBackend.OutlookBackend == null
                 ? null : new OutlookToolAdapter(outlookBackend.OutlookBackend);
-            _htmlArtifactExecutor = new HtmlArtifactToolExecutor(
-                _adapter, _adapterTools, BeginLiveOfficeRead, ExecuteOfficeDataSourceUnderCurrentAccess);
+            _htmlWorkspaceService = new HtmlWorkspaceToolService(
+                _adapter, _adapterTools, BeginLiveOfficeRead,
+                ExecuteHtmlDataSourceUnderCurrentAccess);
             var controllerTools = new List<ToolDefinition>();
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
             if (_vbaExecutor.HostSupportsVba())
@@ -115,7 +116,9 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
             RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
             RegisterControllerTools(controllerTools, ResourceToolCatalog.GetControllerTools(), ControllerExecutorKind.Native);
-            RegisterControllerTools(controllerTools, _htmlArtifactExecutor.GetControllerTools(), ControllerExecutorKind.HtmlArtifact);
+            RegisterControllerTools(controllerTools,
+                HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService),
+                ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools,
                 TaskListToolCatalog.GetTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools,
@@ -146,7 +149,8 @@ namespace RNAssistant.Office.Tools
                 _excelFindReplaceAdapter, _excelSheetAdapter,
                 _excelRangeMutationAdapter, _excelTableAdapter,
                 _excelChartAdapter, _wordAdapter, _powerPointAdapter,
-                _outlookAdapter, _vbaExecutor, _hostRuntime,
+                _outlookAdapter, _vbaExecutor, _htmlWorkspaceService,
+                _hostRuntime,
                 session, snapshot, settings, mode, pendingRegistrar, trace);
         }
 
@@ -482,7 +486,8 @@ namespace RNAssistant.Office.Tools
                     OutlookToolIds.IsMutation(command.ToolId) ||
                     VbaToolCatalog.Owns(command.ToolId) ||
                     PlanDocumentToolCatalog.Owns(command.ToolId) ||
-                    TaskListToolCatalog.Owns(command.ToolId)))
+                    TaskListToolCatalog.Owns(command.ToolId) ||
+                    HtmlWorkspaceToolCatalog.IsMutation(command.ToolId)))
                 {
                     var validation = ValidateCommandArguments(command, tool);
                     if (validation != null) return validation;
@@ -710,45 +715,75 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private ToolResult ExecuteOfficeDataSourceUnderCurrentAccess(
-            ToolCommand command,
+        private HtmlDataSourceReadOutcome ExecuteHtmlDataSourceUnderCurrentAccess(
+            string toolId,
+            IDictionary<string, object> arguments,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (command != null && ExcelReadToolIds.Owns(command.ToolId))
+            if (ExcelReadToolIds.Owns(toolId))
             {
                 if (_excelReadAdapter == null)
-                    return ToolResult.Fail("The bound Excel read backend is unavailable.", null,
+                    return HtmlDataSourceReadOutcome.Error(
+                        "The bound Excel read backend is unavailable.", null,
                         "excel_backend_unavailable", false);
-                return _excelReadAdapter.ExecuteDataSource(command, cancellationToken);
+                var outcome = _excelReadAdapter.ExecuteOutcome(
+                    toolId, arguments);
+                return outcome.Success
+                    ? HtmlDataSourceReadOutcome.Ok(
+                        outcome.Message, outcome.DataJson)
+                    : HtmlDataSourceReadOutcome.Error(
+                        outcome.Message, outcome.DataJson,
+                        outcome.ErrorCode, outcome.Retryable);
             }
-            if (command != null && WordToolIds.IsRead(command.ToolId))
+            if (WordToolIds.IsRead(toolId))
             {
                 if (_wordAdapter == null)
-                    return ToolResult.Fail(
+                    return HtmlDataSourceReadOutcome.Error(
                         "The bound Word read backend is unavailable.", null,
                         "word_backend_unavailable", false);
-                return _wordAdapter.ExecuteDataSource(command, cancellationToken);
+                var outcome = _wordAdapter.Execute(
+                    toolId, arguments, null, cancellationToken);
+                return outcome.Status == WordOutcomeStatus.Ok
+                    ? HtmlDataSourceReadOutcome.Ok(
+                        outcome.Message, outcome.DataJson)
+                    : HtmlDataSourceReadOutcome.Error(
+                        outcome.Message, outcome.DataJson,
+                        outcome.ErrorCode, outcome.Retryable);
             }
-            if (command != null && PowerPointToolIds.IsRead(command.ToolId))
+            if (PowerPointToolIds.IsRead(toolId))
             {
                 if (_powerPointAdapter == null)
-                    return ToolResult.Fail(
+                    return HtmlDataSourceReadOutcome.Error(
                         "The bound PowerPoint read backend is unavailable.", null,
                         "powerpoint_backend_unavailable", false);
-                return _powerPointAdapter.ExecuteDataSource(
-                    command, cancellationToken);
+                var outcome = _powerPointAdapter.Execute(
+                    toolId, arguments, null, cancellationToken);
+                return outcome.Status == PowerPointOutcomeStatus.Ok
+                    ? HtmlDataSourceReadOutcome.Ok(
+                        outcome.Message, outcome.DataJson)
+                    : HtmlDataSourceReadOutcome.Error(
+                        outcome.Message, outcome.DataJson,
+                        outcome.ErrorCode, outcome.Retryable);
             }
-            if (command != null && OutlookToolIds.IsRead(command.ToolId))
+            if (OutlookToolIds.IsRead(toolId))
             {
                 if (_outlookAdapter == null)
-                    return ToolResult.Fail(
+                    return HtmlDataSourceReadOutcome.Error(
                         "The bound Outlook read backend is unavailable.", null,
                         "outlook_backend_unavailable", false);
-                return _outlookAdapter.ExecuteDataSource(
-                    command, cancellationToken);
+                var outcome = _outlookAdapter.Execute(
+                    toolId, arguments, null, cancellationToken);
+                return outcome.Status == OutlookOutcomeStatus.Ok
+                    ? HtmlDataSourceReadOutcome.Ok(
+                        outcome.Message, outcome.DataJson)
+                    : HtmlDataSourceReadOutcome.Error(
+                        outcome.Message, outcome.DataJson,
+                        outcome.ErrorCode, outcome.Retryable);
             }
-            return _adapter.ExecuteTool(command) ?? ToolResult.Fail("Office data source returned no result.");
+            return HtmlDataSourceReadOutcome.Error(
+                "HTML data source tool has no typed backend: " + toolId + ".",
+                null, "html_data_source_backend_missing", false);
         }
 
         private static ToolResult MutationLockFailure(HostRuntime.MutationLockException exception)
@@ -790,8 +825,6 @@ namespace RNAssistant.Office.Tools
                 case ControllerExecutorKind.Native:
                     return ToolResult.Fail("Native tool did not enter its registered handler.", null,
                         "native_handler_unavailable", false);
-                case ControllerExecutorKind.HtmlArtifact:
-                    return _htmlArtifactExecutor.ExecuteControllerTool(command, context.Session, dryRun, cancellationToken);
                 default:
                     return ToolResult.Fail("Unknown controller executor for tool: " + command.ToolId);
             }
@@ -839,7 +872,7 @@ namespace RNAssistant.Office.Tools
             if (_controllerExecutors.TryGetValue(id, out controller))
             {
                 return VbaToolCatalog.Owns(id) ||
-                    (controller == ControllerExecutorKind.HtmlArtifact && _htmlArtifactExecutor.RequiresOfficeDocument(id));
+                    HtmlWorkspaceToolCatalog.RequiresOfficeDocument(id);
             }
             return true;
         }
@@ -1017,7 +1050,6 @@ namespace RNAssistant.Office.Tools
             ToolAuthoring,
             Prompt,
             Native,
-            HtmlArtifact,
         }
     }
 }

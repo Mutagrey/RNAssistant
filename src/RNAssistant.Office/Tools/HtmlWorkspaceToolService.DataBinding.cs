@@ -8,11 +8,14 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Domains.Outlook;
+using RNAssistant.Office.Domains.PowerPoint;
+using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed partial class HtmlArtifactToolExecutor
+    internal sealed partial class HtmlWorkspaceToolService
     {
         private static bool IsEligibleDataSourceTool(ToolDefinition tool)
         {
@@ -27,7 +30,7 @@ namespace RNAssistant.Office.Tools
             return ToolSchemaSupport.TryParse(tool, out ignoredSchema, out ignoredError);
         }
 
-        private string BuildBindDescription()
+        internal string BuildBindDescription()
         {
             return "Workspace: Execute one approved read-only Office tool, save its JSON as a refreshable HTML data source, and bind it to the active document. " +
                 "Choose sourceTool first and pass only arguments declared by that exact tool in sourceArguments; do not copy selector fields from another source. " +
@@ -35,7 +38,7 @@ namespace RNAssistant.Office.Tools
                 string.Join(", ", _dataSourceTools.Keys.ToArray()) + ".";
         }
 
-        private string BuildBindSchema()
+        internal string BuildBindSchema()
         {
             var sourceIds = _dataSourceTools.Keys.OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToArray();
             var sourceProperties = new JObject();
@@ -122,31 +125,37 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private ToolResult BindDataSource(ChatSession session, ToolCommand command, bool dryRun, CancellationToken cancellationToken)
+        private HtmlWorkspaceToolOutcome BindDataSource(
+            ChatSession session,
+            IDictionary<string, object> arguments,
+            Action markDispatchPossible,
+            CancellationToken cancellationToken)
         {
             EnsureAdapterMatchesSession(session);
-            var name = NormalizeDataName(ToolArgumentReader.String(command.Arguments, "dataName", string.Empty));
-            var sourceToolId = ToolArgumentReader.String(command.Arguments, "sourceTool", string.Empty);
-            var transform = NormalizeTransform(ToolArgumentReader.String(command.Arguments, "transform", "raw"));
-            var headers = NormalizeHeaders(ToolArgumentReader.String(command.Arguments, "headers", "firstRow"));
-            var refreshPolicy = NormalizeRefreshPolicy(ToolArgumentReader.String(command.Arguments, "refreshPolicy", "on_preview"));
-            var sourceArguments = ReadObjectArgument(command, "sourceArguments");
+            var name = NormalizeDataName(ToolArgumentReader.String(
+                arguments, "dataName", string.Empty));
+            var sourceToolId = ToolArgumentReader.String(
+                arguments, "sourceTool", string.Empty);
+            var transform = NormalizeTransform(ToolArgumentReader.String(
+                arguments, "transform", "raw"));
+            var headers = NormalizeHeaders(ToolArgumentReader.String(
+                arguments, "headers", "firstRow"));
+            var refreshPolicy = NormalizeRefreshPolicy(ToolArgumentReader.String(
+                arguments, "refreshPolicy", "on_preview"));
+            var sourceArguments = ReadObjectArgument(
+                arguments, "sourceArguments");
             ToolDefinition sourceTool;
             JObject normalizedSourceArguments;
-            var sourceCommand = BuildSourceCommand(sourceToolId, sourceArguments, out sourceTool, out normalizedSourceArguments);
-
-            if (dryRun)
-            {
-                return ToolResult.Ok(
-                    "Dry run: would bind HTML data " + name + " to " + sourceTool.Id + ".",
-                    DataBindingResultJson(session, name, sourceTool.Id, transform, refreshPolicy, "dry_run", false, 0));
-            }
+            var normalizedArguments = BuildSourceArguments(
+                sourceToolId, sourceArguments, out sourceTool,
+                out normalizedSourceArguments);
 
             cancellationToken.ThrowIfCancellationRequested();
-            var sourceResult = ExecuteDataSource(session, sourceCommand, cancellationToken);
+            var sourceResult = ExecuteDataSource(
+                session, sourceTool.Id, normalizedArguments, cancellationToken);
             if (!sourceResult.Success)
             {
-                return ToolResult.Fail(
+                return HtmlWorkspaceToolOutcome.Error(
                     "Could not bind HTML data " + name + ": " + (sourceResult.Message ?? "Office source failed."),
                     sourceResult.DataJson,
                     sourceResult.ErrorCode ?? "html_data_source_failed",
@@ -155,9 +164,11 @@ namespace RNAssistant.Office.Tools
 
             var json = TransformSourceJson(sourceResult.DataJson, transform, headers);
             ValidateDataSource(name, json);
-            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
             var id = DataSourceId(name);
-            ValidateWorkspaceCapacity(session.HtmlWorkspace, null, null, id, json);
+            ValidateWorkspaceCapacity(workspace, null, null, id, json);
+            markDispatchPossible();
+            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             var now = DateTime.UtcNow;
             var data = session.HtmlWorkspace.DataSources.FirstOrDefault(item =>
                 item != null && string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -190,23 +201,31 @@ namespace RNAssistant.Office.Tools
             data.UpdatedUtc = now;
             session.HtmlWorkspace.UpdatedUtc = now;
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML bound data: " + name);
-            return ToolResult.Ok(
+            return HtmlWorkspaceToolOutcome.Ok(
                 "HTML data bound and loaded: " + name + ".",
-                DataBindingResultJson(session, name, sourceTool.Id, transform, refreshPolicy, "ready", true, json.Length));
+                DataBindingResultJson(session, name, sourceTool.Id, transform,
+                    refreshPolicy, "ready", true, json.Length),
+                HtmlWorkspaceEffect.VerifiedChange);
         }
 
-        private ToolResult RefreshDataSources(ChatSession session, ToolCommand command, bool dryRun, CancellationToken cancellationToken)
+        private HtmlWorkspaceToolOutcome RefreshDataSources(
+            ChatSession session,
+            IDictionary<string, object> arguments,
+            Action markDispatchPossible,
+            CancellationToken cancellationToken)
         {
             EnsureAdapterMatchesSession(session);
-            var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
-            var policy = ToolArgumentReader.String(command.Arguments, "policy", "all");
+            var name = ToolArgumentReader.String(
+                arguments, "name", string.Empty);
+            var policy = ToolArgumentReader.String(
+                arguments, "policy", "all");
             if (!string.Equals(policy, "all", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(policy, "on_preview", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("policy must be all or on_preview.");
             }
 
-            var workspace = dryRun ? NormalizedWorkspaceCopy(session.HtmlWorkspace) : NormalizeWorkspace(session.HtmlWorkspace);
+            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
             List<HtmlWorkspaceDataSource> targets;
             if (!string.IsNullOrWhiteSpace(name))
             {
@@ -223,21 +242,18 @@ namespace RNAssistant.Office.Tools
 
             if (targets.Count == 0)
             {
-                return ToolResult.Ok("No matching bound HTML data sources to refresh.", RefreshResultJson(new JArray(), 0, 0, dryRun));
+                return HtmlWorkspaceToolOutcome.Ok(
+                    "No matching bound HTML data sources to refresh.",
+                    RefreshResultJson(new JArray(), 0, 0, false),
+                    HtmlWorkspaceEffect.VerifiedNoChange);
             }
 
-            if (dryRun)
-            {
-                foreach (var target in targets) ValidateBinding(target.Binding);
-                return ToolResult.Ok(
-                    "Dry run: would refresh " + targets.Count + " HTML data source(s).",
-                    RefreshResultJson(new JArray(targets.Select(item => new JObject
-                    {
-                        ["name"] = item.Name,
-                        ["sourceTool"] = item.Binding.ToolId,
-                        ["status"] = "dry_run"
-                    })), targets.Count, 0, true));
-            }
+            foreach (var target in targets) ValidateBinding(target.Binding);
+            var targetNames = targets.Select(item => item.Name).ToArray();
+            markDispatchPossible();
+            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            targets = targetNames.Select(item =>
+                FindDataSource(session.HtmlWorkspace, item)).ToList();
 
             var summaries = new JArray();
             var succeeded = 0;
@@ -246,7 +262,8 @@ namespace RNAssistant.Office.Tools
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var refreshed = RefreshDataSource(session, target, cancellationToken);
-                if (refreshed.Success) succeeded += 1;
+                if (refreshed.Status == HtmlWorkspaceOutcomeStatus.Ok)
+                    succeeded += 1;
                 else failed += 1;
                 summaries.Add(ResultSummary(target, refreshed));
             }
@@ -254,15 +271,20 @@ namespace RNAssistant.Office.Tools
             var dataJson = RefreshResultJson(summaries, succeeded, failed, false);
             if (failed > 0)
             {
-                return ToolResult.PartialFailure(
+                return HtmlWorkspaceToolOutcome.Unknown(
                     "Refreshed " + succeeded + " HTML data source(s); " + failed + " failed and kept their previous JSON.",
                     dataJson,
                     "html_data_refresh_partial");
             }
-            return ToolResult.Ok("Refreshed " + succeeded + " HTML data source(s).", dataJson);
+            return HtmlWorkspaceToolOutcome.Ok(
+                "Refreshed " + succeeded + " HTML data source(s).", dataJson,
+                HtmlWorkspaceEffect.VerifiedChange);
         }
 
-        private ToolResult RefreshDataSource(ChatSession session, HtmlWorkspaceDataSource data, CancellationToken cancellationToken)
+        private HtmlWorkspaceToolOutcome RefreshDataSource(
+            ChatSession session,
+            HtmlWorkspaceDataSource data,
+            CancellationToken cancellationToken)
         {
             var binding = data == null ? null : data.Binding;
             try
@@ -270,13 +292,20 @@ namespace RNAssistant.Office.Tools
                 ValidateBinding(binding);
                 var arguments = JObject.Parse(binding.ArgumentsJson);
                 ToolDefinition sourceTool;
-                var sourceCommand = BuildSourceCommand(binding.ToolId, arguments, out sourceTool);
+                var normalizedArguments = BuildSourceArguments(
+                    binding.ToolId, arguments, out sourceTool);
                 cancellationToken.ThrowIfCancellationRequested();
-                var result = ExecuteDataSource(session, sourceCommand, cancellationToken);
+                var result = ExecuteDataSource(
+                    session, sourceTool.Id, normalizedArguments,
+                    cancellationToken);
                 if (!result.Success)
                 {
                     MarkBindingError(session, data, result.Message);
-                    return ToolResult.Fail(result.Message ?? "Office source failed.", null, result.ErrorCode ?? "html_data_source_failed", result.Retryable);
+                    return HtmlWorkspaceToolOutcome.Error(
+                        result.Message ?? "Office source failed.",
+                        result.DataJson,
+                        result.ErrorCode ?? "html_data_source_failed",
+                        result.Retryable);
                 }
 
                 var json = TransformSourceJson(result.DataJson, binding.Transform, binding.Headers);
@@ -300,7 +329,11 @@ namespace RNAssistant.Office.Tools
                 binding.LastRefreshUtc = now;
                 binding.UpdatedUtc = now;
                 session.HtmlWorkspace.UpdatedUtc = now;
-                return ToolResult.Ok(changed ? "Data changed." : "Data is unchanged.", JsonConvert.SerializeObject(new { changed = changed }));
+                return HtmlWorkspaceToolOutcome.Ok(
+                    changed ? "Data changed." : "Data is unchanged.",
+                    JsonConvert.SerializeObject(new { changed = changed }),
+                    changed ? HtmlWorkspaceEffect.VerifiedChange :
+                        HtmlWorkspaceEffect.VerifiedNoChange);
             }
             catch (OperationCanceledException)
             {
@@ -309,21 +342,27 @@ namespace RNAssistant.Office.Tools
             catch (Exception ex)
             {
                 MarkBindingError(session, data, ex.Message);
-                return ToolResult.Fail(ex.Message, null, "html_data_refresh_failed", false);
+                return HtmlWorkspaceToolOutcome.Error(
+                    ex.Message, null, "html_data_refresh_failed", false);
             }
         }
 
-        private ToolResult FreezeDataSource(ChatSession session, ToolCommand command, bool dryRun)
+        private HtmlWorkspaceToolOutcome FreezeDataSource(
+            ChatSession session,
+            IDictionary<string, object> arguments,
+            Action markDispatchPossible)
         {
-            var name = ToolArgumentReader.String(command.Arguments, "name", string.Empty);
-            var workspace = dryRun ? NormalizedWorkspaceCopy(session.HtmlWorkspace) : NormalizeWorkspace(session.HtmlWorkspace);
-            var data = FindDataSource(workspace, name);
-            if (data.Binding == null) throw new InvalidOperationException("HTML workspace data source is not bound: " + data.Name);
-            if (dryRun)
-            {
-                return ToolResult.Ok("Dry run: would freeze HTML data " + data.Name + ".", DataBindingResultJson(session, data.Name, data.Binding.ToolId, data.Binding.Transform, data.Binding.RefreshPolicy, "dry_run", false, (data.Json ?? string.Empty).Length));
-            }
+            var name = ToolArgumentReader.String(
+                arguments, "name", string.Empty);
+            var preview = FindDataSource(
+                NormalizedWorkspaceCopy(session.HtmlWorkspace), name);
+            if (preview.Binding == null)
+                throw new InvalidOperationException(
+                    "HTML workspace data source is not bound: " + preview.Name);
 
+            markDispatchPossible();
+            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            var data = FindDataSource(session.HtmlWorkspace, name);
             var sourceToolId = data.Binding.ToolId;
             var transform = data.Binding.Transform;
             var refreshPolicy = data.Binding.RefreshPolicy;
@@ -331,18 +370,27 @@ namespace RNAssistant.Office.Tools
             data.UpdatedUtc = DateTime.UtcNow;
             session.HtmlWorkspace.UpdatedUtc = data.UpdatedUtc;
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML frozen data: " + data.Name);
-            return ToolResult.Ok("HTML data frozen: " + data.Name + ".", DataBindingResultJson(session, data.Name, sourceToolId, transform, refreshPolicy, "frozen", true, (data.Json ?? string.Empty).Length));
+            return HtmlWorkspaceToolOutcome.Ok(
+                "HTML data frozen: " + data.Name + ".",
+                DataBindingResultJson(session, data.Name, sourceToolId,
+                    transform, refreshPolicy, "frozen", true,
+                    (data.Json ?? string.Empty).Length),
+                HtmlWorkspaceEffect.VerifiedChange);
         }
 
-        private ToolCommand BuildSourceCommand(string sourceToolId, JObject arguments, out ToolDefinition sourceTool)
+        private IDictionary<string, object> BuildSourceArguments(
+            string sourceToolId, JObject arguments,
+            out ToolDefinition sourceTool)
         {
             JObject ignored;
-            return BuildSourceCommand(sourceToolId, arguments, out sourceTool, out ignored);
+            return BuildSourceArguments(
+                sourceToolId, arguments, out sourceTool, out ignored);
         }
 
-        private ToolResult ExecuteDataSource(
+        private HtmlDataSourceReadOutcome ExecuteDataSource(
             ChatSession session,
-            ToolCommand sourceCommand,
+            string sourceToolId,
+            IDictionary<string, object> sourceArguments,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -352,34 +400,97 @@ namespace RNAssistant.Office.Tools
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     if (_executeOfficeDataSource != null)
-                        return _executeOfficeDataSource(sourceCommand, cancellationToken) ??
-                            ToolResult.Fail("Office data source returned no result.");
-                    if (sourceCommand != null && ExcelReadToolIds.Owns(sourceCommand.ToolId))
-                        return _standaloneExcelRead == null
-                            ? ToolResult.Fail("Excel read adapter is unavailable.", null, "excel_read_backend_missing", false)
-                            : _standaloneExcelRead.ExecuteDataSource(sourceCommand, cancellationToken);
-                    if (sourceCommand != null && WordToolIds.IsRead(sourceCommand.ToolId))
-                        return _standaloneWordRead == null
-                            ? ToolResult.Fail("Word read adapter is unavailable.", null, "word_read_backend_missing", false)
-                            : _standaloneWordRead.ExecuteDataSource(sourceCommand, cancellationToken);
-                    if (sourceCommand != null && PowerPointToolIds.IsRead(sourceCommand.ToolId))
-                        return _standalonePowerPointRead == null
-                            ? ToolResult.Fail("PowerPoint read adapter is unavailable.", null, "powerpoint_read_backend_missing", false)
-                            : _standalonePowerPointRead.ExecuteDataSource(sourceCommand, cancellationToken);
-                    if (sourceCommand != null && OutlookToolIds.IsRead(sourceCommand.ToolId))
-                        return _standaloneOutlookRead == null
-                            ? ToolResult.Fail("Outlook read adapter is unavailable.", null, "outlook_read_backend_missing", false)
-                            : _standaloneOutlookRead.ExecuteDataSource(sourceCommand, cancellationToken);
-                    return _adapter.ExecuteTool(sourceCommand) ?? ToolResult.Fail("Office data source returned no result.");
+                        return _executeOfficeDataSource(
+                            sourceToolId, sourceArguments,
+                            cancellationToken) ??
+                            HtmlDataSourceReadOutcome.Error(
+                                "Office data source returned no result.",
+                                null, "html_data_source_result_missing", false);
+                    if (ExcelReadToolIds.Owns(sourceToolId))
+                    {
+                        if (_standaloneExcelRead == null)
+                            return MissingSource(
+                                "Excel", "excel_read_backend_missing");
+                        var outcome = _standaloneExcelRead.ExecuteOutcome(
+                            sourceToolId, sourceArguments);
+                        return outcome.Success
+                            ? HtmlDataSourceReadOutcome.Ok(
+                                outcome.Message, outcome.DataJson)
+                            : HtmlDataSourceReadOutcome.Error(
+                                outcome.Message, outcome.DataJson,
+                                outcome.ErrorCode, outcome.Retryable);
+                    }
+                    if (WordToolIds.IsRead(sourceToolId))
+                    {
+                        if (_standaloneWordRead == null)
+                            return MissingSource(
+                                "Word", "word_read_backend_missing");
+                        var outcome = _standaloneWordRead.Execute(
+                            sourceToolId, sourceArguments, null,
+                            cancellationToken);
+                        return outcome.Status == WordOutcomeStatus.Ok
+                            ? HtmlDataSourceReadOutcome.Ok(
+                                outcome.Message, outcome.DataJson)
+                            : HtmlDataSourceReadOutcome.Error(
+                                outcome.Message, outcome.DataJson,
+                                outcome.ErrorCode, outcome.Retryable);
+                    }
+                    if (PowerPointToolIds.IsRead(sourceToolId))
+                    {
+                        if (_standalonePowerPointRead == null)
+                            return MissingSource(
+                                "PowerPoint",
+                                "powerpoint_read_backend_missing");
+                        var outcome = _standalonePowerPointRead.Execute(
+                            sourceToolId, sourceArguments, null,
+                            cancellationToken);
+                        return outcome.Status == PowerPointOutcomeStatus.Ok
+                            ? HtmlDataSourceReadOutcome.Ok(
+                                outcome.Message, outcome.DataJson)
+                            : HtmlDataSourceReadOutcome.Error(
+                                outcome.Message, outcome.DataJson,
+                                outcome.ErrorCode, outcome.Retryable);
+                    }
+                    if (OutlookToolIds.IsRead(sourceToolId))
+                    {
+                        if (_standaloneOutlookRead == null)
+                            return MissingSource(
+                                "Outlook", "outlook_read_backend_missing");
+                        var outcome = _standaloneOutlookRead.Execute(
+                            sourceToolId, sourceArguments, null,
+                            cancellationToken);
+                        return outcome.Status == OutlookOutcomeStatus.Ok
+                            ? HtmlDataSourceReadOutcome.Ok(
+                                outcome.Message, outcome.DataJson)
+                            : HtmlDataSourceReadOutcome.Error(
+                                outcome.Message, outcome.DataJson,
+                                outcome.ErrorCode, outcome.Retryable);
+                    }
+                    return HtmlDataSourceReadOutcome.Error(
+                        "HTML data source tool has no typed backend: " +
+                        sourceToolId + ".", null,
+                        "html_data_source_backend_missing", false);
                 }
             }
             catch (ResourceRequestException ex)
             {
-                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+                return HtmlDataSourceReadOutcome.Error(
+                    ex.Message, null, ex.ErrorCode, ex.Retryable);
             }
         }
 
-        private ToolCommand BuildSourceCommand(string sourceToolId, JObject arguments, out ToolDefinition sourceTool, out JObject normalizedArguments)
+        private static HtmlDataSourceReadOutcome MissingSource(
+            string host, string errorCode)
+        {
+            return HtmlDataSourceReadOutcome.Error(
+                host + " read adapter is unavailable.", null,
+                errorCode, false);
+        }
+
+        private IDictionary<string, object> BuildSourceArguments(
+            string sourceToolId, JObject arguments,
+            out ToolDefinition sourceTool,
+            out JObject normalizedArguments)
         {
             if (!_dataSourceTools.TryGetValue(sourceToolId ?? string.Empty, out sourceTool))
             {
@@ -401,9 +512,10 @@ namespace RNAssistant.Office.Tools
             }
 
             normalizedArguments = (JObject)arguments.DeepClone();
-            var command = new ToolCommand { ToolId = sourceTool.Id };
-            ToolArgumentNormalizer.AddProperties(arguments, command.Arguments);
-            return command;
+            var normalized = new Dictionary<string, object>(
+                StringComparer.OrdinalIgnoreCase);
+            ToolArgumentNormalizer.AddProperties(arguments, normalized);
+            return normalized;
         }
 
         private void ValidateBinding(HtmlWorkspaceDataBinding binding)
@@ -424,7 +536,7 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("Stored HTML data source arguments are invalid: " + ex.Message);
             }
             ToolDefinition ignored;
-            BuildSourceCommand(binding.ToolId, arguments, out ignored);
+            BuildSourceArguments(binding.ToolId, arguments, out ignored);
         }
 
         private void EnsureAdapterMatchesSession(ChatSession session)
@@ -437,10 +549,12 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static JObject ReadObjectArgument(ToolCommand command, string name)
+        private static JObject ReadObjectArgument(
+            IDictionary<string, object> arguments, string name)
         {
             object raw;
-            if (command == null || command.Arguments == null || !command.Arguments.TryGetValue(name, out raw) || raw == null)
+            if (arguments == null ||
+                !arguments.TryGetValue(name, out raw) || raw == null)
             {
                 return new JObject();
             }
@@ -639,7 +753,9 @@ namespace RNAssistant.Office.Tools
             if (session != null && session.HtmlWorkspace != null) session.HtmlWorkspace.UpdatedUtc = now;
         }
 
-        private static JObject ResultSummary(HtmlWorkspaceDataSource data, ToolResult result)
+        private static JObject ResultSummary(
+            HtmlWorkspaceDataSource data,
+            HtmlWorkspaceToolOutcome result)
         {
             var changed = false;
             try
@@ -653,7 +769,8 @@ namespace RNAssistant.Office.Tools
             {
                 ["name"] = data == null ? string.Empty : data.Name,
                 ["sourceTool"] = data == null || data.Binding == null ? string.Empty : data.Binding.ToolId,
-                ["ok"] = result != null && result.Success,
+                ["ok"] = result != null &&
+                    result.Status == HtmlWorkspaceOutcomeStatus.Ok,
                 ["changed"] = changed,
                 ["status"] = data == null || data.Binding == null ? "error" : data.Binding.Status,
                 ["message"] = result == null ? "Refresh failed." : result.Message

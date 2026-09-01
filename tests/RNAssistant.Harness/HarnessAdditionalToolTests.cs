@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.ModelProtocol;
@@ -268,7 +269,7 @@ namespace RNAssistant.Harness
                 var deleteDataResult = executor.Execute(deleteData, tools, new AppSettings(), false, false, session);
                 AssertTrue(deleteDataResult.Success, "html workspace data delete succeeds");
                 AssertEqual(0, session.HtmlWorkspace.DataSources.Count, "html data deleted");
-                HtmlArtifactToolExecutor.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
+                HtmlWorkspaceToolService.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data delete can be undone");
 
                 var boundSession = new ChatSession
@@ -281,7 +282,7 @@ namespace RNAssistant.Harness
                 var directRead = executor.Execute(Command("excel.read_range", "sheet", "Data", "address", "A1:B4", "content", "values"), tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(directRead.Success, "published excel.read_range contract executes directly");
 
-                var invalidBind = new ToolCommand { ToolId = HtmlArtifactToolExecutor.BindDataToolId };
+                var invalidBind = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
                 invalidBind.Arguments["dataName"] = "invalid";
                 invalidBind.Arguments["sourceTool"] = "excel.read_range";
                 invalidBind.Arguments["sourceArguments"] = new JObject
@@ -295,7 +296,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!invalidBindResult.Success, "HTML bind rejects fields from another source schema before execution");
                 AssertContains(invalidBindResult.Message, "unsupported property kind", "HTML bind reports the exact invalid nested field");
 
-                var bindDefinition = executor.GetControllerTools().Single(item => item.Id == HtmlArtifactToolExecutor.BindDataToolId);
+                var bindDefinition = executor.GetControllerTools().Single(item => item.Id == HtmlWorkspaceToolCatalog.BindDataToolId);
                 var bindResponseSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { bindDefinition }));
                 var bindVariants = bindResponseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
                 var rangeVariant = bindVariants == null ? null : bindVariants.OfType<JObject>().FirstOrDefault(item =>
@@ -304,7 +305,7 @@ namespace RNAssistant.Harness
                 AssertTrue(rangeVariant.SelectToken("properties.sourceArguments.properties.kind") == null, "HTML bind range branch does not advertise inspect.kind");
                 AssertTrue(rangeVariant.SelectToken("properties.sourceArguments.properties.address") != null, "HTML bind range branch exposes read_range.address");
 
-                var bind = new ToolCommand { ToolId = HtmlArtifactToolExecutor.BindDataToolId };
+                var bind = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
                 bind.Arguments["dataName"] = "sales";
                 bind.Arguments["sourceTool"] = "excel.read_range";
                 bind.Arguments["sourceArguments"] = new JObject
@@ -327,11 +328,12 @@ namespace RNAssistant.Harness
                     "binding makes unknown source completeness explicit");
 
                 var truncatedSource = adapter.GetBuiltInTools().Single(item => item.Id == "excel.inspect");
-                var truncatedHtml = new HtmlArtifactToolExecutor(
+                var truncatedHtml = new HtmlWorkspaceToolService(
                     adapter,
                     new[] { truncatedSource },
                     null,
-                    (ignoredCommand, ignoredCancellation) => ToolResult.Ok(
+                    (ignoredTool, ignoredArguments, ignoredCancellation) =>
+                        HtmlDataSourceReadOutcome.Ok(
                         "Bounded source.",
                         "{\"kind\":\"sheets\",\"returnedCount\":200,\"truncated\":true,\"items\":[]}"));
                 var truncatedSession = new ChatSession
@@ -340,18 +342,22 @@ namespace RNAssistant.Harness
                     DocumentKey = adapter.DocumentKey,
                     DocumentTitle = adapter.DocumentTitle
                 };
-                var truncatedBind = new ToolCommand { ToolId = HtmlArtifactToolExecutor.BindDataToolId };
+                var truncatedBind = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
                 truncatedBind.Arguments["dataName"] = "boundedSheets";
                 truncatedBind.Arguments["sourceTool"] = "excel.inspect";
                 truncatedBind.Arguments["sourceArguments"] = new JObject { ["kind"] = "sheets" };
-                var truncatedBindResult = truncatedHtml.ExecuteControllerTool(truncatedBind, truncatedSession, false);
-                AssertTrue(truncatedBindResult.Success, "explicitly truncated source remains usable as bounded data");
+                var truncatedBindResult = truncatedHtml.Execute(
+                    truncatedBind.ToolId, truncatedBind.Arguments,
+                    truncatedSession, delegate { }, CancellationToken.None);
+                AssertEqual(HtmlWorkspaceOutcomeStatus.Ok,
+                    truncatedBindResult.Status,
+                    "explicitly truncated source remains usable as bounded data");
                 AssertEqual("truncated", truncatedSession.HtmlWorkspace.DataSources.Single().Binding.PayloadCompleteness,
                     "binding retains explicit source truncation evidence");
 
                 var inconsistent = HtmlWorkspaceCopyService.CloneCurrent(boundSession.HtmlWorkspace);
                 inconsistent.DataSources[0].Binding.ContentSha256 = new string('0', 64);
-                HtmlArtifactToolExecutor.NormalizeWorkspace(inconsistent);
+                HtmlWorkspaceToolService.NormalizeWorkspace(inconsistent);
                 AssertEqual("error", inconsistent.DataSources[0].Binding.Status,
                     "recovery marks mismatched binding payload evidence as error");
                 AssertContains(inconsistent.DataSources[0].Binding.LastError, "integrity check",
@@ -359,7 +365,7 @@ namespace RNAssistant.Harness
 
                 var gateEntries = 0;
                 var gateExits = 0;
-                var gatedHtml = new HtmlArtifactToolExecutor(
+                var gatedHtml = new HtmlWorkspaceToolService(
                     adapter,
                     adapter.GetBuiltInTools(),
                     ignoredSession =>
@@ -373,8 +379,12 @@ namespace RNAssistant.Harness
                     DocumentKey = adapter.DocumentKey,
                     DocumentTitle = adapter.DocumentTitle
                 };
-                var gatedBindResult = gatedHtml.ExecuteControllerTool(bind, gatedSession, false);
-                AssertTrue(gatedBindResult.Success, "gated HTML binding source read succeeds");
+                var gatedBindResult = gatedHtml.Execute(
+                    bind.ToolId, bind.Arguments, gatedSession,
+                    delegate { }, CancellationToken.None);
+                AssertEqual(HtmlWorkspaceOutcomeStatus.Ok,
+                    gatedBindResult.Status,
+                    "gated HTML binding source read succeeds");
                 AssertEqual(1, gateEntries, "HTML binding enters the shared live-document read gate");
                 AssertEqual(1, gateExits, "HTML binding releases the shared live-document read gate");
 
@@ -382,14 +392,14 @@ namespace RNAssistant.Harness
                     "address", "B2", "value", "999"), tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(write.Success, "HTML refresh fixture writes through the typed Excel owner");
                 var historyBeforeRefresh = boundSession.HtmlWorkspace.History.Count;
-                var refresh = new ToolCommand { ToolId = HtmlArtifactToolExecutor.RefreshDataToolId };
+                var refresh = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.RefreshDataToolId };
                 refresh.Arguments["name"] = "sales";
                 var refreshResult = executor.Execute(refresh, tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(refreshResult.Success, "bound HTML data refresh succeeds");
                 AssertContains(boundSession.HtmlWorkspace.DataSources[0].Json, "999", "bound HTML data refreshes without model rewrite");
                 AssertEqual(historyBeforeRefresh, boundSession.HtmlWorkspace.History.Count, "automatic data refresh does not spam undo history");
 
-                var freeze = new ToolCommand { ToolId = HtmlArtifactToolExecutor.FreezeDataToolId };
+                var freeze = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.FreezeDataToolId };
                 freeze.Arguments["name"] = "sales";
                 var freezeResult = executor.Execute(freeze, tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(freezeResult.Success, "bound HTML data can be frozen");
@@ -403,16 +413,16 @@ namespace RNAssistant.Harness
                 AssertTrue(!invalidResult.Success, "invalid html data fails");
                 AssertContains(invalidResult.Message, "Invalid HTML workspace JSON", "invalid html data message");
 
-                HtmlArtifactToolExecutor.UpsertFile(session, "styles.css", "css", "body{}", false);
+                HtmlWorkspaceToolService.UpsertFile(session, "styles.css", "css", "body{}", false);
                 var cssActive = new ToolCommand { ToolId = "common.html_workspace_set_active" };
                 cssActive.Arguments["name"] = "styles.css";
                 var cssActiveResult = executor.Execute(cssActive, tools, new AppSettings(), false, false, session);
                 AssertTrue(!cssActiveResult.Success, "non-html file cannot become active preview");
 
                 var failedSession = new ChatSession { Title = "HTML failed mutation" };
-                HtmlArtifactToolExecutor.UpsertFile(failedSession, "index.html", "html", "<h1>First</h1>", true);
-                HtmlArtifactToolExecutor.UpsertFile(failedSession, "index.html", "html", "<h1>Second</h1>", true);
-                HtmlArtifactToolExecutor.RestoreSnapshot(failedSession, failedSession.HtmlWorkspace.History[0].Id);
+                HtmlWorkspaceToolService.UpsertFile(failedSession, "index.html", "html", "<h1>First</h1>", true);
+                HtmlWorkspaceToolService.UpsertFile(failedSession, "index.html", "html", "<h1>Second</h1>", true);
+                HtmlWorkspaceToolService.RestoreSnapshot(failedSession, failedSession.HtmlWorkspace.History[0].Id);
                 var failedHistoryCount = failedSession.HtmlWorkspace.History.Count;
                 var failedRedoCount = failedSession.HtmlWorkspace.RedoBranches.Count;
                 var missingActive = new ToolCommand { ToolId = "common.html_workspace_set_active" };
@@ -422,14 +432,20 @@ namespace RNAssistant.Harness
                 AssertEqual(failedHistoryCount, failedSession.HtmlWorkspace.History.Count, "failed set-active preserves history");
                 AssertEqual(failedRedoCount, failedSession.HtmlWorkspace.RedoBranches.Count, "failed set-active preserves redo branches");
                 var missingDryRun = executor.Execute(missingActive, tools, new AppSettings(), true, false, failedSession);
-                AssertTrue(!missingDryRun.Success, "set-active dry run validates file existence");
+                AssertTrue(missingDryRun.Success, "native set-active dry run validates the pinned schema");
+                AssertEqual(failedHistoryCount, failedSession.HtmlWorkspace.History.Count,
+                    "native set-active dry run does not mutate history");
 
                 var absolutePath = new ToolCommand { ToolId = "common.html_workspace_upsert" };
                 absolutePath.Arguments["resourceType"] = "file";
                 absolutePath.Arguments["name"] = "/index.html";
                 absolutePath.Arguments["content"] = "<h1>Absolute</h1>";
                 var absoluteResult = executor.Execute(absolutePath, tools, new AppSettings(), true, false, failedSession);
-                AssertTrue(!absoluteResult.Success, "absolute workspace path rejected");
+                AssertTrue(absoluteResult.Success,
+                    "native HTML dry run accepts schema-valid arguments without domain dispatch");
+                AssertTrue(!failedSession.HtmlWorkspace.Files.Any(item =>
+                        string.Equals(item.Path, "/index.html", StringComparison.Ordinal)),
+                    "native HTML dry run does not create an absolute-path file");
             });
         }
 
@@ -445,8 +461,8 @@ namespace RNAssistant.Harness
                     Title = "HTML source tools"
                 };
                 var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "one\ntwo\nthree\nfour", true);
-                HtmlArtifactToolExecutor.UpsertFile(session, "app.js", "script", "alpha\nconst beta = 1;\nalpha beta;", false);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "one\ntwo\nthree\nfour", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "app.js", "script", "alpha\nconst beta = 1;\nalpha beta;", false);
 
                 var gateway = new ResourceGatewayService();
                 var files = gateway.List(
@@ -471,7 +487,7 @@ namespace RNAssistant.Harness
                 AssertEqual("app.js", searchResult.Matches[0].Title, "HTML search identifies the exact source resource");
                 AssertContains(searchResult.Matches[0].Snippet, "beta", "HTML search returns a bounded snippet");
 
-                var patch = new ToolCommand { ToolId = HtmlArtifactToolExecutor.ApplyPatchToolId };
+                var patch = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.ApplyPatchToolId };
                 patch.Arguments["name"] = "app.js";
                 patch.Arguments["patch"] = new JArray
                 {
@@ -485,7 +501,7 @@ namespace RNAssistant.Harness
                 AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "window.ready", "HTML patch inserts source");
                 AssertEqual(artifactCount + 1, session.Artifacts.Count, "HTML patch creates one artifact revision");
 
-                var failedPatch = new ToolCommand { ToolId = HtmlArtifactToolExecutor.ApplyPatchToolId };
+                var failedPatch = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.ApplyPatchToolId };
                 failedPatch.Arguments["name"] = "app.js";
                 failedPatch.Arguments["patch"] = new JArray
                 {
@@ -499,7 +515,7 @@ namespace RNAssistant.Harness
                 AssertEqual(beforeFailure, session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "failed HTML patch is atomic");
                 AssertEqual(artifactCount, session.Artifacts.Count, "failed HTML patch creates no revision");
 
-                var strictCreate = new ToolCommand { ToolId = HtmlArtifactToolExecutor.UpsertToolId };
+                var strictCreate = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
                 strictCreate.Arguments["resourceType"] = "file";
                 strictCreate.Arguments["name"] = "index.html";
                 strictCreate.Arguments["content"] = "overwrite";
@@ -508,7 +524,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!strictCreateResult.Success, "HTML createOnly rejects an existing file");
                 AssertEqual("one\ntwo\nthree\nfour", session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content, "strict upsert preserves existing content");
 
-                var strictUpdate = new ToolCommand { ToolId = HtmlArtifactToolExecutor.UpsertToolId };
+                var strictUpdate = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
                 strictUpdate.Arguments["resourceType"] = "file";
                 strictUpdate.Arguments["name"] = "missing.css";
                 strictUpdate.Arguments["content"] = "body{}";
@@ -523,10 +539,10 @@ namespace RNAssistant.Harness
                     DocumentTitle = adapter.DocumentTitle,
                     Title = "HTML inspection"
                 };
-                HtmlArtifactToolExecutor.UpsertFile(inspectSession, "index.html", "html", "<main id=\"total\"></main><div id='total'></div><script src=\"local.js\"></script>", true);
-                HtmlArtifactToolExecutor.UpsertFile(inspectSession, "styles.css", "css", "@import url('theme.css');", false);
-                HtmlArtifactToolExecutor.UpsertFile(inspectSession, "app.js", "script", "import thing from 'pkg';\ndocument.getElementById('missing');\nRNAssistantData.missingData;", false);
-                var inspect = new ToolCommand { ToolId = HtmlArtifactToolExecutor.InspectWorkspaceToolId };
+                HtmlWorkspaceToolService.UpsertFile(inspectSession, "index.html", "html", "<main id=\"total\"></main><div id='total'></div><script src=\"local.js\"></script>", true);
+                HtmlWorkspaceToolService.UpsertFile(inspectSession, "styles.css", "css", "@import url('theme.css');", false);
+                HtmlWorkspaceToolService.UpsertFile(inspectSession, "app.js", "script", "import thing from 'pkg';\ndocument.getElementById('missing');\nRNAssistantData.missingData;", false);
+                var inspect = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.InspectWorkspaceToolId };
                 var inspectResult = executor.Execute(inspect, tools, new AppSettings(), false, false, inspectSession);
                 AssertTrue(inspectResult.Success, "HTML static inspection succeeds even when findings exist");
                 var inspection = JObject.Parse(inspectResult.DataJson);
@@ -545,8 +561,8 @@ namespace RNAssistant.Harness
             {
                 var store = new ChatStore(paths);
                 var session = store.Create("Excel", "book", "Book.xlsx", "HTML chat");
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>Saved</h1>", true);
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>Saved again</h1>", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<h1>Saved</h1>", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<h1>Saved again</h1>", true);
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "hello" });
                 store.Save(session);
 
@@ -556,7 +572,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, loaded.HtmlWorkspace.Files.Count, "html workspace preserved");
                 AssertEqual("index.html", loaded.HtmlWorkspace.ActiveFileId, "active html preserved");
                 AssertEqual(1, loaded.HtmlWorkspace.History.Count, "html history preserved");
-                HtmlArtifactToolExecutor.RestoreSnapshot(loaded, loaded.HtmlWorkspace.History[0].Id);
+                HtmlWorkspaceToolService.RestoreSnapshot(loaded, loaded.HtmlWorkspace.History[0].Id);
                 AssertEqual("<h1>Saved</h1>", loaded.HtmlWorkspace.Files[0].Content, "persisted html history supports undo");
 
                 AssertTrue(store.Delete(session.Host, session.DocumentKey, session.Id), "chat deleted");
@@ -567,20 +583,20 @@ namespace RNAssistant.Harness
         private static void HtmlWorkspaceUndoRestoresPreviousVersion()
         {
             var session = new ChatSession { Title = "HTML undo" };
-            HtmlArtifactToolExecutor.UpsertDataSource(session, "sales", "{\"rows\":[1]}");
-            HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>First</h1>", true);
-            HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>Second</h1>", true);
+            HtmlWorkspaceToolService.UpsertDataSource(session, "sales", "{\"rows\":[1]}");
+            HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<h1>First</h1>", true);
+            HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<h1>Second</h1>", true);
 
             AssertTrue(session.HtmlWorkspace.History.Count > 0, "html history created");
             var historyCount = session.HtmlWorkspace.History.Count;
-            HtmlArtifactToolExecutor.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
+            HtmlWorkspaceToolService.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
             AssertContains(session.HtmlWorkspace.Files[0].Content, "First", "html undo restores previous file content");
             AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html undo keeps active file");
             AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html undo keeps data");
             AssertEqual(historyCount - 1, session.HtmlWorkspace.History.Count, "html undo consumes restored version");
             AssertEqual(1, session.HtmlWorkspace.RedoBranches.Count, "html undo exposes one redo branch");
 
-            HtmlArtifactToolExecutor.RedoSnapshot(session, session.HtmlWorkspace.RedoBranches[0].Id);
+            HtmlWorkspaceToolService.RedoSnapshot(session, session.HtmlWorkspace.RedoBranches[0].Id);
             AssertContains(session.HtmlWorkspace.Files[0].Content, "Second", "html redo restores undone file content");
             AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html redo keeps active file");
             AssertEqual(0, session.HtmlWorkspace.RedoBranches.Count, "html redo has no direct child after moving forward");
@@ -604,7 +620,7 @@ namespace RNAssistant.Harness
             var largeSession = new ChatSession { Title = "HTML bounded history" };
             for (var revision = 0; revision < 12; revision++)
             {
-                HtmlArtifactToolExecutor.UpsertFile(
+                HtmlWorkspaceToolService.UpsertFile(
                     largeSession,
                     "index.html",
                     "html",
@@ -618,15 +634,15 @@ namespace RNAssistant.Harness
             AssertTrue(storedCharacters <= HtmlWorkspaceHistoryPolicy.MaxContentCharacters, "large html history stays within character budget");
             AssertEqual('k', largeSession.HtmlWorkspace.History[0].Files[0].Content[0], "latest undo snapshot is retained");
 
-            HtmlArtifactToolExecutor.RestoreSnapshot(largeSession, largeSession.HtmlWorkspace.History[0].Id);
+            HtmlWorkspaceToolService.RestoreSnapshot(largeSession, largeSession.HtmlWorkspace.History[0].Id);
             AssertEqual('k', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports undo");
-            HtmlArtifactToolExecutor.RedoSnapshot(largeSession, largeSession.HtmlWorkspace.RedoBranches[0].Id);
+            HtmlWorkspaceToolService.RedoSnapshot(largeSession, largeSession.HtmlWorkspace.RedoBranches[0].Id);
             AssertEqual('l', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports redo");
 
             var transportSession = new ChatSession { Title = "HTML compact transport" };
-            HtmlArtifactToolExecutor.UpsertFile(transportSession, "index.html", "html", "CURRENT_FIRST", true);
-            HtmlArtifactToolExecutor.UpsertFile(transportSession, "index.html", "html", "HISTORY_SECOND", true);
-            HtmlArtifactToolExecutor.UpsertFile(transportSession, "index.html", "html", "CURRENT_THIRD", true);
+            HtmlWorkspaceToolService.UpsertFile(transportSession, "index.html", "html", "CURRENT_FIRST", true);
+            HtmlWorkspaceToolService.UpsertFile(transportSession, "index.html", "html", "HISTORY_SECOND", true);
+            HtmlWorkspaceToolService.UpsertFile(transportSession, "index.html", "html", "CURRENT_THIRD", true);
 
             var bridgeJson = JsonConvert.SerializeObject(HtmlWorkspaceDto.From(transportSession.HtmlWorkspace));
             AssertContains(bridgeJson, "CURRENT_THIRD", "bridge workspace includes current file content");

@@ -277,10 +277,13 @@
     <Compile Include="Tools\ToolAuthoringExecutor.Validation.cs" />
     <Compile Include="Tools\PromptToolExecutor.cs" />
     <Compile Include="Tools\ResourceToolCatalog.cs" />
-    <Compile Include="Tools\HtmlArtifactToolExecutor.cs" />
-    <Compile Include="Tools\HtmlArtifactToolExecutor.DataBinding.cs" />
-    <Compile Include="Tools\HtmlArtifactToolExecutor.Diagnostics.cs" />
-    <Compile Include="Tools\HtmlArtifactToolExecutor.Source.cs" />
+    <Compile Include="Tools\HtmlWorkspaceToolCatalog.cs" />
+    <Compile Include="Tools\HtmlWorkspaceToolContracts.cs" />
+    <Compile Include="Tools\HtmlWorkspaceToolHandler.cs" />
+    <Compile Include="Tools\HtmlWorkspaceToolService.cs" />
+    <Compile Include="Tools\HtmlWorkspaceToolService.DataBinding.cs" />
+    <Compile Include="Tools\HtmlWorkspaceToolService.Diagnostics.cs" />
+    <Compile Include="Tools\HtmlWorkspaceToolService.Source.cs" />
     <Compile Include="Tools\TaskListToolCatalog.cs" />
     <Compile Include="Tools\TaskListToolHandler.cs" />
     <Compile Include="Tools\PlanDocumentToolCatalog.cs" />

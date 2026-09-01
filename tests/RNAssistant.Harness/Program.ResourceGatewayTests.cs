@@ -102,7 +102,7 @@ namespace RNAssistant.Harness
                 var readRecord = execute(ResourceToolCatalog.ReadToolId, calls[ResourceToolCatalog.ReadToolId]);
                 AssertTrue(readRecord.Result.Resources.Any(reference => reference.Uri == resourceUri),
                     "native resource read retains the exact ResourceRef in typed result data");
-                HtmlArtifactToolExecutor.UpsertFile(
+                HtmlWorkspaceToolService.UpsertFile(
                     session,
                     "nested/report.html",
                     "html",
@@ -486,32 +486,35 @@ namespace RNAssistant.Harness
                 "artifact media requires explicit attachmentId metadata instead of a legacy id convention");
 
             var htmlSession = new ChatSession();
-            HtmlArtifactToolExecutor.UpsertFile(
+            HtmlWorkspaceToolService.UpsertFile(
                 htmlSession,
                 "index.html",
                 "html",
                 "<main>Dashboard</main>",
                 true);
             var oldScript = new string('x', 180) + " OLD_NEEDLE";
-            HtmlArtifactToolExecutor.UpsertFile(
+            HtmlWorkspaceToolService.UpsertFile(
                 htmlSession,
                 "scripts/nested/app.js",
                 "script",
                 oldScript,
                 false);
-            HtmlArtifactToolExecutor.UpsertDataSource(htmlSession, "rows", "{\"items\":[1,2]}");
+            HtmlWorkspaceToolService.UpsertDataSource(htmlSession, "rows", "{\"items\":[1,2]}");
 
             var htmlGateway = new ResourceGatewayService();
-            var mutation = new HtmlArtifactToolExecutor().ExecuteControllerTool(
+            var mutation = new HtmlWorkspaceToolService().Execute(
+                HtmlWorkspaceToolCatalog.UpsertToolId,
                 Command(
-                    HtmlArtifactToolExecutor.UpsertToolId,
+                    HtmlWorkspaceToolCatalog.UpsertToolId,
                     "resourceType", "file",
                     "name", "reports/oil-production-chart.html",
                     "content", "<main>Oil chart</main>",
-                    "setActive", false),
+                    "setActive", false).Arguments,
                 htmlSession,
-                false);
-            AssertTrue(mutation.Success, "HTML mutation succeeds before canonical-ref assertions");
+                delegate { },
+                CancellationToken.None);
+            AssertEqual(HtmlWorkspaceOutcomeStatus.Ok, mutation.Status,
+                "HTML mutation succeeds before canonical-ref assertions");
             var mutationData = JObject.Parse(mutation.DataJson);
             AssertEqual(2, (int)mutationData["version"], "HTML mutation result version");
             var mutationArtifactUri = (string)mutationData.SelectToken("artifactRef.uri");
@@ -678,7 +681,7 @@ namespace RNAssistant.Harness
                 "items",
                 "HTML data is an independently readable text resource");
 
-            HtmlArtifactToolExecutor.UpsertFile(
+            HtmlWorkspaceToolService.UpsertFile(
                 htmlSession,
                 "scripts/nested/app.js",
                 "script",

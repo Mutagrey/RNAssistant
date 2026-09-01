@@ -68,7 +68,7 @@ namespace RNAssistant.Harness
                     var reads = adapter.PowerPointBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.PowerPointReadSlidesOperation);
                     var bound = executor.Execute(Command(
-                        HtmlArtifactToolExecutor.BindDataToolId,
+                        HtmlWorkspaceToolCatalog.BindDataToolId,
                         "dataName", "powerpoint_slides",
                         "sourceTool", PowerPointToolIds.ReadSlides,
                         "sourceArguments", new JObject

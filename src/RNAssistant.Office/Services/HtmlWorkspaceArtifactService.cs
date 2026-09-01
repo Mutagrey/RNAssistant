@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Services
                 }
                 return session.ActiveHtmlArtifactId ?? session.HtmlWorkspaceRecovery.ActiveArtifactId ?? string.Empty;
             }
-            session.HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(session.HtmlWorkspace);
+            session.HtmlWorkspace = HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace);
             session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
             ValidateRevisionLineage(session);
             var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(
@@ -74,7 +74,7 @@ namespace RNAssistant.Office.Services
                 return false;
             }
             if (snapshot == null) return false;
-            session.HtmlWorkspace = HtmlArtifactToolExecutor.NormalizeWorkspace(
+            session.HtmlWorkspace = HtmlWorkspaceToolService.NormalizeWorkspace(
                 HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(snapshot));
             session.ActiveHtmlArtifactId = artifact.Id;
             RebuildNavigation(session);

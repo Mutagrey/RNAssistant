@@ -70,7 +70,7 @@ namespace RNAssistant.Office.Services
             }
             HtmlWorkspaceArtifactService.EnsureMutable(session);
             var source = Resolve(session, sourceResourceUri);
-            var normalizedPath = HtmlArtifactToolExecutor.NormalizeWorkspacePath(targetPath);
+            var normalizedPath = HtmlWorkspaceToolService.NormalizeWorkspacePath(targetPath);
             if (!normalizedPath.EndsWith(".html", StringComparison.OrdinalIgnoreCase) &&
                 !normalizedPath.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
             {
@@ -80,7 +80,7 @@ namespace RNAssistant.Office.Services
                     ? new List<HtmlWorkspaceFile>()
                     : session.HtmlWorkspace.Files ?? new List<HtmlWorkspaceFile>())
                 .Any(item => item != null && string.Equals(
-                    HtmlArtifactToolExecutor.NormalizeWorkspacePath(item.Path),
+                    HtmlWorkspaceToolService.NormalizeWorkspacePath(item.Path),
                     normalizedPath,
                     StringComparison.OrdinalIgnoreCase));
             if (existing)
@@ -102,7 +102,7 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Complete uploaded HTML source is unavailable; import was not performed.");
             }
 
-            var imported = HtmlArtifactToolExecutor.UpsertFile(
+            var imported = HtmlWorkspaceToolService.UpsertFile(
                 session,
                 normalizedPath,
                 "html",

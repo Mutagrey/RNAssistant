@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -68,7 +69,7 @@ namespace RNAssistant.Harness
                     .Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
                 AssertEqual(sourceUri, importedHead.DerivedFromResourceUri, "library exposes import provenance");
 
-                HtmlArtifactToolExecutor.UpsertFile(
+                HtmlWorkspaceToolService.UpsertFile(
                     session,
                     "pages/landing.html",
                     "html",
@@ -99,8 +100,8 @@ namespace RNAssistant.Harness
                     new string('x', 40000) + "\"}";
                 var store = new ChatStore(paths);
                 var session = store.Create("Excel", "html-export", "Export.xlsx", "HTML export");
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<main>exact</main>", true);
-                HtmlArtifactToolExecutor.UpsertDataSource(session, "bound", firstJson);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<main>exact</main>", true);
+                HtmlWorkspaceToolService.UpsertDataSource(session, "bound", firstJson);
                 var data = session.HtmlWorkspace.DataSources.Single();
                 data.Binding = new HtmlWorkspaceDataBinding
                 {
@@ -153,7 +154,7 @@ namespace RNAssistant.Harness
                     "export checkpoint has verified CAS identity");
                 AssertEqual(exportJson, replayed.HtmlWorkspace.DataSources.Single().Json,
                     "export checkpoint replays the exact payload");
-                HtmlArtifactToolExecutor.UpsertFile(replayed, "index.html", "html", "<main>later</main>", true);
+                HtmlWorkspaceToolService.UpsertFile(replayed, "index.html", "html", "<main>later</main>", true);
                 store.Save(replayed);
                 string error;
                 AssertTrue(store.TryActivateHtmlWorkspaceRevision(replayed, exportArtifactId, out error),
@@ -166,28 +167,28 @@ namespace RNAssistant.Harness
         private static void HtmlWorkspaceBranchesUseUniqueMonotonicRevisions()
         {
             var session = new ChatSession();
-            HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "root", true);
+            HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "root", true);
             var rootId = session.ActiveHtmlArtifactId;
             AssertEqual(1, session.Artifacts.Single(item => item.Id == rootId).Revision, "root revision");
 
-            HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch A", true);
+            HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch A", true);
             var branchAId = session.ActiveHtmlArtifactId;
             AssertEqual(2, session.Artifacts.Single(item => item.Id == branchAId).Revision, "first branch revision");
-            HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch A child", true);
+            HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch A child", true);
             var branchAChildId = session.ActiveHtmlArtifactId;
             AssertEqual(3, session.Artifacts.Single(item => item.Id == branchAChildId).Revision, "first branch child revision");
 
-            HtmlArtifactToolExecutor.RestoreSnapshot(session, rootId);
-            HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch B", true);
+            HtmlWorkspaceToolService.RestoreSnapshot(session, rootId);
+            HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch B", true);
             var branchBId = session.ActiveHtmlArtifactId;
             var branchB = session.Artifacts.Single(item => item.Id == branchBId);
             AssertEqual(4, branchB.Revision, "alternative branch uses the next global revision");
             AssertEqual(rootId, branchB.ParentArtifactId, "alternative branch keeps the exact active parent");
 
-            HtmlArtifactToolExecutor.RestoreSnapshot(session, rootId);
+            HtmlWorkspaceToolService.RestoreSnapshot(session, rootId);
             AssertEqual(2, session.HtmlWorkspace.RedoBranches.Count, "both direct branches remain available");
-            HtmlArtifactToolExecutor.RedoSnapshot(session, branchBId);
-            HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch B child", true);
+            HtmlWorkspaceToolService.RedoSnapshot(session, branchBId);
+            HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch B child", true);
             var branchBChildId = session.ActiveHtmlArtifactId;
             var branchBChild = session.Artifacts.Single(item => item.Id == branchBChildId);
             AssertEqual(5, branchBChild.Revision, "continued alternative branch remains globally monotonic");
@@ -221,7 +222,7 @@ namespace RNAssistant.Harness
             });
             var artifactCount = incompatible.Artifacts.Count;
             var error = RuntimeThrows<InvalidOperationException>(() =>
-                HtmlArtifactToolExecutor.UpsertFile(incompatible, "index.html", "html", "must not write", true));
+                HtmlWorkspaceToolService.UpsertFile(incompatible, "index.html", "html", "must not write", true));
             AssertTrue(error.Message.IndexOf("ambiguous", StringComparison.OrdinalIgnoreCase) >= 0,
                 "ambiguous lineage requires reset");
             AssertEqual(artifactCount, incompatible.Artifacts.Count, "rejected lineage appends no artifact");
@@ -236,14 +237,17 @@ namespace RNAssistant.Harness
             AssertEqual(0, empty.Artifacts.Count, "empty pre-turn workspace creates no artifact");
 
             var session = new ChatSession();
-            var executor = new HtmlArtifactToolExecutor();
-            var write = new ToolCommand { ToolId = HtmlArtifactToolExecutor.UpsertToolId };
+            var executor = new HtmlWorkspaceToolService();
+            var write = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
             write.Arguments["resourceType"] = "file";
             write.Arguments["name"] = "index.html";
             write.Arguments["content"] = "<h1>Report</h1>";
             write.Arguments["setActive"] = true;
-            var writeResult = executor.ExecuteControllerTool(write, session, false);
-            AssertTrue(writeResult.Success, "html mutation succeeds");
+            var writeResult = executor.Execute(
+                write.ToolId, write.Arguments, session, delegate { },
+                CancellationToken.None);
+            AssertEqual(HtmlWorkspaceOutcomeStatus.Ok, writeResult.Status,
+                "html mutation succeeds");
             var revisionId = session.ActiveHtmlArtifactId;
 
             var writeMessage = new ChatMessage
@@ -278,7 +282,7 @@ namespace RNAssistant.Harness
             {
                 Role = "assistant",
                 HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
-                Activity = new ChatActivity { ToolId = HtmlArtifactToolExecutor.SetActiveToolId, DataJson = writeResult.DataJson }
+                Activity = new ChatActivity { ToolId = HtmlWorkspaceToolCatalog.SetActiveToolId, DataJson = writeResult.DataJson }
             };
             session.Messages.Add(writeMessage);
             session.Messages.Add(duplicateMutationMessage);

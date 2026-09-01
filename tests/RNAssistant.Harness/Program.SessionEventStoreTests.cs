@@ -1160,8 +1160,8 @@ namespace RNAssistant.Harness
             {
                 var store = new ChatStore(paths);
                 var session = store.Create("Word", "header-metadata", "Header.docx", "Header");
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>header</h1>", true);
-                HtmlArtifactToolExecutor.UpsertDataSource(session, "rows", "{\"rows\":[1]}");
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<h1>header</h1>", true);
+                HtmlWorkspaceToolService.UpsertDataSource(session, "rows", "{\"rows\":[1]}");
                 store.Save(session);
 
                 var active = session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId);
@@ -1194,7 +1194,7 @@ namespace RNAssistant.Harness
                     Phase = "final",
                     StartedUtc = DateTime.UtcNow.AddMinutes(-1)
                 };
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "<h1>header</h1>", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<h1>header</h1>", true);
                 writer.Save(session);
                 session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId).MetadataJson = "{}";
                 writer.Save(session);
@@ -1217,7 +1217,7 @@ namespace RNAssistant.Harness
                 session.Messages.Single().ProtocolMessage = false;
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "second visible" });
                 session.Messages.Reverse();
-                HtmlArtifactToolExecutor.UpsertDataSource(session, "rows", "{\"rows\":[1]}");
+                HtmlWorkspaceToolService.UpsertDataSource(session, "rows", "{\"rows\":[1]}");
                 writer.Save(session);
 
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
@@ -2985,17 +2985,17 @@ namespace RNAssistant.Harness
             {
                 var store = new ChatStore(paths);
                 var session = store.Create("Word", "html-nav", "Navigation.docx", "Navigation");
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "version one", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "version one", true);
                 store.Save(session);
                 var firstId = session.ActiveHtmlArtifactId;
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "version two", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "version two", true);
                 store.Save(session);
                 var secondId = session.ActiveHtmlArtifactId;
 
                 var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
                 AssertEqual("version two", loaded.HtmlWorkspace.Files.Single().Content, "active revision projected");
                 AssertEqual(firstId, loaded.HtmlWorkspace.History.Single().Id, "undo points to parent artifact");
-                HtmlArtifactToolExecutor.RestoreSnapshot(loaded, firstId);
+                HtmlWorkspaceToolService.RestoreSnapshot(loaded, firstId);
                 AssertEqual(firstId, loaded.ActiveHtmlArtifactId, "undo activates prior artifact");
                 AssertEqual(secondId, loaded.HtmlWorkspace.RedoBranches.Single().Id, "redo points to direct child artifact");
                 store.Save(loaded);
@@ -3003,7 +3003,7 @@ namespace RNAssistant.Harness
                 loaded = store.Load(loaded.Id);
                 AssertEqual("version one", loaded.HtmlWorkspace.Files.Single().Content, "undo survives replay");
                 AssertTrue(store.LoadArtifactBody(loaded, secondId), "redo artifact body loads lazily");
-                HtmlArtifactToolExecutor.RedoSnapshot(loaded, secondId);
+                HtmlWorkspaceToolService.RedoSnapshot(loaded, secondId);
                 AssertEqual("version two", loaded.HtmlWorkspace.Files.Single().Content, "redo activates child artifact");
                 AssertEqual(2, loaded.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace),
                     "undo and redo do not duplicate revisions");
@@ -3016,10 +3016,10 @@ namespace RNAssistant.Harness
             {
                 var store = new ChatStore(paths);
                 var session = store.Create("Word", "html-recovery", "Recovery.docx", "Recovery");
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "healthy root", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "healthy root", true);
                 store.Save(session);
                 var rootId = session.ActiveHtmlArtifactId;
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "broken active", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "broken active", true);
                 store.Save(session);
                 var brokenId = session.ActiveHtmlArtifactId;
                 var brokenArtifact = session.Artifacts.Single(item => item.Id == brokenId);
@@ -3042,7 +3042,7 @@ namespace RNAssistant.Harness
                 var blocked = false;
                 try
                 {
-                    HtmlArtifactToolExecutor.UpsertFile(loaded, "index.html", "html", "must not write", true);
+                    HtmlWorkspaceToolService.UpsertFile(loaded, "index.html", "html", "must not write", true);
                 }
                 catch (InvalidOperationException)
                 {
@@ -3082,10 +3082,10 @@ namespace RNAssistant.Harness
             {
                 var store = new ChatStore(paths);
                 var session = store.Create("Word", "html-parent-recovery", "Parent.docx", "Parent recovery");
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "root", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "root", true);
                 store.Save(session);
                 var rootId = session.ActiveHtmlArtifactId;
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "readable child", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "readable child", true);
                 store.Save(session);
                 session.Artifacts.RemoveAll(item => item != null && item.Id == rootId);
                 store.Save(session);
@@ -3101,7 +3101,7 @@ namespace RNAssistant.Harness
                     "readable active revision remains mutable despite truncated ancestry");
                 AssertEqual(0, loaded.HtmlWorkspace.History.Count, "undo stops before missing parent");
 
-                HtmlArtifactToolExecutor.UpsertFile(loaded, "index.html", "html", "new child", true);
+                HtmlWorkspaceToolService.UpsertFile(loaded, "index.html", "html", "new child", true);
                 store.Save(loaded);
                 AssertEqual("new child", store.Load(loaded.Id).HtmlWorkspace.Files.Single().Content,
                     "new revision can extend a readable degraded branch");
@@ -3114,23 +3114,23 @@ namespace RNAssistant.Harness
             {
                 var store = new ChatStore(paths);
                 var session = store.Create("Word", "html-branches", "Branches.docx", "Branches");
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "root", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "root", true);
                 store.Save(session);
                 var rootId = session.ActiveHtmlArtifactId;
 
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch A", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch A", true);
                 store.Save(session);
                 var branchAId = session.ActiveHtmlArtifactId;
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch A child", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch A child", true);
                 store.Save(session);
                 var descendantId = session.ActiveHtmlArtifactId;
 
-                HtmlArtifactToolExecutor.RestoreSnapshot(session, rootId);
+                HtmlWorkspaceToolService.RestoreSnapshot(session, rootId);
                 store.Save(session);
-                HtmlArtifactToolExecutor.UpsertFile(session, "index.html", "html", "branch B", true);
+                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch B", true);
                 store.Save(session);
                 var branchBId = session.ActiveHtmlArtifactId;
-                HtmlArtifactToolExecutor.RestoreSnapshot(session, rootId);
+                HtmlWorkspaceToolService.RestoreSnapshot(session, rootId);
                 store.Save(session);
 
                 File.AppendAllText(SessionEventFile(paths, session), "{\"SchemaVersion\":");
@@ -3157,7 +3157,7 @@ namespace RNAssistant.Harness
                 var ambiguousRejected = false;
                 try
                 {
-                    HtmlArtifactToolExecutor.RedoSnapshot(loaded, null);
+                    HtmlWorkspaceToolService.RedoSnapshot(loaded, null);
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -3168,7 +3168,7 @@ namespace RNAssistant.Harness
                 var descendantRejected = false;
                 try
                 {
-                    HtmlArtifactToolExecutor.RedoSnapshot(loaded, descendantId);
+                    HtmlWorkspaceToolService.RedoSnapshot(loaded, descendantId);
                 }
                 catch (InvalidOperationException)
                 {
@@ -3177,12 +3177,12 @@ namespace RNAssistant.Harness
                 AssertTrue(descendantRejected, "redo cannot jump over a direct child");
 
                 AssertTrue(store.LoadArtifactBody(loaded, branchAId), "selected branch body loads on demand");
-                HtmlArtifactToolExecutor.RedoSnapshot(loaded, branchAId);
+                HtmlWorkspaceToolService.RedoSnapshot(loaded, branchAId);
                 AssertEqual("branch A", loaded.HtmlWorkspace.Files.Single().Content, "explicit branch redo succeeds");
                 AssertEqual(descendantId, loaded.HtmlWorkspace.RedoBranches.Single().Id,
                     "next direct child becomes the only redo choice");
                 AssertTrue(store.LoadArtifactBody(loaded, descendantId), "next branch body loads on demand");
-                HtmlArtifactToolExecutor.RedoSnapshot(loaded, null);
+                HtmlWorkspaceToolService.RedoSnapshot(loaded, null);
                 AssertEqual("branch A child", loaded.HtmlWorkspace.Files.Single().Content,
                     "redo without id succeeds for exactly one child");
             });

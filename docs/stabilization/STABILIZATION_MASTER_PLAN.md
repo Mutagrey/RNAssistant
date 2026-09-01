@@ -2456,7 +2456,11 @@ endpoint.
        verified active/closed revision evidence. The old controller executor is
        removed.
        [Evidence](PHASE_11T9C3_TASK_LIST_NATIVE_RUNTIME.md);
-     - 11T9C4 — HTML workspace family;
+     - [x] 11T9C4 — all eight HTML workspace/data tools use exact Agent-only
+       native handlers and source-owned read/verified-write policies. The HTML
+       controller executor, legacy command/result path and generic Office source
+       fallback are removed; bind/refresh call only typed bound read backends.
+       [Evidence](PHASE_11T9C4_HTML_NATIVE_RUNTIME.md);
      - 11T9C5 — capability discovery/read family;
      - 11T9C6 — prompt read/save family;
    - [x] independent host-neutral cleanup: удалить pre-R37 trajectory inference;

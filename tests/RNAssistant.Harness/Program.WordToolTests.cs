@@ -72,7 +72,7 @@ namespace RNAssistant.Harness
                     var htmlReads = adapter.WordBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.WordReadTextOperation);
                     var bound = executor.Execute(Command(
-                        HtmlArtifactToolExecutor.BindDataToolId,
+                        HtmlWorkspaceToolCatalog.BindDataToolId,
                         "dataName", "word_text",
                         "sourceTool", WordToolIds.ReadText,
                         "sourceArguments", new JObject

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Models;
 using RNAssistant.Office.Domains.Outlook;
 
 namespace RNAssistant.Office.Tools
@@ -113,20 +112,5 @@ namespace RNAssistant.Office.Tools
                 "unknown_tool", false);
         }
 
-        internal ToolResult ExecuteDataSource(
-            ToolCommand command, CancellationToken cancellationToken)
-        {
-            if (command == null)
-                return ToolResult.Fail(
-                    "Outlook read command is empty.", null,
-                    "outlook_read_command_missing", false);
-            var outcome = Execute(
-                command.ToolId, command.Arguments, null, cancellationToken);
-            return outcome.Status == OutlookOutcomeStatus.Ok
-                ? ToolResult.Ok(outcome.Message, outcome.DataJson)
-                : ToolResult.Fail(
-                    outcome.Message, outcome.DataJson,
-                    outcome.ErrorCode, outcome.Retryable);
-        }
     }
 }

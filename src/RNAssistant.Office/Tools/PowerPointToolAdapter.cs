@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Models;
 using RNAssistant.Office.Domains.PowerPoint;
 
 namespace RNAssistant.Office.Tools
@@ -113,22 +112,6 @@ namespace RNAssistant.Office.Tools
                 }, markDispatchPossible, cancellationToken);
             return Invalid(
                 "Unsupported PowerPoint tool: " + toolId, "unknown_tool");
-        }
-
-        internal ToolResult ExecuteDataSource(
-            ToolCommand command, CancellationToken cancellationToken)
-        {
-            if (command == null)
-                return ToolResult.Fail(
-                    "PowerPoint read command is empty.", null,
-                    "powerpoint_read_command_missing", false);
-            var outcome = Execute(
-                command.ToolId, command.Arguments, null, cancellationToken);
-            return outcome.Status == PowerPointOutcomeStatus.Ok
-                ? ToolResult.Ok(outcome.Message, outcome.DataJson)
-                : ToolResult.Fail(
-                    outcome.Message, outcome.DataJson,
-                    outcome.ErrorCode, outcome.Retryable);
         }
 
         private static PowerPointReplaceRequest ReplaceRequest(

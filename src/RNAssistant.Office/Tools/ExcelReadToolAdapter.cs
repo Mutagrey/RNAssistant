@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using RNAssistant.Core.Models;
 using RNAssistant.Office.Domains.Excel;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
@@ -28,17 +27,7 @@ namespace RNAssistant.Office.Tools
                 : RuntimeResult.Error(outcome.Message, outcome.DataJson);
         }
 
-        internal ToolResult ExecuteDataSource(ToolCommand command, CancellationToken cancellationToken)
-        {
-            if (command == null) return ToolResult.Fail("Excel read command is empty.", null, "excel_read_command_missing", false);
-            cancellationToken.ThrowIfCancellationRequested();
-            var outcome = ExecuteOutcome(command.ToolId, command.Arguments);
-            return outcome.Success
-                ? ToolResult.Ok(outcome.Message, outcome.DataJson)
-                : ToolResult.Fail(outcome.Message, outcome.DataJson, outcome.ErrorCode, outcome.Retryable);
-        }
-
-        private ExcelReadOutcome ExecuteOutcome(
+        internal ExcelReadOutcome ExecuteOutcome(
             string toolId,
             IDictionary<string, object> arguments)
         {
