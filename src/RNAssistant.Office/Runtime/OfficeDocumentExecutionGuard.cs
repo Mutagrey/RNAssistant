@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
@@ -9,7 +10,7 @@ namespace RNAssistant.Office
         public string ErrorCode { get; private set; }
         public bool Retryable { get; private set; }
 
-        public OfficeDocumentGuardException(ToolResult mismatch)
+        public OfficeDocumentGuardException(ToolRunResult mismatch)
             : base(mismatch == null ? "The active Office document could not be verified." : mismatch.Message)
         {
             ErrorCode = mismatch == null || string.IsNullOrWhiteSpace(mismatch.ErrorCode)
@@ -45,7 +46,7 @@ namespace RNAssistant.Office
             return new Scope(delegate { _current.Value = previous; });
         }
 
-        public static ToolResult Validate(
+        public static ToolRunResult Validate(
             IOfficeApplicationAdapter adapter,
             OfficeDocumentExecutionExpectation expectation)
         {
@@ -57,7 +58,7 @@ namespace RNAssistant.Office
                 if (bound != null)
                 {
                     if (bound.StaDispatcher == null)
-                        return ToolResult.Fail("The bound document has no owner STA.", null, "document_session_unavailable", false);
+                        return ToolRunResult.Error("The bound document has no owner STA.", null, "document_session_unavailable", false);
                     return bound.StaDispatcher.Invoke(() => ValidateBoundSession(bound, expectation));
                 }
                 var hostMatches = string.Equals(
@@ -75,7 +76,7 @@ namespace RNAssistant.Office
                     string.Empty,
                     adapter.RuntimeDocumentKey);
                 if (hostMatches && identityMatches) return null;
-                return ToolResult.Fail(
+                return ToolRunResult.Error(
                     "The Office document bound to this chat is closed or no longer matches the tool target. " +
                     "No Office action was started. Open that document before retrying Office tools; " +
                     "non-Office tools can continue in this chat.",
@@ -85,7 +86,7 @@ namespace RNAssistant.Office
             }
             catch (Exception ex)
             {
-                return ToolResult.Fail(
+                return ToolRunResult.Error(
                     "RNAssistant could not verify the active Office document before tool execution: " + ex.Message,
                     null,
                     "document_identity_unavailable",
@@ -103,19 +104,19 @@ namespace RNAssistant.Office
 
         // Called on the bound session's owner STA. A stable path never overrides
         // a different live identity; metadata snapshots are not liveness evidence.
-        internal static ToolResult ValidateBoundSession(
+        internal static ToolRunResult ValidateBoundSession(
             IOfficeDocumentSession session, OfficeDocumentExecutionExpectation expectation)
         {
             if (session == null || session.StaDispatcher == null || !session.StaDispatcher.CheckAccess)
-                return ToolResult.Fail("The bound document must be checked on its owner STA.",
+                return ToolRunResult.Error("The bound document must be checked on its owner STA.",
                     null, "document_session_unavailable", false);
             try
             {
                 if (string.IsNullOrWhiteSpace(session.Host) || string.IsNullOrWhiteSpace(session.RuntimeDocumentId) ||
                     session.BoundDocumentObject == null || session.MutationGate == null)
-                    return ToolResult.Fail("The bound document session is incomplete.", null, "document_session_unavailable", false);
+                    return ToolRunResult.Error("The bound document session is incomplete.", null, "document_session_unavailable", false);
                 if (!session.IsAlive)
-                    return ToolResult.Fail("The bound Office document is closed. No replacement document was selected.",
+                    return ToolRunResult.Error("The bound Office document is closed. No replacement document was selected.",
                         null, "active_document_changed", false);
                 if (expectation == null) return null;
                 var hostMatches = string.Equals(expectation.Host, session.Host, StringComparison.OrdinalIgnoreCase);
@@ -123,13 +124,13 @@ namespace RNAssistant.Office
                     ? string.Equals(expectation.RuntimeDocumentKey, session.RuntimeDocumentId, StringComparison.Ordinal)
                     : !string.IsNullOrWhiteSpace(expectation.DocumentKey) &&
                         string.Equals(expectation.DocumentKey, session.StableDocumentId, StringComparison.OrdinalIgnoreCase);
-                return hostMatches && identityMatches ? null : ToolResult.Fail(
+                return hostMatches && identityMatches ? null : ToolRunResult.Error(
                     "The bound Office document no longer matches this run. No Office action was started.",
                     null, "active_document_changed", false);
             }
             catch (Exception ex)
             {
-                return ToolResult.Fail("The bound Office document could not be verified: " + ex.Message,
+                return ToolRunResult.Error("The bound Office document could not be verified: " + ex.Message,
                     null, "document_identity_unavailable", false);
             }
         }

@@ -18,9 +18,9 @@ namespace RNAssistant.Office.Runtime
             if (handler == null) throw new ArgumentNullException(nameof(handler));
             JObject schema;
             string error;
-            // Reuse the established schema validator; do not couple the new
-            // runtime contract to legacy executor or package behavior.
-            if (!ToolSchemaSupport.TryParse(new ToolDefinition
+            // Reuse the canonical schema validator without coupling runtime
+            // registration to catalog persistence or package behavior.
+            if (!ToolSchemaSupport.TryParse(new ToolCatalogEntry
                 { Id = registration.Descriptor.Id, ArgumentSchemaJson = registration.Descriptor.ParametersJson }, out schema, out error))
                 throw new ArgumentException("Invalid registered tool schema: " + error, nameof(registration));
 

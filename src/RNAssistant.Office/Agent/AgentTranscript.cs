@@ -8,6 +8,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
@@ -20,7 +21,7 @@ namespace RNAssistant.Office
         private const int MaxRenderableTranscriptDataChars = ChatArtifactLimits.MaximumTextCharacters;
         private const int MaxTranscriptMessageChars = 16000;
 
-        internal static ChatMessage CreateRunningToolMessage(ChatSession session, ToolCommand command,
+        internal static ChatMessage CreateRunningToolMessage(ChatSession session, ToolInvocation command,
             string stepId, string stepMessage)
         {
             return new ChatMessage
@@ -34,7 +35,7 @@ namespace RNAssistant.Office
         }
 
         internal static void CompleteToolActivityMessage(ChatSession session, ChatMessage activityMessage,
-            ToolCommand command, ToolResult result, string stepId, string stepMessage)
+            ToolInvocation command, ToolRunResult result, string stepId, string stepMessage)
         {
             var completed = CreateLocalResultMessage(command, result, stepId, stepMessage);
             activityMessage.Content = completed.Content;
@@ -69,8 +70,8 @@ namespace RNAssistant.Office
         }
 
         public static ChatMessage CreateLocalResultMessage(
-            ToolCommand command,
-            ToolResult result,
+            ToolInvocation command,
+            ToolRunResult result,
             string stepId = null,
             string stepMessage = null)
         {
@@ -87,15 +88,12 @@ namespace RNAssistant.Office
         }
 
         public static ChatActivity CreateRunningToolActivity(
-            ToolCommand command,
+            ToolInvocation command,
             string stepId,
             string stepMessage)
         {
-            var activity = CreateToolActivity(command, new ToolResult
-            {
-                Success = false,
-                Status = "running"
-            }, "tool");
+            var activity = CreateToolActivity(command,
+                ToolRunResult.Running(), "tool");
             activity.StepId = stepId;
             activity.StepMessage = stepMessage;
             activity.Status = "running";
@@ -134,7 +132,7 @@ namespace RNAssistant.Office
             };
         }
 
-        public static object DescribeResult(ToolCommand command, ToolResult result)
+        public static object DescribeResult(ToolInvocation command, ToolRunResult result)
         {
             return new
             {
@@ -150,7 +148,7 @@ namespace RNAssistant.Office
             };
         }
 
-        public static ChatActivity CreateToolActivity(ToolCommand command, ToolResult result, string kind)
+        public static ChatActivity CreateToolActivity(ToolInvocation command, ToolRunResult result, string kind)
         {
             var success = result != null && result.Success;
             var message = result == null ? string.Empty : BoundText(result.Message, MaxTranscriptMessageChars);
@@ -172,7 +170,7 @@ namespace RNAssistant.Office
                 ErrorCode = result == null ? null : result.ErrorCode,
                 Retryable = result == null ? null : result.Retryable,
                 PendingId = result == null ? null : result.PendingId,
-                ConfirmationCatalogSha256 = result == null ? null : result.ConfirmationCatalogSha256,
+                ConfirmationCatalogSha256 = result == null ? null : result.CatalogRevision,
                 ToolId = command == null ? string.Empty : command.ToolId,
                 ToolCallId = command == null ? string.Empty : command.ToolCallId,
                 ArgumentsJson = command == null
@@ -180,7 +178,7 @@ namespace RNAssistant.Office
                     : BoundJson(
                         JsonConvert.SerializeObject(command.Arguments, Formatting.Indented),
                         MaxTranscriptArgumentsChars,
-                        result != null && IsWaitingResult(result),
+                        result != null && IsAwaitingConfirmation(result),
                         false),
                 RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson,
                 ResultMessage = message,
@@ -190,7 +188,7 @@ namespace RNAssistant.Office
             return activity;
         }
 
-        private static string BoundActivityData(ToolResult result, string dataJson)
+        private static string BoundActivityData(ToolRunResult result, string dataJson)
         {
             var reference = result == null ? null : result.ModelResultResourceRef;
             if (reference == null || string.IsNullOrWhiteSpace(reference.Uri))
@@ -251,20 +249,21 @@ namespace RNAssistant.Office
                 : value.Substring(0, maxCharacters) + "\n...[truncated]";
         }
 
-        public static bool IsWaitingResult(ToolResult result)
+        public static bool IsAwaitingConfirmation(ToolRunResult result)
         {
             var status = NormalizeExecutionStatus(result);
-            return string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(status, "awaiting_confirmation",
+                StringComparison.OrdinalIgnoreCase);
         }
 
-        public static bool IsAwaitingUserResult(ToolResult result)
+        public static bool IsAwaitingUser(ToolRunResult result)
         {
             return string.Equals(NormalizeExecutionStatus(result), "awaiting_user", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static string ToActivityStatus(ToolResult result)
+        private static string ToActivityStatus(ToolRunResult result)
         {
-            if (IsAwaitingUserResult(result))
+            if (IsAwaitingUser(result))
             {
                 return "waiting";
             }
@@ -274,7 +273,8 @@ namespace RNAssistant.Office
             }
 
             var status = NormalizeExecutionStatus(result);
-            if (string.Equals(status, "waiting_confirmation", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(status, "awaiting_confirmation",
+                StringComparison.OrdinalIgnoreCase))
             {
                 return "waiting";
             }
@@ -286,7 +286,7 @@ namespace RNAssistant.Office
             return "failed";
         }
 
-        private static string NormalizeExecutionStatus(ToolResult result)
+        private static string NormalizeExecutionStatus(ToolRunResult result)
         {
             if (result == null)
             {

@@ -19,6 +19,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using TerminalToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
@@ -35,8 +36,11 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "replay-run", TurnId = "replay-turn", RuntimeId = "runtime" };
                 store.Save(session);
-                if (outcome != "ok") adapter.QueueResult("outlook.create_draft", ToolResult.Fail("Write failed", null,
-                    outcome == "unknown" ? "tool_effect_uncertain" : "write_rejected", false));
+                if (outcome == "unknown")
+                    adapter.OutlookThrowAfterMutation = true;
+                else if (outcome == "error")
+                    adapter.QueueOutlookCreateDraftFailure(
+                        "Write failed", "write_rejected", false);
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("outlook.create_draft"),
@@ -55,7 +59,7 @@ namespace RNAssistant.Harness
                 ChatTurnResult result;
                 using (RunCausalTrace.Begin(EventStore(store), session))
                     result = service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter),
-                        new AppSettings { AutoConfirmToolActions = true }, adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                        new AppSettings { AutoConfirmToolActions = true }, OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                         (phase, text, activity) =>
                         {
                             if (phase != "tool_running") return;
@@ -69,12 +73,23 @@ namespace RNAssistant.Harness
                         }).GetAwaiter().GetResult();
                 var replay = AssertKernelReplay(session);
                 AssertEqual(RunLifecycle.Completed, replay.LastRun.KernelState.Summary.Lifecycle, "model ending closes loop only");
-                AssertEqual(outcome == "error" ? "errors" : "unknown", result.RunViewState.ExecutionHealth, "health from actual effect evidence");
+                AssertEqual(outcome == "ok" ? "clean" :
+                    outcome == "error" ? "errors" : "unknown",
+                    result.RunViewState.ExecutionHealth,
+                    "health comes from direct typed effect evidence");
                 AssertEqual(1, result.RunViewState.SuccessfulReads, "schema read counted once");
-                AssertEqual(outcome == "ok" ? 1 : 0, result.RunViewState.UnverifiedWrites, "successful legacy write is not called verified");
+                AssertEqual(outcome == "ok" ? 1 : 0,
+                    result.RunViewState.VerifiedWrites,
+                    "successful direct write is verified");
+                AssertEqual(0, result.RunViewState.UnverifiedWrites,
+                    "direct Outlook handler never creates unverified legacy evidence");
                 AssertEqual(outcome == "error" ? 1 : 0, result.RunViewState.FailedCalls, "error call count");
-                AssertEqual(outcome == "error" ? 0 : 1, result.RunViewState.UnknownEffects, "unknown effect count");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "outlook.create_draft"), "single execution, no retry");
+                AssertEqual(outcome == "unknown" ? 1 : 0,
+                    result.RunViewState.UnknownEffects,
+                    "unknown effect count");
+                AssertEqual(1, adapter.OutlookBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.OutlookCreateDraftOperation),
+                    "single execution, no retry");
                 AssertTrue(replay.LastRun.KernelState.InFlightTool == null, "terminal clears in-flight evidence");
             });
         }
@@ -172,7 +187,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = false, ToolResultRole = role };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var responses = KernelConfirmationResponses();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
@@ -226,7 +241,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var responses = KernelConfirmationResponses();
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = false };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
                 service.ExecuteAsync(ChatModes.Agent, "Create skill", session,
@@ -267,7 +282,7 @@ namespace RNAssistant.Harness
                 var responses = KernelConfirmationResponses();
                 var session = NewSession(adapter);
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = false };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
                 service.ExecuteAsync(ChatModes.Agent, "Create skill", session,
@@ -329,7 +344,7 @@ namespace RNAssistant.Harness
                 });
                 var interrupted = false;
                 try { service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult(); }
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult(); }
                 catch (RunStoreException) { interrupted = true; }
                 AssertTrue(interrupted, "fault injected at actual completed-evidence append");
                 new ChatSessionService(adapter, ConversationStore(new ChatStore(paths))).ReconcileInterruptedRuns("replacement");
@@ -377,7 +392,7 @@ namespace RNAssistant.Harness
                 try
                 {
                     service.ExecuteAsync(ChatModes.Agent, "Write once", session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
-                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), (phase, message, activity) =>
+                        OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), (phase, message, activity) =>
                         {
                             if (afterDispatch && phase == "tool_running" && activity.ToolId == "excel.add_sheet") injectConcurrentCommit();
                         }).GetAwaiter().GetResult();
@@ -409,7 +424,7 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths);
                 var session = NewSession(adapter);
                 var settings = new AppSettings { AutoConfirmToolActions = false };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var responses = KernelConfirmationResponses();
                 var service = CreateConversationRunService(adapter, executor,
                     (appSettings, messages, options, stream, token) =>
@@ -824,7 +839,7 @@ namespace RNAssistant.Harness
                     DocumentRuntimeKey = adapter.RuntimeDocumentKey, StartedUtc = DateTime.UtcNow
                 };
                 store.Save(session);
-                var command = new ToolCommand
+                var command = new ToolInvocation
                 {
                     ToolId = "common.vba_write_module", ToolCallId = "confirmed", RuntimeStepId = "original-step",
                     Arguments = new Dictionary<string, object>
@@ -832,11 +847,11 @@ namespace RNAssistant.Harness
                         { "moduleName", "Module1" }, { "code", "Sub Main()\nDebug.Print 42\nEnd Sub" }
                     }
                 };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = false };
                 using (RunCausalTrace.Begin(EventStore(store), session))
                 {
-                    AssertEqual("waiting_confirmation", executor.Execute(command, tools, settings, false, false, session).Status,
+                    AssertEqual("awaiting_confirmation", executor.ExecuteManual(command, tools, settings, false, false, session).Status,
                         "first run pauses before mutation");
                 }
                 AssertEqual(0, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count, "confirmation pause has no mutation");
@@ -844,7 +859,7 @@ namespace RNAssistant.Harness
                 store.Save(session);
                 using (RunCausalTrace.Begin(EventStore(store), session))
                 {
-                    AssertTrue(executor.Execute(command, tools, settings, false, true, session).Success, "confirmed call executes");
+                    AssertTrue(executor.ExecuteManual(command, tools, settings, false, true, session).Success, "confirmed call executes");
                 }
                 var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
                     .Where(item => item.Type.StartsWith("tool.execution.", StringComparison.Ordinal) || item.Type.StartsWith("domain.effect.", StringComparison.Ordinal)).ToList();
@@ -858,7 +873,7 @@ namespace RNAssistant.Harness
                 AssertTrue(effects.All(item => item.RunId == "after-confirm" &&
                     (string)item.Data["JournalRunId"] == mutation.Prepared.RunId &&
                     (string)item.Data["MutationId"] == mutation.Prepared.MutationId), "actual execution run and journal guard origin are not confused");
-                AssertEqual(1, adapter.Executed.Count(item => item.ToolId == "excel.vba_replace_module"), "confirmation writes once");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "confirmation writes once");
             });
         }
 
@@ -873,11 +888,11 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { RunId = "unsaved-run", TurnId = "unsaved-turn" };
                 using (RunCausalTrace.Begin(EventStore(store), session))
                 {
-                    var result = executor.Execute(new ToolCommand
+                    var result = executor.ExecuteManual(new ToolInvocation
                     {
                         ToolId = "excel.add_sheet", ToolCallId = "one-write",
                         Arguments = new Dictionary<string, object> { { "name", "TraceFailure" } }
-                    }, adapter.GetBuiltInTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                    }, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                     AssertTrue(result.Success && adapter.HasSheet("TraceFailure"), "trace failure does not block or reinterpret a tool");
                 }
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -890,7 +905,7 @@ namespace RNAssistant.Harness
                 };
                 var final = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Answer.", session, NewContext(adapter), new AppSettings(),
-                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).ToList(), null).GetAwaiter().GetResult();
                 AssertEqual("Answer.", final.AssistantText, "optional accepted trace failure preserves response");
                 AssertEqual(RunViewLifecycles.Completed, final.RunViewState.Lifecycle, "optional accepted trace failure preserves outcome");
                 AssertEqual(1, adapter.ExcelSheetRequests.Count(item => item.ToolId == "excel.add_sheet"), "trace failure never retries a write");
@@ -1801,7 +1816,7 @@ namespace RNAssistant.Harness
                 {
                     var id = "call-" + role;
                     var result = AgentJsonProtocol.CreateToolResultMessage(
-                        new ToolCommand { ToolCallId = id, ToolId = "excel.read_range" },
+                        new ToolInvocation { ToolCallId = id, ToolId = "excel.read_range" },
                         TerminalToolResult.Ok("Read complete."), role);
                     result.RunId = "run-roles";
                     session.Messages.Add(result);

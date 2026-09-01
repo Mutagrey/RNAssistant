@@ -137,11 +137,6 @@ namespace RNAssistant.OfficeHosts
             catch { return false; }
         }
 
-        public IEnumerable<ToolDefinition> GetBuiltInTools()
-        {
-            return OfficeBuiltInToolCatalog.ForHost(HostName);
-        }
-
         public IEnumerable<SkillDefinition> GetBuiltInSkills()
         {
             return new[]
@@ -233,15 +228,6 @@ namespace RNAssistant.OfficeHosts
                     mode = referenceOnly ? "reference" : "text"
                 })
             };
-        }
-
-        public ToolResult ExecuteTool(ToolCommand command)
-        {
-            return ToolResult.Fail(
-                "PowerPoint tools require direct typed backends.",
-                null,
-                "powerpoint_legacy_dispatch_removed",
-                false);
         }
 
         private PowerPoint.Presentation RequirePresentation()

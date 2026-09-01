@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Services
             string mode,
             string userText,
             IOfficeApplicationAdapter adapter,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills,
             DocumentContext context,
             AppSettings settings,
@@ -144,7 +144,7 @@ namespace RNAssistant.Office.Services
         internal static string BuildRuntimeContext(
             string mode,
             IOfficeApplicationAdapter adapter,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills,
             DocumentContext context,
             ChatSession session,
@@ -251,10 +251,10 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal static JArray BuildTools(IEnumerable<ToolDefinition> tools)
+        internal static JArray BuildTools(IEnumerable<ToolCatalogEntry> tools)
         {
             var result = new JArray();
-            foreach (var tool in tools ?? new ToolDefinition[0])
+            foreach (var tool in tools ?? new ToolCatalogEntry[0])
             {
                 var descriptor = BuildTool(tool);
                 if (descriptor != null) result.Add(descriptor);
@@ -262,7 +262,7 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        internal static JObject BuildTool(ToolDefinition tool)
+        internal static JObject BuildTool(ToolCatalogEntry tool)
         {
             if (tool == null || string.IsNullOrWhiteSpace(tool.Id)) return null;
             JObject schema;
@@ -287,7 +287,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        internal static string BuildDescription(ToolDefinition tool)
+        internal static string BuildDescription(ToolCatalogEntry tool)
         {
             var parts = new List<string>();
             if (!string.IsNullOrWhiteSpace(tool.Description)) parts.Add(tool.Description.Trim());

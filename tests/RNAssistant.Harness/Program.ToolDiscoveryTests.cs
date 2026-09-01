@@ -24,7 +24,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var catalog = ConversationRunService.PrepareToolsForRun(
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()));
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()));
                 var skills = new[]
                 {
                     new SkillDefinition
@@ -57,18 +57,18 @@ namespace RNAssistant.Harness
                     "exact capability family is complete");
                 foreach (var definition in capabilityDefinitions)
                 {
-                    AssertTrue(definition.RuntimePolicy != null,
+                    AssertTrue(definition.Policy != null,
                         definition.Id + " owns a typed policy");
                     AssertEqual(ToolEffect.Read,
-                        definition.RuntimePolicy.Effect,
+                        definition.Policy.Effect,
                         definition.Id + " is read-only");
                     AssertEqual(ToolVerification.None,
-                        definition.RuntimePolicy.Verification,
+                        definition.Policy.Verification,
                         definition.Id + " does not manufacture verification");
-                    AssertTrue(definition.RuntimePolicy.IndependentLocalRead,
+                    AssertTrue(definition.Policy.IndependentLocalRead,
                         definition.Id + " is an independent local read");
                     AssertEqual("agent,plan",
-                        string.Join(",", definition.RuntimePolicy.AllowedModes),
+                        string.Join(",", definition.Policy.AllowedModes),
                         definition.Id + " is restricted to Agent and Plan");
                 }
                 var nativeRuntime = executor.CreateNativeRuntime(
@@ -112,7 +112,7 @@ namespace RNAssistant.Harness
                     string.Equals(tool.Id, "common.skills_read", StringComparison.OrdinalIgnoreCase)),
                     "removed split discovery ids have no aliases");
 
-                var search = executor.Execute(
+                var search = executor.ExecuteManual(
                     Command(CapabilityToolCatalog.SearchToolId, "query", "excel.review_workbook", "limit", 2),
                     catalog,
                     new AppSettings(),
@@ -128,7 +128,7 @@ namespace RNAssistant.Harness
                 AssertTrue(search.DataJson.IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
                     "search contains no exact schemas");
 
-                var read = executor.Execute(
+                var read = executor.ExecuteManual(
                     Command(CapabilityToolCatalog.ReadToolId, "id", "excel.add_sheet"),
                     catalog,
                     new AppSettings(),
@@ -149,7 +149,7 @@ namespace RNAssistant.Harness
                     "exact descriptor names the tool");
                 AssertTrue(data.SelectToken("descriptor.function.parameters") is JObject,
                     "exact descriptor includes strict parameters");
-                var wrongCaseRead = executor.Execute(
+                var wrongCaseRead = executor.ExecuteManual(
                     Command(CapabilityToolCatalog.ReadToolId,
                         "id", "EXCEL.ADD_SHEET"),
                     catalog,
@@ -166,7 +166,7 @@ namespace RNAssistant.Harness
                     (string)data["revision"],
                     "schema revision is deterministic");
 
-                var skillRead = executor.Execute(
+                var skillRead = executor.ExecuteManual(
                     Command(CapabilityToolCatalog.ReadToolId, "id", "excel.review_workbook"),
                     catalog,
                     new AppSettings(),
@@ -193,7 +193,7 @@ namespace RNAssistant.Harness
                 }
                 AssertTrue(collisionDetected, "tool/skill id collisions fail closed");
 
-                var largeCatalog = catalog.Concat(Enumerable.Range(0, 300).Select(index => new ToolDefinition
+                var largeCatalog = catalog.Concat(Enumerable.Range(0, 300).Select(index => new ToolCatalogEntry
                 {
                     Id = "excel.synthetic_" + index.ToString("D3"),
                     Host = "Excel",
@@ -202,7 +202,9 @@ namespace RNAssistant.Harness
                     ArgumentSchemaJson = EmptyFormalToolSchema,
                     BuiltIn = true,
                     Enabled = true,
-                    AgentCanRun = true
+                    AgentCanRun = true,
+                    Policy = OptionalFixturePolicy(),
+                    Binding = OptionalFixtureBinding()
                 })).ToList();
                 CapabilityCatalogService.BindReadSchema(largeCatalog, skills);
                 var completeCatalog = CapabilityCatalogService.BuildPromptCatalog(
@@ -234,7 +236,7 @@ namespace RNAssistant.Harness
                 AssertTrue(completeCatalog["items"].ToString(Newtonsoft.Json.Formatting.None)
                         .IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
                     "complete prompt index remains schema-free");
-                var tailSearch = executor.Execute(
+                var tailSearch = executor.ExecuteManual(
                     Command(CapabilityToolCatalog.SearchToolId, "query", "excel.synthetic_299"),
                     largeCatalog,
                     new AppSettings(),
@@ -251,7 +253,7 @@ namespace RNAssistant.Harness
                     "search preserves the wider metadata summary");
                 AssertTrue(tailSearch.DataJson.IndexOf("schemaLoaded", StringComparison.Ordinal) < 0,
                     "search does not claim working-set state it cannot observe");
-                var tailRead = executor.Execute(
+                var tailRead = executor.ExecuteManual(
                     Command(CapabilityToolCatalog.ReadToolId, "id", "excel.synthetic_299"),
                     largeCatalog,
                     new AppSettings(),
@@ -291,7 +293,7 @@ namespace RNAssistant.Harness
                     ContextWindowOverrideTokens = 65536,
                     AutoConfirmToolActions = true
                 };
-                var catalog = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
@@ -386,7 +388,7 @@ namespace RNAssistant.Harness
                     }, string.Empty, null, FixtureCallOrigin("oversized-capability-step"));
                     var command = Command(CapabilityToolCatalog.ReadToolId, "id", skillId);
                     command.ToolCallId = callId;
-                    var result = executor.Execute(
+                    var result = executor.ExecuteManual(
                         command,
                         catalog,
                         settings,
@@ -397,7 +399,9 @@ namespace RNAssistant.Harness
                         skills);
                     AssertTrue(result.Success, "provider returns complete oversized skill evidence before projection");
                     modelSession.AppendToolResult(command, new ConversationModelSession.PreparedToolResult(
-                        LegacyToolResultAdapter.Materialize(result, ToolExecutionOutcome.Ok), null));
+                        new ToolResultMaterialization(TerminalToolResult.Ok(
+                            result.Message, result.DataJson,
+                            result.ModelResourceRefs)), null));
 
                     var request = modelSession.CreateRequest("after-oversized-capability",
                         new ModelProtocolCallContext(new string[0]));
@@ -494,7 +498,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var catalog = ConversationRunService.PrepareToolsForRun(
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()));
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()));
                 CapabilityCatalogService.BindReadSchema(catalog, null);
                 var snapshot = ToolPackSnapshotFactory.Capture("agent", adapter.HostName, catalog);
                 var inspect = snapshot.Find(ExcelReadToolIds.Inspect);
@@ -515,7 +519,7 @@ namespace RNAssistant.Harness
                 var definition = catalog.Single(tool => tool.Id == ExcelReadToolIds.Inspect);
                 definition.Description += " changed after capture";
                 AssertEqual(originalPackRevision, snapshot.Revision,
-                    "mutating the legacy source catalog cannot rewrite an existing snapshot");
+                    "mutating the source catalog cannot rewrite an existing snapshot");
                 var replaced = ToolPackSnapshotFactory.Capture("agent", adapter.HostName, catalog);
                 AssertTrue(replaced.Revision != originalPackRevision,
                     "a later run observes the replaced descriptor as a new snapshot");
@@ -546,7 +550,7 @@ namespace RNAssistant.Harness
                 AssertEqual(beforeBinding,
                     ToolPackSnapshotFactory.ExecutionFingerprint(
                         catalog, capabilityRead.Id),
-                    "legacy projection fields cannot replace the native capability binding");
+                    "catalog-only projection fields cannot replace the native capability binding");
             });
         }
 
@@ -555,7 +559,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var optionalTools = Enumerable.Range(1, 3)
-                    .Select(index => new ToolDefinition
+                    .Select(index => new ToolCatalogEntry
                     {
                         Id = "fixture.dynamic_" + index,
                         Host = "Excel",
@@ -564,11 +568,13 @@ namespace RNAssistant.Harness
                         ArgumentSchemaJson = EmptyFormalToolSchema,
                         BuiltIn = true,
                         Enabled = true,
-                        AgentCanRun = true
+                        AgentCanRun = true,
+                        Policy = OptionalFixturePolicy(),
+                        Binding = OptionalFixtureBinding()
                     })
                     .ToList();
                 var catalog = ConversationRunService.PrepareToolsForRun(
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).Concat(optionalTools));
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).Concat(optionalTools));
                 CapabilityCatalogService.BindReadSchema(catalog, null);
                 const string runId = "run-tool-pack";
                 var toolPack = CallableToolPack.Create(
@@ -577,7 +583,7 @@ namespace RNAssistant.Harness
                     runId,
                     catalog);
 
-                foreach (var id in adapter.GetBuiltInTools().Select(tool => tool.Id))
+                foreach (var id in OfficeToolCatalog.ForHost(adapter.HostName).Select(tool => tool.Id))
                     AssertTrue(toolPack.Tools.Any(tool => tool.Id == id), "Excel core includes exact built-in " + id);
                 foreach (var id in new[]
                 {
@@ -668,7 +674,7 @@ namespace RNAssistant.Harness
             {
                 var enumValues = new JArray(Enumerable.Range(0, 600)
                     .Select(value => "value_" + value + "_" + new string('x', 12)));
-                var optionalTools = Enumerable.Range(1, 2).Select(index => new ToolDefinition
+                var optionalTools = Enumerable.Range(1, 2).Select(index => new ToolCatalogEntry
                 {
                     Id = "fixture.large_" + index,
                     Host = "Excel",
@@ -691,7 +697,9 @@ namespace RNAssistant.Harness
                     }.ToString(Newtonsoft.Json.Formatting.None),
                     BuiltIn = true,
                     Enabled = true,
-                    AgentCanRun = true
+                    AgentCanRun = true,
+                    Policy = OptionalFixturePolicy(),
+                    Binding = OptionalFixtureBinding()
                 }).ToArray();
                 var catalog = ConversationRunService.PrepareToolsForRun(
                     executor.GetControllerTools().Where(tool => tool.Id == CapabilityToolCatalog.ReadToolId)
@@ -735,10 +743,12 @@ namespace RNAssistant.Harness
                         }, string.Empty, null, FixtureCallOrigin("overflow-step"));
                         var command = Command(CapabilityToolCatalog.ReadToolId, "id", tool.Id);
                         command.ToolCallId = callId;
-                        var result = executor.Execute(command, catalog, settings, false, false);
+                        var result = executor.ExecuteManual(command, catalog, settings, false, false);
                         AssertTrue(result.Success, "large schema read succeeds before admission");
                         modelSession.AppendToolResult(command, new ConversationModelSession.PreparedToolResult(
-                            LegacyToolResultAdapter.Materialize(result, ToolExecutionOutcome.Ok), null));
+                            new ToolResultMaterialization(TerminalToolResult.Ok(
+                                result.Message, result.DataJson,
+                                result.ModelResourceRefs)), null));
                     }
 
                     store.Save(session);
@@ -813,7 +823,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var optional = new ToolDefinition
+                var optional = new ToolCatalogEntry
                 {
                     Id = "fixture.compaction_tool",
                     Host = "Excel",
@@ -822,7 +832,9 @@ namespace RNAssistant.Harness
                     ArgumentSchemaJson = EmptyFormalToolSchema,
                     BuiltIn = true,
                     Enabled = true,
-                    AgentCanRun = true
+                    AgentCanRun = true,
+                    Policy = OptionalFixturePolicy(),
+                    Binding = OptionalFixtureBinding()
                 };
                 var catalog = ConversationRunService.PrepareToolsForRun(
                     executor.GetControllerTools().Where(tool => tool.Id == CapabilityToolCatalog.ReadToolId)
@@ -901,7 +913,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var optional = new ToolDefinition
+                var optional = new ToolCatalogEntry
                 {
                     Id = "fixture.durable_tool",
                     Host = "Excel",
@@ -910,9 +922,11 @@ namespace RNAssistant.Harness
                     ArgumentSchemaJson = EmptyFormalToolSchema,
                     BuiltIn = true,
                     Enabled = true,
-                    AgentCanRun = true
+                    AgentCanRun = true,
+                    Policy = OptionalFixturePolicy(),
+                    Binding = OptionalFixtureBinding()
                 };
-                var secondOptional = new ToolDefinition
+                var secondOptional = new ToolCatalogEntry
                 {
                     Id = "fixture.durable_tool_2",
                     Host = "Excel",
@@ -921,7 +935,9 @@ namespace RNAssistant.Harness
                     ArgumentSchemaJson = EmptyFormalToolSchema,
                     BuiltIn = true,
                     Enabled = true,
-                    AgentCanRun = true
+                    AgentCanRun = true,
+                    Policy = OptionalFixturePolicy(),
+                    Binding = OptionalFixtureBinding()
                 };
                 var catalog = ConversationRunService.PrepareToolsForRun(
                     executor.GetControllerTools().Where(tool => tool.Id == CapabilityToolCatalog.ReadToolId)
@@ -1055,18 +1071,35 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static ToolPolicy OptionalFixturePolicy()
+        {
+            return new ToolPolicy(
+                ToolEffect.Read,
+                ToolVerification.None,
+                false,
+                true,
+                new[] { ChatModes.Agent, ChatModes.Plan });
+        }
+
+        private static ToolBinding OptionalFixtureBinding()
+        {
+            return new ToolBinding("fixture.optional.handler.v1");
+        }
+
         private static ChatMessage ReadSchemaEvidence(
             OfficeToolExecutor executor,
-            IReadOnlyList<ToolDefinition> catalog,
+            IReadOnlyList<ToolCatalogEntry> catalog,
             string toolId,
             string callId)
         {
             var command = Command(CapabilityToolCatalog.ReadToolId, "id", toolId);
             command.ToolCallId = callId;
-            var result = executor.Execute(command, catalog, new AppSettings(), false, false);
+            var result = executor.ExecuteManual(command, catalog, new AppSettings(), false, false);
             AssertTrue(result.Success, "schema read succeeds for " + toolId);
             return AgentJsonProtocol.CreateToolResultMessage(command,
-                LegacyToolResultAdapter.Materialize(result, ToolExecutionOutcome.Ok), ToolResultRoles.User);
+                new ToolResultMaterialization(TerminalToolResult.Ok(
+                    result.Message, result.DataJson,
+                    result.ModelResourceRefs)), ToolResultRoles.User);
         }
     }
 }

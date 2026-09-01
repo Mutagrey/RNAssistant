@@ -12,6 +12,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
+using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -92,7 +93,7 @@ namespace RNAssistant.Harness
             var diagnostic = jsonMessage();
             diagnostic.Activity = new ChatActivity { Kind = "model_response" };
             AssertTrue(!ConversationResponseHistoryReader.Read(diagnostic).Success, "diagnostics are not accepted responses");
-            var result = AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "call_1", ToolId = "test.read" }, RNAssistant.Core.Tools.Contracts.ToolResult.Ok("ok"));
+            var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "call_1", ToolId = "test.read" }, RNAssistant.Core.Tools.Contracts.ToolResult.Ok("ok"));
             result.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             AssertTrue(!ConversationResponseHistoryReader.Read(result).Success, "tool results are not assistant responses");
             var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
@@ -108,9 +109,9 @@ namespace RNAssistant.Harness
             AssertTrue(rejected, "one raw call position cannot map to two accepted identities");
         }
 
-        private static ToolDefinition V4ReadTool(string id = "test.read")
+        private static ToolCatalogEntry V4ReadTool(string id = "test.read")
         {
-            return new ToolDefinition
+            return new ToolCatalogEntry
             {
                 Id = id,
                 ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{" +
@@ -132,7 +133,7 @@ namespace RNAssistant.Harness
             return new JObject { ["message"] = "Читаю.", ["tool_calls"] = new JArray(calls) }.ToString(Formatting.None);
         }
 
-        private static ConversationResponseParseResult ParseV4(string json, params ToolDefinition[] tools)
+        private static ConversationResponseParseResult ParseV4(string json, params ToolCatalogEntry[] tools)
         {
             return new ConversationResponseParser().Parse(json, tools, tools,
                 new ModelProtocolCallContext(tools.Select(tool => tool.Id)));
@@ -255,9 +256,9 @@ namespace RNAssistant.Harness
             }
             loaded.ArgumentSchemaJson = "{}";
             AssertTrue(!ParseV4(V4Envelope(V4Call()), loaded).Success, "malformed callable schema cannot grant authority");
-            AssertTrue(!parser.Parse(V4Envelope(), new ToolDefinition[0], new ToolDefinition[0], null).Success,
+            AssertTrue(!parser.Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], null).Success,
                 "local safety context must be explicit, even if empty");
-            AssertTrue(!parser.Parse(V4Envelope(), new ToolDefinition[0], new ToolDefinition[0], new ModelProtocolCallContext(null)).Success,
+            AssertTrue(!parser.Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], new ModelProtocolCallContext(null)).Success,
                 "batch safety authority must be explicit");
         }
 
@@ -344,7 +345,7 @@ namespace RNAssistant.Harness
         private static void SimpleAgentPromptContainsToolsAndSkills()
         {
             var adapter = FakeOfficeAdapter.ForHost("Excel");
-            var tools = adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.add_sheet" || tool.Id == "excel.read_range").ToList();
+            var tools = OfficeToolCatalog.ForHost(adapter.HostName).Where(tool => tool.Id == "excel.add_sheet" || tool.Id == "excel.read_range").ToList();
             var skills = new[]
             {
                 new SkillDefinition
@@ -394,7 +395,7 @@ namespace RNAssistant.Harness
                     DocumentKey = session.DocumentKey,
                     Title = session.DocumentTitle
                 };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.html_workspace_upsert"),
@@ -437,9 +438,9 @@ namespace RNAssistant.Harness
                     "Office tools omitted for a closed document");
                 AssertTrue(prompt.IndexOf("common.html_data_bind", StringComparison.OrdinalIgnoreCase) < 0,
                     "Office-backed HTML binding omitted for a closed document");
-                AssertEqual(0, adapter.Executed.Count, "local tool does not enter Office adapter");
+                AssertEqual(0, adapter.TotalBackendCallCount, "local tool does not enter Office adapter");
 
-                var blocked = executor.Execute(
+                var blocked = executor.ExecuteManual(
                     Command("excel.read_range", "sheet", "Data", "address", "A1:B2"),
                     tools,
                     new AppSettings(),
@@ -448,7 +449,7 @@ namespace RNAssistant.Harness
                     session);
                 AssertEqual("active_document_changed", blocked.ErrorCode,
                     "closed-document Office call remains guarded");
-                AssertEqual(0, adapter.Executed.Count, "guarded Office tool never reaches adapter");
+                AssertEqual(0, adapter.TotalBackendCallCount, "guarded Office tool never reaches adapter");
             });
         }
 
@@ -476,7 +477,7 @@ namespace RNAssistant.Harness
                     calls.Add(messages.ToList());
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Do the test workflow.", NewSession(adapter), NewContext(adapter), new AppSettings(),
@@ -509,7 +510,7 @@ namespace RNAssistant.Harness
             var adapter = FakeOfficeAdapter.ForHost("Excel");
             var tools = new[]
             {
-                new ToolDefinition
+                new ToolCatalogEntry
                 {
                     Id = "excel.good",
                     Description = "Good",
@@ -517,7 +518,7 @@ namespace RNAssistant.Harness
                     AgentCanRun = true,
                     ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"
                 },
-                new ToolDefinition
+                new ToolCatalogEntry
                 {
                     Id = "excel.bad",
                     Description = "Bad",
@@ -535,7 +536,7 @@ namespace RNAssistant.Harness
 
         private static void StrictToolSchemaValidatesMetadataAndConstraints()
         {
-            var tool = new ToolDefinition
+            var tool = new ToolCatalogEntry
             {
                 Id = "common.strict_test",
                 ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Item count.\",\"default\":2,\"minimum\":1,\"maximum\":3}},\"required\":[],\"additionalProperties\":false}"
@@ -561,7 +562,7 @@ namespace RNAssistant.Harness
             AssertTrue(arguments.Property("value") != null, "explicitly allowed null is preserved");
             AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error), "explicit null remains valid");
 
-            var tableCommand = new ToolCommand();
+            var tableCommand = new ToolInvocation();
             tableCommand.Arguments["values"] = new Newtonsoft.Json.Linq.JArray(
                 new Newtonsoft.Json.Linq.JArray("A", "B"),
                 new Newtonsoft.Json.Linq.JArray("C", "D"),
@@ -608,7 +609,7 @@ namespace RNAssistant.Harness
             {
                 WithTempExecutor(FakeOfficeAdapter.ForHost(host), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
-                    var catalog = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                    var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                     var session = NewSession(adapter);
                     foreach (var tool in executor.GetControllerTools())
                     {
@@ -623,9 +624,9 @@ namespace RNAssistant.Harness
                             var arguments = MinimalValidArguments(variant);
                             string argumentError;
                             AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError), host + "/" + tool.Id + " variant: " + argumentError);
-                            var command = new ToolCommand { ToolId = tool.Id };
+                            var command = new ToolInvocation { ToolId = tool.Id };
                             ToolArgumentNormalizer.AddProperties(arguments, command.Arguments);
-                            var result = executor.Execute(command, catalog, new AppSettings { AutoConfirmToolActions = true }, true, true, session);
+                            var result = executor.ExecuteManual(command, catalog, new AppSettings { AutoConfirmToolActions = true }, true, true, session);
                             AssertTrue(result == null || !string.Equals(result.ErrorCode, "unknown_tool", StringComparison.OrdinalIgnoreCase), host + "/" + tool.Id + " dispatch is registered");
                             AssertTrue(result == null || !string.Equals(result.ErrorCode, "invalid_arguments", StringComparison.OrdinalIgnoreCase), host + "/" + tool.Id + " published branch reaches its handler");
                         }
@@ -659,7 +660,7 @@ namespace RNAssistant.Harness
                     ChatModes.Agent,
                     "Создай лист Report.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual("Лист Report создан.", result.AssistantText, "final response");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "successful write keeps the accepted model status");
@@ -705,7 +706,7 @@ namespace RNAssistant.Harness
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Создай лист Report.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 var write = result.ToolResults.Select(item => JObject.FromObject(item))
                     .Single(item => (string)item["toolId"] == "excel.add_sheet");
@@ -758,12 +759,12 @@ namespace RNAssistant.Harness
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Обнови модуль Module1.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 var write = result.ToolResults.Select(item => JObject.FromObject(item))
                     .Single(item => (string)item["toolId"] == "common.vba_write_module");
                 AssertEqual(false, (bool)write["success"], "unverified effect is not a successful tool result");
-                AssertEqual("partial_failure", (string)write["status"], "current unknown transport is partial_failure");
+                AssertEqual("unknown", (string)write["status"], "typed manual projection preserves unknown status");
                 AssertEqual("vba_mutation_unknown", (string)write["errorCode"], "real journal classified the divergent effect");
                 AssertEqual(false, (bool)write["retryable"], "unknown write cannot be retried automatically");
                 var writeData = JObject.Parse((string)write["dataJson"]);
@@ -774,7 +775,7 @@ namespace RNAssistant.Harness
                 AssertEqual(VbaMutationStatuses.Unknown,
                     journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status, "durable journal also records unknown");
                 AssertContains(adapter.VbaModuleCode, "\"diverged\"", "fake host state matches neither before nor intended");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.vba_replace_module"), "unknown write is dispatched once");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "unknown write is dispatched once");
                 AssertContains(FlattenSimple(requests.Last()), "vba_mutation_unknown", "model receives unknown effect evidence");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "unknown", 0, 0, 1);
@@ -793,8 +794,12 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 adapter.VbaModuleCode = before;
                 if (outcome == "unknown") adapter.VbaWriteTransform = code => code.Replace("\"after\"", "\"diverged\"");
-                if (outcome == "error") adapter.QueueResult("excel.vba_replace_module",
-                    ToolResult.Fail("Write rejected.", null, "write_rejected", false));
+                if (outcome == "error")
+                    adapter.QueueVbaActionResult(
+                        FakeVbaOperation.ReplaceModule,
+                        VbaBackendActionResult.Error(
+                            "Write rejected.", null,
+                            "write_rejected", false));
                 var journal = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
                 var store = new ChatStore(paths);
@@ -849,7 +854,7 @@ namespace RNAssistant.Harness
                     result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                         ChatModes.Agent, "Update Module1.", session, NewContext(adapter),
                         new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 20 },
-                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null)
+                        OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                         .GetAwaiter().GetResult();
                 }
                 store.Save(session);
@@ -944,7 +949,7 @@ namespace RNAssistant.Harness
                     AssertEqual("trace-turn", item.TurnId, "turn correlation");
                     AssertEqual(adapter.RuntimeDocumentKey, (string)item.Data["DocumentRuntimeId"], "runtime document correlation");
                 }
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.vba_replace_module"), "exactly one write dispatch");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "exactly one write dispatch");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "runtime lifecycle remains completed");
                 AssertTrue(!FlattenSimple(store.Load(session.Id).Messages).Contains("REJECTED_TRACE_SENTINEL"), "trace never enters accepted history");
             });
@@ -967,7 +972,7 @@ namespace RNAssistant.Harness
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Создай лист Report.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual(1, calls, "terminal no-call response stops the loop");
                 AssertEqual(0, result.ToolResults.Count, "there is no tool effect evidence");
@@ -1019,7 +1024,7 @@ namespace RNAssistant.Harness
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "List sheets.", session, NewContext(adapter), settings,
-                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual("Готово.", result.AssistantText, "agent completed");
                 AssertEqual(2, requests.Count, "two model requests");
@@ -1074,7 +1079,7 @@ namespace RNAssistant.Harness
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Restricted request.", session, NewContext(adapter), new AppSettings(),
-                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual(2, requests.Count, "one repair request");
                 AssertEqual("Не могу выполнить этот запрос.", result.AssistantText, "formatted refusal accepted");
@@ -1114,7 +1119,7 @@ namespace RNAssistant.Harness
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Проверь листы.", session, NewContext(adapter), new AppSettings(),
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual(4, requests.Count, "structural repair, schema discovery, and tool continuation");
                 AssertContains(requests[1].Last().Content, "unsupported root field: status", "repair rejects the old envelope instead of adapting it");
@@ -1152,7 +1157,7 @@ namespace RNAssistant.Harness
                         terminalSession,
                         NewContext(adapter),
                         new AppSettings(),
-                        adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                        OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                         null).GetAwaiter().GetResult();
                     AssertEqual(terminalCase, terminalResult.AssistantText, "message is preserved without classification or trimming");
                     AssertEqual(AgentResponseStatuses.Completed, terminalResult.ResponseStatus,
@@ -1181,7 +1186,7 @@ namespace RNAssistant.Harness
                     limitedSession,
                     NewContext(adapter),
                     new AppSettings { MaxAgentIterations = 1 },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Failed, limitedResult.RunViewState.Lifecycle,
                     "runtime step limit is not projected as model-declared completion");
@@ -1212,7 +1217,7 @@ namespace RNAssistant.Harness
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Do something.", session, NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 20 },
-                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual(20, requests.Count, "twenty total responses including the initial request");
                 AssertContains(result.AssistantText, "после 20 попыток", "diagnostic counts total protocol responses");
@@ -1258,7 +1263,7 @@ namespace RNAssistant.Harness
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent, "Ответь на вопрос.", session, NewContext(adapter),
                     new AppSettings { MaxAgentFormatRetries = 20 },
-                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual(20, requests.Count, "nineteen protection responses followed by one valid response");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "twentieth request can complete the run");
@@ -1297,7 +1302,7 @@ namespace RNAssistant.Harness
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Do something.", NewSession(adapter), NewContext(adapter), new AppSettings { MaxAgentFormatRetries = 99 },
-                    adapter.GetBuiltInTools().ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual(20, calls, "at most twenty protocol responses including the initial request");
                 AssertContains(result.AssistantText, "после 20 попыток", "clamped total-attempt diagnostic");
@@ -1316,7 +1321,7 @@ namespace RNAssistant.Harness
                     requestOptions = options;
                     return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Готово.\",\"tool_calls\":[]}" });
                 };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var promptSettings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema };
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
@@ -1534,7 +1539,7 @@ namespace RNAssistant.Harness
                     session,
                     NewContext(adapter),
                     settings,
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     null,
                     null,
                     BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
@@ -1590,7 +1595,7 @@ namespace RNAssistant.Harness
                     calls.Add(messages.ToList());
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Run Module1.MigrateApiKey with arguments.", NewSession(adapter), NewContext(adapter),
@@ -1598,9 +1603,11 @@ namespace RNAssistant.Harness
                     .GetAwaiter().GetResult();
 
                 AssertEqual(3, calls.Count, "schema load, macro execution, and final response");
-                AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "excel.run_macro"), "macro executes once");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.RunMacro), "macro executes once");
                 AssertEqual("Module1.MigrateApiKey", adapter.RanMacros.Single(), "arbitrary exact macro name reaches the adapter");
-                AssertEqual("[\"value\",2,true]", Convert.ToString(adapter.Executed.Single(command => command.ToolId == "excel.run_macro").Arguments["argumentsJson"]),
+                AssertEqual("[\"value\",2,true]", JsonConvert.SerializeObject(
+                    ((VbaRunMacroRequest)adapter.SingleVbaCall(
+                        FakeVbaOperation.RunMacro).Request).Arguments),
                     "public native arguments are serialized only at the hidden backend boundary");
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "macro schema evidence reaches execution step");
                 AssertEqual("Макрос выполнен.", result.AssistantText, "macro result returns to the model");
@@ -1640,7 +1647,7 @@ namespace RNAssistant.Harness
                     ChatModes.Agent,
                     "Создай листы First и Second.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), (phase, message, activity) =>
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), (phase, message, activity) =>
                     {
                         if (activity != null) progressActivities.Add(activity);
                     }).GetAwaiter().GetResult();
@@ -1699,7 +1706,7 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { RunId = "initial", TurnId = "turn", Status = "running",
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = false };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(ChatModes.Agent, "Создай лист и skill.", session, NewContext(adapter),
                     settingsForRun, tools, null, (pendingSession, command, result) => "pending").GetAwaiter().GetResult();
                 AssertTrue(first.WaitingForConfirmation, "real loop stops at confirmation");
@@ -1709,14 +1716,15 @@ namespace RNAssistant.Harness
                 var confirmed = PendingCommand(session);
                 var final = service.ConfirmAsync("pending", confirmed, session,
                     new ConversationRunInput(settingsForRun, NewContext(adapter), tools), null).GetAwaiter().GetResult();
-                AssertRunViewState(final, session, "unknown", 1,
+                AssertRunViewState(final, session, initialHealth, 1,
                     initialHealth == "errors" ? 1 : 0, initialHealth == "unknown" ? 1 : 0);
                 AssertEqual(RunViewLifecycles.Completed, final.RunViewState.Lifecycle, "completed lifecycle does not erase errors or unknown");
                 var previousFinal = session.Messages.Last();
                 var next = service.ExecuteAsync(ChatModes.Agent, "Ответь без действий.", session, NewContext(adapter),
                     settingsForRun, tools, null).GetAwaiter().GetResult();
                 AssertRunViewState(next, session, "clean", 0, 0, 0);
-                AssertEqual("unknown", previousFinal.RunViewState.ExecutionHealth, "new turn does not rewrite earlier evidence");
+                AssertEqual(initialHealth, previousFinal.RunViewState.ExecutionHealth,
+                    "new turn does not rewrite earlier evidence");
             });
         }
 
@@ -1741,7 +1749,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settings = new AppSettings { AutoConfirmToolActions = false, SystemPromptRole = "user" };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(
                     ChatModes.Agent,
                     "Create a test skill.", session, NewContext(adapter), settings, tools,
@@ -1838,7 +1846,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var settings = new AppSettings
                     { AutoConfirmToolActions = false };
-                var tools = adapter.GetBuiltInTools()
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(
                     ChatModes.Agent,
@@ -1895,9 +1903,7 @@ namespace RNAssistant.Harness
                     "confirmed execution consumes the original prepared guard");
                 AssertContains(adapter.VbaModuleCode, "external",
                     "stale confirmed call does not overwrite live VBA");
-                AssertEqual(0, adapter.Executed.Count(command =>
-                    command.ToolId.EndsWith(".vba_replace_module",
-                        StringComparison.OrdinalIgnoreCase)),
+                AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
                     "stale guard blocks the backend dispatch boundary");
             });
         }
@@ -1922,7 +1928,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settings = new AppSettings { AutoConfirmToolActions = false };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 service.ExecuteAsync(
                     ChatModes.Agent,
                     "Create a test skill.", session, NewContext(adapter), settings, tools,
@@ -1981,7 +1987,7 @@ namespace RNAssistant.Harness
                 });
                 var session = NewSession(adapter);
                 var settingsForRun = new AppSettings { ToolResultRole = ToolResultRoles.Tool };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(ChatModes.Agent, "Read twice", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
                 AssertEqual(2, first.RunViewState.SuccessfulReads, "both independent reads execute once");
                 session = AssertKernelReplay(session);
@@ -2028,7 +2034,7 @@ namespace RNAssistant.Harness
                 var result = service.ExecuteAsync(ChatModes.Agent, "Save complete HTML.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 1,
                         ToolResultRole = resultRole, ContextWindowOverrideTokens = 131072 },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "valid calls complete without repair");
                 AssertEqual(4, requestCount, "two independently accepted writes require no extra model attempt");
                 var accepted = session.Messages.Where(message => message.Role == "assistant" &&
@@ -2072,7 +2078,7 @@ namespace RNAssistant.Harness
                 var agent = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Restricted request.", agentSession, NewContext(adapter), new AppSettings(),
-                    new ToolDefinition[0], (Action<string, string, ChatActivity>)null).GetAwaiter().GetResult();
+                    new ToolCatalogEntry[0], (Action<string, string, ChatActivity>)null).GetAwaiter().GetResult();
                 AssertEqual("Запрос отклонён провайдером.", agent.AssistantText, "agent refusal text");
                 AssertEqual(RunViewLifecycles.Failed, agent.RunViewState.Lifecycle, "native refusal is locally classified by kernel");
                 AssertKernelReplay(agentSession);
@@ -2135,7 +2141,7 @@ namespace RNAssistant.Harness
                 };
                 var session = NewSession(adapter);
                 session.Mode = ChatModes.Chat;
-                var allTools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var allTools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var spoofedResource = executor.GetControllerTools()
                     .Single(tool => tool.Id == ResourceToolCatalog.ReadToolId)
                     .Clone();
@@ -2213,7 +2219,7 @@ namespace RNAssistant.Harness
                     captured.Add(messages.ToList());
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var service = CreateConversationRunService(adapter, executor, completion);
 
                 var first = service.ExecuteAsync(
@@ -2308,7 +2314,7 @@ namespace RNAssistant.Harness
             foreach (var callId in new[] { "call_1", "call_2" })
             {
                 var toolResult = AgentJsonProtocol.CreateToolResultMessage(
-                    new ToolCommand { ToolCallId = callId, ToolId = "excel.read_range" },
+                    new ToolInvocation { ToolCallId = callId, ToolId = "excel.read_range" },
                     RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read"), ToolResultRoles.Tool);
                 toolResult.RunId = "run_tool";
                 session.Messages.Add(toolResult);
@@ -2379,7 +2385,7 @@ namespace RNAssistant.Harness
             };
             session.Messages.Add(call);
             var result = AgentJsonProtocol.CreateToolResultMessage(
-                new ToolCommand { ToolCallId = "call_pair", ToolId = "excel.read_range" },
+                new ToolInvocation { ToolCallId = "call_pair", ToolId = "excel.read_range" },
                 RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read"), ToolResultRoles.Developer);
             result.RunId = "run_pair";
             session.Messages.Add(result);

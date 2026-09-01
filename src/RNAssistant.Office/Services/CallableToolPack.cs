@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -47,8 +48,8 @@ namespace RNAssistant.Office.Services
         private readonly string _mode;
         private readonly string _host;
         private readonly string _runId;
-        private readonly IReadOnlyList<ToolDefinition> _catalog;
-        private readonly IDictionary<string, ToolDefinition> _catalogById;
+        private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
+        private readonly IDictionary<string, ToolCatalogEntry> _catalogById;
         private readonly HashSet<string> _coreIds;
         private readonly List<string> _optionalIds = new List<string>();
         private readonly HashSet<string> _optionalSet = new HashSet<string>(StringComparer.Ordinal);
@@ -60,12 +61,12 @@ namespace RNAssistant.Office.Services
             string mode,
             string host,
             string runId,
-            IReadOnlyList<ToolDefinition> catalog)
+            IReadOnlyList<ToolCatalogEntry> catalog)
         {
             _mode = ChatModes.Normalize(mode);
             _host = host ?? string.Empty;
             _runId = runId ?? string.Empty;
-            _catalog = (catalog ?? new ToolDefinition[0])
+            _catalog = (catalog ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
                 .GroupBy(tool => tool.Id, StringComparer.Ordinal)
                 .Select(group => group.First().Clone())
@@ -79,7 +80,7 @@ namespace RNAssistant.Office.Services
             string mode,
             string host,
             string runId,
-            IReadOnlyList<ToolDefinition> catalog,
+            IReadOnlyList<ToolCatalogEntry> catalog,
             IReadOnlyList<ToolPackExtensionEventData> restoredAdmissions = null)
         {
             var pack = new CallableToolPack(mode, host, runId, catalog);
@@ -88,12 +89,12 @@ namespace RNAssistant.Office.Services
             return pack;
         }
 
-        public IReadOnlyList<ToolDefinition> Tools
+        public IReadOnlyList<ToolCatalogEntry> Tools
         {
             get { return ToolsFor(_optionalIds); }
         }
 
-        public IReadOnlyList<ToolDefinition> Catalog
+        public IReadOnlyList<ToolCatalogEntry> Catalog
         {
             get { return _catalog; }
         }
@@ -162,7 +163,7 @@ namespace RNAssistant.Office.Services
         }
 
         public ToolPackAdmission PreparePending(
-            Func<IReadOnlyList<ToolDefinition>, ChatMessage, bool> canPublish)
+            Func<IReadOnlyList<ToolCatalogEntry>, ChatMessage, bool> canPublish)
         {
             if (_pendingIds.Count == 0) return null;
 
@@ -268,7 +269,7 @@ namespace RNAssistant.Office.Services
                 var valid = true;
                 foreach (var reference in admission.RequestedSchemas ?? new List<ToolPackSchemaRevision>())
                 {
-                    ToolDefinition tool;
+                    ToolCatalogEntry tool;
                     if (reference == null || string.IsNullOrWhiteSpace(reference.Id) ||
                         !seen.Add(reference.Id) || _coreIds.Contains(reference.Id) ||
                         _optionalSet.Contains(reference.Id) ||
@@ -321,7 +322,7 @@ namespace RNAssistant.Office.Services
                 admission.RequestedSchemas != null;
         }
 
-        private IReadOnlyList<ToolDefinition> ToolsFor(IEnumerable<string> optionalIds)
+        private IReadOnlyList<ToolCatalogEntry> ToolsFor(IEnumerable<string> optionalIds)
         {
             if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return _catalog;
             var active = new HashSet<string>(_coreIds, StringComparer.Ordinal);
@@ -389,7 +390,7 @@ namespace RNAssistant.Office.Services
                 .ToList();
         }
 
-        private string SnapshotRevision(IReadOnlyList<ToolDefinition> tools)
+        private string SnapshotRevision(IReadOnlyList<ToolCatalogEntry> tools)
         {
             return ToolPackSnapshotFactory.Capture(_mode, _host, tools).Revision;
         }
@@ -452,7 +453,7 @@ namespace RNAssistant.Office.Services
                 return false;
             }
             id = (string)data["id"];
-            ToolDefinition tool;
+            ToolCatalogEntry tool;
             if (string.IsNullOrWhiteSpace(id) || !_catalogById.TryGetValue(id, out tool) ||
                 !string.Equals(id, tool.Id, StringComparison.Ordinal)) return false;
             if (!string.Equals((string)data["revision"], CapabilityCatalogService.Revision(tool), StringComparison.Ordinal)) return false;

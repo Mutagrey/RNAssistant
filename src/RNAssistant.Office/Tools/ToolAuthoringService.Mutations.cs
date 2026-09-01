@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,8 +24,8 @@ namespace RNAssistant.Office.Tools
                         "Tool authoring store is not available.", null,
                         "tool_store_unavailable", false));
             }
-            ToolDefinition current;
-            ToolDefinition intended;
+            ToolCatalogEntry current;
+            ToolCatalogEntry intended;
             string operation;
             ToolAuthoringOutcome error;
             if (string.Equals(toolId, ToolAuthoringCatalog.UpsertToolId,
@@ -75,7 +76,7 @@ namespace RNAssistant.Office.Tools
                 ["changed"] = !string.Equals(
                     beforeHash, intendedHash, StringComparison.Ordinal),
                 ["components"] = new JArray(((intended ?? current)
-                    ?.Components ?? new List<VbaToolComponent>())
+                    ?.Components ?? new List<ToolPackageComponentDefinition>())
                     .Where(component => component != null)
                     .Select(component => component.Name ?? string.Empty))
             }.ToString(Formatting.None);
@@ -130,8 +131,8 @@ namespace RNAssistant.Office.Tools
                     null, "tool_definition_changed", true);
             }
 
-            ToolDefinition current;
-            ToolDefinition intended;
+            ToolCatalogEntry current;
+            ToolCatalogEntry intended;
             string operation;
             ToolAuthoringOutcome error;
             if (string.Equals(toolId, ToolAuthoringCatalog.UpsertToolId,
@@ -215,8 +216,8 @@ namespace RNAssistant.Office.Tools
 
         private ToolAuthoringOutcome ResolveUpsert(
             IDictionary<string, object> arguments,
-            out ToolDefinition existing,
-            out ToolDefinition intended,
+            out ToolCatalogEntry existing,
+            out ToolCatalogEntry intended,
             out string operation)
         {
             existing = null;
@@ -263,7 +264,7 @@ namespace RNAssistant.Office.Tools
 
         private ToolAuthoringOutcome ResolveDelete(
             IDictionary<string, object> arguments,
-            out ToolDefinition existing)
+            out ToolCatalogEntry existing)
         {
             var id = ToolArgumentReader.String(
                 arguments, "id", string.Empty);
@@ -277,10 +278,10 @@ namespace RNAssistant.Office.Tools
             return null;
         }
 
-        private ToolDefinition FindStoredTool(string id)
+        private ToolCatalogEntry FindStoredTool(string id)
         {
             return (_toolStore == null
-                    ? new List<ToolDefinition>() : _toolStore.Load())
+                    ? new List<ToolCatalogEntry>() : _toolStore.Load())
                 .FirstOrDefault(tool => tool != null && string.Equals(
                     tool.Id, id, StringComparison.OrdinalIgnoreCase));
         }
@@ -309,7 +310,7 @@ namespace RNAssistant.Office.Tools
             return (JObject)Canonicalize(result);
         }
 
-        private static string StateHash(ToolDefinition tool)
+        private static string StateHash(ToolCatalogEntry tool)
         {
             var state = new JObject { ["exists"] = tool != null };
             if (tool != null)

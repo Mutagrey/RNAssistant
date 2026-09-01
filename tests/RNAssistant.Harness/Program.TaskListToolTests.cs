@@ -19,13 +19,13 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 AssertTrue(tools.Any(tool => tool.Id == TaskListToolCatalog.CreateToolId), "task-list create exposed to Agent");
                 AssertTrue(NativeToolRuntimeAdapter.Owns(
                     TaskListToolCatalog.CreateToolId),
                     "task-list tools use the native ToolRuntime");
                 var taskPolicy = tools.Single(tool =>
-                    tool.Id == TaskListToolCatalog.CreateToolId).RuntimePolicy;
+                    tool.Id == TaskListToolCatalog.CreateToolId).Policy;
                 AssertTrue(taskPolicy != null &&
                     taskPolicy.Effect == ToolEffect.Write &&
                     taskPolicy.Verification == ToolVerification.Tool &&
@@ -48,7 +48,7 @@ namespace RNAssistant.Harness
                         new JObject { ["id"] = "write", ["text"] = "Write the report", ["status"] = "pending" },
                         new JObject { ["id"] = "verify", ["text"] = "Verify the report", ["status"] = "pending" }));
 
-                var created = executor.Execute(create, tools, new AppSettings(), false, false, session);
+                var created = executor.ExecuteManual(create, tools, new AppSettings(), false, false, session);
                 AssertTrue(created.Success, "plan create succeeds");
                 var createdData = JObject.Parse(created.DataJson);
                 var planId = (string)createdData["taskList"]["id"];
@@ -63,7 +63,7 @@ namespace RNAssistant.Harness
                 AssertTrue(ReferencesArtifact(session, createMessage, firstArtifactId), "created plan linked to tool result message");
 
                 var update = Command(TaskListToolCatalog.UpdateToolId, "id", planId, "goal", "Prepare verified workbook report");
-                var updated = executor.Execute(update, tools, new AppSettings(), false, false, session);
+                var updated = executor.ExecuteManual(update, tools, new AppSettings(), false, false, session);
                 AssertTrue(updated.Success, "partial plan update succeeds");
                 var updatedData = JObject.Parse(updated.DataJson);
                 var secondArtifactId = (string)updatedData["artifactId"];
@@ -81,7 +81,7 @@ namespace RNAssistant.Harness
                 var planUri = ArtifactUri(session, updatedArtifact);
                 var read = ReadResource(new ResourceGatewayService(), session, planUri, "text", null, 32000).Result;
                 AssertContains(read.Text, "Prepare verified workbook report", "active plan revision reads through resources");
-                var removedRead = executor.Execute(Command("common.plan_read"), tools, new AppSettings(), false, false, session);
+                var removedRead = executor.ExecuteManual(Command("common.plan_read"), tools, new AppSettings(), false, false, session);
                 AssertEqual("unknown_tool", removedRead.ErrorCode, "legacy plan id stays unknown");
 
                 session.Messages.Remove(updateMessage);
@@ -94,9 +94,9 @@ namespace RNAssistant.Harness
                     new JObject { ["id"] = "inspect", ["text"] = "Inspect source data", ["status"] = "completed" },
                     new JObject { ["id"] = "write", ["text"] = "Write the report", ["status"] = "completed" },
                     new JObject { ["id"] = "verify", ["text"] = "Verify the report", ["status"] = "completed" });
-                var finalUpdate = executor.Execute(Command(TaskListToolCatalog.UpdateToolId, "id", planId, "steps", completedSteps), tools, new AppSettings(), false, false, session);
+                var finalUpdate = executor.ExecuteManual(Command(TaskListToolCatalog.UpdateToolId, "id", planId, "steps", completedSteps), tools, new AppSettings(), false, false, session);
                 AssertTrue(finalUpdate.Success, "final task-list update succeeds");
-                var closed = executor.Execute(Command(TaskListToolCatalog.CloseToolId, "id", planId, "outcome", "completed"), tools, new AppSettings(), false, false, session);
+                var closed = executor.ExecuteManual(Command(TaskListToolCatalog.CloseToolId, "id", planId, "outcome", "completed"), tools, new AppSettings(), false, false, session);
                 AssertTrue(closed.Success, "task-list close succeeds");
                 AssertTrue(string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId), "closed task list is hidden");
                 AssertTrue(session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.TaskList) >= 3, "closed task-list history remains stored");
@@ -108,7 +108,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var result = executor.Execute(
+                var result = executor.ExecuteManual(
                     Command(
                         TaskListToolCatalog.CreateToolId,
                         "goal", "Invalid duplicate plan",
@@ -116,7 +116,7 @@ namespace RNAssistant.Harness
                             new JObject { ["id"] = "same", ["text"] = "First" },
                             new JObject { ["id"] = "same", ["text"] = "Second" },
                             new JObject { ["id"] = "third", ["text"] = "Third" })),
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings(),
                     false,
                     false,
@@ -134,7 +134,7 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var tools = adapter.GetBuiltInTools()
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
                 var definitions = tools.Where(tool =>
                     TaskListToolCatalog.Owns(tool.Id)).ToArray();
@@ -176,7 +176,7 @@ namespace RNAssistant.Harness
                     "active-list rejection occurs before the mutation boundary");
 
                 var artifactCount = session.Artifacts.Count;
-                var dryRun = executor.Execute(Command(
+                var dryRun = executor.ExecuteManual(Command(
                     TaskListToolCatalog.UpdateToolId,
                     "id", (string)createdData["taskList"]["id"],
                     "goal", "Preview"), tools, new AppSettings(),

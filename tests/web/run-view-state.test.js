@@ -129,9 +129,9 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   });
   assert.ok(index.includes("app-agent.js?v=runtime-diagnostics-20260831-1"),
     "agent outcome uses the diagnostics cache key");
-  assert.ok(index.includes("app-chat-session.js?v=skill-contract-20260901-1"), "chat session uses the typed Skill contract cache key");
+  assert.ok(index.includes("app-chat-session.js?v=tool-contract-20260901-1"), "chat session uses the typed Tool contract cache key");
   assert.ok(index.includes("app-core.js?v=bridge-bootstrap-20260831-1"), "core bridge bootstrap uses the bridge cache key");
-  assert.ok(index.includes("app-chat-state.js?v=skill-contract-20260901-1"), "chat state uses the typed Skill contract cache key");
+  assert.ok(index.includes("app-chat-state.js?v=tool-contract-20260901-1"), "chat state uses the typed Tool contract cache key");
   assert.ok(index.includes("app-messages.js?v=artifact-commit-20260831-1"), "messages uses the artifact commit cache key");
   ["app-chat.css", "app-agent.css"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=run-view-state-20260830-1"), asset + " uses the atomic cutover cache key");

@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -71,7 +72,7 @@ namespace RNAssistant.Office.Tools
         }
 
         internal ToolAuthoringOutcome ValidateDefinition(
-            ToolDefinition tool)
+            ToolCatalogEntry tool)
         {
             var reserved = ValidateAuthoredToolId(
                 tool == null ? null : tool.Id);
@@ -99,13 +100,13 @@ namespace RNAssistant.Office.Tools
                 "Custom tools listed.", JsonConvert.SerializeObject(tools));
         }
 
-        private static ToolDefinition ReadToolDefinition(
+        private static ToolCatalogEntry ReadToolDefinition(
             IDictionary<string, object> arguments)
         {
             var id = ToolArgumentReader.String(arguments, "id", string.Empty);
             var components = ReadComponents(ToolArgumentReader.String(
                 arguments, "components", "[]"));
-            return NormalizeVbaEntryCode(new ToolDefinition
+            return NormalizeVbaEntryCode(new ToolCatalogEntry
             {
                 Id = id,
                 Host = ToolArgumentReader.String(arguments, "host", DefaultHostFromId(id)),
@@ -129,8 +130,8 @@ namespace RNAssistant.Office.Tools
             });
         }
 
-        private static ToolDefinition UpdateToolDefinition(
-            ToolDefinition existing,
+        private static ToolCatalogEntry UpdateToolDefinition(
+            ToolCatalogEntry existing,
             IDictionary<string, object> arguments)
         {
             var tool = existing.Clone();
@@ -299,22 +300,22 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static ToolDefinition NormalizeVbaEntryCode(ToolDefinition tool)
+        private static ToolCatalogEntry NormalizeVbaEntryCode(ToolCatalogEntry tool)
         {
             if (tool != null && string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
-                var entry = (tool.Components ?? new List<VbaToolComponent>()).FirstOrDefault();
+                var entry = (tool.Components ?? new List<ToolPackageComponentDefinition>()).FirstOrDefault();
                 tool.Code = entry == null ? string.Empty : entry.Code ?? string.Empty;
             }
             return tool;
         }
 
-        private static List<VbaToolComponent> ReadComponents(string json)
+        private static List<ToolPackageComponentDefinition> ReadComponents(string json)
         {
-            if (string.IsNullOrWhiteSpace(json)) return new List<VbaToolComponent>();
+            if (string.IsNullOrWhiteSpace(json)) return new List<ToolPackageComponentDefinition>();
             try
             {
-                return JArray.Parse(json).OfType<JObject>().Select(component => new VbaToolComponent
+                return JArray.Parse(json).OfType<JObject>().Select(component => new ToolPackageComponentDefinition
                 {
                     Name = (string)component["name"],
                     Type = (string)component["type"],
@@ -324,13 +325,13 @@ namespace RNAssistant.Office.Tools
             }
             catch (JsonException)
             {
-                return new List<VbaToolComponent>();
+                return new List<ToolPackageComponentDefinition>();
             }
         }
 
-        private static JObject ToolPayload(ToolDefinition tool)
+        private static JObject ToolPayload(ToolCatalogEntry tool)
         {
-            tool = tool ?? new ToolDefinition();
+            tool = tool ?? new ToolCatalogEntry();
             return new JObject
             {
                 ["id"] = tool.Id ?? string.Empty,
@@ -339,7 +340,7 @@ namespace RNAssistant.Office.Tools
                 ["description"] = tool.Description ?? string.Empty,
                 ["parameters"] = ParseJsonObject(tool.ArgumentSchemaJson),
                 ["executor"] = tool.Executor ?? string.Empty,
-                ["components"] = new JArray((tool.Components ?? new List<VbaToolComponent>())
+                ["components"] = new JArray((tool.Components ?? new List<ToolPackageComponentDefinition>())
                     .Where(component => component != null)
                     .Select(component => new JObject
                     {
@@ -421,7 +422,7 @@ namespace RNAssistant.Office.Tools
                 ? value : fallback;
         }
 
-        private IEnumerable<ToolDefinition> VisibleTools()
+        private IEnumerable<ToolCatalogEntry> VisibleTools()
         {
             return _toolStore.Load().Where(t =>
                 t != null &&

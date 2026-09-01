@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,7 +25,7 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException(invalidAttachment.FileName + ": " + invalidAttachment.Error);
             }
 
-            IReadOnlyList<ToolDefinition> tools = new ToolDefinition[0];
+            IReadOnlyList<ToolCatalogEntry> tools = new ToolCatalogEntry[0];
             IReadOnlyList<SkillDefinition> skills = new SkillDefinition[0];
             if (ChatModes.Normalize(session.Mode) != ChatModes.Chat)
             {

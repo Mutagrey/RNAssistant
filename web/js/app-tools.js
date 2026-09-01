@@ -1,3 +1,119 @@
+var toolLibraryContractVersion = 1;
+var toolLibraryContractType = "rnassistant.toolLibrary";
+var toolLibraryMutationRequestType = "rnassistant.toolLibraryMutationRequest";
+var toolLibraryMutationResultType = "rnassistant.toolLibraryMutationResult";
+
+function toolComponentFromContract(component) {
+  if (!component || typeof component.name !== "string" ||
+    typeof component.type !== "string" ||
+    typeof component.fileName !== "string" ||
+    typeof component.code !== "string" ||
+    typeof component.codeSha256 !== "string") {
+    throw new Error("Некорректный typed component инструмента.");
+  }
+  return {
+    Name: component.name,
+    Type: component.type,
+    FileName: component.fileName,
+    Code: component.code,
+    CodeSha256: component.codeSha256
+  };
+}
+
+function toolFromContract(tool) {
+  if (!tool || typeof tool.revision !== "string" || !tool.revision ||
+    typeof tool.id !== "string" || !tool.id ||
+    typeof tool.host !== "string" || typeof tool.name !== "string" ||
+    typeof tool.description !== "string" ||
+    typeof tool.argumentSchemaJson !== "string" ||
+    typeof tool.executor !== "string" ||
+    typeof tool.requiresConfirmation !== "boolean" ||
+    typeof tool.mutatesDocument !== "boolean" ||
+    typeof tool.mutatesLocalState !== "boolean" ||
+    typeof tool.canSourceHtmlData !== "boolean" ||
+    typeof tool.agentCanRun !== "boolean" ||
+    typeof tool.code !== "string" || typeof tool.readme !== "string" ||
+    typeof tool.enabled !== "boolean" || typeof tool.builtIn !== "boolean" ||
+    typeof tool.riskLevel !== "number" || typeof tool.useWhen !== "string" ||
+    typeof tool.doNotUseWhen !== "string" ||
+    typeof tool.capabilityStatus !== "string" ||
+    typeof tool.limitations !== "string" ||
+    typeof tool.packageVersion !== "string" ||
+    typeof tool.entryPoint !== "string" ||
+    !Array.isArray(tool.argumentOrder) || !Array.isArray(tool.components) ||
+    typeof tool.scope !== "string" ||
+    typeof tool.installationStatus !== "string") {
+    throw new Error("Некорректный typed package инструмента.");
+  }
+  return {
+    Id: tool.id,
+    Host: tool.host,
+    Name: tool.name,
+    Description: tool.description,
+    ArgumentSchemaJson: tool.argumentSchemaJson,
+    Executor: tool.executor,
+    RequiresConfirmation: tool.requiresConfirmation,
+    MutatesDocument: tool.mutatesDocument,
+    MutatesLocalState: tool.mutatesLocalState,
+    CanSourceHtmlData: tool.canSourceHtmlData,
+    AgentCanRun: tool.agentCanRun,
+    Code: tool.code,
+    Readme: tool.readme,
+    Enabled: tool.enabled,
+    BuiltIn: tool.builtIn,
+    RiskLevel: tool.riskLevel,
+    UseWhen: tool.useWhen,
+    DoNotUseWhen: tool.doNotUseWhen,
+    CapabilityStatus: tool.capabilityStatus,
+    Limitations: tool.limitations,
+    PackageVersion: tool.packageVersion,
+    EntryPoint: tool.entryPoint,
+    ArgumentOrder: tool.argumentOrder.slice(),
+    Components: tool.components.map(toolComponentFromContract),
+    Scope: tool.scope,
+    InstallationStatus: tool.installationStatus,
+    Revision: tool.revision,
+    _baseId: tool.builtIn ? "" : tool.id,
+    _baseRevision: tool.builtIn ? "" : tool.revision
+  };
+}
+
+function toolLibraryItemsFromContract(contract) {
+  if (!contract || contract.type !== toolLibraryContractType ||
+    contract.contractVersion !== toolLibraryContractVersion ||
+    !Array.isArray(contract.tools)) {
+    throw new Error("Некорректный typed Tool Library contract.");
+  }
+  return contract.tools.map(toolFromContract);
+}
+
+function requireToolMutationResult(result) {
+  if (!result || result.type !== "rnassistant.toolMutationResult" ||
+    result.contractVersion !== toolLibraryContractVersion ||
+    ["ok", "error", "unknown"].indexOf(result.status) < 0 ||
+    typeof result.message !== "string" ||
+    typeof result.dispatch !== "string" || typeof result.effect !== "string") {
+    throw new Error("Некорректный typed результат изменения инструмента.");
+  }
+  return result;
+}
+
+function toolLibraryMutationFromContract(response) {
+  if (!response || response.type !== toolLibraryMutationResultType ||
+    response.contractVersion !== toolLibraryContractVersion ||
+    !Array.isArray(response.results)) {
+    throw new Error("Некорректный typed результат Tool Library.");
+  }
+  var results = response.results.map(requireToolMutationResult);
+  return {
+    tools: toolLibraryItemsFromContract(response.library),
+    results: results,
+    failure: results.filter(function (result) {
+      return result.status !== "ok";
+    })[0] || null
+  };
+}
+
 var toolStructuredEditor = window.RNAssistantToolStructuredEditor.create({
   state: state,
   markDirty: markToolLibraryDirty
@@ -11,6 +127,10 @@ var toolActions = window.RNAssistantToolActions.create({
   syncSelected: syncSelectedToolFromEditor,
   validateSelected: validateSelectedToolEditors,
   validateAll: validateAllToolDefinitions,
+  mutationRequest: toolLibraryMutationRequest,
+  parseMutation: toolLibraryMutationFromContract,
+  parseLibrary: toolLibraryItemsFromContract,
+  reconcile: reconcileToolLibraryCatalog,
   readTools: readTools,
   readRunArguments: toolStructuredEditor.readRunArguments,
   renderTools: renderTools,
@@ -129,8 +249,8 @@ function toolLibraryComparable(tool) {
 }
 
 function toolLibraryIdentity(tool) {
-  var storagePath = String(tool && (tool.StoragePath || tool.storagePath) || "").toLowerCase();
-  return storagePath ? "path:" + storagePath : "id:" + String(tool && (tool.Id || tool.id) || "").toLowerCase();
+  var baseId = String(tool && tool._baseId || "").toLowerCase();
+  return "id:" + (baseId || String(tool && tool.Id || "").toLowerCase());
 }
 
 function toolLibraryRecords(tools) {
@@ -139,6 +259,8 @@ function toolLibraryRecords(tools) {
       entity: tool,
       identity: toolLibraryIdentity(tool),
       id: String(tool.Id || "").toLowerCase(),
+      baseId: tool._baseId || "",
+      revision: tool._baseRevision || "",
       comparable: toolLibraryComparable(tool)
     };
   });
@@ -221,6 +343,73 @@ function acceptToolLibraryState() {
   setToolLibraryBaseline(state.tools);
   state.toolLibraryDirty = false;
   updateToolSaveButton();
+}
+
+function toolLibraryMutations() {
+  syncSelectedToolFromEditor();
+  var current = toolLibraryRecords(state.tools);
+  var baseline = state.toolLibraryBaselineItems || [];
+  var currentIndex = toolRecordIndex(current);
+  var baselineIndex = toolRecordIndex(baseline);
+  var mutations = [];
+  current.forEach(function (record) {
+    var previous = matchingToolRecord(baselineIndex, record);
+    if (previous && !toolRecordChanged(record, previous)) return;
+    var tool = record.entity;
+    var comparable = toolLibraryComparable(tool);
+    mutations.push({
+      kind: "upsert",
+      baseId: previous ? previous.baseId : "",
+      expectedRevision: previous ? previous.revision : "",
+      id: comparable.Id,
+      host: comparable.Host,
+      name: comparable.Name,
+      description: comparable.Description,
+      argumentSchemaJson: comparable.ArgumentSchemaJson,
+      executor: comparable.Executor,
+      requiresConfirmation: comparable.RequiresConfirmation,
+      mutatesDocument: comparable.MutatesDocument,
+      mutatesLocalState: comparable.MutatesLocalState,
+      agentCanRun: comparable.AgentCanRun,
+      code: comparable.Code,
+      readme: comparable.Readme,
+      enabled: comparable.Enabled,
+      riskLevel: comparable.RiskLevel,
+      useWhen: comparable.UseWhen,
+      doNotUseWhen: comparable.DoNotUseWhen,
+      capabilityStatus: comparable.CapabilityStatus,
+      limitations: comparable.Limitations,
+      packageVersion: comparable.PackageVersion,
+      entryPoint: comparable.EntryPoint,
+      argumentOrder: comparable.ArgumentOrder,
+      components: comparable.Components.map(function (component) {
+        return {
+          name: component.Name,
+          type: component.Type,
+          fileName: component.FileName,
+          code: component.Code,
+          codeSha256: component.CodeSha256
+        };
+      })
+    });
+  });
+  baseline.forEach(function (record) {
+    if (matchingToolRecord(currentIndex, record)) return;
+    mutations.push({
+      kind: "delete",
+      baseId: record.baseId,
+      expectedRevision: record.revision
+    });
+  });
+  return mutations;
+}
+
+function toolLibraryMutationRequest() {
+  return {
+    type: toolLibraryMutationRequestType,
+    contractVersion: toolLibraryContractVersion,
+    mutations: toolLibraryMutations()
+  };
 }
 
 function selectedToolComponent(tool) {
@@ -576,7 +765,9 @@ function bindToolActions() {
       CapabilityStatus: "available",
       Scope: "global",
       PackageVersion: "1.0.0",
-      Components: [{ Name: "RNA_NewTool", Type: "StdModule", FileName: "RNA_NewTool.bas", Code: "Option Explicit\n" }]
+      Components: [{ Name: "RNA_NewTool", Type: "StdModule", FileName: "RNA_NewTool.bas", Code: "Option Explicit\n" }],
+      _baseId: "",
+      _baseRevision: ""
     });
     state.selectedToolIndex = state.tools.length - 1;
     state.selectedInstructionKind = "tool";
@@ -617,7 +808,9 @@ function bindToolActions() {
       ArgumentOrder: (source.ArgumentOrder || []).slice(),
       Components: toolComponents(source).map(function (component) { return JSON.parse(JSON.stringify(component)); }),
       Scope: "global",
-      InstallationStatus: "not_installed"
+      InstallationStatus: "not_installed",
+      _baseId: "",
+      _baseRevision: ""
     });
     state.selectedToolIndex = state.tools.length - 1;
     state.selectedInstructionKind = "tool";

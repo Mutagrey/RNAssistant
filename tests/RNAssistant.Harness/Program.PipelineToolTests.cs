@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.IO;
 using System.Linq;
@@ -12,9 +13,9 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static ToolDefinition DisabledPipeline()
+        private static ToolCatalogEntry DisabledPipeline()
         {
-            return new ToolDefinition
+            return new ToolCatalogEntry
             {
                 Id = "excel.old_pipeline", Host = "Excel", Executor = "pipeline",
                 Enabled = true, AgentCanRun = true, RequiresConfirmation = true,
@@ -31,14 +32,14 @@ namespace RNAssistant.Harness
                 foreach (var manual in new[] { false, true })
                 foreach (var dry in new[] { false, true })
                 {
-                    var result = executor.Execute(Command(pipeline.Id), new[] { pipeline },
+                    var result = executor.ExecuteManual(Command(pipeline.Id), new[] { pipeline },
                         new AppSettings { AutoConfirmToolActions = true }, dry, manual);
                     AssertEqual("pipeline_disabled", result.ErrorCode, "pipeline rejected before dispatch/confirmation");
                     AssertEqual(false, result.Retryable, "disabled feature is not retryable");
                 }
-                AssertEqual(0, adapter.Executed.Count, "no nested tool executed");
+                AssertEqual(0, adapter.TotalBackendCallCount, "no nested tool executed");
                 AssertTrue(!ToolSafetyPolicy.Resolve(pipeline, new[] { pipeline }).Valid, "no nested safety traversal");
-                var direct = executor.Execute(Command("excel.add_sheet", "name", "Direct"), adapter.GetBuiltInTools().ToList(),
+                var direct = executor.ExecuteManual(Command("excel.add_sheet", "name", "Direct"), OfficeToolCatalog.ForHost(adapter.HostName).ToList(),
                     new AppSettings { AutoConfirmToolActions = true }, false, false,
                     NewSession(adapter));
                 AssertTrue(direct.Success && adapter.HasSheet("Direct"), "direct tools remain available");
@@ -63,7 +64,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!HasTool(new ToolCatalogService(adapter, executor, store).GetVisibleTools(), pipeline.Id), "manual catalog excludes pipelines");
                 AssertTrue(!HasTool(ConversationRunService.PrepareToolsForRun(new[] { pipeline }), pipeline.Id), "injected model catalog excludes pipelines");
                 AssertEqual(string.Empty, ToolPackSnapshotFactory.ExecutionFingerprint(new[] { pipeline }, pipeline.Id), "no resumable pipeline fingerprint");
-                var read = executor.Execute(Command(CapabilityToolCatalog.ReadToolId, "id", pipeline.Id),
+                var read = executor.ExecuteManual(Command(CapabilityToolCatalog.ReadToolId, "id", pipeline.Id),
                     new[] { pipeline }, new AppSettings(), false, true);
                 AssertTrue(!read.Success, "direct capability read cannot advertise an injected pipeline");
                 store.Save(new[] { CustomTool("Excel", "excel.current") }, "Excel");
@@ -89,9 +90,9 @@ namespace RNAssistant.Harness
                     var schema = JObject.Parse(FindTool(executor.GetControllerTools(), id).ArgumentSchemaJson);
                     AssertTrue(schema.SelectToken("properties.pipeline") == null && schema.SelectToken("properties.pipelineSteps") == null,
                         "pipeline authoring fields removed");
-                    var result = executor.Execute(Command(id, "id", pipeline.Id, "executor", "pipeline"),
+                    var result = executor.ExecuteManual(Command(id, "id", pipeline.Id, "executor", "pipeline"),
                         executor.GetControllerTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, true);
-                    AssertTrue(!result.Success && result.Status != "waiting_confirmation", "model/manual authoring rejected");
+                    AssertTrue(!result.Success && result.Status != "awaiting_confirmation", "model/manual authoring rejected");
                 }
             });
         }

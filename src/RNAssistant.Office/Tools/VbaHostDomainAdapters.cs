@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Vba;
 
@@ -208,7 +209,7 @@ namespace RNAssistant.Office.Tools
         public VbaMutationReadResult ReadModule(string moduleName, int maxChars)
         {
             VbaModuleState state;
-            RNAssistant.Core.Models.ToolResult error;
+            ToolRunResult error;
             if (_reader.TryReadModule(moduleName, maxChars, out state, out error))
                 return VbaMutationReadResult.Found(state);
             if (error == null)

@@ -27,11 +27,27 @@ namespace RNAssistant.Office.Services
         public RunViewState RunViewState { get; set; }
     }
 
+    public sealed class PendingToolRegistration
+    {
+        public string Message { get; private set; }
+        public string DataJson { get; private set; }
+        public string CatalogRevision { get; private set; }
+
+        public PendingToolRegistration(string message, string dataJson,
+            string catalogRevision)
+        {
+            Message = message ?? string.Empty;
+            DataJson = dataJson;
+            CatalogRevision = catalogRevision ?? string.Empty;
+        }
+    }
+
     // Model context remains outside the pure kernel. The same three adapters serve
     // a fresh turn and a confirmed continuation; there is no second execution loop.
     public sealed class ConversationRunService
     {
-        public delegate string PendingToolRegistrar(ChatSession session, ToolCommand command, ToolResult result);
+        public delegate string PendingToolRegistrar(ChatSession session,
+            ToolInvocation command, PendingToolRegistration registration);
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
@@ -62,7 +78,7 @@ namespace RNAssistant.Office.Services
         }
 
         public Task<ChatTurnResult> ExecuteAsync(string mode, string text, ChatSession session,
-            DocumentContext documentContext, AppSettings settings, IReadOnlyList<ToolDefinition> tools,
+            DocumentContext documentContext, AppSettings settings, IReadOnlyList<ToolCatalogEntry> tools,
             Action<string, string, ChatActivity> progress, PendingToolRegistrar pendingToolRegistrar = null,
             IReadOnlyList<SkillDefinition> skills = null, CancellationToken cancellationToken = default(CancellationToken))
         {
@@ -71,7 +87,7 @@ namespace RNAssistant.Office.Services
         }
 
         public async Task<ChatTurnResult> ExecuteAsync(string mode, string text, ChatSession session,
-            DocumentContext documentContext, AppSettings settings, IReadOnlyList<ToolDefinition> tools,
+            DocumentContext documentContext, AppSettings settings, IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<ChatAttachment> attachments, Action<string, string, ChatActivity> progress,
             PendingToolRegistrar pendingToolRegistrar, IReadOnlyList<SkillDefinition> skills,
             CancellationToken cancellationToken, bool appendUserMessage = true)
@@ -106,7 +122,7 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        public async Task<ChatTurnResult> ConfirmAsync(string pendingId, ToolCommand command, ChatSession session,
+        public async Task<ChatTurnResult> ConfirmAsync(string pendingId, ToolInvocation command, ChatSession session,
             ConversationRunInput input, Action<string, string, ChatActivity> progress,
             PendingToolRegistrar pendingToolRegistrar = null,
             Func<CancellationToken, Task<ConversationRunInput>> refreshModelInput = null,
@@ -129,7 +145,7 @@ namespace RNAssistant.Office.Services
 
         private ConversationKernelAdapter CreatePorts(string mode, string text, ChatSession session,
             ConversationRunInput input, Action<string, string, ChatActivity> progress,
-            PendingToolRegistrar registrar, CancellationToken cancellationToken, ToolCommand confirmedCommand = null,
+            PendingToolRegistrar registrar, CancellationToken cancellationToken, ToolInvocation confirmedCommand = null,
             Func<CancellationToken, Task<ConversationRunInput>> refresh = null, long revision = 0)
         {
             return new ConversationKernelAdapter(_adapter, _toolExecutor, _conversationStore, _eventStore, _modelProtocolFactory(),
@@ -137,9 +153,9 @@ namespace RNAssistant.Office.Services
                 progress, registrar, cancellationToken, confirmedCommand, refresh, revision);
         }
 
-        internal static List<ToolDefinition> PrepareToolsForRun(IEnumerable<ToolDefinition> tools)
+        internal static List<ToolCatalogEntry> PrepareToolsForRun(IEnumerable<ToolCatalogEntry> tools)
         {
-            var source = (tools ?? new ToolDefinition[0])
+            var source = (tools ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null && tool.Enabled && ValidToolId(tool.Id))
                 .OrderByDescending(tool => tool.BuiltIn)
                 .ThenBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
@@ -147,7 +163,7 @@ namespace RNAssistant.Office.Services
                 .Select(group => group.First().Clone())
                 .ToList();
             var safety = ToolSafetyPolicy.ResolveAll(source);
-            var result = new List<ToolDefinition>();
+            var result = new List<ToolCatalogEntry>();
             foreach (var tool in source)
             {
                 ToolSafetyProfile profile;
@@ -170,9 +186,9 @@ namespace RNAssistant.Office.Services
             return result.OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
-        internal static List<ToolDefinition> PrepareToolsForMode(
+        internal static List<ToolCatalogEntry> PrepareToolsForMode(
             string mode,
-            IEnumerable<ToolDefinition> tools)
+            IEnumerable<ToolCatalogEntry> tools)
         {
             return ConversationRunPolicy.For(mode).SelectTools(PrepareToolsForRun(tools));
         }

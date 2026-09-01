@@ -46,10 +46,10 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static ToolCommand PendingCommand(ChatSession session)
+        private static ToolInvocation PendingCommand(ChatSession session)
         {
             var call = session.LastRun.KernelState.Summary.PendingConfirmation.Call;
-            return new ToolCommand { ToolId = call.Name, ToolCallId = call.Id,
+            return new ToolInvocation { ToolId = call.Name, ToolCallId = call.Id,
                 Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(call.ArgumentsJson,
                     new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) };
         }

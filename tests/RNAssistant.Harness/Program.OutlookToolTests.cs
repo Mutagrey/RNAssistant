@@ -19,7 +19,7 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
-                    var tools = adapter.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = OutlookRuntime(executor, adapter);
                     var ids = new[]
@@ -61,13 +61,10 @@ namespace RNAssistant.Harness
                     AssertEqual(1,
                         ((JArray)readData["attachments"]).Count,
                         "Outlook attachment projection is preserved");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                        OutlookToolIds.Owns(command.ToolId)),
-                        "Outlook public ids never reach generic host dispatch");
 
                     var reads = adapter.OutlookBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.OutlookReadMailOperation);
-                    var bound = executor.Execute(Command(
+                    var bound = executor.ExecuteManual(Command(
                         HtmlWorkspaceToolCatalog.BindDataToolId,
                         "dataName", "outlook_mail",
                         "sourceTool", OutlookToolIds.ReadMail,
@@ -86,7 +83,7 @@ namespace RNAssistant.Harness
 
                     var drafts = adapter.OutlookBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.OutlookCreateDraftOperation);
-                    var dryRun = executor.Execute(Command(
+                    var dryRun = executor.ExecuteManual(Command(
                         OutlookToolIds.CreateDraft,
                         "kind", "new", "body", "Dry"),
                         tools, new AppSettings(), true, true, session);
@@ -243,9 +240,9 @@ namespace RNAssistant.Harness
                         DocumentKey = "bound-outlook-window",
                         DocumentTitle = "Inbox"
                     };
-                    var tools = host.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(host.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
-                    var result = executor.Execute(Command(
+                    var result = executor.ExecuteManual(Command(
                         OutlookToolIds.CreateDraft,
                         "kind", "new", "body", "Bound"),
                         tools, new AppSettings(), false, true, chat);
@@ -256,7 +253,7 @@ namespace RNAssistant.Harness
                         operation => operation ==
                             FakeOfficeAdapter.OutlookCreateDraftOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closed = executor.Execute(Command(
+                    var closed = executor.ExecuteManual(Command(
                         OutlookToolIds.CreateDraft,
                         "kind", "new", "body", "Stale"),
                         tools, new AppSettings(), false, true, chat);
@@ -275,7 +272,7 @@ namespace RNAssistant.Harness
         {
             return executor.CreateNativeRuntime(
                 NewSession(adapter),
-                adapter.GetBuiltInTools().Where(tool =>
+                OfficeToolCatalog.ForHost(adapter.HostName).Where(tool =>
                     OutlookToolIds.Owns(tool.Id)),
                 new AppSettings(), "agent", false);
         }

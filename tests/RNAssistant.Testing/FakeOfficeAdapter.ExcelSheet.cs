@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,7 +31,7 @@ namespace RNAssistant.Harness
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (markDispatchPossible == null)
                 throw new ArgumentNullException(nameof(markDispatchPossible));
-            ExcelSheetRequests.Add(new ToolCommand
+            ExcelSheetRequests.Add(new ToolInvocation
             {
                 ToolId = "excel.add_sheet",
                 Arguments = new Dictionary<string, object> { { "name", request.Name } }
@@ -61,7 +62,7 @@ namespace RNAssistant.Harness
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (markDispatchPossible == null)
                 throw new ArgumentNullException(nameof(markDispatchPossible));
-            ExcelSheetRequests.Add(new ToolCommand
+            ExcelSheetRequests.Add(new ToolInvocation
             {
                 ToolId = "excel.rename_sheet",
                 Arguments = new Dictionary<string, object>

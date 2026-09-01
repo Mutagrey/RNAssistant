@@ -1,33 +1,33 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
-using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
-    // One conversion boundary while current catalogs are still ToolDefinition.
-    // The snapshot itself is typed and independent of AgentKernel/model context.
+    // Catalog entries carry source-owned policy; this boundary only captures the
+    // exact immutable descriptor, binding and package bytes admitted to a run.
     internal static class ToolPackSnapshotFactory
     {
         private const string RunPackId = "run-tool-pack";
 
         internal static ToolPackSnapshot Capture(string mode, string host,
-            IEnumerable<ToolDefinition> tools)
+            IEnumerable<ToolCatalogEntry> tools)
         {
-            var registrations = (tools ?? new ToolDefinition[0])
+            var registrations = (tools ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null)
                 .Select(tool => Capture(tool, mode))
                 .ToArray();
             return new ToolPackSnapshot(RunPackId, mode, host, registrations);
         }
 
-        internal static string ExecutionFingerprint(IEnumerable<ToolDefinition> tools,
+        internal static string ExecutionFingerprint(IEnumerable<ToolCatalogEntry> tools,
             string exactToolId, string mode = "agent")
         {
-            var matches = (tools ?? new ToolDefinition[0])
+            var matches = (tools ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
                 .Where(tool => string.Equals(tool.Id, exactToolId, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
@@ -37,13 +37,40 @@ namespace RNAssistant.Office.Services
             return Capture(definition, mode).Revision;
         }
 
-        private static ToolRegistration Capture(ToolDefinition definition, string mode)
+        private static ToolRegistration Capture(ToolCatalogEntry definition, string mode)
         {
-            var binding = NativeToolRuntimeAdapter.BindingFor(definition.Id) ??
-                VbaPackageToolHandler.BindingFor(definition) ??
-                LegacyToolDefinitionAdapter.BindingFor(definition);
-            return LegacyToolDefinitionAdapter.Adapt(definition, binding, mode,
-                ConversationPromptComposer.BuildDescription(definition));
+            var binding = definition.Binding;
+            if (binding == null)
+                throw new InvalidOperationException(
+                    "Tool has no direct runtime binding: " + definition.Id);
+            var policy = definition.Policy;
+            if (policy == null)
+                throw new InvalidOperationException(
+                    "Tool has no source-owned runtime policy: " +
+                    definition.Id);
+            var package = definition.BuiltIn ? null :
+                new ToolPackageMetadata(
+                    definition.PackageVersion,
+                    definition.StoragePath,
+                    definition.Code,
+                    JsonConvert.SerializeObject(
+                        definition.Components ??
+                        new List<ToolPackageComponentDefinition>()),
+                    definition.InstallationStatus,
+                    definition.Readme);
+            return ToolPackSnapshot.Capture(
+                new ToolDescriptor(
+                    definition.Id,
+                    ConversationPromptComposer.BuildDescription(definition),
+                    definition.ArgumentSchemaJson),
+                policy,
+                new ToolBinding(
+                    binding.HandlerId,
+                    binding.EntryPoint,
+                    definition.Scope,
+                    definition.Host),
+                package);
         }
+
     }
 }

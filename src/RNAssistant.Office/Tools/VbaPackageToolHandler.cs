@@ -31,7 +31,7 @@ namespace RNAssistant.Office.Tools
             _dryRun = dryRun;
         }
 
-        internal static bool IsDefinition(ToolDefinition definition)
+        internal static bool IsDefinition(ToolCatalogEntry definition)
         {
             return definition != null && !definition.BuiltIn &&
                 string.Equals(definition.Executor, "vba",
@@ -45,11 +45,23 @@ namespace RNAssistant.Office.Tools
                     StringComparison.Ordinal);
         }
 
-        internal static ToolBinding BindingFor(ToolDefinition definition)
+        internal static ToolBinding BindingFor(ToolCatalogEntry definition)
         {
             if (!IsDefinition(definition)) return null;
             return new ToolBinding(HandlerId, definition.EntryPoint,
                 definition.Scope, definition.Host);
+        }
+
+        internal static ToolPolicy PolicyFor(ToolCatalogEntry definition)
+        {
+            if (!IsDefinition(definition)) return null;
+            return new ToolPolicy(
+                ToolEffect.Write,
+                ToolVerification.None,
+                true,
+                false,
+                new[] { "agent" },
+                Math.Max(1, definition.RiskLevel));
         }
 
         public Task<ToolHandlerResult> ExecuteAsync(

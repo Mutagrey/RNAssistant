@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -83,6 +84,43 @@ namespace RNAssistant.Office.Tools
         {
             Outcome = outcome ?? throw new ArgumentNullException(nameof(outcome));
             PreparedStateJson = preparedStateJson;
+        }
+    }
+
+    internal sealed class ToolLibraryCoreMutation
+    {
+        internal string Kind { get; set; }
+        internal string BaseId { get; set; }
+        internal string ExpectedRevision { get; set; }
+        internal ToolCatalogEntry Intended { get; set; }
+    }
+
+    internal sealed class ToolManualMutationResult
+    {
+        internal ToolAuthoringOutcome Outcome { get; private set; }
+        internal bool DispatchPossible { get; private set; }
+        internal ToolCatalogEntry Package { get; private set; }
+        internal string Id { get; private set; }
+        internal string Operation { get; private set; }
+        internal string PreviousRevision { get; private set; }
+        internal string Revision { get; private set; }
+
+        internal ToolManualMutationResult(
+            ToolAuthoringOutcome outcome,
+            bool dispatchPossible,
+            ToolCatalogEntry package,
+            string id,
+            string operation,
+            string previousRevision,
+            string revision)
+        {
+            Outcome = outcome ?? throw new ArgumentNullException(nameof(outcome));
+            DispatchPossible = dispatchPossible;
+            Package = package;
+            Id = id ?? string.Empty;
+            Operation = operation ?? string.Empty;
+            PreviousRevision = previousRevision ?? string.Empty;
+            Revision = revision ?? string.Empty;
         }
     }
 }

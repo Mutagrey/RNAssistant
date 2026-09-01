@@ -76,12 +76,12 @@ namespace RNAssistant.Harness
                     AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, item.Key + " uses its native handler");
                     AssertTrue(record.Result.Resources.Any(reference => reference.Uri == resourceUri),
                         item.Key + " exposes each returned exact resource at Tool Result root");
-                    var command = new ToolCommand
+                    var command = new ToolInvocation
                     {
                         ToolId = item.Key,
                         Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(item.Value)
                     };
-                    var manual = executor.Execute(command, tools, new AppSettings(), false, true, session);
+                    var manual = executor.ExecuteManual(command, tools, new AppSettings(), false, true, session);
                     AssertTrue(manual.Success, item.Key + " manual path uses the same native handler");
                     AssertEqual(record.Result.DataJson, manual.DataJson,
                         item.Key + " manual and kernel paths share one implementation");
@@ -136,7 +136,7 @@ namespace RNAssistant.Harness
                     "resource runtime preserves the precise error code");
                 AssertContains(foreignResolve.Message, "owning chat",
                     "resource runtime includes actionable recovery guidance");
-                var invalidManual = executor.Execute(Command(ResourceToolCatalog.ListToolId, "limit", 51), tools,
+                var invalidManual = executor.ExecuteManual(Command(ResourceToolCatalog.ListToolId, "limit", 51), tools,
                     new AppSettings(), false, true, session);
                 AssertTrue(!invalidManual.Success && invalidManual.ErrorCode == "invalid_arguments",
                     "manual command uses the same native validation boundary");
@@ -148,7 +148,7 @@ namespace RNAssistant.Harness
                     DocumentKey = adapter.DocumentKey,
                     RuntimeDocumentKey = adapter.RuntimeDocumentKey
                 };
-                var backendCalls = adapter.Executed.Count;
+                var backendCalls = adapter.TotalBackendCallCount;
                 var liveListArguments = "{\"provider\":\"vba\",\"kind\":\"vba-component\"}";
                 using (hostRuntime.BeginDocumentAccess(target))
                 {
@@ -161,7 +161,7 @@ namespace RNAssistant.Harness
                         "new native command cannot borrow document access held on the same thread");
                     AssertEqual("tool_mutation_busy", (string)JObject.Parse(blocked.Result.DataJson)["code"],
                         "native live list reports the occupied document gate");
-                    AssertEqual(backendCalls, adapter.Executed.Count, "blocked native live list never reaches Office backend");
+                    AssertEqual(backendCalls, adapter.TotalBackendCallCount, "blocked native live list never reaches Office backend");
                 }
 
                 var releasedCall = new ToolCall("released_live_list", ResourceToolCatalog.ListToolId,
@@ -170,12 +170,12 @@ namespace RNAssistant.Harness
                 var released = runtime.ExecuteAsync(new ToolExecutionContext(releasedCall, releasedPolicy, "run", "turn", "step",
                     DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(ToolExecutionOutcome.Ok, released.Outcome, "native live list succeeds after document access release");
-                AssertTrue(adapter.Executed.Count > backendCalls, "released native live list reaches the Office backend");
+                AssertTrue(adapter.TotalBackendCallCount > backendCalls, "released native live list reaches the Office backend");
             });
         }
 
         private static void AssertResourceControllerProjection(
-            ToolDefinition definition,
+            ToolCatalogEntry definition,
             ToolDescriptor descriptor,
             ToolPolicy policy,
             string name)
@@ -190,7 +190,7 @@ namespace RNAssistant.Harness
                 name + " controller availability");
             AssertTrue(!definition.MutatesDocument && !definition.MutatesLocalState,
                 name + " controller read flags");
-            AssertTrue(ReferenceEquals(policy, definition.RuntimePolicy),
+            AssertTrue(ReferenceEquals(policy, definition.Policy),
                 name + " preserves source-owned policy instance");
         }
 
@@ -275,7 +275,7 @@ namespace RNAssistant.Harness
             var crossRecord = readRuntime.ExecuteAsync(new ToolExecutionContext(
                 crossCall, crossPolicy, "run", "turn", "step", DateTime.UtcNow, false, 1),
                 CancellationToken.None).GetAwaiter().GetResult();
-            var crossOperationCursor = ToolResultUiProjection.Create(crossRecord);
+            var crossOperationCursor = ToolRunResultFactory.Create(crossRecord);
             AssertEqual("resource_cursor_invalid", crossOperationCursor.ErrorCode,
                 "list cursor is rejected by resource read");
             AssertTrue(crossOperationCursor.Retryable != true,
@@ -1034,7 +1034,7 @@ namespace RNAssistant.Harness
             var runtimeContext = ConversationPromptComposer.BuildRuntimeContext(
                 ChatModes.Plan,
                 null,
-                new ToolDefinition[0],
+                new ToolCatalogEntry[0],
                 new SkillDefinition[0],
                 null,
                 session,
@@ -1461,8 +1461,8 @@ namespace RNAssistant.Harness
                     "ResourceNeedleChanged",
                     "VBA URI survives completed document identity migration");
 
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var renamed = executor.Execute(
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var renamed = executor.ExecuteManual(
                     Command(
                         "common.vba_write_module",
                         "moduleName", "ResourceModule",
@@ -1474,7 +1474,7 @@ namespace RNAssistant.Harness
                     false,
                     session);
                 AssertTrue(renamed.Success, "VBA resource recovery setup renames the live component");
-                var staleComponent = executor.Execute(
+                var staleComponent = executor.ExecuteManual(
                     Command(
                         ResourceToolCatalog.ReadToolId,
                         "uri", component.Reference.Uri,
@@ -1493,7 +1493,7 @@ namespace RNAssistant.Harness
 
                 adapter.DocumentKeyValue = "other-document";
                 adapter.RuntimeDocumentKeyValue = "runtime-other-document";
-                var blocked = executor.Execute(
+                var blocked = executor.ExecuteManual(
                     Command(
                         ResourceToolCatalog.ReadToolId,
                         "uri", document.Reference.Uri,
@@ -1582,7 +1582,7 @@ namespace RNAssistant.Harness
 
             var prompt = new ConversationPromptComposer().BuildMessages(
                 ChatModes.Agent,
-                "New request", adapter, new ToolDefinition[0], new SkillDefinition[0],
+                "New request", adapter, new ToolCatalogEntry[0], new SkillDefinition[0],
                 new DocumentContext(), new AppSettings(), session, null);
             var old = prompt.First(message => (message.Content ?? string.Empty).StartsWith("Old request", StringComparison.Ordinal));
             AssertEqual(0, old.Attachments.Count, "historical attachment bodies are removed from replay");
@@ -1776,7 +1776,7 @@ namespace RNAssistant.Harness
                     null,
                     CancellationToken.None).GetAwaiter().GetResult())
                 {
-                    var command = new ToolCommand
+                    var command = new ToolInvocation
                     {
                         ToolId = ResourceToolCatalog.ReadToolId,
                         ToolCallId = "media_projection_failure"
@@ -1808,11 +1808,11 @@ namespace RNAssistant.Harness
                         "resource projection failure has an actionable code");
                     AssertEqual(ToolResultStatus.Ok,
                         ToolResultResourceService.ProjectionFailureStatus(
-                            new ToolCommand { ToolId = "excel.add_sheet" }, ToolResultStatus.Ok),
+                            new ToolInvocation { ToolId = "excel.add_sheet" }, ToolResultStatus.Ok),
                         "projection failure cannot rewrite a known mutation outcome");
                     AssertEqual(ToolResultStatus.Ok,
                         ToolResultResourceService.ProjectionFailureStatus(
-                            new ToolCommand { ToolId = "common.resources_upsert" }, ToolResultStatus.Ok),
+                            new ToolInvocation { ToolId = "common.resources_upsert" }, ToolResultStatus.Ok),
                         "resource namespace prefixes do not classify future mutations as exact reads");
                 }
             });

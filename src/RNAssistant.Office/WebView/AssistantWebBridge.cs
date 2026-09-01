@@ -268,7 +268,7 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "saveTools":
                         var saveTools = Payload<SaveToolsPayload>(payload);
-                        responsePayload = _controller.SaveTools(saveTools.Tools ?? new List<ToolDefinition>());
+                        responsePayload = _controller.SaveTools(saveTools);
                         break;
                     case "installVbaTool":
                         var installVbaTool = Payload<VbaToolPackagePayload>(payload);

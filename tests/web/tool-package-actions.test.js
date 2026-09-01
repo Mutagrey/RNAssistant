@@ -23,6 +23,21 @@ const vm = require("node:vm");
     state,
     syncSelected() {},
     readTools() { return state.tools; },
+    mutationRequest() {
+      return {
+        type: "rnassistant.toolLibraryMutationRequest",
+        contractVersion: 1,
+        mutations: []
+      };
+    },
+    parseMutation(response) {
+      assert.equal(response.type, "rnassistant.toolLibraryMutationResult");
+      return { tools: state.tools, results: response.results, failure: null };
+    },
+    parseLibrary(response) {
+      assert.equal(response.type, "rnassistant.toolLibrary");
+      return state.tools;
+    },
     acceptSaved() {},
     renderTools() {},
     renderEditor() {},
@@ -32,7 +47,16 @@ const vm = require("node:vm");
     log(message, level) { logs.push({ message, level }); },
     async send(action, payload) {
       calls.push({ action, payload });
-      if (action === "saveTools") return state.tools;
+      if (action === "saveTools") return {
+        type: "rnassistant.toolLibraryMutationResult",
+        contractVersion: 1,
+        results: [],
+        library: {
+          type: "rnassistant.toolLibrary",
+          contractVersion: 1,
+          tools: []
+        }
+      };
       return {
         result: {
           contractVersion: 1,
@@ -43,7 +67,11 @@ const vm = require("node:vm");
           mayHaveDispatched: true,
           effect: "verified_change"
         },
-        tools: state.tools,
+        tools: {
+          type: "rnassistant.toolLibrary",
+          contractVersion: 1,
+          tools: []
+        },
         Result: { Message: "legacy must not win" },
         Tools: []
       };
@@ -54,6 +82,8 @@ const vm = require("node:vm");
 
   assert.deepEqual(calls.map(item => item.action),
     ["saveTools", "installVbaTool"]);
+  assert.equal(calls[0].payload.type,
+    "rnassistant.toolLibraryMutationRequest");
   assert.equal(outputs.at(-1).contractVersion, 1);
   assert.equal(outputs.at(-1).effect, "verified_change");
   assert.equal(logs.at(-1).message, "installed");

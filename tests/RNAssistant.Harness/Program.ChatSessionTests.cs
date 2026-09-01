@@ -685,7 +685,7 @@ namespace RNAssistant.Harness
                 callMessage.RunId = "safe-run";
                 session.Messages.Add(callMessage);
                 var resultMessage = AgentJsonProtocol.CreateToolResultMessage(
-                    new ToolCommand { ToolCallId = call.Id, ToolId = call.Name },
+                    new ToolInvocation { ToolCallId = call.Id, ToolId = call.Name },
                     RuntimeToolResult.Ok("Read"), ToolResultRoles.User);
                 resultMessage.RunId = "safe-run";
                 session.Messages.Add(resultMessage);

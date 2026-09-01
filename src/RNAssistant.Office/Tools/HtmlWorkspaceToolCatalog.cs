@@ -52,7 +52,7 @@ namespace RNAssistant.Office.Tools
                     StringComparison.Ordinal);
         }
 
-        internal static IEnumerable<ToolDefinition> GetTools(
+        internal static IEnumerable<ToolCatalogEntry> GetTools(
             HtmlWorkspaceToolService service)
         {
             if (service == null) throw new ArgumentNullException(nameof(service));
@@ -92,7 +92,7 @@ namespace RNAssistant.Office.Tools
                 "html_data_freeze", true, 0);
         }
 
-        private static ToolDefinition Projection(
+        private static ToolCatalogEntry Projection(
             string id, string description, string schema, string name,
             bool mutation, int riskLevel)
         {
@@ -101,7 +101,7 @@ namespace RNAssistant.Office.Tools
                     false, false, new[] { "agent" }, riskLevel)
                 : new ToolPolicy(ToolEffect.Read, ToolVerification.None,
                     false, true, new[] { "agent" }, riskLevel);
-            return ControllerToolDefinition.CreateTypedProjection(
+            return ControllerToolCatalogEntry.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema), policy,
                 name: name, scope: "session",
                 mutatesLocalState: mutation);

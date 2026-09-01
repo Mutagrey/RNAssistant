@@ -197,11 +197,6 @@ namespace RNAssistant.OfficeHosts
             return SafeString(delegate { return workbook.FullName; });
         }
 
-        public IEnumerable<ToolDefinition> GetBuiltInTools()
-        {
-            return OfficeBuiltInToolCatalog.ForHost(HostName);
-        }
-
         public IEnumerable<SkillDefinition> GetBuiltInSkills()
         {
             return new[]
@@ -287,15 +282,6 @@ namespace RNAssistant.OfficeHosts
                     mode = referenceOnly ? "reference" : "text"
                 })
             };
-        }
-
-        public ToolResult ExecuteTool(ToolCommand command)
-        {
-            return ToolResult.Fail(
-                "Excel tools require direct typed backends.",
-                null,
-                "excel_legacy_dispatch_removed",
-                false);
         }
 
         private Excel.Workbook RequireWorkbook()
@@ -462,11 +448,6 @@ namespace RNAssistant.OfficeHosts
         {
             try { return getter(); }
             catch { return string.Empty; }
-        }
-
-        private static ToolDefinition Tool(string id, string description, string schema, bool mutatesDocument = false, bool agentCanRun = true, int riskLevel = 0, bool requiresConfirmation = false, bool canSourceHtmlData = false)
-        {
-            return new ToolDefinition { Id = id, Host = "Excel", Name = id, Description = description, ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, MutatesDocument = mutatesDocument, AgentCanRun = agentCanRun, RiskLevel = riskLevel, RequiresConfirmation = requiresConfirmation, CanSourceHtmlData = canSourceHtmlData };
         }
 
         private static List<List<object>> RangeToRows(Excel.Range range)

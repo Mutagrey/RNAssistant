@@ -2,11 +2,11 @@
 
 Дата фиксации: 2026-08-30; статус маршрута обновлён 2026-09-01.
 
-Статус: ordered migration route, не описание уже реализованной архитектуры. Phase
-10A–10D, WQ-A1–A5 и 11T0/7D–11T8 Office host switches завершены
-host-neutral. По
-принятому 2026-08-31 риску WQ0 не блокировал implementation; Windows evidence
-остаётся не выполненным. Section B и финальное удаление active legacy обязательны до Phase 12.
+Статус: обязательный migration route через 11T10 завершён host-neutral. Phase
+10A–10D, WQ-A1–A5, все Office/VBA/controller/authoring switches и финальное
+удаление active legacy выполнены. По принятому 2026-08-31 риску WQ0 не блокировал
+implementation; Milestone WQ и Windows evidence остаются не выполненными и
+обязательны до Phase 12.
 Новые optional product capabilities этим не допускаются. Если другое предложение
 становится обязательным, сначала обновляются master plan/ADR и `MIGRATION_MAP.md` с
 owner, consumers и removal gate.
@@ -50,10 +50,10 @@ store, model wire или UI-owned effect classification.
    switch удаляет свой legacy host path. Не создавать compatibility scaffolding,
    которое всё равно вызывает `ExecuteTool(ToolCommand)`; WQ0 выполняется позже как
    diagnostic/regression и не возвращает прежний gate.
-7. После family switches обязательны direct VBA/controller/custom authoring
-   migrations и финальное удаление generic adapter catalog/dispatch, legacy
-   definition/result/UI bridges; старая trajectory inference уже удалена отдельным
-   host-neutral slice.
+7. [x] После family switches выполнены direct VBA/controller/custom authoring
+   migrations и 11T10 final cleanup: generic host catalog/dispatch,
+   definition/result/UI bridges и retired fake queues удалены; старая trajectory
+   inference была удалена отдельным host-neutral slice.
 8. Milestone WQ и Phase 12 stable core.
 9. Остальные улучшения ниже — отдельные post-stable minor changes либо соответствующие
    independently admitted Phase 11 contours. Не включать их в 9D5/Phase 10.
@@ -77,10 +77,10 @@ store, model wire или UI-owned effect classification.
 
 ### Мотивация
 
-`IOfficeApplicationAdapter` одновременно несёт current-document identity, context,
-selection capture, built-in catalog и generic `ToolCommand` execution. Такая граница
-заставляет consumers зависеть от возможностей, которые им не нужны, и удерживает
-string-based host dispatch.
+До 11T10 `IOfficeApplicationAdapter` одновременно нёс current-document identity,
+context, selection capture, built-in catalog и generic command execution. Такая
+граница заставляла consumers зависеть от возможностей, которые им не нужны, и
+удерживала string-based host dispatch.
 
 ### Цель
 
@@ -93,8 +93,8 @@ string-based host dispatch.
 - ToolRuntime registrations как источник runnable catalog вместо host-owned
   `GetBuiltInTools`.
 
-`ExecuteTool(ToolCommand)` удаляется только после switch последнего consumer. Не
-создавать новый широкий `IOfficeHostServices` и не сохранять старый путь как fallback.
+Generic host execution удалён в 11T10 после switch последнего consumer. Не создавать
+новый широкий `IOfficeHostServices` и не возвращать старый путь как fallback.
 
 ### Gate и DoD
 
@@ -190,7 +190,7 @@ contract. Generic `execute_actions`/arbitrary command list и batch writes за�
 Active legacy означает второй execution/catalog/result/history path, а не любое имя
 `Adapter` или `Compatibility`:
 
-- удалить generic `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`,
+- [x] удалить generic `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`,
   `OfficeToolExecutor` fallback и host tool-id switches после последнего family;
 - [x] удалить internal Excel compatibility commands/backends в 11T0/7D;
 - [x] удалить Excel find/replace generic host branches/helpers в 11T1;
@@ -204,8 +204,8 @@ Active legacy означает второй execution/catalog/result/history pat
   execution fallback в 11T7;
 - [x] удалить все public Outlook generic host branches/helpers и unbound execution
   fallback в 11T8;
-- удалить VBA mutation/package adapters после direct typed host/backend switch;
-- удалить `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` и
+- [x] удалить VBA mutation/package adapters после direct typed host/backend switch;
+- [x] удалить `LegacyToolDefinitionAdapter`, `LegacyToolResultAdapter` и
   `ToolResultUiProjection` после последнего catalog/result/UI consumer;
 - pre-R37 trajectory accepted-call inference удалена host-neutral; старые
   несовместимые evidence не переинтерпретируются и требуют нового chat/reset;

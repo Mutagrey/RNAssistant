@@ -14,14 +14,14 @@ namespace RNAssistant.Office.Tools
     {
         private readonly string _toolId;
         private readonly CapabilityCatalogService _service;
-        private readonly IReadOnlyList<ToolDefinition> _catalog;
+        private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
         private readonly IReadOnlyList<SkillDefinition> _skills;
         private readonly bool _manualRun;
 
         internal CapabilityToolHandler(
             string toolId,
             CapabilityCatalogService service,
-            IReadOnlyList<ToolDefinition> catalog,
+            IReadOnlyList<ToolCatalogEntry> catalog,
             IReadOnlyList<SkillDefinition> skills,
             bool manualRun)
         {
@@ -30,7 +30,7 @@ namespace RNAssistant.Office.Tools
                     "An exact capability tool id is required.", nameof(toolId));
             _toolId = toolId;
             _service = service ?? throw new ArgumentNullException(nameof(service));
-            _catalog = catalog ?? new ToolDefinition[0];
+            _catalog = catalog ?? new ToolCatalogEntry[0];
             _skills = skills;
             _manualRun = manualRun;
         }

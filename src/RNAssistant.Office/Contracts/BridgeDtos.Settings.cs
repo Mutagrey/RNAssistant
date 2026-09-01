@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
@@ -24,12 +25,6 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("reviewAgentPrompts")]
         public bool ReviewAgentPrompts { get; set; }
-    }
-
-    public sealed class SaveToolsPayload
-    {
-        [JsonProperty("tools")]
-        public List<ToolDefinition> Tools { get; set; }
     }
 
     public sealed class VbaToolPackagePayload

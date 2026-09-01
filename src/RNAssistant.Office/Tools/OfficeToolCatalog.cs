@@ -9,20 +9,20 @@ using RNAssistant.Office.Domains.Excel;
 
 namespace RNAssistant.Office.Tools
 {
-    public static class OfficeBuiltInToolCatalog
+    public static class OfficeToolCatalog
     {
-        public static IReadOnlyList<ToolDefinition> ForHost(string host)
+        public static IReadOnlyList<ToolCatalogEntry> ForHost(string host)
         {
-            IEnumerable<ToolDefinition> tools;
+            IEnumerable<ToolCatalogEntry> tools;
             if (string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)) tools = ExcelTools();
             else if (string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase)) tools = WordTools();
             else if (string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase)) tools = PowerPointTools();
             else if (string.Equals(host, "Outlook", StringComparison.OrdinalIgnoreCase)) tools = OutlookTools();
-            else tools = new ToolDefinition[0];
+            else tools = new ToolCatalogEntry[0];
             return tools.Select(HardenContract).Select(tool => tool.Clone()).ToArray();
         }
 
-        private static IEnumerable<ToolDefinition> ExcelTools()
+        private static IEnumerable<ToolCatalogEntry> ExcelTools()
         {
             return new[]
             {
@@ -55,7 +55,7 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static IEnumerable<ToolDefinition> WordTools()
+        private static IEnumerable<ToolCatalogEntry> WordTools()
         {
             return new[]
             {
@@ -71,7 +71,7 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static IEnumerable<ToolDefinition> PowerPointTools()
+        private static IEnumerable<ToolCatalogEntry> PowerPointTools()
         {
             return new[]
             {
@@ -87,7 +87,7 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static IEnumerable<ToolDefinition> OutlookTools()
+        private static IEnumerable<ToolCatalogEntry> OutlookTools()
         {
             return new[]
             {
@@ -99,7 +99,7 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static ToolDefinition HardenContract(ToolDefinition tool)
+        private static ToolCatalogEntry HardenContract(ToolCatalogEntry tool)
         {
             var schema = JObject.Parse(tool.ArgumentSchemaJson);
             AddCommonBounds(schema);
@@ -370,7 +370,7 @@ namespace RNAssistant.Office.Tools
             public string[] Required { get; set; }
         }
 
-        private static ToolDefinition Define(
+        private static ToolCatalogEntry Define(
             string host,
             string id,
             string description,
@@ -383,7 +383,7 @@ namespace RNAssistant.Office.Tools
             bool independentLocalRead = false,
             ToolVerification verification = ToolVerification.None)
         {
-            return new ToolDefinition
+            return new ToolCatalogEntry
             {
                 Id = id,
                 Host = host,
@@ -397,13 +397,15 @@ namespace RNAssistant.Office.Tools
                 RiskLevel = riskLevel,
                 RequiresConfirmation = requiresConfirmation,
                 CanSourceHtmlData = canSourceHtmlData,
-                RuntimePolicy = independentLocalRead
-                    ? new ToolPolicy(ToolEffect.Read, ToolVerification.None, requiresConfirmation,
-                        !requiresConfirmation, new[] { "agent" }, riskLevel)
-                    : verification != ToolVerification.None
-                        ? new ToolPolicy(mutatesDocument ? ToolEffect.Write : ToolEffect.Unclassified,
-                            verification, requiresConfirmation, false, new[] { "agent" }, riskLevel)
-                    : null
+                Policy = new ToolPolicy(
+                    mutatesDocument ? ToolEffect.Write : ToolEffect.Read,
+                    verification,
+                    requiresConfirmation,
+                    independentLocalRead && !mutatesDocument &&
+                        !requiresConfirmation,
+                    new[] { "agent" },
+                    riskLevel),
+                Binding = DirectToolBindingCatalog.Resolve(id)
             };
         }
 

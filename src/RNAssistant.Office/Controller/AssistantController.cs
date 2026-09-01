@@ -218,7 +218,8 @@ namespace RNAssistant.Office
                 Settings = settings,
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret()),
-                Tools = _toolCatalog.GetVisibleTools(),
+                Tools = ToolLibraryResponse.From(
+                    _toolCatalog.GetVisibleTools()),
                 ToolsPath = _paths.ToolsDirectory,
                 Skills = GetSkills(),
                 SkillsPath = _paths.SkillsDirectory,

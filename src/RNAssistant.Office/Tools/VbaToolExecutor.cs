@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Vba;
 using RNAssistant.Office.Domains.Vba;
@@ -59,12 +60,12 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        ToolResult IVbaResourceSource.ListResourceModules()
+        ToolRunResult IVbaResourceSource.ListResourceModules()
         {
             var reconciliationError = ReconcilePendingMutations();
             if (reconciliationError != null) return reconciliationError;
             IReadOnlyList<VbaModuleState> project;
-            ToolResult error;
+            ToolRunResult error;
             if (!_reader.TryReadProject(out project, out error)) return error;
             var modules = new JArray(project.Select(module => new JObject
             {
@@ -72,12 +73,12 @@ namespace RNAssistant.Office.Tools
                 ["type"] = module.ComponentType,
                 ["lineCount"] = module.LineCount
             }));
-            return ToolResult.Ok(
+            return ToolRunResult.Ok(
                 "VBA modules listed: " + modules.Count + ".",
                 JsonConvert.SerializeObject(new { modules = modules }));
         }
 
-        ToolResult IVbaResourceSource.ReadResourceModule(
+        ToolRunResult IVbaResourceSource.ReadResourceModule(
             ChatSession session,
             string moduleName,
             int maxChars)
@@ -85,7 +86,7 @@ namespace RNAssistant.Office.Tools
             var reconciliationError = ReconcilePendingMutations();
             if (reconciliationError != null) return reconciliationError;
             VbaModuleState module;
-            ToolResult result;
+            ToolRunResult result;
             if (!_reader.TryReadResourceModule(moduleName, maxChars, out module, out result)) return result;
             RecordObservationFromModule(session, moduleName, module);
             return result;
@@ -129,7 +130,7 @@ namespace RNAssistant.Office.Tools
         }
 
         private static VbaMutationCorrelation MutationCorrelation(
-            ToolCommand command,
+            ToolInvocation command,
             ChatSession session)
         {
             return new VbaMutationCorrelation

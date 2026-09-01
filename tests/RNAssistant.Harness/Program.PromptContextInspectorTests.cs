@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,6 +8,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Tools;
 using RuntimeToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
@@ -30,7 +32,7 @@ namespace RNAssistant.Harness
             callMessage.RunId = "run-1";
             session.Messages.Add(callMessage);
             var resultMessage = AgentJsonProtocol.CreateToolResultMessage(
-                new ToolCommand { ToolCallId = call.Id, ToolId = call.Name },
+                new ToolInvocation { ToolCallId = call.Id, ToolId = call.Name },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.User);
             resultMessage.RunId = "run-1";
             session.Messages.Add(resultMessage);
@@ -55,7 +57,7 @@ namespace RNAssistant.Harness
                 Reference = "A1:B4",
                 Text = "Revenue 100; Cost 40"
             });
-            var tools = adapter.GetBuiltInTools()
+            var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                 .Where(tool => tool.Id == "excel.read_range" || tool.Id == "excel.add_sheet")
                 .ToList();
             var skills = new[]
@@ -115,7 +117,7 @@ namespace RNAssistant.Harness
                 session.Mode = ChatModes.Chat;
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "История" });
                 var service = new PromptContextInspectorService(adapter, null);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
 
                 var compact = service.Inspect(
                     session,
@@ -167,10 +169,10 @@ namespace RNAssistant.Harness
                 TokenEstimateMultiplier = 2
             };
             var expectedBase = new PromptContextInspectorService(adapter, null).Inspect(
-                session, context, baseSettings, new ToolDefinition[0], new SkillDefinition[0],
+                session, context, baseSettings, new ToolCatalogEntry[0], new SkillDefinition[0],
                 new ChatAttachment[0], "question", false).UsedTokens;
             var expectedScaled = new PromptContextInspectorService(adapter, null).Inspect(
-                session, context, scaledSettings, new ToolDefinition[0], new SkillDefinition[0],
+                session, context, scaledSettings, new ToolCatalogEntry[0], new SkillDefinition[0],
                 new ChatAttachment[0], "question", false).UsedTokens;
             AssertTrue(expectedScaled > expectedBase, "test settings produce distinct estimates");
 
@@ -182,7 +184,7 @@ namespace RNAssistant.Harness
                     start.Wait();
                     var settings = index % 2 == 0 ? baseSettings : scaledSettings;
                     return service.Inspect(
-                        session, context, settings, new ToolDefinition[0], new SkillDefinition[0],
+                        session, context, settings, new ToolCatalogEntry[0], new SkillDefinition[0],
                         new ChatAttachment[0], "question", false).UsedTokens;
                 })).ToArray();
                 start.Set();

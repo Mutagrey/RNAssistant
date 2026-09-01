@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,18 +18,18 @@ namespace RNAssistant.Office.Services
         internal const int DefaultMaxToolResultDataTokens = 8192;
         private const int MaxToolResultMessageTokens = 512;
 
-        public static string BuildToolResult(ToolCommand command, TerminalResult result)
+        public static string BuildToolResult(ToolInvocation command, TerminalResult result)
         {
             return BuildToolResult(command, new ToolResultMaterialization(result));
         }
 
-        internal static string BuildToolResult(ToolCommand command, TerminalResult result,
+        internal static string BuildToolResult(ToolInvocation command, TerminalResult result,
             int maxDataTokens, AppSettings settings = null)
         {
             return BuildToolResult(command, new ToolResultMaterialization(result), maxDataTokens, settings);
         }
 
-        internal static string BuildToolResult(ToolCommand command, ToolResultMaterialization materialized,
+        internal static string BuildToolResult(ToolInvocation command, ToolResultMaterialization materialized,
             int maxDataTokens = DefaultMaxToolResultDataTokens, AppSettings settings = null)
         {
             if (command == null) throw new ArgumentNullException(nameof(command));
@@ -66,23 +67,23 @@ namespace RNAssistant.Office.Services
             return ToolResultWire.Write(command.ToolCallId, command.ToolId, bounded, materialized.ResultResource);
         }
 
-        public static ChatMessage CreateToolResultMessage(ToolCommand command, TerminalResult result)
+        public static ChatMessage CreateToolResultMessage(ToolInvocation command, TerminalResult result)
         {
             return CreateToolResultMessage(command, result, ToolResultRoles.User);
         }
 
-        public static ChatMessage CreateToolResultMessage(ToolCommand command, TerminalResult result, string role)
+        public static ChatMessage CreateToolResultMessage(ToolInvocation command, TerminalResult result, string role)
         {
             return CreateToolResultMessage(command, new ToolResultMaterialization(result), DefaultMaxToolResultDataTokens, role);
         }
 
-        internal static ChatMessage CreateToolResultMessage(ToolCommand command, ToolResultMaterialization result,
+        internal static ChatMessage CreateToolResultMessage(ToolInvocation command, ToolResultMaterialization result,
             string role = ToolResultRoles.User)
         {
             return CreateToolResultMessage(command, result, DefaultMaxToolResultDataTokens, role);
         }
 
-        internal static ChatMessage CreateToolResultMessage(ToolCommand command, ToolResultMaterialization result,
+        internal static ChatMessage CreateToolResultMessage(ToolInvocation command, ToolResultMaterialization result,
             int maxDataTokens, string role, AppSettings settings = null)
         {
             var normalizedRole = ToolResultRoles.Normalize(role);

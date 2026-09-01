@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,6 +10,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Tools;
 using RuntimeToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
@@ -227,7 +229,7 @@ namespace RNAssistant.Harness
                     session,
                     new DocumentContext(),
                     new AppSettings(),
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     edited.Attachments,
                     null,
                     null,
@@ -446,7 +448,7 @@ namespace RNAssistant.Harness
                 ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "excel.inspect" } }
             };
             var firstResult = AgentJsonProtocol.CreateToolResultMessage(
-                new ToolCommand { ToolCallId = firstCall.ToolCallId, ToolId = "excel.inspect" },
+                new ToolInvocation { ToolCallId = firstCall.ToolCallId, ToolId = "excel.inspect" },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.Developer);
             var secondCall = new ChatMessage
             {
@@ -461,7 +463,7 @@ namespace RNAssistant.Harness
                 Activity = new ChatActivity { ToolCallId = "call_1", Kind = "tool" }
             };
             var secondResult = AgentJsonProtocol.CreateToolResultMessage(
-                new ToolCommand { ToolCallId = secondCall.ToolCallId, ToolId = "excel.inspect" },
+                new ToolInvocation { ToolCallId = secondCall.ToolCallId, ToolId = "excel.inspect" },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.Developer);
             var messages = new List<ChatMessage>
             {
@@ -482,7 +484,7 @@ namespace RNAssistant.Harness
                 "reused call id in the same run is preserved");
 
             var mismatchedResult = AgentJsonProtocol.CreateToolResultMessage(
-                new ToolCommand { ToolCallId = "unrelated-call", ToolId = "excel.inspect" },
+                new ToolInvocation { ToolCallId = "unrelated-call", ToolId = "excel.inspect" },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.Developer);
             // A body claiming call_1 cannot add this different metadata call to its exchange.
             mismatchedResult.Content = secondResult.Content;
@@ -521,7 +523,7 @@ namespace RNAssistant.Harness
                 }
             };
             var multiResult1 = AgentJsonProtocol.CreateToolResultMessage(
-                new ToolCommand { ToolCallId = "multi_1", ToolId = "excel.inspect" },
+                new ToolInvocation { ToolCallId = "multi_1", ToolId = "excel.inspect" },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.Tool);
             var incompleteMulti = new List<ChatMessage> { multiCall, multiResult1 };
             ChatHistoryEditService.ExcludeUnmatchedToolCalls(incompleteMulti);
@@ -541,10 +543,10 @@ namespace RNAssistant.Harness
                 }
             };
             var completeResult1 = AgentJsonProtocol.CreateToolResultMessage(
-                new ToolCommand { ToolCallId = "complete_1", ToolId = "excel.inspect" },
+                new ToolInvocation { ToolCallId = "complete_1", ToolId = "excel.inspect" },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.Tool);
             var completeResult2 = AgentJsonProtocol.CreateToolResultMessage(
-                new ToolCommand { ToolCallId = "complete_2", ToolId = "excel.inspect" },
+                new ToolInvocation { ToolCallId = "complete_2", ToolId = "excel.inspect" },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.Tool);
             var completeMulti = new List<ChatMessage> { completeCall, completeResult1, completeResult2 };
             var completeSelection = ChatHistoryEditService.SelectMessagesForDeletion(completeMulti, 1);

@@ -21,7 +21,7 @@ namespace RNAssistant.Harness
         private const string EmptyFormalToolSchema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
         private const string SheetFormalToolSchema = "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name.\"}},\"required\":[\"sheet\"],\"additionalProperties\":false}";
 
-        private static ToolDefinition CustomTool(string host, string id, string name = null)
+        private static ToolCatalogEntry CustomTool(string host, string id, string name = null)
         {
             var manifest = new
             {
@@ -37,7 +37,7 @@ namespace RNAssistant.Harness
             return parsed.Tool;
         }
 
-        private static Newtonsoft.Json.Linq.JArray ToolComponentsPayload(ToolDefinition tool)
+        private static Newtonsoft.Json.Linq.JArray ToolComponentsPayload(ToolCatalogEntry tool)
         {
             return new Newtonsoft.Json.Linq.JArray(tool.Components.Select(component =>
                 new Newtonsoft.Json.Linq.JObject
@@ -46,7 +46,7 @@ namespace RNAssistant.Harness
                 }));
         }
 
-        private static bool HasTool(IEnumerable<ToolDefinition> tools, string id)
+        private static bool HasTool(IEnumerable<ToolCatalogEntry> tools, string id)
         {
             foreach (var tool in tools)
             {
@@ -72,9 +72,9 @@ namespace RNAssistant.Harness
             return false;
         }
 
-        private static ToolDefinition FindTool(IEnumerable<ToolDefinition> tools, string id)
+        private static ToolCatalogEntry FindTool(IEnumerable<ToolCatalogEntry> tools, string id)
         {
-            foreach (var tool in tools ?? new ToolDefinition[0])
+            foreach (var tool in tools ?? new ToolCatalogEntry[0])
             {
                 if (tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase))
                 {
@@ -85,9 +85,9 @@ namespace RNAssistant.Harness
             return null;
         }
 
-        private static ToolCommand Command(string id, params object[] keyValues)
+        private static ToolInvocation Command(string id, params object[] keyValues)
         {
-            var command = new ToolCommand { ToolId = id };
+            var command = new ToolInvocation { ToolId = id };
             for (var i = 0; i + 1 < (keyValues == null ? 0 : keyValues.Length); i += 2)
             {
                 command.Arguments[Convert.ToString(keyValues[i])] = keyValues[i + 1];

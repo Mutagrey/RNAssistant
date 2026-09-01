@@ -28,9 +28,9 @@ namespace RNAssistant.Core.Storage
             _json = new JsonFileStore();
         }
 
-        public List<ToolDefinition> Load()
+        public List<ToolCatalogEntry> Load()
         {
-            var result = new List<ToolDefinition>();
+            var result = new List<ToolCatalogEntry>();
             if (!Directory.Exists(_paths.ToolsDirectory))
             {
                 return result;
@@ -38,7 +38,7 @@ namespace RNAssistant.Core.Storage
 
             foreach (var file in StorageFileSystem.GetFilesRecursive(_paths.ToolsDirectory, "tool.json"))
             {
-                ToolDefinition tool;
+                ToolCatalogEntry tool;
                 if (!TryLoadMetadata(file, out tool)) continue;
                 if (tool == null || string.IsNullOrWhiteSpace(tool.Id))
                 {
@@ -71,19 +71,19 @@ namespace RNAssistant.Core.Storage
             return result.OrderBy(t => t.Host).ThenBy(t => t.Id).ToList();
         }
 
-        public void Save(IEnumerable<ToolDefinition> tools)
+        public void Save(IEnumerable<ToolCatalogEntry> tools)
         {
             Reconcile(tools, null);
         }
 
-        public void Save(IEnumerable<ToolDefinition> tools, string host)
+        public void Save(IEnumerable<ToolCatalogEntry> tools, string host)
         {
-            var incoming = new List<ToolDefinition>((tools ?? new ToolDefinition[0])
+            var incoming = new List<ToolCatalogEntry>((tools ?? new ToolCatalogEntry[0])
                 .Where(t => t != null && !t.BuiltIn && !string.IsNullOrWhiteSpace(t.Id)));
             Reconcile(incoming, host);
         }
 
-        public ToolDefinition SaveOne(ToolDefinition tool)
+        public ToolCatalogEntry SaveOne(ToolCatalogEntry tool)
         {
             if (tool == null || tool.BuiltIn || string.IsNullOrWhiteSpace(tool.Id))
             {
@@ -126,9 +126,9 @@ namespace RNAssistant.Core.Storage
             return true;
         }
 
-        private void Reconcile(IEnumerable<ToolDefinition> tools, string host)
+        private void Reconcile(IEnumerable<ToolCatalogEntry> tools, string host)
         {
-            var incoming = (tools ?? new ToolDefinition[0])
+            var incoming = (tools ?? new ToolCatalogEntry[0])
                 .Where(t => t != null && !t.BuiltIn && !string.IsNullOrWhiteSpace(t.Id))
                 .ToList();
             foreach (var tool in incoming) RequireSupportedExecutor(tool);
@@ -151,13 +151,13 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static void RequireSupportedExecutor(ToolDefinition tool)
+        private static void RequireSupportedExecutor(ToolCatalogEntry tool)
         {
             if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException("Only VBA custom tools are supported. Pipelines are disabled during stabilization.");
         }
 
-        private void SaveTool(ToolDefinition tool)
+        private void SaveTool(ToolCatalogEntry tool)
         {
             RequireSupportedExecutor(tool);
             var directory = ToolDirectory(tool);
@@ -179,7 +179,7 @@ namespace RNAssistant.Core.Storage
                 }
             }
 
-            var metadata = new ToolDefinition
+            var metadata = new ToolCatalogEntry
             {
                 Id = tool.Id,
                 Host = string.IsNullOrWhiteSpace(tool.Host) ? "Common" : tool.Host,
@@ -201,7 +201,7 @@ namespace RNAssistant.Core.Storage
                 PackageVersion = tool.PackageVersion,
                 EntryPoint = tool.EntryPoint,
                 ArgumentOrder = new List<string>(tool.ArgumentOrder ?? new List<string>()),
-                Components = (tool.Components ?? new List<VbaToolComponent>()).Select(component => new VbaToolComponent
+                Components = (tool.Components ?? new List<ToolPackageComponentDefinition>()).Select(component => new ToolPackageComponentDefinition
                 {
                     Name = component.Name,
                     Type = component.Type,
@@ -217,7 +217,7 @@ namespace RNAssistant.Core.Storage
             WriteOptional(Path.Combine(directory, "README.md"), tool.Readme);
         }
 
-        private string ToolDirectory(ToolDefinition tool)
+        private string ToolDirectory(ToolCatalogEntry tool)
         {
             return Path.Combine(_paths.ToolsDirectory, HostFolder(tool == null ? null : tool.Host), ToolFolder(tool == null ? null : tool.Id));
         }
@@ -258,11 +258,11 @@ namespace RNAssistant.Core.Storage
             StorageFileSystem.WriteAllTextAtomic(path, value);
         }
 
-        private static bool LoadVbaSources(string directory, ToolDefinition tool)
+        private static bool LoadVbaSources(string directory, ToolCatalogEntry tool)
         {
             try
             {
-                tool.Components = tool.Components ?? new List<VbaToolComponent>();
+                tool.Components = tool.Components ?? new List<ToolPackageComponentDefinition>();
                 if (tool.Components.Count == 0 || tool.Components.Count > MaxComponents) return false;
                 var sourceDirectory = Path.Combine(directory, "src");
                 if (!Directory.Exists(sourceDirectory) ||
@@ -323,17 +323,17 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static bool TryApplyVbaManifest(ToolDefinition tool)
+        private static bool TryApplyVbaManifest(ToolCatalogEntry tool)
         {
             var parsed = new VbaToolManifestParser().Parse(tool == null ? null : tool.Code);
             if (!parsed.Success ||
                 !string.Equals(parsed.Tool.Id, tool.Id, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(parsed.Tool.Host, tool.Host, StringComparison.OrdinalIgnoreCase)) return false;
 
-            var supplied = (tool.Components ?? new List<VbaToolComponent>())
+            var supplied = (tool.Components ?? new List<ToolPackageComponentDefinition>())
                 .Where(component => component != null)
                 .ToList();
-            var declared = parsed.Tool.Components ?? new List<VbaToolComponent>();
+            var declared = parsed.Tool.Components ?? new List<ToolPackageComponentDefinition>();
             if (declared.Count == 0 || supplied.Count != declared.Count ||
                 supplied.GroupBy(component => component.Name, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1) ||
                 declared.Any(component => !supplied.Any(candidate =>
@@ -359,7 +359,7 @@ namespace RNAssistant.Core.Storage
             return true;
         }
 
-        private static bool HasSupportedMetadata(ToolDefinition tool)
+        private static bool HasSupportedMetadata(ToolCatalogEntry tool)
         {
             if (tool == null || string.IsNullOrWhiteSpace(tool.Id) || tool.Id.Length > 128 ||
                 tool.Id.Any(char.IsWhiteSpace)) return false;
@@ -406,7 +406,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static bool TryLoadMetadata(string path, out ToolDefinition tool)
+        private static bool TryLoadMetadata(string path, out ToolCatalogEntry tool)
         {
             tool = null;
             string json;
@@ -417,7 +417,7 @@ namespace RNAssistant.Core.Storage
                 {
                     DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error
                 });
-                tool = root.ToObject<ToolDefinition>();
+                tool = root.ToObject<ToolCatalogEntry>();
                 return tool != null;
             }
             catch (JsonException)
@@ -464,7 +464,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static void WriteVbaSources(string directory, ToolDefinition tool)
+        private static void WriteVbaSources(string directory, ToolCatalogEntry tool)
         {
             if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
@@ -514,7 +514,7 @@ namespace RNAssistant.Core.Storage
             StorageFileSystem.TryDeleteDirectory(sourceDirectory);
         }
 
-        private static string SourceFileName(VbaToolComponent component)
+        private static string SourceFileName(ToolPackageComponentDefinition component)
         {
             var type = component == null ? null : component.Type;
             var extension = string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase)

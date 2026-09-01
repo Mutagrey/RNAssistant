@@ -194,10 +194,10 @@ function appendMessageFooter(node, message, index, activity) {
   } else if (!runViewState && messageRole(message) === "assistant" &&
       !messageProtocolMessage(message) && !activity && !message.Pending && !message.Failed && !message.Local &&
       messageContent(message).trim()) {
-    var legacyOutcome = document.createElement("span");
-    legacyOutcome.className = "message-outcome status-unknown";
-    legacyOutcome.textContent = "Нет typed runtime state · требуется новый запуск";
-    meta.appendChild(legacyOutcome);
+    var incompatibleOutcome = document.createElement("span");
+    incompatibleOutcome.className = "message-outcome status-unknown";
+    incompatibleOutcome.textContent = "Нет typed runtime state · требуется новый запуск";
+    meta.appendChild(incompatibleOutcome);
   }
 
   var actions = document.createElement("div");

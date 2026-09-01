@@ -555,7 +555,7 @@ namespace RNAssistant.OfficeHosts.Vba
             var payload = (source ?? new VbaInstallPackageComponent[0])
                 .Where(item => item != null)
                 .ToList();
-            var components = payload.Select(item => new VbaToolComponent
+            var components = payload.Select(item => new ToolPackageComponentDefinition
             {
                 Name = item.Name,
                 Type = item.ComponentType,
@@ -849,7 +849,7 @@ namespace RNAssistant.OfficeHosts.Vba
             }
         }
 
-        private static string PrepareImportSource(VbaToolComponent component, string marker)
+        private static string PrepareImportSource(ToolPackageComponentDefinition component, string marker)
         {
             var code = VbaTextCanonicalizer.NormalizePackageCode(component.Code);
             var markerLine = string.IsNullOrWhiteSpace(marker) ? string.Empty : "' " + marker.Trim() + Environment.NewLine;
@@ -865,7 +865,7 @@ namespace RNAssistant.OfficeHosts.Vba
             return "Attribute VB_Name = \"" + component.Name + "\"\r\n" + markerLine + code;
         }
 
-        private static string PrepareCodeOnlyFormSource(VbaToolComponent component, string marker)
+        private static string PrepareCodeOnlyFormSource(ToolPackageComponentDefinition component, string marker)
         {
             var code = VbaTextCanonicalizer.NormalizePackageCode(component == null ? null : component.Code);
             var markerLine = string.IsNullOrWhiteSpace(marker) ? string.Empty : "' " + marker.Trim() + "\r\n";

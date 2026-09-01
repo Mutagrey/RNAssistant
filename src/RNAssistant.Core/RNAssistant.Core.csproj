@@ -92,7 +92,8 @@
     <Compile Include="Models\ChartArtifactModels.cs" />
     <Compile Include="Models\ContextModels.cs" />
     <Compile Include="Models\SkillModels.cs" />
-    <Compile Include="Models\ToolModels.cs" />
+    <Compile Include="Tools\ToolCatalogEntry.cs" />
+    <Compile Include="Tools\ToolInvocation.cs" />
     <Compile Include="Agent\AgentConversation.cs" />
     <Compile Include="Agent\RunSummary.cs" />
     <Compile Include="Agent\AgentRunContracts.cs" />

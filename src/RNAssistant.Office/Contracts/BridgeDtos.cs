@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -683,7 +684,7 @@ namespace RNAssistant.Office.Contracts
         public bool HasHistorySecret { get; set; }
 
         [JsonProperty("tools")]
-        public IReadOnlyList<ToolDefinition> Tools { get; set; }
+        public ToolLibraryResponse Tools { get; set; }
 
         [JsonProperty("toolsPath")]
         public string ToolsPath { get; set; }
@@ -740,7 +741,7 @@ namespace RNAssistant.Office.Contracts
         public IReadOnlyList<object> ToolResults { get; set; }
 
         [JsonProperty("tools")]
-        public IReadOnlyList<ToolDefinition> Tools { get; set; }
+        public ToolLibraryResponse Tools { get; set; }
 
         [JsonProperty("skills")]
         public SkillLibraryResponse Skills { get; set; }

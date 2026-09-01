@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -251,9 +252,9 @@ namespace RNAssistant.Harness
             };
         }
 
-        private static ToolCommand ChartCommand(ExcelChartMutationPlan plan)
+        private static ToolInvocation ChartCommand(ExcelChartMutationPlan plan)
         {
-            return new ToolCommand
+            return new ToolInvocation
             {
                 ToolId = plan.Kind == ExcelChartMutationKind.Delete
                     ? "excel.delete_chart" : "excel.upsert_chart",

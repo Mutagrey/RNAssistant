@@ -56,7 +56,7 @@ namespace RNAssistant.Core.Tools
             Revision = Hash(Fingerprint().ToString(Formatting.None));
         }
 
-        public static ToolPackageSource Capture(ToolDefinition definition)
+        public static ToolPackageSource Capture(ToolCatalogEntry definition)
         {
             if (definition == null) return null;
             return new ToolPackageSource(
@@ -69,7 +69,7 @@ namespace RNAssistant.Core.Tools
                 definition.Code,
                 definition.StoragePath,
                 definition.Readme,
-                (definition.Components ?? new List<VbaToolComponent>())
+                (definition.Components ?? new List<ToolPackageComponentDefinition>())
                     .Where(component => component != null)
                     .Select(component => new ToolPackageSourceComponent(
                         component.Name, component.Type, component.FileName,

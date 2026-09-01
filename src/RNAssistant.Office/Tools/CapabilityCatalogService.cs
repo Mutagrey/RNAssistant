@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,7 +24,7 @@ namespace RNAssistant.Office.Tools
         internal CapabilityToolOutcome Execute(
             string toolId,
             IDictionary<string, object> arguments,
-            IReadOnlyList<ToolDefinition> runnableCatalog,
+            IReadOnlyList<ToolCatalogEntry> runnableCatalog,
             IReadOnlyList<SkillDefinition> skills,
             bool manualRun)
         {
@@ -50,18 +51,18 @@ namespace RNAssistant.Office.Tools
                 "unknown_tool", false);
         }
 
-        internal static JObject Descriptor(ToolDefinition tool)
+        internal static JObject Descriptor(ToolCatalogEntry tool)
         {
             return ConversationPromptComposer.BuildTool(tool);
         }
 
-        internal static string Revision(ToolDefinition tool)
+        internal static string Revision(ToolCatalogEntry tool)
         {
             var descriptor = Descriptor(tool);
             return descriptor == null ? string.Empty : Sha256(descriptor.ToString(Formatting.None));
         }
 
-        internal static string ToolCatalogRevision(IEnumerable<ToolDefinition> tools)
+        internal static string ToolCatalogRevision(IEnumerable<ToolCatalogEntry> tools)
         {
             return Sha256(string.Join("\n", NormalizeTools(tools)
                 .Select(tool => tool.Id + ":" + Revision(tool))
@@ -69,7 +70,7 @@ namespace RNAssistant.Office.Tools
         }
 
         internal static string CatalogRevision(
-            IEnumerable<ToolDefinition> tools,
+            IEnumerable<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills)
         {
             var entries = Records(NormalizeTools(tools), NormalizeSkills(skills))
@@ -81,14 +82,14 @@ namespace RNAssistant.Office.Tools
         }
 
         internal static JObject BuildPromptCatalog(
-            IEnumerable<ToolDefinition> tools,
+            IEnumerable<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills,
-            IEnumerable<ToolDefinition> activeTools)
+            IEnumerable<ToolCatalogEntry> activeTools)
         {
             var toolCatalog = NormalizeTools(tools);
             var skillCatalog = NormalizeSkills(skills);
             ThrowOnCollision(toolCatalog, skillCatalog);
-            var activeIds = new HashSet<string>((activeTools ?? new ToolDefinition[0])
+            var activeIds = new HashSet<string>((activeTools ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
                 .Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
             var entries = Records(toolCatalog, skillCatalog)
@@ -113,13 +114,13 @@ namespace RNAssistant.Office.Tools
         }
 
         internal static void BindReadSchema(
-            IList<ToolDefinition> tools,
+            IList<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills)
         {
             var toolCatalog = NormalizeTools(tools);
             var skillCatalog = NormalizeSkills(skills);
             ThrowOnCollision(toolCatalog, skillCatalog);
-            var reader = (tools ?? new List<ToolDefinition>()).FirstOrDefault(tool => tool != null &&
+            var reader = (tools ?? new List<ToolCatalogEntry>()).FirstOrDefault(tool => tool != null &&
                 string.Equals(tool.Id, CapabilityToolCatalog.ReadToolId,
                     StringComparison.Ordinal));
             if (reader == null) return;
@@ -141,10 +142,10 @@ namespace RNAssistant.Office.Tools
         }
 
         private static bool HasBoundIdEnum(
-            IEnumerable<ToolDefinition> tools,
+            IEnumerable<ToolCatalogEntry> tools,
             int expectedIds)
         {
-            var reader = (tools ?? new ToolDefinition[0]).FirstOrDefault(tool => tool != null &&
+            var reader = (tools ?? new ToolCatalogEntry[0]).FirstOrDefault(tool => tool != null &&
                 string.Equals(tool.Id, CapabilityToolCatalog.ReadToolId,
                     StringComparison.Ordinal));
             if (reader == null || string.IsNullOrWhiteSpace(reader.ArgumentSchemaJson)) return false;
@@ -160,7 +161,7 @@ namespace RNAssistant.Office.Tools
         }
 
         internal static void ThrowOnCollision(
-            IEnumerable<ToolDefinition> tools,
+            IEnumerable<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills)
         {
             var collision = FindCollision(NormalizeTools(tools), NormalizeSkills(skills));
@@ -173,7 +174,7 @@ namespace RNAssistant.Office.Tools
 
         private CapabilityToolOutcome Read(
             IDictionary<string, object> arguments,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills)
         {
             var id = ToolArgumentReader.String(
@@ -214,7 +215,7 @@ namespace RNAssistant.Office.Tools
             return ReadSkill(arguments, skill);
         }
 
-        private static CapabilityToolOutcome ReadTool(ToolDefinition tool)
+        private static CapabilityToolOutcome ReadTool(ToolCatalogEntry tool)
         {
             var descriptor = Descriptor(tool);
             if (descriptor == null)
@@ -256,7 +257,7 @@ namespace RNAssistant.Office.Tools
 
         private static CapabilityToolOutcome Search(
             IDictionary<string, object> arguments,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills)
         {
             var query = ToolArgumentReader.String(
@@ -307,10 +308,10 @@ namespace RNAssistant.Office.Tools
         }
 
         private static IEnumerable<CapabilityRecord> Records(
-            IEnumerable<ToolDefinition> tools,
+            IEnumerable<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills)
         {
-            foreach (var tool in tools ?? new ToolDefinition[0])
+            foreach (var tool in tools ?? new ToolCatalogEntry[0])
             {
                 yield return new CapabilityRecord
                 {
@@ -447,9 +448,9 @@ namespace RNAssistant.Office.Tools
                 .Where(token => token.Length > 1), StringComparer.OrdinalIgnoreCase);
         }
 
-        private static List<ToolDefinition> NormalizeTools(IEnumerable<ToolDefinition> tools)
+        private static List<ToolCatalogEntry> NormalizeTools(IEnumerable<ToolCatalogEntry> tools)
         {
-            return (tools ?? new ToolDefinition[0])
+            return (tools ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null && tool.Enabled && tool.AgentCanRun &&
                     !string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) &&
                     !string.IsNullOrWhiteSpace(tool.Id) && Descriptor(tool) != null)
@@ -470,10 +471,10 @@ namespace RNAssistant.Office.Tools
         }
 
         private static string FindCollision(
-            IEnumerable<ToolDefinition> tools,
+            IEnumerable<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills)
         {
-            var toolIds = new HashSet<string>((tools ?? new ToolDefinition[0]).Select(tool => tool.Id),
+            var toolIds = new HashSet<string>((tools ?? new ToolCatalogEntry[0]).Select(tool => tool.Id),
                 StringComparer.OrdinalIgnoreCase);
             return (skills ?? new SkillDefinition[0])
                 .Select(skill => skill.Id)
@@ -607,7 +608,7 @@ namespace RNAssistant.Office.Tools
             public string Summary { get; set; }
             public string Revision { get; set; }
             public string SearchText { get; set; }
-            public ToolDefinition Tool { get; set; }
+            public ToolCatalogEntry Tool { get; set; }
             public SkillDefinition Skill { get; set; }
         }
     }

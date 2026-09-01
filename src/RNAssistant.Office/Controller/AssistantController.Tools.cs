@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,29 +11,120 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        public IReadOnlyList<ToolDefinition> GetTools()
+        public ToolLibraryResponse GetTools()
         {
-            return _toolCatalog.GetVisibleTools();
+            return ToolLibraryResponse.From(
+                _toolCatalog.GetVisibleTools());
         }
 
-        public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools)
+        public ToolLibraryMutationResponse SaveTools(
+            SaveToolsPayload payload)
         {
             using (_chatRuns.ReserveMaintenance())
             {
                 EnsureNoActiveRuns();
-                var customTools = (tools ?? new ToolDefinition[0]).Where(s =>
-                    s != null && !s.BuiltIn && !string.Equals(s.Scope, "document", StringComparison.OrdinalIgnoreCase)).ToList();
-                foreach (var tool in customTools)
+                var mutations = ValidateToolLibraryPayload(payload);
+                var results = new List<ToolMutationResultDto>();
+                foreach (var mutation in mutations)
                 {
-                    var validation = _toolExecutor.ValidateToolDefinition(tool);
-                    if (!validation.Success)
-                    {
-                        throw new InvalidOperationException(validation.Message);
-                    }
+                    var result = _toolExecutor
+                        .ExecuteToolLibraryMutation(mutation);
+                    results.Add(ToolMutationResultDto.From(result));
+                    if (result.Outcome.Status !=
+                        ToolAuthoringOutcomeStatus.Ok) break;
                 }
-                _toolStore.Save(customTools, _adapter.HostName);
-                return GetTools();
+                _toolCatalog.InvalidateDocumentVbaTools();
+                return new ToolLibraryMutationResponse
+                {
+                    Type = ToolLibraryMutationResponse.ContractType,
+                    ContractVersion =
+                        ToolLibraryResponse.CurrentContractVersion,
+                    Results = results,
+                    Library = GetTools()
+                };
             }
+        }
+
+        private static IReadOnlyList<ToolLibraryCoreMutation>
+            ValidateToolLibraryPayload(SaveToolsPayload payload)
+        {
+            if (payload == null || !string.Equals(payload.Type,
+                    SaveToolsPayload.ContractType,
+                    StringComparison.Ordinal) ||
+                payload.ContractVersion !=
+                    ToolLibraryResponse.CurrentContractVersion)
+            {
+                throw new InvalidOperationException(
+                    "Unsupported Tool Library mutation contract.");
+            }
+            var source = payload.Mutations ??
+                new List<ToolCoreMutationPayload>();
+            if (source.Count > 256)
+                throw new InvalidOperationException(
+                    "Tool Library mutation limit exceeded: 256.");
+            var baseIds = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            var targetIds = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            var result = new List<ToolLibraryCoreMutation>();
+            foreach (var item in source)
+            {
+                if (item == null ||
+                    !string.Equals(item.Kind, "upsert",
+                        StringComparison.Ordinal) &&
+                    !string.Equals(item.Kind, "delete",
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "Tool Library mutation kind is invalid.");
+                }
+                var baseId = item.BaseId ?? string.Empty;
+                var expected = item.ExpectedRevision ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(baseId) &&
+                    !baseIds.Add(baseId))
+                {
+                    throw new InvalidOperationException(
+                        "Duplicate Tool Library base id: " + baseId);
+                }
+                if (string.Equals(item.Kind, "delete",
+                    StringComparison.Ordinal))
+                {
+                    if (string.IsNullOrWhiteSpace(baseId) ||
+                        string.IsNullOrWhiteSpace(expected))
+                    {
+                        throw new InvalidOperationException(
+                            "Tool delete requires baseId and expectedRevision.");
+                    }
+                    result.Add(new ToolLibraryCoreMutation
+                    {
+                        Kind = item.Kind,
+                        BaseId = baseId,
+                        ExpectedRevision = expected
+                    });
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(item.Id) ||
+                    !targetIds.Add(item.Id))
+                {
+                    throw new InvalidOperationException(
+                        "Tool upsert id is missing or duplicated: " +
+                        (item.Id ?? string.Empty));
+                }
+                if (string.IsNullOrWhiteSpace(baseId) !=
+                    string.IsNullOrWhiteSpace(expected))
+                {
+                    throw new InvalidOperationException(
+                        "Existing tool upsert requires both baseId and expectedRevision; a new tool requires neither.");
+                }
+                result.Add(new ToolLibraryCoreMutation
+                {
+                    Kind = item.Kind,
+                    BaseId = baseId,
+                    ExpectedRevision = expected,
+                    Intended = item.ToCatalogEntry()
+                });
+            }
+            return result;
         }
 
         public SkillLibraryResponse GetSkills()
@@ -262,7 +354,7 @@ namespace RNAssistant.Office
             };
         }
 
-        public ToolResult RunTool(
+        public ToolRunResult RunTool(
             string toolId,
             IDictionary<string, object> arguments,
             bool dryRun,
@@ -272,7 +364,7 @@ namespace RNAssistant.Office
             var settings = _settingsService.Load();
             var session = LoadSession(null);
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolCommand { ToolId = toolId };
+            var command = new ToolInvocation { ToolId = toolId };
             foreach (var pair in arguments ?? new Dictionary<string, object>())
             {
                 command.Arguments[pair.Key] = pair.Value;
@@ -281,7 +373,7 @@ namespace RNAssistant.Office
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
             if (dryRun)
             {
-                return _toolExecutor.Execute(
+                return _toolExecutor.ExecuteManual(
                     command,
                     tools,
                     settings,
@@ -296,12 +388,13 @@ namespace RNAssistant.Office
                 // Read-only library checks do not modify chat state and may safely use an
                 // isolated snapshot while the active chat is waiting on the model/tools.
                 var manualSnapshot = OfficeToolExecutor.CreateIsolatedManualSession(session);
-                return _toolExecutor.Execute(command, tools, settings, false, true, manualSnapshot, cancellationToken);
+                return _toolExecutor.ExecuteManual(command, tools, settings,
+                    false, true, manualSnapshot, cancellationToken);
             }
 
             if (_chatRuns.IsExternallyRunning(session.Id))
             {
-                return ToolResult.Fail(
+                return ToolRunResult.Error(
                     "A mutating library tool cannot run while this chat is active. Read-only tools can still be tested; stop the chat before testing document or local-state mutations.",
                     null,
                     "manual_tool_chat_busy",
@@ -310,7 +403,8 @@ namespace RNAssistant.Office
 
             return WithReservedSession(session, current =>
             {
-                var result = _toolExecutor.Execute(command, tools, settings, false, true, current, cancellationToken);
+                var result = _toolExecutor.ExecuteManual(command, tools,
+                    settings, false, true, current, cancellationToken);
                 if (IsSessionArtifactTool(toolId))
                 {
                     SaveSessionChanges(current);

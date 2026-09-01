@@ -12,10 +12,10 @@ namespace RNAssistant.Core.ModelProtocol
         public const string SchemaName = "rnassistant_conversation_response_v4";
         public const int MaximumToolCalls = 32;
 
-        public static string Build(IEnumerable<ToolDefinition> callableTools)
+        public static string Build(IEnumerable<ToolCatalogEntry> callableTools)
         {
             var options = new JArray();
-            foreach (var tool in (callableTools ?? new ToolDefinition[0])
+            foreach (var tool in (callableTools ?? new ToolCatalogEntry[0])
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, System.StringComparer.Ordinal).Select(group => group.First()))
             {

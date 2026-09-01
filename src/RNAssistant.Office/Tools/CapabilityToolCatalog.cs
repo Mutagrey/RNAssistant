@@ -16,7 +16,7 @@ namespace RNAssistant.Office.Tools
                 string.Equals(toolId, ReadToolId, StringComparison.Ordinal);
         }
 
-        internal static IEnumerable<ToolDefinition> GetTools()
+        internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(
                 SearchToolId,
@@ -30,10 +30,10 @@ namespace RNAssistant.Office.Tools
                 "capabilities_read");
         }
 
-        private static ToolDefinition Projection(
+        private static ToolCatalogEntry Projection(
             string id, string description, string schema, string name)
         {
-            return ControllerToolDefinition.CreateTypedProjection(
+            return ControllerToolCatalogEntry.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema),
                 new ToolPolicy(ToolEffect.Read, ToolVerification.None,
                     false, true, new[] { "agent", "plan" }),

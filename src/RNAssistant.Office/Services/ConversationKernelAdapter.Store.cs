@@ -11,7 +11,6 @@ using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
-using LegacyResult = RNAssistant.Core.Models.ToolResult;
 using TerminalResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Services
@@ -91,14 +90,7 @@ namespace RNAssistant.Office.Services
             var record = fact.Execution;
             var command = Command(record.Context.Call, record.Context.StepId, record.Context.IsConfirmed);
             var materialized = TerminalMaterialization(record);
-            LegacyResult result;
-            if (!_uiResults.TryGetValue(record.Context.Call.Id, out result) ||
-                LegacyToolOutcomeAdapter.Map(record.Context.Policy, result) != record.Outcome)
-            {
-                result = ToolResultUiProjection.Create(record);
-                _uiResults[record.Context.Call.Id] = result;
-            }
-            ToolResultUiProjection.IncludeResources(result, materialized);
+            var result = ToolRunResultFactory.Create(record, materialized);
             var activity = FindActivity(record.Context.Call.Id) ?? AgentTranscript.CreateRunningToolMessage(
                 _session, command, record.Context.StepId, _stepMessage);
             if (!_session.Messages.Contains(activity)) _session.Messages.Add(activity);
@@ -152,8 +144,7 @@ namespace RNAssistant.Office.Services
                     }
                 }
             }
-            var uiResult = _uiResults[record.Context.Call.Id];
-            ToolResultUiProjection.IncludeResources(uiResult, result);
+            var uiResult = ToolRunResultFactory.Create(record, result);
             var activity = FindActivity(record.Context.Call.Id);
             AgentTranscript.CompleteToolActivityMessage(_session, activity, command, uiResult, record.Context.StepId, _stepMessage);
             activity.Activity.ExecutionEvidence = record.Evidence;

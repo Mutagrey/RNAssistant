@@ -11,7 +11,7 @@ namespace RNAssistant.Office.Tools
     {
         public const string AskToolId = "common.questions_ask";
 
-        internal static IEnumerable<ToolDefinition> GetTools()
+        internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             var descriptor = new ToolDescriptor(AskToolId,
                 "Plan mode: Present one to three key typed questions and stop until the user answers. Use only after read-only discovery cannot resolve a material decision.",
@@ -19,7 +19,7 @@ namespace RNAssistant.Office.Tools
             var policy = new ToolPolicy(ToolEffect.Read,
                 ToolVerification.None, false, false,
                 new[] { "plan" }, 0);
-            yield return ControllerToolDefinition.CreateTypedProjection(
+            yield return ControllerToolCatalogEntry.CreateTypedProjection(
                 descriptor, policy, name: "questions_ask", scope: "session",
                 mutatesLocalState: true);
         }

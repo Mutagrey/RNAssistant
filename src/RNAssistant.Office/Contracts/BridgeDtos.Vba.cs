@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -93,7 +94,7 @@ namespace RNAssistant.Office.Contracts
     public sealed class VbaProjectResponse
     {
         [JsonProperty("result")]
-        public ToolResult Result { get; set; }
+        public ToolRunResult Result { get; set; }
 
         [JsonProperty("backups")]
         public IReadOnlyList<VbaModuleBackup> Backups { get; set; }
@@ -338,6 +339,6 @@ namespace RNAssistant.Office.Contracts
         public VbaPackageResultDto Result { get; set; }
 
         [JsonProperty("tools")]
-        public IReadOnlyList<ToolDefinition> Tools { get; set; }
+        public ToolLibraryResponse Tools { get; set; }
     }
 }

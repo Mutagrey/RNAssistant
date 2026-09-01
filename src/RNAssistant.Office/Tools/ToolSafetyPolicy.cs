@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,7 +20,7 @@ namespace RNAssistant.Office.Tools
     internal static class ToolSafetyPolicy
     {
         public static bool RequiresConfirmation(
-            ToolDefinition tool,
+            ToolCatalogEntry tool,
             ToolSafetyProfile profile,
             AppSettings settings,
             bool dryRun,
@@ -50,22 +51,22 @@ namespace RNAssistant.Office.Tools
             return !CanAgentRunMutation(tool, profile);
         }
 
-        public static bool EffectiveMutatesDocument(ToolDefinition tool, IEnumerable<ToolDefinition> knownTools)
+        public static bool EffectiveMutatesDocument(ToolCatalogEntry tool, IEnumerable<ToolCatalogEntry> knownTools)
         {
             return Resolve(tool, knownTools).MutatesDocument;
         }
 
-        public static bool EffectiveMutatesLocalState(ToolDefinition tool, IEnumerable<ToolDefinition> knownTools)
+        public static bool EffectiveMutatesLocalState(ToolCatalogEntry tool, IEnumerable<ToolCatalogEntry> knownTools)
         {
             return Resolve(tool, knownTools).MutatesLocalState;
         }
 
-        public static int EffectiveRiskLevel(ToolDefinition tool, IEnumerable<ToolDefinition> knownTools)
+        public static int EffectiveRiskLevel(ToolCatalogEntry tool, IEnumerable<ToolCatalogEntry> knownTools)
         {
             return Resolve(tool, knownTools).RiskLevel;
         }
 
-        public static ToolSafetyProfile Resolve(ToolDefinition tool, IEnumerable<ToolDefinition> knownTools)
+        public static ToolSafetyProfile Resolve(ToolCatalogEntry tool, IEnumerable<ToolCatalogEntry> knownTools)
         {
             if (tool == null) return Invalid("Tool definition is missing.");
             if (string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
@@ -77,7 +78,7 @@ namespace RNAssistant.Office.Tools
                 Valid = true,
                 MutatesDocument = tool.MutatesDocument || isVba,
                 MutatesLocalState = tool.MutatesLocalState,
-                RequiresConfirmation = tool.RequiresConfirmation || tool.RuntimePolicy != null && tool.RuntimePolicy.RequiresConfirmation,
+                RequiresConfirmation = tool.RequiresConfirmation || tool.Policy != null && tool.Policy.RequiresConfirmation,
                 AgentCanRun = tool.AgentCanRun,
                 RiskLevel = tool.RiskLevel
             };
@@ -87,15 +88,15 @@ namespace RNAssistant.Office.Tools
             return profile;
         }
 
-        public static IDictionary<string, ToolSafetyProfile> ResolveAll(IEnumerable<ToolDefinition> tools)
+        public static IDictionary<string, ToolSafetyProfile> ResolveAll(IEnumerable<ToolCatalogEntry> tools)
         {
-            return (tools ?? new ToolDefinition[0])
+            return (tools ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
                 .GroupBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => Resolve(group.First(), null), StringComparer.OrdinalIgnoreCase);
         }
 
-        private static bool CanAgentRunMutation(ToolDefinition tool, ToolSafetyProfile profile)
+        private static bool CanAgentRunMutation(ToolCatalogEntry tool, ToolSafetyProfile profile)
         {
             return tool != null &&
                 tool.BuiltIn &&
@@ -103,7 +104,7 @@ namespace RNAssistant.Office.Tools
                 profile.AgentCanRun;
         }
 
-        private static void ApplyImplicitConfirmation(ToolDefinition tool, ToolSafetyProfile profile)
+        private static void ApplyImplicitConfirmation(ToolCatalogEntry tool, ToolSafetyProfile profile)
         {
             if (profile != null && profile.MutatesDocument && !CanAgentRunMutation(tool, profile))
             {

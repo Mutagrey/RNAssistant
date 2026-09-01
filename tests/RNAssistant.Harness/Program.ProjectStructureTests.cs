@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -394,31 +395,31 @@ namespace RNAssistant.Harness
             AssertTrue(
                 excelFindReplaceBackendSource.IndexOf("session.BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
                 excelFindReplaceBackendSource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
-                excelFindReplaceBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                excelFindReplaceBackendSource.IndexOf("ToolInvocation", StringComparison.Ordinal) < 0 &&
                 excelFindReplaceBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
                 "Excel find/replace backend must use only typed bound-document contracts");
             AssertTrue(
                 excelSheetBackendSource.IndexOf("session.BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
                 excelSheetBackendSource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
-                excelSheetBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                excelSheetBackendSource.IndexOf("ToolInvocation", StringComparison.Ordinal) < 0 &&
                 excelSheetBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
                 "Excel sheet backend must use only typed bound-document contracts");
             AssertTrue(
                 excelRangeMutationBackendSource.IndexOf("session.BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
                 excelRangeMutationBackendSource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
-                excelRangeMutationBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                excelRangeMutationBackendSource.IndexOf("ToolInvocation", StringComparison.Ordinal) < 0 &&
                 excelRangeMutationBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
                 "Excel range mutation backend must use only typed bound-document contracts");
             AssertTrue(
                 excelTableBackendSource.IndexOf("session.BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
                 excelTableBackendSource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
-                excelTableBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                excelTableBackendSource.IndexOf("ToolInvocation", StringComparison.Ordinal) < 0 &&
                 excelTableBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
                 "Excel table backend must use only typed bound-document contracts");
             AssertTrue(
                 excelChartBackendSource.IndexOf("session.BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
                 excelChartBackendSource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
-                excelChartBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                excelChartBackendSource.IndexOf("ToolInvocation", StringComparison.Ordinal) < 0 &&
                 excelChartBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0,
                 "Excel chart backend must use only typed bound-document contracts");
             AssertTrue(
@@ -484,7 +485,7 @@ namespace RNAssistant.Harness
                 .ToArray();
             AssertTrue(
                 vbaBackendSource.IndexOf("BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
-                vbaBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                vbaBackendSource.IndexOf("ToolInvocation", StringComparison.Ordinal) < 0 &&
                 vbaBackendSource.IndexOf("ToolResult", StringComparison.Ordinal) < 0 &&
                 vbaBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0 &&
                 vbaReaderSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0 &&
@@ -580,6 +581,108 @@ namespace RNAssistant.Harness
                     .GetProperty("Skills").PropertyType ==
                     typeof(RNAssistant.Office.Contracts.SkillLibraryResponse),
                 "Skills bridge must expose only versioned package/result DTOs and explicit mutations");
+
+            var toolModelAssembly = typeof(ToolCatalogEntry).Assembly;
+            AssertTrue(
+                !File.Exists(Path.Combine(coreRoot, "Models",
+                    "ToolModels.cs")) &&
+                File.Exists(Path.Combine(coreRoot, "Tools",
+                    "ToolCatalogEntry.cs")) &&
+                File.Exists(Path.Combine(coreRoot, "Tools",
+                    "ToolInvocation.cs")) &&
+                toolModelAssembly.GetType(
+                    "RNAssistant.Core.Models.ToolDefinition", false) == null &&
+                toolModelAssembly.GetType(
+                    "RNAssistant.Core.Models.ToolCommand", false) == null &&
+                toolModelAssembly.GetType(
+                    "RNAssistant.Core.Models.ToolResult", false) == null,
+                "retired generic tool DTOs must be physically removed from Core.Models");
+            foreach (var removedPath in new[]
+            {
+                Path.Combine(officeRoot, "Runtime",
+                    "LegacyToolDefinitionAdapter.cs"),
+                Path.Combine(officeRoot, "Runtime",
+                    "LegacyToolResultAdapter.cs"),
+                Path.Combine(officeRoot, "Services",
+                    "ToolResultUiProjection.cs"),
+                Path.Combine(officeRoot, "Tools",
+                    "OfficeBuiltInToolCatalog.cs"),
+                Path.Combine(officeRoot, "Tools",
+                    "ControllerToolDefinition.cs")
+            })
+            {
+                AssertTrue(!File.Exists(removedPath),
+                    "final generic tool compatibility path must be removed: " +
+                    Path.GetFileName(removedPath));
+            }
+            AssertTrue(
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "OfficeToolCatalog.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "ControllerToolCatalogEntry.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "DirectToolBindingCatalog.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Contracts",
+                    "BridgeDtos.Tools.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Contracts",
+                    "ToolRunResult.cs")),
+                "direct catalog, binding and typed Tool Library contracts must be explicit sources");
+            AssertTrue(
+                typeof(RNAssistant.Office.IOfficeApplicationAdapter).GetMethod(
+                    "GetBuiltInTools") == null &&
+                typeof(RNAssistant.Office.IOfficeApplicationAdapter).GetMethod(
+                    "ExecuteTool") == null,
+                "Office adapter boundary must not expose generic catalog or command dispatch");
+            AssertTrue(
+                typeof(RNAssistant.Office.Contracts.SaveToolsPayload)
+                    .GetProperty("Tools") == null &&
+                typeof(RNAssistant.Office.Contracts.SaveToolsPayload)
+                    .GetProperty("Mutations").PropertyType ==
+                    typeof(List<RNAssistant.Office.Contracts.ToolCoreMutationPayload>) &&
+                typeof(RNAssistant.Office.Contracts.InitResponse)
+                    .GetProperty("Tools").PropertyType ==
+                    typeof(RNAssistant.Office.Contracts.ToolLibraryResponse) &&
+                typeof(RNAssistant.Office.Contracts.SendChatResponse)
+                    .GetProperty("Tools").PropertyType ==
+                    typeof(RNAssistant.Office.Contracts.ToolLibraryResponse) &&
+                typeof(RNAssistant.Office.Contracts.VbaToolPackageResponse)
+                    .GetProperty("Tools").PropertyType ==
+                    typeof(RNAssistant.Office.Contracts.ToolLibraryResponse),
+                "Tools bridge must expose only versioned library/result DTOs and explicit guarded mutations");
+            var toolSnapshotSource = File.ReadAllText(Path.Combine(
+                officeRoot, "Services", "ToolPackSnapshotFactory.cs"));
+            AssertTrue(
+                toolSnapshotSource.IndexOf("definition.Binding",
+                    StringComparison.Ordinal) >= 0 &&
+                toolSnapshotSource.IndexOf("definition.Policy",
+                    StringComparison.Ordinal) >= 0 &&
+                toolSnapshotSource.IndexOf("DirectToolBindingCatalog",
+                    StringComparison.Ordinal) < 0 &&
+                toolSnapshotSource.IndexOf("PolicyFor(",
+                    StringComparison.Ordinal) < 0,
+                "ToolPack capture must consume source-owned policy/binding without reconstructing authority");
+            var toolControllerSource = File.ReadAllText(Path.Combine(
+                officeRoot, "Controller", "AssistantController.Tools.cs"));
+            AssertTrue(toolControllerSource.IndexOf("_toolStore",
+                    StringComparison.Ordinal) < 0,
+                "Tools UI controller must call the typed authoring owner instead of mutating ToolStore");
+            var allHostAdapterSources = productionHostAdapterSources.Concat(
+                new[] { File.ReadAllText(Path.Combine(hostsRoot,
+                    "OutlookAdapter.cs")) }).ToArray();
+            AssertTrue(!allHostAdapterSources.Any(source =>
+                    source.IndexOf("GetBuiltInTools", StringComparison.Ordinal) >= 0 ||
+                    source.IndexOf("ExecuteTool(", StringComparison.Ordinal) >= 0),
+                "production host adapters must not retain generic tool catalog or dispatch methods");
+            var fakeAdapterSources = SourceFiles(Path.Combine(root,
+                    "tests", "RNAssistant.Testing"))
+                .Select(File.ReadAllText).ToArray();
+            AssertTrue(!fakeAdapterSources.Any(source =>
+                    source.IndexOf("GetBuiltInTools", StringComparison.Ordinal) >= 0 ||
+                    source.IndexOf("QueueResult", StringComparison.Ordinal) >= 0 ||
+                    source.IndexOf("BeforeExecuteTool", StringComparison.Ordinal) >= 0 ||
+                    source.IndexOf("ThrowOnToolId", StringComparison.Ordinal) >= 0 ||
+                    source.IndexOf("ExecuteTool(", StringComparison.Ordinal) >= 0),
+                "test fakes must script direct typed backends without retired generic queues");
             AssertTrue(
                 File.Exists(Path.Combine(officeRoot, "Tools",
                     "UserQuestionToolHandler.cs")) &&

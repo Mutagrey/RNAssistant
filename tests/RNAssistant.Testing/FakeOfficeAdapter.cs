@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -16,7 +17,15 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend, IVbaHostBackendProvider, IVbaHostBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter,
+        IOfficeContextProvider, IOfficeBuiltInSkillProvider,
+        IOfficeDocumentCatalog, IOfficeDocumentSessionProvider,
+        IOfficeDispatcherProvider, IExcelBackendProvider, IExcelReadBackend,
+        IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend,
+        IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend,
+        IWordBackendProvider, IWordBackend, IPowerPointBackendProvider,
+        IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend,
+        IVbaHostBackendProvider, IVbaHostBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
@@ -35,23 +44,37 @@ namespace RNAssistant.Harness
         internal const string ExcelChartReadOperation = "chart.read";
         internal const string ExcelChartApplyOperation = "chart.apply";
 
-        public readonly List<ToolCommand> Executed = new List<ToolCommand>();
         public readonly List<string> ExcelBackendCalls = new List<string>();
         public readonly List<string> WordBackendCalls = new List<string>();
         public readonly List<string> PowerPointBackendCalls = new List<string>();
         public readonly List<string> OutlookBackendCalls = new List<string>();
-        public readonly List<ToolCommand> ExcelSheetRequests = new List<ToolCommand>();
-        public readonly List<ToolCommand> ExcelRangeMutationRequests =
-            new List<ToolCommand>();
-        public readonly List<ToolCommand> ExcelTableRequests =
-            new List<ToolCommand>();
-        public readonly List<ToolCommand> ExcelChartRequests =
-            new List<ToolCommand>();
+        public int TotalBackendCallCount
+        {
+            get
+            {
+                return ExcelBackendCalls.Count + WordBackendCalls.Count +
+                    PowerPointBackendCalls.Count + OutlookBackendCalls.Count +
+                    VbaBackendCalls.Count;
+            }
+        }
+
+        public void ClearBackendCalls()
+        {
+            ExcelBackendCalls.Clear();
+            WordBackendCalls.Clear();
+            PowerPointBackendCalls.Clear();
+            OutlookBackendCalls.Clear();
+            VbaBackendCalls.Clear();
+        }
+        public readonly List<ToolInvocation> ExcelSheetRequests = new List<ToolInvocation>();
+        public readonly List<ToolInvocation> ExcelRangeMutationRequests =
+            new List<ToolInvocation>();
+        public readonly List<ToolInvocation> ExcelTableRequests =
+            new List<ToolInvocation>();
+        public readonly List<ToolInvocation> ExcelChartRequests =
+            new List<ToolInvocation>();
         public string VbaModuleType = "StdModule";
         public readonly List<string> RanMacros = new List<string>();
-        public bool FailUnknownSkills { get; set; }
-        public string ThrowOnToolId { get; set; }
-        public Action<ToolCommand> BeforeExecuteTool { get; set; }
         public Action<string> BeforeExcelBackendCall { get; set; }
         public string ThrowOnExcelBackendOperation { get; set; }
         public Func<string, string> VbaWriteTransform { get; set; }
@@ -86,8 +109,6 @@ namespace RNAssistant.Harness
         private readonly string _hostName;
         private string _documentTitle;
         private readonly string _documentSnapshot;
-        private readonly List<ToolDefinition> _builtInTools;
-        private readonly Dictionary<string, Queue<ToolResult>> _scriptedResults;
         private readonly Dictionary<string, FakeVbaModule> _vbaModules;
         private readonly Dictionary<string, FakeSheet> _sheets;
         private readonly List<string> _excelSheetOrder;
@@ -106,6 +127,8 @@ namespace RNAssistant.Harness
         private string _wordText;
         private string _outlookSelection;
         private string _outlookDraft;
+        private readonly FakeDocumentSession _documentSession;
+        private readonly FakeStaDispatcher _dispatcher;
 
         public string VbaModuleCode
         {
@@ -114,17 +137,16 @@ namespace RNAssistant.Harness
         }
 
         public FakeOfficeAdapter()
-            : this("Excel", "Harness.xlsx", ExcelBuiltIns(), "Harness document")
+            : this("Excel", "Harness.xlsx", "Harness document")
         {
         }
 
-        private FakeOfficeAdapter(string hostName, string documentTitle, IEnumerable<ToolDefinition> builtInTools, string documentSnapshot)
+        private FakeOfficeAdapter(string hostName, string documentTitle,
+            string documentSnapshot)
         {
             _hostName = hostName;
             _documentTitle = documentTitle;
             _documentSnapshot = documentSnapshot;
-            _builtInTools = new List<ToolDefinition>((builtInTools ?? new ToolDefinition[0]).Select(CloneTool));
-            _scriptedResults = new Dictionary<string, Queue<ToolResult>>(StringComparer.OrdinalIgnoreCase);
             _vbaModules = new Dictionary<string, FakeVbaModule>(StringComparer.OrdinalIgnoreCase);
             _sheets = new Dictionary<string, FakeSheet>(StringComparer.OrdinalIgnoreCase);
             _excelSheetOrder = new List<string>();
@@ -143,6 +165,8 @@ namespace RNAssistant.Harness
             DocumentKeyValue = "doc";
             RuntimeDocumentKeyValue = "runtime-doc";
             DocumentPathValue = "C:\\Demo\\MockWorkbook.xlsx";
+            _dispatcher = new FakeStaDispatcher();
+            _documentSession = new FakeDocumentSession(this, _dispatcher);
             SeedDemoState();
         }
 
@@ -150,26 +174,38 @@ namespace RNAssistant.Harness
         {
             if (string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase))
             {
-                return new FakeOfficeAdapter("Word", "MockDocument.docx", WordBuiltIns(), "Quarterly revenue grew 18%. Main risks: churn and delayed enterprise renewals.");
+                return new FakeOfficeAdapter("Word", "MockDocument.docx",
+                    "Quarterly revenue grew 18%. Main risks: churn and delayed enterprise renewals.");
             }
 
             if (string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase))
             {
-                return new FakeOfficeAdapter("PowerPoint", "MockDeck.pptx", PowerPointBuiltIns(), "Mock slide deck");
+                return new FakeOfficeAdapter("PowerPoint", "MockDeck.pptx",
+                    "Mock slide deck");
             }
 
             if (string.Equals(host, "Outlook", StringComparison.OrdinalIgnoreCase))
             {
-                return new FakeOfficeAdapter("Outlook", "Selected mail", OutlookBuiltIns(), "Subject: Renewal follow-up\nCustomer asks for a concise answer about next steps.");
+                return new FakeOfficeAdapter("Outlook", "Selected mail",
+                    "Subject: Renewal follow-up\nCustomer asks for a concise answer about next steps.");
             }
 
-            return new FakeOfficeAdapter("Excel", "MockWorkbook.xlsx", ExcelBuiltIns(), "Mock workbook");
+            return new FakeOfficeAdapter("Excel", "MockWorkbook.xlsx",
+                "Mock workbook");
         }
 
         public string HostName { get { return _hostName; } }
         public string DocumentKey { get { return DocumentKeyValue; } }
         public string RuntimeDocumentKey { get { return RuntimeDocumentKeyValue; } }
         public string DocumentTitle { get { return _documentTitle; } }
+        public IOfficeDocumentSession DocumentSession
+        {
+            get { return _documentSession; }
+        }
+        public IOfficeStaDispatcher StaDispatcher
+        {
+            get { return _dispatcher; }
+        }
         public string WordText { get { return _wordText; } }
         public string OutlookDraft { get { return _outlookDraft; } }
         public int WordCommentCount { get { return _wordComments.Count; } }
@@ -338,11 +374,6 @@ namespace RNAssistant.Harness
             };
         }
 
-        public IEnumerable<ToolDefinition> GetBuiltInTools()
-        {
-            return _builtInTools.Select(CloneTool).ToArray();
-        }
-
         public IEnumerable<SkillDefinition> GetBuiltInSkills()
         {
             if (string.Equals(_hostName, "Word", StringComparison.OrdinalIgnoreCase))
@@ -358,18 +389,6 @@ namespace RNAssistant.Harness
                 return new[] { BuiltInSkill("outlook.email_assistant", "Outlook", "Outlook email assistant", "Draft, summarize, and reply to Outlook mail.") };
             }
             return new[] { BuiltInSkill("excel.analysis_reporting", "Excel", "Excel analysis reporting", "Analyze ranges, create summaries, tables, and charts in Excel.") };
-        }
-
-        public void QueueResult(string toolId, ToolResult result)
-        {
-            Queue<ToolResult> queue;
-            if (!_scriptedResults.TryGetValue(toolId, out queue))
-            {
-                queue = new Queue<ToolResult>();
-                _scriptedResults[toolId] = queue;
-            }
-
-            queue.Enqueue(result);
         }
 
         public void QueueExcelInspectSnapshot(ExcelInspectSnapshot snapshot)
@@ -481,254 +500,6 @@ namespace RNAssistant.Harness
                 EnsureSheet("Bound " + index);
         }
 
-        public ToolResult ExecuteTool(ToolCommand command)
-        {
-            var beforeExecute = BeforeExecuteTool;
-            if (beforeExecute != null) beforeExecute(command);
-            Executed.Add(Clone(command));
-            if (!string.IsNullOrWhiteSpace(ThrowOnToolId) &&
-                string.Equals(ThrowOnToolId, command == null ? null : command.ToolId, StringComparison.OrdinalIgnoreCase))
-            {
-                ThrowOnToolId = null;
-                throw new InvalidOperationException("scripted adapter failure");
-            }
-            ToolResult scripted;
-            if (TryDequeueResult(command.ToolId, out scripted))
-            {
-                return scripted;
-            }
-
-            var fakeResult = ExecuteStatefulTool(command);
-            if (fakeResult != null)
-            {
-                return fakeResult;
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
-                {
-                    title = DocumentTitle,
-                    modules = _vbaModules.Values.Select(module => new
-                    {
-                        name = module.Name,
-                        type = module.Type,
-                        lineCount = LineCount(module.Code) + VbaReportedLineCountOffset,
-                        codeOnlyUserForm = string.Equals(module.Type, "MSForm", StringComparison.OrdinalIgnoreCase) ? (bool?)true : null,
-                        hasToolManifest = string.Equals(module.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
-                            (module.Code ?? string.Empty).IndexOf("<RNAssistantTool>", StringComparison.Ordinal) >= 0
-                    }).ToArray()
-                }));
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase))
-            {
-                var moduleName = Argument(command, "moduleName", "Module1");
-                FakeVbaModule module;
-                if (!_vbaModules.TryGetValue(moduleName, out module))
-                {
-                    return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
-                }
-
-                if (command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount"))
-                {
-                    var lines = (module.Code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-                    var totalLineCount = string.IsNullOrEmpty(module.Code) ? 0 : lines.Length;
-                    var startLine = Math.Max(1, ArgumentInt(command, "startLine", 1));
-                    var requested = Math.Max(1, Math.Min(500, ArgumentInt(command, "lineCount", 200)));
-                    if (totalLineCount > 0 && startLine > totalLineCount)
-                    {
-                        return ToolResult.Fail("VBA startLine is outside the module.", null, "vba_line_range_invalid", true);
-                    }
-                    var returned = totalLineCount == 0 ? 0 : Math.Min(requested, totalLineCount - startLine + 1);
-                    var code = returned == 0 ? string.Empty : string.Join("\n", lines.Skip(startLine - 1).Take(returned).ToArray());
-                    return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
-                    {
-                        name = module.Name,
-                        type = module.Type,
-                        startLine = totalLineCount == 0 ? 1 : startLine,
-                        endLine = returned == 0 ? 0 : startLine + returned - 1,
-                        returnedLineCount = returned,
-                        totalLineCount = totalLineCount,
-                        code = code,
-                        codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(module.Code),
-                        hasMoreBefore = totalLineCount > 0 && startLine > 1,
-                        hasMoreAfter = totalLineCount > 0 && startLine + returned - 1 < totalLineCount
-                    }));
-                }
-
-                var maxChars = Math.Max(1, Math.Min(1000000, ArgumentInt(command, "maxChars", 30000)));
-                var returnedCode = module.Code.Length > maxChars ? module.Code.Substring(0, maxChars) + "\n...[truncated]" : module.Code;
-                return ToolResult.Ok("read " + command.ToolId, JsonConvert.SerializeObject(new
-                {
-                    name = module.Name,
-                    code = returnedCode,
-                    type = module.Type,
-                    codeOnlyUserForm = string.Equals(module.Type, "MSForm", StringComparison.OrdinalIgnoreCase) ? (bool?)true : null,
-                    lineCount = LineCount(module.Code) + VbaReportedLineCountOffset,
-                    codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(module.Code),
-                    truncated = !string.Equals(returnedCode, module.Code, StringComparison.Ordinal)
-                }));
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase))
-            {
-                var moduleName = Argument(command, "moduleName", "Module1");
-                var code = Argument(command, "code", string.Empty);
-                FakeVbaModule existing;
-                var exists = _vbaModules.TryGetValue(moduleName, out existing);
-                var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
-                var actualCodeSha256 = exists ? VbaTextCanonicalizer.LiveCodeSha256(existing.Code) : null;
-                if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
-                    (!exists || !string.Equals(expectedCodeSha256, actualCodeSha256, StringComparison.OrdinalIgnoreCase)))
-                {
-                    return ToolResult.Fail(
-                        "stale VBA backend write",
-                        JsonConvert.SerializeObject(new { moduleName = moduleName, actualExists = exists, actualCodeSha256 = actualCodeSha256 }),
-                        "stale_vba_module",
-                        true);
-                }
-                var componentType = exists ? existing.Type : VbaModuleType;
-                SetVbaModule(moduleName, VbaWriteTransform == null ? code : VbaWriteTransform(code), componentType);
-                return ToolResult.Ok("replaced " + command.ToolId);
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".run_macro", StringComparison.OrdinalIgnoreCase))
-            {
-                RanMacros.Add(Argument(command, "macroName", string.Empty));
-                return ToolResult.Ok("ran " + command.ToolId, JsonConvert.SerializeObject(new { output = "fake-vba-result" }));
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_install_package_internal", StringComparison.OrdinalIgnoreCase))
-            {
-                var marker = Argument(command, "marker", string.Empty);
-                var components = JArray.Parse(Argument(command, "componentsJson", "[]")).OfType<JObject>().ToList();
-                var guardError = ValidatePackageInstallGuard(components);
-                if (guardError != null) return guardError;
-                foreach (var component in components)
-                {
-                    var code = "' " + marker + "\n" + ((string)component["code"] ?? string.Empty);
-                    SetVbaModule(
-                        (string)component["name"],
-                        VbaWriteTransform == null ? code : VbaWriteTransform(code),
-                        (string)component["type"] ?? "StdModule");
-                }
-                return ToolResult.Ok("fake VBA package installed");
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_remove_package_internal", StringComparison.OrdinalIgnoreCase))
-            {
-                var expected = JObject.Parse(Argument(command, "expectedComponentsJson", "{}"));
-                var expectedMarker = Argument(command, "expectedMarker", string.Empty);
-                foreach (var property in expected.Properties())
-                {
-                    FakeVbaModule module;
-                    if (_vbaModules.TryGetValue(property.Name, out module) && module.Code.IndexOf(expectedMarker, StringComparison.OrdinalIgnoreCase) < 0)
-                    {
-                        return ToolResult.Fail("not owned", null, "vba_component_not_owned", false);
-                    }
-                    if (_vbaModules.TryGetValue(property.Name, out module) && !string.Equals(VbaTextCanonicalizer.PackageComparableCodeSha256(module.Code), (string)property.Value, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return ToolResult.Fail("modified", null, "vba_component_modified", false);
-                    }
-                }
-                foreach (var property in expected.Properties()) _vbaModules.Remove(property.Name);
-                return ToolResult.Ok("fake VBA package removed");
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_create_module_internal", StringComparison.OrdinalIgnoreCase))
-            {
-                var name = Argument(command, "moduleName", "Module1");
-                if (_vbaModules.ContainsKey(name)) return ToolResult.Fail("VBA module already exists: " + name, null, "vba_module_exists", false);
-                var code = Argument(command, "code", string.Empty);
-                SetVbaModule(name, VbaWriteTransform == null ? code : VbaWriteTransform(code), Argument(command, "componentType", "StdModule"));
-                return ToolResult.Ok("fake VBA module created");
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_rename_module_internal", StringComparison.OrdinalIgnoreCase))
-            {
-                var moduleName = Argument(command, "moduleName", string.Empty);
-                var newModuleName = Argument(command, "newModuleName", string.Empty);
-                FakeVbaModule existing;
-                if (!_vbaModules.TryGetValue(moduleName, out existing))
-                {
-                    return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
-                }
-                if (string.Equals(moduleName, newModuleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail("The VBA rename destination is the current component name.", null, "vba_rename_noop", true);
-                }
-                if (_vbaModules.ContainsKey(newModuleName))
-                {
-                    return ToolResult.Fail("VBA rename destination already exists: " + newModuleName, null, "vba_module_exists", true);
-                }
-                var expectedComponentType = Argument(command, "expectedComponentType", null);
-                if (!string.IsNullOrWhiteSpace(expectedComponentType) &&
-                    !string.Equals(expectedComponentType, existing.Type, StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail(
-                        "stale VBA backend rename type",
-                        JsonConvert.SerializeObject(new
-                        {
-                            moduleName = moduleName,
-                            expectedComponentType = expectedComponentType,
-                            actualComponentType = existing.Type
-                        }),
-                        "stale_vba_module",
-                        true);
-                }
-                var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
-                var actualCodeSha256 = VbaTextCanonicalizer.LiveCodeSha256(existing.Code);
-                if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
-                    !string.Equals(expectedCodeSha256, actualCodeSha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail(
-                        "stale VBA backend rename",
-                        JsonConvert.SerializeObject(new { moduleName = moduleName, actualExists = true, actualCodeSha256 = actualCodeSha256 }),
-                        "stale_vba_module",
-                        true);
-                }
-                _vbaModules.Remove(moduleName);
-                existing.Name = newModuleName;
-                _vbaModules[newModuleName] = existing;
-                return ToolResult.Ok("fake VBA module renamed", JsonConvert.SerializeObject(new
-                {
-                    previousModuleName = moduleName,
-                    moduleName = newModuleName,
-                    componentType = existing.Type,
-                    lineCount = LineCount(existing.Code),
-                    codeSha256 = actualCodeSha256
-                }));
-            }
-
-            if ((command.ToolId ?? string.Empty).EndsWith(".vba_delete_module_internal", StringComparison.OrdinalIgnoreCase))
-            {
-                var moduleName = Argument(command, "moduleName", "Module1");
-                FakeVbaModule existing;
-                var exists = _vbaModules.TryGetValue(moduleName, out existing);
-                var expectedCodeSha256 = Argument(command, "expectedCodeSha256", null);
-                var actualCodeSha256 = exists ? VbaTextCanonicalizer.LiveCodeSha256(existing.Code) : null;
-                if (!string.IsNullOrWhiteSpace(expectedCodeSha256) &&
-                    (!exists || !string.Equals(expectedCodeSha256, actualCodeSha256, StringComparison.OrdinalIgnoreCase)))
-                {
-                    return ToolResult.Fail(
-                        "stale VBA backend delete",
-                        JsonConvert.SerializeObject(new { moduleName = moduleName, actualExists = exists, actualCodeSha256 = actualCodeSha256 }),
-                        "stale_vba_module",
-                        true);
-                }
-                _vbaModules.Remove(moduleName);
-                return ToolResult.Ok("fake VBA module deleted");
-            }
-
-            if (FailUnknownSkills && !IsKnownTool(command.ToolId))
-            {
-                return ToolResult.Fail("Unsupported " + HostName + " tool: " + command.ToolId);
-            }
-
-            return ToolResult.Ok("executed " + command.ToolId, JsonConvert.SerializeObject(new { host = HostName, toolId = command.ToolId }));
-        }
-
         private void SeedDemoState()
         {
             SetVbaModule("Module1", "Sub DemoMacro()\n    MsgBox \"RNAssistant mock demo\"\nEnd Sub", VbaModuleType);
@@ -779,96 +550,6 @@ namespace RNAssistant.Harness
                     Shapes = new List<FakePowerPointShape>()
                 });
             }
-        }
-
-        private ToolResult ExecuteStatefulTool(ToolCommand command)
-        {
-            var toolId = command == null ? string.Empty : command.ToolId ?? string.Empty;
-            if (toolId.StartsWith("excel.", StringComparison.OrdinalIgnoreCase))
-            {
-                return ExecuteExcelTool(command);
-            }
-
-            if (toolId.StartsWith("word.", StringComparison.OrdinalIgnoreCase))
-            {
-                return ExecuteWordTool(command);
-            }
-
-            if (toolId.StartsWith("powerpoint.", StringComparison.OrdinalIgnoreCase))
-            {
-                return ExecutePowerPointTool(command);
-            }
-
-            if (toolId.StartsWith("outlook.", StringComparison.OrdinalIgnoreCase))
-            {
-                return ExecuteOutlookTool(command);
-            }
-
-            return null;
-        }
-
-        private ToolResult ExecuteExcelTool(ToolCommand command)
-        {
-            if (string.Equals(command.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("Public excel.add_sheet is owned by ToolRuntime.", null,
-                    "excel_public_sheet_moved", false);
-            }
-
-            if (string.Equals(command.ToolId, ExcelWriteToolIds.WriteRange, StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("Public excel.write_range is owned by ToolRuntime.", null,
-                    "excel_public_write_moved", false);
-            }
-
-            if (string.Equals(command.ToolId, ExcelReadToolIds.ReadRange, StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("Public excel.read_range is owned by ToolRuntime.", null, "excel_public_read_moved", false);
-            }
-
-            if (string.Equals(command.ToolId, "excel.find_cells", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("Public excel.find_cells is owned by ToolRuntime.", null,
-                    "excel_public_find_moved", false);
-            }
-
-            if (string.Equals(command.ToolId, "excel.replace_cells", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("Public excel.replace_cells is owned by ToolRuntime.", null,
-                    "excel_public_replace_moved", false);
-            }
-
-            if (ExcelChartToolIds.Owns(command.ToolId))
-                return ToolResult.Fail(
-                    "Public Excel chart tools are owned by ToolRuntime.", null,
-                    "excel_public_chart_moved", false);
-
-            if (string.Equals(command.ToolId, ExcelReadToolIds.Inspect, StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("Public excel.inspect is owned by ToolRuntime.", null, "excel_public_read_moved", false);
-            }
-
-            if (string.Equals(command.ToolId, "excel.add_table", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail(
-                    "Public excel.add_table is owned by ToolRuntime.", null,
-                    "excel_public_table_moved", false);
-            }
-
-            if (string.Equals(command.ToolId, "excel.rename_sheet", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("Public excel.rename_sheet is owned by ToolRuntime.", null,
-                    "excel_public_sheet_moved", false);
-            }
-
-            if (ExcelRangeMutationToolIds.Owns(command.ToolId))
-            {
-                return ToolResult.Fail(
-                    "Public Excel range mutations are owned by ToolRuntime.",
-                    null, "excel_public_range_mutation_moved", false);
-            }
-
-            return null;
         }
 
         public ExcelRangeSnapshot ReadRange(ExcelRangeReadRequest request)
@@ -998,35 +679,6 @@ namespace RNAssistant.Harness
                 ChartType = chart.ChartType, Series = new List<ExcelChartSeriesSnapshot>(),
                 SeriesTruncated = false
             };
-        }
-
-        private ToolResult ExecuteWordTool(ToolCommand command)
-        {
-            return WordToolIds.Owns(command == null ? null : command.ToolId)
-                ? ToolResult.Fail(
-                    "Public Word tools require the typed Word backend.",
-                    null, "word_legacy_dispatch_removed", false)
-                : null;
-        }
-
-        private ToolResult ExecutePowerPointTool(ToolCommand command)
-        {
-            return PowerPointToolIds.Owns(
-                command == null ? null : command.ToolId)
-                ? ToolResult.Fail(
-                    "Public PowerPoint tools require the typed PowerPoint backend.",
-                    null, "powerpoint_legacy_dispatch_removed", false)
-                : null;
-        }
-
-        private ToolResult ExecuteOutlookTool(ToolCommand command)
-        {
-            return OutlookToolIds.Owns(
-                command == null ? null : command.ToolId)
-                ? ToolResult.Fail(
-                    "Public Outlook tools require the typed Outlook backend.",
-                    null, "outlook_legacy_dispatch_removed", false)
-                : null;
         }
 
         private string SelectionText()
@@ -1217,205 +869,6 @@ namespace RNAssistant.Harness
             return row + ":" + column;
         }
 
-        private static string Argument(ToolCommand command, string name, string fallback)
-        {
-            object value;
-            return command != null && command.Arguments != null && command.Arguments.TryGetValue(name, out value) && value != null
-                ? Convert.ToString(value)
-                : fallback;
-        }
-
-        private static int ArgumentInt(ToolCommand command, string name, int fallback)
-        {
-            int parsed;
-            return int.TryParse(Argument(command, name, Convert.ToString(fallback)), out parsed) ? parsed : fallback;
-        }
-
-        private ToolResult ValidatePackageInstallGuard(IReadOnlyList<JObject> components)
-        {
-            var items = components ?? new JObject[0];
-            var hasGuard = items.Any(item => item != null && item["expectedBeforeExists"] != null);
-            if (!hasGuard || items.Any(item => item == null || item["expectedBeforeExists"] == null ||
-                item["expectedBeforeOwnershipMarkerPresent"] == null))
-            {
-                return ToolResult.Fail(
-                    "VBA package install guard is incomplete.",
-                    null,
-                    "vba_package_guard_invalid",
-                    false);
-            }
-            foreach (var item in items)
-            {
-                var name = (string)item["name"];
-                FakeVbaModule actual;
-                var actualExists = _vbaModules.TryGetValue(name, out actual);
-                var expectedExists = item.Value<bool>("expectedBeforeExists");
-                if (actualExists != expectedExists)
-                {
-                    return ToolResult.Fail("stale VBA package install", null, "stale_vba_package", false);
-                }
-                if (!expectedExists) continue;
-                var expectedMarkerPresent = item.Value<bool>("expectedBeforeOwnershipMarkerPresent");
-                var actualMarker = PackageMarkerEvidence(actual.Code);
-                if (!string.Equals(actual.Type, (string)item["expectedBeforeType"], StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(
-                        VbaTextCanonicalizer.PackageComparableCodeSha256(actual.Code),
-                        (string)item["expectedBeforeComparableCodeSha256"],
-                        StringComparison.OrdinalIgnoreCase) ||
-                    expectedMarkerPresent != !string.IsNullOrWhiteSpace(actualMarker) ||
-                    expectedMarkerPresent && !string.Equals(
-                        actualMarker,
-                        (string)item["expectedBeforeOwnershipMarker"],
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    return ToolResult.Fail("stale VBA package install", null, "stale_vba_package", false);
-                }
-            }
-            return null;
-        }
-
-        private static string PackageMarkerEvidence(string code)
-        {
-            var lines = (code ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n')
-                .Select(line => (line ?? string.Empty).TrimStart())
-                .Where(line => line.StartsWith("' RNAssistantPackage:", StringComparison.OrdinalIgnoreCase) ||
-                    line.StartsWith("' RNAssistantSession:", StringComparison.OrdinalIgnoreCase))
-                .Select(line => line.Substring(1).TrimStart())
-                .ToArray();
-            return lines.Length == 0 ? null : string.Join("\n", lines);
-        }
-
-        private bool TryDequeueResult(string toolId, out ToolResult result)
-        {
-            result = null;
-            Queue<ToolResult> queue;
-            if (!_scriptedResults.TryGetValue(toolId ?? string.Empty, out queue) || queue.Count == 0)
-            {
-                return false;
-            }
-
-            result = queue.Dequeue();
-            return true;
-        }
-
-        private bool IsKnownTool(string toolId)
-        {
-            return _builtInTools.Any(tool => string.Equals(tool.Id, toolId, StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static IEnumerable<ToolDefinition> ExcelBuiltIns()
-        {
-            return OfficeBuiltInToolCatalog.ForHost("Excel");
-        }
-
-        private static IEnumerable<ToolDefinition> WordBuiltIns()
-        {
-            return OfficeBuiltInToolCatalog.ForHost("Word");
-        }
-
-        private static IEnumerable<ToolDefinition> PowerPointBuiltIns()
-        {
-            return OfficeBuiltInToolCatalog.ForHost("PowerPoint");
-        }
-
-        private static IEnumerable<ToolDefinition> OutlookBuiltIns()
-        {
-            return OfficeBuiltInToolCatalog.ForHost("Outlook");
-        }
-
-        private static ToolDefinition BuiltIn(string host, string id, bool requiresConfirmation, bool mutatesDocument, bool agentCanRun, int riskLevel = 0, bool canSourceHtmlData = false)
-        {
-            return new ToolDefinition
-            {
-                Id = id,
-                Host = host,
-                Name = id,
-                Description = (mutatesDocument ? "Mutates document: " : "Read-only: ") + id,
-                ArgumentSchemaJson = FakeSchema(host, id),
-                Enabled = true,
-                BuiltIn = true,
-                RequiresConfirmation = requiresConfirmation,
-                MutatesDocument = mutatesDocument,
-                CanSourceHtmlData = canSourceHtmlData,
-                AgentCanRun = agentCanRun,
-                RiskLevel = mutatesDocument && riskLevel <= 0 ? 2 : riskLevel
-            };
-        }
-
-        private static string FakeSchema(string host, string id)
-        {
-            var names = string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)
-                ? ExcelFakeArguments(id)
-                : string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase)
-                    ? "source kind maxChars start end startLine lineCount query scope mode matchCase wholeWord maxResults contextChars maxTables maxRows text location find replace replaceAll maxReplacements style target bold italic underline fontSize fontName rows columns values moduleName code createIfMissing macroName"
-                    : string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase)
-                        ? "kind target content maxSlides slideIndex query scope includeNotes mode matchCase wholeWord maxResults contextChars title body text notes left top width height fontSize shapeName find replace replaceAll maxReplacements path rows columns values toIndex moduleName maxChars startLine lineCount code createIfMissing macroName"
-                        : "kind content groupBy maxChars entryId query mode matchCase wholeWord fields maxItems maxResults maxBodyChars contextChars to cc bcc subject body categories";
-            var booleans = new HashSet<string>(new[] { "matchCase", "wholeWord", "replaceAll", "hasHeaders", "bold", "italic", "underline", "descending", "includeNotes", "createIfMissing", "sourceSuccess" }, StringComparer.Ordinal);
-            var integers = new HashSet<string>(new[] { "maxResults", "contextChars", "maxReplacements", "left", "top", "width", "height", "keyColumn", "field", "maxChars", "start", "end", "startLine", "lineCount", "maxTables", "maxRows", "fontSize", "rows", "columns", "maxSlides", "slideIndex", "toIndex", "maxItems", "maxBodyChars" }, StringComparer.Ordinal);
-            var properties = new JObject();
-            foreach (var name in names.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var definition = new JObject
-                {
-                    ["type"] = string.Equals(name, "values", StringComparison.Ordinal)
-                        ? "array"
-                        : booleans.Contains(name) ? "boolean" : integers.Contains(name) ? "integer" : "string",
-                    ["description"] = string.Equals(name, "sheet", StringComparison.Ordinal)
-                        ? "Worksheet name."
-                        : "Test argument " + name + "."
-                };
-                if (string.Equals(name, "values", StringComparison.Ordinal)) definition["items"] = new JObject();
-                properties[name] = definition;
-            }
-            return new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = new JArray(),
-                ["additionalProperties"] = false
-            }.ToString(Formatting.None);
-        }
-
-        private static string ExcelFakeArguments(string id)
-        {
-            switch (id)
-            {
-                case "excel.inspect":
-                    return "kind sheet chartName";
-                case "excel.read_range":
-                    return "sheet address content";
-                case "excel.find_cells":
-                    return "sheet address scope query mode matchCase wholeWord lookIn maxResults contextChars";
-                case "excel.replace_cells":
-                    return "sheet address scope find replace mode matchCase wholeWord lookIn replaceAll maxReplacements";
-                case "excel.create_chat_chart":
-                    return "sheet address chartType title";
-                case "excel.delete_chart":
-                    return "sheet chartName";
-                case "excel.write_range":
-                    return "kind sheet address value formula values";
-                case "excel.add_table":
-                    return "sheet sourceRange name hasHeaders style";
-                case "excel.upsert_chart":
-                    return "mode sheet sourceRange chartType title chartName categoryLabelsRange xAxisTitle yAxisTitle left top width height";
-                case "excel.format_range":
-                    return "sheet address numberFormat bold italic fillColor fontColor horizontalAlignment autoFit";
-                case "excel.add_sheet":
-                    return "name";
-                case "excel.rename_sheet":
-                    return "sheet newName";
-                case "excel.clear_range":
-                    return "sheet address clearWhat";
-                case "excel.sort_range":
-                    return "sheet address keyColumn descending hasHeaders";
-                case "excel.filter_range":
-                    return "sheet address field criteria";
-                default:
-                    return string.Empty;
-            }
-        }
-
         private static SkillDefinition BuiltInSkill(string id, string host, string name, string description)
         {
             return new SkillDefinition
@@ -1430,49 +883,59 @@ namespace RNAssistant.Harness
             };
         }
 
-        private static ToolDefinition CloneTool(ToolDefinition tool)
+        private sealed class FakeStaDispatcher : IOfficeStaDispatcher
         {
-            return new ToolDefinition
+            private readonly ThreadLocal<int> _invokeDepth =
+                new ThreadLocal<int>(() => 0);
+
+            public bool CheckAccess { get { return _invokeDepth.Value > 0; } }
+
+            public T Invoke<T>(Func<T> action)
             {
-                Id = tool.Id,
-                Host = tool.Host,
-                Name = tool.Name,
-                Description = tool.Description,
-                ArgumentSchemaJson = tool.ArgumentSchemaJson,
-                Executor = tool.Executor,
-                RequiresConfirmation = tool.RequiresConfirmation,
-                MutatesDocument = tool.MutatesDocument,
-                MutatesLocalState = tool.MutatesLocalState,
-                CanSourceHtmlData = tool.CanSourceHtmlData,
-                AgentCanRun = tool.AgentCanRun,
-                RuntimePolicy = tool.RuntimePolicy,
-                Code = tool.Code,
-                Readme = tool.Readme,
-                StoragePath = tool.StoragePath,
-                Enabled = tool.Enabled,
-                BuiltIn = tool.BuiltIn,
-                RiskLevel = tool.RiskLevel,
-                UseWhen = tool.UseWhen,
-                DoNotUseWhen = tool.DoNotUseWhen,
-                CapabilityStatus = tool.CapabilityStatus,
-                Limitations = tool.Limitations
-            };
+                _invokeDepth.Value += 1;
+                try
+                {
+                    return action();
+                }
+                finally
+                {
+                    _invokeDepth.Value -= 1;
+                }
+            }
         }
 
-        private static ToolCommand Clone(ToolCommand command)
+        private sealed class FakeDocumentSession : IOfficeDocumentSession
         {
-            var clone = new ToolCommand
+            private readonly FakeOfficeAdapter _owner;
+
+            internal FakeDocumentSession(FakeOfficeAdapter owner,
+                IOfficeStaDispatcher dispatcher)
             {
-                ToolId = command.ToolId,
-                Description = command.Description,
-                ToolCallId = command.ToolCallId,
-                RuntimeStepId = command.RuntimeStepId
-            };
-            foreach (var pair in command.Arguments)
-            {
-                clone.Arguments[pair.Key] = pair.Value;
+                _owner = owner;
+                StaDispatcher = dispatcher;
+                MutationGate = new object();
             }
-            return clone;
+
+            public string Host { get { return _owner.HostName; } }
+            public string StableDocumentId
+            {
+                get { return _owner.DocumentKey; }
+            }
+            public string RuntimeDocumentId
+            {
+                get { return _owner.RuntimeDocumentKey; }
+            }
+            public object BoundDocumentObject { get { return _owner; } }
+            public bool IsAlive
+            {
+                get
+                {
+                    return !string.IsNullOrWhiteSpace(
+                        _owner.RuntimeDocumentKey);
+                }
+            }
+            public IOfficeStaDispatcher StaDispatcher { get; private set; }
+            public object MutationGate { get; private set; }
         }
 
         private static string Trim(string value, int maxChars)

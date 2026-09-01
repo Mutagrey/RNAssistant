@@ -12,7 +12,7 @@ namespace RNAssistant.Office.Tools
     internal sealed partial class ToolAuthoringService
     {
         internal static ToolAuthoringOutcome ValidateToolDefinition(
-            ToolDefinition tool)
+            ToolCatalogEntry tool)
         {
             if (tool == null || string.IsNullOrWhiteSpace(tool.Id))
             {
@@ -41,7 +41,7 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolAuthoringOutcome.Error("Tool definition exceeds a supported text size limit.", null, "tool_definition_too_large", false);
             }
-            var componentsForSize = (tool.Components ?? new List<VbaToolComponent>())
+            var componentsForSize = (tool.Components ?? new List<ToolPackageComponentDefinition>())
                 .Where(component => component != null)
                 .ToList();
             if (componentsForSize.Count > 50 ||
@@ -119,7 +119,7 @@ namespace RNAssistant.Office.Tools
                     tool.Components = manifest.Tool.Components;
                 }
                 var declared = new HashSet<string>(manifest.Tool.Components.Select(component => component.Name), StringComparer.OrdinalIgnoreCase);
-                var components = (tool.Components ?? new List<VbaToolComponent>()).Where(component => component != null).ToList();
+                var components = (tool.Components ?? new List<ToolPackageComponentDefinition>()).Where(component => component != null).ToList();
                 var duplicate = components.Where(component => !string.IsNullOrWhiteSpace(component.Name))
                     .GroupBy(component => component.Name, StringComparer.OrdinalIgnoreCase)
                     .FirstOrDefault(group => group.Count() > 1);

@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Tools
                 string.Equals(toolId, RunMacro, StringComparison.Ordinal);
         }
 
-        internal static IEnumerable<ToolDefinition> GetTools()
+        internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(RestoreBackup,
                 "Mutates document: Restore a VBA module from an exact backupId, or resolve the latest backup for moduleName when backupId is omitted. Runtime pins the exact backup and current target state before confirmation.",
@@ -41,10 +41,10 @@ namespace RNAssistant.Office.Tools
                 RunMacroSchema(), ToolEffect.External, ToolVerification.None);
         }
 
-        private static ToolDefinition Projection(string id, string description,
+        private static ToolCatalogEntry Projection(string id, string description,
             string schema, ToolEffect effect, ToolVerification verification)
         {
-            return ControllerToolDefinition.CreateTypedProjection(
+            return ControllerToolCatalogEntry.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema),
                 new ToolPolicy(effect, verification, true, false,
                     new[] { "agent" }, 3),

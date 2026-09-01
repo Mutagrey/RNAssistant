@@ -8,6 +8,7 @@ namespace RNAssistant.Harness
 {
     internal sealed partial class FakeOfficeAdapter
     {
+        private OutlookBackendException _nextOutlookCreateDraftFailure;
         internal const string OutlookReadMailOperation =
             "outlook.read_mail.direct";
         internal const string OutlookReadFolderOperation =
@@ -83,6 +84,12 @@ namespace RNAssistant.Harness
             OutlookCreateDraftRequest request, Action markDispatchPossible)
         {
             BeginOutlookBackendCall(OutlookCreateDraftOperation);
+            if (_nextOutlookCreateDraftFailure != null)
+            {
+                var failure = _nextOutlookCreateDraftFailure;
+                _nextOutlookCreateDraftFailure = null;
+                throw failure;
+            }
             request = request ?? new OutlookCreateDraftRequest();
             FakeOutlookMail target = null;
             if (!string.Equals(request.Kind, "new", StringComparison.Ordinal))
@@ -117,6 +124,13 @@ namespace RNAssistant.Harness
                 StateToken = TextPatternEngine.Sha256(
                     (request.Kind ?? string.Empty) + "\n" + body)
             };
+        }
+
+        public void QueueOutlookCreateDraftFailure(
+            string message, string errorCode, bool retryable)
+        {
+            _nextOutlookCreateDraftFailure = new OutlookBackendException(
+                message, errorCode, retryable);
         }
 
         public OutlookUpdateBackendResult UpdateMail(

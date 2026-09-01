@@ -11,6 +11,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Vba;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Domains.PowerPoint;
@@ -21,7 +22,7 @@ namespace RNAssistant.Office.Tools
     public sealed class OfficeToolExecutor
     {
         private readonly IOfficeApplicationAdapter _adapter;
-        private readonly IReadOnlyList<ToolDefinition> _adapterTools;
+        private readonly IReadOnlyList<ToolCatalogEntry> _adapterTools;
         private readonly VbaToolExecutor _vbaExecutor;
         private readonly SkillAuthoringService _skillAuthoringService;
         private readonly CapabilityCatalogService _capabilityCatalogService;
@@ -39,7 +40,7 @@ namespace RNAssistant.Office.Tools
         private readonly PowerPointToolAdapter _powerPointAdapter;
         private readonly OutlookToolAdapter _outlookAdapter;
         private readonly HtmlWorkspaceToolService _htmlWorkspaceService;
-        private readonly IReadOnlyList<ToolDefinition> _controllerTools;
+        private readonly IReadOnlyList<ToolCatalogEntry> _controllerTools;
         private readonly ISet<string> _controllerToolIds;
         private readonly HostRuntime _hostRuntime;
 
@@ -58,7 +59,8 @@ namespace RNAssistant.Office.Tools
             Func<ChatAttachment, int, string> readAttachmentText = null)
         {
             _adapter = adapter;
-            _adapterTools = (_adapter.GetBuiltInTools() ?? new ToolDefinition[0]).ToArray();
+            _adapterTools = OfficeToolCatalog.ForHost(
+                _adapter.HostName).ToArray();
             _controllerToolIds = new HashSet<string>(
                 StringComparer.OrdinalIgnoreCase);
             _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore);
@@ -115,7 +117,7 @@ namespace RNAssistant.Office.Tools
             _htmlWorkspaceService = new HtmlWorkspaceToolService(
                 _adapter, _adapterTools, BeginLiveOfficeRead,
                 ExecuteHtmlDataSourceUnderCurrentAccess);
-            var controllerTools = new List<ToolDefinition>();
+            var controllerTools = new List<ToolCatalogEntry>();
             if (_vbaExecutor.HostSupportsVba())
                 RegisterControllerTools(controllerTools,
                     VbaToolCatalog.GetTools());
@@ -147,9 +149,14 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        public IEnumerable<ToolDefinition> GetControllerTools()
+        public IEnumerable<ToolCatalogEntry> GetControllerTools()
         {
             return _controllerTools;
+        }
+
+        internal IEnumerable<ToolCatalogEntry> GetHostTools()
+        {
+            return _adapterTools.Select(tool => tool.Clone()).ToArray();
         }
 
         internal ResourceGatewayService ResourceGateway { get { return _resourceGateway; } }
@@ -158,7 +165,7 @@ namespace RNAssistant.Office.Tools
             AppSettings settings, string mode, bool trace = true,
             Func<RNAssistant.Core.Tools.ToolExecutionContext,
                 ToolPreparationResult, string> pendingRegistrar = null,
-            IReadOnlyList<ToolDefinition> discoveryCatalog = null,
+            IReadOnlyList<ToolCatalogEntry> discoveryCatalog = null,
             IReadOnlyList<SkillDefinition> skillCatalog = null,
             bool manualRun = false,
             bool dryRun = false)
@@ -175,16 +182,16 @@ namespace RNAssistant.Office.Tools
                 session, snapshot, settings, mode, pendingRegistrar, trace);
         }
 
-        internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolDefinition> catalog,
+        internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolCatalogEntry> catalog,
             AppSettings settings, string mode, bool trace = true,
             Func<RNAssistant.Core.Tools.ToolExecutionContext,
                 ToolPreparationResult, string> pendingRegistrar = null,
-            IReadOnlyList<ToolDefinition> discoveryCatalog = null,
+            IReadOnlyList<ToolCatalogEntry> discoveryCatalog = null,
             IReadOnlyList<SkillDefinition> skillCatalog = null,
             bool manualRun = false,
             bool dryRun = false)
         {
-            var catalogList = (catalog ?? new ToolDefinition[0]).ToArray();
+            var catalogList = (catalog ?? new ToolCatalogEntry[0]).ToArray();
             return CreateNativeRuntime(session,
                 ToolPackSnapshotFactory.Capture(
                     mode, _adapter.HostName, catalogList),
@@ -193,11 +200,11 @@ namespace RNAssistant.Office.Tools
                 dryRun);
         }
 
-        internal List<ToolDefinition> AvailableConversationToolsForSession(
-            IEnumerable<ToolDefinition> tools,
+        internal List<ToolCatalogEntry> AvailableConversationToolsForSession(
+            IEnumerable<ToolCatalogEntry> tools,
             ChatSession session)
         {
-            var source = (tools ?? new ToolDefinition[0])
+            var source = (tools ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
                 .ToList();
             if (OfficeDocumentExecutionGuardState.SessionMatchesAdapter(_adapter, session))
@@ -208,88 +215,137 @@ namespace RNAssistant.Office.Tools
             return source.Where(tool => !RequiresOfficeDocument(tool)).ToList();
         }
 
-        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, CancellationToken cancellationToken = default(CancellationToken))
+        public ToolRunResult ExecuteManual(ToolInvocation command,
+            IReadOnlyList<ToolCatalogEntry> tools, AppSettings settings,
+            bool dryRun, bool authorized,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Execute(command, tools, settings, dryRun, manualRun, null, cancellationToken);
+            return ExecuteManual(command, tools, settings, dryRun,
+                authorized, null, cancellationToken);
         }
 
-        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, CancellationToken cancellationToken = default(CancellationToken))
+        public ToolRunResult ExecuteManual(ToolInvocation command,
+            IReadOnlyList<ToolCatalogEntry> tools, AppSettings settings,
+            bool dryRun, bool authorized, ChatSession session,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Execute(
+            return ExecuteManual(
                 command,
                 tools,
                 settings,
                 dryRun,
-                manualRun,
+                authorized,
                 session,
                 settings == null ? AppSettings.DefaultMaxAgentToolSteps : settings.MaxAgentToolSteps,
                 cancellationToken);
         }
 
-        public ToolResult Execute(ToolCommand command, IReadOnlyList<ToolDefinition> tools, AppSettings settings, bool dryRun, bool manualRun, ChatSession session, int maxExecutionSteps, CancellationToken cancellationToken = default(CancellationToken))
+        public ToolRunResult ExecuteManual(ToolInvocation command,
+            IReadOnlyList<ToolCatalogEntry> tools, AppSettings settings,
+            bool dryRun, bool authorized, ChatSession session,
+            int maxExecutionSteps,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Execute(command, tools, settings, dryRun, manualRun, session, maxExecutionSteps, null, cancellationToken);
+            return ExecuteManual(command, tools, settings, dryRun,
+                authorized, session, maxExecutionSteps, null,
+                cancellationToken);
         }
 
-        public ToolResult Execute(
-            ToolCommand command,
-            IReadOnlyList<ToolDefinition> tools,
+        public ToolRunResult ExecuteManual(
+            ToolInvocation command,
+            IReadOnlyList<ToolCatalogEntry> tools,
             AppSettings settings,
             bool dryRun,
-            bool manualRun,
+            bool authorized,
             ChatSession session,
             int maxExecutionSteps,
             IReadOnlyList<SkillDefinition> skillCatalog,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            var context = new ToolExecutionContext(
-                KnownTools(tools),
-                tools,
-                settings ?? new AppSettings(),
-                session,
-                maxExecutionSteps,
-                skillCatalog);
-            var initialSteps = context.RemainingSteps;
-            TraceExecution(command, SessionEventKind.ToolExecutionStartedObservation, null, null);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
+                return ToolRunResult.Error("Tool command is empty.", null,
+                    "invalid_tool_command", false);
+            var known = KnownTools(tools);
+            var matches = known.Where(candidate => candidate != null &&
+                string.Equals(candidate.Id, command.ToolId,
+                    StringComparison.Ordinal)).ToArray();
+            if (matches.Length != 1) return UnknownTool(command.ToolId, known);
+            var tool = matches[0];
+            if (!tool.Enabled) return DisabledTool(command.ToolId, known);
+            if (string.Equals(tool.Executor, "pipeline",
+                StringComparison.OrdinalIgnoreCase))
+                return ToolRunResult.Error(
+                    "Pipelines are disabled during stabilization.", null,
+                    "pipeline_disabled", false);
+            if (!string.IsNullOrWhiteSpace(tool.CapabilityStatus) &&
+                !string.Equals(tool.CapabilityStatus, "available",
+                    StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(tool.CapabilityStatus, "partial",
+                    StringComparison.OrdinalIgnoreCase))
+                return ToolRunResult.Error(
+                    "Tool is unavailable: " + command.ToolId + ". " +
+                        (tool.Limitations ?? tool.CapabilityStatus),
+                    null, "tool_capability_unavailable", false);
+            if (dryRun && tool.Policy != null &&
+                tool.Policy.MayHaveSideEffects &&
+                !VbaPackageToolHandler.IsDefinition(tool))
+            {
+                var validation = ValidateCommandArguments(command, tool);
+                return validation ?? ToolRunResult.Ok(
+                    "Dry run: would execute " + command.ToolId,
+                    JsonConvert.SerializeObject(command.Arguments));
+            }
             try
             {
-                // Native handlers own their exact document scope. Wrapping them here
-                // would create a second operation root and defeat synchronous reentry.
-                var result = command != null && IsNativeTool(command.ToolId, context.Tools)
-                    ? ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken)
-                    : _hostRuntime.ExecuteForExpectedDocument(
-                        DocumentTarget(session),
-                        RequiresOfficeDocument(command, context.Tools),
-                        cancellationToken,
-                        () => ExecuteCommandSafely(command, context, dryRun, manualRun, cancellationToken));
-                if (result != null) result.ToolStepsConsumed = initialSteps - context.RemainingSteps;
-                TraceExecution(command, SessionEventKind.ToolExecutionCompletedObservation,
-                    result == null ? "missing_result" : result.Status, result == null ? null : result.ErrorCode);
-                return result;
+                var runtimeSettings = settings ?? new AppSettings();
+                if (authorized && !runtimeSettings.AutoConfirmToolActions)
+                    runtimeSettings = new AppSettings
+                    {
+                        AutoConfirmToolActions = true
+                    };
+                return CreateNativeRuntime(
+                        session,
+                        new[] { tool },
+                        runtimeSettings,
+                        ManualMode(tool),
+                        true,
+                        (execution, preparation) =>
+                            Guid.NewGuid().ToString("N"),
+                        tools,
+                        skillCatalog,
+                        true,
+                        dryRun)
+                    .ExecuteManual(command,
+                        Math.Max(1, maxExecutionSteps),
+                        cancellationToken);
             }
             catch (Exception ex)
             {
-                TraceExecution(command, SessionEventKind.ToolExecutionCompletedObservation,
-                    ex is OperationCanceledException ? "cancelled" : "threw", null);
-                throw;
+                if (ex is OperationCanceledException) throw;
+                return ToolRunResult.Error(
+                    "Tool execution failed: " + command.ToolId + ". " +
+                        DeepestMessage(ex),
+                    null,
+                    "tool_execution_exception",
+                    false);
             }
         }
 
-        private static void TraceExecution(
-            ToolCommand command,
-            SessionEventKind kind,
-            string status,
-            string code)
+        private static string ManualMode(ToolCatalogEntry tool)
         {
-            RunCausalTrace.Record(new CausalTraceRecord(kind)
-            {
-                StepId = command == null ? null : command.RuntimeStepId,
-                ToolCallId = command == null ? null : command.ToolCallId,
-                ToolId = command == null ? null : command.ToolId,
-                Status = status,
-                Code = code,
-                Boundary = "office_tool_executor"
-            });
+            var modes = tool == null || tool.Policy == null
+                ? null : tool.Policy.AllowedModes;
+            if (modes != null && modes.Contains(ChatModes.Agent,
+                    StringComparer.Ordinal))
+                return ChatModes.Agent;
+            if (modes != null && modes.Contains(ChatModes.Plan,
+                    StringComparer.Ordinal))
+                return ChatModes.Plan;
+            if (modes != null && modes.Contains(ChatModes.Chat,
+                    StringComparer.Ordinal))
+                return ChatModes.Chat;
+            return ChatModes.Agent;
         }
 
         private static OfficeDocumentExecutionExpectation DocumentTarget(ChatSession session)
@@ -312,14 +368,14 @@ namespace RNAssistant.Office.Tools
             _vbaExecutor.ObserveExpectedHash(session, moduleName, codeSha256);
         }
 
-        internal ToolResult ReadVbaProjectForEditor(ChatSession session)
+        internal ToolRunResult ReadVbaProjectForEditor(ChatSession session)
         {
             return ExecuteLiveVbaEditorRead(
                 session,
                 () => ((IVbaResourceSource)_vbaExecutor).ListResourceModules());
         }
 
-        internal ToolResult ReadVbaModuleForEditor(ChatSession session, string moduleName, int maxChars)
+        internal ToolRunResult ReadVbaModuleForEditor(ChatSession session, string moduleName, int maxChars)
         {
             return ExecuteLiveVbaEditorRead(
                 session,
@@ -329,7 +385,7 @@ namespace RNAssistant.Office.Tools
                     maxChars));
         }
 
-        private ToolResult ExecuteLiveVbaEditorRead(ChatSession session, Func<ToolResult> action)
+        private ToolRunResult ExecuteLiveVbaEditorRead(ChatSession session, Func<ToolRunResult> action)
         {
             // An editor request is a separate operation, not a nested read from an
             // unrelated UI callback that happens to run on the same STA.
@@ -339,11 +395,11 @@ namespace RNAssistant.Office.Tools
             }
             catch (ResourceRequestException ex)
             {
-                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+                return ToolRunResult.Error(ex.Message, null, ex.ErrorCode, ex.Retryable);
             }
         }
 
-        public ToolResult RunVbaMacro(
+        public ToolRunResult RunVbaMacro(
             string macroName,
             ChatSession session = null,
             CancellationToken cancellationToken = default(CancellationToken))
@@ -351,18 +407,18 @@ namespace RNAssistant.Office.Tools
             var tool = VbaToolCatalog.GetTools().First(item =>
                 string.Equals(item.Id, VbaToolCatalog.RunMacro,
                     StringComparison.Ordinal));
-            var command = new ToolCommand { ToolId = tool.Id };
+            var command = new ToolInvocation { ToolId = tool.Id };
             command.Arguments["macroName"] = macroName;
-            return Execute(command, new[] { tool }, new AppSettings(),
+            return ExecuteManual(command, new[] { tool }, new AppSettings(),
                 false, true, session, cancellationToken);
         }
 
-        public ToolResult ValidateToolDefinition(ToolDefinition tool)
+        public ToolRunResult ValidateToolDefinition(ToolCatalogEntry tool)
         {
             var validation = _toolAuthoringService.ValidateDefinition(tool);
             return validation.Success
-                ? ToolResult.Ok(validation.Message, validation.DataJson)
-                : ToolResult.Fail(validation.Message, validation.DataJson,
+                ? ToolRunResult.Ok(validation.Message, validation.DataJson)
+                : ToolRunResult.Error(validation.Message, validation.DataJson,
                     validation.ErrorCode, validation.Retryable);
         }
 
@@ -370,6 +426,12 @@ namespace RNAssistant.Office.Tools
             SkillLibraryCoreMutation mutation)
         {
             return _skillAuthoringService.ExecuteManualCoreMutation(mutation);
+        }
+
+        internal ToolManualMutationResult ExecuteToolLibraryMutation(
+            ToolLibraryCoreMutation mutation)
+        {
+            return _toolAuthoringService.ExecuteManualCoreMutation(mutation);
         }
 
         internal SkillReferenceReadResult ReadSkillLibraryReference(
@@ -389,7 +451,7 @@ namespace RNAssistant.Office.Tools
 
         internal bool RequiresSessionLeaseForManualRun(
             string toolId,
-            IEnumerable<ToolDefinition> tools)
+            IEnumerable<ToolCatalogEntry> tools)
         {
             var known = KnownTools(tools);
             var tool = known.FirstOrDefault(item => item != null &&
@@ -452,165 +514,15 @@ namespace RNAssistant.Office.Tools
                 globalSource, documentSource);
         }
 
-        private ToolResult ExecuteCommandSafely(ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken)
-        {
-            try
-            {
-                return ExecuteCommand(command, context, dryRun, manualRun, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (HostRuntime.MutationLockException ex)
-            {
-                return MutationLockFailure(ex);
-            }
-            catch (Exception ex)
-            {
-                var toolId = command == null ? string.Empty : command.ToolId ?? string.Empty;
-                var tool = context == null ? null : context.Find(toolId);
-                var safety = tool == null || context == null ? null : context.Safety(tool);
-                var effectUncertain = safety != null && (safety.MutatesDocument || safety.MutatesLocalState);
-                return ToolResult.Fail(
-                    "Tool execution failed: " + toolId + ". " + DeepestMessage(ex) +
-                        (effectUncertain ? " The external effect may have been applied; inspect state before retrying." : string.Empty),
-                    null,
-                    effectUncertain ? "tool_effect_uncertain" : "tool_execution_exception",
-                    !effectUncertain);
-            }
-        }
-
-        private ToolResult ExecuteCommand(ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (command == null || string.IsNullOrWhiteSpace(command.ToolId))
-            {
-                return ToolResult.Fail("Tool command is empty.");
-            }
-
-            var tool = context.Find(command.ToolId);
-            if (tool == null)
-            {
-                return UnknownTool(command.ToolId, context.Tools);
-            }
-            if (!tool.Enabled)
-            {
-                return DisabledTool(command.ToolId, context.Tools);
-            }
-            if (string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail("Pipelines are disabled during stabilization.", null, "pipeline_disabled", false);
-            }
-            if (!string.IsNullOrWhiteSpace(tool.CapabilityStatus) &&
-                !string.Equals(tool.CapabilityStatus, "available", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(tool.CapabilityStatus, "partial", StringComparison.OrdinalIgnoreCase))
-            {
-                return ToolResult.Fail(
-                    "Tool is unavailable: " + command.ToolId + ". " + (tool.Limitations ?? tool.CapabilityStatus),
-                    null,
-                    "tool_capability_unavailable",
-                    false);
-            }
-
-            if (IsNativeTool(command.ToolId, new[] { tool }))
-            {
-                if (dryRun && (ExcelWriteToolIds.Owns(command.ToolId) ||
-                    ExcelFindReplaceToolIds.IsMutation(command.ToolId) ||
-                    ExcelSheetToolIds.Owns(command.ToolId) ||
-                    ExcelRangeMutationToolIds.Owns(command.ToolId) ||
-                    ExcelTableToolIds.Owns(command.ToolId) ||
-                    ExcelChartToolIds.IsMutation(command.ToolId) ||
-                    WordToolIds.IsMutation(command.ToolId) ||
-                    PowerPointToolIds.IsMutation(command.ToolId) ||
-                    OutlookToolIds.IsMutation(command.ToolId) ||
-                    VbaToolCatalog.Owns(command.ToolId) ||
-                    PromptToolCatalog.IsMutation(command.ToolId) ||
-                    ToolAuthoringCatalog.IsMutation(command.ToolId) ||
-                    SkillAuthoringCatalog.IsMutation(command.ToolId) ||
-                    PlanDocumentToolCatalog.Owns(command.ToolId) ||
-                    TaskListToolCatalog.Owns(command.ToolId) ||
-                    HtmlWorkspaceToolCatalog.IsMutation(command.ToolId)))
-                {
-                    var validation = ValidateCommandArguments(command, tool);
-                    if (validation != null) return validation;
-                    if (!context.TryConsumeStep())
-                        return ToolResult.Fail("Tool execution budget exceeded.", null, "tool_step_limit_exceeded", false);
-                    return ToolResult.Ok("Dry run: would execute " + command.ToolId,
-                        JsonConvert.SerializeObject(command.Arguments));
-                }
-                var remainingSteps = context.RemainingSteps;
-                if (!context.TryConsumeStep())
-                    return ToolResult.Fail("Tool execution budget exceeded.", null, "tool_step_limit_exceeded", false);
-                var nativeSettings = context.Settings;
-                var nativeConfirmed = manualRun;
-                if (manualRun && (VbaToolCatalog.Owns(command.ToolId) ||
-                    VbaPackageToolHandler.IsDefinition(tool) ||
-                    PromptToolCatalog.IsMutation(command.ToolId) ||
-                    ToolAuthoringCatalog.IsMutation(command.ToolId) ||
-                    SkillAuthoringCatalog.IsMutation(command.ToolId)))
-                {
-                    // A direct UI action is already authorized, but a guarded
-                    // handler must still prepare and consume its exact state.
-                    nativeSettings = new AppSettings { AutoConfirmToolActions = true };
-                    nativeConfirmed = false;
-                }
-                return CreateNativeRuntime(context.Session, new[] { tool }, nativeSettings,
-                    ChatModes.Normalize(context.Session == null ? null : context.Session.Mode), false,
-                    (execution, preparation) => Guid.NewGuid().ToString("N"),
-                    context.DiscoveryCatalog, context.SkillCatalog, manualRun,
-                    dryRun)
-                    .ExecuteCommand(command, remainingSteps, nativeConfirmed, cancellationToken);
-            }
-
-            var argumentValidation = ValidateCommandArguments(command, tool);
-            if (argumentValidation != null)
-            {
-                return argumentValidation;
-            }
-
-            var customTool = tool != null && !tool.BuiltIn ? tool : null;
-            var safety = context.Safety(tool);
-            if (!safety.Valid)
-            {
-                return ToolResult.Fail(safety.Error);
-            }
-
-            if (ToolSafetyPolicy.RequiresConfirmation(tool, safety, context.Settings, dryRun, manualRun))
-            {
-                var waiting = ToolResult.WaitingConfirmation(
-                    "Tool requires confirmation before execution: " +
-                    command.ToolId);
-                return waiting;
-            }
-
-            if (!context.TryConsumeStep())
-            {
-                return ToolResult.Fail("Tool execution budget exceeded.", null, "tool_step_limit_exceeded", false);
-            }
-
-            var needsMutationScope = !dryRun &&
-                (safety.MutatesDocument || safety.MutatesLocalState);
-            if (needsMutationScope)
-            {
-                return _hostRuntime.ExecuteMutation(
-                    DocumentTarget(context.Session),
-                    safety.MutatesLocalState && !string.Equals(tool.Scope, "session", StringComparison.OrdinalIgnoreCase),
-                    safety.MutatesDocument,
-                    cancellationToken,
-                    () => ExecuteResolvedCommand(command, context, dryRun, manualRun, cancellationToken, customTool));
-            }
-
-            return ExecuteResolvedCommand(command, context, dryRun, manualRun, cancellationToken, customTool);
-        }
-
-        private static ToolResult ValidateCommandArguments(ToolCommand command, ToolDefinition tool)
+        private static ToolRunResult ValidateCommandArguments(
+            ToolInvocation command, ToolCatalogEntry tool)
         {
             JObject schema;
             string schemaError;
             if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError))
             {
-                return ToolResult.Fail(schemaError, null, "invalid_tool_schema", false);
+                return ToolRunResult.Error(schemaError, null,
+                    "invalid_tool_schema", false);
             }
 
             JObject arguments;
@@ -622,13 +534,16 @@ namespace RNAssistant.Office.Tools
             }
             catch (JsonException ex)
             {
-                return ToolResult.Fail("Tool arguments are invalid: " + ex.Message, null, "invalid_arguments", true);
+                return ToolRunResult.Error(
+                    "Tool arguments are invalid: " + ex.Message, null,
+                    "invalid_arguments", true);
             }
 
             string argumentError;
             if (!ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError))
             {
-                return ToolResult.Fail(argumentError, null, "invalid_arguments", true);
+                return ToolRunResult.Error(argumentError, null,
+                    "invalid_arguments", true);
             }
 
             command.Arguments.Clear();
@@ -652,23 +567,6 @@ namespace RNAssistant.Office.Tools
                     "$." + property.Name + " must be a native JSON " + type +
                     ", not quoted/stringified JSON.");
             }
-        }
-
-        private ToolResult ExecuteResolvedCommand(ToolCommand command, ToolExecutionContext context, bool dryRun, bool manualRun, CancellationToken cancellationToken, ToolDefinition customTool)
-        {
-
-            if (customTool != null)
-            {
-                return ToolResult.Fail("Tool executor is not runnable yet: " + customTool.Executor);
-            }
-
-            if (dryRun)
-            {
-                return ToolResult.Ok("Dry run: would execute " + command.ToolId, JsonConvert.SerializeObject(command.Arguments));
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            return _adapter.ExecuteTool(command);
         }
 
         private VbaPackageResult ExecutePackageMutation(
@@ -714,17 +612,6 @@ namespace RNAssistant.Office.Tools
                         "vba_package_operation_failed",
                     false, dispatched);
             }
-        }
-
-        private static bool IsNativeTool(string exactToolId,
-            IEnumerable<ToolDefinition> tools)
-        {
-            if (NativeToolRuntimeAdapter.Owns(exactToolId)) return true;
-            var definition = (tools ?? new ToolDefinition[0])
-                .FirstOrDefault(item => item != null &&
-                    string.Equals(item.Id, exactToolId,
-                        StringComparison.Ordinal));
-            return VbaPackageToolHandler.IsDefinition(definition);
         }
 
         private IDisposable BeginLiveOfficeRead(ChatSession session)
@@ -817,15 +704,6 @@ namespace RNAssistant.Office.Tools
                 null, "html_data_source_backend_missing", false);
         }
 
-        private static ToolResult MutationLockFailure(HostRuntime.MutationLockException exception)
-        {
-            return ToolResult.Fail(
-                exception.Message,
-                null,
-                exception.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable",
-                exception.Retryable);
-        }
-
         private static string DeepestMessage(Exception exception)
         {
             var current = exception;
@@ -837,10 +715,10 @@ namespace RNAssistant.Office.Tools
         }
 
         private void RegisterControllerTools(
-            ICollection<ToolDefinition> target,
-            IEnumerable<ToolDefinition> tools)
+            ICollection<ToolCatalogEntry> target,
+            IEnumerable<ToolCatalogEntry> tools)
         {
-            foreach (var tool in tools ?? new ToolDefinition[0])
+            foreach (var tool in tools ?? new ToolCatalogEntry[0])
             {
                 if (tool == null || string.IsNullOrWhiteSpace(tool.Id))
                 {
@@ -857,19 +735,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private bool RequiresOfficeDocument(ToolCommand command, IReadOnlyList<ToolDefinition> tools)
-        {
-            var id = command == null ? null : command.ToolId;
-            var catalog = (tools ?? new ToolDefinition[0])
-                .Where(candidate => candidate != null && !string.IsNullOrWhiteSpace(candidate.Id))
-                .GroupBy(candidate => candidate.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-            ToolDefinition tool;
-            if (string.IsNullOrWhiteSpace(id) || !catalog.TryGetValue(id, out tool)) return false;
-            return RequiresOfficeDocument(tool);
-        }
-
-        private bool RequiresOfficeDocument(ToolDefinition tool)
+        private bool RequiresOfficeDocument(ToolCatalogEntry tool)
         {
             var id = tool.Id;
             if (string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) return false;
@@ -884,9 +750,9 @@ namespace RNAssistant.Office.Tools
             return true;
         }
 
-        private IReadOnlyList<ToolDefinition> KnownTools(IEnumerable<ToolDefinition> providedTools)
+        private IReadOnlyList<ToolCatalogEntry> KnownTools(IEnumerable<ToolCatalogEntry> providedTools)
         {
-            var result = new List<ToolDefinition>();
+            var result = new List<ToolCatalogEntry>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             AddTools(result, seen, _adapterTools);
             AddTools(result, seen, _controllerTools);
@@ -901,9 +767,9 @@ namespace RNAssistant.Office.Tools
                  _controllerToolIds.Contains(id));
         }
 
-        private static void AddTools(ICollection<ToolDefinition> result, ISet<string> seen, IEnumerable<ToolDefinition> tools)
+        private static void AddTools(ICollection<ToolCatalogEntry> result, ISet<string> seen, IEnumerable<ToolCatalogEntry> tools)
         {
-            foreach (var tool in tools ?? new ToolDefinition[0])
+            foreach (var tool in tools ?? new ToolCatalogEntry[0])
             {
                 if (tool == null || string.IsNullOrWhiteSpace(tool.Id) || seen.Contains(tool.Id))
                 {
@@ -915,7 +781,8 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static ToolResult UnknownTool(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
+        private static ToolRunResult UnknownTool(string requestedToolId,
+            IReadOnlyList<ToolCatalogEntry> knownTools)
         {
             var suggestions = ToolIdSuggester.Suggest(requestedToolId, knownTools, 5);
             var message = "Unknown tool id: " + requestedToolId + ". Use only available tool ids.";
@@ -924,95 +791,34 @@ namespace RNAssistant.Office.Tools
                 message += " Did you mean: " + string.Join(", ", suggestions.ToArray()) + "?";
             }
 
-            return ToolResult.Fail(message, ToolDiagnosticJson(requestedToolId, knownTools, suggestions, false), "unknown_tool", true);
+            return ToolRunResult.Error(message,
+                ToolDiagnosticJson(requestedToolId, knownTools,
+                    suggestions, false),
+                "unknown_tool", true);
         }
 
-        private static ToolResult DisabledTool(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools)
+        private static ToolRunResult DisabledTool(string requestedToolId,
+            IReadOnlyList<ToolCatalogEntry> knownTools)
         {
-            return ToolResult.Fail(
+            return ToolRunResult.Error(
                 "Tool is disabled: " + requestedToolId + ". Enable it or use another available tool id.",
                 ToolDiagnosticJson(requestedToolId, knownTools, new List<string>(), true),
                 "tool_disabled",
                 false);
         }
 
-        private static string ToolDiagnosticJson(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools, IReadOnlyList<string> suggestions, bool disabled)
+        private static string ToolDiagnosticJson(string requestedToolId, IReadOnlyList<ToolCatalogEntry> knownTools, IReadOnlyList<string> suggestions, bool disabled)
         {
             return JsonConvert.SerializeObject(new
             {
                 requestedToolId = requestedToolId,
                 disabled = disabled,
                 suggestions = suggestions ?? new string[0],
-                availableToolIds = (knownTools ?? new ToolDefinition[0])
+                availableToolIds = (knownTools ?? new ToolCatalogEntry[0])
                     .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
                     .Select(tool => tool.Id)
                     .ToArray()
             });
-        }
-
-        private sealed class ToolExecutionContext
-        {
-            private readonly IDictionary<string, ToolDefinition> _toolsById;
-            private readonly IDictionary<string, ToolSafetyProfile> _safetyById;
-
-            public ToolExecutionContext(
-                IReadOnlyList<ToolDefinition> tools,
-                IReadOnlyList<ToolDefinition> discoveryCatalog,
-                AppSettings settings,
-                ChatSession session,
-                int maxExecutionSteps,
-                IReadOnlyList<SkillDefinition> skillCatalog)
-            {
-                Tools = tools ?? new ToolDefinition[0];
-                DiscoveryCatalog = discoveryCatalog ?? new ToolDefinition[0];
-                Settings = settings;
-                Session = session;
-                SkillCatalog = skillCatalog;
-                _toolsById = Tools
-                    .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))
-                    .ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
-                _safetyById = new Dictionary<string, ToolSafetyProfile>(StringComparer.OrdinalIgnoreCase);
-                RemainingSteps = Math.Max(1, maxExecutionSteps);
-            }
-
-            public IReadOnlyList<ToolDefinition> Tools { get; private set; }
-
-            public IReadOnlyList<ToolDefinition> DiscoveryCatalog { get; private set; }
-
-            public AppSettings Settings { get; private set; }
-
-            public ChatSession Session { get; private set; }
-
-            public IReadOnlyList<SkillDefinition> SkillCatalog { get; private set; }
-
-            public int RemainingSteps { get; private set; }
-
-            public bool TryConsumeStep()
-            {
-                if (RemainingSteps <= 0) return false;
-                RemainingSteps -= 1;
-                return true;
-            }
-
-            public ToolDefinition Find(string toolId)
-            {
-                ToolDefinition tool;
-                return !string.IsNullOrWhiteSpace(toolId) && _toolsById.TryGetValue(toolId, out tool)
-                    ? tool
-                    : null;
-            }
-
-            public ToolSafetyProfile Safety(ToolDefinition tool)
-            {
-                ToolSafetyProfile safety;
-                if (!_safetyById.TryGetValue(tool.Id, out safety))
-                {
-                    safety = ToolSafetyPolicy.Resolve(tool, Tools);
-                    _safetyById[tool.Id] = safety;
-                }
-
-                return safety;
-            }
         }
 
     }

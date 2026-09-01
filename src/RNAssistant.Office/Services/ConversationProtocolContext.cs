@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,11 +14,13 @@ namespace RNAssistant.Office.Services
     // are owned by AgentKernel; this adapter only reconstructs a validated continuation.
     internal static class ConversationProtocolContext
     {
-        internal static string[] BatchSafeReadIds(IEnumerable<ToolDefinition> catalog)
+        internal static string[] BatchSafeReadIds(IEnumerable<ToolCatalogEntry> catalog)
         {
-            return (catalog ?? new ToolDefinition[0])
-                .Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id) &&
-                    LegacyToolDefinitionAdapter.PolicyFor(tool).IndependentLocalRead)
+            return (catalog ?? new ToolCatalogEntry[0])
+                .Where(tool => tool != null &&
+                    !string.IsNullOrWhiteSpace(tool.Id) &&
+                    tool.Policy != null &&
+                    tool.Policy.IndependentLocalRead)
                 .Select(tool => tool.Id).Distinct(StringComparer.Ordinal).ToArray();
         }
 
@@ -85,12 +88,12 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal static void EnsureCanContinue(ChatSession session, ToolCommand command)
+        internal static void EnsureCanContinue(ChatSession session, ToolInvocation command)
         {
             RestoreContinuation(session, command);
         }
 
-        internal static AgentRunContinuation RestoreContinuation(ChatSession session, ToolCommand command)
+        internal static AgentRunContinuation RestoreContinuation(ChatSession session, ToolInvocation command)
         {
             EnsureCurrentHistory(session);
             var state = session.LastRun == null ? null : session.LastRun.KernelState;

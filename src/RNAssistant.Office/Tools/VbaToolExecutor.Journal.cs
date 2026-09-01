@@ -1,5 +1,6 @@
 using System;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Tools
@@ -47,7 +48,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private RNAssistant.Core.Models.ToolResult ReconcilePendingMutations()
+        private ToolRunResult ReconcilePendingMutations()
         {
             var outcome = ReconcilePendingMutationOutcome();
             if (outcome == null) return null;
@@ -55,11 +56,11 @@ namespace RNAssistant.Office.Tools
             var dataJson = data == null || !data.HasValues
                 ? null : data.ToString(Newtonsoft.Json.Formatting.None);
             return outcome.Status == VbaMutationOutcomeStatus.Unknown
-                ? RNAssistant.Core.Models.ToolResult.PartialFailure(
+                ? ToolRunResult.Unknown(
                     outcome.Message, dataJson,
                     string.IsNullOrWhiteSpace(outcome.ErrorCode)
                         ? "vba_mutation_unknown" : outcome.ErrorCode)
-                : RNAssistant.Core.Models.ToolResult.Fail(
+                : ToolRunResult.Error(
                     outcome.Message, dataJson, outcome.ErrorCode,
                     outcome.Retryable);
         }

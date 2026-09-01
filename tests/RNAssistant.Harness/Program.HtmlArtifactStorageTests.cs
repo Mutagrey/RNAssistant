@@ -238,7 +238,7 @@ namespace RNAssistant.Harness
 
             var session = new ChatSession();
             var executor = new HtmlWorkspaceToolService();
-            var write = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
+            var write = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
             write.Arguments["resourceType"] = "file";
             write.Arguments["name"] = "index.html";
             write.Arguments["content"] = "<h1>Report</h1>";
@@ -259,7 +259,7 @@ namespace RNAssistant.Harness
             var fileResource = new ResourceGatewayService()
                 .List(session, "chat", ChatHtmlResourceCatalog.FileKind, null, 10)
                 .Items.Single();
-            var read = new ToolCommand
+            var read = new ToolInvocation
             {
                 ToolId = ResourceToolCatalog.ReadToolId,
                 Arguments = { ["uri"] = fileResource.Reference.Uri, ["representation"] = "source" }

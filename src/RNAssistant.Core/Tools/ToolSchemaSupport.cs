@@ -18,7 +18,7 @@ namespace RNAssistant.Core.Tools
             },
             StringComparer.Ordinal);
 
-        public static bool TryParse(ToolDefinition tool, out JObject schema, out string error)
+        public static bool TryParse(ToolCatalogEntry tool, out JObject schema, out string error)
         {
             schema = null;
             error = null;

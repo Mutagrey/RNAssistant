@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using RNAssistant.Core.Llm;
@@ -9,7 +10,7 @@ namespace RNAssistant.Core.ModelProtocol
     // No version selection or historical fallback: all active responses use v4.
     public static class ModelProtocolWire
     {
-        public static LlmRequestOptions CreateRequestOptions(string responseMode, IEnumerable<ToolDefinition> tools)
+        public static LlmRequestOptions CreateRequestOptions(string responseMode, IEnumerable<ToolCatalogEntry> tools)
         {
             var jsonSchema = string.Equals(AgentResponseModes.Normalize(responseMode),
                 AgentResponseModes.JsonSchema, StringComparison.Ordinal);
@@ -21,8 +22,8 @@ namespace RNAssistant.Core.ModelProtocol
             };
         }
 
-        public static ConversationResponseParseResult Parse(string content, IEnumerable<ToolDefinition> callableTools,
-            IEnumerable<ToolDefinition> runnableCatalog, ModelProtocolCallContext context)
+        public static ConversationResponseParseResult Parse(string content, IEnumerable<ToolCatalogEntry> callableTools,
+            IEnumerable<ToolCatalogEntry> runnableCatalog, ModelProtocolCallContext context)
         {
             return new ConversationResponseParser().Parse(content, callableTools, runnableCatalog, context);
         }

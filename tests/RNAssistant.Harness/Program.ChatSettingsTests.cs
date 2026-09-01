@@ -60,26 +60,26 @@ namespace RNAssistant.Harness
                 var saveDefinition = definitions.Single(tool =>
                     tool.Id == PromptToolCatalog.SaveToolId);
                 AssertEqual(ToolEffect.Read,
-                    readDefinition.RuntimePolicy.Effect,
+                    readDefinition.Policy.Effect,
                     "prompt read effect");
                 AssertEqual(ToolVerification.None,
-                    readDefinition.RuntimePolicy.Verification,
+                    readDefinition.Policy.Verification,
                     "prompt read verification");
-                AssertTrue(readDefinition.RuntimePolicy.IndependentLocalRead,
+                AssertTrue(readDefinition.Policy.IndependentLocalRead,
                     "prompt read is an independent local read");
                 AssertEqual(ToolEffect.Write,
-                    saveDefinition.RuntimePolicy.Effect,
+                    saveDefinition.Policy.Effect,
                     "prompt save effect");
                 AssertEqual(ToolVerification.Tool,
-                    saveDefinition.RuntimePolicy.Verification,
+                    saveDefinition.Policy.Verification,
                     "prompt save verification");
-                AssertTrue(saveDefinition.RuntimePolicy.RequiresConfirmation,
+                AssertTrue(saveDefinition.Policy.RequiresConfirmation,
                     "prompt save requires confirmation");
                 AssertTrue(saveDefinition.ArgumentSchemaJson.Length <
                         CapabilityCatalogService.MaximumDescriptorCharacters,
                     "prompt save descriptor remains discoverable");
                 AssertEqual("agent",
-                    string.Join(",", saveDefinition.RuntimePolicy.AllowedModes),
+                    string.Join(",", saveDefinition.Policy.AllowedModes),
                     "prompt tools are Agent-only");
 
                 var native = executor.CreateNativeRuntime(
@@ -105,9 +105,9 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolEffectEvidence.None, read.Evidence.Effect,
                     "prompt read reports no effect");
 
-                var empty = executor.Execute(
-                    new ToolCommand { ToolId = "common.prompts_save" },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                var empty = executor.ExecuteManual(
+                    new ToolInvocation { ToolId = "common.prompts_save" },
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     runtime,
                     false,
                     false);
@@ -200,15 +200,15 @@ namespace RNAssistant.Harness
                     mismatch.Evidence.Effect,
                     "failed prompt read-back retains unknown effect");
 
-                var command = new ToolCommand { ToolId = "common.prompts_save" };
+                var command = new ToolInvocation { ToolId = "common.prompts_save" };
                 command.Arguments["systemPrompt"] = "New prompt";
                 command.Arguments["agentToolsPrompt"] = "New tool prompt";
                 command.Arguments["agentSkillsPrompt"] = "New skill prompt";
                 command.Arguments["attachmentAnalysisPrompt"] = "New attachment prompt";
 
-                var result = executor.Execute(
+                var result = executor.ExecuteManual(
                     command,
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     runtime,
                     false,
                     true);

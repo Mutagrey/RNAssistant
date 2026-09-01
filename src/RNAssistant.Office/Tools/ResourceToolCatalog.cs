@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
 
@@ -11,15 +12,15 @@ namespace RNAssistant.Office.Tools
         public const string SearchToolId = "common.resources_search";
         public const string ReadToolId = "common.resources_read";
 
-        internal static IEnumerable<ToolDefinition> GetControllerTools()
+        internal static IEnumerable<ToolCatalogEntry> GetControllerTools()
         {
-            yield return ControllerToolDefinition.CreateReadProjection(
+            yield return ControllerToolCatalogEntry.CreateReadProjection(
                 ResourceListToolHandler.Descriptor, ResourceListToolHandler.Policy, "resources_list");
-            yield return ControllerToolDefinition.CreateReadProjection(
+            yield return ControllerToolCatalogEntry.CreateReadProjection(
                 ResourceResolveToolHandler.Descriptor, ResourceResolveToolHandler.Policy, "resources_resolve");
-            yield return ControllerToolDefinition.CreateReadProjection(
+            yield return ControllerToolCatalogEntry.CreateReadProjection(
                 ResourceSearchToolHandler.Descriptor, ResourceSearchToolHandler.Policy, "resources_search");
-            yield return ControllerToolDefinition.CreateReadProjection(
+            yield return ControllerToolCatalogEntry.CreateReadProjection(
                 ResourceReadToolHandler.Descriptor, ResourceReadToolHandler.Policy, "resources_read");
         }
     }

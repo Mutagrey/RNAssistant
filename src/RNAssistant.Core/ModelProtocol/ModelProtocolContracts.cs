@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,8 +23,8 @@ namespace RNAssistant.Core.ModelProtocol
     {
         public AppSettings Settings { get; set; }
         public IReadOnlyList<ChatMessage> AcceptedMessages { get; set; }
-        public IReadOnlyList<ToolDefinition> CallableTools { get; set; }
-        public IReadOnlyList<ToolDefinition> RunnableCatalog { get; set; }
+        public IReadOnlyList<ToolCatalogEntry> CallableTools { get; set; }
+        public IReadOnlyList<ToolCatalogEntry> RunnableCatalog { get; set; }
         // Required before raw dispatch, supplied by local execution authority.
         // ModelProtocol validates batching; runtime alone owns accepted call IDs.
         public ModelProtocolCallContext CallContext { get; set; }

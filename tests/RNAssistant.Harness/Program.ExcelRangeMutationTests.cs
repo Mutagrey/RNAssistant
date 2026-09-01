@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
-                    var tools = adapter.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
                         session,
@@ -57,13 +57,10 @@ namespace RNAssistant.Harness
                         "format read-back certifies the change");
                     AssertTrue(adapter.HasExcelRangeFormat("Data", "A1:B1"),
                         "direct backend stores the requested format state");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                        ExcelRangeMutationToolIds.Owns(command.ToolId)),
-                        "range mutation ids never reach generic host dispatch");
 
                     var calls = adapter.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelRangeMutationApplyOperation);
-                    var dryRun = executor.Execute(
+                    var dryRun = executor.ExecuteManual(
                         Command(ExcelRangeMutationToolIds.ClearRange,
                             "sheet", "Data", "address", "A2:B2"),
                         tools, new AppSettings(), true, true, session);
@@ -297,9 +294,9 @@ namespace RNAssistant.Harness
                         DocumentKey = "bound-excel-range",
                         DocumentTitle = "Bound.xlsx"
                     };
-                    var tools = host.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(host.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
-                    var result = executor.Execute(Command(
+                    var result = executor.ExecuteManual(Command(
                         ExcelRangeMutationToolIds.ClearRange,
                         "sheet", "Data", "address", "A2:B2"),
                         tools, new AppSettings(), false, true, chat);
@@ -309,7 +306,7 @@ namespace RNAssistant.Harness
                     var dispatched = inner.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelRangeMutationApplyOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closed = executor.Execute(Command(
+                    var closed = executor.ExecuteManual(Command(
                         ExcelRangeMutationToolIds.ClearRange,
                         "sheet", "Data", "address", "A3:B3"),
                         tools, new AppSettings(), false, true, chat);
@@ -328,7 +325,7 @@ namespace RNAssistant.Harness
         {
             return executor.CreateNativeRuntime(
                 NewSession(adapter),
-                adapter.GetBuiltInTools().Where(tool =>
+                OfficeToolCatalog.ForHost(adapter.HostName).Where(tool =>
                     ExcelRangeMutationToolIds.Owns(tool.Id)),
                 new AppSettings(), "agent", false);
         }

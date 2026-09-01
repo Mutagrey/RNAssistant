@@ -31,7 +31,7 @@ namespace RNAssistant.Harness
             {
                 adapter.SetVbaModule("Module1", "Option Explicit\nSub Test()\nDim oldValue As Long\noldValue = 1\nEnd Sub", "StdModule");
                 adapter.SetVbaModule("ThisWorkbook", "Private Sub Workbook_Open()\nEnd Sub", "DocumentModule");
-                var tools = adapter.GetBuiltInTools().ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
 
                 var session = NewSession(adapter);
@@ -57,14 +57,14 @@ namespace RNAssistant.Harness
                     ["find"] = "Dim oldValue As Long\noldValue = 1",
                     ["text"] = "Dim newValue As Long\nnewValue = 1"
                 });
-                var patched = executor.Execute(Command("common.vba_apply_patch", "moduleName", "Module1", "patch", patch), tools, settings, false, false);
+                var patched = executor.ExecuteManual(Command("common.vba_apply_patch", "moduleName", "Module1", "patch", patch), tools, settings, false, false);
                 AssertTrue(patched.Success, "VBA exact patch succeeds after resource discovery");
                 AssertContains(adapter.GetVbaModuleCode("Module1"), "newValue", "VBA exact patch updates discovered source");
 
-                var blockedDelete = executor.Execute(Command("common.vba_delete_module", "moduleName", "ThisWorkbook"), tools, settings, false, false);
+                var blockedDelete = executor.ExecuteManual(Command("common.vba_delete_module", "moduleName", "ThisWorkbook"), tools, settings, false, false);
                 AssertEqual("vba_component_type_read_only", blockedDelete.ErrorCode, "document module delete blocked");
 
-                var deleted = executor.Execute(Command("common.vba_delete_module", "moduleName", "Module1"), tools, settings, false, false);
+                var deleted = executor.ExecuteManual(Command("common.vba_delete_module", "moduleName", "Module1"), tools, settings, false, false);
                 AssertTrue(deleted.Success, "standard module delete succeeds");
             });
         }

@@ -80,11 +80,6 @@ namespace RNAssistant.OfficeHosts
             return context;
         }
 
-        public IEnumerable<ToolDefinition> GetBuiltInTools()
-        {
-            return OfficeBuiltInToolCatalog.ForHost(HostName);
-        }
-
         public IEnumerable<SkillDefinition> GetBuiltInSkills()
         {
             return new[]
@@ -165,13 +160,6 @@ namespace RNAssistant.OfficeHosts
                     mode = referenceOnly ? "reference" : "text"
                 })
             };
-        }
-
-        public ToolResult ExecuteTool(ToolCommand command)
-        {
-            return ToolResult.Fail(
-                "Public Outlook tools require the typed Outlook backend.",
-                null, "outlook_legacy_dispatch_removed", false);
         }
 
         private Outlook.MailItem RequireSelectedMail()

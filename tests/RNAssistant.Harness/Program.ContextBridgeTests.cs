@@ -180,7 +180,7 @@ namespace RNAssistant.Harness
                     var terminal = RuntimeToolResult.Ok("Read", sourceArgumentsJson,
                         new[] { new ResourceRef(sourcePlanUri, "1") });
                     var message = AgentJsonProtocol.CreateToolResultMessage(
-                        new ToolCommand { ToolCallId = "result-" + role, ToolId = "excel.read_range" }, terminal, role);
+                        new ToolInvocation { ToolCallId = "result-" + role, ToolId = "excel.read_range" }, terminal, role);
                     message.ResourceRefs = terminal.Resources.ToList();
                     return message;
                 }).ToArray();
@@ -405,7 +405,7 @@ namespace RNAssistant.Harness
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("b1", response["id"].Value<string>(), "bridge response id");
-            AssertTrue(response["payload"]["Success"].Value<bool>(), "bridge payload success");
+            AssertTrue(response["payload"]["success"].Value<bool>(), "bridge payload success");
             AssertEqual("excel.add_sheet", controller.LastToolId, "tool id");
             AssertContains(controller.LastArgumentsJson, "Report", "tool args");
             AssertEqual(2, JObject.Parse(controller.LastArgumentsJson)["count"].Value<int>(), "integer tool arg");
@@ -491,7 +491,12 @@ namespace RNAssistant.Harness
             AssertEqual(RunViewLifecycles.Completed,
                 response["payload"]["runViewState"]["Lifecycle"].Value<string>(),
                 "chat response carries typed runtime lifecycle");
-            AssertEqual("common.generated_tool", response["payload"]["tools"][0]["Id"].Value<string>(), "chat response refreshes tool catalog");
+            AssertEqual("rnassistant.toolLibrary",
+                response["payload"]["tools"]["type"].Value<string>(),
+                "chat response refreshes a versioned tool catalog");
+            AssertEqual("common.generated_tool",
+                response["payload"]["tools"]["tools"][0]["id"].Value<string>(),
+                "chat response refreshes tool catalog");
             AssertEqual("rnassistant.skillLibrary",
                 response["payload"]["skills"]["type"].Value<string>(),
                 "chat response refreshes a versioned skill catalog");
@@ -753,7 +758,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var toolsResponseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b6\",\"type\":\"saveTools\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"tools\":[{\"Id\":\"excel.custom\",\"Host\":\"Excel\",\"Executor\":\"pipeline\",\"Enabled\":true}]}}")
+                "{\"id\":\"b6\",\"type\":\"saveTools\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.toolLibraryMutationRequest\",\"contractVersion\":1,\"mutations\":[{\"kind\":\"upsert\",\"baseId\":\"\",\"expectedRevision\":\"\",\"id\":\"excel.custom\",\"host\":\"Excel\",\"name\":\"Custom\",\"description\":\"Custom.\",\"argumentSchemaJson\":\"{}\",\"executor\":\"vba\",\"enabled\":true,\"components\":[]}]}}")
                 .GetAwaiter()
                 .GetResult();
             var skillsResponseJson = bridge.HandleMessageAsync(
@@ -778,11 +783,14 @@ namespace RNAssistant.Harness
             AssertTrue(JObject.Parse(readReferenceJson)["ok"].Value<bool>(), "skill reference read bridge response ok");
             AssertTrue(JObject.Parse(saveReferenceJson)["ok"].Value<bool>(), "skill reference save bridge response ok");
             AssertTrue(JObject.Parse(deleteReferenceJson)["ok"].Value<bool>(), "skill reference delete bridge response ok");
-            AssertEqual("excel.custom", JArray.Parse(controller.LastToolsJson)[0]["Id"].Value<string>(), "tool id");
+            AssertEqual("excel.custom", JArray.Parse(controller.LastToolsJson)[0]["id"].Value<string>(), "tool id");
             AssertEqual("common.review", JArray.Parse(controller.LastSkillsJson)[0]["id"].Value<string>(), "skill id");
             AssertEqual("rnassistant.skillLibraryMutationResult",
                 JObject.Parse(skillsResponseJson)["payload"]["type"].Value<string>(),
                 "skill bridge result contract");
+            AssertEqual("rnassistant.toolLibraryMutationResult",
+                JObject.Parse(toolsResponseJson)["payload"]["type"].Value<string>(),
+                "tool bridge result contract");
             AssertEqual("rnassistant.skillReferenceResult",
                 JObject.Parse(saveReferenceJson)["payload"]["type"].Value<string>(),
                 "skill reference result contract");

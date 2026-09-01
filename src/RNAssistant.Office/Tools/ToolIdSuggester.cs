@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,7 +8,7 @@ namespace RNAssistant.Office.Tools
 {
     internal static class ToolIdSuggester
     {
-        public static List<string> Suggest(string requestedToolId, IReadOnlyList<ToolDefinition> knownTools, int limit)
+        public static List<string> Suggest(string requestedToolId, IReadOnlyList<ToolCatalogEntry> knownTools, int limit)
         {
             var requestedTokens = Expand(Tokenize(requestedToolId));
             if (requestedTokens.Count == 0)
@@ -15,7 +16,7 @@ namespace RNAssistant.Office.Tools
                 return new List<string>();
             }
 
-            return (knownTools ?? new ToolDefinition[0])
+            return (knownTools ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null && tool.Enabled && !string.IsNullOrWhiteSpace(tool.Id))
                 .Select(tool => new { Tool = tool, Score = Score(requestedTokens, tool) })
                 .Where(item => item.Score > 0)
@@ -26,7 +27,7 @@ namespace RNAssistant.Office.Tools
                 .ToList();
         }
 
-        private static int Score(ISet<string> requestedTokens, ToolDefinition tool)
+        private static int Score(ISet<string> requestedTokens, ToolCatalogEntry tool)
         {
             var candidateTokens = Expand(Tokenize(
                 (tool.Id ?? string.Empty) + " " +

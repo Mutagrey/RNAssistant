@@ -250,7 +250,8 @@ namespace RNAssistant.Office
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
                 RemovePendingAgentTool(pendingId);
-                var result = ToolResult.Cancelled("Tool cancelled by user.");
+                var result = ToolRunResult.Cancelled(
+                    "Tool cancelled by user.");
                 result.PendingId = pending.PendingId;
                 UpdatePendingActivity(session, pending.PendingId, pending.Command, result);
                 var protocolStart = session.Messages.Count;
@@ -283,7 +284,8 @@ namespace RNAssistant.Office
             return ChatState(session);
         }
 
-        private string RegisterPendingAgentTool(ChatSession session, ToolCommand command, ToolResult result)
+        private string RegisterPendingAgentTool(ChatSession session,
+            ToolInvocation command, PendingToolRegistration registration)
         {
             var pendingId = Guid.NewGuid().ToString("N");
             var pending = new PendingAgentTool
@@ -294,17 +296,13 @@ namespace RNAssistant.Office
                 Attachments = new List<ChatAttachment>(LatestUserAttachments(session)),
                 IterationsUsed = session.LastRun == null ? 0 : session.LastRun.IterationsUsed,
                 ToolStepsUsed = session.LastRun == null ? 0 : session.LastRun.ToolStepsUsed,
-                CatalogFingerprint = result == null ? string.Empty : result.ConfirmationCatalogSha256
+                CatalogFingerprint = registration == null
+                    ? string.Empty : registration.CatalogRevision
             };
 
             lock (_syncRoot)
             {
                 _pendingAgentTools[pendingId] = pending;
-            }
-
-            if (result != null)
-            {
-                result.PendingId = pendingId;
             }
 
             return pendingId;
@@ -398,9 +396,9 @@ namespace RNAssistant.Office
             }
         }
 
-        private static ToolCommand CloneCommand(ToolCommand command)
+        private static ToolInvocation CloneCommand(ToolInvocation command)
         {
-            var clone = new ToolCommand
+            var clone = new ToolInvocation
             {
                 ToolId = command == null ? string.Empty : command.ToolId,
                 Description = command == null ? string.Empty : command.Description,
@@ -420,7 +418,7 @@ namespace RNAssistant.Office
             return clone;
         }
 
-        private static string PendingToolResultRole(ChatSession session, ToolCommand command, string fallback)
+        private static string PendingToolResultRole(ChatSession session, ToolInvocation command, string fallback)
         {
             var callId = command == null ? string.Empty : command.ToolCallId ?? string.Empty;
             for (var index = session == null || session.Messages == null ? -1 : session.Messages.Count - 1;
@@ -574,14 +572,14 @@ namespace RNAssistant.Office
             return false;
         }
 
-        private static ToolCommand CommandFromActivity(ChatActivity activity)
+        private static ToolInvocation CommandFromActivity(ChatActivity activity)
         {
             if (activity == null || string.IsNullOrWhiteSpace(activity.ToolId) ||
                 string.IsNullOrWhiteSpace(activity.ToolCallId))
             {
                 return null;
             }
-            var command = new ToolCommand
+            var command = new ToolInvocation
             {
                 ToolId = activity.ToolId,
                 ToolCallId = activity.ToolCallId,
@@ -637,7 +635,8 @@ namespace RNAssistant.Office
                  (message.Content ?? string.Empty).StartsWith("TOOL_RESULT:", StringComparison.Ordinal));
         }
 
-        private static void UpdatePendingActivity(ChatSession session, string pendingId, ToolCommand command, ToolResult result)
+        private static void UpdatePendingActivity(ChatSession session,
+            string pendingId, ToolInvocation command, ToolRunResult result)
         {
             if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(pendingId))
             {
@@ -721,7 +720,7 @@ namespace RNAssistant.Office
         {
             public string PendingId { get; set; }
             public string SessionId { get; set; }
-            public ToolCommand Command { get; set; }
+            public ToolInvocation Command { get; set; }
             public IReadOnlyList<ChatAttachment> Attachments { get; set; }
             public int IterationsUsed { get; set; }
             public int ToolStepsUsed { get; set; }

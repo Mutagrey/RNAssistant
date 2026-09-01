@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Tools
         private const int MaxWorkspaceCharacters = 1500000;
 
         private readonly IOfficeApplicationAdapter _adapter;
-        private readonly Dictionary<string, ToolDefinition> _dataSourceTools;
+        private readonly Dictionary<string, ToolCatalogEntry> _dataSourceTools;
         private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
         private readonly Func<string, IDictionary<string, object>,
             CancellationToken, HtmlDataSourceReadOutcome> _executeOfficeDataSource;
@@ -39,14 +39,14 @@ namespace RNAssistant.Office.Tools
 
         public HtmlWorkspaceToolService(
             IOfficeApplicationAdapter adapter,
-            IEnumerable<ToolDefinition> adapterTools)
+            IEnumerable<ToolCatalogEntry> adapterTools)
             : this(adapter, adapterTools, null, null)
         {
         }
 
         internal HtmlWorkspaceToolService(
             IOfficeApplicationAdapter adapter,
-            IEnumerable<ToolDefinition> adapterTools,
+            IEnumerable<ToolCatalogEntry> adapterTools,
             Func<ChatSession, IDisposable> beginLiveOfficeRead)
             : this(adapter, adapterTools, beginLiveOfficeRead, null)
         {
@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Tools
 
         internal HtmlWorkspaceToolService(
             IOfficeApplicationAdapter adapter,
-            IEnumerable<ToolDefinition> adapterTools,
+            IEnumerable<ToolCatalogEntry> adapterTools,
             Func<ChatSession, IDisposable> beginLiveOfficeRead,
             Func<string, IDictionary<string, object>, CancellationToken,
                 HtmlDataSourceReadOutcome> executeOfficeDataSource)
@@ -77,7 +77,7 @@ namespace RNAssistant.Office.Tools
             _standaloneOutlookRead = outlook == null ||
                 outlook.OutlookBackend == null
                 ? null : new OutlookToolAdapter(outlook.OutlookBackend);
-            _dataSourceTools = (adapterTools ?? new ToolDefinition[0])
+            _dataSourceTools = (adapterTools ?? new ToolCatalogEntry[0])
                 .Where(IsEligibleDataSourceTool)
                 .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(tool => tool.Id, tool => tool.Clone(), StringComparer.OrdinalIgnoreCase);

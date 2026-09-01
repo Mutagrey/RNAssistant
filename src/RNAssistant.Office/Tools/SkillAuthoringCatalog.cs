@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Tools
             return Owns(toolId);
         }
 
-        internal static IEnumerable<ToolDefinition> GetTools(
+        internal static IEnumerable<ToolCatalogEntry> GetTools(
             SkillAuthoringService service)
         {
             if (service == null) throw new ArgumentNullException(nameof(service));
@@ -39,10 +39,10 @@ namespace RNAssistant.Office.Tools
                 DeleteSchema(), "skills_delete");
         }
 
-        private static ToolDefinition Projection(
+        private static ToolCatalogEntry Projection(
             string id, string description, string schema, string name)
         {
-            return ControllerToolDefinition.CreateTypedProjection(
+            return ControllerToolCatalogEntry.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema),
                 new ToolPolicy(ToolEffect.Write,
                     ToolVerification.Tool, true, false,

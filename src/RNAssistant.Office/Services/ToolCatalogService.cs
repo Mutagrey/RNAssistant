@@ -7,6 +7,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Vba;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
@@ -21,7 +22,7 @@ namespace RNAssistant.Office.Services
         private string _documentVbaCacheKey;
         private DateTime _documentVbaCacheUtc;
         private long _documentVbaCacheGeneration;
-        private List<ToolDefinition> _documentVbaCache = new List<ToolDefinition>();
+        private List<ToolCatalogEntry> _documentVbaCache = new List<ToolCatalogEntry>();
 
         public ToolCatalogService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor, ToolStore toolStore)
         {
@@ -31,10 +32,10 @@ namespace RNAssistant.Office.Services
             _toolStore = toolStore;
         }
 
-        public List<ToolDefinition> GetVisibleTools()
+        public List<ToolCatalogEntry> GetVisibleTools()
         {
-            var result = new Dictionary<string, ToolDefinition>(StringComparer.OrdinalIgnoreCase);
-            foreach (var tool in _adapter.GetBuiltInTools() ?? new ToolDefinition[0])
+            var result = new Dictionary<string, ToolCatalogEntry>(StringComparer.OrdinalIgnoreCase);
+            foreach (var tool in _toolExecutor.GetHostTools())
             {
                 result[tool.Id] = tool;
             }
@@ -57,6 +58,7 @@ namespace RNAssistant.Office.Services
                     {
                         tool.Scope = "global";
                         tool.InstallationStatus = "not_installed";
+                        BindCustomPackage(tool);
                     }
                     result.Add(tool.Id, tool);
                 }
@@ -67,18 +69,19 @@ namespace RNAssistant.Office.Services
             return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id).ToList();
         }
 
-        public List<ToolDefinition> GetFreshConversationTools()
+        public List<ToolCatalogEntry> GetFreshConversationTools()
         {
             InvalidateDocumentVbaTools();
             return GetVisibleTools();
         }
 
-        private void DiscoverDocumentVbaTools(IDictionary<string, ToolDefinition> result)
+        private void DiscoverDocumentVbaTools(IDictionary<string, ToolCatalogEntry> result)
         {
             var matchedGlobalPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var discovered in GetDocumentVbaTools())
             {
-                ToolDefinition existing;
+                BindCustomPackage(discovered);
+                ToolCatalogEntry existing;
                 if (result.TryGetValue(discovered.Id, out existing))
                 {
                     if (!existing.BuiltIn &&
@@ -130,20 +133,31 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private List<ToolDefinition> GetDocumentVbaTools()
+        private static void BindCustomPackage(ToolCatalogEntry entry)
         {
-            if (!SupportsVbaHost()) return new List<ToolDefinition>();
+            if (entry == null) return;
+            entry.Policy = VbaPackageToolHandler.PolicyFor(entry);
+            entry.Binding = VbaPackageToolHandler.BindingFor(entry);
+            if (entry.Policy == null || entry.Binding == null)
+                throw new InvalidOperationException(
+                    "Custom package has no direct runtime contract: " +
+                    (entry.Id ?? string.Empty));
+        }
+
+        private List<ToolCatalogEntry> GetDocumentVbaTools()
+        {
+            if (!SupportsVbaHost()) return new List<ToolCatalogEntry>();
             try
             {
                 // Cache identity, list and every component read share one access.
                 // Failed access is not a successful empty catalog and is not cached.
                 return _toolExecutor.DocumentRuntime.ReadDocument(null, ReadDocumentVbaTools);
             }
-            catch (OfficeDocumentGuardException) { return new List<ToolDefinition>(); }
-            catch (HostRuntime.MutationLockException) { return new List<ToolDefinition>(); }
+            catch (OfficeDocumentGuardException) { return new List<ToolCatalogEntry>(); }
+            catch (HostRuntime.MutationLockException) { return new List<ToolCatalogEntry>(); }
         }
 
-        private List<ToolDefinition> ReadDocumentVbaTools()
+        private List<ToolCatalogEntry> ReadDocumentVbaTools()
         {
             var host = _adapter.HostName ?? string.Empty;
             var documentKey = _adapter.DocumentKey ?? string.Empty;
@@ -163,14 +177,14 @@ namespace RNAssistant.Office.Services
             var loaded = LoadDocumentVbaTools();
             if (loaded == null || !string.Equals(cacheKey, CurrentDocumentVbaCacheKey(), StringComparison.OrdinalIgnoreCase))
             {
-                return new List<ToolDefinition>();
+                return new List<ToolCatalogEntry>();
             }
 
             lock (_documentVbaCacheSync)
             {
                 if (cacheGeneration != _documentVbaCacheGeneration)
                 {
-                    return new List<ToolDefinition>();
+                    return new List<ToolCatalogEntry>();
                 }
                 if (string.Equals(cacheKey, _documentVbaCacheKey, StringComparison.OrdinalIgnoreCase) &&
                     DateTime.UtcNow - _documentVbaCacheUtc <= DocumentVbaCacheDuration)
@@ -199,11 +213,11 @@ namespace RNAssistant.Office.Services
                 (runtimeDocumentKey ?? string.Empty);
         }
 
-        private List<ToolDefinition> LoadDocumentVbaTools()
+        private List<ToolCatalogEntry> LoadDocumentVbaTools()
         {
             // Null means a backend read failed. Never publish a partial load or
             // confuse failed access with a successfully empty document catalog.
-            var result = new List<ToolDefinition>();
+            var result = new List<ToolCatalogEntry>();
             IReadOnlyList<VbaModuleState> modules;
             if (!TryReadDocumentVbaProject(out modules)) return null;
             var moduleMap = new Dictionary<string, VbaModuleState>(StringComparer.OrdinalIgnoreCase);
@@ -239,14 +253,14 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private List<VbaToolComponent> ResolveDocumentComponents(
-            ToolDefinition tool,
+        private List<ToolPackageComponentDefinition> ResolveDocumentComponents(
+            ToolCatalogEntry tool,
             IDictionary<string, VbaModuleState> modules,
             out bool readFailed)
         {
             readFailed = false;
-            var result = new List<VbaToolComponent>();
-            foreach (var declared in tool.Components ?? new List<VbaToolComponent>())
+            var result = new List<ToolPackageComponentDefinition>();
+            foreach (var declared in tool.Components ?? new List<ToolPackageComponentDefinition>())
             {
                 var module = ReadDocumentModule(modules, declared.Name, out readFailed);
                 if (readFailed) return null;
@@ -255,7 +269,7 @@ namespace RNAssistant.Office.Services
                     string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase) && module.CodeOnlyUserForm == true;
                 var code = supported ? module.Code ?? string.Empty : string.Empty;
-                result.Add(new VbaToolComponent
+                result.Add(new ToolPackageComponentDefinition
                 {
                     Name = declared.Name,
                     Type = type,
@@ -293,7 +307,7 @@ namespace RNAssistant.Office.Services
         {
             try
             {
-                ToolResult error;
+                ToolRunResult error;
                 return _vbaReader.TryReadProject(out modules, out error);
             }
             catch (OfficeDocumentGuardException) { throw; }
@@ -309,7 +323,7 @@ namespace RNAssistant.Office.Services
         {
             try
             {
-                ToolResult error;
+                ToolRunResult error;
                 return _vbaReader.TryReadModule(moduleName, 2000000, out module, out error);
             }
             catch (OfficeDocumentGuardException) { throw; }

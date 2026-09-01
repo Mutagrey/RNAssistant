@@ -19,7 +19,7 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
-                    var tools = adapter.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
                         session,
@@ -65,13 +65,10 @@ namespace RNAssistant.Harness
                     AssertTrue(((string)JObject.Parse(read.Result.DataJson)["text"])
                         .StartsWith("Quarterly revenue", StringComparison.Ordinal),
                         "Word read keeps the existing text result shape");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                        WordToolIds.Owns(command.ToolId)),
-                        "Word public ids never reach generic host dispatch");
 
                     var htmlReads = adapter.WordBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.WordReadTextOperation);
-                    var bound = executor.Execute(Command(
+                    var bound = executor.ExecuteManual(Command(
                         HtmlWorkspaceToolCatalog.BindDataToolId,
                         "dataName", "word_text",
                         "sourceTool", WordToolIds.ReadText,
@@ -86,13 +83,10 @@ namespace RNAssistant.Harness
                         adapter.WordBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.WordReadTextOperation),
                         "Word HTML binding enters the direct backend once");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                        command.ToolId == WordToolIds.ReadText),
-                        "Word HTML binding never enters generic host dispatch");
 
                     var writes = adapter.WordBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.WordWriteOperation);
-                    var dryRun = executor.Execute(Command(
+                    var dryRun = executor.ExecuteManual(Command(
                         WordToolIds.WriteText,
                         "mode", "insert", "text", "dry"),
                         tools, new AppSettings(), true, true, session);
@@ -263,9 +257,9 @@ namespace RNAssistant.Harness
                         DocumentKey = "bound-word-document",
                         DocumentTitle = "Bound.docx"
                     };
-                    var tools = host.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(host.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
-                    var result = executor.Execute(Command(
+                    var result = executor.ExecuteManual(Command(
                         WordToolIds.WriteText,
                         "mode", "insert", "text", " bound"),
                         tools, new AppSettings(), false, true, chat);
@@ -275,7 +269,7 @@ namespace RNAssistant.Harness
                     var dispatched = inner.WordBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.WordWriteOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closed = executor.Execute(Command(
+                    var closed = executor.ExecuteManual(Command(
                         WordToolIds.WriteText,
                         "mode", "insert", "text", " stale"),
                         tools, new AppSettings(), false, true, chat);
@@ -294,7 +288,7 @@ namespace RNAssistant.Harness
         {
             return executor.CreateNativeRuntime(
                 NewSession(adapter),
-                adapter.GetBuiltInTools().Where(tool =>
+                OfficeToolCatalog.ForHost(adapter.HostName).Where(tool =>
                     WordToolIds.Owns(tool.Id)),
                 new AppSettings(), "agent", false);
         }

@@ -56,12 +56,6 @@ namespace RNAssistant.Harness
                 return _inner.CaptureSelectionContext(mode, maxChars);
             }
 
-            public IEnumerable<ToolDefinition> GetBuiltInTools()
-            {
-                _record();
-                return _inner.GetBuiltInTools();
-            }
-
             public IEnumerable<SkillDefinition> GetBuiltInSkills()
             {
                 _record();
@@ -69,11 +63,6 @@ namespace RNAssistant.Harness
                 return provider == null ? new SkillDefinition[0] : provider.GetBuiltInSkills();
             }
 
-            public ToolResult ExecuteTool(ToolCommand command)
-            {
-                _record();
-                return _inner.ExecuteTool(command);
-            }
         }
     }
 }

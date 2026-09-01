@@ -163,11 +163,6 @@ namespace RNAssistant.OfficeHosts
             return SafeString(delegate { return document.FullName; });
         }
 
-        public IEnumerable<ToolDefinition> GetBuiltInTools()
-        {
-            return OfficeBuiltInToolCatalog.ForHost(HostName);
-        }
-
         public IEnumerable<SkillDefinition> GetBuiltInSkills()
         {
             return new[]
@@ -234,15 +229,6 @@ namespace RNAssistant.OfficeHosts
                     mode = referenceOnly ? "reference" : "text"
                 })
             };
-        }
-
-        public ToolResult ExecuteTool(ToolCommand command)
-        {
-            return ToolResult.Fail(
-                "Word tools require direct typed backends.",
-                null,
-                "word_legacy_dispatch_removed",
-                false);
         }
 
         private Word.Document RequireDocument()

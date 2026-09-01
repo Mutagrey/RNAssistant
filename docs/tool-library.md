@@ -7,9 +7,10 @@ change the current `ToolRuntime`, `ToolPackSnapshot`, confirmation or execution
 policy, and it does not add dynamic authoring to the `16.1.0` release scope.
 
 Migration of built-in Excel/Word/PowerPoint/Outlook execution is the separate 11T
-contour: parity-first semantic-family switches remove legacy host dispatch after a
-qualified bound `DocumentSession`. The Library neither performs that migration nor
-hides its incomplete state; Inspector projects the exact current endpoint catalog.
+contour. Its parity-first semantic-family switches and 11T10 cleanup are complete
+host-neutral: generic host dispatch/catalog and definition/result projections are
+deleted. Windows `DocumentSession` qualification remains mandatory; the Library
+projects the exact current endpoint catalog and cannot hide or satisfy that gate.
 
 A tool is an executable capability, not a chat artifact. Built-in tools belong to
 the application build, custom tools are global or host-scoped packages, and
@@ -30,8 +31,10 @@ separate owners, stores, version rules and model transports:
 
 ## Current implementation
 
-Built-in host catalogs and controller tools are captured in one immutable execution
-snapshot. Agent receives a finite core plus a compact exact-id catalog; optional
+Source-owned host and controller catalogs are captured in one immutable execution
+snapshot. Mutable `ToolCatalogEntry` values are catalog/package projections only;
+their exact policy/binding is required at capture and missing authority fails closed.
+Agent receives a finite core plus a compact exact-id catalog; optional
 schemas are admitted atomically at model-step boundaries. Chat cannot execute tools,
 Plan is restricted to its own read-only/Plan-local set, and Agent execution remains
 subject to source-owned policy and confirmation.
@@ -49,7 +52,12 @@ capture one complete `ToolPackageSource` v1. Its deterministic content revision 
 separate from the manifest package version and is pinned with the native handler in
 the accepted run. Library actions return typed result v1 with status, source revision,
 dispatch and effect evidence; PascalCase/legacy result fallbacks are unsupported.
-This does not make the flat store immutable history.
+Since 11T10 the existing Tools editor also uses lowercase
+`rnassistant.toolLibrary` v1 and explicit revision-guarded create/update/rename/
+delete mutation DTOs through the same `ToolAuthoringService` as model authoring.
+Controller-owned catalog reconciliation, `StoragePath` identity, generic execution
+and unversioned response fallback are absent. This does not make the flat store
+immutable history.
 
 ## Read-only Tool Inspector first
 
@@ -114,6 +122,8 @@ artifact.
 5. Model authoring switch and later-run catalog refresh.
 6. Existing VBA package definition/result adapter removal (completed host-neutral in
    11J2); Windows VBE/Library qualification remains required.
+7. Final existing-editor typed boundary and generic catalog/result removal
+   (completed host-neutral in 11T10); Windows WebView qualification remains required.
 
 Host-neutral tests cover catalog projection, stale endpoint behavior, scope and
 revision conflicts, no-shadow rules and run-boundary refresh. Windows x64 + Office

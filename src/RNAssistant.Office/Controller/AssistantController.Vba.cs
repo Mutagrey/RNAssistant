@@ -61,14 +61,14 @@ namespace RNAssistant.Office
             };
         }
 
-        public ToolResult GetVbaModule(string moduleName)
+        public ToolRunResult GetVbaModule(string moduleName)
         {
             const int editorReadLimit = 1000000;
             var session = OfficeToolExecutor.CreateIsolatedManualSession(LoadSession(null));
             var result = _toolExecutor.ReadVbaModuleForEditor(session, moduleName, editorReadLimit);
             if (result == null || !result.Success || string.IsNullOrWhiteSpace(result.DataJson))
             {
-                return result ?? ToolResult.Fail("VBA module read returned no result.", null, "vba_editor_read_missing", true);
+                return result ?? ToolRunResult.Error("VBA module read returned no result.", null, "vba_editor_read_missing", true);
             }
 
             try
@@ -82,7 +82,7 @@ namespace RNAssistant.Office
                     string.IsNullOrWhiteSpace((string)hashToken) ||
                     truncatedToken == null || truncatedToken.Type != JTokenType.Boolean)
                 {
-                    return ToolResult.Fail(
+                    return ToolRunResult.Error(
                         "VBA editor received an incomplete module payload. The module was not opened for saving.",
                         null,
                         "vba_editor_read_invalid",
@@ -92,7 +92,7 @@ namespace RNAssistant.Office
                 var code = (string)codeToken;
                 if ((bool)truncatedToken || code.EndsWith("\n...[truncated]", StringComparison.Ordinal))
                 {
-                    return ToolResult.Fail(
+                    return ToolRunResult.Error(
                         "VBA module is larger than the editor's safe read limit and was not opened. Saving a partial module is blocked.",
                         new JObject
                         {
@@ -107,7 +107,7 @@ namespace RNAssistant.Office
             }
             catch (JsonException ex)
             {
-                return ToolResult.Fail("VBA editor received an invalid module payload: " + ex.Message, null, "vba_editor_read_invalid", true);
+                return ToolRunResult.Error("VBA editor received an invalid module payload: " + ex.Message, null, "vba_editor_read_invalid", true);
             }
 
             return result;
@@ -141,70 +141,74 @@ namespace RNAssistant.Office
                 _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, mutationId));
         }
 
-        public ToolResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
+        public ToolRunResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_write_module") };
+            var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_write_module") };
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["code"] = code;
             command.Arguments["mode"] = "updateOnly";
             return WithReservedSession(LoadSession(null), session =>
             {
                 _toolExecutor.ObserveVbaHash(session, moduleName, expectedCodeSha256);
-                var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
+                var result = _toolExecutor.ExecuteManual(command, tools,
+                    settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();
                 return result;
             });
         }
 
-        public ToolResult RunVbaMacro(string macroName, CancellationToken cancellationToken)
+        public ToolRunResult RunVbaMacro(string macroName, CancellationToken cancellationToken)
         {
             return WithReservedSession(LoadSession(null), session =>
                 _toolExecutor.RunVbaMacro(macroName, session, cancellationToken));
         }
 
-        public ToolResult CreateVbaModule(string moduleName, string componentType, string code)
+        public ToolRunResult CreateVbaModule(string moduleName, string componentType, string code)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_write_module") };
+            var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_write_module") };
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["componentType"] = componentType;
             command.Arguments["code"] = code;
             command.Arguments["mode"] = "createOnly";
             return WithReservedSession(LoadSession(null), session =>
             {
-                var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
+                var result = _toolExecutor.ExecuteManual(command, tools,
+                    settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();
                 return result;
             });
         }
 
-        public ToolResult DeleteVbaModule(string moduleName)
+        public ToolRunResult DeleteVbaModule(string moduleName)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_delete_module") };
+            var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_delete_module") };
             command.Arguments["moduleName"] = moduleName;
             return WithReservedSession(LoadSession(null), session =>
             {
-                var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
+                var result = _toolExecutor.ExecuteManual(command, tools,
+                    settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();
                 return result;
             });
         }
 
-        public ToolResult RestoreVbaBackup(string backupId, string moduleName)
+        public ToolRunResult RestoreVbaBackup(string backupId, string moduleName)
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolCommand { ToolId = _toolExecutor.VbaToolId("vba_restore_backup") };
+            var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_restore_backup") };
             if (!string.IsNullOrWhiteSpace(backupId)) command.Arguments["backupId"] = backupId;
             if (!string.IsNullOrWhiteSpace(moduleName)) command.Arguments["moduleName"] = moduleName;
             return WithReservedSession(LoadSession(null), session =>
             {
-                var result = _toolExecutor.Execute(command, tools, settings, false, true, session);
+                var result = _toolExecutor.ExecuteManual(command, tools,
+                    settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();
                 return result;
             });

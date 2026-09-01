@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -82,7 +83,7 @@ namespace RNAssistant.Office.Services
             string responseMode,
             CancellationToken cancellationToken)
         {
-            var tool = new ToolDefinition
+            var tool = new ToolCatalogEntry
             {
                 Id = "compat.echo",
                 Description = "Compatibility probe.",
@@ -120,8 +121,8 @@ namespace RNAssistant.Office.Services
                 "tool_result_json",
                 "Tool result · " + toolResultRole,
                 messages,
-                ModelProtocolWire.CreateRequestOptions(responseMode, new ToolDefinition[0]),
-                completion => ValidateSentinel(completion, sentinel, new ToolDefinition[0],
+                ModelProtocolWire.CreateRequestOptions(responseMode, new ToolCatalogEntry[0]),
+                completion => ValidateSentinel(completion, sentinel, new ToolCatalogEntry[0],
                     new ModelProtocolCallContext(new string[0])),
                 cancellationToken);
         }
@@ -135,7 +136,7 @@ namespace RNAssistant.Office.Services
         }
 
         private static string ValidateSentinel(LlmCompletionResult completion, string sentinel,
-            IReadOnlyList<ToolDefinition> tools, ModelProtocolCallContext context)
+            IReadOnlyList<ToolCatalogEntry> tools, ModelProtocolCallContext context)
         {
             var actual = ModelProtocolWire.Parse(completion == null ? null : completion.Content, tools, tools, context);
             if (!actual.Success) return actual.Error;
@@ -158,7 +159,7 @@ namespace RNAssistant.Office.Services
                 AgentJsonProtocol.CreateToolCallMessage(call, "TOOL_OK", null, role,
                     new AcceptedToolCallOrigin("compatibility-probe", "synthetic-attempt", 0)),
                 AgentJsonProtocol.CreateToolResultMessage(
-                    new ToolCommand { ToolCallId = call.Id, ToolId = call.Name },
+                    new ToolInvocation { ToolCallId = call.Id, ToolId = call.Name },
                     RuntimeToolResult.Ok(string.Empty, "{\"value\":\"A\"}"), role),
                 new ChatMessage
                 {

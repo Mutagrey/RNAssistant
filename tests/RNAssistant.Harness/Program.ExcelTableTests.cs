@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
-                    var tools = adapter.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
                         session,
@@ -43,13 +43,10 @@ namespace RNAssistant.Harness
                     AssertTrue(table != null && table.Range == "A1:B4" &&
                         table.HasHeaders && table.Style == "TableStyleMedium2",
                         "direct backend stores the exact table contract");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                        ExcelTableToolIds.Owns(command.ToolId)),
-                        "table public id never reaches generic host dispatch");
 
                     var applyCalls = adapter.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelTableAddOperation);
-                    var dryRun = executor.Execute(
+                    var dryRun = executor.ExecuteManual(
                         Command(ExcelTableToolIds.AddTable,
                             "sheet", "Data", "sourceRange", "D1:E2",
                             "name", "DryTable"),
@@ -235,9 +232,9 @@ namespace RNAssistant.Harness
                         DocumentKey = "bound-excel-table",
                         DocumentTitle = "Bound.xlsx"
                     };
-                    var tools = host.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(host.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
-                    var result = executor.Execute(Command(
+                    var result = executor.ExecuteManual(Command(
                         ExcelTableToolIds.AddTable,
                         "sheet", "Data", "sourceRange", "A1:B4",
                         "name", "BoundTable"),
@@ -248,7 +245,7 @@ namespace RNAssistant.Harness
                     var dispatched = inner.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelTableAddOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closed = executor.Execute(Command(
+                    var closed = executor.ExecuteManual(Command(
                         ExcelTableToolIds.AddTable,
                         "sheet", "Data", "sourceRange", "D1:E2",
                         "name", "BlockedTable"),
@@ -269,7 +266,7 @@ namespace RNAssistant.Harness
         {
             return executor.CreateNativeRuntime(
                 NewSession(adapter),
-                adapter.GetBuiltInTools().Where(tool =>
+                OfficeToolCatalog.ForHost(adapter.HostName).Where(tool =>
                     ExcelTableToolIds.Owns(tool.Id)),
                 new AppSettings(), "agent", false);
         }

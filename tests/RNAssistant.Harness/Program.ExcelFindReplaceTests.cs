@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
-                    var tools = adapter.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var definitions = tools.Where(tool =>
                         ExcelFindReplaceToolIds.Owns(tool.Id)).ToArray();
@@ -43,9 +43,6 @@ namespace RNAssistant.Harness
                     AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelFindScopeReadOperation),
                         "find reaches the direct backend once");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                        command.ToolId == ExcelFindReplaceToolIds.FindCells),
-                        "find public id never reaches generic host dispatch");
 
                     var replaceCall = new ToolCall(
                         "replace-native",
@@ -67,13 +64,10 @@ namespace RNAssistant.Harness
                     AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelReplaceApplyOperation),
                         "replacement reaches one direct apply backend");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                        command.ToolId == ExcelFindReplaceToolIds.ReplaceCells),
-                        "replace public id never reaches generic host dispatch");
 
                     var applies = adapter.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelReplaceApplyOperation);
-                    var dryRun = executor.Execute(Command(
+                    var dryRun = executor.ExecuteManual(Command(
                         ExcelFindReplaceToolIds.ReplaceCells,
                         "sheet", "Data", "address", "A3",
                         "find", "Feb", "replace", "February"),
@@ -98,7 +92,7 @@ namespace RNAssistant.Harness
                     adapter.SetExcelCell("Data", "D1", "Code-12 code-345");
                     adapter.SetExcelFormula("Data", "D2", "=SUM(A2:B2)");
                     var session = NewSession(adapter);
-                    var definitions = adapter.GetBuiltInTools().Where(tool =>
+                    var definitions = OfficeToolCatalog.ForHost(adapter.HostName).Where(tool =>
                         ExcelFindReplaceToolIds.Owns(tool.Id)).ToArray();
                     var runtime = executor.CreateNativeRuntime(
                         session, definitions, new AppSettings(), "agent", false);
@@ -302,9 +296,9 @@ namespace RNAssistant.Harness
                         DocumentKey = "bound-excel-find-replace",
                         DocumentTitle = "Bound.xlsx"
                     };
-                    var tools = host.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(host.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
-                    var result = executor.Execute(Command(
+                    var result = executor.ExecuteManual(Command(
                         ExcelFindReplaceToolIds.ReplaceCells,
                         "sheet", "Data", "address", "H1",
                         "find", "before", "replace", "after"),
@@ -315,7 +309,7 @@ namespace RNAssistant.Harness
                     var dispatched = inner.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelReplaceApplyOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closed = executor.Execute(Command(
+                    var closed = executor.ExecuteManual(Command(
                         ExcelFindReplaceToolIds.ReplaceCells,
                         "sheet", "Data", "address", "H1",
                         "find", "after", "replace", "blocked"),
@@ -335,7 +329,7 @@ namespace RNAssistant.Harness
         {
             return executor.CreateNativeRuntime(
                 NewSession(adapter),
-                adapter.GetBuiltInTools().Where(tool =>
+                OfficeToolCatalog.ForHost(adapter.HostName).Where(tool =>
                     ExcelFindReplaceToolIds.Owns(tool.Id)),
                 new AppSettings(), "agent", false);
         }

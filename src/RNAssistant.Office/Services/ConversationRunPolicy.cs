@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -51,9 +52,9 @@ namespace RNAssistant.Office.Services
             return new ConversationRunPolicy(mode);
         }
 
-        public List<ToolDefinition> SelectTools(IEnumerable<ToolDefinition> tools)
+        public List<ToolCatalogEntry> SelectTools(IEnumerable<ToolCatalogEntry> tools)
         {
-            var source = (tools ?? new ToolDefinition[0]).Where(tool => tool != null);
+            var source = (tools ?? new ToolCatalogEntry[0]).Where(tool => tool != null);
             if (string.Equals(Mode, ChatModes.Agent, StringComparison.Ordinal))
             {
                 return source.ToList();

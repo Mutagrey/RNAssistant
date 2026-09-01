@@ -22,7 +22,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var definition = tools.Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
                 var call = new ToolCall("excel-write-change", ExcelWriteToolIds.WriteRange,
@@ -44,8 +44,6 @@ namespace RNAssistant.Harness
                 AssertEqual(2, adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelWriteReadOperation),
                     "the same direct backend reads before and after the exact target");
-                AssertEqual(0, adapter.Executed.Count(item => item.ToolId == ExcelWriteToolIds.WriteRange),
-                    "public write id never reaches the host adapter");
 
                 var noopCall = new ToolCall("excel-write-noop", ExcelWriteToolIds.WriteRange,
                     "{\"kind\":\"value\",\"sheet\":\"Data\",\"address\":\"J1\",\"value\":42}");
@@ -61,7 +59,7 @@ namespace RNAssistant.Harness
 
                 var applies = adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelWriteApplyOperation);
-                var dryRun = executor.Execute(Command(ExcelWriteToolIds.WriteRange, "kind", "value", "sheet", "Data",
+                var dryRun = executor.ExecuteManual(Command(ExcelWriteToolIds.WriteRange, "kind", "value", "sheet", "Data",
                     "address", "J2", "value", "preview"), tools, new AppSettings(), true, true, session);
                 AssertTrue(dryRun.Success && string.IsNullOrEmpty(adapter.CellValue("Data", "J2")),
                     "native write dry-run remains non-mutating");
@@ -70,9 +68,6 @@ namespace RNAssistant.Harness
                     "dry-run never reaches the write backend");
                 AssertTrue(runtime.Describe(new ToolCall("wrong-case", "EXCEL.WRITE_RANGE", "{}")) == null,
                     "native ownership has no case alias");
-                AssertEqual("excel_public_write_moved",
-                    adapter.ExecuteTool(Command(ExcelWriteToolIds.WriteRange, "kind", "value", "value", 1)).ErrorCode,
-                    "host cannot execute the moved public id");
             });
         }
 
@@ -81,7 +76,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var definition = tools.Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
 
@@ -141,7 +136,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var definition = tools.Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
                 adapter.QueueExcelWriteApplyFailure(
@@ -162,7 +157,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var definition = adapter.GetBuiltInTools().Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
+                var definition = OfficeToolCatalog.ForHost(adapter.HostName).Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
                 adapter.BeforeExcelBackendCall = operation =>
                 {
@@ -187,7 +182,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var definition = adapter.GetBuiltInTools().Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
+                var definition = OfficeToolCatalog.ForHost(adapter.HostName).Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
                 adapter.ExcelWriteThrowAfterMutation = true;
                 var call = new ToolCall("excel-write-throw-after", ExcelWriteToolIds.WriteRange,
@@ -202,7 +197,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var definition = adapter.GetBuiltInTools().Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
+                var definition = OfficeToolCatalog.ForHost(adapter.HostName).Single(tool => tool.Id == ExcelWriteToolIds.WriteRange);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), "agent", false);
                 var reads = 0;
                 adapter.BeforeExcelBackendCall = operation =>
@@ -242,8 +237,8 @@ namespace RNAssistant.Harness
                     {
                         Host = "Excel", DocumentKey = "bound-excel-write", DocumentTitle = "Bound.xlsx"
                     };
-                    var tools = host.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                    var result = executor.Execute(Command(ExcelWriteToolIds.WriteRange, "kind", "value",
+                    var tools = OfficeToolCatalog.ForHost(host.HostName).Concat(executor.GetControllerTools()).ToList();
+                    var result = executor.ExecuteManual(Command(ExcelWriteToolIds.WriteRange, "kind", "value",
                         "sheet", "Data", "address", "P1", "value", "bound"),
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(result.Success && ownerSta, "typed write stays on the bound document owner STA");
@@ -251,7 +246,7 @@ namespace RNAssistant.Harness
                     var dispatched = inner.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelWriteApplyOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closed = executor.Execute(Command(ExcelWriteToolIds.WriteRange, "kind", "value",
+                    var closed = executor.ExecuteManual(Command(ExcelWriteToolIds.WriteRange, "kind", "value",
                         "sheet", "Data", "address", "P2", "value", "blocked"),
                         tools, new AppSettings(), false, false, chat);
                     AssertEqual("active_document_changed", closed.ErrorCode,

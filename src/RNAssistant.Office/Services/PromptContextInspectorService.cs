@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -45,7 +46,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             DocumentContext context,
             AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
@@ -68,7 +69,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             DocumentContext context,
             AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
@@ -224,7 +225,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             DocumentContext context,
             AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             int historyBudgetTokens,
@@ -253,7 +254,7 @@ namespace RNAssistant.Office.Services
             ChatSession previewSession,
             DocumentContext context,
             AppSettings settings,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills,
             JObject capabilityCatalog,
             IReadOnlyList<ChatAttachment> attachments,

@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -15,7 +16,7 @@ namespace RNAssistant.Office.Tools
     public static class TableArgumentResolver
     {
         public static bool TryResolve(
-            ToolCommand command,
+            ToolInvocation command,
             int defaultRows,
             int defaultColumns,
             out ResolvedTableArguments resolved,
@@ -23,7 +24,7 @@ namespace RNAssistant.Office.Tools
         {
             resolved = null;
             error = null;
-            command = command ?? new ToolCommand();
+            command = command ?? new ToolInvocation();
 
             JArray values = null;
             var valuesJson = ToolArgumentReader.String(command.Arguments, "values", string.Empty);

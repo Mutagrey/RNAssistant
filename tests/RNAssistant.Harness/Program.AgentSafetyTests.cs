@@ -16,6 +16,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
@@ -48,7 +49,7 @@ namespace RNAssistant.Harness
             session.Messages.Add(new ChatMessage { Role = "user", Content = "Current request", RunId = "current_turn" });
             session.Messages.Add(ContextAcceptedCall("before_compaction"));
             session.Messages[3].RunId = "current_turn";
-            session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "before_compaction", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok")));
+            session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "before_compaction", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok")));
             var pending = ContextAcceptedCall("pending_id", ToolResultRoles.Tool, FixtureCallOrigin("step"));
             pending.RunId = "resume_1";
             pending.ExcludeFromModelContext = true;
@@ -80,7 +81,7 @@ namespace RNAssistant.Harness
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, null,
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var settingsForRun = new AppSettings { AgentPromptSchemaVersion = 0 };
                 Action<Action> expectReview = attempt =>
                 {
@@ -104,7 +105,7 @@ namespace RNAssistant.Harness
                 }
                 var continuation = ContextContinuationSession();
                 var continuationBefore = JsonConvert.SerializeObject(continuation);
-                expectReview(() => service.ConfirmAsync("pending_fixture", new ToolCommand { ToolCallId = "pending_id" },
+                expectReview(() => service.ConfirmAsync("pending_fixture", new ToolInvocation { ToolCallId = "pending_id" },
                     continuation, new ConversationRunInput(settingsForRun, NewContext(adapter), tools),
                     (phase, message, activity) => progressCalls++).GetAwaiter().GetResult());
                 AssertEqual(continuationBefore, JsonConvert.SerializeObject(continuation), "blocked continuation does not rewrite accepted history");
@@ -140,7 +141,7 @@ namespace RNAssistant.Harness
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
                 foreach (var version in new[] { 0, 1, 2, 3, AgentResponseProtocol.CurrentVersion + 1 })
                 foreach (var form in new[] { "plain", ToolResultRoles.User, ToolResultRoles.Tool })
@@ -210,7 +211,7 @@ namespace RNAssistant.Harness
                     session.Messages.Add(new ChatMessage { Role = "user", Content = "Earlier tool request" });
                     session.Messages.Add(ContextAcceptedCall("result_id", role));
                     var oldResult = AgentJsonProtocol.CreateToolResultMessage(
-                        new ToolCommand { ToolCallId = "result_id", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok"), role);
+                        new ToolInvocation { ToolCallId = "result_id", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok"), role);
                     oldResult.ExcludeFromModelContext = true;
                     session.Messages.Add(oldResult);
                     var checkpoint = new ContextCheckpoint { ThroughMessageId = oldResult.Id, SummaryMarkdown = "Earlier tool summarized" };
@@ -227,7 +228,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, rawCalls, "no model or compaction dispatch from incompatible full history");
                 AssertEqual(0, boundaryCalls, "blocked before model boundary construction");
                 AssertEqual(0, progressCalls, "blocked before execution progress");
-                AssertEqual(0, adapter.Executed.Count, "incompatible full history never dispatches an Office tool");
+                AssertEqual(0, adapter.TotalBackendCallCount, "incompatible full history never dispatches an Office tool");
 
                 var current = NewSession(adapter);
                 current.LastRun = new ChatRunRecord(); // No accepted response in the last failed/unfinished run.
@@ -235,7 +236,7 @@ namespace RNAssistant.Harness
                 current.Messages.Add(AgentTranscript.CreateAssistantMessage("{\"quoted\":\"text\"}", null, null, "completed"));
                 current.Messages.Add(new ChatMessage { Role = "assistant", Activity = new ChatActivity { Kind = "diagnostic" } });
                 current.Messages.Add(ContextAcceptedCall("result"));
-                current.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = "result", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok")));
+                current.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "result", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok")));
                 var result = service.ExecuteAsync(ChatModes.Agent, "Next request", current, NewContext(adapter), new AppSettings(), tools, null)
                     .GetAwaiter().GetResult();
                 AssertEqual("Done", result.AssistantText, "current history, diagnostic and tool-result forms remain usable");
@@ -262,7 +263,7 @@ namespace RNAssistant.Harness
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 foreach (var invalidate in new Action<ChatSession>[]
                 {
                     session => session.Messages[3].ToolCallId = null,
@@ -357,7 +358,7 @@ namespace RNAssistant.Harness
             AssertTrue(context.IsComplete, "explicit complete context");
             AssertTrue(context.BatchSafeReadOnlyToolIds.SequenceEqual(new[] { "test.read" }), "safety projection copied per step");
             AssertTrue(((IList<string>)context.BatchSafeReadOnlyToolIds).IsReadOnly, "snapshot does not expose a mutable safety array");
-            AssertTrue(new ConversationResponseParser().Parse(V4Envelope(), new ToolDefinition[0], new ToolDefinition[0], context).Success,
+            AssertTrue(new ConversationResponseParser().Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], context).Success,
                 "v4 accepts a final response with complete local safety context");
             foreach (var incomplete in new[]
             {
@@ -366,7 +367,7 @@ namespace RNAssistant.Harness
             })
             {
                 AssertTrue(!incomplete.IsComplete, "incomplete context is not a valid empty safety projection");
-                AssertTrue(!new ConversationResponseParser().Parse(V4Envelope(), new ToolDefinition[0], new ToolDefinition[0], incomplete).Success,
+                AssertTrue(!new ConversationResponseParser().Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], incomplete).Success,
                     "v4 rejects incomplete context even for a final response");
             }
         }
@@ -388,7 +389,7 @@ namespace RNAssistant.Harness
             for (var index = 0; index < batchIds.Length; index++)
                 session.Messages.Add(ContextAcceptedCall(batchIds[index], origin: FixtureCallOrigin("batch-step", batchAttempt, index)));
             foreach (var id in batchIds)
-                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolCommand { ToolCallId = id, ToolId = "excel.inspect" }, TerminalToolResult.Ok("read")));
+                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = id, ToolId = "excel.inspect" }, TerminalToolResult.Ok("read")));
             var before = JsonConvert.SerializeObject(session);
             var continuation = ConversationProtocolContext.RestoreContinuation(session, ContextPendingCommand());
             AssertTrue(continuation.AcceptedCallIds.SequenceEqual(new[] { "batch_1", "batch_2", "before_compaction", "pending_id" }),
@@ -440,21 +441,21 @@ namespace RNAssistant.Harness
             invalid.Add(duplicateResult);
             foreach (var session in invalid)
                 ExpectProtocolPreflightBlock(() => ConversationProtocolContext.RestoreContinuation(session, ContextPendingCommand()));
-            ExpectProtocolPreflightBlock(() => ConversationProtocolContext.RestoreContinuation(ContextContinuationSession(), new ToolCommand()));
+            ExpectProtocolPreflightBlock(() => ConversationProtocolContext.RestoreContinuation(ContextContinuationSession(), new ToolInvocation()));
         }
 
-        private static ToolCommand ContextPendingCommand()
+        private static ToolInvocation ContextPendingCommand()
         {
-            return new ToolCommand { ToolId = "excel.inspect", ToolCallId = "pending_id",
+            return new ToolInvocation { ToolId = "excel.inspect", ToolCallId = "pending_id",
                 Arguments = new Dictionary<string, object> { ["kind"] = "sheets" } };
         }
 
         private static void ProtocolContextBatchSafetyUsesLocalAuthority()
         {
-            var read = OfficeBuiltInToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.inspect");
-            var write = OfficeBuiltInToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.add_sheet");
-            var external = new ToolDefinition { Id = "external.lookup", BuiltIn = true };
-            var pipeline = new ToolDefinition { Id = "pipeline.read", Executor = "pipeline" };
+            var read = OfficeToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.inspect");
+            var write = OfficeToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.add_sheet");
+            var external = new ToolCatalogEntry { Id = "external.lookup", BuiltIn = true };
+            var pipeline = new ToolCatalogEntry { Id = "pipeline.read", Executor = "pipeline" };
             var scope = ConversationProtocolContext.BatchSafeReadIds(new[] { read, write, external, pipeline });
             AssertTrue(scope.SequenceEqual(new[] { "excel.inspect" }),
                 "only audited local reads with safe metadata can batch; external/unclassified/pipelines stay singleton");
@@ -462,37 +463,38 @@ namespace RNAssistant.Harness
             renamedRead.Id = "fixture.explicit_read";
             AssertTrue(ConversationProtocolContext.BatchSafeReadIds(new[] { renamedRead }).SequenceEqual(new[] { renamedRead.Id }),
                 "declared policy, not a central name list, grants independent read batching");
-            var untyped = new ToolDefinition { Id = read.Id, BuiltIn = true };
+            var untyped = new ToolCatalogEntry { Id = read.Id, BuiltIn = true };
             AssertEqual(0, ConversationProtocolContext.BatchSafeReadIds(new[] { untyped }).Length,
                 "a known read name without source-owned policy is unclassified");
             var serialized = JsonConvert.SerializeObject(read);
-            AssertTrue(serialized.IndexOf("RuntimePolicy", StringComparison.Ordinal) < 0,
+            AssertTrue(serialized.IndexOf("Policy", StringComparison.Ordinal) < 0,
                 "source-owned authority is not a custom tool JSON field");
-            var forged = JsonConvert.DeserializeObject<ToolDefinition>("{\"Id\":\"external.fake\",\"BuiltIn\":true,\"RuntimePolicy\":{\"Effect\":\"Read\",\"IndependentLocalRead\":true}}");
+            var forged = JsonConvert.DeserializeObject<ToolCatalogEntry>("{\"Id\":\"external.fake\",\"BuiltIn\":true,\"Policy\":{\"Effect\":\"Read\",\"IndependentLocalRead\":true}}");
             AssertEqual(0, ConversationProtocolContext.BatchSafeReadIds(new[] { forged }).Length,
                 "serialized authority cannot forge independent local read permission");
             var originalFingerprint = ToolPackSnapshotFactory.ExecutionFingerprint(new[] { read }, read.Id);
             var changedPolicy = read.Clone();
-            changedPolicy.RuntimePolicy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent" });
+            changedPolicy.Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent" });
             AssertTrue(originalFingerprint != ToolPackSnapshotFactory.ExecutionFingerprint(new[] { changedPolicy }, changedPolicy.Id),
                 "captured authority revision includes the typed policy");
-            foreach (var kind in new[] { "document", "local", "confirmation", "not_agent", "disabled", "custom", "vba", "pipeline" })
+            foreach (var kind in new[] { "document", "local", "confirmation", "risk" })
             {
                 var changed = read.Clone();
                 changed.MutatesDocument = kind == "document";
                 changed.MutatesLocalState = kind == "local";
                 changed.RequiresConfirmation = kind == "confirmation";
-                changed.AgentCanRun = kind != "not_agent";
-                changed.Enabled = kind != "disabled";
-                changed.BuiltIn = kind != "custom";
-                if (kind == "vba" || kind == "pipeline") changed.Executor = kind;
+                changed.RiskLevel = kind == "risk" ? 3 : changed.RiskLevel;
                 var context = ConversationProtocolContext.BatchSafeReadIds(new[] { changed, write });
-                AssertTrue(context.Length == 0, "batch permission cannot override " + kind + " metadata/binding");
+                AssertTrue(context.SequenceEqual(new[] { changed.Id }),
+                    "catalog projection cannot override source-owned policy: " + kind);
             }
             read.RequiresConfirmation = true;
             AssertTrue(scope.Contains("excel.inspect"), "run projection is a snapshot of the original catalog");
+            read.Policy = new ToolPolicy(ToolEffect.Read,
+                ToolVerification.None, false, false,
+                new[] { "agent" });
             AssertTrue(!ConversationProtocolContext.BatchSafeReadIds(new[] { read }).Contains("excel.inspect"),
-                "new run/confirmation rebuilds safety from the current catalog");
+                "new run/confirmation rebuilds batching from the current source-owned policy");
         }
 
         private sealed class RecordingModelProtocol : IMaterializedModelProtocol
@@ -540,7 +542,7 @@ namespace RNAssistant.Harness
                     () => new RecordingModelProtocol(completion, requests));
                 var session = NewSession(adapter);
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 2 };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var result = service.ExecuteAsync(ChatModes.Agent, "Inspect sheets", session, NewContext(adapter), settingsForRun, tools, null)
                     .GetAwaiter().GetResult();
                 AssertEqual(5, rawCalls, "unknown tool and forbidden model id are repaired inside their logical steps");
@@ -560,8 +562,6 @@ namespace RNAssistant.Harness
                 AssertEqual(2, adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelInspectOperation),
                     "independent native reads dispatch once each through the direct typed backend");
-                AssertEqual(0, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.Inspect),
-                    "accepted public ids never dispatch through the host adapter");
                 AssertTrue(requests[0].CallContext.BatchSafeReadOnlyToolIds.Contains("common.resources_read") &&
                     requests[0].CallContext.BatchSafeReadOnlyToolIds.Contains("excel.inspect"), "runtime metadata feeds the batch-safe projection");
                 AssertEqual(4, result.ResponseProtocolVersion, "accepted writes use v4");
@@ -594,8 +594,8 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "original_run", TurnId = "original_run", ResponseProtocolVersion = 4, Status = "running" };
                 var settingsForRun = new AppSettings { AutoConfirmToolActions = false, ToolResultRole = role };
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                ToolCommand confirmed = null;
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                ToolInvocation confirmed = null;
                 var first = service.ExecuteAsync(ChatModes.Agent, "Create test skill", session, NewContext(adapter), settingsForRun, tools, null,
                     (pendingSession, command, result) => { confirmed = command; return "pending_context"; }).GetAwaiter().GetResult();
                 AssertTrue(first.WaitingForConfirmation && confirmed != null, "real runtime pauses after the accepted confirmation-required call");
@@ -657,14 +657,14 @@ namespace RNAssistant.Harness
                     new ChatMessage { Role = "system", Content = "Use the conversation response contract." },
                     new ChatMessage { Role = "user", Content = "Current accepted request." }
                 },
-                CallableTools = new ToolDefinition[0],
-                RunnableCatalog = new ToolDefinition[0],
+                CallableTools = new ToolCatalogEntry[0],
+                RunnableCatalog = new ToolCatalogEntry[0],
                 CallContext = new ModelProtocolCallContext(new string[0]),
                 Options = new LlmRequestOptions
                 {
                     ResponseFormat = strict ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
                     ResponseSchemaName = strict ? ConversationResponseSchemaBuilder.SchemaName : null,
-                    ResponseSchemaJson = strict ? ConversationResponseSchemaBuilder.Build(new ToolDefinition[0]) : null,
+                    ResponseSchemaJson = strict ? ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0]) : null,
                     TraceStepId = Guid.NewGuid().ToString("N")
                 }
             };
@@ -1108,30 +1108,42 @@ namespace RNAssistant.Harness
             AssertTrue(result.Response == null && result.Completion == null, "budget failure cannot become an accepted answer");
         }
 
-        private static void RunSummaryUsesActualOutcomesAndMetadata()
+        private static void RunSummaryUsesTypedOutcomesAndMetadata()
         {
-            var read = new ToolPolicySnapshot("test.write_named_read", "r1", false);
-            var write = new ToolPolicySnapshot("test.inspect", "r1", true);
-            AssertEqual(ToolExecutionOutcome.Ok, LegacyToolOutcomeAdapter.Map(read, ToolResult.Ok("unknown; all writes applied")),
-                "names and model prose do not classify effects");
-            AssertEqual(ToolExecutionOutcome.Error, LegacyToolOutcomeAdapter.Map(read, ToolResult.Fail("Everything applied")), "read error");
-            AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, LegacyToolOutcomeAdapter.Map(write, ToolResult.WaitingConfirmation("Confirm")),
-                "pending is not a final effect");
-            AssertEqual(ToolExecutionOutcome.Unknown, LegacyToolOutcomeAdapter.Map(write, ToolResult.PartialFailure("Some writes completed", null, "partial")),
-                "partial write is uncertain");
-            AssertEqual(ToolExecutionOutcome.Error, LegacyToolOutcomeAdapter.Map(write, ToolResult.Fail("No change", null, "write_rejected")), "definite write failure");
+            var read = new ToolRuntimeFixture(RuntimeRegistration(
+                "test.write_named_read", Policy(ToolEffect.Read))).Context();
+            var write = new ToolRuntimeFixture(RuntimeRegistration(
+                "test.inspect", Policy(ToolEffect.Write))).Context();
+            var counts = new ToolCounts()
+                .Add(new ToolExecutionRecord(read, ToolExecutionOutcome.Ok,
+                    read.StartedUtc, "unknown; all writes applied",
+                    result: TerminalToolResult.Ok("unknown; all writes applied")))
+                .Add(new ToolExecutionRecord(read, ToolExecutionOutcome.Error,
+                    read.StartedUtc, "Everything applied",
+                    result: TerminalToolResult.Error("Everything applied")))
+                .Add(new ToolExecutionRecord(write, ToolExecutionOutcome.Unknown,
+                    write.StartedUtc, "Some writes completed",
+                    result: TerminalToolResult.Unknown("Some writes completed")))
+                .Add(new ToolExecutionRecord(write, ToolExecutionOutcome.Error,
+                    write.StartedUtc, "No change",
+                    result: TerminalToolResult.Error("No change")));
+            AssertEqual(1, counts.ReadOk,
+                "read outcome, not prose or id, owns success");
+            AssertEqual(1, counts.ReadError,
+                "typed read error is counted exactly");
+            AssertEqual(1, counts.WriteUnknown,
+                "typed unknown write remains uncertain");
+            AssertEqual(1, counts.WriteError,
+                "typed rejected write remains an error");
         }
 
-        private static void RunSummaryMapsLegacyUncertaintyConservatively()
+        private static void RunSummaryRequiresTypedContinuationEvidence()
         {
-            var policy = new ToolPolicySnapshot("test.effect", "r1", true);
-            foreach (var result in new[] { null, new ToolResult { Status = "unknown" }, new ToolResult { Status = "interrupted_unknown" },
-                ToolResult.Fail("cancelled after dispatch", null, "tool_effect_uncertain"), ToolResult.Fail("no evidence", null, "missing_result") })
-                AssertEqual(ToolExecutionOutcome.Unknown, LegacyToolOutcomeAdapter.Map(policy, result), "structured write uncertainty is retained");
-            AssertEqual(ToolExecutionOutcome.Unknown, LegacyToolOutcomeAdapter.Map(null, ToolResult.Ok("Success")), "missing policy cannot certify success");
-            var legacy = ContextContinuationSession();
-            legacy.LastRun.KernelState = null;
-            ExpectProtocolPreflightBlock(() => ConversationProtocolContext.EnsureCanContinue(legacy, ContextPendingCommand()));
+            var incomplete = ContextContinuationSession();
+            incomplete.LastRun.KernelState = null;
+            ExpectProtocolPreflightBlock(() =>
+                ConversationProtocolContext.EnsureCanContinue(
+                    incomplete, ContextPendingCommand()));
         }
 
         private static void RunSummarySurvivesCancellationAfterUnknown()
@@ -1153,7 +1165,7 @@ namespace RNAssistant.Harness
                 });
                 var cancelled = service.ExecuteAsync(ChatModes.Agent, "Создай лист.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true },
-                    adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Cancelled, cancelled.RunViewState.Lifecycle, "kernel owns cancellation lifecycle");
                 AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "no automatic write retry");
                 AssertEqual(RunViewHealth.Unknown, RunViewStateProjector.Create(session).ExecutionHealth,
@@ -1261,7 +1273,7 @@ namespace RNAssistant.Harness
         {
             var invalid = V4ReadTool("test.invalid");
             invalid.ArgumentSchemaJson = "{}";
-            foreach (var tools in new[] { new ToolDefinition[0], new[] { invalid, null, new ToolDefinition() } })
+            foreach (var tools in new[] { new ToolCatalogEntry[0], new[] { invalid, null, new ToolCatalogEntry() } })
             {
                 var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(tools));
                 string error;
@@ -1295,7 +1307,7 @@ namespace RNAssistant.Harness
             });
             AssertEqual("json_object", (string)objectBody.SelectToken("response_format.type"), "json_object request type");
 
-            var schemaJson = ConversationResponseSchemaBuilder.Build(new ToolDefinition[0]);
+            var schemaJson = ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0]);
             var schemaBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions
             {
                 ResponseFormat = LlmResponseFormats.JsonSchema,
@@ -1310,7 +1322,7 @@ namespace RNAssistant.Harness
 
         private static void AgentJsonSchemaMirrorsToolContracts()
         {
-            var tool = new ToolDefinition
+            var tool = new ToolCatalogEntry
             {
                 Id = "excel.read_range",
                 Description = "Read cells.",
@@ -1350,7 +1362,7 @@ namespace RNAssistant.Harness
             AssertContains((string)schema.SelectToken("properties.tool_calls.description"),
                 "requested deliverables", "terminal schema tells the model not to stop after an intermediate tool result");
 
-            var noToolSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new ToolDefinition[0]));
+            var noToolSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0]));
             AssertEqual(0, (int)noToolSchema.SelectToken("properties.tool_calls.maxItems"),
                 "empty callable set permits no calls");
         }
@@ -1418,7 +1430,7 @@ namespace RNAssistant.Harness
                 Name = "excel.read_range",
                 Arguments = new Dictionary<string, object> { ["range"] = "A1" }
             };
-            var command = new ToolCommand { ToolId = call.Name, ToolCallId = call.Id };
+            var command = new ToolInvocation { ToolId = call.Name, ToolCallId = call.Id };
             var result = TerminalToolResult.Ok("read", "{\"value\":1}");
 
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer })
@@ -1541,7 +1553,7 @@ namespace RNAssistant.Harness
                 };
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Test.", NewSession(adapter), NewContext(adapter), settings, new ToolDefinition[0],
+                    "Test.", NewSession(adapter), NewContext(adapter), settings, new ToolCatalogEntry[0],
                     null, null, null, CancellationToken.None).GetAwaiter().GetResult();
 
                 AssertEqual("Done.", result.AssistantText, "fallback completes request");
@@ -1554,7 +1566,7 @@ namespace RNAssistant.Harness
 
         private static void AgentToolResultDataIsBounded()
         {
-            var command = new ToolCommand { ToolId = "excel.read_range", ToolCallId = "call_large" };
+            var command = new ToolInvocation { ToolId = "excel.read_range", ToolCallId = "call_large" };
             var data = JsonConvert.SerializeObject(new { value = new string('x', 50000) + "TOOL_RESULT_END" });
             var toolResult = new ToolResultMaterialization(TerminalToolResult.Ok("read", data));
             var result = JObject.Parse(AgentJsonProtocol.BuildToolResult(command, toolResult, 256));
@@ -1638,8 +1650,8 @@ namespace RNAssistant.Harness
                 title = "Sales",
                 rows = new[] { new { month = "Jan", value = 10 } }
             });
-            var chartUiResult = ToolResult.Ok("chart", chartData);
-            var chartResult = LegacyToolResultAdapter.Materialize(chartUiResult, ToolExecutionOutcome.Ok);
+            var chartTerminal = TerminalToolResult.Ok("chart", chartData);
+            var chartResult = new ToolResultMaterialization(chartTerminal);
             var chartArtifact = ToolResultResourceService.ExternalizeIfNeeded(
                 chartSession, command, chartResult, 10000, new AppSettings());
             AssertEqual(ChatArtifactKinds.Chart, chartArtifact == null ? null : chartArtifact.Kind,
@@ -1669,9 +1681,15 @@ namespace RNAssistant.Harness
             RuntimeThrows<InvalidOperationException>(() => ToolResultResourceService.ExternalizeIfNeeded(
                 chartSession, command, chartResult, 10000, new AppSettings()));
             chartSession.Artifacts.RemoveAt(chartSession.Artifacts.Count - 1);
+            var chartContext = new ToolRuntimeFixture(RuntimeRegistration(
+                command.ToolId, Policy(ToolEffect.Read))).Context();
+            var chartRecord = new ToolExecutionRecord(chartContext,
+                ToolExecutionOutcome.Ok, chartContext.StartedUtc, "chart",
+                result: chartTerminal);
+            var chartUiResult = ToolRunResultFactory.Create(
+                chartRecord, chartResult);
             var chartMessage = AgentTranscript.CreateRunningToolMessage(chartSession, command, "chart_step", "Read chart");
             chartMessage.RunId = "chart_run";
-            ToolResultUiProjection.IncludeResources(chartUiResult, chartResult);
             AgentTranscript.CompleteToolActivityMessage(chartSession, chartMessage, command, chartUiResult, "chart_step", "Read chart");
             var chartActivity = chartMessage.Activity;
             AssertEqual(chartMessage.Id, chartArtifact.SourceMessageId, "chart provenance points at the visible tool activity");
@@ -1699,7 +1717,7 @@ namespace RNAssistant.Harness
             });
 
             var nestedData = JsonConvert.SerializeObject(new { value = new string('x', 200000) });
-            var pipeline = AgentTranscript.CreateToolActivity(command, ToolResult.Ok("pipeline", JsonConvert.SerializeObject(new
+            var pipeline = AgentTranscript.CreateToolActivity(command, ToolRunResult.Ok("pipeline", JsonConvert.SerializeObject(new
             {
                 steps = new[]
                 {
@@ -1740,7 +1758,7 @@ namespace RNAssistant.Harness
                     ContextWindowOverrideTokens = 14000,
                     MaxTokens = 512
                 };
-                var tools = adapter.GetBuiltInTools().Where(tool => tool.Id == "excel.inspect")
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Where(tool => tool.Id == "excel.inspect")
                     .Concat(executor.GetControllerTools())
                     .ToList();
 

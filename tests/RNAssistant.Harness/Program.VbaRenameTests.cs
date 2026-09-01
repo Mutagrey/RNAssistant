@@ -68,10 +68,10 @@ namespace RNAssistant.Harness
                     "rename journal binds both identities");
                 AssertEqual(VbaMutationStatuses.Committed, record.Terminal.Status,
                     "rename ok requires committed read-back");
-                var backend = adapter.Executed.Single(command => command.ToolId.EndsWith(
-                    ".vba_rename_module_internal",
-                    StringComparison.OrdinalIgnoreCase));
-                AssertEqual("ClassModule", Convert.ToString(backend.Arguments["expectedComponentType"]),
+                var backend =
+                    (RNAssistant.Office.Domains.Vba.VbaRenameModuleRequest)adapter
+                    .SingleVbaCall(FakeVbaOperation.RenameModule).Request;
+                AssertEqual("ClassModule", backend.ExpectedComponentType,
                     "typed backend receives the source type CAS guard");
 
                 adapter.SetVbaModule("TypeRace", source, "ClassModule");
@@ -80,18 +80,16 @@ namespace RNAssistant.Harness
                     "rename-type-session",
                     "TypeRace",
                     "TypeRaceTarget");
-                var dispatchesBefore = adapter.Executed.Count(command => command.ToolId.EndsWith(
-                    ".vba_rename_module_internal",
-                    StringComparison.OrdinalIgnoreCase));
+                var dispatchesBefore =
+                    adapter.CountVbaCalls(FakeVbaOperation.RenameModule);
                 adapter.SetVbaModule("TypeRace", source, "StdModule");
                 var stale = service.RenameModule(typeRace, CancellationToken.None);
                 AssertEqual(VbaMutationOutcomeStatus.Error, stale.Status,
                     "source type race is rejected before rename preparation");
                 AssertEqual("stale_vba_module", stale.ErrorCode,
                     "source type race has the stale snapshot code");
-                AssertEqual(dispatchesBefore, adapter.Executed.Count(command => command.ToolId.EndsWith(
-                    ".vba_rename_module_internal",
-                    StringComparison.OrdinalIgnoreCase)),
+                AssertEqual(dispatchesBefore,
+                    adapter.CountVbaCalls(FakeVbaOperation.RenameModule),
                     "source type race never reaches the backend");
             });
         }
@@ -208,17 +206,13 @@ namespace RNAssistant.Harness
                     "unreadable-readback",
                     "UnreadableSource",
                     "UnreadableTarget");
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeVbaBackendCall = call =>
                 {
-                    if (command == null || !command.ToolId.EndsWith(
-                        ".vba_rename_module_internal",
-                        StringComparison.OrdinalIgnoreCase)) return;
-                    adapter.QueueResult(
-                        "excel.vba_read_module",
-                        ToolResult.Fail("read unavailable", null, "vba_read_unavailable", false));
-                    adapter.QueueResult(
-                        "excel.vba_read_module",
-                        ToolResult.Fail("read unavailable", null, "vba_read_unavailable", false));
+                    if (call.Operation != FakeVbaOperation.RenameModule) return;
+                    adapter.QueueVbaFailure(FakeVbaOperation.ReadModule,
+                        "read unavailable", "vba_read_unavailable", false);
+                    adapter.QueueVbaFailure(FakeVbaOperation.ReadModule,
+                        "read unavailable", "vba_read_unavailable", false);
                 };
                 var outcome = service.RenameModule(request, CancellationToken.None);
 

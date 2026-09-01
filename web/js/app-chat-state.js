@@ -136,10 +136,10 @@ function applyPushedChatState(message) {
 function applyLibraryCatalogState(response) {
   var changed = false;
   response = response || {};
-  if (response.tools !== undefined || response.Tools !== undefined) {
+  if (response.tools !== undefined) {
     var selectedTool = state.tools[state.selectedToolIndex];
-    var selectedToolId = selectedTool && (selectedTool.Id || selectedTool.id) || "";
-    var responseTools = response.tools || response.Tools || [];
+    var selectedToolId = selectedTool && selectedTool.Id || "";
+    var responseTools = toolLibraryItemsFromContract(response.tools);
     if (state.toolLibraryDirty && typeof reconcileToolLibraryCatalog === "function") {
       reconcileToolLibraryCatalog(responseTools);
     } else {
@@ -148,7 +148,7 @@ function applyLibraryCatalogState(response) {
     }
     if (selectedToolId) {
       state.selectedToolIndex = state.tools.findIndex(function (tool) {
-        return String(tool && (tool.Id || tool.id) || "").toLowerCase() === String(selectedToolId).toLowerCase();
+        return String(tool && tool.Id || "").toLowerCase() === String(selectedToolId).toLowerCase();
       });
     }
     changed = true;

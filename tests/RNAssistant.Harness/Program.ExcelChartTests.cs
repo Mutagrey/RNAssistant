@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
-                    var tools = adapter.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
                         session,
@@ -61,13 +61,10 @@ namespace RNAssistant.Harness
                         "chat chart keeps the artifact contract");
                     AssertEqual("Data", (string)artifact["Source"]["Sheet"],
                         "chat chart source is bound and explicit");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                        ExcelChartToolIds.Owns(command.ToolId)),
-                        "chart public ids never reach generic host dispatch");
 
                     var applyCalls = adapter.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelChartApplyOperation);
-                    var dryRun = executor.Execute(Command(
+                    var dryRun = executor.ExecuteManual(Command(
                         ExcelChartToolIds.UpsertChart,
                         "sheet", "Data", "chartName", "DryChart"),
                         tools, new AppSettings(), true, true, session);
@@ -296,9 +293,9 @@ namespace RNAssistant.Harness
                         DocumentKey = "bound-excel-chart",
                         DocumentTitle = "Bound.xlsx"
                     };
-                    var tools = host.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(host.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
-                    var result = executor.Execute(Command(
+                    var result = executor.ExecuteManual(Command(
                         ExcelChartToolIds.UpsertChart,
                         "sheet", "Data", "chartName", "BoundChart"),
                         tools, new AppSettings(), false, true, chat);
@@ -308,7 +305,7 @@ namespace RNAssistant.Harness
                     var dispatched = inner.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelChartApplyOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closed = executor.Execute(Command(
+                    var closed = executor.ExecuteManual(Command(
                         ExcelChartToolIds.DeleteChart,
                         "sheet", "Data", "chartName", "BoundChart"),
                         tools, new AppSettings(), false, true, chat);
@@ -328,7 +325,7 @@ namespace RNAssistant.Harness
         {
             return executor.CreateNativeRuntime(
                 NewSession(adapter),
-                adapter.GetBuiltInTools().Where(tool =>
+                OfficeToolCatalog.ForHost(adapter.HostName).Where(tool =>
                     ExcelChartToolIds.Owns(tool.Id)),
                 new AppSettings(), "agent", false);
         }

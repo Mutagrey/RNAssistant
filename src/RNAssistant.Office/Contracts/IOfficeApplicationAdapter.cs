@@ -14,8 +14,6 @@ namespace RNAssistant.Office
         string GetDocumentSnapshot(int maxChars);
         void PrepareForContextCapture();
         ContextNote CaptureSelectionContext(string mode, int maxChars);
-        IEnumerable<ToolDefinition> GetBuiltInTools();
-        ToolResult ExecuteTool(ToolCommand command);
     }
 
     public interface IOfficeDocumentExecutionGuard

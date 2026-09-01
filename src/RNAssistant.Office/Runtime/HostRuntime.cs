@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Runtime
 {
@@ -17,19 +18,19 @@ namespace RNAssistant.Office.Runtime
             _mutationLockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
         }
 
-        internal ToolResult ExecuteForExpectedDocument(
+        internal ToolRunResult ExecuteForExpectedDocument(
             OfficeDocumentExecutionExpectation target,
             bool requiresOfficeDocument,
-            Func<ToolResult> action)
+            Func<ToolRunResult> action)
         {
             return ExecuteForExpectedDocument(target, requiresOfficeDocument, CancellationToken.None, action);
         }
 
-        internal ToolResult ExecuteForExpectedDocument(
+        internal ToolRunResult ExecuteForExpectedDocument(
             OfficeDocumentExecutionExpectation target,
             bool requiresOfficeDocument,
             CancellationToken cancellationToken,
-            Func<ToolResult> action)
+            Func<ToolRunResult> action)
         {
             // A public execution entry is never reentrant merely because a UI callback
             // happened on the thread of a different, still-running operation.
@@ -47,7 +48,7 @@ namespace RNAssistant.Office.Runtime
                 }
                 catch (OfficeDocumentGuardException ex)
                 {
-                    return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+                    return ToolRunResult.Error(ex.Message, null, ex.ErrorCode, ex.Retryable);
                 }
                 catch (MutationLockException ex)
                 {
@@ -56,12 +57,12 @@ namespace RNAssistant.Office.Runtime
             }
         }
 
-        internal ToolResult ExecuteMutation(
+        internal ToolRunResult ExecuteMutation(
             OfficeDocumentExecutionExpectation target,
             bool mutatesSharedLocalState,
             bool mutatesDocument,
             CancellationToken cancellationToken,
-            Func<ToolResult> action)
+            Func<ToolRunResult> action)
         {
             var access = mutatesDocument ? CaptureAccess(target) : null;
             // The outer document scope also covers preparation. Direct callers
@@ -72,13 +73,13 @@ namespace RNAssistant.Office.Runtime
                 _mutationLockDirectory, "local_state", MayWait(access), cancellationToken, false))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                Func<ToolResult> execute = delegate
+                Func<ToolRunResult> execute = delegate
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     try { return action(); }
                     catch (OperationCanceledException)
                     {
-                        return ToolResult.Fail(
+                        return ToolRunResult.Error(
                             "Cancellation was observed after mutation execution started. The external effect may have been applied; inspect state before retrying.",
                             null, "tool_effect_uncertain", false);
                     }
@@ -86,7 +87,7 @@ namespace RNAssistant.Office.Runtime
                     {
                         // A nested read/guard may fail after a write. Do not let the outer
                         // access boundary misclassify that as a retryable pre-dispatch refusal.
-                        return ToolResult.Fail(
+                        return ToolRunResult.Error(
                             "Document access failed after mutation execution started. The external effect may have been applied; inspect state before retrying. " + ex.Message,
                             null, "tool_effect_uncertain", false);
                     }
@@ -153,13 +154,13 @@ namespace RNAssistant.Office.Runtime
             }
         }
 
-        private ToolResult ExecuteGuarded(DocumentAccess access,
-            OfficeDocumentExecutionExpectation target, CancellationToken cancellationToken, Func<ToolResult> action)
+        private ToolRunResult ExecuteGuarded(DocumentAccess access,
+            OfficeDocumentExecutionExpectation target, CancellationToken cancellationToken, Func<ToolRunResult> action)
         {
-            try { return ExecuteGuarded<ToolResult>(access, target, cancellationToken, action); }
+            try { return ExecuteGuarded<ToolRunResult>(access, target, cancellationToken, action); }
             catch (OfficeDocumentGuardException ex)
             {
-                return ToolResult.Fail(ex.Message, null, ex.ErrorCode, ex.Retryable);
+                return ToolRunResult.Error(ex.Message, null, ex.ErrorCode, ex.Retryable);
             }
         }
 
@@ -192,7 +193,7 @@ namespace RNAssistant.Office.Runtime
                 DocumentAccessGate.Invoke(access.Dispatcher, guarded);
         }
 
-        private ToolResult CheckTarget(DocumentAccess access, OfficeDocumentExecutionExpectation target)
+        private ToolRunResult CheckTarget(DocumentAccess access, OfficeDocumentExecutionExpectation target)
         {
             if (access.Session != null)
             {
@@ -234,7 +235,7 @@ namespace RNAssistant.Office.Runtime
                 if (string.IsNullOrWhiteSpace(session.Host) || string.IsNullOrWhiteSpace(session.RuntimeDocumentId) ||
                     session.MutationGate == null || dispatcher == null)
                 {
-                    throw new OfficeDocumentGuardException(ToolResult.Fail(
+                    throw new OfficeDocumentGuardException(ToolRunResult.Error(
                         "The bound Office document session is incomplete. No Office action was started.",
                         null, "document_session_unavailable", false));
                 }
@@ -244,13 +245,9 @@ namespace RNAssistant.Office.Runtime
                     session.MutationGate, session, dispatcher);
             }
 
-            // Compatibility boundary for the not-yet-switched production hosts.
-            // These keys do not identify a live workbook across lifetimes.
-            var host = target == null ? _adapter.HostName : target.Host ?? _adapter.HostName;
-            var document = target == null ? _adapter.DocumentKey : target.DocumentKey ?? _adapter.DocumentKey;
-            var legacyIdentity = (host ?? string.Empty) + "|" + (document ?? string.Empty);
-            return new DocumentAccess("legacy_document|" + legacyIdentity.ToLowerInvariant(),
-                "document_" + AppDataPaths.SafeFileName(legacyIdentity), null, null, dispatcher);
+            throw new OfficeDocumentGuardException(ToolRunResult.Error(
+                "A bound Office document session is required. No Office action was started.",
+                null, "document_session_unavailable", false));
         }
 
         private static bool HasExpectation(OfficeDocumentExecutionExpectation target)
@@ -259,9 +256,9 @@ namespace RNAssistant.Office.Runtime
                 (!string.IsNullOrWhiteSpace(target.DocumentKey) || !string.IsNullOrWhiteSpace(target.RuntimeDocumentKey));
         }
 
-        private static ToolResult LockFailure(MutationLockException exception)
+        private static ToolRunResult LockFailure(MutationLockException exception)
         {
-            return ToolResult.Fail(exception.Message, null,
+            return ToolRunResult.Error(exception.Message, null,
                 exception.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable",
                 exception.Retryable);
         }

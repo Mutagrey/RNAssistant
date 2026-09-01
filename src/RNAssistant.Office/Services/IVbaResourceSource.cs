@@ -1,10 +1,11 @@
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
     internal interface IVbaResourceSource
     {
-        ToolResult ListResourceModules();
-        ToolResult ReadResourceModule(ChatSession session, string moduleName, int maxChars);
+        ToolRunResult ListResourceModules();
+        ToolRunResult ReadResourceModule(ChatSession session, string moduleName, int maxChars);
     }
 }

@@ -110,8 +110,6 @@
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Identity\DocumentIdentity.cs" Link="OfficeHosts\Identity\DocumentIdentity.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeDocumentExecutionGuard.cs" Link="Office\Runtime\OfficeDocumentExecutionGuard.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeStaDispatcher.cs" Link="Office\Runtime\OfficeStaDispatcher.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Runtime\LegacyToolDefinitionAdapter.cs" Link="Office\Runtime\LegacyToolDefinitionAdapter.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Runtime\LegacyToolResultAdapter.cs" Link="Office\Runtime\LegacyToolResultAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\NativeToolRuntimeAdapter.cs" Link="Office\Runtime\NativeToolRuntimeAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolHandlerRegistry.cs" Link="Office\Runtime\ToolHandlerRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolRuntime.cs" Link="Office\Runtime\ToolRuntime.cs" />

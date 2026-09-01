@@ -21,7 +21,7 @@ namespace RNAssistant.Office.Tools
                 string.Equals(toolId, CloseToolId, StringComparison.Ordinal);
         }
 
-        internal static IEnumerable<ToolDefinition> GetTools()
+        internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(CreateToolId,
                 "Task list: Create the visible checklist for the current active chat task. Use for at least three meaningful stages, not individual tool calls.",
@@ -34,10 +34,10 @@ namespace RNAssistant.Office.Tools
                 CloseSchema(), "task_list_close");
         }
 
-        private static ToolDefinition Projection(
+        private static ToolCatalogEntry Projection(
             string id, string description, string schema, string name)
         {
-            return ControllerToolDefinition.CreateTypedProjection(
+            return ControllerToolCatalogEntry.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema),
                 new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
                     false, false, new[] { "agent", "plan" }),

@@ -22,7 +22,17 @@
       try {
         if (action === "installVbaTool") {
           var selectedId = tool.Id;
-          state.tools = await options.send("saveTools", { tools: options.readTools() }) || state.tools;
+          var saved = options.parseMutation(await options.send(
+            "saveTools", options.mutationRequest()));
+          state.tools = saved.failure && options.reconcile
+            ? options.reconcile(saved.tools) : saved.tools;
+          if (saved.failure) {
+            var saveFailure = new Error(saved.failure.message ||
+              "Инструмент не сохранён.");
+            saveFailure.code = saved.failure.code ||
+              "tool_library_mutation_failed";
+            throw saveFailure;
+          }
           if (options.acceptSaved) options.acceptSaved();
           state.selectedToolIndex = findToolIndex(state.tools, selectedId);
           tool = state.tools[state.selectedToolIndex];
@@ -35,7 +45,7 @@
             !["none", "verified_no_change", "verified_change", "unknown"].includes(result.effect)) {
           throw new Error("VBA package action returned an incompatible result contract.");
         }
-        state.tools = Array.isArray(response.tools) ? response.tools : state.tools;
+        state.tools = options.parseLibrary(response.tools);
         state.selectedToolIndex = findToolIndex(state.tools, tool.Id);
         state.selectedToolComponentIndex = 0;
         options.renderTools();
@@ -93,9 +103,19 @@
         options.validateAll();
         var selected = state.tools[state.selectedToolIndex];
         var selectedId = selected ? selected.Id : "";
-        var response = await options.send("saveTools", { tools: options.readTools() });
-        state.tools = response || [];
+        var response = options.parseMutation(await options.send(
+          "saveTools", options.mutationRequest()));
+        state.tools = response.failure && options.reconcile
+          ? options.reconcile(response.tools) : response.tools;
         state.selectedToolIndex = selectedId ? findToolIndex(state.tools, selectedId) : -1;
+        if (response.failure) {
+          var failure = new Error(response.failure.message ||
+            "Инструменты не сохранены.");
+          failure.detail = response.failure.message;
+          failure.code = response.failure.code ||
+            "tool_library_mutation_failed";
+          throw failure;
+        }
         if (options.acceptSaved) options.acceptSaved();
         options.renderTools();
         options.log("Инструменты сохранены.");

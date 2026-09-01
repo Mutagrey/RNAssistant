@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,7 +27,7 @@ namespace RNAssistant.Harness
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (markDispatchPossible == null)
                 throw new ArgumentNullException(nameof(markDispatchPossible));
-            ExcelTableRequests.Add(new ToolCommand
+            ExcelTableRequests.Add(new ToolInvocation
             {
                 ToolId = "excel.add_table",
                 Arguments = new Dictionary<string, object>

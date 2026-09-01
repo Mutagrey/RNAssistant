@@ -21,7 +21,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 AssertTrue(!executor.RequiresSessionLeaseForManualRun("excel.read_range", tools),
                     "read-only Excel tool can run beside an active chat");
                 AssertTrue(executor.RequiresSessionLeaseForManualRun("excel.write_range", tools),
@@ -40,7 +40,7 @@ namespace RNAssistant.Harness
                     "manual read snapshot has an isolated observation identity");
                 AssertEqual("B", ReadVbaSource(executor, manualSnapshot, "Module1").Text,
                     "manual library resource read succeeds on current VBA source");
-                var staleAgent = executor.Execute(
+                var staleAgent = executor.ExecuteManual(
                     Command("common.vba_apply_patch", "moduleName", "Module1", "patch", new JArray(new JObject
                     {
                         ["op"] = "replace",
@@ -62,9 +62,9 @@ namespace RNAssistant.Harness
             var adapter = FakeOfficeAdapter.ForHost("Excel");
             WithTempExecutor(adapter, delegate(OfficeToolExecutor executor, FakeOfficeAdapter fake)
             {
-                var builtIns = new List<ToolDefinition>(fake.GetBuiltInTools());
-                var unknown = executor.Execute(
-                    new ToolCommand { ToolId = "create_worksheet" },
+                var builtIns = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(fake.HostName));
+                var unknown = executor.ExecuteManual(
+                    new ToolInvocation { ToolId = "create_worksheet" },
                     builtIns,
                     new AppSettings(),
                     false,
@@ -74,16 +74,16 @@ namespace RNAssistant.Harness
                 AssertContains(unknown.Message, "Unknown tool id", "unknown tool message");
                 AssertContains(unknown.Message, "excel.add_sheet", "unknown tool suggestion");
                 AssertContains(unknown.DataJson, "availableToolIds", "unknown tool diagnostics");
-                AssertEqual(0, fake.Executed.Count, "unknown adapter count");
+                AssertEqual(0, fake.TotalBackendCallCount, "unknown adapter count");
 
-                fake.Executed.Clear();
+                fake.ClearBackendCalls();
                 var disabled = CustomTool("Excel", "excel.disabled_custom");
                 disabled.Enabled = false;
-                var tools = new List<ToolDefinition>(builtIns);
+                var tools = new List<ToolCatalogEntry>(builtIns);
                 tools.Add(disabled);
 
-                var disabledResult = executor.Execute(
-                    new ToolCommand { ToolId = "excel.disabled_custom" },
+                var disabledResult = executor.ExecuteManual(
+                    new ToolInvocation { ToolId = "excel.disabled_custom" },
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
@@ -91,7 +91,7 @@ namespace RNAssistant.Harness
 
                 AssertTrue(!disabledResult.Success, "disabled tool should fail");
                 AssertContains(disabledResult.Message, "Tool is disabled", "disabled tool message");
-                AssertEqual(0, fake.Executed.Count, "disabled adapter count");
+                AssertEqual(0, fake.TotalBackendCallCount, "disabled adapter count");
             });
         }
 
@@ -99,10 +99,10 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var command = new ToolCommand { ToolId = "common.render_html" };
-                var result = executor.Execute(
+                var command = new ToolInvocation { ToolId = "common.render_html" };
+                var result = executor.ExecuteManual(
                     command,
-                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                    new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)),
                     new AppSettings(),
                     false,
                     false);
@@ -112,9 +112,9 @@ namespace RNAssistant.Harness
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var result = executor.Execute(
-                    new ToolCommand { ToolId = "outlook.draft_reply" },
-                    new List<ToolDefinition>(adapter.GetBuiltInTools()),
+                var result = executor.ExecuteManual(
+                    new ToolInvocation { ToolId = "outlook.draft_reply" },
+                    new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)),
                     new AppSettings(),
                     false,
                     false);
@@ -134,7 +134,7 @@ namespace RNAssistant.Harness
             };
             foreach (var pair in expectedHostCounts)
             {
-                var runnable = ConversationRunService.PrepareToolsForRun(FakeOfficeAdapter.ForHost(pair.Key).GetBuiltInTools());
+                var runnable = ConversationRunService.PrepareToolsForRun(OfficeToolCatalog.ForHost(pair.Key));
                 AssertEqual(pair.Value, runnable.Count, pair.Key + " compact runnable tool count");
             }
 
@@ -149,10 +149,10 @@ namespace RNAssistant.Harness
             {
                 WithTempExecutor(FakeOfficeAdapter.ForHost(pair.Key), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
-                    var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                    var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                     foreach (var id in pair.Value)
                     {
-                        var result = executor.Execute(new ToolCommand { ToolId = id }, tools, new AppSettings(), false, false);
+                        var result = executor.ExecuteManual(new ToolInvocation { ToolId = id }, tools, new AppSettings(), false, false);
                         AssertEqual("unknown_tool", result.ErrorCode, id + " is removed");
                     }
                 });
@@ -160,7 +160,7 @@ namespace RNAssistant.Harness
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 foreach (var id in new[]
                 {
                     "common.skills_list",
@@ -172,7 +172,7 @@ namespace RNAssistant.Harness
                     "common.html_workspace_search"
                 })
                 {
-                    var result = executor.Execute(new ToolCommand { ToolId = id }, tools, new AppSettings(), false, false);
+                    var result = executor.ExecuteManual(new ToolInvocation { ToolId = id }, tools, new AppSettings(), false, false);
                     AssertEqual("unknown_tool", result.ErrorCode, id + " is removed");
                 }
 
@@ -190,7 +190,7 @@ namespace RNAssistant.Harness
                     DocumentTitle = adapter.DocumentTitle,
                     Title = "HTML"
                 };
-                var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
+                var tools = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName));
 
                 var drySession = new ChatSession();
                 drySession.HtmlWorkspace.Files = null;
@@ -203,32 +203,32 @@ namespace RNAssistant.Harness
                 AssertTrue(drySession.HtmlWorkspace.DataSources == null, "html dry run does not normalize data in place");
                 AssertEqual(default(DateTime), drySession.HtmlWorkspace.UpdatedUtc, "html dry run keeps timestamp");
 
-                var fileCommand = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                var fileCommand = new ToolInvocation { ToolId = "common.html_workspace_upsert" };
                 fileCommand.Arguments["resourceType"] = "file";
                 fileCommand.Arguments["name"] = "index.html";
                 fileCommand.Arguments["content"] = "<h1>Report</h1>";
                 fileCommand.Arguments["setActive"] = true;
 
-                var fileResult = executor.Execute(fileCommand, tools, new AppSettings(), false, false, session);
+                var fileResult = executor.ExecuteManual(fileCommand, tools, new AppSettings(), false, false, session);
                 AssertTrue(fileResult.Success, "html workspace file save succeeds");
                 AssertEqual(1, session.HtmlWorkspace.Files.Count, "html file count");
                 AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "active html file");
 
-                var scriptCommand = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                var scriptCommand = new ToolInvocation { ToolId = "common.html_workspace_upsert" };
                 scriptCommand.Arguments["resourceType"] = "file";
                 scriptCommand.Arguments["name"] = "app.js";
                 scriptCommand.Arguments["content"] = "window.reportReady = true;";
                 scriptCommand.Arguments["setActive"] = false;
-                var scriptResult = executor.Execute(scriptCommand, tools, new AppSettings(), false, false, session);
+                var scriptResult = executor.ExecuteManual(scriptCommand, tools, new AppSettings(), false, false, session);
                 AssertTrue(scriptResult.Success, "html workspace script save succeeds");
                 AssertEqual(2, session.HtmlWorkspace.Files.Count, "html file and script count");
                 AssertEqual("script", session.HtmlWorkspace.Files[1].Kind, "script kind normalized");
 
-                var dataCommand = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                var dataCommand = new ToolInvocation { ToolId = "common.html_workspace_upsert" };
                 dataCommand.Arguments["resourceType"] = "data";
                 dataCommand.Arguments["name"] = "rows";
                 dataCommand.Arguments["content"] = "{\"items\":[1,2]}";
-                var dataResult = executor.Execute(dataCommand, tools, new AppSettings(), false, false, session);
+                var dataResult = executor.ExecuteManual(dataCommand, tools, new AppSettings(), false, false, session);
                 AssertTrue(dataResult.Success, "html workspace data save succeeds");
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data count");
 
@@ -239,15 +239,15 @@ namespace RNAssistant.Harness
                 var readResult = ReadResource(gateway, session, dataResource.Reference.Uri, "text", null, 8000).Result;
                 AssertContains(readResult.Text, "items", "html data reads through the resource gateway");
 
-                var removedRead = executor.Execute(
-                    new ToolCommand { ToolId = "common.html_workspace_read" },
+                var removedRead = executor.ExecuteManual(
+                    new ToolInvocation { ToolId = "common.html_workspace_read" },
                     tools,
                     new AppSettings(),
                     false,
                     false,
                     session);
-                var removedSearch = executor.Execute(
-                    new ToolCommand { ToolId = "common.html_workspace_search" },
+                var removedSearch = executor.ExecuteManual(
+                    new ToolInvocation { ToolId = "common.html_workspace_search" },
                     tools,
                     new AppSettings(),
                     false,
@@ -256,17 +256,17 @@ namespace RNAssistant.Harness
                 AssertEqual("unknown_tool", removedRead.ErrorCode, "removed HTML read id stays unknown");
                 AssertEqual("unknown_tool", removedSearch.ErrorCode, "removed HTML search id stays unknown");
 
-                var deleteScript = new ToolCommand { ToolId = "common.html_workspace_delete" };
+                var deleteScript = new ToolInvocation { ToolId = "common.html_workspace_delete" };
                 deleteScript.Arguments["resourceType"] = "file";
                 deleteScript.Arguments["name"] = "app.js";
-                var deleteScriptResult = executor.Execute(deleteScript, tools, new AppSettings(), false, false, session);
+                var deleteScriptResult = executor.ExecuteManual(deleteScript, tools, new AppSettings(), false, false, session);
                 AssertTrue(deleteScriptResult.Success, "html workspace file delete succeeds");
                 AssertEqual(1, session.HtmlWorkspace.Files.Count, "html script deleted");
 
-                var deleteData = new ToolCommand { ToolId = "common.html_workspace_delete" };
+                var deleteData = new ToolInvocation { ToolId = "common.html_workspace_delete" };
                 deleteData.Arguments["resourceType"] = "data";
                 deleteData.Arguments["name"] = "rows";
-                var deleteDataResult = executor.Execute(deleteData, tools, new AppSettings(), false, false, session);
+                var deleteDataResult = executor.ExecuteManual(deleteData, tools, new AppSettings(), false, false, session);
                 AssertTrue(deleteDataResult.Success, "html workspace data delete succeeds");
                 AssertEqual(0, session.HtmlWorkspace.DataSources.Count, "html data deleted");
                 HtmlWorkspaceToolService.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
@@ -279,10 +279,10 @@ namespace RNAssistant.Harness
                     DocumentTitle = adapter.DocumentTitle,
                     Title = "Bound HTML data"
                 };
-                var directRead = executor.Execute(Command("excel.read_range", "sheet", "Data", "address", "A1:B4", "content", "values"), tools, new AppSettings(), false, false, boundSession);
+                var directRead = executor.ExecuteManual(Command("excel.read_range", "sheet", "Data", "address", "A1:B4", "content", "values"), tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(directRead.Success, "published excel.read_range contract executes directly");
 
-                var invalidBind = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
+                var invalidBind = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
                 invalidBind.Arguments["dataName"] = "invalid";
                 invalidBind.Arguments["sourceTool"] = "excel.read_range";
                 invalidBind.Arguments["sourceArguments"] = new JObject
@@ -292,7 +292,7 @@ namespace RNAssistant.Harness
                     ["content"] = "values",
                     ["kind"] = "range"
                 };
-                var invalidBindResult = executor.Execute(invalidBind, tools, new AppSettings(), false, false, boundSession);
+                var invalidBindResult = executor.ExecuteManual(invalidBind, tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(!invalidBindResult.Success, "HTML bind rejects fields from another source schema before execution");
                 AssertContains(invalidBindResult.Message, "unsupported property kind", "HTML bind reports the exact invalid nested field");
 
@@ -305,7 +305,7 @@ namespace RNAssistant.Harness
                 AssertTrue(rangeVariant.SelectToken("properties.sourceArguments.properties.kind") == null, "HTML bind range branch does not advertise inspect.kind");
                 AssertTrue(rangeVariant.SelectToken("properties.sourceArguments.properties.address") != null, "HTML bind range branch exposes read_range.address");
 
-                var bind = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
+                var bind = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
                 bind.Arguments["dataName"] = "sales";
                 bind.Arguments["sourceTool"] = "excel.read_range";
                 bind.Arguments["sourceArguments"] = new JObject
@@ -317,7 +317,7 @@ namespace RNAssistant.Harness
                 bind.Arguments["transform"] = "table";
                 bind.Arguments["headers"] = "firstRow";
                 bind.Arguments["refreshPolicy"] = "on_preview";
-                var bindResult = executor.Execute(bind, tools, new AppSettings(), false, false, boundSession);
+                var bindResult = executor.ExecuteManual(bind, tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(bindResult.Success, "html Office data binding succeeds");
                 AssertEqual("excel.read_range", boundSession.HtmlWorkspace.DataSources[0].Binding.ToolId, "html binding source persisted");
                 var table = JObject.Parse(boundSession.HtmlWorkspace.DataSources[0].Json);
@@ -327,7 +327,7 @@ namespace RNAssistant.Harness
                 AssertEqual("bounded", boundSession.HtmlWorkspace.DataSources[0].Binding.PayloadCompleteness,
                     "binding makes unknown source completeness explicit");
 
-                var truncatedSource = adapter.GetBuiltInTools().Single(item => item.Id == "excel.inspect");
+                var truncatedSource = OfficeToolCatalog.ForHost(adapter.HostName).Single(item => item.Id == "excel.inspect");
                 var truncatedHtml = new HtmlWorkspaceToolService(
                     adapter,
                     new[] { truncatedSource },
@@ -342,7 +342,7 @@ namespace RNAssistant.Harness
                     DocumentKey = adapter.DocumentKey,
                     DocumentTitle = adapter.DocumentTitle
                 };
-                var truncatedBind = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
+                var truncatedBind = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
                 truncatedBind.Arguments["dataName"] = "boundedSheets";
                 truncatedBind.Arguments["sourceTool"] = "excel.inspect";
                 truncatedBind.Arguments["sourceArguments"] = new JObject { ["kind"] = "sheets" };
@@ -367,7 +367,7 @@ namespace RNAssistant.Harness
                 var gateExits = 0;
                 var gatedHtml = new HtmlWorkspaceToolService(
                     adapter,
-                    adapter.GetBuiltInTools(),
+                    OfficeToolCatalog.ForHost(adapter.HostName),
                     ignoredSession =>
                     {
                         gateEntries += 1;
@@ -388,35 +388,35 @@ namespace RNAssistant.Harness
                 AssertEqual(1, gateEntries, "HTML binding enters the shared live-document read gate");
                 AssertEqual(1, gateExits, "HTML binding releases the shared live-document read gate");
 
-                var write = executor.Execute(Command("excel.write_range", "kind", "value", "sheet", "Data",
+                var write = executor.ExecuteManual(Command("excel.write_range", "kind", "value", "sheet", "Data",
                     "address", "B2", "value", "999"), tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(write.Success, "HTML refresh fixture writes through the typed Excel owner");
                 var historyBeforeRefresh = boundSession.HtmlWorkspace.History.Count;
-                var refresh = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.RefreshDataToolId };
+                var refresh = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.RefreshDataToolId };
                 refresh.Arguments["name"] = "sales";
-                var refreshResult = executor.Execute(refresh, tools, new AppSettings(), false, false, boundSession);
+                var refreshResult = executor.ExecuteManual(refresh, tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(refreshResult.Success, "bound HTML data refresh succeeds");
                 AssertContains(boundSession.HtmlWorkspace.DataSources[0].Json, "999", "bound HTML data refreshes without model rewrite");
                 AssertEqual(historyBeforeRefresh, boundSession.HtmlWorkspace.History.Count, "automatic data refresh does not spam undo history");
 
-                var freeze = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.FreezeDataToolId };
+                var freeze = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.FreezeDataToolId };
                 freeze.Arguments["name"] = "sales";
-                var freezeResult = executor.Execute(freeze, tools, new AppSettings(), false, false, boundSession);
+                var freezeResult = executor.ExecuteManual(freeze, tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(freezeResult.Success, "bound HTML data can be frozen");
                 AssertTrue(boundSession.HtmlWorkspace.DataSources[0].Binding == null, "freeze keeps JSON and removes binding");
 
-                var invalidData = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                var invalidData = new ToolInvocation { ToolId = "common.html_workspace_upsert" };
                 invalidData.Arguments["resourceType"] = "data";
                 invalidData.Arguments["name"] = "bad";
                 invalidData.Arguments["content"] = "{ bad";
-                var invalidResult = executor.Execute(invalidData, tools, new AppSettings(), false, false, session);
+                var invalidResult = executor.ExecuteManual(invalidData, tools, new AppSettings(), false, false, session);
                 AssertTrue(!invalidResult.Success, "invalid html data fails");
                 AssertContains(invalidResult.Message, "Invalid HTML workspace JSON", "invalid html data message");
 
                 HtmlWorkspaceToolService.UpsertFile(session, "styles.css", "css", "body{}", false);
-                var cssActive = new ToolCommand { ToolId = "common.html_workspace_set_active" };
+                var cssActive = new ToolInvocation { ToolId = "common.html_workspace_set_active" };
                 cssActive.Arguments["name"] = "styles.css";
-                var cssActiveResult = executor.Execute(cssActive, tools, new AppSettings(), false, false, session);
+                var cssActiveResult = executor.ExecuteManual(cssActive, tools, new AppSettings(), false, false, session);
                 AssertTrue(!cssActiveResult.Success, "non-html file cannot become active preview");
 
                 var failedSession = new ChatSession { Title = "HTML failed mutation" };
@@ -425,22 +425,22 @@ namespace RNAssistant.Harness
                 HtmlWorkspaceToolService.RestoreSnapshot(failedSession, failedSession.HtmlWorkspace.History[0].Id);
                 var failedHistoryCount = failedSession.HtmlWorkspace.History.Count;
                 var failedRedoCount = failedSession.HtmlWorkspace.RedoBranches.Count;
-                var missingActive = new ToolCommand { ToolId = "common.html_workspace_set_active" };
+                var missingActive = new ToolInvocation { ToolId = "common.html_workspace_set_active" };
                 missingActive.Arguments["name"] = "missing.html";
-                var missingResult = executor.Execute(missingActive, tools, new AppSettings(), false, false, failedSession);
+                var missingResult = executor.ExecuteManual(missingActive, tools, new AppSettings(), false, false, failedSession);
                 AssertTrue(!missingResult.Success, "missing active HTML file fails");
                 AssertEqual(failedHistoryCount, failedSession.HtmlWorkspace.History.Count, "failed set-active preserves history");
                 AssertEqual(failedRedoCount, failedSession.HtmlWorkspace.RedoBranches.Count, "failed set-active preserves redo branches");
-                var missingDryRun = executor.Execute(missingActive, tools, new AppSettings(), true, false, failedSession);
+                var missingDryRun = executor.ExecuteManual(missingActive, tools, new AppSettings(), true, false, failedSession);
                 AssertTrue(missingDryRun.Success, "native set-active dry run validates the pinned schema");
                 AssertEqual(failedHistoryCount, failedSession.HtmlWorkspace.History.Count,
                     "native set-active dry run does not mutate history");
 
-                var absolutePath = new ToolCommand { ToolId = "common.html_workspace_upsert" };
+                var absolutePath = new ToolInvocation { ToolId = "common.html_workspace_upsert" };
                 absolutePath.Arguments["resourceType"] = "file";
                 absolutePath.Arguments["name"] = "/index.html";
                 absolutePath.Arguments["content"] = "<h1>Absolute</h1>";
-                var absoluteResult = executor.Execute(absolutePath, tools, new AppSettings(), true, false, failedSession);
+                var absoluteResult = executor.ExecuteManual(absolutePath, tools, new AppSettings(), true, false, failedSession);
                 AssertTrue(absoluteResult.Success,
                     "native HTML dry run accepts schema-valid arguments without domain dispatch");
                 AssertTrue(!failedSession.HtmlWorkspace.Files.Any(item =>
@@ -460,7 +460,7 @@ namespace RNAssistant.Harness
                     DocumentTitle = adapter.DocumentTitle,
                     Title = "HTML source tools"
                 };
-                var tools = new List<ToolDefinition>(adapter.GetBuiltInTools());
+                var tools = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName));
                 HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "one\ntwo\nthree\nfour", true);
                 HtmlWorkspaceToolService.UpsertFile(session, "app.js", "script", "alpha\nconst beta = 1;\nalpha beta;", false);
 
@@ -487,7 +487,7 @@ namespace RNAssistant.Harness
                 AssertEqual("app.js", searchResult.Matches[0].Title, "HTML search identifies the exact source resource");
                 AssertContains(searchResult.Matches[0].Snippet, "beta", "HTML search returns a bounded snippet");
 
-                var patch = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.ApplyPatchToolId };
+                var patch = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.ApplyPatchToolId };
                 patch.Arguments["name"] = "app.js";
                 patch.Arguments["patch"] = new JArray
                 {
@@ -495,13 +495,13 @@ namespace RNAssistant.Harness
                     new JObject { ["op"] = "insertAfter", ["find"] = "alpha beta;", ["text"] = "\nwindow.ready = true;" }
                 };
                 var artifactCount = session.Artifacts.Count;
-                var patchResult = executor.Execute(patch, tools, new AppSettings(), false, false, session);
+                var patchResult = executor.ExecuteManual(patch, tools, new AppSettings(), false, false, session);
                 AssertTrue(patchResult.Success, "HTML structured patch succeeds");
                 AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "beta = 2", "HTML patch replaces exact source");
                 AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "window.ready", "HTML patch inserts source");
                 AssertEqual(artifactCount + 1, session.Artifacts.Count, "HTML patch creates one artifact revision");
 
-                var failedPatch = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.ApplyPatchToolId };
+                var failedPatch = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.ApplyPatchToolId };
                 failedPatch.Arguments["name"] = "app.js";
                 failedPatch.Arguments["patch"] = new JArray
                 {
@@ -509,27 +509,27 @@ namespace RNAssistant.Harness
                 };
                 var beforeFailure = session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content;
                 artifactCount = session.Artifacts.Count;
-                var failedResult = executor.Execute(failedPatch, tools, new AppSettings(), false, false, session);
+                var failedResult = executor.ExecuteManual(failedPatch, tools, new AppSettings(), false, false, session);
                 AssertTrue(!failedResult.Success, "ambiguous HTML patch fails");
                 AssertEqual("text_patch_ambiguous", failedResult.ErrorCode, "ambiguous HTML patch has stable code");
                 AssertEqual(beforeFailure, session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "failed HTML patch is atomic");
                 AssertEqual(artifactCount, session.Artifacts.Count, "failed HTML patch creates no revision");
 
-                var strictCreate = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
+                var strictCreate = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
                 strictCreate.Arguments["resourceType"] = "file";
                 strictCreate.Arguments["name"] = "index.html";
                 strictCreate.Arguments["content"] = "overwrite";
                 strictCreate.Arguments["mode"] = "createOnly";
-                var strictCreateResult = executor.Execute(strictCreate, tools, new AppSettings(), false, false, session);
+                var strictCreateResult = executor.ExecuteManual(strictCreate, tools, new AppSettings(), false, false, session);
                 AssertTrue(!strictCreateResult.Success, "HTML createOnly rejects an existing file");
                 AssertEqual("one\ntwo\nthree\nfour", session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content, "strict upsert preserves existing content");
 
-                var strictUpdate = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
+                var strictUpdate = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
                 strictUpdate.Arguments["resourceType"] = "file";
                 strictUpdate.Arguments["name"] = "missing.css";
                 strictUpdate.Arguments["content"] = "body{}";
                 strictUpdate.Arguments["mode"] = "updateOnly";
-                var strictUpdateResult = executor.Execute(strictUpdate, tools, new AppSettings(), false, false, session);
+                var strictUpdateResult = executor.ExecuteManual(strictUpdate, tools, new AppSettings(), false, false, session);
                 AssertTrue(!strictUpdateResult.Success, "HTML updateOnly rejects a missing file");
 
                 var inspectSession = new ChatSession
@@ -542,8 +542,8 @@ namespace RNAssistant.Harness
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "index.html", "html", "<main id=\"total\"></main><div id='total'></div><script src=\"local.js\"></script>", true);
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "styles.css", "css", "@import url('theme.css');", false);
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "app.js", "script", "import thing from 'pkg';\ndocument.getElementById('missing');\nRNAssistantData.missingData;", false);
-                var inspect = new ToolCommand { ToolId = HtmlWorkspaceToolCatalog.InspectWorkspaceToolId };
-                var inspectResult = executor.Execute(inspect, tools, new AppSettings(), false, false, inspectSession);
+                var inspect = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.InspectWorkspaceToolId };
+                var inspectResult = executor.ExecuteManual(inspect, tools, new AppSettings(), false, false, inspectSession);
                 AssertTrue(inspectResult.Success, "HTML static inspection succeeds even when findings exist");
                 var inspection = JObject.Parse(inspectResult.DataJson);
                 AssertTrue(!(bool)inspection["runtimeExecuted"], "HTML inspection identifies static-only scope");
@@ -690,15 +690,15 @@ namespace RNAssistant.Harness
                 var tool = CustomTool("Excel", "excel.validated");
                 var command = Command("common.tools_validate", "id", tool.Id, "host", tool.Host,
                     "description", tool.Description, "executor", "vba", "components", ToolComponentsPayload(tool));
-                var result = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings(), false, false);
+                var result = executor.ExecuteManual(command, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings(), false, false);
                 AssertTrue(result.Success, "VBA tool validates: " + result.Message);
                 AssertTrue(!HasTool(store.Load(), tool.Id), "validation does not save");
                 command.Arguments["parameterDefinitions"] = new JArray();
-                var compact = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings(), false, false);
+                var compact = executor.ExecuteManual(command, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings(), false, false);
                 AssertTrue(compact.Success, "compact parameters remain supported");
                 AssertContains(compact.DataJson, "\"parameters\":{", "native parameter schema returned");
                 command.Arguments["parameters"] = JObject.Parse(EmptyFormalToolSchema);
-                var ambiguous = executor.Execute(command, adapter.GetBuiltInTools().ToList(), new AppSettings(), false, false);
+                var ambiguous = executor.ExecuteManual(command, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings(), false, false);
                 AssertEqual("tool_parameters_ambiguous", ambiguous.ErrorCode, "ambiguous parameter input rejected");
             });
         }

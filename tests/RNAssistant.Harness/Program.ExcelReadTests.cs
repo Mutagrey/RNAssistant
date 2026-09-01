@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var inspectDefinition = tools.Single(tool => tool.Id == ExcelReadToolIds.Inspect);
                 var runtime = executor.CreateNativeRuntime(session, new[] { inspectDefinition }, new AppSettings(), "agent", false);
                 AssertTrue(runtime.Describe(new ToolCall("inspect", ExcelReadToolIds.Inspect, "{\"kind\":\"sheets\"}")) != null,
@@ -29,18 +29,16 @@ namespace RNAssistant.Harness
                     "static ownership does not create a handler absent from the captured catalog");
 
                 adapter.ExcelBackendCalls.Clear();
-                var inspect = executor.Execute(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
+                var inspect = executor.ExecuteManual(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(inspect.Success, "native inspect succeeds");
                 AssertEqual("sheets", (string)JObject.Parse(inspect.DataJson)["kind"], "inspect returns canonical selector");
                 AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelInspectOperation),
                     "inspect reaches one direct typed backend");
-                AssertEqual(0, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.Inspect),
-                    "public inspect never reaches the host adapter");
 
                 adapter.ExcelBackendCalls.Clear();
-                var range = executor.Execute(Command(ExcelReadToolIds.ReadRange,
+                var range = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
                     "sheet", "Data", "address", "A1:B4", "content", "values"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(range.Success, "native range read succeeds");
@@ -50,9 +48,6 @@ namespace RNAssistant.Harness
                     operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                     "range reaches one direct typed backend");
 
-                AssertEqual("excel_public_read_moved",
-                    adapter.ExecuteTool(Command(ExcelReadToolIds.Inspect, "kind", "sheets")).ErrorCode,
-                    "host adapter cannot execute the moved public id");
             });
 
             WithTempPaths(paths =>
@@ -74,14 +69,14 @@ namespace RNAssistant.Harness
                     {
                         Host = "Excel", DocumentKey = "bound-excel", DocumentTitle = "Bound.xlsx"
                     };
-                    var tools = host.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                    var result = executor.Execute(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
+                    var tools = OfficeToolCatalog.ForHost(host.HostName).Concat(executor.GetControllerTools()).ToList();
+                    var result = executor.ExecuteManual(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(result.Success, "native read succeeds against a bound document session");
                     AssertTrue(ownerSta, "native backend dispatch runs on the bound document owner STA");
                     var dispatched = inner.ExcelBackendCalls.Count;
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closed = executor.Execute(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
+                    var closed = executor.ExecuteManual(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
                         tools, new AppSettings(), false, false, chat);
                     AssertEqual("active_document_changed", closed.ErrorCode,
                         "closed bound workbook is rejected before dispatch");
@@ -100,10 +95,10 @@ namespace RNAssistant.Harness
                 adapter.AddExcelChartForTest(
                     "Data", "A1:B4", "SalesChart");
                 var session = NewSession(adapter);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 foreach (var kind in new[] { "workbook", "sheets", "charts", "tables", "names", "shapes" })
                 {
-                    var result = executor.Execute(Command(ExcelReadToolIds.Inspect, "kind", kind),
+                    var result = executor.ExecuteManual(Command(ExcelReadToolIds.Inspect, "kind", kind),
                         tools, new AppSettings(), false, false, session);
                     AssertTrue(result.Success, "inspect selector succeeds: " + kind);
                     var json = JObject.Parse(result.DataJson);
@@ -112,7 +107,7 @@ namespace RNAssistant.Harness
                         "selector exposes bound evidence: " + kind);
                 }
 
-                var chart = executor.Execute(Command(ExcelReadToolIds.Inspect,
+                var chart = executor.ExecuteManual(Command(ExcelReadToolIds.Inspect,
                     "kind", "charts", "sheet", "Data", "chartName", "SalesChart"),
                     tools, new AppSettings(), false, false, session);
                 AssertEqual("SalesChart", (string)JObject.Parse(chart.DataJson).SelectToken("item.name"),
@@ -120,7 +115,7 @@ namespace RNAssistant.Harness
 
                 foreach (var content in new[] { "values", "formulas", "profile" })
                 {
-                    var result = executor.Execute(Command(ExcelReadToolIds.ReadRange,
+                    var result = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
                         "sheet", "Data", "address", "A1:B4", "content", content),
                         tools, new AppSettings(), false, false, session);
                     AssertTrue(result.Success, "range representation succeeds: " + content);
@@ -135,7 +130,7 @@ namespace RNAssistant.Harness
                     }
                 }
 
-                var empty = executor.Execute(Command(ExcelReadToolIds.ReadRange,
+                var empty = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
                     "sheet", "Data", "address", "D1:E2", "content", "values"),
                     tools, new AppSettings(), false, false, session);
                 var emptyJson = JObject.Parse(empty.DataJson);
@@ -164,8 +159,8 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                var oversized = executor.Execute(Command(ExcelReadToolIds.ReadRange,
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var oversized = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
                     "sheet", "Data", "address", "A1:XFD1048576", "content", "values"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(!oversized.Success, "oversized range fails");
@@ -174,7 +169,7 @@ namespace RNAssistant.Harness
                     "host checks dimensions before values/formulas materialization");
 
                 adapter.SeedExcelSheets(205);
-                var bounded = executor.Execute(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
+                var bounded = executor.ExecuteManual(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
                     tools, new AppSettings(), false, false, session);
                 var boundedJson = JObject.Parse(bounded.DataJson);
                 AssertEqual(ExcelReadService.MaxInspectItems, boundedJson["returnedCount"].Value<int>(),
@@ -184,7 +179,7 @@ namespace RNAssistant.Harness
                 adapter.ExcelBackendCalls.Clear();
                 var wrongSession = NewSession(adapter);
                 wrongSession.DocumentKey = "other-document";
-                var wrongTarget = executor.Execute(Command(ExcelReadToolIds.ReadRange,
+                var wrongTarget = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
                     "sheet", "Data", "address", "A1"), tools, new AppSettings(), false, false, wrongSession);
                 AssertEqual("active_document_changed", wrongTarget.ErrorCode,
                     "native handler checks the chat document expectation");
@@ -241,7 +236,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var session = NewSession(adapter);
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId,
                     "dataName", "sales",
                     "sourceTool", ExcelReadToolIds.ReadRange,
@@ -250,15 +245,13 @@ namespace RNAssistant.Harness
                         ["sheet"] = "Data", ["address"] = "A1:B4", ["content"] = "values"
                     },
                     "transform", "table", "headers", "firstRow");
-                var bound = executor.Execute(bind, tools, new AppSettings(), false, false, session);
+                var bound = executor.ExecuteManual(bind, tools, new AppSettings(), false, false, session);
                 AssertTrue(bound.Success, "HTML bind succeeds through the typed read route");
                 AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                     "HTML bind uses the direct backend once");
-                AssertEqual(0, adapter.Executed.Count(command => command.ToolId == ExcelReadToolIds.ReadRange),
-                    "HTML bind never dispatches the public id to the host");
 
-                var refresh = executor.Execute(Command(HtmlWorkspaceToolCatalog.RefreshDataToolId, "name", "sales"),
+                var refresh = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.RefreshDataToolId, "name", "sales"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(refresh.Success, "HTML refresh succeeds through the same adapter");
                 AssertEqual(2, adapter.ExcelBackendCalls.Count(operation =>

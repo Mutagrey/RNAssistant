@@ -7,6 +7,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
@@ -286,7 +287,7 @@ namespace RNAssistant.Office.Services
             return TextPatternEngine.Sha256((moduleName ?? string.Empty).Trim().ToLowerInvariant());
         }
 
-        private static void EnsureSuccess(ToolResult result, string fallback)
+        private static void EnsureSuccess(ToolRunResult result, string fallback)
         {
             if (result != null && result.Success) return;
             throw new ResourceRequestException(

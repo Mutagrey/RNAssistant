@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Vba;
 
 namespace RNAssistant.Office.Vba
@@ -42,7 +43,7 @@ namespace RNAssistant.Office.Vba
             string requestedModuleName,
             int maxChars,
             out VbaModuleState module,
-            out ToolResult result)
+            out ToolRunResult result)
         {
             module = null;
             var moduleName = (requestedModuleName ?? string.Empty).Trim();
@@ -75,7 +76,7 @@ namespace RNAssistant.Office.Vba
                     return false;
                 }
             }
-            ToolResult error;
+            ToolRunResult error;
             if (!TryValidateModuleSnapshot(
                 snapshot, moduleName, false, out module, out error))
             {
@@ -86,7 +87,7 @@ namespace RNAssistant.Office.Vba
             return true;
         }
 
-        public bool TryReadProject(out IReadOnlyList<VbaModuleState> modules, out ToolResult error)
+        public bool TryReadProject(out IReadOnlyList<VbaModuleState> modules, out ToolRunResult error)
         {
             modules = null;
             error = null;
@@ -152,7 +153,7 @@ namespace RNAssistant.Office.Vba
             }
         }
 
-        public bool TryReadModule(string moduleName, int maxChars, out VbaModuleState module, out ToolResult error)
+        public bool TryReadModule(string moduleName, int maxChars, out VbaModuleState module, out ToolRunResult error)
         {
             VbaModuleSnapshot snapshot;
             VbaBackendException backendError;
@@ -172,13 +173,13 @@ namespace RNAssistant.Office.Vba
             string moduleName,
             bool requireComplete,
             out VbaModuleState module,
-            out ToolResult error)
+            out ToolRunResult error)
         {
             module = null;
             error = null;
             if (snapshot == null)
             {
-                error = ToolResult.Fail(
+                error = ToolRunResult.Error(
                     "VBA module read returned no snapshot.",
                     null,
                     "vba_read_missing_result",
@@ -190,7 +191,7 @@ namespace RNAssistant.Office.Vba
             {
                 if (snapshot.Code == null)
                 {
-                    error = ToolResult.Fail(
+                    error = ToolRunResult.Error(
                         "VBA module data has no code field.",
                         SnapshotJson(snapshot),
                         "vba_read_invalid",
@@ -202,7 +203,7 @@ namespace RNAssistant.Office.Vba
                     ? moduleName : snapshot.Name;
                 if (!string.Equals(resolvedName, moduleName, StringComparison.OrdinalIgnoreCase))
                 {
-                    error = ToolResult.Fail(
+                    error = ToolRunResult.Error(
                         "VBA module read returned a different component: " + resolvedName + ".",
                         SnapshotJson(snapshot),
                         "vba_read_invalid",
@@ -214,7 +215,7 @@ namespace RNAssistant.Office.Vba
                 var markerPresent = code.EndsWith(TruncatedMarker, StringComparison.Ordinal);
                 if (truncated != markerPresent)
                 {
-                    error = ToolResult.Fail(
+                    error = ToolRunResult.Error(
                         "VBA module truncation metadata does not match its source payload.",
                         SnapshotJson(snapshot),
                         "vba_read_invalid",
@@ -224,7 +225,7 @@ namespace RNAssistant.Office.Vba
                 if (!truncated && !string.IsNullOrWhiteSpace(codeSha256) &&
                     !string.Equals(codeSha256, VbaTextCanonicalizer.LiveCodeSha256(code), StringComparison.OrdinalIgnoreCase))
                 {
-                    error = ToolResult.Fail(
+                    error = ToolRunResult.Error(
                         "VBA module hash does not match its complete source payload.",
                         SnapshotJson(snapshot),
                         "vba_read_invalid",
@@ -245,7 +246,7 @@ namespace RNAssistant.Office.Vba
             }
             catch (FormatException ex)
             {
-                error = ToolResult.Fail(
+                error = ToolRunResult.Error(
                     "Could not parse VBA module data: " + ex.Message,
                     SnapshotJson(snapshot),
                     "vba_read_invalid",
@@ -255,7 +256,7 @@ namespace RNAssistant.Office.Vba
 
             if (requireComplete && module.Truncated)
             {
-                error = ToolResult.Fail("VBA module is too large for a safe patch.");
+                error = ToolRunResult.Error("VBA module is too large for a safe patch.");
                 module = null;
                 return false;
             }
@@ -299,9 +300,9 @@ namespace RNAssistant.Office.Vba
             }
         }
 
-        private static ToolResult InvalidProject(string message)
+        private static ToolRunResult InvalidProject(string message)
         {
-            return ToolResult.Fail(message, null, "vba_read_invalid", true);
+            return ToolRunResult.Error(message, null, "vba_read_invalid", true);
         }
 
         private static string RequireSnapshotString(string value, string name)
@@ -323,15 +324,15 @@ namespace RNAssistant.Office.Vba
             return value;
         }
 
-        private static ToolResult BackendError(VbaBackendException error)
+        private static ToolRunResult BackendError(VbaBackendException error)
         {
             if (error == null)
-                return ToolResult.Fail(
+                return ToolRunResult.Error(
                     "VBA backend returned no error.",
                     null,
                     "vba_read_missing_result",
                     true);
-            return ToolResult.Fail(
+            return ToolRunResult.Error(
                 error.Message,
                 error.Details == null
                     ? null : error.Details.ToString(Formatting.None),
@@ -339,9 +340,9 @@ namespace RNAssistant.Office.Vba
                 error.Retryable);
         }
 
-        private static ToolResult ModuleToolResult(VbaModuleState module)
+        private static ToolRunResult ModuleToolResult(VbaModuleState module)
         {
-            return ToolResult.Ok(
+            return ToolRunResult.Ok(
                 "VBA module read: " + module.Name,
                 JsonConvert.SerializeObject(new
                 {
@@ -372,7 +373,7 @@ namespace RNAssistant.Office.Vba
                     StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
-        public static bool IsModuleNotFound(ToolResult result)
+        public static bool IsModuleNotFound(ToolRunResult result)
         {
             return result != null &&
                 (string.Equals(result.ErrorCode, "vba_module_not_found", StringComparison.OrdinalIgnoreCase) ||

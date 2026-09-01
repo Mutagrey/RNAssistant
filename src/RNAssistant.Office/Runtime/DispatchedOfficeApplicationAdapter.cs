@@ -250,11 +250,6 @@ namespace RNAssistant.Office
             return ReadExpected(delegate { return Inner.CaptureSelectionContext(mode, maxChars); });
         }
 
-        public IEnumerable<ToolDefinition> GetBuiltInTools()
-        {
-            return _dispatcher.Invoke(delegate { return Inner.GetBuiltInTools().ToArray(); });
-        }
-
         public IEnumerable<SkillDefinition> GetBuiltInSkills()
         {
             return _dispatcher.Invoke(delegate
@@ -262,16 +257,6 @@ namespace RNAssistant.Office
                 var provider = Inner as IOfficeBuiltInSkillProvider;
                 var skills = provider == null ? null : provider.GetBuiltInSkills();
                 return (skills ?? new SkillDefinition[0]).ToArray();
-            });
-        }
-
-        public ToolResult ExecuteTool(ToolCommand command)
-        {
-            var expectation = _documentGuard.Current;
-            return _dispatcher.Invoke(delegate
-            {
-                var mismatch = OfficeDocumentExecutionGuardState.Validate(Inner, expectation);
-                return mismatch ?? Inner.ExecuteTool(command);
             });
         }
 

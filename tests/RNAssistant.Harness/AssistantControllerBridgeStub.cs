@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -70,6 +71,7 @@ namespace RNAssistant.Office
             {
                 Host = "Excel",
                 Title = "Harness.xlsx",
+                Tools = EmptyToolLibrary(),
                 Skills = EmptySkillLibrary()
             };
         }
@@ -284,11 +286,22 @@ namespace RNAssistant.Office
         }
 
         public InitResponse ClearRuntimeData() { return Initialize(); }
-        public IReadOnlyList<ToolDefinition> GetTools() { return new ToolDefinition[0]; }
-        public IReadOnlyList<ToolDefinition> SaveTools(IEnumerable<ToolDefinition> tools)
+        public ToolLibraryResponse GetTools() { return EmptyToolLibrary(); }
+        public ToolLibraryMutationResponse SaveTools(SaveToolsPayload payload)
         {
-            LastToolsJson = JsonConvert.SerializeObject(tools ?? new ToolDefinition[0]);
-            return new ToolDefinition[0];
+            if (payload == null || payload.Type != SaveToolsPayload.ContractType ||
+                payload.ContractVersion != ToolLibraryResponse.CurrentContractVersion)
+                throw new InvalidOperationException(
+                    "Unsupported Tool Library mutation contract.");
+            LastToolsJson = JsonConvert.SerializeObject(
+                payload.Mutations ?? new List<ToolCoreMutationPayload>());
+            return new ToolLibraryMutationResponse
+            {
+                Type = ToolLibraryMutationResponse.ContractType,
+                ContractVersion = ToolLibraryResponse.CurrentContractVersion,
+                Results = new List<ToolMutationResultDto>(),
+                Library = EmptyToolLibrary()
+            };
         }
 
         public VbaToolPackageResponse InstallVbaTool(string id, bool dryRun)
@@ -305,7 +318,7 @@ namespace RNAssistant.Office
                     Message = "installed",
                     Effect = "verified_change"
                 },
-                Tools = new ToolDefinition[0]
+                Tools = EmptyToolLibrary()
             };
         }
 
@@ -322,7 +335,7 @@ namespace RNAssistant.Office
                     Message = "uninstalled",
                     Effect = "verified_change"
                 },
-                Tools = new ToolDefinition[0]
+                Tools = EmptyToolLibrary()
             };
         }
 
@@ -432,6 +445,16 @@ namespace RNAssistant.Office
                 Skills = new List<SkillPackageDto>()
             };
         }
+
+        private static ToolLibraryResponse EmptyToolLibrary()
+        {
+            return new ToolLibraryResponse
+            {
+                Type = ToolLibraryResponse.ContractType,
+                ContractVersion = ToolLibraryResponse.CurrentContractVersion,
+                Tools = new List<ToolLibraryItemDto>()
+            };
+        }
         public ChatStateResponse ConfirmAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
         public Task<ChatStateResponse> ConfirmAgentToolAsync(
             string pendingId,
@@ -474,8 +497,8 @@ namespace RNAssistant.Office
                 RawRequestJson = includeRaw ? "{}" : null
             };
         }
-        public VbaProjectResponse GetVbaProject() { return new VbaProjectResponse { Result = ToolResult.Ok("ok") }; }
-        public ToolResult GetVbaModule(string moduleName) { LastModuleName = moduleName; return ToolResult.Ok("read"); }
+        public VbaProjectResponse GetVbaProject() { return new VbaProjectResponse { Result = ToolRunResult.Ok("ok") }; }
+        public ToolRunResult GetVbaModule(string moduleName) { LastModuleName = moduleName; return ToolRunResult.Ok("read"); }
         public VbaMutationQueryResponse GetVbaMutations(VbaMutationQueryPayload request)
         {
             LastVbaMutationCursor = request == null ? null : request.Cursor;
@@ -487,34 +510,34 @@ namespace RNAssistant.Office
             return new VbaMutationDetailResponse { MutationId = mutationId, Components = new VbaMutationComponentDto[0] };
         }
 
-        public ToolResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
+        public ToolRunResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
         {
             LastModuleName = moduleName;
             LastModuleCode = code;
             LastModuleHash = expectedCodeSha256;
-            return ToolResult.Ok("saved");
+            return ToolRunResult.Ok("saved");
         }
 
-        public ToolResult CreateVbaModule(string moduleName, string componentType, string code)
+        public ToolRunResult CreateVbaModule(string moduleName, string componentType, string code)
         {
             LastModuleName = moduleName;
             LastModuleType = componentType;
             LastModuleCode = code;
-            return ToolResult.Ok("created");
+            return ToolRunResult.Ok("created");
         }
 
-        public ToolResult DeleteVbaModule(string moduleName)
+        public ToolRunResult DeleteVbaModule(string moduleName)
         {
             LastModuleName = moduleName;
-            return ToolResult.Ok("deleted");
+            return ToolRunResult.Ok("deleted");
         }
 
-        public ToolResult RestoreVbaBackup(string backupId, string moduleName) { return ToolResult.Ok("restored"); }
-        public ToolResult RunVbaMacro(string macroName, CancellationToken cancellationToken)
+        public ToolRunResult RestoreVbaBackup(string backupId, string moduleName) { return ToolRunResult.Ok("restored"); }
+        public ToolRunResult RunVbaMacro(string macroName, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             LastModuleName = macroName;
-            return ToolResult.Ok("ran macro");
+            return ToolRunResult.Ok("ran macro");
         }
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = path ?? string.Empty }) }; }
@@ -648,7 +671,29 @@ namespace RNAssistant.Office
                     RunViewLifecycles.Completed, RunViewHealth.Clean, 0, 0, 0, 0, 0, 0,
                     null, null, "ok", DateTime.UtcNow),
                 Message = "ok",
-                Tools = new[] { new ToolDefinition { Id = "common.generated_tool" } },
+                Tools = new ToolLibraryResponse
+                {
+                    Type = ToolLibraryResponse.ContractType,
+                    ContractVersion = ToolLibraryResponse.CurrentContractVersion,
+                    Tools = new List<ToolLibraryItemDto>
+                    {
+                        new ToolLibraryItemDto
+                        {
+                            Revision = "generated-revision",
+                            Id = "common.generated_tool",
+                            Host = "Common",
+                            Name = "common.generated_tool",
+                            Description = string.Empty,
+                            ArgumentSchemaJson = "{}",
+                            Executor = "builtin",
+                            Enabled = true,
+                            BuiltIn = true,
+                            AgentCanRun = true,
+                            Components = new List<ToolPackageComponentDto>(),
+                            ArgumentOrder = new List<string>()
+                        }
+                    }
+                },
                 Skills = new SkillLibraryResponse
                 {
                     Type = SkillLibraryResponse.ContractType,
@@ -694,7 +739,7 @@ namespace RNAssistant.Office
             return new { deleted = true };
         }
 
-        public ToolResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
+        public ToolRunResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             LastToolId = toolId;
@@ -704,7 +749,7 @@ namespace RNAssistant.Office
             {
                 progress("executing", "Testing tool");
             }
-            return ToolResult.Ok("ran", "{\"ran\":true}");
+            return ToolRunResult.Ok("ran", "{\"ran\":true}");
         }
 
         private static ChatStateResponse ChatState(string title = null, string chatId = null)

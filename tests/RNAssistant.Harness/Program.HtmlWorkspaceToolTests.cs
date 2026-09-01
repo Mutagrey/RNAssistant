@@ -26,21 +26,21 @@ namespace RNAssistant.Harness
                         "complete HTML workspace family is registered");
                     foreach (var definition in definitions)
                     {
-                        AssertTrue(definition.RuntimePolicy != null,
+                        AssertTrue(definition.Policy != null,
                             definition.Id + " owns an exact typed policy");
                         AssertEqual(definition.Id ==
                                 HtmlWorkspaceToolCatalog.InspectWorkspaceToolId
                                     ? ToolEffect.Read : ToolEffect.Write,
-                            definition.RuntimePolicy.Effect,
+                            definition.Policy.Effect,
                             definition.Id + " effect policy");
                         AssertEqual(definition.Id ==
                                 HtmlWorkspaceToolCatalog.InspectWorkspaceToolId
                                     ? ToolVerification.None :
                                         ToolVerification.Tool,
-                            definition.RuntimePolicy.Verification,
+                            definition.Policy.Verification,
                             definition.Id + " verification policy");
                         AssertEqual("agent",
-                            string.Join(",", definition.RuntimePolicy.AllowedModes),
+                            string.Join(",", definition.Policy.AllowedModes),
                             definition.Id + " is Agent-only");
                     }
 
@@ -123,9 +123,6 @@ namespace RNAssistant.Harness
                     AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                         "HTML bind reaches one typed bound read backend");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                            HtmlWorkspaceToolCatalog.Owns(command.ToolId)),
-                        "HTML family never reaches generic host dispatch");
                 });
         }
 

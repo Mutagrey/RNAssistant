@@ -10,8 +10,8 @@ namespace RNAssistant.Core.ModelProtocol
 {
     public sealed class ConversationResponseParser
     {
-        public ConversationResponseParseResult Parse(string content, IEnumerable<ToolDefinition> callableTools,
-            IEnumerable<ToolDefinition> runnableCatalog, ModelProtocolCallContext context)
+        public ConversationResponseParseResult Parse(string content, IEnumerable<ToolCatalogEntry> callableTools,
+            IEnumerable<ToolCatalogEntry> runnableCatalog, ModelProtocolCallContext context)
         {
             if (context == null || !context.IsComplete)
                 return ConversationResponseParseResult.Fail("V4 requires a complete local batch-safety context: " +
@@ -30,7 +30,7 @@ namespace RNAssistant.Core.ModelProtocol
             var batchSafeIds = new HashSet<string>(context.BatchSafeReadOnlyToolIds, StringComparer.Ordinal);
             foreach (var call in parsed.Response.ToolCalls)
             {
-                ToolDefinition tool;
+                ToolCatalogEntry tool;
                 if (!knownTools.TryGetValue(call.Name, out tool))
                 {
                     return ConversationResponseParseResult.Fail(catalogIds.Contains(call.Name)

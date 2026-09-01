@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -463,7 +464,7 @@ namespace RNAssistant.Harness
             return spec.Field + "|" + (spec.Criteria ?? string.Empty);
         }
 
-        private static ToolCommand RangeMutationCommand(
+        private static ToolInvocation RangeMutationCommand(
             ExcelRangeMutationSpec spec)
         {
             var toolId = spec.Kind == ExcelRangeMutationKind.Clear
@@ -473,7 +474,7 @@ namespace RNAssistant.Harness
                     : spec.Kind == ExcelRangeMutationKind.Filter
                         ? "excel.filter_range"
                         : "excel.format_range";
-            return new ToolCommand
+            return new ToolInvocation
             {
                 ToolId = toolId,
                 Arguments = new Dictionary<string, object>

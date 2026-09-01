@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
-                    var tools = adapter.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
                         session,
@@ -54,13 +54,10 @@ namespace RNAssistant.Harness
                     AssertTrue(adapter.HasSheet("Summary") &&
                         !adapter.HasSheet("Report"),
                         "direct sheet backend renames the exact target");
-                    AssertEqual(0, adapter.Executed.Count(command =>
-                        ExcelSheetToolIds.Owns(command.ToolId)),
-                        "sheet public ids never reach generic host dispatch");
 
                     var addCalls = adapter.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelSheetAddOperation);
-                    var dryRun = executor.Execute(
+                    var dryRun = executor.ExecuteManual(
                         Command(ExcelSheetToolIds.AddSheet, "name", "DryRun"),
                         tools, new AppSettings(), true, true, session);
                     AssertTrue(dryRun.Success && !adapter.HasSheet("DryRun"),
@@ -246,9 +243,9 @@ namespace RNAssistant.Harness
                         DocumentKey = "bound-excel-sheet",
                         DocumentTitle = "Bound.xlsx"
                     };
-                    var tools = host.GetBuiltInTools()
+                    var tools = OfficeToolCatalog.ForHost(host.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
-                    var result = executor.Execute(Command(
+                    var result = executor.ExecuteManual(Command(
                         ExcelSheetToolIds.AddSheet, "name", "BoundSheet"),
                         tools, new AppSettings(), false, true, chat);
                     AssertTrue(result.Success && ownerSta,
@@ -257,7 +254,7 @@ namespace RNAssistant.Harness
                     var dispatched = inner.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelSheetAddOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closed = executor.Execute(Command(
+                    var closed = executor.ExecuteManual(Command(
                         ExcelSheetToolIds.AddSheet, "name", "Blocked"),
                         tools, new AppSettings(), false, true, chat);
                     AssertEqual("active_document_changed", closed.ErrorCode,
@@ -275,7 +272,7 @@ namespace RNAssistant.Harness
         {
             return executor.CreateNativeRuntime(
                 NewSession(adapter),
-                adapter.GetBuiltInTools().Where(tool =>
+                OfficeToolCatalog.ForHost(adapter.HostName).Where(tool =>
                     ExcelSheetToolIds.Owns(tool.Id)),
                 new AppSettings(), "agent", false);
         }

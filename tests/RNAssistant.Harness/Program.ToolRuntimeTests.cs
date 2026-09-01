@@ -11,9 +11,9 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
-using LegacyResult = RNAssistant.Core.Models.ToolResult;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Harness
@@ -23,7 +23,7 @@ namespace RNAssistant.Harness
         private const string RuntimeEmptySchema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
         private const string RuntimeIsoText = "2026-08-28T12:34:56.000Z";
 
-        private static ToolPolicy RuntimePolicy(ToolEffect effect = ToolEffect.Read,
+        private static ToolPolicy Policy(ToolEffect effect = ToolEffect.Read,
             ToolVerification verification = ToolVerification.None, bool confirmation = false,
             bool independent = false, IEnumerable<string> modes = null, int risk = 0)
         {
@@ -33,7 +33,7 @@ namespace RNAssistant.Harness
         private static ToolRegistration RuntimeRegistration(string id = "fixture.read", ToolPolicy policy = null,
             string schema = RuntimeEmptySchema, string revision = "revision-1", string handlerId = null)
         {
-            return new ToolRegistration(new ToolDescriptor(id, "Fixture tool", schema), policy ?? RuntimePolicy(),
+            return new ToolRegistration(new ToolDescriptor(id, "Fixture tool", schema), policy ?? Policy(),
                 new ToolBinding(handlerId ?? id + ".handler"), revision);
         }
 
@@ -73,9 +73,9 @@ namespace RNAssistant.Harness
                 RuntimeThrows<ArgumentException>(() => registry.Register(RuntimeRegistration(schema: schema), new RuntimeTestHandler()));
                 AssertTrue(registry.Find("fixture.read") == null, "invalid schema leaves no partial registration");
             }
-            RuntimeThrows<ArgumentException>(() => RuntimePolicy(ToolEffect.External, independent: true));
-            RuntimeThrows<ArgumentException>(() => RuntimePolicy(confirmation: true, independent: true));
-            RuntimeThrows<ArgumentException>(() => RuntimePolicy(modes: new[] { "unknown" }));
+            RuntimeThrows<ArgumentException>(() => Policy(ToolEffect.External, independent: true));
+            RuntimeThrows<ArgumentException>(() => Policy(confirmation: true, independent: true));
+            RuntimeThrows<ArgumentException>(() => Policy(modes: new[] { "unknown" }));
             RuntimeThrows<ArgumentException>(() => new ToolDescriptor("not exact", "", RuntimeEmptySchema));
         }
 
@@ -154,7 +154,7 @@ namespace RNAssistant.Harness
             var stale = new[]
             {
                 new ToolPolicySnapshot("fixture.read", "previous", f.Registration.Policy),
-                new ToolPolicySnapshot("fixture.read", "revision-1", RuntimePolicy(risk: 1)),
+                new ToolPolicySnapshot("fixture.read", "revision-1", Policy(risk: 1)),
                 new ToolPolicySnapshot("fixture.read", "revision-1", false)
             };
             foreach (var snapshot in stale)
@@ -164,7 +164,7 @@ namespace RNAssistant.Harness
                 AssertContains(result.Result.DataJson, "tool_policy_changed", "stale captured contract");
             }
             AssertEqual(0, f.Handler.Calls, "stale or untyped snapshot cannot execute");
-            var confirmation = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write,
+            var confirmation = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write,
                 confirmation: true, modes: new[] { "chat" })), "chat", true, false);
             var cannotConfirm = await confirmation.Runtime.ExecuteAsync(confirmation.Context(confirmed: true), CancellationToken.None);
             AssertEqual(ToolExecutionOutcome.Error, cannotConfirm.Outcome, "mode prohibition survives auto-confirm and a confirmed flag");
@@ -175,7 +175,7 @@ namespace RNAssistant.Harness
         {
             var registrations = 0;
             ToolExecutionContext registered = null;
-            var f = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write, ToolVerification.Tool, true)),
+            var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write, ToolVerification.Tool, true)),
                 registrar: (context, preparation) => { registrations++; registered = context; return "pending-runtime"; });
             f.Handler.Run = (context, token) =>
             {
@@ -199,7 +199,7 @@ namespace RNAssistant.Harness
 
         private static async Task ToolRuntimePersistsPreparationAcrossConfirmation()
         {
-            var registration = RuntimeRegistration(policy: RuntimePolicy(
+            var registration = RuntimeRegistration(policy: Policy(
                 ToolEffect.Write, ToolVerification.Tool, true));
             var handler = new RuntimePreparableHandler();
             ToolPreparationResult registeredPreparation = null;
@@ -295,7 +295,7 @@ namespace RNAssistant.Harness
 
         private static async Task ToolRuntimeHandlesUnavailableAndAutomaticConfirmation()
         {
-            var registration = RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write, confirmation: true));
+            var registration = RuntimeRegistration(policy: Policy(ToolEffect.Write, confirmation: true));
             foreach (var registrar in new Func<ToolExecutionContext, ToolPreparationResult, string>[]
                 { null, (context, preparation) => "", (context, preparation) => { throw new InvalidOperationException("registration failed"); } })
             {
@@ -326,7 +326,7 @@ namespace RNAssistant.Harness
             }
             foreach (var evidence in new[] { ToolEffectEvidence.None, ToolEffectEvidence.Unreported, ToolEffectEvidence.VerifiedNoChange })
             {
-                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(verification: ToolVerification.Tool)));
+                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(verification: ToolVerification.Tool)));
                 f.Handler.Run = (context, token) => Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("Read"), evidence));
                 var result = await f.Runtime.ExecuteAsync(f.Context(), CancellationToken.None);
                 AssertEqual(evidence == ToolEffectEvidence.VerifiedNoChange ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.Error,
@@ -352,7 +352,7 @@ namespace RNAssistant.Harness
             foreach (var effectKind in new[] { ToolEffect.Write, ToolEffect.External, ToolEffect.Unclassified })
             foreach (var item in cases)
             {
-                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(effectKind, ToolVerification.Tool)));
+                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(effectKind, ToolVerification.Tool)));
                 f.Handler.Run = (context, token) =>
                 {
                     if (item.Dispatch) context.MarkDispatchPossible();
@@ -364,7 +364,7 @@ namespace RNAssistant.Harness
                 AssertEqual("{\"partial\":true}", result.Result.DataJson, "classification preserves domain data");
                 AssertEqual(1, f.Handler.Calls, "unknown/error effects are never retried");
             }
-            var missing = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write, ToolVerification.Tool)));
+            var missing = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write, ToolVerification.Tool)));
             var noEvidence = await missing.Runtime.ExecuteAsync(missing.Context(), CancellationToken.None);
             AssertEqual(ToolExecutionOutcome.Error, noEvidence.Outcome, "verification policy cannot supply actual evidence before dispatch");
             AssertTrue(!noEvidence.MayHaveDispatched, "unexecuted failure is not an unknown effect");
@@ -376,7 +376,7 @@ namespace RNAssistant.Harness
             foreach (var dispatch in new[] { false, true })
             foreach (var missing in new[] { false, true })
             {
-                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(write ? ToolEffect.Write : ToolEffect.Read)));
+                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(write ? ToolEffect.Write : ToolEffect.Read)));
                 f.Handler.Run = (context, token) =>
                 {
                     if (dispatch) context.MarkDispatchPossible();
@@ -394,7 +394,7 @@ namespace RNAssistant.Harness
         {
             using (var source = new CancellationTokenSource())
             {
-                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write, confirmation: true)),
+                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write, confirmation: true)),
                     registrar: (context, preparation) => { source.Cancel(); throw new OperationCanceledException(source.Token); });
                 var result = await f.Runtime.ExecuteAsync(f.Context(), source.Token);
                 AssertEqual(ToolExecutionOutcome.NotDispatched, result.Outcome, "cancelled registration does not become an execution error");
@@ -404,7 +404,7 @@ namespace RNAssistant.Harness
             foreach (var dispatch in new[] { false, true })
             using (var source = new CancellationTokenSource())
             {
-                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(write ? ToolEffect.Write : ToolEffect.Read)));
+                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(write ? ToolEffect.Write : ToolEffect.Read)));
                 f.Handler.Run = (context, token) =>
                 {
                     if (dispatch) context.MarkDispatchPossible();
@@ -428,7 +428,7 @@ namespace RNAssistant.Harness
             }
             using (var source = new CancellationTokenSource())
             {
-                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write, ToolVerification.Tool)));
+                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write, ToolVerification.Tool)));
                 f.Handler.Run = (context, token) =>
                 {
                     context.MarkDispatchPossible();
@@ -463,7 +463,7 @@ namespace RNAssistant.Harness
         private static void ToolRuntimeContractsRoundTrip()
         {
             var modes = new[] { "agent", "plan" };
-            var policy = RuntimePolicy(ToolEffect.Write, ToolVerification.Tool, true, modes: modes, risk: 3);
+            var policy = Policy(ToolEffect.Write, ToolVerification.Tool, true, modes: modes, risk: 3);
             modes[0] = "chat";
             AssertTrue(policy.AllowedModes.SequenceEqual(new[] { "agent", "plan" }), "policy snapshots caller-owned modes");
             var snapshot = new ToolPolicySnapshot("fixture.write", "revision-1", policy);
@@ -502,102 +502,83 @@ namespace RNAssistant.Harness
             RuntimeThrows<ArgumentException>(() => new ToolExecutionEvidence(ToolDispatchEvidence.NotDispatched, ToolEffectEvidence.VerifiedChange));
         }
 
-        private static void ToolRuntimeLegacyTerminalWire()
+        private static void ToolRunResultProjectsTerminalStates()
         {
-            var policy = new ToolPolicySnapshot("fixture.write", "revision", true);
+            var context = new ToolRuntimeFixture().Context();
             var cases = new[]
             {
-                new { Source = LegacyResult.Ok("unknown is only prose"), Status = ToolResultStatus.Ok },
-                new { Source = LegacyResult.Fail("optimistic prose", errorCode: "write_rejected"), Status = ToolResultStatus.Error },
-                new { Source = LegacyResult.PartialFailure("some writes completed"), Status = ToolResultStatus.Unknown },
-                new { Source = new LegacyResult { Status = "unknown", Message = "unverified" }, Status = ToolResultStatus.Unknown }
+                new { Outcome = ToolExecutionOutcome.Ok, Result = RuntimeResult.Ok("read", "{\"value\":1}"), Status = "ok" },
+                new { Outcome = ToolExecutionOutcome.Error, Result = RuntimeResult.Error("rejected", "{\"code\":\"write_rejected\",\"retryable\":true}"), Status = "error" },
+                new { Outcome = ToolExecutionOutcome.Unknown, Result = RuntimeResult.Unknown("uncertain", "{\"code\":\"effect_unknown\"}"), Status = "unknown" }
             };
             foreach (var item in cases)
             {
-                var before = JsonConvert.SerializeObject(item.Source);
-                var outcome = LegacyToolOutcomeAdapter.Map(policy, item.Source);
-                var materialized = LegacyToolResultAdapter.Materialize(item.Source, outcome);
-                var command = new ToolCommand { ToolCallId = "call_legacy", ToolId = policy.ToolId };
-                AssertTrue(ToolResultResourceService.ExternalizeIfNeeded(new ChatSession(), command,
-                    materialized, 1024, new AppSettings()) == null,
-                    "small terminal data, including JSON null, remains inline");
-                var wire = ToolResultWire.Read(AgentJsonProtocol.BuildToolResult(command, materialized));
-                AssertTrue(wire.Success, "legacy terminal execution enters the v1 writer");
-                AssertEqual(item.Status, wire.Result.Status, "partial failure is unknown rather than a fourth wire state");
-                AssertEqual(item.Source.Message, wire.Result.Message, "message does not classify the terminal outcome");
-                AssertEqual(before, JsonConvert.SerializeObject(item.Source), "conversion does not rewrite the legacy result");
-                if (item.Status != ToolResultStatus.Ok)
-                    AssertEqual(item.Source.ErrorCode ?? "tool_effect_uncertain", (string)RuntimeData(wire.Result.DataJson)["code"],
-                        "domain error code is retained or receives the unknown fallback");
+                var record = new ToolExecutionRecord(context, item.Outcome,
+                    context.StartedUtc, item.Result.Message,
+                    result: item.Result);
+                var projection = ToolRunResultFactory.Create(record);
+                AssertEqual(ToolRunResult.ContractType, projection.Type,
+                    "manual result type is explicit");
+                AssertEqual(ToolRunResult.CurrentContractVersion,
+                    projection.ContractVersion, "manual result version is explicit");
+                AssertEqual(item.Status, projection.Status,
+                    "typed runtime outcome owns local status");
+                AssertEqual(item.Result.DataJson, projection.DataJson,
+                    "terminal data is not rewritten");
             }
-            var authoritative = LegacyToolResultAdapter.Materialize(LegacyResult.Ok("optimistic"), ToolExecutionOutcome.Unknown);
-            AssertEqual(ToolResultStatus.Unknown, authoritative.Result.Status, "runtime outcome overrides a legacy success flag");
         }
 
-        private static void ToolRuntimeLegacyPausesStayRuntimeOnly()
+        private static void ToolRunResultProjectsRuntimePauses()
         {
-            foreach (var pause in new[] { LegacyResult.WaitingConfirmation("Confirm"), LegacyResult.AwaitingUser("Answer", "{}") })
-                RuntimeThrows<InvalidOperationException>(() => LegacyToolResultAdapter.Materialize(pause, ToolExecutionOutcome.Ok));
-            RuntimeThrows<InvalidOperationException>(() =>
-                LegacyToolResultAdapter.Materialize(LegacyResult.Ok("done"), ToolExecutionOutcome.AwaitingConfirmation));
             var context = new ToolRuntimeFixture().Context();
-            var pending = new ToolExecutionRecord(context, ToolExecutionOutcome.AwaitingConfirmation, context.StartedUtc,
-                "Confirm", mayHaveDispatched: false, pendingId: "pending");
-            var pendingUi = ToolResultUiProjection.Create(pending);
-            AssertEqual("waiting_confirmation", pendingUi.Status, "UI retains the confirmation control");
-            AssertEqual("pending", pendingUi.PendingId, "pending identity stays in runtime/UI");
-            AssertTrue(pending.Result == null, "confirmation does not fabricate a terminal result");
-            var awaiting = new ToolExecutionRecord(context, ToolExecutionOutcome.Ok, context.StartedUtc,
-                "Answer", awaitingUser: true, result: RuntimeResult.Ok("Question", "{}"));
-            var awaitingUi = ToolResultUiProjection.Create(awaiting);
-            AssertEqual("awaiting_user", awaitingUi.Status, "user-input control remains separate from terminal status");
-            RuntimeThrows<InvalidOperationException>(() => LegacyToolResultAdapter.Materialize(awaitingUi, awaiting.Outcome));
+            var pending = new ToolExecutionRecord(context,
+                ToolExecutionOutcome.AwaitingConfirmation,
+                context.StartedUtc, "Confirm", mayHaveDispatched: false,
+                pendingId: "pending");
+            var pendingUi = ToolRunResultFactory.Create(pending);
+            AssertEqual("awaiting_confirmation", pendingUi.Status,
+                "confirmation is an explicit local control state");
+            AssertEqual("pending", pendingUi.PendingId,
+                "pending identity stays in runtime/UI");
+            AssertEqual(context.Policy.Revision, pendingUi.CatalogRevision,
+                "confirmation pins the exact catalog revision");
+            AssertTrue(pending.Result == null,
+                "confirmation does not fabricate a terminal result");
+            var awaiting = new ToolExecutionRecord(context,
+                ToolExecutionOutcome.Ok, context.StartedUtc, "Answer",
+                awaitingUser: true,
+                result: RuntimeResult.Ok("Question", "{}"));
+            AssertEqual("awaiting_user",
+                ToolRunResultFactory.Create(awaiting).Status,
+                "user-input control remains separate from terminal status");
         }
 
-        private static void ToolRuntimeLegacyErrorDataRemainsLiteral()
+        private static void ToolRunResultPreservesErrorMetadata()
         {
-            var source = new JObject { ["stamp"] = RuntimeIsoText, ["literal"] = "\\n\t\"quoted\"" };
-            var unchanged = source.ToString(Formatting.None);
-            var plain = LegacyToolResultAdapter.Materialize(
-                LegacyResult.Fail("Failed", unchanged, "runtime_code"), ToolExecutionOutcome.Error);
-            var body = RuntimeData(plain.Result.DataJson);
-            AssertEqual("runtime_code", (string)body["code"], "runtime code is merged into object data");
-            AssertEqual(RuntimeIsoText, (string)body["stamp"], "ISO data stays exact text");
-            AssertEqual(JTokenType.String, body["stamp"].Type, "ISO data is not a Date token");
-            AssertEqual((string)source["literal"], (string)body["literal"], "literal backslashes and escapes survive merging");
-            foreach (var code in new JToken[] { new JValue("domain_code"), new JValue(7), JValue.CreateNull() })
+            var context = new ToolRuntimeFixture().Context();
+            var data = new JObject
             {
-                source["code"] = code;
-                source["details"] = new JObject { ["stamp"] = RuntimeIsoText };
-                var collision = LegacyToolResultAdapter.Materialize(
-                    LegacyResult.Fail("Failed", source.ToString(Formatting.None), "runtime_code"), ToolExecutionOutcome.Error);
-                var merged = RuntimeData(collision.Result.DataJson);
-                AssertEqual("runtime_code", (string)merged["code"], "runtime code remains authoritative");
-                AssertTrue(JToken.DeepEquals(source, merged["details"]), "conflicting code and existing details are retained together");
-            }
-            source["code"] = "runtime_code";
-            var matching = LegacyToolResultAdapter.Materialize(
-                LegacyResult.Fail("Failed", source.ToString(Formatting.None), "runtime_code"), ToolExecutionOutcome.Error);
-            AssertTrue(JToken.DeepEquals(source, RuntimeData(matching.Result.DataJson)), "matching code does not add a details wrapper");
-            foreach (var scalar in new JToken[]
-            {
-                JValue.CreateNull(), new JValue(RuntimeIsoText), new JValue(42), new JValue(false),
-                new JArray(RuntimeIsoText, "\\n")
-            })
-            {
-                var materialized = LegacyToolResultAdapter.Materialize(
-                    LegacyResult.Fail("Failed", scalar.ToString(Formatting.None)), ToolExecutionOutcome.Error);
-                var merged = RuntimeData(materialized.Result.DataJson);
-                AssertEqual("tool_failed", (string)merged["code"], "missing error code has one fallback");
-                AssertTrue(JToken.DeepEquals(scalar, merged["details"]), "scalar and array payloads are preserved under details");
-            }
-            var literaltext = RuntimeIsoText + " literalnotjson \\n";
-            var literalResult = LegacyToolResultAdapter.Materialize(
-                LegacyResult.Fail("Failed", literaltext), ToolExecutionOutcome.Error);
-            AssertEqual(literaltext, (string)RuntimeData(literalResult.Result.DataJson)["details"], "legacy plain text remains literal data");
+                ["code"] = "runtime_code",
+                ["retryable"] = true,
+                ["stamp"] = RuntimeIsoText,
+                ["literal"] = "\\n\t\"quoted\""
+            }.ToString(Formatting.None);
+            var record = new ToolExecutionRecord(context,
+                ToolExecutionOutcome.Error, context.StartedUtc, "Failed",
+                result: RuntimeResult.Error("Failed", data));
+            var projection = ToolRunResultFactory.Create(record);
+            AssertEqual("runtime_code", projection.ErrorCode,
+                "typed error code is projected without prose inference");
+            AssertEqual(true, projection.Retryable,
+                "typed retry metadata is retained");
+            AssertEqual(data, projection.DataJson,
+                "literal payload bytes are retained");
+            AssertEqual(JTokenType.String,
+                RuntimeData(projection.DataJson)["stamp"].Type,
+                "ISO text is not converted into a date token");
         }
 
-        private static void ToolRuntimeProjectionCannotChangeExecution()
+        private static void ToolRunResultProjectionCannotChangeExecution()
         {
             var cases = new[]
             {
@@ -607,7 +588,7 @@ namespace RNAssistant.Harness
             };
             foreach (var item in cases)
             {
-                var context = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write))).Context();
+                var context = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write))).Context();
                 var original = new RuntimeResult(item.Status, "Executed", "{\"stamp\":\"" + RuntimeIsoText + "\"}");
                 var evidence = new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, item.Effect);
                 var record = new ToolExecutionRecord(context, item.Outcome, context.StartedUtc, "Executed", evidence: evidence, result: original);
@@ -616,8 +597,7 @@ namespace RNAssistant.Harness
                 var reference = new ResourceRef("rna://chat/session/artifact/full/revision/1", "1");
                 materialized.IncludeResultResource(reference, ChatArtifactKinds.ToolResult);
                 materialized.ReplaceResult(new RuntimeResult(item.Status, "Projection message", "{\"loaded\":false}", materialized.Result.Resources));
-                var ui = ToolResultUiProjection.Create(record);
-                ToolResultUiProjection.IncludeResources(ui, materialized);
+                var ui = ToolRunResultFactory.Create(record, materialized);
                 ui.Success = !ui.Success;
                 ui.Status = "prepared";
                 ui.Message = "UI only";
@@ -625,7 +605,7 @@ namespace RNAssistant.Harness
                 ui.ModelResourceRefs[0].Uri = "rna://chat/ui-only";
                 ui.ModelResultResourceRef.Revision = "UI_ONLY";
                 var wire = ToolResultWire.Read(AgentJsonProtocol.BuildToolResult(
-                    new ToolCommand { ToolCallId = context.Call.Id, ToolId = context.Call.Name }, materialized));
+                    new ToolInvocation { ToolCallId = context.Call.Id, ToolId = context.Call.Name }, materialized));
                 AssertTrue(wire.Success, "UI mutation cannot invalidate the model resource relation");
                 AssertEqual(item.Status, wire.Result.Status, "projection keeps the terminal status");
                 AssertEqual("Projection message", wire.Result.Message, "UI prose is not model data");
@@ -637,54 +617,13 @@ namespace RNAssistant.Harness
             }
         }
 
-        private static void ToolRuntimeConversionFailurePreservesKnownOutcome()
+        private static void ToolRunResultRejectsMissingExecutionRecord()
         {
-            var cases = new[]
-            {
-                new { Source = LegacyResult.Ok("Write completed"), Status = ToolResultStatus.Ok },
-                new { Source = LegacyResult.Fail("Write rejected", errorCode: "rejected"), Status = ToolResultStatus.Error },
-                new { Source = LegacyResult.PartialFailure("Write may have changed state"), Status = ToolResultStatus.Unknown }
-            };
-            foreach (var item in cases)
-                WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
-                {
-                    item.Source.ModelResourceRefs = new ResourceRef[] { null };
-                    var outcome = LegacyToolOutcomeAdapter.Map(new ToolPolicySnapshot("outlook.create_draft", "revision", true), item.Source);
-                    RuntimeThrows<ArgumentException>(() => LegacyToolResultAdapter.Materialize(item.Source, outcome));
-                    adapter.QueueResult("outlook.create_draft", item.Source);
-                    var responses = new Queue<string>(new[]
-                    {
-                        LoadToolSchemaResponse("outlook.create_draft"),
-                        "{\"message\":\"Replace\",\"tool_calls\":[{\"name\":\"outlook.create_draft\",\"arguments\":{\"kind\":\"new\",\"body\":\"Conversion\"}}]}"
-                    });
-                    var modelCalls = 0;
-                    LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
-                    {
-                        modelCalls++;
-                        return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-                    };
-                    var session = NewSession(adapter);
-                    var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
-                    var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                        ChatModes.Agent, "Create chart", session, NewContext(adapter),
-                        new AppSettings { AutoConfirmToolActions = true }, tools, null).GetAwaiter().GetResult();
-                    AssertEqual(1, adapter.Executed.Count(command => command.ToolId == "outlook.create_draft"), "conversion failure never retries execution");
-                    AssertEqual(2, modelCalls, "conversion failure never triggers model repair");
-                    var view = JObject.FromObject(result)["RunViewState"];
-                    AssertEqual(item.Status == ToolResultStatus.Ok ? 1 : 0, (int)view["UnverifiedWrites"], "legacy success is preserved without fabricated verification");
-                    AssertEqual(item.Status == ToolResultStatus.Error ? 1 : 0, (int)view["FailedCalls"], "known error count survives conversion failure");
-                    AssertEqual(item.Status == ToolResultStatus.Error ? 0 : 1, (int)view["UnknownEffects"], "conversion failure creates no extra unknown effect");
-                    var message = session.Messages.Single(entry => entry.ProtocolMessage && entry.Role != "assistant" &&
-                        entry.ToolName == "outlook.create_draft");
-                    ToolResultWireReadResult wire;
-                    string error;
-                    AssertTrue(ToolResultHistoryReader.TryRead(message, out wire, out error), "failed projection still closes the accepted exchange");
-                    AssertEqual(item.Status, wire.Result.Status, "fallback wire retains the established execution outcome");
-                    AssertEqual("result_materialization_failed", (string)RuntimeData(wire.Result.DataJson)["code"], "fallback identifies projection failure");
-                    var activity = session.Messages.Single(entry => entry.Activity != null && entry.Activity.ToolCallId == wire.ToolCallId).Activity;
-                    AssertEqual(ToolDispatchEvidence.MayHaveDispatched, activity.ExecutionEvidence.Dispatch, "conversion cannot claim non-dispatch");
-                    AssertEqual(ToolEffectEvidence.Unreported, activity.ExecutionEvidence.Effect, "legacy conversion never fabricates verified evidence");
-                });
+            var projection = ToolRunResultFactory.Create(null);
+            AssertEqual("error", projection.Status,
+                "missing runtime record is a definite projection failure");
+            AssertEqual("missing_execution_record", projection.ErrorCode,
+                "missing runtime record has an exact code");
         }
 
         private static JToken RuntimeData(string json)

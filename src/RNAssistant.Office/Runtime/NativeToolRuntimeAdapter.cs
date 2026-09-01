@@ -8,14 +8,13 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
-using LegacyResult = RNAssistant.Core.Models.ToolResult;
 
 namespace RNAssistant.Office.Runtime
 {
-    // Production composition for migrated handlers. Unmigrated controller
-    // families still use the explicit legacy port until their atomic switch.
+    // Production composition for direct typed handlers.
     internal sealed class NativeToolRuntimeAdapter : IToolRuntime
     {
         private readonly ToolRuntime _runtime;
@@ -63,7 +62,7 @@ namespace RNAssistant.Office.Runtime
             PromptSettingsService promptTools,
             ToolAuthoringService toolAuthoring,
             SkillAuthoringService skillAuthoring,
-            IReadOnlyList<ToolDefinition> discoveryCatalog,
+            IReadOnlyList<ToolCatalogEntry> discoveryCatalog,
             IReadOnlyList<SkillDefinition> skillCatalog,
             bool manualRun, bool dryRun,
             HostRuntime hostRuntime, ChatSession session,
@@ -79,7 +78,8 @@ namespace RNAssistant.Office.Runtime
                 var packageRegistration = VbaPackageToolHandler.Owns(registration);
                 var binding = packageRegistration
                     ? registration.Binding
-                    : BindingFor(registration.Descriptor.Id);
+                    : DirectToolBindingCatalog.Resolve(
+                        registration.Descriptor.Id);
                 if (binding == null ||
                     !string.Equals(binding.HandlerId, registration.Binding.HandlerId, StringComparison.Ordinal) ||
                     !string.Equals(binding.EntryPoint, registration.Binding.EntryPoint, StringComparison.Ordinal))
@@ -317,61 +317,6 @@ namespace RNAssistant.Office.Runtime
                  VbaPackageToolHandler.Owns(registration));
         }
 
-        internal static ToolBinding BindingFor(string toolId)
-        {
-            if (string.Equals(toolId, ResourceToolCatalog.ListToolId, StringComparison.Ordinal))
-                return ResourceListToolHandler.Binding;
-            if (string.Equals(toolId, ResourceToolCatalog.ResolveToolId, StringComparison.Ordinal))
-                return ResourceResolveToolHandler.Binding;
-            if (string.Equals(toolId, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal))
-                return ResourceSearchToolHandler.Binding;
-            if (string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal))
-                return ResourceReadToolHandler.Binding;
-            if (ExcelReadToolIds.Owns(toolId)) return ExcelReadToolHandler.BindingFor(toolId);
-            if (ExcelWriteToolIds.Owns(toolId)) return ExcelWriteToolHandler.Binding;
-            if (ExcelFindReplaceToolIds.Owns(toolId))
-                return ExcelFindReplaceToolHandler.BindingFor(toolId);
-            if (ExcelSheetToolIds.Owns(toolId))
-                return ExcelSheetToolHandler.BindingFor(toolId);
-            if (ExcelRangeMutationToolIds.Owns(toolId))
-                return ExcelRangeMutationToolHandler.BindingFor(toolId);
-            if (ExcelTableToolIds.Owns(toolId)) return ExcelTableToolHandler.Binding;
-            if (ExcelChartToolIds.Owns(toolId))
-                return ExcelChartToolHandler.BindingFor(toolId);
-            if (WordToolIds.Owns(toolId))
-                return WordToolHandler.BindingFor(toolId);
-            if (PowerPointToolIds.Owns(toolId))
-                return PowerPointToolHandler.BindingFor(toolId);
-            if (OutlookToolIds.Owns(toolId))
-                return OutlookToolHandler.BindingFor(toolId);
-            if (VbaToolCatalog.Owns(toolId))
-                return VbaToolHandler.BindingFor(toolId);
-            if (string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
-                StringComparison.Ordinal))
-                return UserQuestionToolHandler.Binding;
-            if (PlanDocumentToolCatalog.Owns(toolId))
-                return PlanDocumentToolHandler.BindingFor(toolId);
-            if (TaskListToolCatalog.Owns(toolId))
-                return TaskListToolHandler.BindingFor(toolId);
-            if (HtmlWorkspaceToolCatalog.Owns(toolId))
-                return HtmlWorkspaceToolHandler.BindingFor(toolId);
-            if (CapabilityToolCatalog.Owns(toolId))
-                return CapabilityToolHandler.BindingFor(toolId);
-            if (string.Equals(toolId, PromptToolCatalog.ReadToolId,
-                StringComparison.Ordinal))
-                return PromptReadToolHandler.Binding;
-            if (string.Equals(toolId, PromptToolCatalog.SaveToolId,
-                StringComparison.Ordinal))
-                return PromptSaveToolHandler.Binding;
-            if (ToolAuthoringCatalog.IsMutation(toolId))
-                return ToolAuthoringMutationToolHandler.BindingFor(toolId);
-            if (ToolAuthoringCatalog.Owns(toolId))
-                return ToolAuthoringReadToolHandler.BindingFor(toolId);
-            if (SkillAuthoringCatalog.Owns(toolId))
-                return SkillAuthoringToolHandler.BindingFor(toolId);
-            return null;
-        }
-
         public ToolPolicySnapshot Describe(ToolCall call) { return _runtime.Describe(call); }
 
         public async Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken)
@@ -391,14 +336,23 @@ namespace RNAssistant.Office.Runtime
             }
         }
 
-        internal LegacyResult ExecuteCommand(ToolCommand command, int remainingSteps, bool confirmed, CancellationToken token)
+        internal ToolRunResult ExecuteManual(ToolInvocation command,
+            int remainingSteps, CancellationToken token)
+        {
+            return ExecuteManual(command, remainingSteps, false, token);
+        }
+
+        internal ToolRunResult ExecuteManual(ToolInvocation command,
+            int remainingSteps, bool confirmed, CancellationToken token)
         {
             // Manual commands also cross the same schema/policy/handler boundary;
             // these transient identities do not create an accepted model response.
             var call = new ToolCall(string.IsNullOrWhiteSpace(command.ToolCallId) ? Guid.NewGuid().ToString("N") : command.ToolCallId,
                 command.ToolId, JsonConvert.SerializeObject(command.Arguments, Formatting.None));
             var policy = Describe(call);
-            if (policy == null) return LegacyResult.Fail("No native handler is available for this exact tool id.", null, "unknown_tool", false);
+            if (policy == null) return ToolRunResult.Error(
+                "No direct handler is available for this exact tool id.",
+                null, "unknown_tool", false);
             var identity = Guid.NewGuid().ToString("N");
             var runId = _session == null || _session.LastRun == null ||
                 string.IsNullOrWhiteSpace(_session.LastRun.RunId)
@@ -410,14 +364,8 @@ namespace RNAssistant.Office.Runtime
                 string.IsNullOrWhiteSpace(command.RuntimeStepId) ? identity : command.RuntimeStepId,
                 DateTime.UtcNow, confirmed, remainingSteps);
             var record = ExecuteAsync(context, token).GetAwaiter().GetResult();
-            var result = ToolResultUiProjection.Create(record);
             var materialized = TakeMaterialization(record);
-            if (materialized != null)
-            {
-                result.ModelAttachments = materialized.ModelAttachments;
-                ToolResultUiProjection.IncludeResources(result, materialized);
-            }
-            return result;
+            return ToolRunResultFactory.Create(record, materialized);
         }
 
         internal ToolResultMaterialization TakeMaterialization(ToolExecutionRecord record)

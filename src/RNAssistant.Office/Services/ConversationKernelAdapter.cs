@@ -19,16 +19,16 @@ namespace RNAssistant.Office.Services
     {
         public AppSettings Settings { get; private set; }
         public DocumentContext Context { get; private set; }
-        public IReadOnlyList<ToolDefinition> Tools { get; private set; }
+        public IReadOnlyList<ToolCatalogEntry> Tools { get; private set; }
         public IReadOnlyList<SkillDefinition> Skills { get; private set; }
         public IReadOnlyList<ChatAttachment> Attachments { get; private set; }
 
-        public ConversationRunInput(AppSettings settings, DocumentContext context, IReadOnlyList<ToolDefinition> tools,
+        public ConversationRunInput(AppSettings settings, DocumentContext context, IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills = null, IReadOnlyList<ChatAttachment> attachments = null)
         {
             Settings = settings ?? new AppSettings();
             Context = context;
-            Tools = tools ?? new ToolDefinition[0];
+            Tools = tools ?? new ToolCatalogEntry[0];
             Skills = skills ?? new SkillDefinition[0];
             Attachments = attachments ?? new ChatAttachment[0];
         }
@@ -53,15 +53,13 @@ namespace RNAssistant.Office.Services
         private readonly Action<string, string, ChatActivity> _progress;
         private readonly ConversationRunService.PendingToolRegistrar _registrar;
         private readonly CancellationToken _runCancellation;
-        private readonly ToolCommand _confirmedCommand;
+        private readonly ToolInvocation _confirmedCommand;
         private readonly Func<CancellationToken, Task<ConversationRunInput>> _refresh;
-        private readonly Dictionary<string, ToolCommand> _commands = new Dictionary<string, ToolCommand>(StringComparer.Ordinal);
+        private readonly Dictionary<string, ToolInvocation> _commands = new Dictionary<string, ToolInvocation>(StringComparer.Ordinal);
         private readonly Dictionary<string, ToolResultMaterialization> _results = new Dictionary<string, ToolResultMaterialization>(StringComparer.Ordinal);
-        // UI/domain compatibility only; never a model writer input.
-        private readonly Dictionary<string, ToolResult> _uiResults = new Dictionary<string, ToolResult>(StringComparer.Ordinal);
         private readonly List<object> _projectedResults = new List<object>();
         private ConversationRunInput _input;
-        private List<ToolDefinition> _catalog;
+        private List<ToolCatalogEntry> _catalog;
         private ToolPackSnapshot _toolPack;
         private IReadOnlyList<SkillDefinition> _skills;
         private ConversationModelSession _modelSession;
@@ -78,7 +76,7 @@ namespace RNAssistant.Office.Services
             AttachmentAnalysisService attachments, Action<ChatSession> saved, string mode, string text,
             ChatSession session, ConversationRunInput input, Action<string, string, ChatActivity> progress,
             ConversationRunService.PendingToolRegistrar registrar, CancellationToken cancellationToken,
-            ToolCommand confirmedCommand, Func<CancellationToken, Task<ConversationRunInput>> refresh, long revision)
+            ToolInvocation confirmedCommand, Func<CancellationToken, Task<ConversationRunInput>> refresh, long revision)
         {
             _adapter = adapter;
             _executor = executor;

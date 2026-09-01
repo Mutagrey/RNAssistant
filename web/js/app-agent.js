@@ -176,7 +176,7 @@ function groupAgentRunSteps(timeline) {
 
   function startStep(stepId, message) {
     current = {
-      id: stepId || ("legacy-" + steps.length),
+      id: stepId || ("unscoped-" + steps.length),
       message: message || "",
       items: [],
       ambient: null
@@ -422,7 +422,7 @@ function appendAgentRunViewState(parent, runViewState, runId) {
   if (!runViewState) {
     note.textContent = "Для этого run нет typed runtime state. Результат изменений не подтверждён.";
   } else if (health === "unknown" && runViewState.unverifiedWrites && !otherUnknownEffects) {
-    note.textContent = "Есть изменения через legacy-handler без read-back; runtime не может подтвердить их эффект.";
+    note.textContent = "Есть исторические изменения без read-back; runtime не может подтвердить их эффект.";
   } else if (health === "unknown") {
     note.textContent = "Результат изменений не определён. Требуется проверка фактического состояния.";
   } else if (health === "errors") {
@@ -436,7 +436,7 @@ function appendAgentRunViewState(parent, runViewState, runId) {
       runViewState.unverifiedWrites || runViewState.failedCalls || runViewState.unknownEffects)) {
     note.textContent += " Runtime evidence: изменения — " + runViewState.verifiedWrites +
       ", без изменения — " + runViewState.noChangeWrites +
-      ", legacy без read-back — " + runViewState.unverifiedWrites +
+      ", исторические без read-back — " + runViewState.unverifiedWrites +
       ", ошибки вызовов — " + runViewState.failedCalls +
       ", прочие неизвестные эффекты — " + otherUnknownEffects + ".";
   }

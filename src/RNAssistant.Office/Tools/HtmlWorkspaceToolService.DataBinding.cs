@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class HtmlWorkspaceToolService
     {
-        private static bool IsEligibleDataSourceTool(ToolDefinition tool)
+        private static bool IsEligibleDataSourceTool(ToolCatalogEntry tool)
         {
             if (tool == null || string.IsNullOrWhiteSpace(tool.Id) || !tool.Enabled || !tool.AgentCanRun ||
                 !tool.CanSourceHtmlData || tool.MutatesDocument || tool.MutatesLocalState || tool.RequiresConfirmation)
@@ -144,7 +144,7 @@ namespace RNAssistant.Office.Tools
                 arguments, "refreshPolicy", "on_preview"));
             var sourceArguments = ReadObjectArgument(
                 arguments, "sourceArguments");
-            ToolDefinition sourceTool;
+            ToolCatalogEntry sourceTool;
             JObject normalizedSourceArguments;
             var normalizedArguments = BuildSourceArguments(
                 sourceToolId, sourceArguments, out sourceTool,
@@ -291,7 +291,7 @@ namespace RNAssistant.Office.Tools
             {
                 ValidateBinding(binding);
                 var arguments = JObject.Parse(binding.ArgumentsJson);
-                ToolDefinition sourceTool;
+                ToolCatalogEntry sourceTool;
                 var normalizedArguments = BuildSourceArguments(
                     binding.ToolId, arguments, out sourceTool);
                 cancellationToken.ThrowIfCancellationRequested();
@@ -380,7 +380,7 @@ namespace RNAssistant.Office.Tools
 
         private IDictionary<string, object> BuildSourceArguments(
             string sourceToolId, JObject arguments,
-            out ToolDefinition sourceTool)
+            out ToolCatalogEntry sourceTool)
         {
             JObject ignored;
             return BuildSourceArguments(
@@ -489,7 +489,7 @@ namespace RNAssistant.Office.Tools
 
         private IDictionary<string, object> BuildSourceArguments(
             string sourceToolId, JObject arguments,
-            out ToolDefinition sourceTool,
+            out ToolCatalogEntry sourceTool,
             out JObject normalizedArguments)
         {
             if (!_dataSourceTools.TryGetValue(sourceToolId ?? string.Empty, out sourceTool))
@@ -535,7 +535,7 @@ namespace RNAssistant.Office.Tools
             {
                 throw new InvalidOperationException("Stored HTML data source arguments are invalid: " + ex.Message);
             }
-            ToolDefinition ignored;
+            ToolCatalogEntry ignored;
             BuildSourceArguments(binding.ToolId, arguments, out ignored);
         }
 

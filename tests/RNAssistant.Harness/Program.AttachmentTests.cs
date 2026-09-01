@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -90,7 +91,7 @@ namespace RNAssistant.Harness
                     ChatModes.Chat,
                     user.Content,
                     adapter,
-                    new ToolDefinition[0],
+                    new ToolCatalogEntry[0],
                     new SkillDefinition[0],
                     new DocumentContext(),
                     new AppSettings(),
@@ -463,7 +464,7 @@ namespace RNAssistant.Harness
                 ChatModes.Chat,
                 sourceMessage.Content,
                 null,
-                new ToolDefinition[0],
+                new ToolCatalogEntry[0],
                 new SkillDefinition[0],
                 new DocumentContext(),
                 routing.Settings,

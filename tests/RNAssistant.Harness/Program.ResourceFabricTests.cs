@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Linq;
 using RNAssistant.Core.Models;
@@ -83,7 +84,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 foreach (var id in new[]
                 {
                     ResourceToolCatalog.ListToolId,
@@ -97,7 +98,7 @@ namespace RNAssistant.Harness
                 foreach (var id in new[] { "common.artifacts_list", "common.artifacts_search", "common.artifacts_read" })
                 {
                     AssertTrue(tools.All(tool => !string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)), id + " is absent");
-                    var result = executor.Execute(new ToolCommand { ToolId = id }, tools, new AppSettings(), false, false);
+                    var result = executor.ExecuteManual(new ToolInvocation { ToolId = id }, tools, new AppSettings(), false, false);
                     AssertEqual("unknown_tool", result.ErrorCode, id + " is not aliased");
                 }
             });

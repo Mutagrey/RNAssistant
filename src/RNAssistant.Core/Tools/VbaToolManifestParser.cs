@@ -10,7 +10,7 @@ namespace RNAssistant.Core.Tools
 {
     public sealed class VbaToolManifestParseResult
     {
-        public ToolDefinition Tool { get; set; }
+        public ToolCatalogEntry Tool { get; set; }
         public string ErrorCode { get; set; }
         public string ErrorMessage { get; set; }
 
@@ -106,7 +106,7 @@ namespace RNAssistant.Core.Tools
             var parameters = manifest["parameters"] as JObject;
             if (parameters == null) return VbaToolManifestParseResult.Fail("parameters_schema", "parameters must be a formal JSON Schema object.");
 
-            var tool = new ToolDefinition
+            var tool = new ToolCatalogEntry
             {
                 Id = id,
                 Host = host,
@@ -127,7 +127,7 @@ namespace RNAssistant.Core.Tools
                 Scope = "global"
             };
             var entryCodeSha256 = VbaTextCanonicalizer.PackageCodeSha256(code);
-            tool.Components = components.Select(name => new VbaToolComponent
+            tool.Components = components.Select(name => new ToolPackageComponentDefinition
             {
                 Name = name,
                 Type = string.Equals(name, moduleName, StringComparison.OrdinalIgnoreCase) ? "StdModule" : string.Empty,

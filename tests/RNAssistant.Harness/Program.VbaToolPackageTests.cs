@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -100,7 +101,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tool = BuildVbaPackageToolForTest();
-                tool.Components.Add(new VbaToolComponent
+                tool.Components.Add(new ToolPackageComponentDefinition
                 {
                     Name = "RNA_EchoService",
                     Type = "ClassModule",
@@ -132,9 +133,9 @@ namespace RNAssistant.Harness
             {
                 var tool = BuildVbaPackageToolForTest();
                 var command = Command(tool.Id, "text", "hello", "count", 2, "ratio", 1.5);
-                var tools = adapter.GetBuiltInTools().Concat(new[] { tool }).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(new[] { tool }).ToList();
 
-                var result = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var result = executor.ExecuteManual(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
 
                 AssertEqual("unknown", result.Status,
                     "arbitrary package macro effect remains explicit unknown");
@@ -143,13 +144,17 @@ namespace RNAssistant.Harness
                 AssertEqual("fake-vba-result", result.Message, "String output wrapped by runtime");
                 AssertEqual("unknown", (string)JObject.Parse(result.DataJson)["effect"],
                     "package result carries typed effect evidence");
-                var run = adapter.Executed.Last(item => string.Equals(item.ToolId, "excel.run_macro", StringComparison.OrdinalIgnoreCase));
-                AssertEqual("[\"hello\",2,1.5,true]", Convert.ToString(run.Arguments["argumentsJson"]), "typed positional arguments and default");
+                var run = (VbaRunMacroRequest)adapter.VbaBackendCalls.Last(
+                    item => item.Operation == FakeVbaOperation.RunMacro).Request;
+                AssertEqual("[\"hello\",2,1.5,true]",
+                    JsonConvert.SerializeObject(run.Arguments),
+                    "typed positional arguments and default");
                 AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_Echo"), "entry module cleaned");
                 AssertEqual(string.Empty, adapter.GetVbaModuleCode("RNA_EchoService"), "class module cleaned");
 
-                adapter.QueueResult("excel.vba_read_module", ToolResult.Fail("VBA project is unavailable.", null, "vba_access_error", true));
-                var blocked = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                adapter.QueueVbaFailure(FakeVbaOperation.ReadModule,
+                    "VBA project is unavailable.", "vba_access_error", true);
+                var blocked = executor.ExecuteManual(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(!blocked.Success, "unreadable VBA package state blocks execution");
                 AssertEqual("vba_package_probe_failed", blocked.ErrorCode, "unreadable VBA package error code");
                 AssertEqual(1, adapter.RanMacros.Count, "probe failure does not run macro");
@@ -194,21 +199,21 @@ namespace RNAssistant.Harness
 
                 var command = Command("excel.echo_vba", "text", "hello",
                     "count", 2, "ratio", 1.5);
-                var pending = runtime.ExecuteCommand(
+                var pending = runtime.ExecuteManual(
                     command, 1, false, CancellationToken.None);
                 AssertEqual("package-pending", pending.PendingId,
                     "package execution pauses before dispatch");
                 AssertEqual(0, adapter.RanMacros.Count,
                     "unconfirmed package does not reach VBA");
 
-                var result = runtime.ExecuteCommand(
+                var result = runtime.ExecuteManual(
                     command, 1, true, CancellationToken.None);
 
                 AssertEqual("unknown", result.Status,
                     "arbitrary macro effect remains unknown after dispatch");
                 AssertEqual(1, adapter.RanMacros.Count,
                     "runtime executes the source captured before catalog drift");
-                AssertEqual("unknown_tool", runtime.ExecuteCommand(
+                AssertEqual("unknown_tool", runtime.ExecuteManual(
                     Command("EXCEL.ECHO_VBA", "text", "hello",
                         "count", 2, "ratio", 1.5),
                     1, false, CancellationToken.None).ErrorCode,
@@ -463,9 +468,9 @@ namespace RNAssistant.Harness
                     adapter.SetVbaModule(component.Name, marker + component.Code, component.Type);
                 }
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
-                var tools = adapter.GetBuiltInTools().Concat(new[] { tool }).ToList();
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(new[] { tool }).ToList();
 
-                var result = executor.Execute(
+                var result = executor.ExecuteManual(
                     Command(tool.Id, "text", "hello", "count", 2, "ratio", 1.5),
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
@@ -530,10 +535,9 @@ namespace RNAssistant.Harness
                 var tool = BuildVbaPackageToolForTest();
                 var source = ToolPackageSource.Capture(tool);
                 var readCount = 0;
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeVbaBackendCall = call =>
                 {
-                    if (command == null ||
-                        !command.ToolId.EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase)) return;
+                    if (call.Operation != FakeVbaOperation.ReadModule) return;
                     readCount += 1;
                     if (readCount != 3) return;
                     foreach (var component in tool.Components)
@@ -548,7 +552,8 @@ namespace RNAssistant.Harness
                 AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status, "probe race is definite error");
                 AssertEqual("vba_package_state_changed", outcome.ErrorCode, "probe race error code");
                 AssertEqual(0, adapter.RanMacros.Count, "probe race never runs macro");
-                AssertTrue(!adapter.Executed.Any(item => item.ToolId.EndsWith(".vba_install_package_internal", StringComparison.OrdinalIgnoreCase)),
+                AssertEqual(0,
+                    adapter.CountVbaCalls(FakeVbaOperation.InstallPackage),
                     "probe race blocks install dispatch");
                 AssertEqual(0, store.ListPackageMutations("Excel", "doc").Count,
                     "probe race blocks journal preparation before overwrite intent is accepted");
@@ -570,10 +575,9 @@ namespace RNAssistant.Harness
                 }
                 var drifted = tool.Components[0].Code.Replace("Echo =", "Echo = \"changed\" &");
                 var readCount = 0;
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeVbaBackendCall = call =>
                 {
-                    if (command == null ||
-                        !command.ToolId.EndsWith(".vba_read_module", StringComparison.OrdinalIgnoreCase)) return;
+                    if (call.Operation != FakeVbaOperation.ReadModule) return;
                     readCount += 1;
                     if (readCount == 3)
                     {
@@ -639,7 +643,8 @@ namespace RNAssistant.Harness
 
                 AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status, "prepare failure is definite error");
                 AssertEqual("vba_package_journal_prepare_failed", outcome.ErrorCode, "prepare failure code");
-                AssertTrue(!adapter.Executed.Any(item => item.ToolId.EndsWith("vba_install_package_internal")),
+                AssertEqual(0,
+                    adapter.CountVbaCalls(FakeVbaOperation.InstallPackage),
                     "prepare failure blocks backend dispatch");
             });
         }
@@ -651,7 +656,8 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var store = new VbaJournalStore(paths);
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
-                adapter.ThrowOnToolId = "excel.vba_install_package_internal";
+                adapter.ThrowOnVbaOperation =
+                    FakeVbaOperation.InstallPackage;
 
                 var outcome = service.Execute(
                     PackageExecution(ToolPackageSource.Capture(BuildVbaPackageToolForTest())),
@@ -672,20 +678,21 @@ namespace RNAssistant.Harness
                 var store = new VbaJournalStore(paths);
                 var tool = BuildVbaPackageToolForTest();
                 var injected = false;
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeVbaBackendCall = call =>
                 {
-                    if (injected || command == null ||
-                        !string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase)) return;
+                    if (injected ||
+                        call.Operation != FakeVbaOperation.InstallPackage) return;
                     injected = true;
-                    var marker = Convert.ToString(command.Arguments["marker"]);
-                    foreach (var component in JArray.Parse(Convert.ToString(command.Arguments["componentsJson"])).OfType<JObject>())
+                    var request = (VbaInstallPackageRequest)call.Request;
+                    foreach (var component in request.Components)
                     {
                         adapter.SetVbaModule(
-                            (string)component["name"],
-                            "' " + marker + "\n" + (string)component["code"],
-                            (string)component["type"]);
+                            component.Name,
+                            "' " + request.Marker + "\n" + component.Code,
+                            component.ComponentType);
                     }
-                    adapter.ThrowOnToolId = command.ToolId;
+                    adapter.ThrowOnVbaOperation =
+                        FakeVbaOperation.InstallPackage;
                 };
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
 
@@ -712,17 +719,17 @@ namespace RNAssistant.Harness
                 {
                     adapter.SetVbaModule(component.Name, component.Code, component.Type);
                 }
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeVbaBackendCall = call =>
                 {
-                    if (command == null ||
-                        !string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase)) return;
+                    if (call.Operation != FakeVbaOperation.InstallPackage) return;
                     var foreignMarker = "' RNAssistantPackage: id=foreign; version=1; hash=" +
                         new string('a', 64) + ";\n";
                     foreach (var component in tool.Components)
                     {
                         adapter.SetVbaModule(component.Name, foreignMarker + component.Code, component.Type);
                     }
-                    adapter.ThrowOnToolId = command.ToolId;
+                    adapter.ThrowOnVbaOperation =
+                        FakeVbaOperation.InstallPackage;
                 };
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
 
@@ -757,10 +764,9 @@ namespace RNAssistant.Harness
                 }
                 var drifted = "' RNAssistantPackage: id=foreign; version=1; hash=" +
                     new string('b', 64) + ";\n" + tool.Components[0].Code;
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeVbaBackendCall = call =>
                 {
-                    if (command == null ||
-                        !string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase)) return;
+                    if (call.Operation != FakeVbaOperation.InstallPackage) return;
                     adapter.SetVbaModule(tool.Components[0].Name, drifted, tool.Components[0].Type);
                 };
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
@@ -837,14 +843,14 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var store = new VbaJournalStore(paths);
                 var queued = false;
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeVbaBackendCall = call =>
                 {
-                    if (queued || command == null ||
-                        !string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase)) return;
+                    if (queued ||
+                        call.Operation != FakeVbaOperation.InstallPackage) return;
                     queued = true;
-                    adapter.QueueResult(
-                        "excel.vba_read_module",
-                        ToolResult.Fail("VBA read-back unavailable.", null, "vba_access_error", false));
+                    adapter.QueueVbaFailure(FakeVbaOperation.ReadModule,
+                        "VBA read-back unavailable.",
+                        "vba_access_error", false);
                 };
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
 
@@ -883,7 +889,8 @@ namespace RNAssistant.Harness
                 }
 
                 AssertTrue(cancelled, "cancellation is propagated");
-                AssertTrue(!adapter.Executed.Any(item => item.ToolId.EndsWith("vba_install_package_internal")),
+                AssertEqual(0,
+                    adapter.CountVbaCalls(FakeVbaOperation.InstallPackage),
                     "cancel before dispatch does not call backend");
                 AssertEqual(VbaMutationStatuses.NotApplied, store.ListPackageMutations("Excel", "doc").Single().Terminal.Status,
                     "cancel before dispatch records before state");
@@ -898,10 +905,9 @@ namespace RNAssistant.Harness
                 var store = new VbaJournalStore(paths);
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
                 var cancellation = new CancellationTokenSource();
-                adapter.BeforeExecuteTool = command =>
+                adapter.BeforeVbaBackendCall = call =>
                 {
-                    if (command != null &&
-                        string.Equals(command.ToolId, "excel.vba_install_package_internal", StringComparison.OrdinalIgnoreCase))
+                    if (call.Operation == FakeVbaOperation.InstallPackage)
                     {
                         cancellation.Cancel();
                     }
@@ -936,10 +942,11 @@ namespace RNAssistant.Harness
                 var store = new VbaJournalStore(paths);
                 var service = CreatePackageService(adapter, new VbaPackageJournalStoreAdapter(store));
                 var source = ToolPackageSource.Capture(BuildVbaPackageToolForTest());
-                adapter.QueueResult(
-                    "excel.run_macro",
-                    ToolResult.Fail("macro failed", null, "macro_failed", false));
-                adapter.ThrowOnToolId = "excel.vba_remove_package_internal";
+                adapter.QueueVbaActionResult(FakeVbaOperation.RunMacro,
+                    VbaBackendActionResult.Error(
+                        "macro failed", null, "macro_failed", false));
+                adapter.ThrowOnVbaOperation =
+                    FakeVbaOperation.RemovePackage;
 
                 var outcome = service.Execute(PackageExecution(source), CancellationToken.None);
 
@@ -974,7 +981,7 @@ namespace RNAssistant.Harness
 
                 AssertTrue(!prepared.Success, "source ownership marker is rejected");
                 AssertEqual("vba_package_source_marker_reserved", prepared.Error.ErrorCode, "reserved marker code");
-                AssertTrue(!adapter.Executed.Any(), "reserved marker fails before host reads or writes");
+                AssertTrue(adapter.TotalBackendCallCount == 0, "reserved marker fails before host reads or writes");
             });
         }
 
@@ -1339,32 +1346,33 @@ namespace RNAssistant.Harness
                 AssertTrue(discovered != null, "document VBA tool discovered");
                 AssertEqual("document", discovered.Scope, "document scope");
                 AssertEqual(2, discovered.Components.Count, "document components resolved");
-                AssertTrue(!adapter.Executed.Any(item =>
-                    string.Equals(item.ToolId, "excel.vba_read_module", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(Convert.ToString(item.Arguments["moduleName"]), "Module1", StringComparison.OrdinalIgnoreCase)),
+                AssertTrue(!adapter.VbaBackendCalls.Any(item =>
+                    item.Operation == FakeVbaOperation.ReadModule &&
+                    string.Equals(((VbaReadModuleRequest)item.Request).ModuleName,
+                        "Module1", StringComparison.OrdinalIgnoreCase)),
                     "document VBA discovery skips standard modules without a manifest");
-                var discoveryCalls = adapter.Executed.Count(item =>
-                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase));
+                var discoveryCalls =
+                    adapter.CountVbaCalls(FakeVbaOperation.ReadProject);
                 catalogService.GetVisibleTools();
-                AssertEqual(discoveryCalls, adapter.Executed.Count(item =>
-                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
+                AssertEqual(discoveryCalls,
+                    adapter.CountVbaCalls(FakeVbaOperation.ReadProject),
                     "document VBA discovery uses short cache");
                 catalogService.GetFreshConversationTools();
-                AssertEqual(discoveryCalls + 1, adapter.Executed.Count(item =>
-                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
+                AssertEqual(discoveryCalls + 1,
+                    adapter.CountVbaCalls(FakeVbaOperation.ReadProject),
                     "each conversation boundary refreshes document VBA discovery");
                 adapter.RuntimeDocumentKeyValue = "runtime-reopened-document";
                 catalogService.GetVisibleTools();
-                AssertEqual(discoveryCalls + 2, adapter.Executed.Count(item =>
-                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
+                AssertEqual(discoveryCalls + 2,
+                    adapter.CountVbaCalls(FakeVbaOperation.ReadProject),
                     "document VBA discovery cache is scoped to the runtime document");
                 catalogService.InvalidateDocumentVbaTools();
                 catalogService.GetVisibleTools();
-                AssertEqual(discoveryCalls + 3, adapter.Executed.Count(item =>
-                    string.Equals(item.ToolId, "excel.vba_list_project_components_internal", StringComparison.OrdinalIgnoreCase)),
+                AssertEqual(discoveryCalls + 3,
+                    adapter.CountVbaCalls(FakeVbaOperation.ReadProject),
                     "document VBA discovery cache invalidates");
 
-                var result = executor.Execute(
+                var result = executor.ExecuteManual(
                     Command(discovered.Id, "text", "hello", "count", 2, "ratio", 1.5),
                     catalog,
                     new AppSettings { AutoConfirmToolActions = true },
@@ -1409,7 +1417,7 @@ namespace RNAssistant.Harness
             AssertContains(VbaTextCanonicalizer.NormalizePackageCode(versionedWithoutAttributes), "VERSION 1.0 CLASS", "non-export VERSION source is preserved");
         }
 
-        private static ToolDefinition BuildVbaPackageToolForTest()
+        private static ToolCatalogEntry BuildVbaPackageToolForTest()
         {
             var entryCode =
                 "Option Explicit\n" +
@@ -1420,7 +1428,7 @@ namespace RNAssistant.Harness
                 "    Echo = text & CStr(count) & CStr(ratio) & CStr(enabled)\n" +
                 "End Function";
             var classCode = "Option Explicit\nPublic Function Prefix(ByVal value As String) As String\n    Prefix = value\nEnd Function";
-            return new ToolDefinition
+            var tool = new ToolCatalogEntry
             {
                 Id = "excel.echo_vba",
                 Host = "Excel",
@@ -1438,15 +1446,18 @@ namespace RNAssistant.Harness
                 PackageVersion = "1.0.0",
                 EntryPoint = "Echo",
                 ArgumentOrder = new List<string> { "text", "count", "ratio", "enabled" },
-                Components = new List<VbaToolComponent>
+                Components = new List<ToolPackageComponentDefinition>
                 {
-                    new VbaToolComponent { Name = "RNA_Echo", Type = "StdModule", FileName = "RNA_Echo.bas", Code = entryCode },
-                    new VbaToolComponent { Name = "RNA_EchoService", Type = "ClassModule", FileName = "RNA_EchoService.cls", Code = classCode }
+                    new ToolPackageComponentDefinition { Name = "RNA_Echo", Type = "StdModule", FileName = "RNA_Echo.bas", Code = entryCode },
+                    new ToolPackageComponentDefinition { Name = "RNA_EchoService", Type = "ClassModule", FileName = "RNA_EchoService.cls", Code = classCode }
                 }
             };
+            tool.Policy = VbaPackageToolHandler.PolicyFor(tool);
+            tool.Binding = VbaPackageToolHandler.BindingFor(tool);
+            return tool;
         }
 
-        private static ToolDefinition BuildVbaUserFormPackageForTest()
+        private static ToolCatalogEntry BuildVbaUserFormPackageForTest()
         {
             var entryCode =
                 "Option Explicit\n" +
@@ -1467,7 +1478,7 @@ namespace RNAssistant.Harness
                 "Private Sub btnOK_Click()\n" +
                 "    Unload Me\n" +
                 "End Sub";
-            return new ToolDefinition
+            var tool = new ToolCatalogEntry
             {
                 Id = "excel.form_tool",
                 Host = "Excel",
@@ -1484,12 +1495,15 @@ namespace RNAssistant.Harness
                 RiskLevel = 3,
                 PackageVersion = "1.0.0",
                 EntryPoint = "ShowForm",
-                Components = new List<VbaToolComponent>
+                Components = new List<ToolPackageComponentDefinition>
                 {
-                    new VbaToolComponent { Name = "RNA_FormTool", Type = "StdModule", Code = entryCode },
-                    new VbaToolComponent { Name = "RNA_FormToolForm", Type = "MSForm", Code = formCode }
+                    new ToolPackageComponentDefinition { Name = "RNA_FormTool", Type = "StdModule", Code = entryCode },
+                    new ToolPackageComponentDefinition { Name = "RNA_FormToolForm", Type = "MSForm", Code = formCode }
                 }
             };
+            tool.Policy = VbaPackageToolHandler.PolicyFor(tool);
+            tool.Binding = VbaPackageToolHandler.BindingFor(tool);
+            return tool;
         }
     }
 }

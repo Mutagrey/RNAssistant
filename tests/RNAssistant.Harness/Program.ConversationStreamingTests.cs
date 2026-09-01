@@ -61,7 +61,7 @@ namespace RNAssistant.Harness
                     session,
                     NewContext(adapter),
                     new AppSettings { StreamResponses = true },
-                    new ToolDefinition[0],
+                    new ToolCatalogEntry[0],
                     (phase, message, activity) => progress.Add(Tuple.Create(phase, message, activity)))
                     .GetAwaiter().GetResult();
 
@@ -113,7 +113,7 @@ namespace RNAssistant.Harness
                     session,
                     NewContext(adapter),
                     new AppSettings { StreamResponses = true },
-                    new ToolDefinition[0],
+                    new ToolCatalogEntry[0],
                     (phase, message, activity) => progress.Add(Tuple.Create(phase, message, activity)))
                     .GetAwaiter().GetResult();
 
@@ -168,7 +168,7 @@ namespace RNAssistant.Harness
                     session,
                     NewContext(adapter),
                     new AppSettings { StreamResponses = true, MaxAgentFormatRetries = 2 },
-                    new ToolDefinition[0],
+                    new ToolCatalogEntry[0],
                     (phase, message, activity) => progressEvents.Add(Tuple.Create(phase, message, activity)))
                     .GetAwaiter().GetResult();
 

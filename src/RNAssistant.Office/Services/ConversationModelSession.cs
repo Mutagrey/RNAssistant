@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,7 +27,7 @@ namespace RNAssistant.Office.Services
         private string _userText;
         private ChatSession _session;
         private AppSettings _settings;
-        private IReadOnlyList<ToolDefinition> _runnableCatalog;
+        private IReadOnlyList<ToolCatalogEntry> _runnableCatalog;
         private Action<string, string, ChatActivity> _progress;
         private List<ChatMessage> _messages;
         private CallableToolPack _toolPack;
@@ -52,7 +53,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             DocumentContext context,
             AppSettings settings,
-            IReadOnlyList<ToolDefinition> runnableCatalog,
+            IReadOnlyList<ToolCatalogEntry> runnableCatalog,
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             bool replayCurrentUserInHistory,
@@ -99,7 +100,7 @@ namespace RNAssistant.Office.Services
             _messages.Add(accepted);
         }
 
-        internal void AppendConfirmedResult(ToolCommand command, ToolResultMaterialization result)
+        internal void AppendConfirmedResult(ToolInvocation command, ToolResultMaterialization result)
         {
             // The callable pack was reconstructed from the durable turn event before
             // this confirmed result is projected into the next model request.
@@ -109,7 +110,7 @@ namespace RNAssistant.Office.Services
         }
 
         internal async Task<PreparedToolResult> PrepareToolResultAsync(
-            ToolCommand command,
+            ToolInvocation command,
             ToolResultMaterialization result,
             CancellationToken cancellationToken)
         {
@@ -135,7 +136,7 @@ namespace RNAssistant.Office.Services
             return new PreparedToolResult(result, media);
         }
 
-        private static ToolResultMaterialization ProjectionFailure(ToolCommand command,
+        private static ToolResultMaterialization ProjectionFailure(ToolInvocation command,
             ToolResultMaterialization source,
             string message, string dataJson, string code)
         {
@@ -154,7 +155,7 @@ namespace RNAssistant.Office.Services
                 resultResource: source.ResultResource, resultResourceKind: source.ResultResourceKind);
         }
 
-        internal void AppendToolResult(ToolCommand command, PreparedToolResult prepared)
+        internal void AppendToolResult(ToolInvocation command, PreparedToolResult prepared)
         {
             var result = prepared.Result;
             var accepted = MaterializeToolResultMessage(command, result);
@@ -222,7 +223,7 @@ namespace RNAssistant.Office.Services
         internal static LlmRequestOptions BuildRequestOptions(
             string mode,
             string responseMode,
-            IReadOnlyList<ToolDefinition> tools,
+            IReadOnlyList<ToolCatalogEntry> tools,
             ChatSession session,
             LlmRunCache runCache)
         {
@@ -240,7 +241,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             DocumentContext context,
             AppSettings settings,
-            IReadOnlyList<ToolDefinition> runnableCatalog,
+            IReadOnlyList<ToolCatalogEntry> runnableCatalog,
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             bool replayCurrentUserInHistory,
@@ -313,7 +314,7 @@ namespace RNAssistant.Office.Services
         }
 
         private ChatMessage MaterializeToolResultMessage(
-            ToolCommand command,
+            ToolInvocation command,
             ToolResultMaterialization result)
         {
             var exactEvidence = ToolResultResourceService.IsExactReadEvidence(command);
@@ -378,7 +379,7 @@ namespace RNAssistant.Office.Services
             return message;
         }
 
-        private bool CanPublishToolPack(IReadOnlyList<ToolDefinition> candidateTools, ChatMessage stateMessage)
+        private bool CanPublishToolPack(IReadOnlyList<ToolCatalogEntry> candidateTools, ChatMessage stateMessage)
         {
             var candidateMessages = new List<ChatMessage>(_messages);
             if (stateMessage != null) candidateMessages.Add(stateMessage);
@@ -403,7 +404,7 @@ namespace RNAssistant.Office.Services
 
         private int EstimatedAdmittedRequestTokens(
             IReadOnlyList<ChatMessage> messages,
-            IReadOnlyList<ToolDefinition> tools)
+            IReadOnlyList<ToolCatalogEntry> tools)
         {
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools, _session, null);
             return ModelContextBudget.EstimateAdmittedRequestTokens(
@@ -414,7 +415,7 @@ namespace RNAssistant.Office.Services
                 ModelContextBudget.ContinuationReserveTokens(_settings));
         }
 
-        private int RequestMessageBudget(IReadOnlyList<ToolDefinition> tools)
+        private int RequestMessageBudget(IReadOnlyList<ToolCatalogEntry> tools)
         {
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools, _session, null);
             var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
@@ -438,7 +439,7 @@ namespace RNAssistant.Office.Services
         }
 
         private ChatMessage LargestFittingExternalizedResultMessage(
-            ToolCommand command,
+            ToolInvocation command,
             ToolResultMaterialization result,
             int maximumDataTokens)
         {
@@ -466,7 +467,7 @@ namespace RNAssistant.Office.Services
         }
 
         private void ReplaceOversizedReadEvidence(
-            ToolCommand command,
+            ToolInvocation command,
             ToolResultMaterialization materialized,
             int availableDataTokens)
         {
@@ -510,7 +511,7 @@ namespace RNAssistant.Office.Services
         }
 
         private static void ReplaceWithCompactReadEvidenceError(
-            ToolCommand command,
+            ToolInvocation command,
             ToolResultMaterialization materialized)
         {
             var capability = !ToolResultResourceService.IsResourceEvidence(command);

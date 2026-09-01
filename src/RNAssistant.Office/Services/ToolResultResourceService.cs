@@ -1,3 +1,4 @@
+using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,7 +16,7 @@ namespace RNAssistant.Office.Services
     {
         public static ChatArtifact ExternalizeIfNeeded(
             ChatSession session,
-            ToolCommand command,
+            ToolInvocation command,
             ToolResultMaterialization result,
             int inlineTokenBudget,
             AppSettings settings)
@@ -59,7 +60,7 @@ namespace RNAssistant.Office.Services
 
         private static ChatArtifact AddArtifact(
             ChatSession session,
-            ToolCommand command,
+            ToolInvocation command,
             ToolResultMaterialization result,
             string kind,
             string title,
@@ -141,12 +142,12 @@ namespace RNAssistant.Office.Services
             return null;
         }
 
-        internal static bool IsExactReadEvidence(ToolCommand command)
+        internal static bool IsExactReadEvidence(ToolInvocation command)
         {
             return IsResourceEvidence(command) || IsCapabilityEvidence(command);
         }
 
-        internal static bool IsResourceEvidence(ToolCommand command)
+        internal static bool IsResourceEvidence(ToolInvocation command)
         {
             var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
             return string.Equals(id, ResourceToolCatalog.ListToolId, StringComparison.OrdinalIgnoreCase) ||
@@ -156,7 +157,7 @@ namespace RNAssistant.Office.Services
         }
 
         internal static ToolResultStatus ProjectionFailureStatus(
-            ToolCommand command,
+            ToolInvocation command,
             ToolResultStatus sourceStatus)
         {
             return IsExactReadEvidence(command) && sourceStatus == ToolResultStatus.Ok
@@ -164,7 +165,7 @@ namespace RNAssistant.Office.Services
                 : sourceStatus;
         }
 
-        private static bool IsCapabilityEvidence(ToolCommand command)
+        private static bool IsCapabilityEvidence(ToolInvocation command)
         {
             var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
             return CapabilityToolCatalog.Owns(id);

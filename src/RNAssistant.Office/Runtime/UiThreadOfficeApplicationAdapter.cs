@@ -146,21 +146,6 @@ namespace RNAssistant.Office
             return ReadExpected(delegate { return _inner.CaptureSelectionContext(mode, maxChars); });
         }
 
-        public IEnumerable<ToolDefinition> GetBuiltInTools()
-        {
-            return _dispatcher.Invoke(delegate { return _inner.GetBuiltInTools().ToArray(); });
-        }
-
-        public ToolResult ExecuteTool(ToolCommand command)
-        {
-            var expectation = _documentGuard.Current;
-            return _dispatcher.Invoke(delegate
-            {
-                var mismatch = OfficeDocumentExecutionGuardState.Validate(_inner, expectation);
-                return mismatch ?? _inner.ExecuteTool(command);
-            });
-        }
-
         public IDisposable BeginExpectedDocument(string host, string documentKey, string runtimeDocumentKey)
         {
             return _documentGuard.Begin(host, documentKey, runtimeDocumentKey);

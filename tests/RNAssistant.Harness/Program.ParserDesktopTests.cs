@@ -18,6 +18,7 @@ using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Qualification;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -128,9 +129,10 @@ namespace RNAssistant.Harness
             }))
             {
                 AssertEqual("Excel", dispatched.HostName, "host name");
-                var result = dispatched.ExecuteTool(GuardProbeCommand(adapter));
-                AssertTrue(result.Success, "tool success");
-                AssertEqual(1, adapter.Executed.Count, "executed count");
+                AssertTrue(dispatched.GetDocumentSnapshot(128) != null,
+                    "document snapshot succeeds");
+                AssertEqual(1, adapter.DocumentSnapshotReadCount,
+                    "snapshot read count");
             }
 
             AssertTrue(createdOnThread != 0, "created thread");
@@ -139,7 +141,6 @@ namespace RNAssistant.Harness
             foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
             {
                 var guardedAdapter = FakeOfficeAdapter.ForHost(host);
-                var probe = GuardProbeCommand(guardedAdapter);
                 using (var dispatched = new DispatchedOfficeApplicationAdapter(
                     delegate(IOfficeStaDispatcher ignored) { return guardedAdapter; }))
                 {
@@ -149,9 +150,19 @@ namespace RNAssistant.Harness
                         host, originalDocumentKey, originalRuntimeKey))
                     {
                         guardedAdapter.RuntimeDocumentKeyValue = originalRuntimeKey + "-new-proxy";
-                        var sameDocument = dispatched.ExecuteTool(probe);
-                        AssertTrue(sameDocument.Success,
-                            host + " guard accepts a stable document key when COM runtime identity changes");
+                        var runtimeChanged = false;
+                        try
+                        {
+                            dispatched.GetDocumentSnapshot(128);
+                        }
+                        catch (OfficeDocumentGuardException ex)
+                        {
+                            runtimeChanged = string.Equals(ex.ErrorCode,
+                                "active_document_changed",
+                                StringComparison.Ordinal);
+                        }
+                        AssertTrue(runtimeChanged,
+                            host + " bound guard rejects runtime identity replacement during the session lifetime");
                     }
 
                     guardedAdapter.RuntimeDocumentKeyValue = originalRuntimeKey;
@@ -159,8 +170,8 @@ namespace RNAssistant.Harness
                         host, originalDocumentKey, originalRuntimeKey))
                     {
                         guardedAdapter.DocumentKeyValue = originalDocumentKey + "-saved";
-                        var migratedDocument = dispatched.ExecuteTool(probe);
-                        AssertTrue(migratedDocument.Success,
+                        var migratedDocument = dispatched.GetDocumentSnapshot(128);
+                        AssertTrue(migratedDocument != null,
                             host + " guard accepts the same runtime document after identity migration");
                     }
 
@@ -169,9 +180,6 @@ namespace RNAssistant.Harness
                     {
                         guardedAdapter.DocumentKeyValue += "-other";
                         guardedAdapter.RuntimeDocumentKeyValue += "-other";
-                        var blocked = dispatched.ExecuteTool(probe);
-                        AssertEqual("active_document_changed", blocked.ErrorCode,
-                            host + " guard blocks a different Office document");
                         var readBlocked = false;
                         try
                         {
@@ -186,16 +194,11 @@ namespace RNAssistant.Harness
                         }
                         AssertTrue(readBlocked,
                             host + " guard also blocks live document reads after dispatch");
-                        AssertEqual(2, guardedAdapter.Executed.Count,
-                            host + " blocked tool never reaches Office adapter");
+                        AssertEqual(1, guardedAdapter.DocumentSnapshotReadCount,
+                            host + " blocked read never reaches Office adapter");
                     }
                 }
             }
-        }
-
-        private static ToolCommand GuardProbeCommand(FakeOfficeAdapter adapter)
-        {
-            return new ToolCommand { ToolId = "test.guard_probe" };
         }
 
         private static void HostRuntimeCancelsQueuedMutationAndReleasesAccess()
@@ -227,7 +230,7 @@ namespace RNAssistant.Harness
                                 waiter.ExecuteMutation(target, false, true, cancellation.Token, () =>
                                 {
                                     Interlocked.Increment(ref actionCalls);
-                                    return ToolResult.Ok("unexpected dispatch");
+                                    return ToolRunResult.Ok("unexpected dispatch");
                                 });
                                 return false;
                             }
@@ -264,7 +267,7 @@ namespace RNAssistant.Harness
                 var postActionFailures = new Exception[]
                 {
                     new HostRuntime.MutationLockException("gate failure after effect", true),
-                    new OfficeDocumentGuardException(ToolResult.Fail("guard failure after effect", null, "active_document_changed", false))
+                    new OfficeDocumentGuardException(ToolRunResult.Error("guard failure after effect", null, "active_document_changed", false))
                 };
                 foreach (var failure in postActionFailures)
                 {
@@ -281,7 +284,7 @@ namespace RNAssistant.Harness
 
                 var next = new HostRuntime(adapter, paths);
                 var result = next.ExecuteMutation(target, false, true, CancellationToken.None,
-                    () => ToolResult.Ok("next mutation"));
+                    () => ToolRunResult.Ok("next mutation"));
                 AssertTrue(result.Success, "a later runtime acquires access after pre- and post-action cancellation");
             });
         }
@@ -316,7 +319,7 @@ namespace RNAssistant.Harness
                                 });
                                 AssertTrue(readStarted.Wait(5000), "another runtime starts its document read");
                                 AssertTrue(!read.Wait(150), "nested access does not let another runtime bypass the gate");
-                                return ToolResult.Ok("nested read");
+                                return ToolRunResult.Ok("nested read");
                             }
                         });
                         AssertTrue(result.Success, "nested reads reuse the owning mutation access");
@@ -347,7 +350,7 @@ namespace RNAssistant.Harness
 
                 var next = new HostRuntime(adapter, paths);
                 var recovered = next.ExecuteMutation(target, false, true, CancellationToken.None,
-                    () => ToolResult.Ok("mutation after failed read"));
+                    () => ToolRunResult.Ok("mutation after failed read"));
                 AssertTrue(recovered.Success, "failed mutation releases document access for another runtime");
             });
         }
@@ -364,12 +367,12 @@ namespace RNAssistant.Harness
                     var runtime = new HostRuntime(adapter, paths);
                     var target = BoundTestTarget(session);
                     var actionCalls = 0;
-                    Func<ToolResult> action = () =>
+                    Func<ToolRunResult> action = () =>
                     {
                         actionCalls++;
                         AssertTrue(dispatcher.CheckAccess, "bound action executes on its owner dispatcher");
                         AssertTrue(ReferenceEquals(document, session.BoundDocumentObject), "action retains the exact bound object");
-                        return ToolResult.Ok("bound access");
+                        return ToolRunResult.Ok("bound access");
                     };
 
                     AssertTrue(runtime.ExecuteForExpectedDocument(target, true, action).Success, "initial bound access succeeds");
@@ -407,7 +410,7 @@ namespace RNAssistant.Harness
                     var contender = new HostRuntime(adapter, paths);
                     var target = BoundTestTarget(session);
                     var unexpectedCalls = 0;
-                    Task<ToolResult> attempted = null;
+                    Task<ToolRunResult> attempted = null;
                     var worker = Task.Run(() =>
                     {
                         using (owner.BeginDocumentAccess(target))
@@ -426,7 +429,7 @@ namespace RNAssistant.Harness
                             contender.ExecuteForExpectedDocument(savedTarget, true, () =>
                             {
                                 Interlocked.Increment(ref unexpectedCalls);
-                                return ToolResult.Ok("unexpected owner-thread dispatch");
+                                return ToolRunResult.Ok("unexpected owner-thread dispatch");
                             })));
                         AssertTrue(attempted.Wait(3000), "owner dispatcher reports busy without waiting for worker release");
                         var busy = attempted.GetAwaiter().GetResult();
@@ -451,7 +454,7 @@ namespace RNAssistant.Harness
                                 using (contender.BeginDocumentAccess(savedTarget))
                                 {
                                     nestedCalls++;
-                                    return ToolResult.Ok("nested bound read");
+                                    return ToolRunResult.Ok("nested bound read");
                                 }
                             });
                         }
@@ -487,7 +490,7 @@ namespace RNAssistant.Harness
                             var nestedRoot = runtime.ExecuteForExpectedDocument(target, true, () =>
                             {
                                 unexpectedCalls++;
-                                return ToolResult.Ok("unexpected new-root dispatch");
+                                return ToolRunResult.Ok("unexpected new-root dispatch");
                             });
                             AssertEqual("tool_mutation_busy", nestedRoot.ErrorCode, "a new root on the same thread cannot borrow the current operation");
 
@@ -510,7 +513,7 @@ namespace RNAssistant.Harness
                                     runtime.ExecuteForExpectedDocument(target, true, cancellation.Token, () =>
                                     {
                                         Interlocked.Increment(ref unexpectedCalls);
-                                        return ToolResult.Ok("unexpected child dispatch");
+                                        return ToolRunResult.Ok("unexpected child dispatch");
                                     });
                                     return false;
                                 }
@@ -522,7 +525,7 @@ namespace RNAssistant.Harness
                             AssertTrue(child.Wait(5000), "cached wrapper metadata lets queued child cancel while the owner dispatcher is occupied");
                             AssertTrue(child.GetAwaiter().GetResult(), "child cancellation occurs before dispatch");
                             using (runtime.BeginDocumentAccess(target)) { }
-                            return ToolResult.Ok("parent retains access");
+                            return ToolRunResult.Ok("parent retains access");
                         });
                         AssertTrue(result.Success, "blocked nested attempts preserve the parent operation's access");
                     }
@@ -559,7 +562,7 @@ namespace RNAssistant.Harness
                             runtime.ExecuteForExpectedDocument(target, true, cancellation.Token, () =>
                             {
                                 Interlocked.Increment(ref actionCalls);
-                                return ToolResult.Ok("unexpected queued action");
+                                return ToolRunResult.Ok("unexpected queued action");
                             });
                             return false;
                         }
@@ -580,7 +583,7 @@ namespace RNAssistant.Harness
                         admit.Set();
                         AssertTrue(pending.Wait(5000), "queued callback completes after admission cleanup");
                     }
-                    var next = runtime.ExecuteForExpectedDocument(target, true, () => ToolResult.Ok("next bound action"));
+                    var next = runtime.ExecuteForExpectedDocument(target, true, () => ToolRunResult.Ok("next bound action"));
                     AssertTrue(next.Success, "cancelled queued callback releases its document gate");
                 }
             });
@@ -816,14 +819,14 @@ namespace RNAssistant.Harness
                             throw new Exception("reentered selection borrowed mutation access");
                         }
                         catch (HostRuntime.MutationLockException) { }
-                        return ToolResult.Ok("held");
+                        return ToolRunResult.Ok("held");
                     });
                     AssertTrue(held.Success, "outer operation survives reentrant reads");
                     AssertEqual(0, calls.Count, "busy reads do not call Office");
                     adapter.BeforeRead = kind =>
                     {
                         if (kind == "prepare") throw new OfficeDocumentGuardException(
-                            ToolResult.Fail("closed during prepare", null, "active_document_changed", false));
+                            ToolRunResult.Error("closed during prepare", null, "active_document_changed", false));
                         calls.Add(kind);
                     };
                     try
@@ -865,15 +868,15 @@ namespace RNAssistant.Harness
                     AssertTrue(runtime.ExecuteForExpectedDocument(BoundTestTarget(session), true, () =>
                     {
                         AssertTrue(!hasPackage(), "busy catalog excludes unavailable document tools");
-                        AssertEqual(0, fake.Executed.Count, "busy catalog never reaches Office");
-                        return ToolResult.Ok("held");
+                        AssertEqual(0, fake.VbaBackendCalls.Count, "busy catalog never reaches Office");
+                        return ToolRunResult.Ok("held");
                     }).Success, "busy catalog preserves outer operation");
                     AssertTrue(hasPackage(), "busy failure was not cached as empty discovery");
-                    AssertTrue(fake.Executed.Count(command => command.ToolId == "excel.vba_read_module") >= 2,
+                    AssertTrue(fake.VbaBackendCalls.Count(call => call.Operation == FakeVbaOperation.ReadModule) >= 2,
                         "manifest and declared components read under the same gate");
-                    var readCount = fake.Executed.Count;
+                    var readCount = fake.VbaBackendCalls.Count;
                     AssertTrue(hasPackage(), "cache remains available with valid access");
-                    AssertEqual(readCount, fake.Executed.Count, "cache avoids repeated COM reads");
+                    AssertEqual(readCount, fake.VbaBackendCalls.Count, "cache avoids repeated COM reads");
 
                     foreach (var failComponent in new[] { false, true })
                     foreach (var failureKind in new[] { "result", "gate", "exception" })
@@ -881,56 +884,72 @@ namespace RNAssistant.Harness
                         catalog.InvalidateDocumentVbaTools();
                         var attempts = 0;
                         var matchingReads = 0;
-                        fake.BeforeExecuteTool = command =>
+                        fake.BeforeVbaBackendCall = call =>
                         {
                             attempts++;
-                            var failedTool = failComponent ? "excel.vba_read_module" : "excel.vba_list_project_components_internal";
-                            if (command.ToolId != failedTool || ++matchingReads != (failComponent ? 2 : 1)) return;
+                            var failedOperation = failComponent
+                                ? FakeVbaOperation.ReadModule
+                                : FakeVbaOperation.ReadProject;
+                            if (call.Operation != failedOperation ||
+                                ++matchingReads != (failComponent ? 2 : 1)) return;
                             if (failureKind == "gate") throw new HostRuntime.MutationLockException("transient catalog access failure", true);
                             if (failureKind == "exception") throw new InvalidOperationException("transient backend read failure");
-                            fake.QueueResult(command.ToolId, ToolResult.Fail(
-                                "transient document guard failure", null, "active_document_changed", false));
+                            fake.QueueVbaFailure(call.Operation,
+                                "transient document guard failure",
+                                "active_document_changed", false);
                         };
                         AssertTrue(!catalog.GetVisibleTools().Any(tool => tool.Scope == "document"),
                             "failed discovery publishes neither empty-cache success nor a partial package: " + failureKind);
                         AssertEqual(failComponent ? 3 : 1, attempts, "failed access ends this load without retry");
-                        fake.BeforeExecuteTool = null;
-                        readCount = fake.Executed.Count;
+                        fake.BeforeVbaBackendCall = null;
+                        readCount = fake.VbaBackendCalls.Count;
                         AssertTrue(hasPackage(), "next independent load recovers after " + failureKind);
-                        AssertTrue(fake.Executed.Count > readCount, "failed load was not cached");
+                        AssertTrue(fake.VbaBackendCalls.Count > readCount, "failed load was not cached");
                     }
 
-                    foreach (var malformedProject in new[] { "{}", "{\"modules\":\"invalid\"}" })
+                    foreach (var malformedProject in new[]
+                    {
+                        new VbaProjectSnapshot { Modules = null },
+                        new VbaProjectSnapshot
+                        {
+                            Modules = new VbaProjectComponentSnapshot[] { null }
+                        }
+                    })
                     {
                         catalog.InvalidateDocumentVbaTools();
-                        fake.QueueResult(
-                            "excel.vba_list_project_components_internal",
-                            ToolResult.Ok("malformed project", malformedProject));
+                        fake.QueueVbaProjectSnapshot(malformedProject);
                         AssertTrue(!hasPackage(), "malformed project snapshot publishes no document tools");
-                        readCount = fake.Executed.Count;
+                        readCount = fake.VbaBackendCalls.Count;
                         AssertTrue(hasPackage(), "malformed project snapshot is not cached as an empty project");
-                        AssertTrue(fake.Executed.Count > readCount, "project snapshot is reread after malformed data");
+                        AssertTrue(fake.VbaBackendCalls.Count > readCount, "project snapshot is reread after malformed data");
                     }
 
                     catalog.InvalidateDocumentVbaTools();
-                    fake.QueueResult("excel.vba_read_module", ToolResult.Ok("malformed module", "{}"));
+                    fake.QueueVbaModuleSnapshot(new VbaModuleSnapshot
+                    {
+                        Name = "Module1",
+                        Code = null
+                    });
                     AssertTrue(!hasPackage(), "malformed module snapshot publishes no partial package");
-                    readCount = fake.Executed.Count;
+                    readCount = fake.VbaBackendCalls.Count;
                     AssertTrue(hasPackage(), "malformed module snapshot is not cached as an unavailable package");
-                    AssertTrue(fake.Executed.Count > readCount, "module snapshot is reread after malformed data");
+                    AssertTrue(fake.VbaBackendCalls.Count > readCount, "module snapshot is reread after malformed data");
 
                     catalog.InvalidateDocumentVbaTools();
-                    fake.QueueResult("excel.vba_list_project_components_internal", ToolResult.Ok("empty project", "{\"modules\":[]}"));
+                    fake.QueueVbaProjectSnapshot(new VbaProjectSnapshot
+                    {
+                        Modules = new VbaProjectComponentSnapshot[0]
+                    });
                     AssertTrue(!hasPackage(), "successfully empty project has no document tools");
-                    readCount = fake.Executed.Count;
+                    readCount = fake.VbaBackendCalls.Count;
                     AssertTrue(!hasPackage(), "successful empty catalog remains cached");
-                    AssertEqual(readCount, fake.Executed.Count, "successful empty discovery avoids repeated reads");
+                    AssertEqual(readCount, fake.VbaBackendCalls.Count, "successful empty discovery avoids repeated reads");
                     catalog.InvalidateDocumentVbaTools();
                     AssertTrue(hasPackage(), "explicit invalidation refreshes the successful empty cache");
-                    readCount = fake.Executed.Count;
+                    readCount = fake.VbaBackendCalls.Count;
                     dispatcher.Invoke(() => document.IsAlive = false);
                     AssertTrue(!hasPackage(), "closed session cannot reuse document catalog cache");
-                    AssertEqual(readCount, fake.Executed.Count, "closed session cannot access Office");
+                    AssertEqual(readCount, fake.VbaBackendCalls.Count, "closed session cannot access Office");
                 }
             });
         }
@@ -1246,8 +1265,6 @@ namespace RNAssistant.Harness
             public void PrepareForContextCapture() { BeforeRead?.Invoke("prepare"); _inner.PrepareForContextCapture(); }
             public ContextNote CaptureSelectionContext(string mode, int maxChars) { BeforeRead?.Invoke("selection"); return _inner.CaptureSelectionContext(mode, maxChars); }
             public OfficeContext GetOfficeContext() { BeforeRead?.Invoke("context"); return _inner.GetOfficeContext(); }
-            public IEnumerable<ToolDefinition> GetBuiltInTools() { return _inner.GetBuiltInTools(); }
-            public ToolResult ExecuteTool(ToolCommand command) { BeforeRead?.Invoke(command.ToolId); return _inner.ExecuteTool(command); }
             public VbaProjectSnapshot ListProjectComponents() { BeforeRead?.Invoke("vba.project.read"); return _inner.ListProjectComponents(); }
             public VbaModuleSnapshot ReadModule(VbaReadModuleRequest request) { BeforeRead?.Invoke("vba.module.read"); return _inner.ReadModule(request); }
             public VbaBackendActionResult ReplaceModule(VbaReplaceModuleRequest request) { BeforeRead?.Invoke("vba.module.replace"); return _inner.ReplaceModule(request); }

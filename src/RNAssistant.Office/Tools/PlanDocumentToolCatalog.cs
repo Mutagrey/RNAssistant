@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Tools
                 string.Equals(toolId, DeleteToolId, StringComparison.Ordinal);
         }
 
-        internal static IEnumerable<ToolDefinition> GetTools()
+        internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(CreateToolId,
                 "Plan document: Create the single revisioned Markdown plan for this chat after discovery and alignment.",
@@ -39,10 +39,10 @@ namespace RNAssistant.Office.Tools
                 DeleteSchema(), "plan_doc_delete", 1);
         }
 
-        private static ToolDefinition Projection(string id, string description,
+        private static ToolCatalogEntry Projection(string id, string description,
             string schema, string name, int riskLevel)
         {
-            return ControllerToolDefinition.CreateTypedProjection(
+            return ControllerToolCatalogEntry.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema),
                 new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
                     false, false, new[] { "plan" }, riskLevel),
