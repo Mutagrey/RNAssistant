@@ -26,7 +26,7 @@ namespace RNAssistant.Office.Services
             PlanDocumentToolExecutor.UpdateToolId,
             PlanDocumentToolExecutor.RestoreToolId,
             PlanDocumentToolExecutor.DeleteToolId,
-            UserQuestionToolExecutor.AskToolId
+            UserQuestionToolCatalog.AskToolId
         }, StringComparer.OrdinalIgnoreCase);
 
         private ConversationRunPolicy(string mode)

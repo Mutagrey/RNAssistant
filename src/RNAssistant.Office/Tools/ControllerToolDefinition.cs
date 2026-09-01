@@ -28,7 +28,9 @@ namespace RNAssistant.Office.Tools
             ToolPolicy policy,
             string host = "Common",
             string name = null,
-            string scope = "global")
+            string scope = "global",
+            bool mutatesDocument = false,
+            bool mutatesLocalState = false)
         {
             if (descriptor == null) throw new ArgumentNullException(nameof(descriptor));
             if (policy == null) throw new ArgumentNullException(nameof(policy));
@@ -43,7 +45,8 @@ namespace RNAssistant.Office.Tools
                 Enabled = true,
                 Scope = scope,
                 AgentCanRun = true,
-                MutatesDocument = policy.MayHaveSideEffects,
+                MutatesDocument = mutatesDocument,
+                MutatesLocalState = mutatesLocalState,
                 RequiresConfirmation = policy.RequiresConfirmation,
                 RiskLevel = policy.RiskLevel,
                 RuntimePolicy = policy

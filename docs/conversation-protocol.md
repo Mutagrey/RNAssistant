@@ -3,7 +3,7 @@
 RNAssistant has three explicit modes and one `Core/Agent/AgentKernel` loop, invoked by `ConversationRunService`.
 
 - `chat`: the editable `ChatSystemPrompt`, a dynamic `RUNTIME_CONTEXT`, and exactly the safe read-only `common.resources_list/resolve/search/read` catalog. Skills, Office tools, local mutations, and confirmation are unavailable by runtime policy.
-- `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, typed `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_*`, and optional `common.task_list_*`. Office/shared mutations and confirmation are unavailable by runtime policy.
+- `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, exact native `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_*`, and optional `common.task_list_*`. The question handler returns typed `AwaitingUser`; message prose cannot pause a run. Office/shared mutations and confirmation are unavailable by runtime policy.
 - `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
 All modes return conversation-response v4: only `message` (string) and `tool_calls` (array); calls contain `name` and `arguments`, never a model-owned ID. The shared ModelProtocol boundary owns strict parsing/schema, bounded repair and provider compatibility; the kernel receives one validated draft, separate provider-native refusal, or typed failure. Model wording is never execution evidence.

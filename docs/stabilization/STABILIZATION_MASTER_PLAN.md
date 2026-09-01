@@ -2439,8 +2439,18 @@ endpoint.
      controller executor, `RuntimeGuardJson` path and public legacy result
      projection are removed. Macro dispatch remains `unknown` effect evidence.
      [Evidence](PHASE_11T9B_VBA_NATIVE_RUNTIME.md);
-   - 11T9C: switch the remaining controller-owned existing execution families to
-     native typed handlers, then remove their controller executor branches;
+   - 11T9C: switch the remaining non-library controller-owned existing execution
+     families to native typed handlers, then remove their controller executor
+     branches. Custom Tool/Skill authoring follows in mandatory 11J/11K:
+     - [x] 11T9C1 — `common.questions_ask` has an exact Plan-only native handler
+       and typed awaiting-user control; `UserQuestion` controller executor and
+       old executor class/path are removed.
+       [Evidence](PHASE_11T9C1_QUESTIONS_NATIVE_RUNTIME.md);
+     - 11T9C2 — Plan Document family;
+     - 11T9C3 — Task List family;
+     - 11T9C4 — HTML workspace family;
+     - 11T9C5 — capability discovery/read family;
+     - 11T9C6 — prompt read/save family;
    - [x] independent host-neutral cleanup: удалить pre-R37 trajectory inference;
      wrong-type retained operation остаётся exact incompatible/reset-only evidence
      и не входит в tool-execution;

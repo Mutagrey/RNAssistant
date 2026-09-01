@@ -14,8 +14,8 @@ using LegacyResult = RNAssistant.Core.Models.ToolResult;
 
 namespace RNAssistant.Office.Runtime
 {
-    // Production composition for migrated handlers. Unmigrated domain tools use
-    // the explicit legacy port, including its existing VBA preparation sequence.
+    // Production composition for migrated handlers. Unmigrated controller
+    // families still use the explicit legacy port until their atomic switch.
     internal sealed class NativeToolRuntimeAdapter : IToolRuntime
     {
         private readonly ToolRuntime _runtime;
@@ -170,6 +170,12 @@ namespace RNAssistant.Office.Runtime
                         registration.Descriptor.Id, vbaTools,
                         hostRuntime, session);
                 }
+                else if (string.Equals(registration.Descriptor.Id,
+                    UserQuestionToolCatalog.AskToolId,
+                    StringComparison.Ordinal))
+                {
+                    handler = new UserQuestionToolHandler();
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -197,7 +203,9 @@ namespace RNAssistant.Office.Runtime
                 ExcelRangeMutationToolIds.Owns(toolId) ||
                 ExcelTableToolIds.Owns(toolId) || ExcelChartToolIds.Owns(toolId) ||
                 WordToolIds.Owns(toolId) || PowerPointToolIds.Owns(toolId) ||
-                OutlookToolIds.Owns(toolId) || VbaToolCatalog.Owns(toolId);
+                OutlookToolIds.Owns(toolId) || VbaToolCatalog.Owns(toolId) ||
+                string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
+                    StringComparison.Ordinal);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -229,6 +237,9 @@ namespace RNAssistant.Office.Runtime
                 return OutlookToolHandler.BindingFor(toolId);
             if (VbaToolCatalog.Owns(toolId))
                 return VbaToolHandler.BindingFor(toolId);
+            if (string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
+                StringComparison.Ordinal))
+                return UserQuestionToolHandler.Binding;
             return null;
         }
 

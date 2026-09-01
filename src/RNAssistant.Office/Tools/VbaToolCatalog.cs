@@ -47,7 +47,8 @@ namespace RNAssistant.Office.Tools
             return ControllerToolDefinition.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema),
                 new ToolPolicy(effect, verification, true, false,
-                    new[] { "agent" }, 3));
+                    new[] { "agent" }, 3),
+                mutatesDocument: true);
         }
     }
 }

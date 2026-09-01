@@ -530,6 +530,8 @@ namespace RNAssistant.Harness
                 officeToolExecutorSource.IndexOf(
                     "ControllerExecutorKind.Vba", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
+                    "ControllerExecutorKind.UserQuestion", StringComparison.Ordinal) < 0 &&
+                officeToolExecutorSource.IndexOf(
                     "PrepareControllerTool", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
                     "PreviewPreparedControllerTool", StringComparison.Ordinal) < 0 &&
@@ -539,7 +541,13 @@ namespace RNAssistant.Harness
                     source.IndexOf("PreviewPreparedControllerTool(", StringComparison.Ordinal) >= 0) &&
                 !vbaToolSources.Any(source => source.IndexOf(
                     "RuntimeGuardJson", StringComparison.Ordinal) >= 0),
-                "public VBA must not retain controller execution or compatibility guard paths");
+                "migrated native families must not retain controller execution or VBA compatibility guard paths");
+            AssertTrue(
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "UserQuestionToolHandler.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools",
+                    "UserQuestionToolExecutor.cs")),
+                "questions_ask must use its exact native handler without a controller executor");
             foreach (var removedAdapter in new[]
             {
                 "VbaMutationDocumentContextAdapter",

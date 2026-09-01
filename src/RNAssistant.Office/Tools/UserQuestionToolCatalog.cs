@@ -3,43 +3,28 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class UserQuestionToolExecutor
+    internal static class UserQuestionToolCatalog
     {
         public const string AskToolId = "common.questions_ask";
 
-        public IEnumerable<ToolDefinition> GetControllerTools()
+        internal static IEnumerable<ToolDefinition> GetTools()
         {
-            yield return ControllerToolDefinition.Create(AskToolId, "Common",
+            var descriptor = new ToolDescriptor(AskToolId,
                 "Plan mode: Present one to three key typed questions and stop until the user answers. Use only after read-only discovery cannot resolve a material decision.",
-                Schema(), mutatesLocalState: true, name: "questions_ask", scope: "session");
+                Schema());
+            var policy = new ToolPolicy(ToolEffect.Read,
+                ToolVerification.None, false, false,
+                new[] { "plan" }, 0);
+            yield return ControllerToolDefinition.CreateTypedProjection(
+                descriptor, policy, name: "questions_ask", scope: "session",
+                mutatesLocalState: true);
         }
 
-        public ToolResult ExecuteControllerTool(ToolCommand command)
-        {
-            if (command == null || !string.Equals(command.ToolId, AskToolId, StringComparison.OrdinalIgnoreCase))
-                return ToolResult.Fail("Unknown question tool.");
-            try
-            {
-                var raw = ToolArgumentReader.String(command.Arguments, "questions", "[]");
-                var questions = JArray.Parse(raw);
-                Validate(questions);
-                return ToolResult.AwaitingUser("Ответьте на ключевые вопросы плана.", new JObject
-                {
-                    ["type"] = "rnassistant.questions",
-                    ["questionSetId"] = "questions_" + Guid.NewGuid().ToString("N"),
-                    ["questions"] = questions
-                }.ToString(Formatting.None));
-            }
-            catch (Exception ex) when (ex is JsonException || ex is InvalidOperationException)
-            {
-                return ToolResult.Fail(ex.Message, null, "invalid_questions", true);
-            }
-        }
-
-        private static void Validate(JArray questions)
+        internal static void Validate(JArray questions)
         {
             if (questions.Count < 1 || questions.Count > 3) throw new InvalidOperationException("questions must contain 1-3 items.");
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

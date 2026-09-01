@@ -1,15 +1,19 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -31,7 +35,17 @@ namespace RNAssistant.Harness
                 AssertTrue(selected.Any(item => item.Id == PlanDocumentToolExecutor.CreateToolId), "plan create available");
                 AssertTrue(selected.Any(item => item.Id == PlanDocumentToolExecutor.RestoreToolId), "plan restore available");
                 AssertTrue(selected.Any(item => item.Id == TaskListToolExecutor.CreateToolId), "task list available");
-                AssertTrue(selected.Any(item => item.Id == UserQuestionToolExecutor.AskToolId), "questions available");
+                AssertTrue(selected.Any(item => item.Id == UserQuestionToolCatalog.AskToolId), "questions available");
+                AssertTrue(NativeToolRuntimeAdapter.Owns(
+                    UserQuestionToolCatalog.AskToolId),
+                    "questions use the native ToolRuntime");
+                var questionPolicy = selected.Single(item =>
+                    item.Id == UserQuestionToolCatalog.AskToolId).RuntimePolicy;
+                AssertTrue(questionPolicy != null &&
+                    questionPolicy.Effect == ToolEffect.Read &&
+                    !questionPolicy.IndependentLocalRead &&
+                    questionPolicy.AllowedModes.SequenceEqual(new[] { "plan" }),
+                    "questions carry exact source-owned Plan policy");
                 AssertTrue(selected.Any(item => item.Id == ResourceToolCatalog.ReadToolId), "resource read available");
                 AssertTrue(selected.All(item => !item.MutatesDocument), "document mutations excluded");
                 AssertTrue(!ConversationRunPolicy.For(ChatModes.Plan).AllowsConfirmation, "Plan cannot confirm mutations");
@@ -75,7 +89,7 @@ namespace RNAssistant.Harness
                 ChatResourceReferenceService.PruneUnreachable(session);
                 AssertEqual(revisionId, session.ActivePlanDocumentArtifactId, "history rewind restores prior plan revision");
 
-                var question = executor.Execute(Command(UserQuestionToolExecutor.AskToolId, "questions", new JArray(
+                var question = executor.Execute(Command(UserQuestionToolCatalog.AskToolId, "questions", new JArray(
                     new JObject
                     {
                         ["id"] = "scope", ["header"] = "Scope", ["prompt"] = "Choose scope", ["selection"] = "multiple",
@@ -84,6 +98,86 @@ namespace RNAssistant.Harness
                             new JObject { ["id"] = "ui", ["label"] = "UI", ["description"] = "Include UI" })
                     })), tools, new AppSettings(), false, false, session);
                 AssertTrue(question.Status == "awaiting_user", "question pauses for user input: " + question.Message);
+            });
+        }
+
+        private static void PlanModeNativeQuestionPausesKernel()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
+                delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var calls = 0;
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse(UserQuestionToolCatalog.AskToolId),
+                    ModelProtocolWire.Write("Нужен выбор.", new[]
+                    {
+                        new ConversationToolCall
+                        {
+                            Name = UserQuestionToolCatalog.AskToolId,
+                            Arguments = new Dictionary<string, object>
+                            {
+                                ["questions"] = new JArray(new JObject
+                                {
+                                    ["id"] = "scope",
+                                    ["header"] = "Scope",
+                                    ["prompt"] = "Choose scope",
+                                    ["selection"] = "single",
+                                    ["options"] = new JArray(
+                                        new JObject
+                                        {
+                                            ["id"] = "core",
+                                            ["label"] = "Core",
+                                            ["description"] = "Core only"
+                                        },
+                                        new JObject
+                                        {
+                                            ["id"] = "ui",
+                                            ["label"] = "UI",
+                                            ["description"] = "Include UI"
+                                        })
+                                })
+                            }
+                        }
+                    })
+                });
+                LlmCompletionDelegate completion =
+                    (settings, messages, options, stream, cancellationToken) =>
+                {
+                    calls++;
+                    return Task.FromResult(new LlmCompletionResult
+                    {
+                        Content = responses.Dequeue()
+                    });
+                };
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Plan;
+                var tools = adapter.GetBuiltInTools()
+                    .Concat(executor.GetControllerTools()).ToList();
+                var result = CreateConversationRunService(
+                    adapter, executor, completion).ExecuteAsync(
+                        ChatModes.Plan,
+                        "Составь план и спроси только необходимое.",
+                        session,
+                        NewContext(adapter),
+                        new AppSettings(),
+                        tools,
+                        null).GetAwaiter().GetResult();
+
+                AssertEqual(2, calls,
+                    "schema admission and native question use two model steps without a third");
+                AssertEqual("awaiting_user",
+                    session.LastRun.KernelState.Summary.Reason,
+                    "kernel owns the typed local-interaction pause");
+                AssertEqual(AgentResponseStatuses.AwaitingUser,
+                    result.ResponseStatus,
+                    "Plan projection preserves awaiting-user status");
+                var activity = session.Messages.Last(message =>
+                    message.Activity != null &&
+                    message.Activity.ToolId ==
+                        UserQuestionToolCatalog.AskToolId).Activity;
+                AssertContains(activity.DataJson, "rnassistant.questions",
+                    "typed question payload reaches the existing UI projection");
             });
         }
 

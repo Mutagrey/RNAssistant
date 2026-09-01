@@ -41,7 +41,6 @@ namespace RNAssistant.Office.Tools
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
         private readonly TaskListToolExecutor _taskListToolExecutor;
         private readonly PlanDocumentToolExecutor _planDocumentToolExecutor;
-        private readonly UserQuestionToolExecutor _userQuestionToolExecutor;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
         private readonly HostRuntime _hostRuntime;
@@ -110,7 +109,6 @@ namespace RNAssistant.Office.Tools
                 _adapter, _adapterTools, BeginLiveOfficeRead, ExecuteOfficeDataSourceUnderCurrentAccess);
             _taskListToolExecutor = new TaskListToolExecutor();
             _planDocumentToolExecutor = new PlanDocumentToolExecutor();
-            _userQuestionToolExecutor = new UserQuestionToolExecutor();
             var controllerTools = new List<ToolDefinition>();
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
             if (_vbaExecutor.HostSupportsVba())
@@ -124,7 +122,8 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools, _htmlArtifactExecutor.GetControllerTools(), ControllerExecutorKind.HtmlArtifact);
             RegisterControllerTools(controllerTools, _taskListToolExecutor.GetControllerTools(), ControllerExecutorKind.TaskList);
             RegisterControllerTools(controllerTools, _planDocumentToolExecutor.GetControllerTools(), ControllerExecutorKind.PlanDocument);
-            RegisterControllerTools(controllerTools, _userQuestionToolExecutor.GetControllerTools(), ControllerExecutorKind.UserQuestion);
+            RegisterControllerTools(controllerTools,
+                UserQuestionToolCatalog.GetTools(), ControllerExecutorKind.Native);
             _controllerTools = controllerTools.ToArray();
             var duplicate = _adapterTools.FirstOrDefault(tool => tool != null && _controllerExecutors.ContainsKey(tool.Id ?? string.Empty));
             if (duplicate != null)
@@ -797,8 +796,6 @@ namespace RNAssistant.Office.Tools
                     return _taskListToolExecutor.ExecuteControllerTool(command, context.Session, dryRun);
                 case ControllerExecutorKind.PlanDocument:
                     return _planDocumentToolExecutor.ExecuteControllerTool(command, context.Session, dryRun);
-                case ControllerExecutorKind.UserQuestion:
-                    return _userQuestionToolExecutor.ExecuteControllerTool(command);
                 default:
                     return ToolResult.Fail("Unknown controller executor for tool: " + command.ToolId);
             }
@@ -1027,7 +1024,6 @@ namespace RNAssistant.Office.Tools
             HtmlArtifact,
             TaskList,
             PlanDocument,
-            UserQuestion
         }
     }
 }
