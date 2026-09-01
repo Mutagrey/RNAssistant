@@ -2467,7 +2467,13 @@ endpoint.
        `SkillToolExecutor` are removed; schema/skill evidence and ToolPack
        admission semantics remain unchanged.
        [Evidence](PHASE_11T9C5_CAPABILITIES_NATIVE_RUNTIME.md);
-     - 11T9C6 — prompt read/save family;
+     - [x] 11T9C6 — `common.prompts_read/save` use exact Agent-only native
+       handlers over one typed prompt-settings service. Save persists a bounded
+       exact-arguments/pre-state guard through confirmation, preserves unrelated
+       settings, marks dispatch before storage write and verifies supplied fields;
+       no-change is explicit. `PromptToolExecutor` and
+       `ControllerExecutorKind.Prompt` are removed.
+       [Evidence](PHASE_11T9C6_PROMPTS_NATIVE_RUNTIME.md);
    - [x] independent host-neutral cleanup: удалить pre-R37 trajectory inference;
      wrong-type retained operation остаётся exact incompatible/reset-only evidence
      и не входит в tool-execution;

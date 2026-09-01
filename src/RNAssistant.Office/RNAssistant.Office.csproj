@@ -279,7 +279,10 @@
     <Compile Include="Tools\ToolAuthoringExecutor.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.Schemas.cs" />
     <Compile Include="Tools\ToolAuthoringExecutor.Validation.cs" />
-    <Compile Include="Tools\PromptToolExecutor.cs" />
+    <Compile Include="Tools\PromptSettingsService.cs" />
+    <Compile Include="Tools\PromptToolCatalog.cs" />
+    <Compile Include="Tools\PromptToolContracts.cs" />
+    <Compile Include="Tools\PromptToolHandler.cs" />
     <Compile Include="Tools\ResourceToolCatalog.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolCatalog.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolContracts.cs" />

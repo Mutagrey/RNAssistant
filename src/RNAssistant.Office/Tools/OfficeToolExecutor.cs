@@ -26,7 +26,7 @@ namespace RNAssistant.Office.Tools
         private readonly SkillToolExecutor _skillExecutor;
         private readonly CapabilityCatalogService _capabilityCatalogService;
         private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
-        private readonly PromptToolExecutor _promptToolExecutor;
+        private readonly PromptSettingsService _promptSettingsService;
         private readonly ResourceGatewayService _resourceGateway;
         private readonly ExcelReadToolAdapter _excelReadAdapter;
         private readonly ExcelWriteToolAdapter _excelWriteAdapter;
@@ -64,7 +64,8 @@ namespace RNAssistant.Office.Tools
             _capabilityCatalogService = new CapabilityCatalogService(
                 adapter, skillStore);
             _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
-            _promptToolExecutor = new PromptToolExecutor(loadSettings, saveSettings);
+            _promptSettingsService = new PromptSettingsService(
+                loadSettings, saveSettings);
             _hostRuntime = new HostRuntime(adapter, paths);
             _resourceGateway = new ResourceGatewayService(
                 adapter,
@@ -116,7 +117,9 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools,
                 CapabilityToolCatalog.GetTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
-            RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
+            RegisterControllerTools(controllerTools,
+                PromptToolCatalog.GetTools(_promptSettingsService),
+                ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools, ResourceToolCatalog.GetControllerTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools,
                 HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService),
@@ -155,7 +158,8 @@ namespace RNAssistant.Office.Tools
                 _excelRangeMutationAdapter, _excelTableAdapter,
                 _excelChartAdapter, _wordAdapter, _powerPointAdapter,
                 _outlookAdapter, _vbaExecutor, _htmlWorkspaceService,
-                _capabilityCatalogService, discoveryCatalog, skillCatalog,
+                _capabilityCatalogService, _promptSettingsService,
+                discoveryCatalog, skillCatalog,
                 manualRun, _hostRuntime,
                 session, snapshot, settings, mode, pendingRegistrar, trace);
         }
@@ -497,6 +501,7 @@ namespace RNAssistant.Office.Tools
                     PowerPointToolIds.IsMutation(command.ToolId) ||
                     OutlookToolIds.IsMutation(command.ToolId) ||
                     VbaToolCatalog.Owns(command.ToolId) ||
+                    PromptToolCatalog.IsMutation(command.ToolId) ||
                     PlanDocumentToolCatalog.Owns(command.ToolId) ||
                     TaskListToolCatalog.Owns(command.ToolId) ||
                     HtmlWorkspaceToolCatalog.IsMutation(command.ToolId)))
@@ -513,10 +518,11 @@ namespace RNAssistant.Office.Tools
                     return ToolResult.Fail("Tool execution budget exceeded.", null, "tool_step_limit_exceeded", false);
                 var nativeSettings = context.Settings;
                 var nativeConfirmed = manualRun;
-                if (manualRun && VbaToolCatalog.Owns(command.ToolId))
+                if (manualRun && (VbaToolCatalog.Owns(command.ToolId) ||
+                    PromptToolCatalog.IsMutation(command.ToolId)))
                 {
-                    // A direct UI action is already authorized, but a VBA handler
-                    // must still prepare and consume its exact live-state guard.
+                    // A direct UI action is already authorized, but a guarded
+                    // handler must still prepare and consume its exact state.
                     nativeSettings = new AppSettings { AutoConfirmToolActions = true };
                     nativeConfirmed = false;
                 }
@@ -827,8 +833,6 @@ namespace RNAssistant.Office.Tools
                     return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.SkillCatalog);
                 case ControllerExecutorKind.ToolAuthoring:
                     return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
-                case ControllerExecutorKind.Prompt:
-                    return _promptToolExecutor.ExecuteControllerTool(command, dryRun);
                 case ControllerExecutorKind.Native:
                     return ToolResult.Fail("Native tool did not enter its registered handler.", null,
                         "native_handler_unavailable", false);
@@ -1054,7 +1058,6 @@ namespace RNAssistant.Office.Tools
         {
             Skill,
             ToolAuthoring,
-            Prompt,
             Native,
         }
     }

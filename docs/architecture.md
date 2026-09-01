@@ -139,6 +139,14 @@ Both `json_schema` and `json_object` enforce the same v4 contract against the cu
 
 Before a turn mutates a chat, the controller acquires a per-chat lease backed by an in-process registry and a cross-process lock file, reloads a newer persisted revision, and appends the user request, committed attachment references, and run state before calling the model. Attachment drafts stay in staging until their content-addressed references and the message are durable. After that mandatory save, the controller queues one full revision-guarded active-chat projection before attachment-helper or primary model transport; catalog-only background updates cannot replace the active transcript, and no WebView acknowledgement gates execution. Tool-start and tool-result boundaries are appended as typed operations. First-class turn events keep one logical `TurnId` across confirmation continuations, while every model request has `step.started`/`step.ended` boundaries correlated by request id. The event tail sequence is the monotonic compare-and-swap revision, so a stale window fails instead of overwriting newer history. A confirmation pause persists its pending id and cumulative iteration/tool counters; a new request is rejected until the action is confirmed or cancelled. Confirmation acquires a new lease and resumes the same logical budget. On startup, recovery checks the canonical event stream for a tool start without its matching finish; only that case becomes `interrupted_unknown`, while already persisted results remain replayable. Open model steps receive a synthetic interrupted terminal event.
 
+11T9C1–11T9C6 move questions, Plan Documents, Task Lists, HTML workspace/data,
+capability discovery/read and prompt read/save to exact native handlers. Prompt save
+is Agent-only, prepares an exact accepted-arguments/current-field guard before
+confirmation, preserves unrelated global settings, marks dispatch before storage
+mutation and requires exact supplied-field read-back; stale preparation fails before
+dispatch and no-change is explicit. Their former controller executors and legacy
+result paths are deleted.
+
 See [conversation-protocol.md](conversation-protocol.md).
 
 ## Important boundaries

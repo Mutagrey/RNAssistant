@@ -1,10 +1,15 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -45,6 +50,61 @@ namespace RNAssistant.Harness
                     value => global = value);
                 var runtime = global.Clone();
                 runtime.Model = "per-chat-model";
+                var definitions = executor.GetControllerTools()
+                    .Where(tool => PromptToolCatalog.Owns(tool.Id))
+                    .ToList();
+                AssertEqual(2, definitions.Count,
+                    "complete prompt family is registered");
+                var readDefinition = definitions.Single(tool =>
+                    tool.Id == PromptToolCatalog.ReadToolId);
+                var saveDefinition = definitions.Single(tool =>
+                    tool.Id == PromptToolCatalog.SaveToolId);
+                AssertEqual(ToolEffect.Read,
+                    readDefinition.RuntimePolicy.Effect,
+                    "prompt read effect");
+                AssertEqual(ToolVerification.None,
+                    readDefinition.RuntimePolicy.Verification,
+                    "prompt read verification");
+                AssertTrue(readDefinition.RuntimePolicy.IndependentLocalRead,
+                    "prompt read is an independent local read");
+                AssertEqual(ToolEffect.Write,
+                    saveDefinition.RuntimePolicy.Effect,
+                    "prompt save effect");
+                AssertEqual(ToolVerification.Tool,
+                    saveDefinition.RuntimePolicy.Verification,
+                    "prompt save verification");
+                AssertTrue(saveDefinition.RuntimePolicy.RequiresConfirmation,
+                    "prompt save requires confirmation");
+                AssertTrue(saveDefinition.ArgumentSchemaJson.Length <
+                        CapabilityCatalogService.MaximumDescriptorCharacters,
+                    "prompt save descriptor remains discoverable");
+                AssertEqual("agent",
+                    string.Join(",", saveDefinition.RuntimePolicy.AllowedModes),
+                    "prompt tools are Agent-only");
+
+                var native = executor.CreateNativeRuntime(
+                    NewSession(adapter), definitions,
+                    new AppSettings { AutoConfirmToolActions = false },
+                    "agent", false,
+                    (execution, preparation) => "prompt_pending");
+                AssertTrue(native.Describe(new ToolCall(
+                        "prompt_read_policy", PromptToolCatalog.ReadToolId,
+                        "{}")) != null,
+                    "exact prompt read has a native binding");
+                AssertTrue(native.Describe(new ToolCall(
+                        "prompt_alias", PromptToolCatalog.ReadToolId
+                            .ToUpperInvariant(), "{}")) == null,
+                    "prompt read has no case alias");
+                var read = ExecutePromptNative(
+                    native, PromptToolCatalog.ReadToolId, new JObject());
+                AssertEqual(ToolExecutionOutcome.Ok, read.Outcome,
+                    "native prompt read succeeds");
+                AssertEqual(ToolDispatchEvidence.NotDispatched,
+                    read.Evidence.Dispatch,
+                    "prompt read never dispatches an effect");
+                AssertEqual(ToolEffectEvidence.None, read.Evidence.Effect,
+                    "prompt read reports no effect");
+
                 var empty = executor.Execute(
                     new ToolCommand { ToolId = "common.prompts_save" },
                     adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList(),
@@ -52,7 +112,93 @@ namespace RNAssistant.Harness
                     false,
                     false);
                 AssertTrue(!empty.Success, "empty prompt save fails before confirmation");
-                AssertEqual("prompt_update_empty", empty.ErrorCode, "empty prompt save error");
+                AssertEqual("invalid_arguments", empty.ErrorCode,
+                    "empty prompt save is rejected by its schema");
+
+                var guardedArguments = new JObject
+                {
+                    ["systemPrompt"] = "Guarded prompt"
+                };
+                var pending = ExecutePromptNative(
+                    native, PromptToolCatalog.SaveToolId, guardedArguments);
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,
+                    pending.Outcome,
+                    "prompt save waits for confirmation");
+                AssertTrue(!string.IsNullOrWhiteSpace(
+                        pending.PreparedStateJson),
+                    "prompt save persists an exact preparation guard");
+                AssertEqual("Old prompt", global.SystemPrompt,
+                    "preparation does not mutate settings");
+                var guarded = ConfirmPromptNative(native, pending);
+                AssertEqual(ToolExecutionOutcome.Ok, guarded.Outcome,
+                    "confirmed prompt save succeeds");
+                AssertEqual(ToolDispatchEvidence.MayHaveDispatched,
+                    guarded.Evidence.Dispatch,
+                    "prompt save marks its dispatch boundary");
+                AssertEqual(ToolEffectEvidence.VerifiedChange,
+                    guarded.Evidence.Effect,
+                    "prompt save verifies the written value");
+                AssertEqual("Guarded prompt", global.SystemPrompt,
+                    "confirmed prompt save mutates settings");
+
+                var unchangedPending = ExecutePromptNative(
+                    native, PromptToolCatalog.SaveToolId, guardedArguments);
+                var unchanged = ConfirmPromptNative(
+                    native, unchangedPending);
+                AssertEqual(ToolExecutionOutcome.Ok, unchanged.Outcome,
+                    "unchanged prompt save succeeds");
+                AssertEqual(ToolDispatchEvidence.NotDispatched,
+                    unchanged.Evidence.Dispatch,
+                    "unchanged prompt save avoids dispatch");
+                AssertEqual(ToolEffectEvidence.VerifiedNoChange,
+                    unchanged.Evidence.Effect,
+                    "unchanged prompt save is explicit");
+
+                var stalePending = ExecutePromptNative(
+                    native, PromptToolCatalog.SaveToolId,
+                    new JObject { ["systemPrompt"] = "Intended prompt" });
+                global.SystemPrompt = "External prompt";
+                var stale = ConfirmPromptNative(native, stalePending);
+                AssertEqual(ToolExecutionOutcome.Error, stale.Outcome,
+                    "stale prompt preparation is rejected");
+                AssertEqual(ToolDispatchEvidence.NotDispatched,
+                    stale.Evidence.Dispatch,
+                    "stale prompt save does not dispatch");
+                AssertContains(stale.Result.DataJson,
+                    "prompt_settings_changed",
+                    "stale prompt save exposes a stable error code");
+
+                var ignored = new AppSettings
+                {
+                    Model = "ignored-model",
+                    SystemPrompt = "Ignored old prompt"
+                };
+                var mismatchExecutor = new OfficeToolExecutor(
+                    adapter,
+                    new VbaJournalStore(paths),
+                    new SkillStore(paths),
+                    new ToolStore(paths),
+                    () => ignored,
+                    value => { });
+                var mismatchDefinitions = mismatchExecutor
+                    .GetControllerTools()
+                    .Where(tool => PromptToolCatalog.Owns(tool.Id))
+                    .ToList();
+                var mismatchRuntime = mismatchExecutor.CreateNativeRuntime(
+                    NewSession(adapter), mismatchDefinitions,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    "agent", false);
+                var mismatch = ExecutePromptNative(
+                    mismatchRuntime, PromptToolCatalog.SaveToolId,
+                    new JObject { ["systemPrompt"] = "Ignored new prompt" });
+                AssertEqual(ToolExecutionOutcome.Unknown, mismatch.Outcome,
+                    "failed prompt read-back is unknown");
+                AssertEqual(ToolDispatchEvidence.MayHaveDispatched,
+                    mismatch.Evidence.Dispatch,
+                    "failed prompt read-back retains dispatch evidence");
+                AssertEqual(ToolEffectEvidence.Unknown,
+                    mismatch.Evidence.Effect,
+                    "failed prompt read-back retains unknown effect");
 
                 var command = new ToolCommand { ToolId = "common.prompts_save" };
                 command.Arguments["systemPrompt"] = "New prompt";
@@ -74,6 +220,46 @@ namespace RNAssistant.Harness
                 AssertEqual("New attachment prompt", global.AttachmentAnalysisPrompt, "attachment prompt updated");
                 AssertEqual("global-model", global.Model, "per-chat model is not copied into global settings");
             });
+        }
+
+        private static ToolExecutionRecord ExecutePromptNative(
+            NativeToolRuntimeAdapter runtime,
+            string toolId,
+            JObject arguments)
+        {
+            var call = new ToolCall(
+                "prompt_" + Guid.NewGuid().ToString("N"),
+                toolId,
+                (arguments ?? new JObject()).ToString(Formatting.None));
+            var policy = runtime.Describe(call);
+            if (policy == null)
+                throw new InvalidOperationException(
+                    "Prompt native policy was not captured: " + toolId);
+            return runtime.ExecuteAsync(
+                    new ToolExecutionContext(
+                        call, policy, "run-prompt-native",
+                        "turn-prompt-native", call.Id + ":1",
+                        DateTime.UtcNow, false, 5),
+                    CancellationToken.None)
+                .GetAwaiter().GetResult();
+        }
+
+        private static ToolExecutionRecord ConfirmPromptNative(
+            NativeToolRuntimeAdapter runtime,
+            ToolExecutionRecord pending)
+        {
+            if (pending == null ||
+                pending.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
+                throw new InvalidOperationException(
+                    "A native pending prompt save is required.");
+            var source = pending.Context;
+            return runtime.ExecuteAsync(
+                    new ToolExecutionContext(
+                        source.Call, source.Policy, source.RunId,
+                        source.TurnId, source.StepId, DateTime.UtcNow,
+                        true, 5, pending.PreparedStateJson),
+                    CancellationToken.None)
+                .GetAwaiter().GetResult();
         }
 
         private static void SettingsRequireExplicitPromptReview()

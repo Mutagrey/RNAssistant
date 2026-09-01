@@ -42,7 +42,7 @@ namespace RNAssistant.Office.Runtime
             : this(gateway, excelReads, excelWrites, excelFindReplace,
                 excelSheets, excelRangeMutations, excelTables, excelCharts,
                 wordTools, powerPointTools, outlookTools, null, null, null,
-                null, null, false, hostRuntime,
+                null, null, null, false, hostRuntime,
                 session, snapshot, settings, mode, null, trace)
         {
         }
@@ -59,6 +59,7 @@ namespace RNAssistant.Office.Runtime
             VbaToolExecutor vbaTools,
             HtmlWorkspaceToolService htmlWorkspaceTools,
             CapabilityCatalogService capabilityTools,
+            PromptSettingsService promptTools,
             IReadOnlyList<ToolDefinition> discoveryCatalog,
             IReadOnlyList<SkillDefinition> skillCatalog,
             bool manualRun,
@@ -214,6 +215,18 @@ namespace RNAssistant.Office.Runtime
                         registration.Descriptor.Id, capabilityTools,
                         discoveryCatalog, skillCatalog, manualRun);
                 }
+                else if (PromptToolCatalog.Owns(
+                    registration.Descriptor.Id))
+                {
+                    if (promptTools == null)
+                        throw new InvalidOperationException(
+                            "Prompt handler dependencies are unavailable.");
+                    handler = string.Equals(registration.Descriptor.Id,
+                            PromptToolCatalog.ReadToolId,
+                            StringComparison.Ordinal)
+                        ? (IToolHandler)new PromptReadToolHandler(promptTools)
+                        : new PromptSaveToolHandler(promptTools);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -247,7 +260,8 @@ namespace RNAssistant.Office.Runtime
                 PlanDocumentToolCatalog.Owns(toolId) ||
                 TaskListToolCatalog.Owns(toolId) ||
                 HtmlWorkspaceToolCatalog.Owns(toolId) ||
-                CapabilityToolCatalog.Owns(toolId);
+                CapabilityToolCatalog.Owns(toolId) ||
+                PromptToolCatalog.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -290,6 +304,12 @@ namespace RNAssistant.Office.Runtime
                 return HtmlWorkspaceToolHandler.BindingFor(toolId);
             if (CapabilityToolCatalog.Owns(toolId))
                 return CapabilityToolHandler.BindingFor(toolId);
+            if (string.Equals(toolId, PromptToolCatalog.ReadToolId,
+                StringComparison.Ordinal))
+                return PromptReadToolHandler.Binding;
+            if (string.Equals(toolId, PromptToolCatalog.SaveToolId,
+                StringComparison.Ordinal))
+                return PromptSaveToolHandler.Binding;
             return null;
         }
 
