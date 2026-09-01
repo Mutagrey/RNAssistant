@@ -532,6 +532,8 @@ namespace RNAssistant.Harness
                 officeToolExecutorSource.IndexOf(
                     "ControllerExecutorKind.UserQuestion", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
+                    "ControllerExecutorKind.PlanDocument", StringComparison.Ordinal) < 0 &&
+                officeToolExecutorSource.IndexOf(
                     "PrepareControllerTool", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
                     "PreviewPreparedControllerTool", StringComparison.Ordinal) < 0 &&
@@ -548,6 +550,14 @@ namespace RNAssistant.Harness
                 !File.Exists(Path.Combine(officeRoot, "Tools",
                     "UserQuestionToolExecutor.cs")),
                 "questions_ask must use its exact native handler without a controller executor");
+            AssertTrue(
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "PlanDocumentToolCatalog.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "PlanDocumentToolHandler.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools",
+                    "PlanDocumentToolExecutor.cs")),
+                "plan_doc tools must use exact native handlers without a controller executor");
             foreach (var removedAdapter in new[]
             {
                 "VbaMutationDocumentContextAdapter",

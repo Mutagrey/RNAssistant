@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Services
             string title,
             string markdown,
             string status,
-            bool dryRun)
+            Action beforeMutation)
         {
             RequireSession(session);
             if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId))
@@ -33,14 +33,15 @@ namespace RNAssistant.Office.Services
             var exactMarkdown = RequiredMarkdown(markdown);
             var normalizedStatus = NormalizeStatus(status);
             var artifact = CreateArtifact(planId, normalizedTitle, exactMarkdown, normalizedStatus, null, 1);
-            if (!dryRun)
+            Commit(beforeMutation, delegate
             {
+                session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
                 session.Artifacts.Add(artifact);
                 session.ActivePlanDocumentArtifactId = artifact.Id;
-            }
+            });
 
             return PlanDocumentMutation.Ok(
-                dryRun ? "Dry run: would create a Markdown plan." : "Plan document created: " + normalizedTitle,
+                "Plan document created: " + normalizedTitle,
                 planId,
                 normalizedStatus,
                 artifact);
@@ -54,7 +55,7 @@ namespace RNAssistant.Office.Services
             bool hasTitle,
             string markdown,
             string status,
-            bool dryRun)
+            Action beforeMutation)
         {
             RequireSession(session);
             planId = RequiredTrimmed(planId, "id", 128);
@@ -102,14 +103,15 @@ namespace RNAssistant.Office.Services
                 normalizedStatus,
                 current,
                 revision);
-            if (!dryRun)
+            Commit(beforeMutation, delegate
             {
+                session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
                 session.Artifacts.Add(artifact);
                 session.ActivePlanDocumentArtifactId = artifact.Id;
-            }
+            });
 
             return PlanDocumentMutation.Ok(
-                dryRun ? "Dry run: would update the Markdown plan." : "Plan document updated: " + normalizedTitle,
+                "Plan document updated: " + normalizedTitle,
                 planId,
                 normalizedStatus,
                 artifact);
@@ -120,7 +122,7 @@ namespace RNAssistant.Office.Services
             string planId,
             string expectedRevisionArtifactId,
             string sourceRevisionArtifactId,
-            bool dryRun)
+            Action beforeMutation)
         {
             RequireSession(session);
             planId = RequiredTrimmed(planId, "id", 128);
@@ -183,15 +185,15 @@ namespace RNAssistant.Office.Services
                 current,
                 revisions[revisions.Count - 1].Revision + 1,
                 source.Id);
-            if (!dryRun)
+            Commit(beforeMutation, delegate
             {
+                session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
                 session.Artifacts.Add(artifact);
                 session.ActivePlanDocumentArtifactId = artifact.Id;
-            }
+            });
 
             return PlanDocumentMutation.OkRestore(
-                dryRun ? "Dry run: would restore the selected Plan revision as a new head." :
-                    "Plan revision restored as a new head: " + source.Title,
+                "Plan revision restored as a new head: " + source.Title,
                 planId,
                 sourceStatus,
                 artifact,
@@ -202,7 +204,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             string planId,
             string expectedRevisionArtifactId,
-            bool dryRun)
+            Action beforeMutation)
         {
             RequireSession(session);
             planId = RequiredTrimmed(planId, "id", 128);
@@ -232,19 +234,27 @@ namespace RNAssistant.Office.Services
                 planId,
                 current,
                 revisions[revisions.Count - 1].Revision + 1);
-            if (!dryRun)
+            Commit(beforeMutation, delegate
             {
+                session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
                 session.Artifacts.Add(tombstone);
                 session.ActivePlanDocumentArtifactId = null;
-            }
+            });
 
             return PlanDocumentMutation.OkRemoval(
-                dryRun ? "Dry run: would append a Plan removal tombstone." :
-                    "Plan document removed; historical exact references remain as removal placeholders.",
+                "Plan document removed; historical exact references remain as removal placeholders.",
                 planId,
                 tombstone,
                 revisions.Count,
                 referencingMessageIds);
+        }
+
+        private static void Commit(Action beforeMutation, Action mutation)
+        {
+            if (beforeMutation == null)
+                throw new ArgumentNullException(nameof(beforeMutation));
+            beforeMutation();
+            mutation();
         }
 
         internal static string PlanId(ChatArtifact artifact)
@@ -323,7 +333,6 @@ namespace RNAssistant.Office.Services
         private static void RequireSession(ChatSession session)
         {
             if (session == null) throw new InvalidOperationException("Plan document requires an active chat.");
-            session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
         }
 
         private static ChatArtifact CreateArtifact(

@@ -211,10 +211,10 @@ namespace RNAssistant.Office
                 string.Equals(toolId, TaskListToolExecutor.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, TaskListToolExecutor.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, TaskListToolExecutor.CloseToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, PlanDocumentToolExecutor.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, PlanDocumentToolExecutor.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, PlanDocumentToolExecutor.RestoreToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, PlanDocumentToolExecutor.DeleteToolId, StringComparison.OrdinalIgnoreCase);
+                string.Equals(toolId, PlanDocumentToolCatalog.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanDocumentToolCatalog.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanDocumentToolCatalog.RestoreToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanDocumentToolCatalog.DeleteToolId, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

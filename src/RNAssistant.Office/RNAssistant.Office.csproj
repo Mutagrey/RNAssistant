@@ -281,7 +281,8 @@
     <Compile Include="Tools\HtmlArtifactToolExecutor.Diagnostics.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.Source.cs" />
     <Compile Include="Tools\TaskListToolExecutor.cs" />
-    <Compile Include="Tools\PlanDocumentToolExecutor.cs" />
+    <Compile Include="Tools\PlanDocumentToolCatalog.cs" />
+    <Compile Include="Tools\PlanDocumentToolHandler.cs" />
     <Compile Include="Tools\UserQuestionToolCatalog.cs" />
     <Compile Include="Tools\UserQuestionToolHandler.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />

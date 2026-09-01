@@ -22,10 +22,10 @@ namespace RNAssistant.Office.Services
             TaskListToolExecutor.CreateToolId,
             TaskListToolExecutor.UpdateToolId,
             TaskListToolExecutor.CloseToolId,
-            PlanDocumentToolExecutor.CreateToolId,
-            PlanDocumentToolExecutor.UpdateToolId,
-            PlanDocumentToolExecutor.RestoreToolId,
-            PlanDocumentToolExecutor.DeleteToolId,
+            PlanDocumentToolCatalog.CreateToolId,
+            PlanDocumentToolCatalog.UpdateToolId,
+            PlanDocumentToolCatalog.RestoreToolId,
+            PlanDocumentToolCatalog.DeleteToolId,
             UserQuestionToolCatalog.AskToolId
         }, StringComparer.OrdinalIgnoreCase);
 

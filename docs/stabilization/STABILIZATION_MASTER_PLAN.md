@@ -2446,7 +2446,11 @@ endpoint.
        and typed awaiting-user control; `UserQuestion` controller executor and
        old executor class/path are removed.
        [Evidence](PHASE_11T9C1_QUESTIONS_NATIVE_RUNTIME.md);
-     - 11T9C2 — Plan Document family;
+     - [x] 11T9C2 — all four Plan Document mutations use exact Plan-only native
+       handlers with direct session mutation boundaries and verified active-revision
+       evidence. `ControllerExecutorKind.PlanDocument` and the old executor
+       class/path are removed.
+       [Evidence](PHASE_11T9C2_PLAN_DOCUMENT_NATIVE_RUNTIME.md);
      - 11T9C3 — Task List family;
      - 11T9C4 — HTML workspace family;
      - 11T9C5 — capability discovery/read family;

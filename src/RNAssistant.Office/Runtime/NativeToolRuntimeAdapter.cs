@@ -176,6 +176,12 @@ namespace RNAssistant.Office.Runtime
                 {
                     handler = new UserQuestionToolHandler();
                 }
+                else if (PlanDocumentToolCatalog.Owns(
+                    registration.Descriptor.Id))
+                {
+                    handler = new PlanDocumentToolHandler(
+                        registration.Descriptor.Id, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -205,7 +211,8 @@ namespace RNAssistant.Office.Runtime
                 WordToolIds.Owns(toolId) || PowerPointToolIds.Owns(toolId) ||
                 OutlookToolIds.Owns(toolId) || VbaToolCatalog.Owns(toolId) ||
                 string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
-                    StringComparison.Ordinal);
+                    StringComparison.Ordinal) ||
+                PlanDocumentToolCatalog.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -240,6 +247,8 @@ namespace RNAssistant.Office.Runtime
             if (string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
                 StringComparison.Ordinal))
                 return UserQuestionToolHandler.Binding;
+            if (PlanDocumentToolCatalog.Owns(toolId))
+                return PlanDocumentToolHandler.BindingFor(toolId);
             return null;
         }
 
