@@ -2523,6 +2523,16 @@ endpoint.
     source contract while 11T9/11J remove its compatibility execution path before
     Phase 12. See
     [Tool Library](../tool-library.md).
+    - [x] 11J1 — the four existing `common.tools_*` authoring operations use exact
+      Agent-only native handlers and a typed service. Upsert/delete persist bounded
+      accepted-argument/current-definition guards, reject stale confirmation, mark
+      dispatch before storage mutation and verify exact effective read-back or
+      absence. `ToolAuthoringExecutor` and its controller branch are removed.
+      [Evidence](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md);
+    - [ ] 11J2 — move existing custom package execution plus Tools UI
+      install/remove/status to the versioned typed package source/result boundary,
+      then delete `VbaPackageToolAdapter` and `VbaLegacyResultProjection` from that
+      contour. Do not claim immutable package history or Host Fabric qualification.
 12. **11K — Skills authoring:** installed skills remain global/host-scoped Library
     capability packages, not chat artifacts. Add immutable package history, exact
     version/revision UX, restore-as-new-head, tombstone, guarded conflicts and

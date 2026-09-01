@@ -536,6 +536,8 @@ namespace RNAssistant.Harness
                 officeToolExecutorSource.IndexOf(
                     "ControllerExecutorKind.TaskList", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
+                    "ControllerExecutorKind.ToolAuthoring", StringComparison.Ordinal) < 0 &&
+                officeToolExecutorSource.IndexOf(
                     "PrepareControllerTool", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
                     "PreviewPreparedControllerTool", StringComparison.Ordinal) < 0 &&
@@ -570,6 +572,16 @@ namespace RNAssistant.Harness
                 !File.Exists(Path.Combine(officeRoot, "Tools",
                     "TaskListToolExecutor.cs")),
                 "task-list tools must use their typed service and exact native handlers");
+            AssertTrue(
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "ToolAuthoringCatalog.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "ToolAuthoringToolHandler.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "ToolAuthoringService.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools",
+                    "ToolAuthoringExecutor.cs")),
+                "tool authoring must use typed services and exact native handlers");
             foreach (var removedAdapter in new[]
             {
                 "VbaMutationDocumentContextAdapter",

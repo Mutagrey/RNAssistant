@@ -176,6 +176,15 @@ A confirmation pause persists its pending id, cumulative iteration/tool-step cou
 
 The Prompts UI and exact Agent-only native `common.prompts_read/save` handlers expose the three Agent sections plus `ChatSystemPrompt`, `PlanSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Save requires at least one schema-declared field and confirmation. Preparation binds the exact accepted arguments to hashes of the supplied current fields; confirmation rejects a changed pre-state before dispatch, preserves every unrelated setting, marks the storage boundary before save, then verifies the supplied fields by read-back. An already matching request returns verified no-change without dispatch. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
 
+The four exact Agent-only `common.tools_definition_read`, `common.tools_validate`,
+`common.tools_upsert` and `common.tools_delete` authoring operations also execute
+through native ToolRuntime handlers. Upsert/delete preparation binds the exact
+accepted arguments, operation and current stored definition hash; confirmation
+rejects drift before dispatch. Storage writes are marked before the possible effect
+and verified by exact effective-definition/absence read-back. A matching upsert is
+verified no-change and does not dispatch. Authoring never changes the immutable
+catalog already captured for the accepted run.
+
 ## ModelProtocol boundary (Phase 2)
 
 One `IMaterializedModelProtocol` instance serves a conversation run. `GetResponseAsync` receives

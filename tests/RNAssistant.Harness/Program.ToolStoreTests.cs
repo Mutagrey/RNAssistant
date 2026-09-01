@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -13,6 +14,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.WebView;
@@ -538,6 +540,54 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
+                var definitions = executor.GetControllerTools()
+                    .Where(tool => ToolAuthoringCatalog.Owns(tool.Id))
+                    .ToList();
+                AssertEqual(4, definitions.Count,
+                    "complete tool authoring family registered");
+                foreach (var definition in definitions)
+                {
+                    AssertEqual("agent", string.Join(",",
+                        definition.RuntimePolicy.AllowedModes),
+                        "tool authoring is Agent-only");
+                }
+                var readDefinition = definitions.Single(tool =>
+                    tool.Id == ToolAuthoringCatalog.DefinitionReadToolId);
+                var upsertDefinition = definitions.Single(tool =>
+                    tool.Id == ToolAuthoringCatalog.UpsertToolId);
+                AssertEqual(ToolEffect.Read,
+                    readDefinition.RuntimePolicy.Effect,
+                    "tool definition read effect");
+                AssertTrue(readDefinition.RuntimePolicy.IndependentLocalRead,
+                    "tool definition read is independently batchable");
+                AssertEqual(ToolEffect.Write,
+                    upsertDefinition.RuntimePolicy.Effect,
+                    "tool upsert effect");
+                AssertEqual(ToolVerification.Tool,
+                    upsertDefinition.RuntimePolicy.Verification,
+                    "tool upsert requires handler verification");
+                AssertTrue(upsertDefinition.RuntimePolicy.RequiresConfirmation,
+                    "tool upsert requires confirmation");
+                var native = executor.CreateNativeRuntime(
+                    NewSession(adapter), definitions,
+                    new AppSettings { AutoConfirmToolActions = false },
+                    "agent", false,
+                    (execution, preparation) => "tool_authoring_pending");
+                AssertTrue(native.Describe(new ToolCall(
+                        "tool_authoring_read",
+                        ToolAuthoringCatalog.DefinitionReadToolId,
+                        "{}")) != null,
+                    "exact tool authoring id has a native binding");
+                AssertTrue(native.Describe(new ToolCall(
+                        "tool_authoring_alias",
+                        ToolAuthoringCatalog.DefinitionReadToolId
+                            .ToUpperInvariant(), "{}")) == null,
+                    "tool authoring has no case alias");
+                AssertEqual("tools.upsert.v1",
+                    NativeToolRuntimeAdapter.BindingFor(
+                        ToolAuthoringCatalog.UpsertToolId).HandlerId,
+                    "tool upsert binding");
+
                 var command = new ToolCommand { ToolId = "common.tools_upsert" };
                 command.Arguments["id"] = "excel.generated_report";
                 command.Arguments["host"] = "Excel";
@@ -556,8 +606,26 @@ namespace RNAssistant.Harness
                 AssertTrue(!blocked.Success, "tool create should require confirmation");
                 AssertContains(blocked.Status, "waiting_confirmation", "blocked status");
 
-                var saved = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
-                AssertTrue(saved.Success, "tool create should succeed");
+                var pending = ExecuteToolAuthoringNative(
+                    native, ToolAuthoringCatalog.UpsertToolId,
+                    JObject.FromObject(command.Arguments));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,
+                    pending.Outcome,
+                    "native tool create waits for confirmation");
+                AssertTrue(!string.IsNullOrWhiteSpace(
+                        pending.PreparedStateJson),
+                    "native tool create persists a preparation guard");
+                AssertTrue(!new ToolStore(FixturePaths.Value).Load().Any(),
+                    "tool preparation does not write storage");
+                var saved = ConfirmToolAuthoringNative(native, pending);
+                AssertEqual(ToolExecutionOutcome.Ok, saved.Outcome,
+                    "confirmed tool create succeeds");
+                AssertEqual(ToolDispatchEvidence.MayHaveDispatched,
+                    saved.Evidence.Dispatch,
+                    "tool create marks its dispatch boundary");
+                AssertEqual(ToolEffectEvidence.VerifiedChange,
+                    saved.Evidence.Effect,
+                    "tool create verifies its read-back");
                 AssertContains(saved.Message, "created", "create message");
 
                 var update = new ToolCommand { ToolId = "common.tools_upsert" };
@@ -566,12 +634,53 @@ namespace RNAssistant.Harness
                 var updated = executor.Execute(update, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(updated.Success, "partial tool update should succeed");
 
-                var read = executor.Execute(new ToolCommand { ToolId = ToolAuthoringExecutor.DefinitionReadToolId, Arguments = { ["id"] = "excel.generated_report" } }, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
+                var read = executor.Execute(new ToolCommand { ToolId = ToolAuthoringCatalog.DefinitionReadToolId, Arguments = { ["id"] = "excel.generated_report" } }, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
                 AssertTrue(read.Success, "tool read should succeed");
                 AssertContains(read.DataJson, "Public Function Run", "saved VBA source");
                 AssertContains(read.DataJson, "\"parameters\":{", "schema returned as native object");
                 AssertContains(read.DataJson, "Updated report", "updated field returned");
                 AssertContains(read.DataJson, "Test custom tool.", "omitted manifest description preserved");
+
+                var unchangedPending = ExecuteToolAuthoringNative(
+                    native, ToolAuthoringCatalog.UpsertToolId,
+                    new JObject
+                    {
+                        ["id"] = "excel.generated_report",
+                        ["readme"] = "Updated report notes"
+                    });
+                var unchanged = ConfirmToolAuthoringNative(
+                    native, unchangedPending);
+                AssertEqual(ToolExecutionOutcome.Ok, unchanged.Outcome,
+                    "unchanged tool update succeeds");
+                AssertEqual(ToolDispatchEvidence.NotDispatched,
+                    unchanged.Evidence.Dispatch,
+                    "unchanged tool update avoids a write");
+                AssertEqual(ToolEffectEvidence.VerifiedNoChange,
+                    unchanged.Evidence.Effect,
+                    "unchanged tool update is explicit");
+
+                var stalePending = ExecuteToolAuthoringNative(
+                    native, ToolAuthoringCatalog.UpsertToolId,
+                    new JObject
+                    {
+                        ["id"] = "excel.generated_report",
+                        ["readme"] = "Intended report notes"
+                    });
+                var store = new ToolStore(FixturePaths.Value);
+                var externallyChanged = store.Load().Single(tool =>
+                    tool.Id == "excel.generated_report");
+                externallyChanged.Readme = "External report notes";
+                store.SaveOne(externallyChanged);
+                var stale = ConfirmToolAuthoringNative(
+                    native, stalePending);
+                AssertEqual(ToolExecutionOutcome.Error, stale.Outcome,
+                    "stale tool preparation is rejected");
+                AssertEqual(ToolDispatchEvidence.NotDispatched,
+                    stale.Evidence.Dispatch,
+                    "stale tool update does not dispatch");
+                AssertContains(stale.Result.DataJson,
+                    "tool_definition_changed",
+                    "stale tool update exposes a stable error code");
 
                 var emptyUpdate = executor.Execute(Command("common.tools_upsert", "id", "excel.generated_report"), new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
                 AssertTrue(!emptyUpdate.Success, "empty tool update fails before confirmation");
@@ -580,7 +689,62 @@ namespace RNAssistant.Harness
                 var missingDelete = executor.Execute(Command("common.tools_delete", "id", "excel.missing"), new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings(), false, false);
                 AssertTrue(!missingDelete.Success, "missing tool delete fails before confirmation");
                 AssertEqual("tool_not_found", missingDelete.ErrorCode, "missing tool delete error");
+
+                var deletePending = ExecuteToolAuthoringNative(
+                    native, ToolAuthoringCatalog.DeleteToolId,
+                    new JObject { ["id"] = "excel.generated_report" });
+                var deleted = ConfirmToolAuthoringNative(
+                    native, deletePending);
+                AssertEqual(ToolExecutionOutcome.Ok, deleted.Outcome,
+                    "confirmed tool delete succeeds");
+                AssertEqual(ToolEffectEvidence.VerifiedChange,
+                    deleted.Evidence.Effect,
+                    "tool delete verifies absence");
+                AssertTrue(!store.Load().Any(tool =>
+                        tool.Id == "excel.generated_report"),
+                    "tool delete removes storage");
             });
+        }
+
+        private static ToolExecutionRecord ExecuteToolAuthoringNative(
+            NativeToolRuntimeAdapter runtime,
+            string toolId,
+            JObject arguments)
+        {
+            var call = new ToolCall(
+                "tool_authoring_" + Guid.NewGuid().ToString("N"),
+                toolId,
+                (arguments ?? new JObject()).ToString(Formatting.None));
+            var policy = runtime.Describe(call);
+            if (policy == null)
+                throw new InvalidOperationException(
+                    "Tool authoring native policy was not captured: " +
+                    toolId);
+            return runtime.ExecuteAsync(
+                    new ToolExecutionContext(
+                        call, policy, "run-tool-authoring-native",
+                        "turn-tool-authoring-native", call.Id + ":1",
+                        DateTime.UtcNow, false, 5),
+                    CancellationToken.None)
+                .GetAwaiter().GetResult();
+        }
+
+        private static ToolExecutionRecord ConfirmToolAuthoringNative(
+            NativeToolRuntimeAdapter runtime,
+            ToolExecutionRecord pending)
+        {
+            if (pending == null || pending.Outcome !=
+                ToolExecutionOutcome.AwaitingConfirmation)
+                throw new InvalidOperationException(
+                    "A native pending tool authoring mutation is required.");
+            var source = pending.Context;
+            return runtime.ExecuteAsync(
+                    new ToolExecutionContext(
+                        source.Call, source.Policy, source.RunId,
+                        source.TurnId, source.StepId, DateTime.UtcNow,
+                        true, 5, pending.PreparedStateJson),
+                    CancellationToken.None)
+                .GetAwaiter().GetResult();
         }
 
         private static void AgentSkillCrudPreservesOmittedFields()

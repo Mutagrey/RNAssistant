@@ -25,7 +25,7 @@ namespace RNAssistant.Office.Tools
         private readonly VbaToolExecutor _vbaExecutor;
         private readonly SkillToolExecutor _skillExecutor;
         private readonly CapabilityCatalogService _capabilityCatalogService;
-        private readonly ToolAuthoringExecutor _toolAuthoringExecutor;
+        private readonly ToolAuthoringService _toolAuthoringService;
         private readonly PromptSettingsService _promptSettingsService;
         private readonly ResourceGatewayService _resourceGateway;
         private readonly ExcelReadToolAdapter _excelReadAdapter;
@@ -63,7 +63,8 @@ namespace RNAssistant.Office.Tools
             _skillExecutor = new SkillToolExecutor(adapter, skillStore);
             _capabilityCatalogService = new CapabilityCatalogService(
                 adapter, skillStore);
-            _toolAuthoringExecutor = new ToolAuthoringExecutor(adapter, toolStore);
+            _toolAuthoringService = new ToolAuthoringService(
+                adapter, toolStore, id => IsProtectedToolId(id));
             _promptSettingsService = new PromptSettingsService(
                 loadSettings, saveSettings);
             _hostRuntime = new HostRuntime(adapter, paths);
@@ -116,7 +117,9 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools, _skillExecutor.GetControllerTools(), ControllerExecutorKind.Skill);
             RegisterControllerTools(controllerTools,
                 CapabilityToolCatalog.GetTools(), ControllerExecutorKind.Native);
-            RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
+            RegisterControllerTools(controllerTools,
+                ToolAuthoringCatalog.GetTools(_toolAuthoringService),
+                ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools,
                 PromptToolCatalog.GetTools(_promptSettingsService),
                 ControllerExecutorKind.Native);
@@ -159,6 +162,7 @@ namespace RNAssistant.Office.Tools
                 _excelChartAdapter, _wordAdapter, _powerPointAdapter,
                 _outlookAdapter, _vbaExecutor, _htmlWorkspaceService,
                 _capabilityCatalogService, _promptSettingsService,
+                _toolAuthoringService,
                 discoveryCatalog, skillCatalog,
                 manualRun, _hostRuntime,
                 session, snapshot, settings, mode, pendingRegistrar, trace);
@@ -345,10 +349,11 @@ namespace RNAssistant.Office.Tools
 
         public ToolResult ValidateToolDefinition(ToolDefinition tool)
         {
-            var validation = ToolAuthoringExecutor.ValidateToolDefinition(tool);
-            return validation.Success && IsProtectedToolId(tool == null ? null : tool.Id)
-                ? ReservedToolId(tool.Id)
-                : validation;
+            var validation = _toolAuthoringService.ValidateDefinition(tool);
+            return validation.Success
+                ? ToolResult.Ok(validation.Message, validation.DataJson)
+                : ToolResult.Fail(validation.Message, validation.DataJson,
+                    validation.ErrorCode, validation.Retryable);
         }
 
         internal bool RequiresSessionLeaseForManualRun(
@@ -502,6 +507,7 @@ namespace RNAssistant.Office.Tools
                     OutlookToolIds.IsMutation(command.ToolId) ||
                     VbaToolCatalog.Owns(command.ToolId) ||
                     PromptToolCatalog.IsMutation(command.ToolId) ||
+                    ToolAuthoringCatalog.IsMutation(command.ToolId) ||
                     PlanDocumentToolCatalog.Owns(command.ToolId) ||
                     TaskListToolCatalog.Owns(command.ToolId) ||
                     HtmlWorkspaceToolCatalog.IsMutation(command.ToolId)))
@@ -519,7 +525,8 @@ namespace RNAssistant.Office.Tools
                 var nativeSettings = context.Settings;
                 var nativeConfirmed = manualRun;
                 if (manualRun && (VbaToolCatalog.Owns(command.ToolId) ||
-                    PromptToolCatalog.IsMutation(command.ToolId)))
+                    PromptToolCatalog.IsMutation(command.ToolId) ||
+                    ToolAuthoringCatalog.IsMutation(command.ToolId)))
                 {
                     // A direct UI action is already authorized, but a guarded
                     // handler must still prepare and consume its exact state.
@@ -544,12 +551,6 @@ namespace RNAssistant.Office.Tools
             if (!safety.Valid)
             {
                 return ToolResult.Fail(safety.Error);
-            }
-
-            var reservedIdResult = ValidateAuthoredToolId(command);
-            if (reservedIdResult != null)
-            {
-                return reservedIdResult;
             }
 
             ControllerExecutorKind controllerKind;
@@ -831,8 +832,6 @@ namespace RNAssistant.Office.Tools
             {
                 case ControllerExecutorKind.Skill:
                     return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.SkillCatalog);
-                case ControllerExecutorKind.ToolAuthoring:
-                    return _toolAuthoringExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun);
                 case ControllerExecutorKind.Native:
                     return ToolResult.Fail("Native tool did not enter its registered handler.", null,
                         "native_handler_unavailable", false);
@@ -903,24 +902,6 @@ namespace RNAssistant.Office.Tools
             return !string.IsNullOrWhiteSpace(id) &&
                 (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
                  _controllerExecutors.ContainsKey(id));
-        }
-
-        private ToolResult ValidateAuthoredToolId(ToolCommand command)
-        {
-            if (command == null ||
-                (!string.Equals(command.ToolId, "common.tools_validate", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(command.ToolId, "common.tools_upsert", StringComparison.OrdinalIgnoreCase)))
-            {
-                return null;
-            }
-
-            var id = ToolArgumentReader.String(command.Arguments, "id", string.Empty);
-            return IsProtectedToolId(id) ? ReservedToolId(id) : null;
-        }
-
-        private static ToolResult ReservedToolId(string id)
-        {
-            return ToolResult.Fail("Tool id is reserved by a built-in tool: " + id, null, "reserved_tool_id", false);
         }
 
         private static void AddTools(ICollection<ToolDefinition> result, ISet<string> seen, IEnumerable<ToolDefinition> tools)
@@ -1057,7 +1038,6 @@ namespace RNAssistant.Office.Tools
         private enum ControllerExecutorKind
         {
             Skill,
-            ToolAuthoring,
             Native,
         }
     }

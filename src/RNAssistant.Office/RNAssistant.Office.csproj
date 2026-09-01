@@ -276,9 +276,13 @@
     <Compile Include="Tools\CapabilityToolCatalog.cs" />
     <Compile Include="Tools\CapabilityToolContracts.cs" />
     <Compile Include="Tools\CapabilityToolHandler.cs" />
-    <Compile Include="Tools\ToolAuthoringExecutor.cs" />
-    <Compile Include="Tools\ToolAuthoringExecutor.Schemas.cs" />
-    <Compile Include="Tools\ToolAuthoringExecutor.Validation.cs" />
+    <Compile Include="Tools\ToolAuthoringCatalog.cs" />
+    <Compile Include="Tools\ToolAuthoringCatalog.Schemas.cs" />
+    <Compile Include="Tools\ToolAuthoringContracts.cs" />
+    <Compile Include="Tools\ToolAuthoringService.cs" />
+    <Compile Include="Tools\ToolAuthoringService.Mutations.cs" />
+    <Compile Include="Tools\ToolAuthoringService.Validation.cs" />
+    <Compile Include="Tools\ToolAuthoringToolHandler.cs" />
     <Compile Include="Tools\PromptSettingsService.cs" />
     <Compile Include="Tools\PromptToolCatalog.cs" />
     <Compile Include="Tools\PromptToolContracts.cs" />

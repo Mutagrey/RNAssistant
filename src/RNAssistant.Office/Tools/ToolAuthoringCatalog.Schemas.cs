@@ -9,14 +9,14 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed partial class ToolAuthoringExecutor
+    internal static partial class ToolAuthoringCatalog
     {
         private static string OptionalIdSchema()
         {
             return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact custom tool id; omit to list compact metadata.\"}},\"required\":[],\"additionalProperties\":false}";
         }
 
-        private string ToolPayloadSchema(bool update)
+        private static string ToolPayloadSchema(bool update)
         {
             var properties = new JObject
             {
@@ -85,7 +85,7 @@ namespace RNAssistant.Office.Tools
             }.ToString(Formatting.None);
         }
 
-        private string ToolUpsertSchema()
+        private static string ToolUpsertSchema()
         {
             var schema = JObject.Parse(ToolPayloadSchema(true));
             ((JObject)schema["properties"])["mode"] = new JObject

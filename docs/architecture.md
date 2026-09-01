@@ -147,6 +147,14 @@ mutation and requires exact supplied-field read-back; stale preparation fails be
 dispatch and no-change is explicit. Their former controller executors and legacy
 result paths are deleted.
 
+11J1 moves `common.tools_definition_read`, `common.tools_validate`,
+`common.tools_upsert` and `common.tools_delete` to exact Agent-only native handlers.
+Authoring mutations prepare a bounded exact-arguments/current-definition hash guard,
+reject stale confirmation before dispatch and require stored-definition read-back;
+exact no-change avoids storage dispatch. `ToolAuthoringExecutor` and its controller
+branch are deleted. Existing custom-package execution and Library UI package actions
+remain the next 11J slice; they cannot call the removed authoring path.
+
 See [conversation-protocol.md](conversation-protocol.md).
 
 ## Important boundaries

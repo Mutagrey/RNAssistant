@@ -40,9 +40,13 @@ Existing custom VBA packages are stored under `%AppData%/RNAssistant/tools` and 
 current Library editor can validate, save, clone, test and delete them. The current
 flat package store is not immutable revision history. Model authoring uses the
 separate `common.tools_definition_read`, `common.tools_validate`,
-`common.tools_upsert` and `common.tools_delete` operations. These paths remain an
-optional Phase 11 contour even though execution of already admitted VBA packages is
-part of the stabilized VBA runtime.
+`common.tools_upsert` and `common.tools_delete` operations. Since 11J1 these four
+exact Agent-only operations use native typed handlers; confirmed upsert/delete bind
+accepted arguments to the current effective definition, reject stale state, mark the
+storage boundary and require read-back verification. They cannot alter the immutable
+ToolPack of the accepted run. The flat store and current Library package actions
+remain until the following 11J package/UI slice; immutable history is not claimed by
+this switch.
 
 ## Read-only Tool Inspector first
 
