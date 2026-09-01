@@ -20,9 +20,31 @@ namespace RNAssistant.Office.Runtime
     {
         private readonly ToolRuntime _runtime;
         private readonly bool _trace;
+        private readonly ChatSession _session;
         private readonly object _projectionSync = new object();
         private readonly Dictionary<string, IReadOnlyList<ChatAttachment>> _resourceReadAttachments =
             new Dictionary<string, IReadOnlyList<ChatAttachment>>(StringComparer.Ordinal);
+
+        internal NativeToolRuntimeAdapter(ResourceGatewayService gateway,
+            ExcelReadToolAdapter excelReads,
+            ExcelWriteToolAdapter excelWrites,
+            ExcelFindReplaceToolAdapter excelFindReplace,
+            ExcelSheetToolAdapter excelSheets,
+            ExcelRangeMutationToolAdapter excelRangeMutations,
+            ExcelTableToolAdapter excelTables,
+            ExcelChartToolAdapter excelCharts,
+            WordToolAdapter wordTools,
+            PowerPointToolAdapter powerPointTools,
+            OutlookToolAdapter outlookTools,
+            HostRuntime hostRuntime, ChatSession session,
+            ToolPackSnapshot snapshot, AppSettings settings, string mode,
+            bool trace = true)
+            : this(gateway, excelReads, excelWrites, excelFindReplace,
+                excelSheets, excelRangeMutations, excelTables, excelCharts,
+                wordTools, powerPointTools, outlookTools, null, hostRuntime,
+                session, snapshot, settings, mode, null, trace)
+        {
+        }
 
         internal NativeToolRuntimeAdapter(ResourceGatewayService gateway, ExcelReadToolAdapter excelReads,
             ExcelWriteToolAdapter excelWrites, ExcelFindReplaceToolAdapter excelFindReplace,
@@ -33,8 +55,11 @@ namespace RNAssistant.Office.Runtime
             WordToolAdapter wordTools,
             PowerPointToolAdapter powerPointTools,
             OutlookToolAdapter outlookTools,
+            VbaToolExecutor vbaTools,
             HostRuntime hostRuntime, ChatSession session,
-            ToolPackSnapshot snapshot, AppSettings settings, string mode, bool trace = true)
+            ToolPackSnapshot snapshot, AppSettings settings, string mode,
+            Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
+            bool trace = true)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
@@ -136,6 +161,15 @@ namespace RNAssistant.Office.Runtime
                         registration.Descriptor.Id, outlookTools,
                         hostRuntime, session);
                 }
+                else if (VbaToolCatalog.Owns(registration.Descriptor.Id))
+                {
+                    if (vbaTools == null || hostRuntime == null)
+                        throw new InvalidOperationException(
+                            "VBA handler dependencies are unavailable.");
+                    handler = new VbaToolHandler(
+                        registration.Descriptor.Id, vbaTools,
+                        hostRuntime, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -146,7 +180,9 @@ namespace RNAssistant.Office.Runtime
             }
             var policy = ConversationRunPolicy.For(mode);
             _runtime = new ToolRuntime(registry, policy.Mode,
-                settings != null && settings.AutoConfirmToolActions, policy.AllowsConfirmation);
+                settings != null && settings.AutoConfirmToolActions,
+                policy.AllowsConfirmation, pendingRegistrar);
+            _session = session;
             _trace = trace;
         }
 
@@ -161,7 +197,7 @@ namespace RNAssistant.Office.Runtime
                 ExcelRangeMutationToolIds.Owns(toolId) ||
                 ExcelTableToolIds.Owns(toolId) || ExcelChartToolIds.Owns(toolId) ||
                 WordToolIds.Owns(toolId) || PowerPointToolIds.Owns(toolId) ||
-                OutlookToolIds.Owns(toolId);
+                OutlookToolIds.Owns(toolId) || VbaToolCatalog.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -191,6 +227,8 @@ namespace RNAssistant.Office.Runtime
                 return PowerPointToolHandler.BindingFor(toolId);
             if (OutlookToolIds.Owns(toolId))
                 return OutlookToolHandler.BindingFor(toolId);
+            if (VbaToolCatalog.Owns(toolId))
+                return VbaToolHandler.BindingFor(toolId);
             return null;
         }
 
@@ -222,7 +260,13 @@ namespace RNAssistant.Office.Runtime
             var policy = Describe(call);
             if (policy == null) return LegacyResult.Fail("No native handler is available for this exact tool id.", null, "unknown_tool", false);
             var identity = Guid.NewGuid().ToString("N");
-            var context = new ToolExecutionContext(call, policy, identity, identity,
+            var runId = _session == null || _session.LastRun == null ||
+                string.IsNullOrWhiteSpace(_session.LastRun.RunId)
+                    ? identity : _session.LastRun.RunId;
+            var turnId = _session == null || _session.LastRun == null ||
+                string.IsNullOrWhiteSpace(_session.LastRun.TurnId)
+                    ? identity : _session.LastRun.TurnId;
+            var context = new ToolExecutionContext(call, policy, runId, turnId,
                 string.IsNullOrWhiteSpace(command.RuntimeStepId) ? identity : command.RuntimeStepId,
                 DateTime.UtcNow, confirmed, remainingSteps);
             var record = ExecuteAsync(context, token).GetAwaiter().GetResult();

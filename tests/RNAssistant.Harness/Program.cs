@@ -90,6 +90,7 @@ namespace RNAssistant.Harness
                 Test("tool runtime: schema gate before handler", ToolRuntimeValidatesArgumentsBeforeHandler),
                 Test("tool runtime: mode and captured policy gate", ToolRuntimeEnforcesModeAndPolicySnapshot),
                 Test("tool runtime: confirmation gates dispatch", ToolRuntimeGatesAndResumesConfirmation),
+                Test("tool runtime: prepared state survives confirmation", ToolRuntimePersistsPreparationAcrossConfirmation),
                 Test("tool runtime: unavailable and automatic confirmation", ToolRuntimeHandlesUnavailableAndAutomaticConfirmation),
                 Test("tool runtime: read results and required verification", ToolRuntimeNormalizesReadResults),
                 Test("tool runtime: write effect evidence", ToolRuntimeSeparatesWriteEffects),
@@ -241,6 +242,7 @@ namespace RNAssistant.Harness
                 Test("agent: classifies exhausted VBA continuation budget", AgentClassifiesExhaustedVbaContinuationBudget),
                 Test("agent: loads and runs arbitrary macro", SimpleAgentLoadsAndRunsArbitraryMacro),
                 Test("agent: confirmation replays one final result", SimpleAgentConfirmationReplaysOnlyFinalResult),
+                Test("agent: VBA confirmation resumes prepared native state", SimpleAgentVbaConfirmationResumesPreparedState),
                 Test("agent: confirmed tool failure continues", SimpleAgentConfirmationFailureContinues),
                 Test("agent: native read batch keeps paired replay", NativeReadBatchKeepsPairedReplay),
                 Test("agent: runtime ids preserve complete HTML in user history", () => RuntimeIdsPreserveCompleteHtml("user")),
@@ -486,6 +488,7 @@ namespace RNAssistant.Harness
                 Test("plan document: restore and removal stay append-only", PlanDocumentRestoreAndRemovalStayAppendOnly),
 
                 Test("vba: reader validates typed snapshots", VbaReaderValidatesTypedSnapshots),
+                Test("vba: public tools use native runtime", VbaPublicToolsUseNativeRuntime),
                 Test("vba: mutation service owns apply patch", VbaMutationServiceOwnsApplyPatch),
                 Test("vba: whole write service owns workflow", VbaWholeModuleWriteServiceOwnsWorkflow),
                 Test("vba: delete service owns workflow", VbaDeleteModuleServiceOwnsWorkflow),

@@ -5,7 +5,8 @@ using RNAssistant.Office.Domains.Vba;
 
 namespace RNAssistant.Office.Tools
 {
-    // Removed with the remaining controller ToolResult boundary in 11T9B.
+    // Custom package/manual/reconciliation UI boundary only. Public VBA tools
+    // bypass this projection since 11T9B; the remaining consumers leave in 11J.
     internal static class VbaLegacyResultProjection
     {
         public static ToolResult ToToolResult(VbaMutationOutcome outcome)

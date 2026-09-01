@@ -21,10 +21,10 @@ namespace RNAssistant.Office.Runtime
         private readonly string _mode;
         private readonly bool _autoConfirm;
         private readonly bool _allowsConfirmation;
-        private readonly Func<ToolExecutionContext, string> _pendingRegistrar;
+        private readonly Func<ToolExecutionContext, ToolPreparationResult, string> _pendingRegistrar;
 
         public ToolRuntime(ToolHandlerRegistry registry, string mode, bool autoConfirm, bool allowsConfirmation,
-            Func<ToolExecutionContext, string> pendingRegistrar = null)
+            Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null)
         {
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
             if (mode != "agent" && mode != "plan" && mode != "chat") throw new ArgumentException("A supported conversation mode is required.", nameof(mode));
@@ -71,16 +71,68 @@ namespace RNAssistant.Office.Runtime
             }
 
             if (cancellationToken.IsCancellationRequested) return NotDispatched(context, "Cancelled before handler dispatch.");
+            var preparable = tool.Handler as IPreparableToolHandler;
+            if (preparable == null && context.PreparedStateJson != null)
+                return Reject(context, "tool_preparation_state_unexpected", "This handler does not accept prepared state.");
+            if (preparable != null && context.IsConfirmed && string.IsNullOrWhiteSpace(context.PreparedStateJson))
+                return Reject(context, "tool_preparation_missing", "Confirmed execution is missing its prepared state.");
+            if (!context.IsConfirmed && context.PreparedStateJson != null)
+                return Reject(context, "tool_preparation_state_unexpected", "Unconfirmed execution cannot supply prepared state.");
+
+            ToolPreparationResult preparation = null;
+            if (preparable != null && !context.IsConfirmed)
+            {
+                var preparationContext = new ToolHandlerContext(context, arguments);
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    preparation = await preparable.PrepareAsync(preparationContext, cancellationToken).ConfigureAwait(false);
+                    if (preparation == null) throw new InvalidOperationException("Handler returned no preparation result.");
+                    if (preparationContext.MayHaveDispatched)
+                        return Record(context, ToolExecutionOutcome.Unknown,
+                            ToolResult.Unknown("Preparation crossed an effect boundary.", Code("preparation_dispatched")),
+                            true, ToolEffectEvidence.Unknown);
+                    if (preparation.Result.Status != ToolResultStatus.Ok)
+                    {
+                        var failed = preparation.Result.Status == ToolResultStatus.Unknown
+                            ? ToolResult.Error(preparation.Result.Message, preparation.Result.DataJson, preparation.Result.Resources)
+                            : preparation.Result;
+                        return Record(context, ToolExecutionOutcome.Error, failed, false, ToolEffectEvidence.None);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    if (preparationContext.MayHaveDispatched)
+                        return Record(context, ToolExecutionOutcome.Unknown,
+                            ToolResult.Unknown(
+                                "Preparation was cancelled after an effect boundary.",
+                                Code("preparation_effect_unknown")),
+                            true, ToolEffectEvidence.Unknown);
+                    return NotDispatched(context, "Preparation cancelled before handler dispatch.");
+                }
+                catch (Exception ex)
+                {
+                    if (preparationContext.MayHaveDispatched)
+                        return Record(context, ToolExecutionOutcome.Unknown,
+                            ToolResult.Unknown(ex.Message,
+                                Code("preparation_effect_unknown")),
+                            true, ToolEffectEvidence.Unknown);
+                    return Reject(context, "tool_preparation_failed", ex.Message);
+                }
+            }
             if (policy.RequiresConfirmation && !context.IsConfirmed && !_autoConfirm)
             {
                 if (_pendingRegistrar == null) return Reject(context, "confirmation_unavailable", "No confirmation registrar is available.");
                 try
                 {
-                    var pendingId = _pendingRegistrar(context);
+                    var pendingId = _pendingRegistrar(context, preparation);
                     if (cancellationToken.IsCancellationRequested) return NotDispatched(context, "Cancelled during confirmation registration.");
                     if (string.IsNullOrWhiteSpace(pendingId)) return Reject(context, "confirmation_unavailable", "Confirmation registration returned no identity.");
                     return Record(context, ToolExecutionOutcome.AwaitingConfirmation, null, false, ToolEffectEvidence.None,
-                        pendingId: pendingId, message: "Confirmation required before handler dispatch.");
+                        pendingId: pendingId,
+                        message: preparation == null ? "Confirmation required before handler dispatch." : preparation.Result.Message,
+                        preparedStateJson: preparation == null ? null : preparation.PreparedStateJson,
+                        confirmationDataJson: preparation == null ? null : preparation.Result.DataJson);
                 }
                 catch (OperationCanceledException)
                 {
@@ -92,7 +144,8 @@ namespace RNAssistant.Office.Runtime
                 }
             }
 
-            var handlerContext = new ToolHandlerContext(context, arguments);
+            var handlerContext = new ToolHandlerContext(context, arguments,
+                context.PreparedStateJson ?? (preparation == null ? null : preparation.PreparedStateJson));
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -179,13 +232,15 @@ namespace RNAssistant.Office.Runtime
         }
 
         private static ToolExecutionRecord Record(ToolExecutionContext context, ToolExecutionOutcome outcome,
-            ToolResult result, bool dispatched, ToolEffectEvidence effect, string pendingId = null, bool awaitingUser = false, string message = null)
+            ToolResult result, bool dispatched, ToolEffectEvidence effect, string pendingId = null, bool awaitingUser = false,
+            string message = null, string preparedStateJson = null, string confirmationDataJson = null)
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
             return new ToolExecutionRecord(context, outcome, completed, message ?? (result == null ? string.Empty : result.Message),
                 mayHaveDispatched: dispatched, pendingId: pendingId, awaitingUser: awaitingUser,
-                evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect), result: result);
+                evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect),
+                result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson);
         }
     }
 }

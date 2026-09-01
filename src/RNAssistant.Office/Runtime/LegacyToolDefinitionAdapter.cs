@@ -17,8 +17,11 @@ namespace RNAssistant.Office.Runtime
             var safety = ToolSafetyPolicy.Resolve(definition, null);
             var trusted = definition.BuiltIn && string.Equals(definition.Executor, "builtin", StringComparison.OrdinalIgnoreCase);
             var declared = trusted ? definition.RuntimePolicy : null;
-            var effect = safety.MutatesDocument || safety.MutatesLocalState
-                ? ToolEffect.Write : declared == null ? ToolEffect.Unclassified : declared.Effect;
+            var effect = declared != null
+                ? declared.Effect
+                : safety.MutatesDocument || safety.MutatesLocalState
+                    ? ToolEffect.Write
+                    : ToolEffect.Unclassified;
             var confirmation = safety.RequiresConfirmation;
             var independent = safety.Valid && definition.Enabled && definition.AgentCanRun &&
                 declared != null && declared.IndependentLocalRead && effect == ToolEffect.Read && !confirmation;

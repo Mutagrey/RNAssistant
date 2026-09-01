@@ -23,6 +23,33 @@ namespace RNAssistant.Office.Tools
             };
         }
 
+        public static ToolDefinition CreateTypedProjection(
+            ToolDescriptor descriptor,
+            ToolPolicy policy,
+            string host = "Common",
+            string name = null,
+            string scope = "global")
+        {
+            if (descriptor == null) throw new ArgumentNullException(nameof(descriptor));
+            if (policy == null) throw new ArgumentNullException(nameof(policy));
+            return new ToolDefinition
+            {
+                Id = descriptor.Id,
+                Host = host,
+                Name = name ?? descriptor.Id,
+                Description = descriptor.Description,
+                ArgumentSchemaJson = descriptor.ParametersJson,
+                BuiltIn = true,
+                Enabled = true,
+                Scope = scope,
+                AgentCanRun = true,
+                MutatesDocument = policy.MayHaveSideEffects,
+                RequiresConfirmation = policy.RequiresConfirmation,
+                RiskLevel = policy.RiskLevel,
+                RuntimePolicy = policy
+            };
+        }
+
         public static ToolDefinition Create(
             string id,
             string host,

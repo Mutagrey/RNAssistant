@@ -176,7 +176,7 @@ namespace RNAssistant.Harness
             var registrations = 0;
             ToolExecutionContext registered = null;
             var f = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write, ToolVerification.Tool, true)),
-                registrar: context => { registrations++; registered = context; return "pending-runtime"; });
+                registrar: (context, preparation) => { registrations++; registered = context; return "pending-runtime"; });
             f.Handler.Run = (context, token) =>
             {
                 context.MarkDispatchPossible();
@@ -197,10 +197,107 @@ namespace RNAssistant.Harness
             AssertEqual(1, registrations, "resume does not register another pending action");
         }
 
+        private static async Task ToolRuntimePersistsPreparationAcrossConfirmation()
+        {
+            var registration = RuntimeRegistration(policy: RuntimePolicy(
+                ToolEffect.Write, ToolVerification.Tool, true));
+            var handler = new RuntimePreparableHandler();
+            ToolPreparationResult registeredPreparation = null;
+            var registry = new ToolHandlerRegistry();
+            registry.Register(registration, handler);
+            var runtime = new ToolRuntime(registry, "agent", false, true,
+                (context, preparation) =>
+                {
+                    registeredPreparation = preparation;
+                    return "pending-prepared";
+                });
+            var call = new ToolCall("call_prepared", registration.Descriptor.Id, "{}");
+            var policy = runtime.Describe(call);
+            var pendingContext = new ToolExecutionContext(call, policy,
+                "run", "turn", "step", DateTime.UtcNow, false, 5);
+            var pending = await runtime.ExecuteAsync(
+                pendingContext, CancellationToken.None);
+
+            AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,
+                pending.Outcome, "successful preparation becomes pending");
+            AssertEqual("{\"guard\":1}", pending.PreparedStateJson,
+                "opaque prepared state is carried by pending evidence");
+            AssertEqual("{\"preview\":true}", pending.ConfirmationDataJson,
+                "bounded preview data remains a UI-only confirmation payload");
+            AssertTrue(ReferenceEquals(registeredPreparation, handler.LastPreparation),
+                "registrar receives the exact preparation result");
+            AssertEqual(1, handler.PrepareCalls, "preparation runs once before confirmation");
+            AssertEqual(0, handler.ExecuteCalls, "preparation does not dispatch the handler");
+
+            var persisted = JsonConvert.DeserializeObject<PendingConfirmation>(
+                JsonConvert.SerializeObject(new PendingConfirmation(pending)));
+            var confirmedContext = new ToolExecutionContext(
+                persisted.Call, persisted.Policy, "run", "turn",
+                persisted.StepId, DateTime.UtcNow, true, 5,
+                persisted.PreparedStateJson);
+            var completed = await runtime.ExecuteAsync(
+                confirmedContext, CancellationToken.None);
+            AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome,
+                "confirmed execution consumes persisted prepared state");
+            AssertEqual("{\"guard\":1}", handler.ExecutedState,
+                "handler receives the exact persisted state");
+            AssertEqual(1, handler.PrepareCalls,
+                "confirmed execution never re-prepares live state");
+            AssertEqual(1, handler.ExecuteCalls,
+                "confirmed execution dispatches exactly once");
+
+            var missing = await runtime.ExecuteAsync(
+                new ToolExecutionContext(call, policy, "run", "turn",
+                    "step", DateTime.UtcNow, true, 5),
+                CancellationToken.None);
+            AssertEqual(ToolExecutionOutcome.Error, missing.Outcome,
+                "confirmed prepared handler fails closed without state");
+            AssertContains(missing.Result.DataJson, "tool_preparation_missing",
+                "missing state has a stable code");
+            AssertEqual(1, handler.ExecuteCalls,
+                "missing prepared state never dispatches");
+
+            var unsafeHandler = new RuntimePreparableHandler
+            {
+                Prepare = context =>
+                {
+                    context.MarkDispatchPossible();
+                    throw new InvalidOperationException("unsafe preparation");
+                }
+            };
+            var unsafeRegistry = new ToolHandlerRegistry();
+            unsafeRegistry.Register(registration, unsafeHandler);
+            var unsafeRuntime = new ToolRuntime(
+                unsafeRegistry, "agent", true, true);
+            var unsafeResult = await unsafeRuntime.ExecuteAsync(
+                new ToolExecutionContext(call, unsafeRuntime.Describe(call),
+                    "run", "turn", "step", DateTime.UtcNow, false, 5),
+                CancellationToken.None);
+            AssertEqual(ToolExecutionOutcome.Unknown, unsafeResult.Outcome,
+                "a preparation that crosses an effect boundary is unknown");
+            AssertTrue(unsafeResult.MayHaveDispatched,
+                "unsafe preparation cannot certify non-dispatch");
+
+            var oversizedState = new string('x',
+                ToolPreparationResult.MaxPreparedStateChars + 1);
+            RuntimeThrows<ArgumentException>(() => new ToolPreparationResult(
+                RuntimeResult.Ok("Prepared"), oversizedState));
+            RuntimeThrows<ArgumentException>(() => new ToolPreparationResult(
+                RuntimeResult.Ok("Prepared", new string('x',
+                    ToolPreparationResult.MaxConfirmationDataChars + 1)),
+                "{}"));
+            RuntimeThrows<ArgumentException>(() => new ToolExecutionContext(
+                call, policy, "run", "turn", "step", DateTime.UtcNow,
+                true, 5, oversizedState));
+            RuntimeThrows<ArgumentException>(() => new PendingConfirmation(
+                "pending", call, policy, "step", 1, oversizedState));
+        }
+
         private static async Task ToolRuntimeHandlesUnavailableAndAutomaticConfirmation()
         {
             var registration = RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write, confirmation: true));
-            foreach (var registrar in new Func<ToolExecutionContext, string>[] { null, context => "", context => { throw new InvalidOperationException("registration failed"); } })
+            foreach (var registrar in new Func<ToolExecutionContext, ToolPreparationResult, string>[]
+                { null, (context, preparation) => "", (context, preparation) => { throw new InvalidOperationException("registration failed"); } })
             {
                 var f = new ToolRuntimeFixture(registration, registrar: registrar);
                 var result = await f.Runtime.ExecuteAsync(f.Context(), CancellationToken.None);
@@ -298,7 +395,7 @@ namespace RNAssistant.Harness
             using (var source = new CancellationTokenSource())
             {
                 var f = new ToolRuntimeFixture(RuntimeRegistration(policy: RuntimePolicy(ToolEffect.Write, confirmation: true)),
-                    registrar: context => { source.Cancel(); throw new OperationCanceledException(source.Token); });
+                    registrar: (context, preparation) => { source.Cancel(); throw new OperationCanceledException(source.Token); });
                 var result = await f.Runtime.ExecuteAsync(f.Context(), source.Token);
                 AssertEqual(ToolExecutionOutcome.NotDispatched, result.Outcome, "cancelled registration does not become an execution error");
                 AssertEqual(0, f.Handler.Calls, "cancelled registration cannot reach the handler");
@@ -613,6 +710,38 @@ namespace RNAssistant.Harness
             }
         }
 
+        private sealed class RuntimePreparableHandler : IPreparableToolHandler
+        {
+            internal int PrepareCalls;
+            internal int ExecuteCalls;
+            internal string ExecutedState;
+            internal ToolPreparationResult LastPreparation;
+            internal Func<ToolHandlerContext, ToolPreparationResult> Prepare;
+
+            public Task<ToolPreparationResult> PrepareAsync(
+                ToolHandlerContext context, CancellationToken cancellationToken)
+            {
+                PrepareCalls++;
+                if (Prepare != null)
+                    return Task.FromResult(Prepare(context));
+                LastPreparation = new ToolPreparationResult(
+                    RuntimeResult.Ok("Prepared", "{\"preview\":true}"),
+                    "{\"guard\":1}");
+                return Task.FromResult(LastPreparation);
+            }
+
+            public Task<ToolHandlerResult> ExecuteAsync(
+                ToolHandlerContext context, CancellationToken cancellationToken)
+            {
+                ExecuteCalls++;
+                ExecutedState = context.PreparedStateJson;
+                context.MarkDispatchPossible();
+                return Task.FromResult(new ToolHandlerResult(
+                    RuntimeResult.Ok("Changed"),
+                    ToolEffectEvidence.VerifiedChange));
+            }
+        }
+
         private sealed class ToolRuntimeFixture
         {
             internal readonly ToolRegistration Registration;
@@ -621,7 +750,8 @@ namespace RNAssistant.Harness
             internal readonly ToolRuntime Runtime;
 
             internal ToolRuntimeFixture(ToolRegistration registration = null, string mode = "agent", bool autoConfirm = false,
-                bool allowsConfirmation = true, Func<ToolExecutionContext, string> registrar = null)
+                bool allowsConfirmation = true,
+                Func<ToolExecutionContext, ToolPreparationResult, string> registrar = null)
             {
                 Registration = registration ?? RuntimeRegistration();
                 Registry.Register(Registration, Handler);

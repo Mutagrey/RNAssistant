@@ -17,6 +17,8 @@ namespace RNAssistant.Office.Services
             {
                 result = LegacyResult.WaitingConfirmation(record.Message);
                 result.PendingId = record.PendingId;
+                result.DataJson = record.ConfirmationDataJson;
+                result.ConfirmationCatalogSha256 = record.Context.Policy.Revision;
             }
             else if (record.AwaitingUser) result = LegacyResult.AwaitingUser(record.Message, data);
             else if (record.Outcome == ToolExecutionOutcome.Ok) result = LegacyResult.Ok(record.Message, data);

@@ -2432,10 +2432,13 @@ endpoint.
      physically removed; durable journals/CAS remain the only authority. Public
      controller execution retains one explicit result/catalog boundary for 11T9B.
      [Evidence](PHASE_11T9A_VBA_BOUND_BACKEND.md);
-   - 11T9B: switch the five public VBA/macro tools to direct native ToolRuntime
-     registrations with typed preparation/confirmation/outcome/effect evidence;
-     remove the remaining controller `ToolResult` projection and public
-     `ToolDefinition` execution path;
+   - [x] 11T9B — five public VBA/macro tools use exact native ToolRuntime
+     registrations and `VbaToolHandler`. Bounded opaque prepared state carries the
+     exact guard through durable confirmation without mutating accepted arguments
+     or re-preparing on resume; manual actions use the same preparation. The VBA
+     controller executor, `RuntimeGuardJson` path and public legacy result
+     projection are removed. Macro dispatch remains `unknown` effect evidence.
+     [Evidence](PHASE_11T9B_VBA_NATIVE_RUNTIME.md);
    - 11T9C: switch the remaining controller-owned existing execution families to
      native typed handlers, then remove their controller executor branches;
    - [x] independent host-neutral cleanup: удалить pre-R37 trajectory inference;

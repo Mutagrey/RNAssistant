@@ -110,7 +110,9 @@ namespace RNAssistant.Office.Services
             _catalog = _policy.SelectTools(_executor.AvailableConversationToolsForSession(_catalog, _session));
             CapabilityDiscoveryExecutor.BindReadSchema(_catalog, _skills);
             _toolPack = ToolPackSnapshotFactory.Capture(_policy.Mode, _adapter.HostName, _catalog);
-            _nativeTools = _executor.CreateNativeRuntime(_session, _toolPack, _input.Settings, _policy.Mode);
+            _nativeTools = _executor.CreateNativeRuntime(
+                _session, _toolPack, _input.Settings, _policy.Mode,
+                true, RegisterNativePending);
         }
 
         internal ChatTurnResult Result(RunSummary summary)

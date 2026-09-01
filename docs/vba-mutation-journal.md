@@ -42,10 +42,13 @@ two-identity preparation, typed backend action, read-back and recovery into the 
 compatibility adapters with a narrow host backend bound to the exact retained
 Excel/Word/PowerPoint session; module/package/macro calls no longer construct
 `ToolCommand`, serialize backend payloads or receive legacy `ToolResult` from the
-host. `VbaToolExecutor` temporarily retains only public controller argument/result
-projection and serialized reconciliation until 11T9B. Package
-journal/read-back/reconciliation belongs to `Office.Vba.VbaPackageService`; CAS
-bytes and durable event formats remain unchanged.
+host. Since 11T9B `VbaToolHandler` owns the exact native public binding. Preparation
+stores the resolved target and guard as bounded opaque ToolRuntime pending state;
+it does not mutate accepted arguments or use `RuntimeGuardJson`, and confirmed
+execution never re-prepares. `VbaToolExecutor` retains only native argument/state
+mapping plus custom package/manual/reconciliation UI projections. Package journal/
+read-back/reconciliation belongs to `Office.Vba.VbaPackageService`; CAS bytes and
+durable event formats remain unchanged.
 
 | Representation | Purpose / existing transformation |
 |---|---|
@@ -70,7 +73,10 @@ the journal protocol; Windows/VBE qualification remains open.
 
 ## Transaction protocol
 
-After guard validation and confirmation, but before COM dispatch, every public `write`, `patch`, `delete`, and `restore` persists `mutation.prepared` with:
+The native handler prepares and persists an exact live guard before confirmation,
+then consumes that same opaque state after confirmation. After guard revalidation,
+but before COM dispatch, every public `write`, `patch`, `delete`, and `restore`
+persists `mutation.prepared` with:
 
 - stable and runtime document identity, module/type, and existence;
 - live-text and VBE-comparable before/intended hashes plus exact-byte CAS references;

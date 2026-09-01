@@ -113,7 +113,9 @@ namespace RNAssistant.Office.Tools
             _userQuestionToolExecutor = new UserQuestionToolExecutor();
             var controllerTools = new List<ToolDefinition>();
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
-            RegisterControllerTools(controllerTools, _vbaExecutor.GetControllerTools(), ControllerExecutorKind.Vba);
+            if (_vbaExecutor.HostSupportsVba())
+                RegisterControllerTools(controllerTools,
+                    VbaToolCatalog.GetTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools, _skillExecutor.GetControllerTools(), ControllerExecutorKind.Skill);
             RegisterControllerTools(controllerTools, _capabilityDiscoveryExecutor.GetControllerTools(), ControllerExecutorKind.CapabilityDiscovery);
             RegisterControllerTools(controllerTools, _toolAuthoringExecutor.GetControllerTools(), ControllerExecutorKind.ToolAuthoring);
@@ -139,21 +141,26 @@ namespace RNAssistant.Office.Tools
         internal ResourceGatewayService ResourceGateway { get { return _resourceGateway; } }
 
         internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, ToolPackSnapshot snapshot,
-            AppSettings settings, string mode, bool trace = true)
+            AppSettings settings, string mode, bool trace = true,
+            Func<RNAssistant.Core.Tools.ToolExecutionContext,
+                ToolPreparationResult, string> pendingRegistrar = null)
         {
             return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _excelWriteAdapter,
                 _excelFindReplaceAdapter, _excelSheetAdapter,
                 _excelRangeMutationAdapter, _excelTableAdapter,
                 _excelChartAdapter, _wordAdapter, _powerPointAdapter,
-                _outlookAdapter, _hostRuntime,
-                session, snapshot, settings, mode, trace);
+                _outlookAdapter, _vbaExecutor, _hostRuntime,
+                session, snapshot, settings, mode, pendingRegistrar, trace);
         }
 
         internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolDefinition> catalog,
-            AppSettings settings, string mode, bool trace = true)
+            AppSettings settings, string mode, bool trace = true,
+            Func<RNAssistant.Core.Tools.ToolExecutionContext,
+                ToolPreparationResult, string> pendingRegistrar = null)
         {
             return CreateNativeRuntime(session,
-                ToolPackSnapshotFactory.Capture(mode, _adapter.HostName, catalog), settings, mode, trace);
+                ToolPackSnapshotFactory.Capture(mode, _adapter.HostName, catalog),
+                settings, mode, trace, pendingRegistrar);
         }
 
         internal List<ToolDefinition> AvailableConversationToolsForSession(
@@ -475,7 +482,8 @@ namespace RNAssistant.Office.Tools
                     ExcelChartToolIds.IsMutation(command.ToolId) ||
                     WordToolIds.IsMutation(command.ToolId) ||
                     PowerPointToolIds.IsMutation(command.ToolId) ||
-                    OutlookToolIds.IsMutation(command.ToolId)))
+                    OutlookToolIds.IsMutation(command.ToolId) ||
+                    VbaToolCatalog.Owns(command.ToolId)))
                 {
                     var validation = ValidateCommandArguments(command, tool);
                     if (validation != null) return validation;
@@ -487,9 +495,19 @@ namespace RNAssistant.Office.Tools
                 var remainingSteps = context.RemainingSteps;
                 if (!context.TryConsumeStep())
                     return ToolResult.Fail("Tool execution budget exceeded.", null, "tool_step_limit_exceeded", false);
-                return CreateNativeRuntime(context.Session, new[] { tool }, context.Settings,
-                    ChatModes.Normalize(context.Session == null ? null : context.Session.Mode), false)
-                    .ExecuteCommand(command, remainingSteps, manualRun, cancellationToken);
+                var nativeSettings = context.Settings;
+                var nativeConfirmed = manualRun;
+                if (manualRun && VbaToolCatalog.Owns(command.ToolId))
+                {
+                    // A direct UI action is already authorized, but a VBA handler
+                    // must still prepare and consume its exact live-state guard.
+                    nativeSettings = new AppSettings { AutoConfirmToolActions = true };
+                    nativeConfirmed = false;
+                }
+                return CreateNativeRuntime(context.Session, new[] { tool }, nativeSettings,
+                    ChatModes.Normalize(context.Session == null ? null : context.Session.Mode), false,
+                    (execution, preparation) => Guid.NewGuid().ToString("N"))
+                    .ExecuteCommand(command, remainingSteps, nativeConfirmed, cancellationToken);
             }
 
             var argumentValidation = ValidateCommandArguments(command, tool);
@@ -513,23 +531,10 @@ namespace RNAssistant.Office.Tools
 
             ControllerExecutorKind controllerKind;
             var isController = _controllerExecutors.TryGetValue(command.ToolId, out controllerKind);
-            var isVbaController = isController &&
-                controllerKind == ControllerExecutorKind.Vba;
-            if (isVbaController)
-            {
-                var preparation = _vbaExecutor.PrepareControllerTool(command, context.Session);
-                if (preparation != null) return preparation;
-            }
-
             if (ToolSafetyPolicy.RequiresConfirmation(tool, safety, context.Settings, dryRun, manualRun))
             {
                 ToolResult preview = null;
-                if (isVbaController)
-                {
-                    preview = _vbaExecutor.PreviewPreparedControllerTool(command, context.Session, cancellationToken);
-                    if (preview != null && !preview.Success) return preview;
-                }
-                else if (isController)
+                if (isController)
                 {
                     preview = ExecuteControllerTool(
                         controllerKind,
@@ -544,7 +549,6 @@ namespace RNAssistant.Office.Tools
                     preview == null
                         ? "Tool requires confirmation before execution: " + command.ToolId
                         : "Confirmation required. " + preview.Message);
-                if (preview != null && isVbaController) waiting.DataJson = preview.DataJson;
                 return waiting;
             }
 
@@ -554,13 +558,13 @@ namespace RNAssistant.Office.Tools
             }
 
             var needsMutationScope = !dryRun &&
-                (safety.MutatesDocument || safety.MutatesLocalState || isVbaController);
+                (safety.MutatesDocument || safety.MutatesLocalState);
             if (needsMutationScope)
             {
                 return _hostRuntime.ExecuteMutation(
                     DocumentTarget(context.Session),
                     safety.MutatesLocalState && !string.Equals(tool.Scope, "session", StringComparison.OrdinalIgnoreCase),
-                    safety.MutatesDocument || isVbaController,
+                    safety.MutatesDocument,
                     cancellationToken,
                     () => ExecuteResolvedCommand(command, context, dryRun, manualRun, cancellationToken, customTool));
             }
@@ -772,8 +776,6 @@ namespace RNAssistant.Office.Tools
             cancellationToken.ThrowIfCancellationRequested();
             switch (executor)
             {
-                case ControllerExecutorKind.Vba:
-                    return _vbaExecutor.ExecuteControllerTool(command, dryRun, context.Session, cancellationToken);
                 case ControllerExecutorKind.Skill:
                     return _skillExecutor.ExecuteControllerTool(command, context.Settings, dryRun, manualRun, context.SkillCatalog);
                 case ControllerExecutorKind.CapabilityDiscovery:
@@ -843,7 +845,7 @@ namespace RNAssistant.Office.Tools
             ControllerExecutorKind controller;
             if (_controllerExecutors.TryGetValue(id, out controller))
             {
-                return controller == ControllerExecutorKind.Vba ||
+                return VbaToolCatalog.Owns(id) ||
                     (controller == ControllerExecutorKind.HtmlArtifact && _htmlArtifactExecutor.RequiresOfficeDocument(id));
             }
             return true;
@@ -1017,7 +1019,6 @@ namespace RNAssistant.Office.Tools
 
         private enum ControllerExecutorKind
         {
-            Vba,
             Skill,
             CapabilityDiscovery,
             ToolAuthoring,

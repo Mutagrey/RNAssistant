@@ -54,23 +54,30 @@ namespace RNAssistant.Core.Agent
         public ToolPolicySnapshot Policy { get; private set; }
         public string StepId { get; private set; }
         public int ChargedToolSteps { get; private set; }
+        public string PreparedStateJson { get; private set; }
 
         internal PendingConfirmation(ToolExecutionRecord record)
-            : this(record.PendingId, record.Context.Call, record.Context.Policy, record.Context.StepId, record.ToolStepsConsumed)
+            : this(record.PendingId, record.Context.Call, record.Context.Policy, record.Context.StepId,
+                record.ToolStepsConsumed, record.PreparedStateJson)
         {
         }
 
         [JsonConstructor]
-        internal PendingConfirmation(string pendingId, ToolCall call, ToolPolicySnapshot policy, string stepId, int chargedToolSteps)
+        internal PendingConfirmation(string pendingId, ToolCall call, ToolPolicySnapshot policy, string stepId,
+            int chargedToolSteps, string preparedStateJson = null)
         {
             if (string.IsNullOrWhiteSpace(pendingId) || string.IsNullOrWhiteSpace(stepId) || call == null || policy == null ||
                 !string.Equals(call.Name, policy.ToolId, StringComparison.Ordinal) || chargedToolSteps < 1)
                 throw new ArgumentException("Incomplete pending execution evidence.");
+            if (preparedStateJson != null &&
+                preparedStateJson.Length > ToolPreparationResult.MaxPreparedStateChars)
+                throw new ArgumentException("Prepared state exceeds the runtime bound.", nameof(preparedStateJson));
             PendingId = pendingId;
             Call = call;
             Policy = policy;
             StepId = stepId;
             ChargedToolSteps = chargedToolSteps;
+            PreparedStateJson = preparedStateJson;
         }
     }
 

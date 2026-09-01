@@ -50,7 +50,7 @@ namespace RNAssistant.Core.Agent
             // it. A duplicate resume cannot reach the tool runtime.
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, state.Summary())).ConfigureAwait(false);
             var execution = await ExecuteOneAsync(state, pending.Call, pending.Policy, pending.StepId,
-                true, pending.ChargedToolSteps, cancellationToken).ConfigureAwait(false);
+                true, pending.ChargedToolSteps, pending.PreparedStateJson, cancellationToken).ConfigureAwait(false);
             if (execution != null)
                 return await FinishAsync(state, execution.Lifecycle, execution.Reason, execution.AssistantMessage).ConfigureAwait(false);
             return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
@@ -124,7 +124,7 @@ namespace RNAssistant.Core.Agent
                 for (var index = 0; index < response.ToolCalls.Count; index++)
                 {
                     var result = await ExecuteOneAsync(state, response.ToolCalls[index], policies[index], stepId,
-                        false, 0, cancellationToken).ConfigureAwait(false);
+                        false, 0, null, cancellationToken).ConfigureAwait(false);
                     if (result != null)
                     {
                         // Keep accepted exchanges closed when cancellation or a
@@ -171,7 +171,8 @@ namespace RNAssistant.Core.Agent
         }
 
         private async Task<RunSummary> ExecuteOneAsync(State state, ToolCall call, ToolPolicySnapshot policy,
-            string stepId, bool confirmed, int chargedSteps, CancellationToken cancellationToken)
+            string stepId, bool confirmed, int chargedSteps, string preparedStateJson,
+            CancellationToken cancellationToken)
         {
             if (cancellationToken.IsCancellationRequested)
             {
@@ -184,7 +185,8 @@ namespace RNAssistant.Core.Agent
                 await RecordNotDispatchedAsync(state, call, policy, stepId, "Tool step limit reached.", confirmed).ConfigureAwait(false);
                 return state.Summary(RunLifecycle.Failed, "tool_step_limit", "Tool step limit reached.");
             }
-            var context = new ToolExecutionContext(call, policy, state.RunId, state.TurnId, stepId, _utcNow(), confirmed, remaining);
+            var context = new ToolExecutionContext(call, policy, state.RunId, state.TurnId, stepId,
+                _utcNow(), confirmed, remaining, preparedStateJson);
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolStarted, state.Summary(),
                 stepId, toolContext: context)).ConfigureAwait(false);
             ToolExecutionRecord record;

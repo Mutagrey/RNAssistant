@@ -63,14 +63,19 @@ namespace RNAssistant.Core.Tools
         public DateTime StartedUtc { get; private set; }
         public bool IsConfirmed { get; private set; }
         public int RemainingToolSteps { get; private set; }
+        public string PreparedStateJson { get; private set; }
 
         [JsonConstructor]
         public ToolExecutionContext(ToolCall call, ToolPolicySnapshot policy, string runId, string turnId,
-            string stepId, DateTime startedUtc, bool isConfirmed, int remainingToolSteps)
+            string stepId, DateTime startedUtc, bool isConfirmed, int remainingToolSteps,
+            string preparedStateJson = null)
         {
             if (call == null || policy == null || !string.Equals(call.Name, policy.ToolId, StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId) || string.IsNullOrWhiteSpace(stepId) || remainingToolSteps < 0)
                 throw new ArgumentException("Incomplete tool execution context.");
+            if (preparedStateJson != null &&
+                preparedStateJson.Length > ToolPreparationResult.MaxPreparedStateChars)
+                throw new ArgumentException("Prepared state exceeds the runtime bound.", nameof(preparedStateJson));
             Call = call;
             Policy = policy;
             RunId = runId;
@@ -79,6 +84,7 @@ namespace RNAssistant.Core.Tools
             StartedUtc = startedUtc;
             IsConfirmed = isConfirmed;
             RemainingToolSteps = remainingToolSteps;
+            PreparedStateJson = preparedStateJson;
         }
     }
 
@@ -96,6 +102,8 @@ namespace RNAssistant.Core.Tools
         // domain mutation actually happened. False certifies no dispatch.
         public bool MayHaveDispatched { get; private set; }
         public string PendingId { get; private set; }
+        public string PreparedStateJson { get; private set; }
+        public string ConfirmationDataJson { get; private set; }
         public bool AwaitingUser { get; private set; }
         public int ToolStepsConsumed { get; private set; }
         public ToolExecutionEvidence Evidence { get; private set; }
@@ -105,7 +113,8 @@ namespace RNAssistant.Core.Tools
         public ToolExecutionRecord(ToolExecutionContext context, ToolExecutionOutcome outcome, DateTime completedUtc,
             string message = null, string modelResultJson = null, bool mayHaveDispatched = true,
             string pendingId = null, bool awaitingUser = false, int toolStepsConsumed = 1, string documentRuntimeId = null,
-            ToolExecutionEvidence evidence = null, Contracts.ToolResult result = null)
+            ToolExecutionEvidence evidence = null, Contracts.ToolResult result = null,
+            string preparedStateJson = null, string confirmationDataJson = null)
         {
             Context = context ?? throw new ArgumentNullException(nameof(context));
             if (!Enum.IsDefined(typeof(ToolExecutionOutcome), outcome)) throw new ArgumentOutOfRangeException(nameof(outcome));
@@ -116,6 +125,14 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("Pending confirmation requires an unexecuted call and a pending id.");
             if (outcome != ToolExecutionOutcome.AwaitingConfirmation && pendingId != null)
                 throw new ArgumentException("Only a pending call has a pending id.", nameof(pendingId));
+            if (outcome != ToolExecutionOutcome.AwaitingConfirmation &&
+                (preparedStateJson != null || confirmationDataJson != null))
+                throw new ArgumentException("Only a pending call can carry confirmation preparation.");
+            if (preparedStateJson != null && preparedStateJson.Length > ToolPreparationResult.MaxPreparedStateChars)
+                throw new ArgumentException("Prepared state exceeds the runtime bound.", nameof(preparedStateJson));
+            if (confirmationDataJson != null &&
+                confirmationDataJson.Length > ToolPreparationResult.MaxConfirmationDataChars)
+                throw new ArgumentException("Confirmation data exceeds the runtime bound.", nameof(confirmationDataJson));
             if (outcome == ToolExecutionOutcome.NotDispatched && mayHaveDispatched)
                 throw new ArgumentException("A non-dispatched call cannot have been dispatched.", nameof(mayHaveDispatched));
             if (awaitingUser && outcome != ToolExecutionOutcome.Ok)
@@ -129,6 +146,8 @@ namespace RNAssistant.Core.Tools
             ModelResultJson = modelResultJson;
             MayHaveDispatched = mayHaveDispatched;
             PendingId = pendingId;
+            PreparedStateJson = preparedStateJson;
+            ConfirmationDataJson = confirmationDataJson;
             AwaitingUser = awaitingUser;
             ToolStepsConsumed = outcome == ToolExecutionOutcome.NotDispatched ? 0 : Math.Max(1, toolStepsConsumed);
             DocumentRuntimeId = documentRuntimeId;

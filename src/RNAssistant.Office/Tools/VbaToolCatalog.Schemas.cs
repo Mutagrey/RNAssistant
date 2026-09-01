@@ -6,8 +6,9 @@ using Newtonsoft.Json.Linq;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed partial class VbaToolExecutor
+    internal static partial class VbaToolCatalog
     {
+        // Closed public schemas stay with the exact native catalog owner.
         private static string ModuleNameSchema()
         {
             return "{\"type\":\"object\",\"properties\":{" +

@@ -6,6 +6,67 @@ using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Tools
 {
+    internal sealed class VbaDispatchBoundary
+    {
+        private readonly object _sync = new object();
+        private Action _mark;
+
+        internal IDisposable Bind(Action mark)
+        {
+            if (mark == null) return EmptyScope.Instance;
+            lock (_sync)
+            {
+                if (_mark != null)
+                    throw new InvalidOperationException("A VBA dispatch boundary is already active.");
+                _mark = mark;
+            }
+            return new Scope(this, mark);
+        }
+
+        internal void Mark()
+        {
+            Action mark;
+            lock (_sync) { mark = _mark; }
+            if (mark != null) mark();
+        }
+
+        private void Release(Action mark)
+        {
+            lock (_sync)
+            {
+                if (!ReferenceEquals(_mark, mark))
+                    throw new InvalidOperationException("VBA dispatch boundary ownership changed.");
+                _mark = null;
+            }
+        }
+
+        private sealed class Scope : IDisposable
+        {
+            private VbaDispatchBoundary _owner;
+            private readonly Action _mark;
+
+            internal Scope(VbaDispatchBoundary owner, Action mark)
+            {
+                _owner = owner;
+                _mark = mark;
+            }
+
+            public void Dispose()
+            {
+                var owner = _owner;
+                if (owner == null) return;
+                _owner = null;
+                owner.Release(_mark);
+            }
+        }
+
+        private sealed class EmptyScope : IDisposable
+        {
+            internal static readonly EmptyScope Instance = new EmptyScope();
+            public void Dispose() { }
+        }
+    }
+
     internal sealed class VbaMutationHostDocumentContext :
         IVbaMutationDocumentContext
     {
@@ -25,15 +86,19 @@ namespace RNAssistant.Office.Tools
     internal sealed class VbaMutationHostBackend : IVbaMutationBackend
     {
         private readonly IVbaHostBackend _backend;
+        private readonly VbaDispatchBoundary _dispatch;
 
-        public VbaMutationHostBackend(IVbaHostBackend backend)
+        public VbaMutationHostBackend(IVbaHostBackend backend,
+            VbaDispatchBoundary dispatch = null)
         {
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+            _dispatch = dispatch;
         }
 
         public VbaMutationActionResult ReplaceModule(VbaModuleWriteRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (_dispatch != null) _dispatch.Mark();
             return Map(_backend.ReplaceModule(new VbaReplaceModuleRequest
             {
                 ModuleName = request.ModuleName,
@@ -47,6 +112,7 @@ namespace RNAssistant.Office.Tools
         public VbaMutationActionResult CreateModule(VbaModuleCreateRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (_dispatch != null) _dispatch.Mark();
             return Map(_backend.CreateModule(new VbaCreateModuleRequest
             {
                 ModuleName = request.ModuleName,
@@ -59,6 +125,7 @@ namespace RNAssistant.Office.Tools
         public VbaMutationActionResult RenameModule(VbaRenameBackendRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (_dispatch != null) _dispatch.Mark();
             return Map(_backend.RenameModule(new VbaRenameModuleRequest
             {
                 ModuleName = request.ModuleName,
@@ -72,6 +139,7 @@ namespace RNAssistant.Office.Tools
         public VbaMutationActionResult DeleteModule(VbaModuleDeleteRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (_dispatch != null) _dispatch.Mark();
             return Map(_backend.DeleteModule(
                 new RNAssistant.Office.Domains.Vba.VbaDeleteModuleRequest
             {
@@ -84,6 +152,7 @@ namespace RNAssistant.Office.Tools
         public VbaMutationActionResult RestoreModule(VbaRestoreBackendRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (_dispatch != null) _dispatch.Mark();
             var result = request.ModuleExists
                 ? _backend.ReplaceModule(new VbaReplaceModuleRequest
                 {

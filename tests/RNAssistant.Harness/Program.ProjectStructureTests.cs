@@ -465,12 +465,18 @@ namespace RNAssistant.Harness
                 officeRoot, "Domains", "Vba", "VbaHostContracts.cs");
             var vbaReaderPath = Path.Combine(
                 officeRoot, "Vba", "VbaReader.cs");
+            var vbaHandlerPath = Path.Combine(
+                officeRoot, "Tools", "VbaToolHandler.cs");
             AssertTrue(
                 File.Exists(vbaBackendPath) && File.Exists(vbaContractsPath),
                 "VBA requires one direct typed backend contract and host implementation");
             AssertTrue(!File.Exists(Path.Combine(
                 officeRoot, "Tools", "VbaMutationToolAdapter.cs")),
                 "replaced VBA legacy command adapter must be physically removed");
+            AssertTrue(File.Exists(vbaHandlerPath) &&
+                File.ReadAllText(vbaHandlerPath).IndexOf(
+                    "IPreparableToolHandler", StringComparison.Ordinal) >= 0,
+                "public VBA requires one native preparable handler");
             var vbaBackendSource = File.ReadAllText(vbaBackendPath);
             var vbaReaderSource = File.ReadAllText(vbaReaderPath);
             var vbaSupportSources = SourceFiles(Path.Combine(hostsRoot, "Vba"))
@@ -512,6 +518,28 @@ namespace RNAssistant.Harness
             var officeProductionSources = SourceFiles(officeRoot)
                 .Select(File.ReadAllText)
                 .ToArray();
+            var officeToolExecutorSource = File.ReadAllText(Path.Combine(
+                officeRoot, "Tools", "OfficeToolExecutor.cs"));
+            var vbaToolSources = SourceFiles(Path.Combine(
+                    officeRoot, "Tools"))
+                .Where(path => Path.GetFileName(path).StartsWith(
+                    "VbaTool", StringComparison.Ordinal))
+                .Select(File.ReadAllText)
+                .ToArray();
+            AssertTrue(
+                officeToolExecutorSource.IndexOf(
+                    "ControllerExecutorKind.Vba", StringComparison.Ordinal) < 0 &&
+                officeToolExecutorSource.IndexOf(
+                    "PrepareControllerTool", StringComparison.Ordinal) < 0 &&
+                officeToolExecutorSource.IndexOf(
+                    "PreviewPreparedControllerTool", StringComparison.Ordinal) < 0 &&
+                !vbaToolSources.Any(source =>
+                    source.IndexOf("ExecuteControllerTool(", StringComparison.Ordinal) >= 0 ||
+                    source.IndexOf("PrepareControllerTool(", StringComparison.Ordinal) >= 0 ||
+                    source.IndexOf("PreviewPreparedControllerTool(", StringComparison.Ordinal) >= 0) &&
+                !vbaToolSources.Any(source => source.IndexOf(
+                    "RuntimeGuardJson", StringComparison.Ordinal) >= 0),
+                "public VBA must not retain controller execution or compatibility guard paths");
             foreach (var removedAdapter in new[]
             {
                 "VbaMutationDocumentContextAdapter",

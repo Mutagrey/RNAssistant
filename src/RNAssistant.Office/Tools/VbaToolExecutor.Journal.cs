@@ -1,11 +1,12 @@
 using System;
-using RNAssistant.Core.Models;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Tools
 {
     internal sealed partial class VbaToolExecutor
     {
-        private ToolResult ReconcilePendingMutations()
+        internal VbaMutationOutcome ReconcilePendingMutationOutcome()
         {
             try
             {
@@ -31,21 +32,26 @@ namespace RNAssistant.Office.Tools
                 var packageReconciliation = _packageService.ReconcilePendingMutations();
                 if (packageReconciliation != null)
                 {
-                    return VbaLegacyResultProjection.ToToolResult(packageReconciliation);
+                    return packageReconciliation;
                 }
                 var renameReconciliation = _mutationService.ReconcilePendingRenames();
-                return renameReconciliation == null
-                    ? null
-                    : VbaLegacyResultProjection.ToToolResult(renameReconciliation);
+                return renameReconciliation;
             }
             catch (Exception ex)
             {
-                return ToolResult.Fail(
+                return VbaMutationOutcome.Error(
                     "VBA history could not be validated; the operation was blocked. " + ex.Message,
-                    null,
+                    new JObject { ["retryable"] = false },
                     "vba_journal_unavailable",
                     false);
             }
+        }
+
+        private RNAssistant.Core.Models.ToolResult ReconcilePendingMutations()
+        {
+            var outcome = ReconcilePendingMutationOutcome();
+            return outcome == null ? null :
+                VbaLegacyResultProjection.ToToolResult(outcome);
         }
     }
 }

@@ -94,6 +94,25 @@ namespace RNAssistant.Office.Services
                 message, mayHaveDispatched: false, result: terminal);
         }
 
+        private string RegisterNativePending(
+            ToolExecutionContext context,
+            ToolPreparationResult preparation)
+        {
+            if (_registrar == null) return null;
+            var command = Command(context.Call, context.StepId, false);
+            command.Arguments = ReadArguments(context.Call);
+            command.RuntimeGuardJson = null;
+            var message = preparation == null
+                ? "Tool requires confirmation before execution: " + context.Call.Name
+                : preparation.Result.Message;
+            var result = ToolResult.WaitingConfirmation(message);
+            result.DataJson = preparation == null ? null : preparation.Result.DataJson;
+            result.ConfirmationCatalogSha256 = context.Policy.Revision;
+            result.PendingId = _registrar(_session, command, result);
+            _uiResults[context.Call.Id] = result;
+            return result.PendingId;
+        }
+
         private ToolCommand Command(ToolCall call, string stepId, bool confirmed)
         {
             ToolCommand command;

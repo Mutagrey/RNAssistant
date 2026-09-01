@@ -1808,6 +1808,100 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SimpleAgentVbaConfirmationResumesPreparedState()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
+                delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode =
+                    "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("common.vba_apply_patch"),
+                    "{\"message\":\"Обновляю VBA.\",\"tool_calls\":[{" +
+                        "\"name\":\"common.vba_apply_patch\",\"arguments\":{" +
+                        "\"moduleName\":\"Module1\",\"patch\":[{" +
+                        "\"op\":\"replace\",\"find\":\"\\\"old\\\"\"," +
+                        "\"text\":\"\\\"new\\\"\"}]}}]}",
+                    "{\"message\":\"Изменение отклонено как устаревшее.\",\"tool_calls\":[]}"
+                });
+                var calls = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion =
+                    (completionSettings, messages, options, stream, token) =>
+                {
+                    calls.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult
+                        { Content = responses.Dequeue() });
+                };
+                var service = CreateConversationRunService(
+                    adapter, executor, completion);
+                var session = NewSession(adapter);
+                var settings = new AppSettings
+                    { AutoConfirmToolActions = false };
+                var tools = adapter.GetBuiltInTools()
+                    .Concat(executor.GetControllerTools()).ToList();
+                var first = service.ExecuteAsync(
+                    ChatModes.Agent,
+                    "Замени old на new в Module1.",
+                    session,
+                    NewContext(adapter),
+                    settings,
+                    tools,
+                    (Action<string, string, ChatActivity>)null,
+                    (pendingSession, command, result) =>
+                        "pending-vba-native").GetAwaiter().GetResult();
+
+                AssertTrue(first.WaitingForConfirmation,
+                    "native VBA pauses after prepared live-state validation");
+                var pending = session.LastRun.KernelState.Summary
+                    .PendingConfirmation;
+                AssertTrue(!string.IsNullOrWhiteSpace(
+                        pending.PreparedStateJson),
+                    "kernel owns the durable prepared VBA state");
+                var activity = session.Messages.Last(message =>
+                    message.Activity != null &&
+                    message.Activity.ToolCallId == pending.Call.Id).Activity;
+                AssertContains(activity.DataJson, "operations",
+                    "confirmation activity carries the prepared preview");
+                AssertTrue(!string.IsNullOrWhiteSpace(
+                        activity.ConfirmationCatalogSha256),
+                    "native pending activity carries the exact catalog fingerprint");
+                var store = new ChatStore(FixturePaths.Value);
+                var loaded = store.Load(session.Id);
+                AssertTrue(!string.IsNullOrWhiteSpace(loaded.LastRun.KernelState
+                        .Summary.PendingConfirmation.PreparedStateJson),
+                    "prepared state survives canonical event replay");
+                var confirmedCommand = PendingCommand(loaded);
+                AssertTrue(string.IsNullOrWhiteSpace(
+                        confirmedCommand.RuntimeGuardJson),
+                    "confirmation command has no compatibility guard field");
+
+                adapter.VbaModuleCode =
+                    "Sub Main()\nDebug.Print \"external\"\nEnd Sub";
+                loaded.LastRun.RunId = "continued-vba-run";
+                var final = service.ConfirmAsync(
+                    "pending-vba-native",
+                    confirmedCommand,
+                    loaded,
+                    new ConversationRunInput(
+                        settings, NewContext(adapter), tools),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual("Изменение отклонено как устаревшее.",
+                    final.AssistantText,
+                    "model receives the terminal stale result after confirmation");
+                AssertContains(FlattenSimple(calls.Last()),
+                    "stale_vba_module",
+                    "confirmed execution consumes the original prepared guard");
+                AssertContains(adapter.VbaModuleCode, "external",
+                    "stale confirmed call does not overwrite live VBA");
+                AssertEqual(0, adapter.Executed.Count(command =>
+                    command.ToolId.EndsWith(".vba_replace_module",
+                        StringComparison.OrdinalIgnoreCase)),
+                    "stale guard blocks the backend dispatch boundary");
+            });
+        }
+
         private static void SimpleAgentConfirmationFailureContinues()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

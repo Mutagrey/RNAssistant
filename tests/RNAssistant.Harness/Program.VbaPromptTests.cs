@@ -6,12 +6,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.Vba;
@@ -102,6 +104,78 @@ namespace RNAssistant.Harness
             AssertTrue(module == null, "malformed resource data creates no observation");
         }
 
+        private static void VbaPublicToolsUseNativeRuntime()
+        {
+            WithTempExecutor(delegate(
+                OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var publicTools = executor.GetControllerTools()
+                    .Where(tool => tool.Id.StartsWith(
+                        "common.vba_", StringComparison.Ordinal) ||
+                        tool.Id == "common.office_run_macro")
+                    .ToArray();
+                AssertEqual(5, publicTools.Length,
+                    "all public VBA and macro tools are present");
+                foreach (var tool in publicTools)
+                {
+                    AssertTrue(NativeToolRuntimeAdapter.Owns(tool.Id),
+                        tool.Id + " is owned by native ToolRuntime");
+                    var binding = NativeToolRuntimeAdapter.BindingFor(tool.Id);
+                    AssertTrue(binding != null && binding.HandlerId.StartsWith(
+                            "vba.public.", StringComparison.Ordinal),
+                        tool.Id + " has an exact non-legacy handler binding");
+                    AssertTrue(tool.RuntimePolicy != null &&
+                            tool.RuntimePolicy.RequiresConfirmation,
+                        tool.Id + " carries source-owned confirmation policy");
+                    AssertEqual(tool.Id == "common.office_run_macro"
+                            ? ToolEffect.External : ToolEffect.Write,
+                        tool.RuntimePolicy.Effect,
+                        tool.Id + " carries its exact effect kind");
+                }
+
+                var session = NewSession(adapter);
+                var command = Command(
+                    "common.office_run_macro",
+                    "macroName", "Module1.Main",
+                    "arguments", new JArray("value", 2, true));
+                var pending = PrepareVbaNative(
+                    executor, session, command);
+                AssertEqual(ToolEffect.External,
+                    pending.Record.Context.Policy.Policy.Effect,
+                    "captured macro runtime policy preserves the external effect");
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,
+                    pending.Record.Outcome,
+                    "macro preparation reaches native confirmation");
+                var completed = ConfirmVbaNative(pending);
+                AssertEqual(ToolExecutionOutcome.Unknown, completed.Outcome,
+                    "arbitrary macro result never certifies its external effect");
+                AssertTrue(completed.MayHaveDispatched,
+                    "macro marks the exact backend dispatch boundary");
+                AssertEqual(ToolEffectEvidence.Unknown,
+                    completed.Evidence.Effect,
+                    "macro carries unknown effect evidence");
+                AssertEqual(1, adapter.Executed.Count(item =>
+                    item.ToolId == "excel.run_macro"),
+                    "macro backend dispatches exactly once");
+
+                var manualWrite = executor.Execute(
+                    Command("common.vba_write_module",
+                        "moduleName", "ManualNative",
+                        "code", "Sub ManualNativeRun()\nEnd Sub",
+                        "mode", "createOnly"),
+                    executor.GetControllerTools().ToList(),
+                    new AppSettings { AutoConfirmToolActions = false },
+                    false,
+                    true,
+                    session);
+                AssertTrue(manualWrite.Success,
+                    "authorized manual VBA execution prepares and consumes its native guard");
+                AssertContains(adapter.GetVbaModuleCode("ManualNative"),
+                    "ManualNativeRun",
+                    "manual VBA execution reaches the typed mutation backend");
+            });
+        }
+
         private static void VbaApplyPatchBacksUpModule()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -121,18 +195,28 @@ namespace RNAssistant.Harness
                         ["text"] = "\"new\""
                     }));
 
-                var blocked = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = false }, false, false, session);
+                var pending = PrepareVbaNative(executor, session, command);
+                var blocked = ToolResultUiProjection.Create(pending.Record);
                 AssertTrue(!blocked.Success, "vba replace blocked");
                 AssertEqual("waiting_confirmation", blocked.Status, "vba replace waits for confirmation");
-                AssertTrue(!string.IsNullOrWhiteSpace(command.RuntimeGuardJson), "runtime reads and binds its own snapshot before confirmation");
+                AssertTrue(string.IsNullOrWhiteSpace(command.RuntimeGuardJson),
+                    "public VBA no longer writes compatibility command guards");
+                AssertTrue(!string.IsNullOrWhiteSpace(pending.Record.PreparedStateJson),
+                    "runtime persists typed preparation before confirmation");
                 AssertContains(blocked.DataJson, "operations", "confirmation includes the validated patch preview");
                 AssertEqual(2, adapter.Executed.Count, "confirmation preflight reads and validates without a public read call");
                 AssertEqual(0, adapter.Executed.Count(item => item.ToolId.EndsWith(".vba_replace_module", StringComparison.OrdinalIgnoreCase)), "confirmation preflight does not write VBA");
                 AssertContains(adapter.VbaModuleCode, "\"old\"", "blocked mutation leaves code unchanged");
 
-                var result = executor.Execute(command, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                var completed = ConfirmVbaNative(pending);
+                var result = ToolResultUiProjection.Create(completed);
 
                 AssertTrue(result.Success, "replace result");
+                AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome,
+                    "verified VBA mutation is a native success");
+                AssertEqual(ToolEffectEvidence.VerifiedChange,
+                    completed.Evidence.Effect,
+                    "read-back certifies the native mutation effect");
                 AssertContains(adapter.VbaModuleCode, "\"new\"", "updated module");
                 AssertTrue(adapter.VbaModuleCode.IndexOf("\"old\"", StringComparison.Ordinal) < 0, "old text removed");
                 var backups = backupStore.List("Excel", "doc");
@@ -1051,11 +1135,14 @@ namespace RNAssistant.Harness
                         ["find"] = "\"old\"",
                         ["text"] = "\"new\""
                     }));
-                var waiting = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session);
+                var pending = PrepareVbaNative(executor, session, command);
+                var waiting = ToolResultUiProjection.Create(pending.Record);
                 AssertEqual("waiting_confirmation", waiting.Status, "mutation waits for confirmation");
 
-                var persistedCommand = JsonConvert.DeserializeObject<ToolCommand>(JsonConvert.SerializeObject(command));
-                AssertTrue(!string.IsNullOrWhiteSpace(persistedCommand.RuntimeGuardJson), "runtime guard survives persistence");
+                var persisted = JsonConvert.DeserializeObject<ToolExecutionRecord>(
+                    JsonConvert.SerializeObject(pending.Record));
+                AssertTrue(!string.IsNullOrWhiteSpace(persisted.PreparedStateJson),
+                    "typed prepared state survives persistence");
                 var otherExecutor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 using (var accessDeadline = new CancellationTokenSource(2000))
                 {
@@ -1063,7 +1150,9 @@ namespace RNAssistant.Harness
                     AssertTrue(available.Success, "another executor acquires document access while confirmation waits");
                 }
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"changed elsewhere\"\nEnd Sub";
-                var stale = executor.Execute(persistedCommand, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                pending.Record = persisted;
+                var stale = ToolResultUiProjection.Create(
+                    ConfirmVbaNative(pending));
 
                 AssertEqual("stale_vba_module", stale.ErrorCode, "confirmed stale mutation rejected");
                 AssertContains(adapter.VbaModuleCode, "changed elsewhere", "stale mutation does not overwrite external change");
@@ -1083,11 +1172,13 @@ namespace RNAssistant.Harness
                     "componentType", "StdModule",
                     "code", "Sub Requested()\nEnd Sub",
                     "mode", "createOnly");
-                var waiting = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session);
+                var pending = PrepareVbaNative(executor, session, command);
+                var waiting = ToolResultUiProjection.Create(pending.Record);
                 AssertEqual("waiting_confirmation", waiting.Status, "create waits for confirmation");
 
                 adapter.SetVbaModule("CreatedDuringConfirmation", "Sub External()\nEnd Sub", "StdModule");
-                var stale = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                var stale = ToolResultUiProjection.Create(
+                    ConfirmVbaNative(pending));
 
                 AssertEqual("stale_vba_module", stale.ErrorCode, "create detects a module added during confirmation");
                 AssertContains(adapter.GetVbaModuleCode("CreatedDuringConfirmation"), "External", "create race does not overwrite module");
@@ -1279,25 +1370,15 @@ namespace RNAssistant.Harness
                     "moduleName", "RenameSource",
                     "newModuleName", "RenameTarget",
                     "mode", "rename");
-                var waiting = executor.Execute(
-                    command,
-                    tools,
-                    new AppSettings { AutoConfirmToolActions = false },
-                    false,
-                    false,
-                    session);
+                var pending = PrepareVbaNative(executor, session, command);
+                var waiting = ToolResultUiProjection.Create(pending.Record);
                 AssertEqual("waiting_confirmation", waiting.Status, "rename waits for confirmation");
                 AssertContains(waiting.Message, "RenameSource", "confirmation identifies source");
                 AssertContains(waiting.Message, "RenameTarget", "confirmation identifies destination");
 
                 adapter.SetVbaModule("RenameTarget", "Sub External()\nEnd Sub", "StdModule");
-                var stale = executor.Execute(
-                    command,
-                    tools,
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false,
-                    session);
+                var stale = ToolResultUiProjection.Create(
+                    ConfirmVbaNative(pending));
                 AssertEqual("stale_vba_module", stale.ErrorCode, "destination created during confirmation blocks rename");
                 AssertEqual(source, adapter.GetVbaModuleCode("RenameSource"), "source remains under its old name");
                 AssertContains(adapter.GetVbaModuleCode("RenameTarget"), "External", "racing destination is preserved");
@@ -1366,21 +1447,28 @@ namespace RNAssistant.Harness
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var session = NewSession(adapter);
                 var command = Command("common.vba_delete_module", "moduleName", "Module1");
-                AssertEqual("waiting_confirmation", executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session).Status,
+                var firstPending = PrepareVbaNative(executor, session, command);
+                AssertEqual("waiting_confirmation",
+                    ToolResultUiProjection.Create(firstPending.Record).Status,
                     "delete waits with a bound guard");
 
                 adapter.RuntimeDocumentKeyValue = "runtime-other-document";
-                var sameDocument = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                var sameDocument = ToolResultUiProjection.Create(
+                    ConfirmVbaNative(firstPending));
                 AssertTrue(sameDocument.Success, "stable document key tolerates a changed runtime identity");
 
                 adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
                 var changedCommand = Command("common.vba_delete_module", "moduleName", "Module1");
-                AssertEqual("waiting_confirmation", executor.Execute(changedCommand, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session).Status,
+                var secondPending = PrepareVbaNative(
+                    executor, session, changedCommand);
+                AssertEqual("waiting_confirmation",
+                    ToolResultUiProjection.Create(secondPending.Record).Status,
                     "second delete waits with a bound guard");
                 adapter.DocumentKeyValue = "other-document";
                 adapter.RuntimeDocumentKeyValue = "runtime-different-document";
                 session.DocumentKey = adapter.DocumentKeyValue;
-                var blocked = executor.Execute(changedCommand, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                var blocked = ToolResultUiProjection.Create(
+                    ConfirmVbaNative(secondPending));
 
                 AssertEqual("vba_snapshot_context_changed", blocked.ErrorCode, "different document invalidates the guard");
                 AssertContains(adapter.VbaModuleCode, "Sub Main", "document switch does not delete module");
@@ -1471,7 +1559,9 @@ namespace RNAssistant.Harness
                 malformed.Arguments["patch"] = "[{\"op\":\"replace\"}}trailing";
                 var malformedResult = executor.Execute(malformed, new List<ToolDefinition>(adapter.GetBuiltInTools()), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(!malformedResult.Success, "malformed patch rejected");
-                AssertContains(malformedResult.Message, "$.patch must be a native JSON array", "malformed patch diagnostic");
+                AssertContains(malformedResult.Message,
+                    "$.patch has the wrong JSON type",
+                    "native schema gate rejects a stringified patch");
 
                 var emptyAnchor = Command(
                     "common.vba_apply_patch",
@@ -2418,15 +2508,18 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = adapter.GetBuiltInTools().Concat(executor.GetControllerTools()).ToList();
                 var command = Command("common.vba_restore_backup", "moduleName", "Module1");
-                var waiting = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = false }, false, false, session);
+                var pending = PrepareVbaNative(executor, session, command);
+                var waiting = ToolResultUiProjection.Create(pending.Record);
                 AssertEqual("waiting_confirmation", waiting.Status, "restore waits for confirmation");
-                AssertEqual(selected.BackupId, Convert.ToString(command.Arguments["backupId"]), "latest backup is resolved to an exact id before confirmation");
+                AssertTrue(!command.Arguments.ContainsKey("backupId"),
+                    "accepted arguments remain unchanged during preparation");
                 AssertContains(waiting.DataJson, selected.BackupId, "restore confirmation identifies the pinned backup");
                 AssertTrue(waiting.DataJson.IndexOf("Sub Selected", StringComparison.Ordinal) < 0,
                     "restore confirmation preview does not duplicate backup source");
 
                 backupStore.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub Newer()\nEnd Sub");
-                var restored = executor.Execute(command, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                var restored = ToolResultUiProjection.Create(
+                    ConfirmVbaNative(pending));
 
                 AssertTrue(restored.Success, "pinned restore succeeds");
                 AssertContains(adapter.VbaModuleCode, "Selected", "confirmation restores the originally selected backup");
@@ -3115,6 +3208,74 @@ namespace RNAssistant.Harness
                     errorCode,
                     message);
             }
+        }
+
+        private static VbaPendingExecution PrepareVbaNative(
+            OfficeToolExecutor executor,
+            ChatSession session,
+            ToolCommand command)
+        {
+            var runtime = executor.CreateNativeRuntime(
+                session,
+                executor.GetControllerTools(),
+                new AppSettings { AutoConfirmToolActions = false },
+                "agent",
+                false,
+                (execution, preparation) => "pending-vba");
+            if (string.IsNullOrWhiteSpace(command.ToolCallId))
+                command.ToolCallId = "call_" + Guid.NewGuid().ToString("N");
+            var call = new ToolCall(
+                command.ToolCallId,
+                command.ToolId,
+                JsonConvert.SerializeObject(command.Arguments, Formatting.None));
+            var policy = runtime.Describe(call);
+            if (policy == null)
+                throw new InvalidOperationException(
+                    "Native VBA policy was not captured: " + command.ToolId);
+            var runId = session == null || session.LastRun == null ||
+                string.IsNullOrWhiteSpace(session.LastRun.RunId)
+                    ? "run-vba-native" : session.LastRun.RunId;
+            var turnId = session == null || session.LastRun == null ||
+                string.IsNullOrWhiteSpace(session.LastRun.TurnId)
+                    ? "turn-vba-native" : session.LastRun.TurnId;
+            var executionContext = new ToolExecutionContext(
+                call, policy, runId, turnId, runId + ":1",
+                DateTime.UtcNow, false, 5);
+            var record = runtime.ExecuteAsync(
+                executionContext, CancellationToken.None).GetAwaiter().GetResult();
+            return new VbaPendingExecution
+            {
+                Runtime = runtime,
+                Record = record
+            };
+        }
+
+        private static ToolExecutionRecord ConfirmVbaNative(
+            VbaPendingExecution pending)
+        {
+            var record = pending == null ? null : pending.Record;
+            if (record == null ||
+                record.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
+                throw new InvalidOperationException(
+                    "A native pending VBA record is required.");
+            var context = new ToolExecutionContext(
+                record.Context.Call,
+                record.Context.Policy,
+                record.Context.RunId,
+                record.Context.TurnId,
+                record.Context.StepId,
+                DateTime.UtcNow,
+                true,
+                5,
+                record.PreparedStateJson);
+            return pending.Runtime.ExecuteAsync(
+                context, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        private sealed class VbaPendingExecution
+        {
+            internal NativeToolRuntimeAdapter Runtime { get; set; }
+            internal ToolExecutionRecord Record { get; set; }
         }
 
         private static void ContextUsageEstimatorCountsPromptAndSession()
