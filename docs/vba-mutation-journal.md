@@ -19,11 +19,13 @@ text replacement and returns typed status/text/match information. JSON validatio
 resource guidance, guards, ordered operations and journal orchestration remain in
 Office. Phase 6A changes ownership only, not stored hashes or source bytes.
 
-Phase 6B places internal VBA list/module command construction, deterministic name
-fallback and typed project/module payload validation in `Office.Vba.VbaReader`.
-Callers retain the HostRuntime gate and mutation/journal ownership. A malformed
-successful read is rejected and never converted into live or durable evidence;
-this extraction does not change CAS bytes, journal events, reconciliation or COM.
+Phase 6B placed deterministic name fallback and typed project/module payload
+validation in `Office.Vba.VbaReader`. Since 11T9A the reader consumes
+`IVbaHostBackend` snapshots directly; the former internal list/module commands and
+legacy result conversion no longer exist in production. Callers retain the
+HostRuntime gate and mutation/journal ownership. A malformed successful read is
+rejected and never converted into live or durable evidence; this does not change
+CAS bytes, journal events, reconciliation or COM.
 
 Phase 6C moves the complete `common.vba_apply_patch` workflow and shared module
 prepare/dispatch/terminal orchestration to `Office.Vba.VbaMutationService`.
@@ -36,10 +38,14 @@ guard that binds the exact backup id/module/type/loaded-source hash together wit
 the current target existence/source hash before confirmation; changing either
 side blocks the action before preparation/dispatch. Phase 6J moves rename guard,
 two-identity preparation, typed backend action, read-back and recovery into the same
-`Office.Vba.VbaMutationService`; `VbaToolExecutor` remains only the argument/result
-adapter plus serialized reconciliation caller. Package journal/read-back/reconciliation
-belongs to `Office.Vba.VbaPackageService`; CAS bytes, COM dispatch and public result
-wire remain unchanged.
+`Office.Vba.VbaMutationService`. 11T9A replaced the old document/read/backend
+compatibility adapters with a narrow host backend bound to the exact retained
+Excel/Word/PowerPoint session; module/package/macro calls no longer construct
+`ToolCommand`, serialize backend payloads or receive legacy `ToolResult` from the
+host. `VbaToolExecutor` temporarily retains only public controller argument/result
+projection and serialized reconciliation until 11T9B. Package
+journal/read-back/reconciliation belongs to `Office.Vba.VbaPackageService`; CAS
+bytes and durable event formats remain unchanged.
 
 | Representation | Purpose / existing transformation |
 |---|---|

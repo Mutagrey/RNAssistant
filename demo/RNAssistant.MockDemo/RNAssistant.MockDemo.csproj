@@ -64,6 +64,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Word\*.cs" Link="Office\Domains\Word\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\PowerPoint\*.cs" Link="Office\Domains\PowerPoint\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Outlook\*.cs" Link="Office\Domains\Outlook\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Office\Domains\Vba\*.cs" Link="Office\Domains\Vba\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaReader.cs" Link="Office\Vba\VbaReader.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaDeleteModuleContracts.cs" Link="Office\Vba\VbaDeleteModuleContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationContracts.cs" Link="Office\Vba\VbaMutationContracts.cs" />
@@ -116,6 +117,7 @@
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.Word.cs" Link="Testing\FakeOfficeAdapter.Word.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.PowerPoint.cs" Link="Testing\FakeOfficeAdapter.PowerPoint.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.Outlook.cs" Link="Testing\FakeOfficeAdapter.Outlook.cs" />
+    <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.Vba.cs" Link="Testing\FakeOfficeAdapter.Vba.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\..\src\RNAssistant.Office\Qualification\Packs\coverage.v1.json"

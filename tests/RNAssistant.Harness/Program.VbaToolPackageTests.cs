@@ -11,6 +11,7 @@ using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.Vba;
+using RNAssistant.Office.Domains.Vba;
 using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.Harness
@@ -110,7 +111,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaToolPackageReservesInternalCommandIds()
+        private static void VbaToolPackageDoesNotRetainInternalCommandAliases()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -120,7 +121,8 @@ namespace RNAssistant.Harness
 
                 var validation = executor.ValidateToolDefinition(tool);
 
-                AssertEqual("reserved_tool_id", validation.ErrorCode, "internal VBA command id is reserved");
+                AssertTrue(validation.Success,
+                    "retired host command id has no built-in runtime authority");
             });
         }
 
@@ -706,7 +708,7 @@ namespace RNAssistant.Harness
                 "vba_package_guard_invalid",
                 VbaProjectSupport.InstallPackage(
                     unguardedDocument,
-                    unguarded,
+                    TypedPackageComponents(unguarded),
                     "RNAssistantPackage: id=excel.guard; version=1.0.0; hash=test").ErrorCode,
                 "COM helper has no unguarded install compatibility path");
             AssertEqual(0, unguardedDocument.VBProject.VBComponents.Count,
@@ -731,7 +733,7 @@ namespace RNAssistant.Harness
 
             var outcome = VbaProjectSupport.InstallPackage(
                 document,
-                componentsJson,
+                TypedPackageComponents(componentsJson),
                 "RNAssistantPackage: id=excel.guard; version=1.0.0; hash=test");
 
             AssertEqual("stale_vba_package", outcome.ErrorCode, "COM helper enforces prepared package state");
@@ -890,14 +892,12 @@ namespace RNAssistant.Harness
             FakeOfficeAdapter adapter,
             IVbaPackageJournal journal)
         {
-            var reader = new VbaReader(adapter, suffix =>
-                (adapter.HostName ?? string.Empty).ToLowerInvariant() + "." + suffix);
+            var reader = new VbaReader(adapter.VbaHostBackend);
             return new VbaPackageService(
-                new VbaMutationDocumentContextAdapter(adapter),
+                new VbaMutationHostDocumentContext(adapter.VbaHostBackend),
                 journal,
-                new VbaMutationReaderAdapter(reader),
-                new VbaPackageBackendAdapter(adapter, suffix =>
-                    (adapter.HostName ?? string.Empty).ToLowerInvariant() + "." + suffix));
+                new VbaMutationHostReader(reader),
+                new VbaPackageHostBackend(adapter.VbaHostBackend));
         }
 
         private static JObject GuardedPackageComponent(
@@ -924,6 +924,39 @@ namespace RNAssistant.Harness
                     ? VbaPackageOwnershipMarker.Evidence(beforeCode)
                     : null
             };
+        }
+
+        private static IReadOnlyList<VbaInstallPackageComponent>
+            TypedPackageComponents(string json)
+        {
+            return JArray.Parse(string.IsNullOrWhiteSpace(json) ? "[]" : json)
+                .OfType<JObject>()
+                .Select(item => new VbaInstallPackageComponent
+                {
+                    Name = (string)item["name"],
+                    ComponentType = (string)item["type"],
+                    Code = (string)item["code"] ?? string.Empty,
+                    ExpectedBeforeExists = (bool?)item["expectedBeforeExists"],
+                    ExpectedBeforeComponentType =
+                        (string)item["expectedBeforeType"],
+                    ExpectedBeforeComparableCodeSha256 =
+                        (string)item["expectedBeforeComparableCodeSha256"],
+                    ExpectedBeforeOwnershipMarkerPresent =
+                        (bool?)item["expectedBeforeOwnershipMarkerPresent"],
+                    ExpectedBeforeOwnershipMarker =
+                        (string)item["expectedBeforeOwnershipMarker"]
+                }).ToArray();
+        }
+
+        private static IReadOnlyDictionary<string, string>
+            TypedExpectedHashes(string json)
+        {
+            return JObject.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json)
+                .Properties()
+                .ToDictionary(
+                    property => property.Name,
+                    property => (string)property.Value,
+                    StringComparer.OrdinalIgnoreCase);
         }
 
         private static VbaPackageExecutionRequest PackageExecution(VbaPackageSourceDefinition source)
@@ -1059,7 +1092,8 @@ namespace RNAssistant.Harness
                 null)).ToString();
             var marker = "RNAssistantPackage: id=excel.form_tool; version=1.0.0; hash=test";
 
-            var installed = VbaProjectSupport.InstallPackage(document, componentsJson, marker);
+            var installed = VbaProjectSupport.InstallPackage(
+                document, TypedPackageComponents(componentsJson), marker);
 
             AssertTrue(installed.Success, "COM package creates blank MSForm without .frm import");
             var form = document.VBProject.VBComponents.Cast<FakeVbaComponent>().Single(component => component.Name == "RNA_FormToolForm");
@@ -1076,7 +1110,9 @@ namespace RNAssistant.Harness
                 true,
                 "MSForm",
                 form.CodeModule.Code)).ToString();
-            AssertTrue(VbaProjectSupport.InstallPackage(document, updatedJson, marker).Success, "owned blank MSForm updates in place");
+            AssertTrue(VbaProjectSupport.InstallPackage(
+                document, TypedPackageComponents(updatedJson), marker).Success,
+                "owned blank MSForm updates in place");
             AssertContains(form.CodeModule.Code, "btnApply", "MSForm code-behind update applied");
 
             var guardedOverwriteJson = new JArray(GuardedPackageComponent(
@@ -1087,14 +1123,18 @@ namespace RNAssistant.Harness
                 "MSForm",
                 form.CodeModule.Code)).ToString();
             form.Designer.Controls.Count = 1;
-            var blocked = VbaProjectSupport.InstallPackage(document, guardedOverwriteJson, marker);
+            var blocked = VbaProjectSupport.InstallPackage(
+                document, TypedPackageComponents(guardedOverwriteJson), marker);
             AssertEqual("vba_userform_designer_unsupported", blocked.ErrorCode, "Designer controls block package overwrite");
             AssertContains(form.CodeModule.Code, "btnApply", "blocked overwrite preserves live form source");
             form.Designer.Controls.Count = 0;
             form.Designer.Picture = new object();
             AssertEqual(
                 "vba_userform_designer_unsupported",
-                VbaProjectSupport.InstallPackage(document, guardedOverwriteJson, marker).ErrorCode,
+                VbaProjectSupport.InstallPackage(
+                    document,
+                    TypedPackageComponents(guardedOverwriteJson),
+                    marker).ErrorCode,
                 "Designer binary assets block package overwrite");
             form.Designer.Picture = null;
 
@@ -1102,7 +1142,10 @@ namespace RNAssistant.Harness
             {
                 ["RNA_FormToolForm"] = VbaTextCanonicalizer.PackageComparableCodeSha256(updatedCode)
             }.ToString();
-            var removed = VbaProjectSupport.RemovePackage(document, expected, "RNAssistantPackage: id=excel.form_tool;");
+            var removed = VbaProjectSupport.RemovePackage(
+                document,
+                TypedExpectedHashes(expected),
+                "RNAssistantPackage: id=excel.form_tool;");
             AssertTrue(removed.Success, "owned blank MSForm can be removed internally by package lifecycle");
             AssertTrue(!document.VBProject.VBComponents.Cast<FakeVbaComponent>().Any(component => component.Name == "RNA_FormToolForm"),
                 "package form is absent after verified removal");
@@ -1165,7 +1208,8 @@ namespace RNAssistant.Harness
                 null)).ToString();
             var marker = "RNAssistantPackage: id=excel.format_form; version=1.0.0; hash=test";
 
-            var installed = VbaProjectSupport.InstallPackage(document, componentsJson, marker);
+            var installed = VbaProjectSupport.InstallPackage(
+                document, TypedPackageComponents(componentsJson), marker);
 
             AssertTrue(installed.Success, "COM install accepts VBE-equivalent package source");
             var form = document.VBProject.VBComponents.Cast<FakeVbaComponent>().Single();
@@ -1175,7 +1219,10 @@ namespace RNAssistant.Harness
                 ["RNA_FormatForm"] = VbaTextCanonicalizer.PackageComparableCodeSha256(source)
             }.ToString();
             AssertTrue(
-                VbaProjectSupport.RemovePackage(document, expected, "RNAssistantPackage: id=excel.format_form;").Success,
+                VbaProjectSupport.RemovePackage(
+                    document,
+                    TypedExpectedHashes(expected),
+                    "RNAssistantPackage: id=excel.format_form;").Success,
                 "COM remove accepts VBE-equivalent owned package source");
         }
 

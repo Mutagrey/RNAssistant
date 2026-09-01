@@ -47,6 +47,7 @@
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.Word.cs" Link="FakeOfficeAdapter.Word.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.PowerPoint.cs" Link="FakeOfficeAdapter.PowerPoint.cs" />
     <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.Outlook.cs" Link="FakeOfficeAdapter.Outlook.cs" />
+    <Compile Include="..\RNAssistant.Testing\FakeOfficeAdapter.Vba.cs" Link="FakeOfficeAdapter.Vba.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentitySample.cs" Link="OfficeHosts\Qualification\ComIdentitySample.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ComIdentityLease.cs" Link="OfficeHosts\Qualification\ComIdentityLease.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Qualification\ExcelProbeTarget.cs" Link="OfficeHosts\Qualification\ExcelProbeTarget.cs" />
@@ -71,6 +72,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Word\*.cs" Link="Office\Domains\Word\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\PowerPoint\*.cs" Link="Office\Domains\PowerPoint\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Outlook\*.cs" Link="Office\Domains\Outlook\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\RNAssistant.Office\Domains\Vba\*.cs" Link="Office\Domains\Vba\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Diagnostics\RuntimeLog.cs" Link="Office\Diagnostics\RuntimeLog.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\*.cs" Link="Office\Agent\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Vba\VbaProjectSupport.cs" Link="OfficeHosts\Vba\VbaProjectSupport.cs" />

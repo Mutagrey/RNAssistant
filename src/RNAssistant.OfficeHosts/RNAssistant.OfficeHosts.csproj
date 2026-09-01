@@ -122,6 +122,7 @@
     <Compile Include="Targets\OfficeTargetDescriptor.cs" />
     <Compile Include="Vba\VbaProjectSupport.cs" />
     <Compile Include="Vba\VbaProjectSupport.PackageGuards.cs" />
+    <Compile Include="Vba\VbaInteropBackend.cs" />
     <Compile Include="Word\WordDocumentSession.cs" />
     <Compile Include="Word\WordInteropBackend.cs" />
     <Compile Include="WordAdapter.cs" />

@@ -1,23 +1,26 @@
 using System;
 using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Vba;
 
 namespace RNAssistant.OfficeHosts.Vba
 {
     public static partial class VbaProjectSupport
     {
-        private static ToolResult ValidatePackageInstallGuards(dynamic vbProject, JArray payload)
+        private static VbaBackendActionResult ValidatePackageInstallGuards(
+            dynamic vbProject,
+            System.Collections.Generic.IReadOnlyList<VbaInstallPackageComponent> payload)
         {
-            var items = (payload ?? new JArray()).OfType<JObject>().ToList();
-            var hasGuard = items.Any(item => item["expectedBeforeExists"] != null);
-            if (!hasGuard || items.Any(item => item["expectedBeforeExists"] == null ||
-                item["expectedBeforeOwnershipMarkerPresent"] == null))
+            var items = (payload ?? new VbaInstallPackageComponent[0])
+                .Where(item => item != null)
+                .ToList();
+            var hasGuard = items.Any(item => item.ExpectedBeforeExists.HasValue);
+            if (!hasGuard || items.Any(item =>
+                !item.ExpectedBeforeExists.HasValue ||
+                !item.ExpectedBeforeOwnershipMarkerPresent.HasValue))
             {
-                return ToolResult.Fail(
+                return VbaBackendActionResult.Error(
                     "VBA package install guard is incomplete.",
                     null,
                     "vba_package_guard_invalid",
@@ -26,8 +29,8 @@ namespace RNAssistant.OfficeHosts.Vba
 
             foreach (var item in items)
             {
-                var name = (string)item["name"];
-                var expectedExists = item.Value<bool>("expectedBeforeExists");
+                var name = item.Name;
+                var expectedExists = item.ExpectedBeforeExists.Value;
                 dynamic component = FindComponent(vbProject, name);
                 var actualExists = component != null;
                 if (actualExists != expectedExists)
@@ -47,11 +50,11 @@ namespace RNAssistant.OfficeHosts.Vba
                 }
                 if (!expectedExists) continue;
 
-                var expectedType = (string)item["expectedBeforeType"];
-                var expectedHash = (string)item["expectedBeforeComparableCodeSha256"];
+                var expectedType = item.ExpectedBeforeComponentType;
+                var expectedHash = item.ExpectedBeforeComparableCodeSha256;
                 if (string.IsNullOrWhiteSpace(expectedType) || string.IsNullOrWhiteSpace(expectedHash))
                 {
-                    return ToolResult.Fail(
+                    return VbaBackendActionResult.Error(
                         "VBA package install guard is incomplete for component: " + name + ".",
                         null,
                         "vba_package_guard_invalid",
@@ -60,8 +63,9 @@ namespace RNAssistant.OfficeHosts.Vba
                 var actualType = ComponentTypeName((int)component.Type);
                 var actualCode = ReadComponentCode(component);
                 var actualHash = VbaTextCanonicalizer.PackageComparableCodeSha256(actualCode);
-                var expectedMarkerPresent = item.Value<bool>("expectedBeforeOwnershipMarkerPresent");
-                var expectedMarker = (string)item["expectedBeforeOwnershipMarker"];
+                var expectedMarkerPresent =
+                    item.ExpectedBeforeOwnershipMarkerPresent.Value;
+                var expectedMarker = item.ExpectedBeforeOwnershipMarker;
                 var actualMarker = VbaPackageOwnershipMarker.Parse(actualCode);
                 var markerMatches = actualMarker.Found == expectedMarkerPresent &&
                     (!expectedMarkerPresent || string.Equals(
@@ -89,7 +93,7 @@ namespace RNAssistant.OfficeHosts.Vba
             return null;
         }
 
-        private static ToolResult StalePackageInstall(
+        private static VbaBackendActionResult StalePackageInstall(
             string componentName,
             bool expectedExists,
             bool actualExists,
@@ -102,9 +106,9 @@ namespace RNAssistant.OfficeHosts.Vba
             string expectedOwnershipMarker,
             string actualOwnershipMarker)
         {
-            return ToolResult.Fail(
+            return VbaBackendActionResult.Error(
                 "VBA package component changed after preparation and was not overwritten: " + componentName + ".",
-                JsonConvert.SerializeObject(new
+                new
                 {
                     component = componentName,
                     expectedExists = expectedExists,
@@ -117,7 +121,7 @@ namespace RNAssistant.OfficeHosts.Vba
                     actualOwnershipMarkerPresent = actualOwnershipMarkerPresent,
                     expectedOwnershipMarker = expectedOwnershipMarker,
                     actualOwnershipMarker = actualOwnershipMarker
-                }),
+                },
                 "stale_vba_package",
                 false);
         }

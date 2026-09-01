@@ -133,6 +133,8 @@
     <Compile Include="Domains\Outlook\OutlookBackendProvider.cs" />
     <Compile Include="Domains\Outlook\OutlookContracts.cs" />
     <Compile Include="Domains\Outlook\OutlookService.cs" />
+    <Compile Include="Domains\Vba\VbaBackendProvider.cs" />
+    <Compile Include="Domains\Vba\VbaHostContracts.cs" />
     <Compile Include="Tools\ExcelReadToolAdapter.cs" />
     <Compile Include="Tools\ExcelReadToolHandler.cs" />
     <Compile Include="Tools\ExcelReadToolIds.cs" />
@@ -283,7 +285,8 @@
     <Compile Include="Tools\UserQuestionToolExecutor.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
-    <Compile Include="Tools\VbaMutationToolAdapter.cs" />
+    <Compile Include="Tools\VbaHostDomainAdapters.cs" />
+    <Compile Include="Tools\VbaLegacyResultProjection.cs" />
     <Compile Include="Tools\VbaPackageToolAdapter.cs" />
     <Compile Include="Tools\VbaToolExecutor.Guards.cs" />
     <Compile Include="Tools\VbaToolExecutor.Journal.cs" />

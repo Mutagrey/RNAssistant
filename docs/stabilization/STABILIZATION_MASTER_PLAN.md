@@ -2425,9 +2425,19 @@ endpoint.
      qualification и trajectory/eval evidence. Разрешены bounded semantic operations
      с одним target/effect/recovery contract; generic `execute_actions`, arbitrary
      command list и batch writes запрещены.
-   - 11T9: переключить VBA mutations/packages и остальные controller-owned existing
-     tools на direct typed registrations/backends без `ToolDefinition`/legacy
-     `ToolResult` roundtrip; durable journals/CAS остаются единственной authority;
+   - [x] 11T9A — VBA host boundary: `VbaReader`, module mutations, packages and
+     macro execution use one narrow `IVbaHostBackend` bound to the exact retained
+     Excel/Word/PowerPoint `DocumentSession`. Host VBA/macro command branches,
+     JSON command payloads and replaced compatibility backend adapters are
+     physically removed; durable journals/CAS remain the only authority. Public
+     controller execution retains one explicit result/catalog boundary for 11T9B.
+     [Evidence](PHASE_11T9A_VBA_BOUND_BACKEND.md);
+   - 11T9B: switch the five public VBA/macro tools to direct native ToolRuntime
+     registrations with typed preparation/confirmation/outcome/effect evidence;
+     remove the remaining controller `ToolResult` projection and public
+     `ToolDefinition` execution path;
+   - 11T9C: switch the remaining controller-owned existing execution families to
+     native typed handlers, then remove their controller executor branches;
    - [x] independent host-neutral cleanup: удалить pre-R37 trajectory inference;
      wrong-type retained operation остаётся exact incompatible/reset-only evidence
      и не входит в tool-execution;

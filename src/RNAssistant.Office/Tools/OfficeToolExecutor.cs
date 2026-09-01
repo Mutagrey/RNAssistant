@@ -863,8 +863,7 @@ namespace RNAssistant.Office.Tools
         {
             return !string.IsNullOrWhiteSpace(id) &&
                 (_adapterTools.Any(tool => tool != null && string.Equals(tool.Id, id, StringComparison.OrdinalIgnoreCase)) ||
-                 _controllerExecutors.ContainsKey(id) ||
-                 _vbaExecutor.IsInternalToolId(id));
+                 _controllerExecutors.ContainsKey(id));
         }
 
         private ToolResult ValidateAuthoredToolId(ToolCommand command)

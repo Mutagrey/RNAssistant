@@ -47,7 +47,7 @@ namespace RNAssistant.Office.Tools
                     Correlation = MutationCorrelation(command, session)
                 },
                 cancellationToken);
-            return VbaMutationToolResultMapper.ToToolResult(outcome);
+            return VbaLegacyResultProjection.ToToolResult(outcome);
         }
 
         public ToolResult InstallCustomTool(
@@ -71,7 +71,7 @@ namespace RNAssistant.Office.Tools
                     Correlation = MutationCorrelation(command, session)
                 },
                 cancellationToken);
-            return VbaMutationToolResultMapper.ToToolResult(outcome);
+            return VbaLegacyResultProjection.ToToolResult(outcome);
         }
 
         public ToolResult RemoveCustomTool(
@@ -93,7 +93,7 @@ namespace RNAssistant.Office.Tools
                     Correlation = MutationCorrelation(command, session)
                 },
                 cancellationToken);
-            return VbaMutationToolResultMapper.ToToolResult(outcome);
+            return VbaLegacyResultProjection.ToToolResult(outcome);
         }
 
         public string GetInstallationStatus(ToolDefinition tool)

@@ -16,6 +16,7 @@ using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Domains.Word;
+using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Qualification;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
@@ -1213,7 +1214,7 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend
+        private sealed class BoundTestOfficeAdapter : IOfficeApplicationAdapter, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IOfficeContextProvider, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend, IVbaHostBackendProvider, IVbaHostBackend
         {
             private readonly FakeOfficeAdapter _inner;
 
@@ -1236,6 +1237,7 @@ namespace RNAssistant.Harness
             public IWordBackend WordBackend { get { return this; } }
             public IPowerPointBackend PowerPointBackend { get { return this; } }
             public IOutlookBackend OutlookBackend { get { return this; } }
+            public IVbaHostBackend VbaHostBackend { get { return this; } }
             public string HostName { get { return Session.Host; } }
             public string DocumentKey { get { return StaDispatcher.Invoke(() => Session.StableDocumentId); } }
             public string RuntimeDocumentKey { get { return Session.RuntimeDocumentId; } }
@@ -1246,6 +1248,15 @@ namespace RNAssistant.Harness
             public OfficeContext GetOfficeContext() { BeforeRead?.Invoke("context"); return _inner.GetOfficeContext(); }
             public IEnumerable<ToolDefinition> GetBuiltInTools() { return _inner.GetBuiltInTools(); }
             public ToolResult ExecuteTool(ToolCommand command) { BeforeRead?.Invoke(command.ToolId); return _inner.ExecuteTool(command); }
+            public VbaProjectSnapshot ListProjectComponents() { BeforeRead?.Invoke("vba.project.read"); return _inner.ListProjectComponents(); }
+            public VbaModuleSnapshot ReadModule(VbaReadModuleRequest request) { BeforeRead?.Invoke("vba.module.read"); return _inner.ReadModule(request); }
+            public VbaBackendActionResult ReplaceModule(VbaReplaceModuleRequest request) { BeforeRead?.Invoke("vba.module.replace"); return _inner.ReplaceModule(request); }
+            public VbaBackendActionResult CreateModule(VbaCreateModuleRequest request) { BeforeRead?.Invoke("vba.module.create"); return _inner.CreateModule(request); }
+            public VbaBackendActionResult RenameModule(VbaRenameModuleRequest request) { BeforeRead?.Invoke("vba.module.rename"); return _inner.RenameModule(request); }
+            public VbaBackendActionResult DeleteModule(VbaDeleteModuleRequest request) { BeforeRead?.Invoke("vba.module.delete"); return _inner.DeleteModule(request); }
+            public VbaBackendActionResult InstallPackage(VbaInstallPackageRequest request) { BeforeRead?.Invoke("vba.package.install"); return _inner.InstallPackage(request); }
+            public VbaBackendActionResult RemovePackage(VbaRemovePackageRequest request) { BeforeRead?.Invoke("vba.package.remove"); return _inner.RemovePackage(request); }
+            public VbaBackendActionResult RunMacro(VbaRunMacroRequest request) { BeforeRead?.Invoke("vba.macro.run"); return _inner.RunMacro(request); }
             public ExcelInspectSnapshot Inspect(ExcelInspectRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelInspectOperation); return _inner.Inspect(request); }
             public ExcelRangeSnapshot ReadRange(ExcelRangeReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelRangeReadOperation); return _inner.ReadRange(request); }
             public ExcelWriteSnapshot Read(ExcelWriteReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelWriteReadOperation); return _inner.Read(request); }

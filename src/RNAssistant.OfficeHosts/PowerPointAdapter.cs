@@ -9,22 +9,24 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.PowerPoint;
+using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Tools;
 using RNAssistant.OfficeHosts.Identity;
-using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {
     public sealed class PowerPointAdapter : IOfficeApplicationAdapter,
         IOfficeContextProvider, IOfficeBuiltInSkillProvider,
         IOfficeDocumentCatalog, IOfficeDocumentSessionProvider,
-        IOfficeDispatcherProvider, IPowerPointBackendProvider
+        IOfficeDispatcherProvider, IPowerPointBackendProvider,
+        IVbaHostBackendProvider
     {
         private readonly PowerPoint.Application _application;
         private readonly PowerPoint.Presentation _targetPresentation;
         private readonly PowerPoint.DocumentWindow _targetWindow;
         private readonly PowerPointDocumentSession _documentSession;
         private readonly PowerPointInteropBackend _powerPointBackend;
+        private readonly VbaInteropBackend _vbaHostBackend;
 
         public PowerPointAdapter(
             PowerPoint.Application application,
@@ -42,12 +44,15 @@ namespace RNAssistant.OfficeHosts
                 _targetPresentation, _targetWindow,
                 runtimeDocumentId, dispatcher);
             _powerPointBackend = new PowerPointInteropBackend(_documentSession);
+            _vbaHostBackend = new VbaInteropBackend(
+                _documentSession, _application);
         }
 
         public string HostName { get { return "PowerPoint"; } }
         public IOfficeDocumentSession DocumentSession { get { return _documentSession; } }
         public IOfficeStaDispatcher StaDispatcher { get { return _documentSession.StaDispatcher; } }
         public IPowerPointBackend PowerPointBackend { get { return _powerPointBackend; } }
+        public IVbaHostBackend VbaHostBackend { get { return _vbaHostBackend; } }
         public string DocumentKey { get { return _documentSession.StableDocumentId; } }
         public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
         public string DocumentTitle { get { return RequirePresentation().Name; } }
@@ -232,107 +237,11 @@ namespace RNAssistant.OfficeHosts
 
         public ToolResult ExecuteTool(ToolCommand command)
         {
-            try
-            {
-                switch (command.ToolId)
-                {
-                    case "powerpoint.vba_list_project_components_internal":
-                        return ListVbaProjectComponents();
-                    case "powerpoint.vba_read_module":
-                        return ReadVbaModule(command);
-                    case "powerpoint.vba_replace_module":
-                        return ReplaceVbaModule(command);
-                    case "powerpoint.run_macro":
-                        return RunMacro(command);
-                    case "powerpoint.vba_install_package_internal":
-                        return VbaProjectSupport.InstallPackage(
-                            RequirePresentation(),
-                            ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"),
-                            ToolArgumentReader.String(command.Arguments, "marker", string.Empty));
-                    case "powerpoint.vba_remove_package_internal":
-                        return VbaProjectSupport.RemovePackage(
-                            RequirePresentation(),
-                            ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"),
-                            ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
-                    case "powerpoint.vba_create_module_internal":
-                        return VbaProjectSupport.CreateModule(
-                            RequirePresentation(),
-                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                            ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"),
-                            ToolArgumentReader.String(command.Arguments, "code", string.Empty));
-                    case "powerpoint.vba_rename_module_internal":
-                        return VbaProjectSupport.RenameModule(
-                            RequirePresentation(),
-                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                            ToolArgumentReader.String(command.Arguments, "newModuleName", string.Empty),
-                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null),
-                            ToolArgumentReader.String(command.Arguments, "expectedComponentType", null));
-                    case "powerpoint.vba_delete_module_internal":
-                        return VbaProjectSupport.DeleteModule(
-                            RequirePresentation(),
-                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
-                    default:
-                        return ToolResult.Fail(
-                            "Unsupported PowerPoint tool: " + command.ToolId);
-                }
-            }
-            catch (Exception ex)
-            {
-                var isVba = (command == null ? string.Empty :
-                    command.ToolId ?? string.Empty).IndexOf(
-                        ".vba_", StringComparison.OrdinalIgnoreCase) >= 0;
-                return ToolResult.Fail(
-                    ex.Message, null,
-                    isVba ? "vba_access_error" : "office_tool_error", !isVba);
-            }
-        }
-
-        private ToolResult ListVbaProjectComponents()
-        {
-            var presentation = RequirePresentation();
-            return VbaProjectSupport.ListProjectComponents(
-                presentation, presentation.Name);
-        }
-
-        private ToolResult ReadVbaModule(ToolCommand command)
-        {
-            if (command.Arguments.ContainsKey("startLine") ||
-                command.Arguments.ContainsKey("lineCount"))
-                return VbaProjectSupport.ReadModuleLines(
-                    RequirePresentation(),
-                    ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                    ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
-                    ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
-            return VbaProjectSupport.ReadModule(
-                RequirePresentation(),
-                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000));
-        }
-
-        private ToolResult ReplaceVbaModule(ToolCommand command)
-        {
-            return VbaProjectSupport.ReplaceModule(
-                RequirePresentation(),
-                ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                ToolArgumentReader.String(command.Arguments, "code", string.Empty),
-                ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true),
-                ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
-        }
-
-        private ToolResult RunMacro(ToolCommand command)
-        {
-            var macroName = ToolArgumentReader.String(
-                command.Arguments, "macroName", string.Empty);
-            if (string.IsNullOrWhiteSpace(macroName))
-                return ToolResult.Fail("No macroName provided.");
-            var argumentsJson = ToolArgumentReader.String(
-                command.Arguments, "argumentsJson", "[]");
-            var output = VbaProjectSupport.RunStringFunction(
-                _application, macroName, argumentsJson);
-            return ToolResult.Ok(
-                "Macro ran: " + macroName,
-                JsonConvert.SerializeObject(new { output }));
+            return ToolResult.Fail(
+                "PowerPoint tools require direct typed backends.",
+                null,
+                "powerpoint_legacy_dispatch_removed",
+                false);
         }
 
         private PowerPoint.Presentation RequirePresentation()

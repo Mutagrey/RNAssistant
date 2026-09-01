@@ -29,7 +29,7 @@ namespace RNAssistant.Harness
             var adapter = new FakeOfficeAdapter();
             var source = "Option Explicit\r\nPublic Sub ReadMe()\r\nEnd Sub";
             adapter.SetVbaModule("ReaderModule", source, "ClassModule");
-            var reader = new VbaReader(adapter, suffix => "excel." + suffix);
+            var reader = new VbaReader(adapter.VbaHostBackend);
 
             VbaModuleState module;
             ToolResult error;
@@ -150,16 +150,12 @@ namespace RNAssistant.Harness
                 var adapter = new FakeOfficeAdapter();
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"before\"\nEnd Sub";
                 var journal = new VbaJournalStore(paths);
-                var reader = new VbaReader(
-                    adapter,
-                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
+                var reader = new VbaReader(adapter.VbaHostBackend);
                 var service = new VbaMutationService(
-                    new VbaMutationDocumentContextAdapter(adapter),
+                    new VbaMutationHostDocumentContext(adapter.VbaHostBackend),
                     new VbaMutationJournalStoreAdapter(journal),
-                    new VbaMutationReaderAdapter(reader),
-                    new VbaMutationBackendAdapter(
-                        adapter,
-                        suffix => adapter.HostName.ToLowerInvariant() + "." + suffix));
+                    new VbaMutationHostReader(reader),
+                    new VbaMutationHostBackend(adapter.VbaHostBackend));
                 var session = NewSession(adapter);
                 var command = Command("common.vba_apply_patch", "moduleName", "Module1");
                 var correlation = new VbaMutationCorrelation
@@ -211,16 +207,12 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new VbaJournalStore(paths);
-                var reader = new VbaReader(
-                    adapter,
-                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
+                var reader = new VbaReader(adapter.VbaHostBackend);
                 var service = new VbaMutationService(
-                    new VbaMutationDocumentContextAdapter(adapter),
+                    new VbaMutationHostDocumentContext(adapter.VbaHostBackend),
                     new VbaMutationJournalStoreAdapter(store),
-                    new VbaMutationReaderAdapter(reader),
-                    new VbaMutationBackendAdapter(
-                        adapter,
-                        suffix => adapter.HostName.ToLowerInvariant() + "." + suffix));
+                    new VbaMutationHostReader(reader),
+                    new VbaMutationHostBackend(adapter.VbaHostBackend));
                 var correlation = new VbaMutationCorrelation { SessionId = "whole-write-service" };
                 const string requestedName = "123 phase 6E target!";
 
@@ -367,16 +359,12 @@ namespace RNAssistant.Harness
                 const string source = "Option Explicit\nPublic Value As Long";
                 adapter.SetVbaModule(moduleName, source, "ClassModule");
                 var store = new VbaJournalStore(paths);
-                var reader = new VbaReader(
-                    adapter,
-                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
+                var reader = new VbaReader(adapter.VbaHostBackend);
                 var service = new VbaMutationService(
-                    new VbaMutationDocumentContextAdapter(adapter),
+                    new VbaMutationHostDocumentContext(adapter.VbaHostBackend),
                     new VbaMutationJournalStoreAdapter(store),
-                    new VbaMutationReaderAdapter(reader),
-                    new VbaMutationBackendAdapter(
-                        adapter,
-                        suffix => adapter.HostName.ToLowerInvariant() + "." + suffix));
+                    new VbaMutationHostReader(reader),
+                    new VbaMutationHostBackend(adapter.VbaHostBackend));
                 var correlation = new VbaMutationCorrelation
                 {
                     SessionId = "delete-service",
@@ -442,7 +430,8 @@ namespace RNAssistant.Harness
                 AssertEqual(VbaTextCanonicalizer.LiveCodeSha256(source),
                     Convert.ToString(deleteCommand.Arguments["expectedCodeSha256"]),
                     "typed backend receives the exact live-state compare-and-swap hash");
-                var finalRead = new VbaMutationReaderAdapter(reader).ReadModule(moduleName, 1000000);
+                var finalRead = new VbaMutationHostReader(reader)
+                    .ReadModule(moduleName, 1000000);
                 AssertTrue(!finalRead.Success && finalRead.IsNotFound,
                     "typed delete workflow verifies the module is absent");
                 var record = store.ListMutations(adapter.HostName, adapter.DocumentKey).Single();
@@ -499,16 +488,12 @@ namespace RNAssistant.Harness
                     moduleName,
                     "StdModule",
                     selectedCode);
-                var reader = new VbaReader(
-                    adapter,
-                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
+                var reader = new VbaReader(adapter.VbaHostBackend);
                 var service = new VbaMutationService(
-                    new VbaMutationDocumentContextAdapter(adapter),
+                    new VbaMutationHostDocumentContext(adapter.VbaHostBackend),
                     new VbaMutationJournalStoreAdapter(store),
-                    new VbaMutationReaderAdapter(reader),
-                    new VbaMutationBackendAdapter(
-                        adapter,
-                        suffix => adapter.HostName.ToLowerInvariant() + "." + suffix));
+                    new VbaMutationHostReader(reader),
+                    new VbaMutationHostBackend(adapter.VbaHostBackend));
                 var correlation = new VbaMutationCorrelation
                 {
                     SessionId = "restore-service",
@@ -1860,8 +1845,17 @@ namespace RNAssistant.Harness
             AssertEqual("NewModule", renamed.Name, "COM rename changes only the component name");
             AssertEqual(2, renamed.Type, "COM rename preserves component type");
             AssertEqual(source, renamed.CodeModule.Code, "COM rename preserves source");
-            AssertEqual("vba_module_not_found", VbaProjectSupport.ReadModule(document, "OldModule", 1000).ErrorCode,
-                "old name is absent after rename");
+            try
+            {
+                VbaProjectSupport.ReadModule(document, "OldModule", 1000);
+                throw new InvalidOperationException(
+                    "old VBA component name remained readable after rename");
+            }
+            catch (RNAssistant.Office.Domains.Vba.VbaBackendException ex)
+            {
+                AssertEqual("vba_module_not_found", ex.ErrorCode,
+                    "old name is absent after rename");
+            }
 
             var typeRace = VbaProjectSupport.RenameModule(
                 document,
@@ -1921,7 +1915,8 @@ namespace RNAssistant.Harness
             var form = document.VBProject.VBComponents.Cast<FakeVbaComponent>().Single(component => component.Name == "UserForm1");
             AssertEqual(3, form.Type, "COM UserForm uses MSForm component type");
             var read = VbaProjectSupport.ReadModule(document, "UserForm1", 1000000);
-            AssertEqual("MSForm", (string)JObject.Parse(read.DataJson)["type"], "COM UserForm type is listed canonically");
+            AssertEqual("MSForm", read.ComponentType,
+                "COM UserForm type is listed canonically");
 
             var edited = VbaProjectSupport.ReplaceModule(
                 document,
@@ -2936,11 +2931,10 @@ namespace RNAssistant.Harness
             IVbaMutationBackend backend)
         {
             return new VbaMutationService(
-                new VbaMutationDocumentContextAdapter(adapter),
+                new VbaMutationHostDocumentContext(adapter.VbaHostBackend),
                 journal,
-                new VbaMutationReaderAdapter(new VbaReader(
-                    adapter,
-                    suffix => adapter.HostName.ToLowerInvariant() + "." + suffix)),
+                new VbaMutationHostReader(new VbaReader(
+                    adapter.VbaHostBackend)),
                 backend);
         }
 

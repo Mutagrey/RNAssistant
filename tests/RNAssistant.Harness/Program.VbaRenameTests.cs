@@ -383,11 +383,10 @@ namespace RNAssistant.Harness
             IVbaRenameJournal renameJournal = null,
             IVbaMutationBackend backend = null)
         {
-            var reader = new VbaMutationReaderAdapter(new VbaReader(
-                adapter,
-                suffix => adapter.HostName.ToLowerInvariant() + "." + suffix));
+            var reader = new VbaMutationHostReader(new VbaReader(
+                adapter.VbaHostBackend));
             return new VbaMutationService(
-                new VbaMutationDocumentContextAdapter(adapter),
+                new VbaMutationHostDocumentContext(adapter.VbaHostBackend),
                 new VbaMutationJournalStoreAdapter(store),
                 reader,
                 backend ?? TypedRenameBackend(adapter),
@@ -396,9 +395,7 @@ namespace RNAssistant.Harness
 
         private static IVbaMutationBackend TypedRenameBackend(FakeOfficeAdapter adapter)
         {
-            return new VbaMutationBackendAdapter(
-                adapter,
-                suffix => adapter.HostName.ToLowerInvariant() + "." + suffix);
+            return new VbaMutationHostBackend(adapter.VbaHostBackend);
         }
 
         private static VbaRenameRequest PrepareTypedRename(

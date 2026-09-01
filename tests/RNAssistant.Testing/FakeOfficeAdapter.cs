@@ -11,11 +11,12 @@ using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Domains.Word;
+using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
-    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend
+    internal sealed partial class FakeOfficeAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IExcelBackendProvider, IExcelReadBackend, IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend, IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend, IWordBackendProvider, IWordBackend, IPowerPointBackendProvider, IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend, IVbaHostBackendProvider, IVbaHostBackend
     {
         internal const string ExcelInspectOperation = "inspect";
         internal const string ExcelRangeReadOperation = "range.read";
@@ -227,6 +228,19 @@ namespace RNAssistant.Harness
             {
                 return string.Equals(
                     _hostName, "Outlook", StringComparison.OrdinalIgnoreCase)
+                    ? this : null;
+            }
+        }
+        public IVbaHostBackend VbaHostBackend
+        {
+            get
+            {
+                return string.Equals(
+                    _hostName, "Excel", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(
+                        _hostName, "Word", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(
+                        _hostName, "PowerPoint", StringComparison.OrdinalIgnoreCase)
                     ? this : null;
             }
         }

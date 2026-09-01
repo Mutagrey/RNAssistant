@@ -31,12 +31,12 @@ namespace RNAssistant.Office.Tools
                 var packageReconciliation = _packageService.ReconcilePendingMutations();
                 if (packageReconciliation != null)
                 {
-                    return VbaMutationToolResultMapper.ToToolResult(packageReconciliation);
+                    return VbaLegacyResultProjection.ToToolResult(packageReconciliation);
                 }
                 var renameReconciliation = _mutationService.ReconcilePendingRenames();
                 return renameReconciliation == null
                     ? null
-                    : VbaMutationToolResultMapper.ToToolResult(renameReconciliation);
+                    : VbaLegacyResultProjection.ToToolResult(renameReconciliation);
             }
             catch (Exception ex)
             {

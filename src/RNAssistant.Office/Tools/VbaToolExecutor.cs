@@ -9,6 +9,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Vba;
+using RNAssistant.Office.Domains.Vba;
 
 namespace RNAssistant.Office.Tools
 {
@@ -19,23 +20,26 @@ namespace RNAssistant.Office.Tools
         private readonly VbaReader _reader;
         private readonly VbaMutationService _mutationService;
         private readonly VbaPackageService _packageService;
+        private readonly IVbaHostBackend _backend;
 
         public VbaToolExecutor(IOfficeApplicationAdapter adapter, VbaJournalStore vbaJournalStore)
         {
             _adapter = adapter;
             _vbaJournalStore = vbaJournalStore;
-            _reader = new VbaReader(adapter, BackendToolId);
+            _backend = VbaBackendProvider.Resolve(adapter);
+            if (_backend == null) return;
+            _reader = new VbaReader(_backend);
             _mutationService = new VbaMutationService(
-                new VbaMutationDocumentContextAdapter(adapter),
+                new VbaMutationHostDocumentContext(_backend),
                 new VbaMutationJournalStoreAdapter(vbaJournalStore),
-                new VbaMutationReaderAdapter(_reader),
-                new VbaMutationBackendAdapter(adapter, BackendToolId),
+                new VbaMutationHostReader(_reader),
+                new VbaMutationHostBackend(_backend),
                 new VbaRenameJournalStoreAdapter(vbaJournalStore));
             _packageService = new VbaPackageService(
-                new VbaMutationDocumentContextAdapter(adapter),
+                new VbaMutationHostDocumentContext(_backend),
                 new VbaPackageJournalStoreAdapter(vbaJournalStore),
-                new VbaMutationReaderAdapter(_reader),
-                new VbaPackageBackendAdapter(adapter, BackendToolId));
+                new VbaMutationHostReader(_reader),
+                new VbaPackageHostBackend(_backend));
         }
 
         internal VbaReader Reader { get { return _reader; } }
@@ -57,18 +61,6 @@ namespace RNAssistant.Office.Tools
         public string ToolId(string suffix)
         {
             return "common." + suffix;
-        }
-
-        public string BackendToolId(string suffix)
-        {
-            return HostToolPrefix() + "." + suffix;
-        }
-
-        internal bool IsInternalToolId(string id)
-        {
-            return !string.IsNullOrWhiteSpace(id) &&
-                (id.StartsWith(BackendToolId("vba_"), StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(id, BackendToolId("run_macro"), StringComparison.OrdinalIgnoreCase));
         }
 
         public ToolResult ExecuteControllerTool(ToolCommand command, bool dryRun, ChatSession session, CancellationToken cancellationToken)
@@ -97,7 +89,7 @@ namespace RNAssistant.Office.Tools
                         Correlation = MutationCorrelation(command, session)
                     },
                     cancellationToken);
-                return VbaMutationToolResultMapper.ToToolResult(outcome);
+                return VbaLegacyResultProjection.ToToolResult(outcome);
             }
 
             if (string.Equals(command.ToolId, ToolId("vba_apply_patch"), StringComparison.OrdinalIgnoreCase))
@@ -117,7 +109,7 @@ namespace RNAssistant.Office.Tools
                         Correlation = MutationCorrelation(command, session)
                     },
                     cancellationToken);
-                return VbaMutationToolResultMapper.ToToolResult(outcome);
+                return VbaLegacyResultProjection.ToToolResult(outcome);
             }
 
             if (string.Equals(command.ToolId, ToolId("vba_write_module"), StringComparison.OrdinalIgnoreCase))
@@ -141,7 +133,7 @@ namespace RNAssistant.Office.Tools
                             Correlation = MutationCorrelation(command, session)
                         },
                         cancellationToken);
-                    return VbaMutationToolResultMapper.ToToolResult(renameOutcome);
+                    return VbaLegacyResultProjection.ToToolResult(renameOutcome);
                 }
                 var outcome = _mutationService.WriteWholeModule(
                     new VbaWholeModuleWriteRequest
@@ -161,12 +153,12 @@ namespace RNAssistant.Office.Tools
                         Correlation = MutationCorrelation(command, session)
                     },
                     cancellationToken);
-                return VbaMutationToolResultMapper.ToToolResult(outcome);
+                return VbaLegacyResultProjection.ToToolResult(outcome);
             }
             if (string.Equals(command.ToolId, ToolId("vba_delete_module"), StringComparison.OrdinalIgnoreCase))
             {
                 var outcome = _mutationService.DeleteModule(
-                    new VbaDeleteModuleRequest
+                    new RNAssistant.Office.Vba.VbaDeleteModuleRequest
                     {
                         ModuleName = ToolArgumentReader.String(
                             command.Arguments,
@@ -177,7 +169,7 @@ namespace RNAssistant.Office.Tools
                         Correlation = MutationCorrelation(command, session)
                     },
                     cancellationToken);
-                return VbaMutationToolResultMapper.ToToolResult(outcome);
+                return VbaLegacyResultProjection.ToToolResult(outcome);
             }
             if (string.Equals(command.ToolId, ToolId("office_run_macro"), StringComparison.OrdinalIgnoreCase)) return RunMacro(command, dryRun);
 
@@ -198,7 +190,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!preparation.Success)
                 {
-                    return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
+                    return VbaLegacyResultProjection.ToToolResult(preparation.Error);
                 }
                 command.Arguments["moduleName"] = preparation.ResolvedModuleName;
                 command.RuntimeGuardJson = JsonConvert.SerializeObject(preparation.Guard);
@@ -214,7 +206,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!preparation.Success)
                 {
-                    return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
+                    return VbaLegacyResultProjection.ToToolResult(preparation.Error);
                 }
                 command.Arguments["moduleName"] = preparation.ResolvedModuleName;
                 command.RuntimeGuardJson = JsonConvert.SerializeObject(preparation.Guard);
@@ -236,7 +228,7 @@ namespace RNAssistant.Office.Tools
                         });
                     if (!renamePreparation.Success)
                     {
-                        return VbaMutationToolResultMapper.ToToolResult(renamePreparation.Error);
+                        return VbaLegacyResultProjection.ToToolResult(renamePreparation.Error);
                     }
                     command.Arguments["moduleName"] = renamePreparation.ResolvedModuleName;
                     command.Arguments["newModuleName"] = renamePreparation.ResolvedTargetModuleName;
@@ -251,7 +243,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!preparation.Success)
                 {
-                    return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
+                    return VbaLegacyResultProjection.ToToolResult(preparation.Error);
                 }
                 command.Arguments["moduleName"] = preparation.ResolvedModuleName;
                 command.RuntimeGuardJson = JsonConvert.SerializeObject(preparation.Guard);
@@ -271,7 +263,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!preparation.Success)
                 {
-                    return VbaMutationToolResultMapper.ToToolResult(preparation.Error);
+                    return VbaLegacyResultProjection.ToToolResult(preparation.Error);
                 }
                 command.Arguments["backupId"] = preparation.BackupId;
                 command.Arguments["moduleName"] = preparation.ModuleName;
@@ -339,11 +331,12 @@ namespace RNAssistant.Office.Tools
                 }));
             }
 
-            var backend = new ToolCommand { ToolId = BackendToolId("run_macro") };
-            backend.Arguments["macroName"] = macroName;
-            backend.Arguments["argumentsJson"] = arguments.ToString(Formatting.None);
-            return _adapter.ExecuteTool(backend) ??
-                ToolResult.Fail("VBA macro returned no result.", null, "vba_macro_missing_result", true);
+            return VbaLegacyResultProjection.ToToolResult(
+                _backend.RunMacro(new VbaRunMacroRequest
+                {
+                    MacroName = macroName,
+                    Arguments = VbaPackageHostBackend.ToArguments(arguments)
+                }));
         }
 
         ToolResult IVbaResourceSource.ListResourceModules()
@@ -434,16 +427,12 @@ namespace RNAssistant.Office.Tools
             return session == null ? string.Empty : session.Id ?? string.Empty;
         }
 
-        private string HostToolPrefix()
-        {
-            return (_adapter.HostName ?? string.Empty).ToLowerInvariant();
-        }
-
         private bool HostSupportsVba()
         {
-            return string.Equals(_adapter.HostName, "Excel", StringComparison.OrdinalIgnoreCase) ||
+            return _backend != null &&
+                (string.Equals(_adapter.HostName, "Excel", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(_adapter.HostName, "Word", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase);
+                string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase));
         }
 
 

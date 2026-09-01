@@ -459,6 +459,74 @@ namespace RNAssistant.Harness
                     "internal Excel compatibility command must be physically removed: " + removedId);
             }
 
+            var vbaBackendPath = Path.Combine(
+                hostsRoot, "Vba", "VbaInteropBackend.cs");
+            var vbaContractsPath = Path.Combine(
+                officeRoot, "Domains", "Vba", "VbaHostContracts.cs");
+            var vbaReaderPath = Path.Combine(
+                officeRoot, "Vba", "VbaReader.cs");
+            AssertTrue(
+                File.Exists(vbaBackendPath) && File.Exists(vbaContractsPath),
+                "VBA requires one direct typed backend contract and host implementation");
+            AssertTrue(!File.Exists(Path.Combine(
+                officeRoot, "Tools", "VbaMutationToolAdapter.cs")),
+                "replaced VBA legacy command adapter must be physically removed");
+            var vbaBackendSource = File.ReadAllText(vbaBackendPath);
+            var vbaReaderSource = File.ReadAllText(vbaReaderPath);
+            var vbaSupportSources = SourceFiles(Path.Combine(hostsRoot, "Vba"))
+                .Select(File.ReadAllText)
+                .ToArray();
+            AssertTrue(
+                vbaBackendSource.IndexOf("BoundDocumentObject", StringComparison.Ordinal) >= 0 &&
+                vbaBackendSource.IndexOf("ToolCommand", StringComparison.Ordinal) < 0 &&
+                vbaBackendSource.IndexOf("ToolResult", StringComparison.Ordinal) < 0 &&
+                vbaBackendSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0 &&
+                vbaReaderSource.IndexOf("ExecuteTool(", StringComparison.Ordinal) < 0 &&
+                !vbaSupportSources.Any(source =>
+                    source.IndexOf("ToolResult", StringComparison.Ordinal) >= 0),
+                "VBA read/mutation/package host path must be bound and typed end to end");
+            var productionHostAdapterSources = new[]
+            {
+                excelAdapterSource,
+                File.ReadAllText(Path.Combine(hostsRoot, "WordAdapter.cs")),
+                File.ReadAllText(Path.Combine(hostsRoot, "PowerPointAdapter.cs"))
+            };
+            foreach (var retiredId in new[]
+            {
+                "vba_list_project_components_internal",
+                "vba_read_module",
+                "vba_replace_module",
+                "vba_create_module_internal",
+                "vba_rename_module_internal",
+                "vba_delete_module_internal",
+                "vba_install_package_internal",
+                "vba_remove_package_internal",
+                ".run_macro"
+            })
+            {
+                AssertTrue(!productionHostAdapterSources.Any(source =>
+                    source.IndexOf(retiredId, StringComparison.Ordinal) >= 0),
+                    "retired VBA host command must be physically removed: " +
+                    retiredId);
+            }
+            var officeProductionSources = SourceFiles(officeRoot)
+                .Select(File.ReadAllText)
+                .ToArray();
+            foreach (var removedAdapter in new[]
+            {
+                "VbaMutationDocumentContextAdapter",
+                "VbaMutationReaderAdapter",
+                "VbaMutationBackendAdapter",
+                "VbaPackageBackendAdapter",
+                "VbaMutationToolResultMapper"
+            })
+            {
+                AssertTrue(!officeProductionSources.Any(source =>
+                    source.IndexOf(removedAdapter, StringComparison.Ordinal) >= 0),
+                    "replaced VBA compatibility adapter must be removed: " +
+                    removedAdapter);
+            }
+
             AssertNoForbiddenDependencies(root,
                 SourceFiles(officeRoot),
                 new[] { "VbaProjectSupport.", "DocumentIdentity." },

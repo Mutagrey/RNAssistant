@@ -4,10 +4,9 @@ using System.Reflection;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Domains.Vba;
 
 namespace RNAssistant.OfficeHosts.Vba
 {
@@ -35,26 +34,33 @@ namespace RNAssistant.OfficeHosts.Vba
             }
         }
 
-        public static ToolResult ListProjectComponents(object documentObject, string title)
+        public static VbaProjectSnapshot ListProjectComponents(
+            object documentObject, string title)
         {
             dynamic vbProject = GetVbaProject(documentObject);
-            var modules = new List<object>();
+            var modules = new List<VbaProjectComponentSnapshot>();
             foreach (dynamic component in vbProject.VBComponents)
             {
                 var type = (int)component.Type;
                 dynamic codeModule = component.CodeModule;
                 var lineCount = (int)codeModule.CountOfLines;
-                modules.Add(new
+                modules.Add(new VbaProjectComponentSnapshot
                 {
-                    name = (string)component.Name,
-                    type = ComponentTypeName(type),
-                    lineCount = lineCount,
-                    codeOnlyUserForm = type == MsFormType ? (bool?)IsCodeOnlyUserForm(component) : null,
-                    hasToolManifest = type == StdModuleType && ContainsText(codeModule, "<RNAssistantTool>", lineCount)
+                    Name = (string)component.Name,
+                    ComponentType = ComponentTypeName(type),
+                    LineCount = lineCount,
+                    CodeOnlyUserForm = type == MsFormType
+                        ? (bool?)IsCodeOnlyUserForm(component) : null,
+                    HasToolManifest = type == StdModuleType &&
+                        ContainsText(codeModule, "<RNAssistantTool>", lineCount)
                 });
             }
 
-            return ToolResult.Ok("VBA components listed.", JsonConvert.SerializeObject(new { title = title, modules = modules }));
+            return new VbaProjectSnapshot
+            {
+                Title = title ?? string.Empty,
+                Modules = modules
+            };
         }
 
         private static bool ContainsText(dynamic codeModule, string text, int lineCount)
@@ -83,85 +89,35 @@ namespace RNAssistant.OfficeHosts.Vba
             }
         }
 
-        public static ToolResult ReadModule(object documentObject, string moduleName, int maxChars)
+        public static VbaModuleSnapshot ReadModule(
+            object documentObject, string moduleName, int maxChars)
         {
             dynamic component = FindComponent(GetVbaProject(documentObject), moduleName);
             if (component == null)
             {
-                return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
+                throw new VbaBackendException(
+                    "VBA module not found: " + moduleName,
+                    "vba_module_not_found",
+                    true);
             }
 
             var componentType = (int)component.Type;
             var fullCode = ReadComponentCode(component);
             var code = Trim(fullCode, Math.Max(1, Math.Min(1000000, maxChars)));
-            return ToolResult.Ok("VBA module read: " + component.Name, JsonConvert.SerializeObject(new
+            return new VbaModuleSnapshot
             {
-                name = (string)component.Name,
-                type = ComponentTypeName(componentType),
-                codeOnlyUserForm = componentType == MsFormType ? (bool?)IsCodeOnlyUserForm(component) : null,
-                lineCount = (int)component.CodeModule.CountOfLines,
-                code = code,
-                codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(fullCode),
-                truncated = !string.Equals(code, fullCode, StringComparison.Ordinal)
-            }));
+                Name = (string)component.Name,
+                ComponentType = ComponentTypeName(componentType),
+                CodeOnlyUserForm = componentType == MsFormType
+                    ? (bool?)IsCodeOnlyUserForm(component) : null,
+                LineCount = (int)component.CodeModule.CountOfLines,
+                Code = code,
+                CodeSha256 = VbaTextCanonicalizer.LiveCodeSha256(fullCode),
+                Truncated = !string.Equals(code, fullCode, StringComparison.Ordinal)
+            };
         }
 
-        public static ToolResult ReadModuleLines(object documentObject, string moduleName, int startLine, int lineCount)
-        {
-            dynamic component = FindComponent(GetVbaProject(documentObject), moduleName);
-            if (component == null)
-            {
-                return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
-            }
-
-            dynamic module = component.CodeModule;
-            var totalLineCount = (int)module.CountOfLines;
-            startLine = Math.Max(1, startLine);
-            lineCount = Math.Max(1, Math.Min(500, lineCount));
-            if (totalLineCount > 0 && startLine > totalLineCount)
-            {
-                return ToolResult.Fail(
-                    "VBA startLine is outside the module.",
-                    JsonConvert.SerializeObject(new { moduleName = moduleName, startLine = startLine, totalLineCount = totalLineCount }),
-                    "vba_line_range_invalid",
-                    true);
-            }
-
-            var returnedLineCount = totalLineCount == 0 ? 0 : Math.Min(lineCount, totalLineCount - startLine + 1);
-            var code = returnedLineCount == 0 ? string.Empty : (string)module.Lines[startLine, returnedLineCount];
-            var rangeLimitedByChars = false;
-            while (code.Length > 30000 && returnedLineCount > 1)
-            {
-                returnedLineCount = Math.Max(1, returnedLineCount / 2);
-                code = (string)module.Lines[startLine, returnedLineCount];
-                rangeLimitedByChars = true;
-            }
-            if (code.Length > 30000)
-            {
-                return ToolResult.Fail(
-                    "One VBA source line exceeds the safe read limit.",
-                    JsonConvert.SerializeObject(new { moduleName = moduleName, startLine = startLine, lineChars = code.Length }),
-                    "vba_line_too_large",
-                    false);
-            }
-            var fullCode = ReadComponentCode(component);
-            return ToolResult.Ok("VBA module lines read: " + component.Name, JsonConvert.SerializeObject(new
-            {
-                name = (string)component.Name,
-                type = ComponentTypeName((int)component.Type),
-                startLine = totalLineCount == 0 ? 1 : startLine,
-                endLine = returnedLineCount == 0 ? 0 : startLine + returnedLineCount - 1,
-                returnedLineCount = returnedLineCount,
-                totalLineCount = totalLineCount,
-                code = code,
-                codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(fullCode),
-                rangeLimitedByChars = rangeLimitedByChars,
-                hasMoreBefore = totalLineCount > 0 && startLine > 1,
-                hasMoreAfter = totalLineCount > 0 && startLine + returnedLineCount - 1 < totalLineCount
-            }));
-        }
-
-        public static ToolResult ReplaceModule(
+        public static VbaBackendActionResult ReplaceModule(
             object documentObject,
             string moduleName,
             string code,
@@ -170,11 +126,13 @@ namespace RNAssistant.OfficeHosts.Vba
         {
             if (string.IsNullOrWhiteSpace(moduleName))
             {
-                return ToolResult.Fail("No moduleName provided.");
+                return VbaBackendActionResult.Error("No moduleName provided.");
             }
             code = code ?? string.Empty;
             string validationError;
-            if (!TryValidateLiveCode(code, out validationError)) return ToolResult.Fail(validationError, null, "vba_code_invalid", true);
+            if (!TryValidateLiveCode(code, out validationError))
+                return VbaBackendActionResult.Error(
+                    validationError, null, "vba_code_invalid", true);
 
             dynamic vbProject = GetVbaProject(documentObject);
             dynamic component = FindComponent(vbProject, moduleName);
@@ -192,7 +150,11 @@ namespace RNAssistant.OfficeHosts.Vba
                 {
                     if (!createIfMissing)
                     {
-                        return ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true);
+                        return VbaBackendActionResult.Error(
+                            "VBA module not found: " + moduleName,
+                            null,
+                            "vba_module_not_found",
+                            true);
                     }
 
                     component = vbProject.VBComponents.Add(StdModuleType);
@@ -253,28 +215,51 @@ namespace RNAssistant.OfficeHosts.Vba
                             : "VBA module replacement failed before source mutation.",
                     ex);
             }
-            return ToolResult.Ok("VBA module replaced: " + component.Name, JsonConvert.SerializeObject(new
+            return VbaBackendActionResult.Ok(
+                "VBA module replaced: " + component.Name,
+                new
             {
                 moduleName = (string)component.Name,
                 lineCount = (int)component.CodeModule.CountOfLines,
                 codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(component))
-            }));
+            });
         }
 
-        public static ToolResult CreateModule(object documentObject, string moduleName, string componentType, string code)
+        public static VbaBackendActionResult CreateModule(
+            object documentObject,
+            string moduleName,
+            string componentType,
+            string code)
         {
-            if (!VbaToolManifestParser.ValidComponentName(moduleName)) return ToolResult.Fail("Invalid VBA module name; use 1-31 ASCII letters, numbers, or underscore and start with a letter.", null, "vba_module_name_invalid", false);
+            if (!VbaToolManifestParser.ValidComponentName(moduleName))
+                return VbaBackendActionResult.Error(
+                    "Invalid VBA module name; use 1-31 ASCII letters, numbers, or underscore and start with a letter.",
+                    null,
+                    "vba_module_name_invalid",
+                    false);
             code = code ?? string.Empty;
             string validationError;
-            if (!TryValidateLiveCode(code, out validationError)) return ToolResult.Fail(validationError, null, "vba_code_invalid", true);
+            if (!TryValidateLiveCode(code, out validationError))
+                return VbaBackendActionResult.Error(
+                    validationError, null, "vba_code_invalid", true);
 
             var type = string.Equals(componentType, "ClassModule", StringComparison.OrdinalIgnoreCase) ? ClassModuleType :
                 string.Equals(componentType, "StdModule", StringComparison.OrdinalIgnoreCase) ? StdModuleType :
                 string.Equals(componentType, "MSForm", StringComparison.OrdinalIgnoreCase) || string.Equals(componentType, "UserForm", StringComparison.OrdinalIgnoreCase) ? MsFormType : 0;
-            if (type == 0) return ToolResult.Fail("Only StdModule, ClassModule, and MSForm can be created.", null, "vba_component_type_read_only", false);
+            if (type == 0)
+                return VbaBackendActionResult.Error(
+                    "Only StdModule, ClassModule, and MSForm can be created.",
+                    null,
+                    "vba_component_type_read_only",
+                    false);
 
             dynamic vbProject = GetVbaProject(documentObject);
-            if (FindComponent(vbProject, moduleName) != null) return ToolResult.Fail("VBA module already exists: " + moduleName, null, "vba_module_exists", false);
+            if (FindComponent(vbProject, moduleName) != null)
+                return VbaBackendActionResult.Error(
+                    "VBA module already exists: " + moduleName,
+                    null,
+                    "vba_module_exists",
+                    false);
             dynamic component = null;
             try
             {
@@ -282,13 +267,15 @@ namespace RNAssistant.OfficeHosts.Vba
                 component.Name = moduleName;
                 ReplaceCode(component.CodeModule, code);
                 VerifyComponentLiveCode(component, code, "VBA module creation");
-                return ToolResult.Ok("Inserted VBA module: " + moduleName, JsonConvert.SerializeObject(new
+                return VbaBackendActionResult.Ok(
+                    "Inserted VBA module: " + moduleName,
+                    new
                 {
                     moduleName = (string)component.Name,
                     componentType = ComponentTypeName((int)component.Type),
                     lineCount = (int)component.CodeModule.CountOfLines,
                     codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(component))
-                }));
+                });
             }
             catch (Exception ex)
             {
@@ -318,7 +305,7 @@ namespace RNAssistant.OfficeHosts.Vba
             }
         }
 
-        public static ToolResult RenameModule(
+        public static VbaBackendActionResult RenameModule(
             object documentObject,
             string moduleName,
             string newModuleName,
@@ -328,7 +315,7 @@ namespace RNAssistant.OfficeHosts.Vba
             if (!VbaToolManifestParser.ValidComponentName(moduleName) ||
                 !VbaToolManifestParser.ValidComponentName(newModuleName))
             {
-                return ToolResult.Fail(
+                return VbaBackendActionResult.Error(
                     "Invalid VBA module name; use 1-31 ASCII letters, numbers, or underscore and start with a letter.",
                     null,
                     "vba_module_name_invalid",
@@ -336,7 +323,7 @@ namespace RNAssistant.OfficeHosts.Vba
             }
             if (string.Equals(moduleName, newModuleName, StringComparison.OrdinalIgnoreCase))
             {
-                return ToolResult.Fail(
+                return VbaBackendActionResult.Error(
                     "The VBA rename destination is the current component name.",
                     null,
                     "vba_rename_noop",
@@ -348,12 +335,16 @@ namespace RNAssistant.OfficeHosts.Vba
             if (component == null)
             {
                 return string.IsNullOrWhiteSpace(expectedCodeSha256)
-                    ? ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true)
+                    ? VbaBackendActionResult.Error(
+                        "VBA module not found: " + moduleName,
+                        null,
+                        "vba_module_not_found",
+                        true)
                     : StaleLiveModule(moduleName, expectedCodeSha256, false, null, "rename");
             }
             if (FindComponent(vbProject, newModuleName) != null)
             {
-                return ToolResult.Fail(
+                return VbaBackendActionResult.Error(
                     "VBA rename destination already exists: " + newModuleName,
                     null,
                     "vba_module_exists",
@@ -368,21 +359,21 @@ namespace RNAssistant.OfficeHosts.Vba
                     actualComponentType,
                     StringComparison.OrdinalIgnoreCase))
             {
-                return ToolResult.Fail(
+                return VbaBackendActionResult.Error(
                     "The VBA component type changed before rename dispatch.",
-                    JsonConvert.SerializeObject(new
+                    new
                     {
                         moduleName = moduleName,
                         expectedComponentType = expectedComponentType,
                         actualComponentType = actualComponentType
-                    }),
+                    },
                     "stale_vba_module",
                     true);
             }
             if (type != StdModuleType && type != ClassModuleType &&
                 (type != MsFormType || !IsCodeOnlyUserForm(component)))
             {
-                return ToolResult.Fail(
+                return VbaBackendActionResult.Error(
                     "Only StdModule, ClassModule, and blank code-only MSForm components can be renamed through RNAssistant.",
                     null,
                     "vba_component_type_read_only",
@@ -414,16 +405,16 @@ namespace RNAssistant.OfficeHosts.Vba
                     throw new InvalidOperationException("VBA rename read-back did not preserve the component identity, type, and source.");
                 }
 
-                return ToolResult.Ok(
+                return VbaBackendActionResult.Ok(
                     "VBA module renamed: " + originalName + " -> " + (string)renamed.Name,
-                    JsonConvert.SerializeObject(new
+                    new
                     {
                         previousModuleName = originalName,
                         moduleName = (string)renamed.Name,
                         componentType = actualComponentType,
                         lineCount = (int)renamed.CodeModule.CountOfLines,
                         codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(renamed))
-                    }));
+                    });
             }
             catch (Exception ex)
             {
@@ -462,19 +453,30 @@ namespace RNAssistant.OfficeHosts.Vba
             }
         }
 
-        public static ToolResult DeleteModule(object documentObject, string moduleName, string expectedCodeSha256 = null)
+        public static VbaBackendActionResult DeleteModule(
+            object documentObject,
+            string moduleName,
+            string expectedCodeSha256 = null)
         {
             dynamic vbProject = GetVbaProject(documentObject);
             dynamic component = FindComponent(vbProject, moduleName);
             if (component == null)
             {
                 return string.IsNullOrWhiteSpace(expectedCodeSha256)
-                    ? ToolResult.Fail("VBA module not found: " + moduleName, null, "vba_module_not_found", true)
+                    ? VbaBackendActionResult.Error(
+                        "VBA module not found: " + moduleName,
+                        null,
+                        "vba_module_not_found",
+                        true)
                     : StaleLiveModule(moduleName, expectedCodeSha256, false, null, "delete");
             }
             var type = (int)component.Type;
             if (type != StdModuleType && type != ClassModuleType)
-                return ToolResult.Fail("Document modules and UserForms cannot be deleted through RNAssistant.", null, "vba_component_type_read_only", false);
+                return VbaBackendActionResult.Error(
+                    "Document modules and UserForms cannot be deleted through RNAssistant.",
+                    null,
+                    "vba_component_type_read_only",
+                    false);
             if (!string.IsNullOrWhiteSpace(expectedCodeSha256))
             {
                 var actualHash = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(component));
@@ -486,24 +488,26 @@ namespace RNAssistant.OfficeHosts.Vba
             vbProject.VBComponents.Remove(component);
             if (FindComponent(vbProject, moduleName) != null)
             {
-                return ToolResult.PartialFailure(
+                return VbaBackendActionResult.Unknown(
                     "VBA module deletion returned success but the module is still present: " + moduleName,
-                    JsonConvert.SerializeObject(new { moduleName = moduleName, type = ComponentTypeName(type) }),
+                    new { moduleName = moduleName, type = ComponentTypeName(type) },
                     "vba_delete_verify_failed");
             }
-            return ToolResult.Ok("VBA module deleted: " + moduleName, JsonConvert.SerializeObject(new { moduleName = moduleName, type = ComponentTypeName(type) }));
+            return VbaBackendActionResult.Ok(
+                "VBA module deleted: " + moduleName,
+                new { moduleName = moduleName, type = ComponentTypeName(type) });
         }
 
-        private static ToolResult StaleLiveModule(
+        private static VbaBackendActionResult StaleLiveModule(
             string moduleName,
             string expectedCodeSha256,
             bool actualExists,
             string actualCodeSha256,
             string operation)
         {
-            return ToolResult.Fail(
+            return VbaBackendActionResult.Error(
                 "VBA module changed immediately before the backend " + operation + ". The operation was not applied; re-read current code and rebuild the action.",
-                JsonConvert.SerializeObject(new
+                new
                 {
                     moduleName = moduleName ?? string.Empty,
                     expectedCodeSha256 = expectedCodeSha256,
@@ -512,28 +516,27 @@ namespace RNAssistant.OfficeHosts.Vba
                     inspectTool = "common.resources_read",
                     resourceProvider = "vba",
                     resourceKind = "vba-component"
-                }),
+                },
                 "stale_vba_module",
                 true);
         }
 
-        public static string RunStringFunction(object applicationObject, string macroName, string argumentsJson)
+        public static string RunStringFunction(
+            object applicationObject,
+            string macroName,
+            IReadOnlyList<object> arguments)
         {
             if (applicationObject == null) throw new InvalidOperationException("Office application is not available.");
-            var array = JArray.Parse(string.IsNullOrWhiteSpace(argumentsJson) ? "[]" : argumentsJson);
-            if (array.Count > 30) throw new InvalidOperationException("VBA macro execution supports at most 30 positional arguments.");
-            var invokeArguments = new object[array.Count + 1];
+            var source = arguments ?? new object[0];
+            if (source.Count > 30)
+                throw new InvalidOperationException(
+                    "VBA macro execution supports at most 30 positional arguments.");
+            var invokeArguments = new object[source.Count + 1];
             invokeArguments[0] = macroName;
-            for (var index = 0; index < array.Count; index++)
+            for (var index = 0; index < source.Count; index++)
             {
-                var item = array[index];
-                invokeArguments[index + 1] = item.Type == JTokenType.Integer
-                    ? (object)item.Value<int>()
-                    : item.Type == JTokenType.Float
-                        ? item.Value<double>()
-                        : item.Type == JTokenType.Boolean
-                            ? item.Value<bool>()
-                            : (object)((string)item ?? string.Empty);
+                var item = source[index];
+                invokeArguments[index + 1] = item ?? string.Empty;
             }
             var output = applicationObject.GetType().InvokeMember(
                 "Run",
@@ -544,41 +547,61 @@ namespace RNAssistant.OfficeHosts.Vba
             return Convert.ToString(output);
         }
 
-        public static ToolResult InstallPackage(object documentObject, string componentsJson, string marker)
+        public static VbaBackendActionResult InstallPackage(
+            object documentObject,
+            IReadOnlyList<VbaInstallPackageComponent> source,
+            string marker)
         {
-            JArray payload;
-            try { payload = JArray.Parse(string.IsNullOrWhiteSpace(componentsJson) ? "[]" : componentsJson); }
-            catch (JsonException ex) { return ToolResult.Fail("Invalid VBA package components: " + ex.Message, null, "vba_package_invalid", false); }
-            var components = payload.OfType<JObject>().Select(item => new VbaToolComponent
+            var payload = (source ?? new VbaInstallPackageComponent[0])
+                .Where(item => item != null)
+                .ToList();
+            var components = payload.Select(item => new VbaToolComponent
             {
-                Name = (string)item["name"],
-                Type = (string)item["type"],
-                Code = (string)item["code"] ?? string.Empty
+                Name = item.Name,
+                Type = item.ComponentType,
+                Code = item.Code ?? string.Empty
             }).ToList();
-            if (components.Count == 0) return ToolResult.Fail("VBA package has no components.", null, "vba_package_empty", false);
+            if (components.Count == 0)
+                return VbaBackendActionResult.Error(
+                    "VBA package has no components.",
+                    null,
+                    "vba_package_empty",
+                    false);
             if (components.Any(component => !VbaToolManifestParser.ValidComponentName(component.Name) ||
                 (!string.Equals(component.Type, "StdModule", StringComparison.OrdinalIgnoreCase) &&
                  !string.Equals(component.Type, "ClassModule", StringComparison.OrdinalIgnoreCase) &&
                  !string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase))))
             {
-                return ToolResult.Fail("VBA package supports only valid StdModule, ClassModule, and code-only MSForm components.", null, "vba_component_invalid", false);
+                return VbaBackendActionResult.Error(
+                    "VBA package supports only valid StdModule, ClassModule, and code-only MSForm components.",
+                    null,
+                    "vba_component_invalid",
+                    false);
             }
             var duplicate = components.GroupBy(component => component.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1);
             if (duplicate != null)
             {
-                return ToolResult.Fail("VBA package contains a duplicate component: " + duplicate.Key, null, "vba_component_duplicate", false);
+                return VbaBackendActionResult.Error(
+                    "VBA package contains a duplicate component: " + duplicate.Key,
+                    null,
+                    "vba_component_duplicate",
+                    false);
             }
             foreach (var component in components)
             {
                 string validationError;
                 if (!TryValidateLiveCode(component.Code, out validationError))
                 {
-                    return ToolResult.Fail(component.Name + ": " + validationError, null, "vba_code_invalid", true);
+                    return VbaBackendActionResult.Error(
+                        component.Name + ": " + validationError,
+                        null,
+                        "vba_code_invalid",
+                        true);
                 }
                 if (string.Equals(component.Type, "MSForm", StringComparison.OrdinalIgnoreCase) &&
                     VbaToolManifestParser.ContainsUserFormDesignerExport(component.Code))
                 {
-                    return ToolResult.Fail(
+                    return VbaBackendActionResult.Error(
                         "VBA package MSForm must contain code-behind only, not exported Designer/FRX metadata: " + component.Name,
                         null,
                         "vba_userform_designer_unsupported",
@@ -600,7 +623,7 @@ namespace RNAssistant.OfficeHosts.Vba
                     (!IsCodeOnlyUserForm(existing) || string.IsNullOrWhiteSpace(ownerMarker) ||
                      ReadComponentCode(existing).IndexOf(ownerMarker, StringComparison.OrdinalIgnoreCase) < 0))
                 {
-                    return ToolResult.Fail(
+                    return VbaBackendActionResult.Error(
                         "VBA package cannot replace UserForm state unless the existing component is an owned blank code-only MSForm: " + component.Name,
                         null,
                         "vba_userform_designer_unsupported",
@@ -668,7 +691,9 @@ namespace RNAssistant.OfficeHosts.Vba
                     }
                     VerifyComponentPackageCode(installed, component.Code, "VBA package installation");
                 }
-                return ToolResult.Ok("VBA package installed.", JsonConvert.SerializeObject(new
+                return VbaBackendActionResult.Ok(
+                    "VBA package installed.",
+                    new
                 {
                     components = components.Select(component => new
                     {
@@ -676,7 +701,7 @@ namespace RNAssistant.OfficeHosts.Vba
                         type = component.Type,
                         codeSha256 = VbaTextCanonicalizer.PackageCodeSha256(component.Code)
                     }).ToArray()
-                }));
+                });
             }
             catch (Exception ex)
             {
@@ -701,7 +726,7 @@ namespace RNAssistant.OfficeHosts.Vba
                     foreach (var backup in backups) vbProject.VBComponents.Import(backup);
                 }
                 catch (Exception rollback) { rollbackError = rollback; }
-                return ToolResult.Fail(
+                return VbaBackendActionResult.Error(
                     "VBA package installation failed" + (rollbackError == null ? ". " : " and rollback failed: " + rollbackError.Message + ". ") + ex.Message,
                     null,
                     rollbackError == null ? "vba_package_install_failed" : "vba_package_rollback_failed",
@@ -714,20 +739,22 @@ namespace RNAssistant.OfficeHosts.Vba
             }
         }
 
-        public static ToolResult RemovePackage(object documentObject, string expectedComponentsJson, string expectedMarker)
+        public static VbaBackendActionResult RemovePackage(
+            object documentObject,
+            IReadOnlyDictionary<string, string> expectedComponents,
+            string expectedMarker)
         {
-            JObject expected;
-            try { expected = JObject.Parse(string.IsNullOrWhiteSpace(expectedComponentsJson) ? "{}" : expectedComponentsJson); }
-            catch (JsonException ex) { return ToolResult.Fail("Invalid expected component hashes: " + ex.Message, null, "vba_package_invalid", false); }
+            var expected = expectedComponents ??
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             dynamic vbProject = GetVbaProject(documentObject);
-            foreach (var property in expected.Properties())
+            foreach (var property in expected)
             {
-                dynamic component = FindComponent(vbProject, property.Name);
+                dynamic component = FindComponent(vbProject, property.Key);
                 if (component == null) continue;
                 if ((int)component.Type == MsFormType && !IsCodeOnlyUserForm(component))
                 {
-                    return ToolResult.Fail(
-                        "VBA package cannot remove a UserForm with Designer controls or unverified Designer state: " + property.Name,
+                    return VbaBackendActionResult.Error(
+                        "VBA package cannot remove a UserForm with Designer controls or unverified Designer state: " + property.Key,
                         null,
                         "vba_userform_designer_unsupported",
                         false);
@@ -735,12 +762,20 @@ namespace RNAssistant.OfficeHosts.Vba
                 var code = ReadComponentCode(component);
                 if (string.IsNullOrWhiteSpace(expectedMarker) || code.IndexOf(expectedMarker, StringComparison.OrdinalIgnoreCase) < 0)
                 {
-                    return ToolResult.Fail("VBA component is not owned by this RNAssistant package and was not removed: " + property.Name, null, "vba_component_not_owned", false);
+                    return VbaBackendActionResult.Error(
+                        "VBA component is not owned by this RNAssistant package and was not removed: " + property.Key,
+                        null,
+                        "vba_component_not_owned",
+                        false);
                 }
                 var actual = VbaTextCanonicalizer.PackageComparableCodeSha256(code);
-                if (!string.Equals(actual, (string)property.Value, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(actual, property.Value, StringComparison.OrdinalIgnoreCase))
                 {
-                    return ToolResult.Fail("VBA component changed after installation and was not removed: " + property.Name, JsonConvert.SerializeObject(new { component = property.Name, expected = (string)property.Value, actual = actual }), "vba_component_modified", false);
+                    return VbaBackendActionResult.Error(
+                        "VBA component changed after installation and was not removed: " + property.Key,
+                        new { component = property.Key, expected = property.Value, actual = actual },
+                        "vba_component_modified",
+                        false);
                 }
             }
             var tempDirectory = Path.Combine(Path.GetTempPath(), "RNAssistant-Vba-Remove-" + Guid.NewGuid().ToString("N"));
@@ -750,34 +785,37 @@ namespace RNAssistant.OfficeHosts.Vba
             var removed = new List<string>();
             try
             {
-                foreach (var property in expected.Properties())
+                foreach (var property in expected)
                 {
-                    dynamic component = FindComponent(vbProject, property.Name);
+                    dynamic component = FindComponent(vbProject, property.Key);
                     if (component == null) continue;
                     if ((int)component.Type == MsFormType)
                     {
-                        formBackups[property.Name] = ReadComponentCode(component);
+                        formBackups[property.Key] = ReadComponentCode(component);
                         continue;
                     }
-                    var backupPath = Path.Combine(tempDirectory, "backup_" + property.Name + ComponentExtension((int)component.Type));
+                    var backupPath = Path.Combine(tempDirectory, "backup_" + property.Key + ComponentExtension((int)component.Type));
                     component.Export(backupPath);
                     backups.Add(backupPath);
                 }
-                foreach (var property in expected.Properties())
+                foreach (var property in expected)
                 {
-                    dynamic component = FindComponent(vbProject, property.Name);
+                    dynamic component = FindComponent(vbProject, property.Key);
                     if (component == null) continue;
                     vbProject.VBComponents.Remove(component);
-                    removed.Add(property.Name);
+                    removed.Add(property.Key);
                 }
-                foreach (var property in expected.Properties())
+                foreach (var property in expected)
                 {
-                    if (FindComponent(vbProject, property.Name) != null)
+                    if (FindComponent(vbProject, property.Key) != null)
                     {
-                        throw new InvalidOperationException("VBA package removal verification found component: " + property.Name);
+                        throw new InvalidOperationException(
+                            "VBA package removal verification found component: " + property.Key);
                     }
                 }
-                return ToolResult.Ok("VBA package components removed.", JsonConvert.SerializeObject(new { components = removed }));
+                return VbaBackendActionResult.Ok(
+                    "VBA package components removed.",
+                    new { components = removed });
             }
             catch (Exception ex)
             {
@@ -798,7 +836,7 @@ namespace RNAssistant.OfficeHosts.Vba
                     }
                 }
                 catch (Exception rollback) { rollbackError = rollback; }
-                return ToolResult.Fail(
+                return VbaBackendActionResult.Error(
                     "VBA package removal failed" + (rollbackError == null ? ". " : " and rollback failed: " + rollbackError.Message + ". ") + ex.Message,
                     null,
                     rollbackError == null ? "vba_package_remove_failed" : "vba_package_rollback_failed",

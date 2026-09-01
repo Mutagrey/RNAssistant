@@ -7,11 +7,12 @@ using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Domains.Outlook;
+using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Qualification;
 
 namespace RNAssistant.Office
 {
-    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IOutlookBackendProvider, IQualificationHostPort
+    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IOutlookBackendProvider, IVbaHostBackendProvider, IQualificationHostPort
     {
         private readonly IOfficeApplicationAdapter _inner;
         private readonly OfficeUiDispatcher _dispatcher;
@@ -26,6 +27,7 @@ namespace RNAssistant.Office
         private readonly IWordBackend _wordBackend;
         private readonly IPowerPointBackend _powerPointBackend;
         private readonly IOutlookBackend _outlookBackend;
+        private readonly IVbaHostBackend _vbaHostBackend;
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
 
         public UiThreadOfficeApplicationAdapter(IOfficeApplicationAdapter inner, OfficeUiDispatcher dispatcher)
@@ -43,6 +45,7 @@ namespace RNAssistant.Office
             IWordBackend wordBackend = null;
             IPowerPointBackend powerPointBackend = null;
             IOutlookBackend outlookBackend = null;
+            IVbaHostBackend vbaHostBackend = null;
             _dispatcher.Invoke(delegate
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
@@ -64,6 +67,8 @@ namespace RNAssistant.Office
                 var outlook = _inner as IOutlookBackendProvider;
                 outlookBackend = outlook == null
                     ? null : outlook.OutlookBackend;
+                var vba = _inner as IVbaHostBackendProvider;
+                vbaHostBackend = vba == null ? null : vba.VbaHostBackend;
                 return true;
             });
             _documentSession = documentSession;
@@ -77,6 +82,7 @@ namespace RNAssistant.Office
             _wordBackend = wordBackend;
             _powerPointBackend = powerPointBackend;
             _outlookBackend = outlookBackend;
+            _vbaHostBackend = vbaHostBackend;
         }
 
         public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
@@ -115,6 +121,10 @@ namespace RNAssistant.Office
         public IOutlookBackend OutlookBackend
         {
             get { return _outlookBackend; }
+        }
+        public IVbaHostBackend VbaHostBackend
+        {
+            get { return _vbaHostBackend; }
         }
 
         public string GetDocumentSnapshot(int maxChars)

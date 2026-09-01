@@ -8,13 +8,13 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Tools;
 using RNAssistant.OfficeHosts.Identity;
-using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed partial class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IExcelBackendProvider
+    public sealed partial class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IExcelBackendProvider, IVbaHostBackendProvider
     {
         private const int MaxContextPreviewCells = 2000;
 
@@ -27,6 +27,7 @@ namespace RNAssistant.OfficeHosts
         private readonly ExcelRangeMutationInteropBackend _excelRangeMutationBackend;
         private readonly ExcelTableInteropBackend _excelTableBackend;
         private readonly ExcelChartInteropBackend _excelChartBackend;
+        private readonly VbaInteropBackend _vbaHostBackend;
         private readonly string _qualificationOwnerLabel;
 
         public ExcelAdapter(
@@ -51,6 +52,8 @@ namespace RNAssistant.OfficeHosts
                 new ExcelRangeMutationInteropBackend(_documentSession);
             _excelTableBackend = new ExcelTableInteropBackend(_documentSession);
             _excelChartBackend = new ExcelChartInteropBackend(_documentSession);
+            _vbaHostBackend = new VbaInteropBackend(
+                _documentSession, _application);
         }
 
         public string HostName { get { return "Excel"; } }
@@ -69,6 +72,7 @@ namespace RNAssistant.OfficeHosts
         }
         public IExcelTableBackend ExcelTableBackend { get { return _excelTableBackend; } }
         public IExcelChartBackend ExcelChartBackend { get { return _excelChartBackend; } }
+        public IVbaHostBackend VbaHostBackend { get { return _vbaHostBackend; } }
 
         public string DocumentKey { get { return _documentSession.StableDocumentId; } }
         public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
@@ -287,95 +291,11 @@ namespace RNAssistant.OfficeHosts
 
         public ToolResult ExecuteTool(ToolCommand command)
         {
-            try
-            {
-                switch (command.ToolId)
-                {
-                    case "excel.vba_list_project_components_internal":
-                        return ListVbaProjectComponents();
-                    case "excel.vba_read_module":
-                        return ReadVbaModule(command);
-                    case "excel.vba_replace_module":
-                        return ReplaceVbaModule(command);
-                    case "excel.run_macro":
-                        return RunMacro(command);
-                    case "excel.vba_install_package_internal":
-                        return VbaProjectSupport.InstallPackage(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "componentsJson", "[]"), ToolArgumentReader.String(command.Arguments, "marker", string.Empty));
-                    case "excel.vba_remove_package_internal":
-                        return VbaProjectSupport.RemovePackage(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "expectedComponentsJson", "{}"), ToolArgumentReader.String(command.Arguments, "expectedMarker", string.Empty));
-                    case "excel.vba_create_module_internal":
-                        return VbaProjectSupport.CreateModule(RequireWorkbook(), ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty), ToolArgumentReader.String(command.Arguments, "componentType", "StdModule"), ToolArgumentReader.String(command.Arguments, "code", string.Empty));
-                    case "excel.vba_rename_module_internal":
-                        return VbaProjectSupport.RenameModule(
-                            RequireWorkbook(),
-                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                            ToolArgumentReader.String(command.Arguments, "newModuleName", string.Empty),
-                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null),
-                            ToolArgumentReader.String(command.Arguments, "expectedComponentType", null));
-                    case "excel.vba_delete_module_internal":
-                        return VbaProjectSupport.DeleteModule(
-                            RequireWorkbook(),
-                            ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty),
-                            ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
-                    default:
-                        return ToolResult.Fail("Unsupported Excel tool: " + command.ToolId);
-                }
-            }
-            catch (Exception ex)
-            {
-                var isVba = (command == null ? string.Empty : command.ToolId ?? string.Empty)
-                    .IndexOf(".vba_", StringComparison.OrdinalIgnoreCase) >= 0;
-                return ToolResult.Fail(ex.Message, null, isVba ? "vba_access_error" : "office_tool_error", !isVba);
-            }
-        }
-
-        private ToolResult ListVbaProjectComponents()
-        {
-            var workbook = RequireWorkbook();
-            return VbaProjectSupport.ListProjectComponents(workbook, workbook.Name);
-        }
-
-        private ToolResult ReadVbaModule(ToolCommand command)
-        {
-            var workbook = RequireWorkbook();
-            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            if (command.Arguments.ContainsKey("startLine") || command.Arguments.ContainsKey("lineCount"))
-            {
-                return VbaProjectSupport.ReadModuleLines(
-                    workbook,
-                    moduleName,
-                    ToolArgumentReader.Int32(command.Arguments, "startLine", 1),
-                    ToolArgumentReader.Int32(command.Arguments, "lineCount", 200));
-            }
-            var maxChars = ToolArgumentReader.Int32(command.Arguments, "maxChars", 30000);
-            return VbaProjectSupport.ReadModule(workbook, moduleName, maxChars);
-        }
-
-        private ToolResult ReplaceVbaModule(ToolCommand command)
-        {
-            var workbook = RequireWorkbook();
-            var moduleName = ToolArgumentReader.String(command.Arguments, "moduleName", string.Empty);
-            var code = ToolArgumentReader.String(command.Arguments, "code", string.Empty);
-            var createIfMissing = ToolArgumentReader.Boolean(command.Arguments, "createIfMissing", true);
-            return VbaProjectSupport.ReplaceModule(
-                workbook,
-                moduleName,
-                code,
-                createIfMissing,
-                ToolArgumentReader.String(command.Arguments, "expectedCodeSha256", null));
-        }
-
-        private ToolResult RunMacro(ToolCommand command)
-        {
-            var macroName = ToolArgumentReader.String(command.Arguments, "macroName", string.Empty);
-            if (string.IsNullOrWhiteSpace(macroName))
-            {
-                return ToolResult.Fail("No macroName provided.");
-            }
-
-            var argumentsJson = ToolArgumentReader.String(command.Arguments, "argumentsJson", "[]");
-            var output = VbaProjectSupport.RunStringFunction(_application, macroName, argumentsJson);
-            return ToolResult.Ok("Macro ran: " + macroName, JsonConvert.SerializeObject(new { output = output }));
+            return ToolResult.Fail(
+                "Excel tools require direct typed backends.",
+                null,
+                "excel_legacy_dispatch_removed",
+                false);
         }
 
         private Excel.Workbook RequireWorkbook()

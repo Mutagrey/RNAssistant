@@ -547,7 +547,7 @@ namespace RNAssistant.Harness
                 Test("vba: journal uses history protection", VbaJournalUsesHistoryProtection),
                 Test("vba: manifest validates entry point", VbaToolManifestValidatesTypedEntryPoint),
                 Test("vba: package rejects duplicate sources", VbaToolPackageRejectsDuplicateSources),
-                Test("vba: internal ids are reserved", VbaToolPackageReservesInternalCommandIds),
+                Test("vba: retired internal ids have no runtime alias", VbaToolPackageDoesNotRetainInternalCommandAliases),
                 Test("vba: package sources roundtrip", VbaToolStoreRoundTripsPackageSources),
                 Test("vba: session execution cleans package", VbaToolSessionExecutionUsesTypedArgumentsAndCleansUp),
                 Test("vba: persistent install tracks ownership", VbaToolPersistentInstallRequiresMacroDocumentAndTracksOwnership),
