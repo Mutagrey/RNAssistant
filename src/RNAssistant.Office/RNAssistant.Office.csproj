@@ -201,6 +201,7 @@
     <Compile Include="Services\ArtifactLibraryProjectionService.cs" />
     <Compile Include="Services\ArtifactViewerService.cs" />
     <Compile Include="Services\PlanDocumentService.cs" />
+    <Compile Include="Services\TaskListService.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatResourceReferenceService.cs" />
     <Compile Include="Services\ChatResourcePromptIndex.cs" />
@@ -280,7 +281,8 @@
     <Compile Include="Tools\HtmlArtifactToolExecutor.DataBinding.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.Diagnostics.cs" />
     <Compile Include="Tools\HtmlArtifactToolExecutor.Source.cs" />
-    <Compile Include="Tools\TaskListToolExecutor.cs" />
+    <Compile Include="Tools\TaskListToolCatalog.cs" />
+    <Compile Include="Tools\TaskListToolHandler.cs" />
     <Compile Include="Tools\PlanDocumentToolCatalog.cs" />
     <Compile Include="Tools\PlanDocumentToolHandler.cs" />
     <Compile Include="Tools\UserQuestionToolCatalog.cs" />

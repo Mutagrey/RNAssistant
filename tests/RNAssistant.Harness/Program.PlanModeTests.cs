@@ -46,7 +46,7 @@ namespace RNAssistant.Harness
                     !planPolicy.RequiresConfirmation &&
                     planPolicy.AllowedModes.SequenceEqual(new[] { "plan" }),
                     "Plan document carries exact source-owned verified-write policy");
-                AssertTrue(selected.Any(item => item.Id == TaskListToolExecutor.CreateToolId), "task list available");
+                AssertTrue(selected.Any(item => item.Id == TaskListToolCatalog.CreateToolId), "task list available");
                 AssertTrue(selected.Any(item => item.Id == UserQuestionToolCatalog.AskToolId), "questions available");
                 AssertTrue(NativeToolRuntimeAdapter.Owns(
                     UserQuestionToolCatalog.AskToolId),

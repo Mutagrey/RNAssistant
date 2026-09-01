@@ -182,6 +182,12 @@ namespace RNAssistant.Office.Runtime
                     handler = new PlanDocumentToolHandler(
                         registration.Descriptor.Id, session);
                 }
+                else if (TaskListToolCatalog.Owns(
+                    registration.Descriptor.Id))
+                {
+                    handler = new TaskListToolHandler(
+                        registration.Descriptor.Id, session);
+                }
                 else
                 {
                     if (excelWrites == null || hostRuntime == null)
@@ -212,7 +218,8 @@ namespace RNAssistant.Office.Runtime
                 OutlookToolIds.Owns(toolId) || VbaToolCatalog.Owns(toolId) ||
                 string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
                     StringComparison.Ordinal) ||
-                PlanDocumentToolCatalog.Owns(toolId);
+                PlanDocumentToolCatalog.Owns(toolId) ||
+                TaskListToolCatalog.Owns(toolId);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -249,6 +256,8 @@ namespace RNAssistant.Office.Runtime
                 return UserQuestionToolHandler.Binding;
             if (PlanDocumentToolCatalog.Owns(toolId))
                 return PlanDocumentToolHandler.BindingFor(toolId);
+            if (TaskListToolCatalog.Owns(toolId))
+                return TaskListToolHandler.BindingFor(toolId);
             return null;
         }
 

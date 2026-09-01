@@ -482,6 +482,7 @@ namespace RNAssistant.Harness
                 Test("tools: validate payload without saving", ToolValidateChecksPayloadWithoutSaving),
                 Test("task lists: CRUD creates revisions and closes", TaskListCrudCreatesRevisionsAndClosesCleanly),
                 Test("task lists: duplicate step ids rejected", TaskListCrudRejectsAmbiguousSteps),
+                Test("task lists: verified native runtime", TaskListUsesVerifiedNativeRuntime),
                 Test("plan mode: filters mutations and keeps planning tools", PlanModeFiltersMutationsAndKeepsPlanningTools),
                 Test("plan mode: plan document revisions and questions", PlanModePersistsMarkdownAndAwaitsAnswers),
                 Test("plan mode: native question pauses kernel", PlanModeNativeQuestionPausesKernel),

@@ -39,7 +39,6 @@ namespace RNAssistant.Office.Tools
         private readonly PowerPointToolAdapter _powerPointAdapter;
         private readonly OutlookToolAdapter _outlookAdapter;
         private readonly HtmlArtifactToolExecutor _htmlArtifactExecutor;
-        private readonly TaskListToolExecutor _taskListToolExecutor;
         private readonly IReadOnlyList<ToolDefinition> _controllerTools;
         private readonly IDictionary<string, ControllerExecutorKind> _controllerExecutors;
         private readonly HostRuntime _hostRuntime;
@@ -106,7 +105,6 @@ namespace RNAssistant.Office.Tools
                 ? null : new OutlookToolAdapter(outlookBackend.OutlookBackend);
             _htmlArtifactExecutor = new HtmlArtifactToolExecutor(
                 _adapter, _adapterTools, BeginLiveOfficeRead, ExecuteOfficeDataSourceUnderCurrentAccess);
-            _taskListToolExecutor = new TaskListToolExecutor();
             var controllerTools = new List<ToolDefinition>();
             _controllerExecutors = new Dictionary<string, ControllerExecutorKind>(StringComparer.OrdinalIgnoreCase);
             if (_vbaExecutor.HostSupportsVba())
@@ -118,7 +116,8 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools, _promptToolExecutor.GetControllerTools(), ControllerExecutorKind.Prompt);
             RegisterControllerTools(controllerTools, ResourceToolCatalog.GetControllerTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools, _htmlArtifactExecutor.GetControllerTools(), ControllerExecutorKind.HtmlArtifact);
-            RegisterControllerTools(controllerTools, _taskListToolExecutor.GetControllerTools(), ControllerExecutorKind.TaskList);
+            RegisterControllerTools(controllerTools,
+                TaskListToolCatalog.GetTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools,
                 PlanDocumentToolCatalog.GetTools(), ControllerExecutorKind.Native);
             RegisterControllerTools(controllerTools,
@@ -482,7 +481,8 @@ namespace RNAssistant.Office.Tools
                     PowerPointToolIds.IsMutation(command.ToolId) ||
                     OutlookToolIds.IsMutation(command.ToolId) ||
                     VbaToolCatalog.Owns(command.ToolId) ||
-                    PlanDocumentToolCatalog.Owns(command.ToolId)))
+                    PlanDocumentToolCatalog.Owns(command.ToolId) ||
+                    TaskListToolCatalog.Owns(command.ToolId)))
                 {
                     var validation = ValidateCommandArguments(command, tool);
                     if (validation != null) return validation;
@@ -792,8 +792,6 @@ namespace RNAssistant.Office.Tools
                         "native_handler_unavailable", false);
                 case ControllerExecutorKind.HtmlArtifact:
                     return _htmlArtifactExecutor.ExecuteControllerTool(command, context.Session, dryRun, cancellationToken);
-                case ControllerExecutorKind.TaskList:
-                    return _taskListToolExecutor.ExecuteControllerTool(command, context.Session, dryRun);
                 default:
                     return ToolResult.Fail("Unknown controller executor for tool: " + command.ToolId);
             }
@@ -1020,7 +1018,6 @@ namespace RNAssistant.Office.Tools
             Prompt,
             Native,
             HtmlArtifact,
-            TaskList,
         }
     }
 }

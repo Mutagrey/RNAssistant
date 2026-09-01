@@ -534,6 +534,8 @@ namespace RNAssistant.Harness
                 officeToolExecutorSource.IndexOf(
                     "ControllerExecutorKind.PlanDocument", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
+                    "ControllerExecutorKind.TaskList", StringComparison.Ordinal) < 0 &&
+                officeToolExecutorSource.IndexOf(
                     "PrepareControllerTool", StringComparison.Ordinal) < 0 &&
                 officeToolExecutorSource.IndexOf(
                     "PreviewPreparedControllerTool", StringComparison.Ordinal) < 0 &&
@@ -558,6 +560,16 @@ namespace RNAssistant.Harness
                 !File.Exists(Path.Combine(officeRoot, "Tools",
                     "PlanDocumentToolExecutor.cs")),
                 "plan_doc tools must use exact native handlers without a controller executor");
+            AssertTrue(
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "TaskListToolCatalog.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools",
+                    "TaskListToolHandler.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Services",
+                    "TaskListService.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools",
+                    "TaskListToolExecutor.cs")),
+                "task-list tools must use their typed service and exact native handlers");
             foreach (var removedAdapter in new[]
             {
                 "VbaMutationDocumentContextAdapter",

@@ -19,9 +19,9 @@ namespace RNAssistant.Office.Services
             StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> PlanLocalToolIds = new HashSet<string>(new[]
         {
-            TaskListToolExecutor.CreateToolId,
-            TaskListToolExecutor.UpdateToolId,
-            TaskListToolExecutor.CloseToolId,
+            TaskListToolCatalog.CreateToolId,
+            TaskListToolCatalog.UpdateToolId,
+            TaskListToolCatalog.CloseToolId,
             PlanDocumentToolCatalog.CreateToolId,
             PlanDocumentToolCatalog.UpdateToolId,
             PlanDocumentToolCatalog.RestoreToolId,

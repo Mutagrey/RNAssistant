@@ -2451,7 +2451,11 @@ endpoint.
        evidence. `ControllerExecutorKind.PlanDocument` and the old executor
        class/path are removed.
        [Evidence](PHASE_11T9C2_PLAN_DOCUMENT_NATIVE_RUNTIME.md);
-     - 11T9C3 — Task List family;
+     - [x] 11T9C3 — all three Task List mutations use exact Agent/Plan native
+       handlers over one typed service with direct session mutation boundaries and
+       verified active/closed revision evidence. The old controller executor is
+       removed.
+       [Evidence](PHASE_11T9C3_TASK_LIST_NATIVE_RUNTIME.md);
      - 11T9C4 — HTML workspace family;
      - 11T9C5 — capability discovery/read family;
      - 11T9C6 — prompt read/save family;
