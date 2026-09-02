@@ -27,6 +27,7 @@
   var boundDataSources = workspaceModel.boundDataSources;
   var selectedItem = workspaceModel.selectedItem;
   var ensureSelection = workspaceModel.ensureSelection;
+  var refreshLibraryHeadSelection = workspaceModel.refreshLibraryHeadSelection;
   var workspaceActions = null;
 
   function submitPlanHandoff() {
@@ -402,6 +403,22 @@
     updateHtmlWorkspaceStatus();
   }
 
+  function refreshArtifactsTabProjection() {
+    refreshLibraryHeadSelection();
+    renderHtmlWorkspace();
+  }
+
+  function refreshArtifactsTab() {
+    refreshArtifactsTabProjection();
+    var synchronization = !state.htmlWorkspaceDirty && typeof synchronizeChatState === "function"
+      ? synchronizeChatState(true)
+      : null;
+    return Promise.resolve(synchronization).then(function () {
+      refreshArtifactsTabProjection();
+      return workspaceActions.refreshAuto();
+    });
+  }
+
   function downloadHtmlWorkspaceExport(exportState) {
     exportState = exportState || {};
     var exportedWorkspace = exportState.workspace || {};
@@ -491,7 +508,7 @@
       });
     });
     var artifactsTab = document.querySelector('.tab[data-tab="artifacts"]');
-    if (artifactsTab) artifactsTab.addEventListener("click", workspaceActions.refreshAuto);
+    if (artifactsTab) artifactsTab.addEventListener("click", refreshArtifactsTab);
   }
 
   window.renderHtmlWorkspace = renderHtmlWorkspace;

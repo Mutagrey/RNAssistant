@@ -44,7 +44,10 @@ context.state = {
         displayKind: "chart", history: [{ artifactId: "chart-2", revision: 2 }]
       }
     ]
-  }
+  },
+  htmlWorkspace: { files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: {} },
+  htmlWorkspaceDirty: false,
+  htmlWorkspaceSelection: { type: "plan", id: "plan-r1" }
 };
 vm.runInContext(source, context, { filename: "app-artifacts.js" });
 
@@ -58,6 +61,23 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.equal(context.RNAssistantArtifactVisuals.meta(heads[1]), "Файл · Оригинал");
   assert.equal(context.RNAssistantArtifactVisuals.meta(heads[3]), "Диаграмма");
   console.log("PASS artifact library: UI consumes server-owned classes, order and labels");
+}
+
+{
+  const modelSource = fs.readFileSync(path.join(root, "web/js/app-html-workspace-model.js"), "utf8");
+  vm.runInContext(modelSource, context, { filename: "app-html-workspace-model.js" });
+  const model = context.RNAssistantHtmlWorkspaceModel.create(context.state);
+  assert.equal(model.refreshLibraryHeadSelection(), true);
+  assert.deepEqual(
+    { type: context.state.htmlWorkspaceSelection.type, id: context.state.htmlWorkspaceSelection.id },
+    { type: "plan", id: "plan-r2" },
+    "entering the library rebases a stale selection to the projected head");
+  context.state.htmlWorkspaceSelection = { type: "plan", id: "plan-r1" };
+  context.state.htmlWorkspaceDirty = true;
+  assert.equal(model.refreshLibraryHeadSelection(), false);
+  assert.equal(context.state.htmlWorkspaceSelection.id, "plan-r1", "unsaved edits keep their exact selection");
+  context.state.htmlWorkspaceDirty = false;
+  console.log("PASS artifact library: tab refresh selects the current server-owned head");
 }
 
 {
@@ -88,7 +108,8 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.ok(index.includes("app-chat-state.js?v=tool-contract-20260901-1"), "chat state has the typed Tool contract cache key");
   assert.ok(index.includes("app-chat-session.js?v=tool-contract-20260901-1"), "chat session has the typed Tool contract cache key");
   assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "artifact cards have the removal cache key");
-  assert.ok(index.includes("app-html-workspace.js?v=artifact-preview-20260902-2"), "artifact actions have the current preview cache key");
+  assert.ok(index.includes("app-html-workspace-model.js?v=artifact-refresh-20260902-1"), "artifact selection model has the refresh cache key");
+  assert.ok(index.includes("app-html-workspace.js?v=artifact-refresh-20260902-1"), "artifact actions have the refresh cache key");
   assert.ok(index.includes("app-html-workspace-actions.js?v=artifact-preview-20260902-2"), "artifact tool calls have the current cache key");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-preview-20260902-2"), "artifact paging owner has the current cache key");
   assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-preview-20260902-3"), "artifact detail has the current cache key");
@@ -96,4 +117,4 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   console.log("PASS artifact library: client lineage inference and Plan JSON label are removed");
 }
 
-console.log("OK 3/3");
+console.log("OK 4/4");

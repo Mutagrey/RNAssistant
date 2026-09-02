@@ -225,6 +225,25 @@
       return active;
     }
 
+    function refreshLibraryHeadSelection() {
+      if (state.htmlWorkspaceDirty) return false;
+      var selected = selectedItem();
+      if (!selected || (selected.type !== "plan" && selected.type !== "artifact")) return false;
+      var visuals = window.RNAssistantArtifactVisuals || null;
+      var head = visuals && typeof visuals.libraryHead === "function"
+        ? visuals.libraryHead(selected.item)
+        : null;
+      var headId = prop(head, "ArtifactId", "artifactId", "") || "";
+      if (!headId || String(headId).toLowerCase() === String(artifactId(selected.item)).toLowerCase()) return false;
+      var headArtifact = artifactById(headId);
+      if (!headArtifact) return false;
+      state.htmlWorkspaceSelection = {
+        type: artifactKind(headArtifact) === "plan" ? "plan" : "artifact",
+        id: artifactId(headArtifact)
+      };
+      return true;
+    }
+
     function ensureSelection() {
       if (selectedItem()) {
         return;
@@ -284,6 +303,7 @@
       prop: prop,
       recovery: recovery,
       recoveryBlocked: recoveryBlocked,
+      refreshLibraryHeadSelection: refreshLibraryHeadSelection,
       redoBranches: redoBranches,
       selectedItem: selectedItem,
       setArtifactInlineText: setArtifactInlineText,

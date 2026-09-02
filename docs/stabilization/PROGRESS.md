@@ -19,6 +19,28 @@ known CA1416 warnings. A local headless Chrome `file://` smoke loaded the assemb
 artifact, reported ECharts 5.6.0, created one 400×240 canvas and accepted a bar
 series. Windows WebView rendering remains open.
 
+Exact source-string escaping correction (2026-09-02, user-reported
+host-neutral): the shared v4 response and format-repair contracts now define one
+outer JSON escaping layer for every string argument. HTML file/data/patch schemas
+and built-in guidance explicitly preserve decoded line breaks and backslashes.
+Runtime, accepted history, execution, CAS storage and replay remain exact and add
+no auto-unescape, which would corrupt valid JavaScript, CSS, regular expressions
+and paths. Focused harness checks pass 7/7, including raw parsing, format repair
+and two complete HTML write/history/executor/replay variants. Live endpoint
+generation and Windows WebView qualification remain open.
+
+Artifact refresh and multi-chat request isolation correction (2026-09-02,
+user-reported host-neutral): entering the top-level Artifacts tab now immediately
+rebases a stale library selection to the server-projected head, then forces the
+addressed chat-state sync before refreshing preview data. Exact revisions opened
+from message/run cards remain pinned, and unsaved editor state is not rebased or
+reloaded. Chat send now carries one captured target chat id through bridge payload,
+response routing and guarded cleanup; attachment-submit barriers are maps keyed by
+chat instead of a global single-flight value, so one chat no longer blocks or
+captures another. Focused web regressions pass 31/31 and changed JavaScript syntax
+passes. Real Windows WebView2 concurrent chats, streaming, tab timing and
+multi-window qualification remain open.
+
 Attachment immediate-send correction (2026-09-02, user-reported host-neutral):
 picker/drop/paste staging had no composer send barrier, so an immediate submit could
 snapshot empty `resourceDraftIds` and start a text-only model request while the PDF
