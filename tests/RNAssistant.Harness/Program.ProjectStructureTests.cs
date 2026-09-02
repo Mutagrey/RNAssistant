@@ -303,6 +303,14 @@ namespace RNAssistant.Harness
 
         private static void RunViewConsumersUseTypedProjection()
         {
+            var root = FindHarnessRepositoryRoot();
+            var chatExecution = File.ReadAllText(Path.Combine(root, "src", "RNAssistant.Office",
+                "Controller", "AssistantController.ChatExecution.cs"));
+            AssertTrue(chatExecution.IndexOf(
+                "session.LastRun.KernelState = session.LastRun.KernelState.Interrupt(ex is OperationCanceledException, ex.Message, runId);",
+                StringComparison.Ordinal) >= 0,
+                "new-run controller errors must close the authoritative kernel lifecycle before persisting the UI projection");
+
             AssertEqual(typeof(RNAssistant.Core.Models.RunViewState),
                 typeof(RNAssistant.Office.Services.ChatTurnResult).GetProperty("RunViewState").PropertyType,
                 "application result exposes one typed run projection");

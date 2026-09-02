@@ -557,6 +557,8 @@ namespace RNAssistant.Office
                 {
                     PersistTokenEstimateCalibration(settings);
                     CloseRunningActivities(session, firstRunMessageIndex, ex is OperationCanceledException);
+                    if (session.LastRun != null && session.LastRun.KernelState != null)
+                        session.LastRun.KernelState = session.LastRun.KernelState.Interrupt(ex is OperationCanceledException, ex.Message, runId);
                     RecordFailedTurn(session, ex);
                     if (session.LastRun != null)
                     {

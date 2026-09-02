@@ -426,6 +426,14 @@ JSON fields are ignored and grant no authority; a run without current
 narrative or retained `ResponseStatus`. Unknown/errors retain an independent
 warning, and a clean no-write answer does not certify applied changes.
 
+If an application/controller exception escapes after the kernel has created current
+run evidence, both new-run and confirmation paths interrupt that exact `KernelState`
+to `failed` or `cancelled` before persisting the diagnostic projection and rethrowing.
+The interrupt preserves recorded tool counts and classifies an open possible effect
+conservatively; flat `LastRun.Status` never substitutes for the terminal kernel
+lifecycle. Therefore a failed bridge request cannot leave the durable UI projection
+in `running` merely because the visible activity was already closed.
+
 See [event durability/recovery](session-events.md),
 [ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md),
 [ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md) and
