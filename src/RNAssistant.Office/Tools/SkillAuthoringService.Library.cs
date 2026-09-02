@@ -133,13 +133,13 @@ namespace RNAssistant.Office.Tools
             string toolId;
             if (string.Equals(kind, "upsert", StringComparison.Ordinal))
             {
-                toolId = SkillAuthoringCatalog.UpsertToolId;
+                toolId = SkillAuthoringCatalog.ReferenceUpsertToolId;
                 arguments["referenceMarkdown"] = content ?? string.Empty;
                 arguments["mode"] = "upsert";
             }
             else if (string.Equals(kind, "delete", StringComparison.Ordinal))
             {
-                toolId = SkillAuthoringCatalog.DeleteToolId;
+                toolId = SkillAuthoringCatalog.ReferenceDeleteToolId;
             }
             else
             {

@@ -42,14 +42,6 @@ namespace RNAssistant.Office.Tools
             if (reserved != null) return reserved;
             current = FindStoredSkill(id);
 
-            var hasReferencePath = HasArgument(arguments, "referencePath");
-            var hasReferenceBody = HasArgument(arguments, "referenceMarkdown");
-            if (hasReferencePath || hasReferenceBody)
-            {
-                return ResolveReferenceUpsert(arguments, current,
-                    out intended, out operation, out referencePath);
-            }
-
             var mode = ToolArgumentReader.String(arguments, "mode", "upsert");
             if (current != null && string.Equals(mode, "createOnly",
                 StringComparison.OrdinalIgnoreCase))
@@ -202,7 +194,30 @@ namespace RNAssistant.Office.Tools
                     "Custom skill not found: " + id, null,
                     "skill_not_found", false);
             }
-            if (!HasArgument(arguments, "referencePath")) return null;
+            return null;
+        }
+
+        private SkillAuthoringOutcome ResolveReferenceDelete(
+            IDictionary<string, object> arguments,
+            out SkillDefinition current,
+            out SkillDefinition intended,
+            out string operation,
+            out string referencePath)
+        {
+            current = null;
+            intended = null;
+            operation = "delete_reference";
+            referencePath = null;
+            var id = ToolArgumentReader.String(arguments, "id", string.Empty);
+            var reserved = ValidateAuthoredSkillId(id);
+            if (reserved != null) return reserved;
+            current = FindStoredSkill(id);
+            if (current == null)
+            {
+                return SkillAuthoringOutcome.Error(
+                    "Custom skill not found: " + id, null,
+                    "skill_not_found", false);
+            }
             string normalizedPath;
             if (!SkillStore.TryNormalizeReferencePath(
                 ToolArgumentReader.String(arguments, "referencePath",
@@ -228,7 +243,6 @@ namespace RNAssistant.Office.Tools
                 string.Equals(item.Path, normalizedPath,
                     StringComparison.OrdinalIgnoreCase));
             referencePath = normalizedPath;
-            operation = "delete_reference";
             return null;
         }
 

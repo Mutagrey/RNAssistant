@@ -223,8 +223,6 @@ namespace RNAssistant.Office.Tools
             existing = null;
             intended = null;
             operation = string.Empty;
-            var parameterError = ValidateParameterInput(arguments);
-            if (parameterError != null) return parameterError;
             var id = ToolArgumentReader.String(arguments, "id", string.Empty);
             var reserved = ValidateAuthoredToolId(id);
             if (reserved != null) return reserved;
@@ -258,6 +256,14 @@ namespace RNAssistant.Office.Tools
                 : UpdateToolDefinition(existing, arguments);
             var validation = ValidateToolDefinition(intended);
             if (!validation.Success) return validation;
+            if (!HasInternalPolicyArguments(arguments))
+            {
+                intended.Enabled = existing == null || existing.Enabled;
+                intended.AgentCanRun = existing == null ||
+                    existing.AgentCanRun;
+                intended.CapabilityStatus = existing == null
+                    ? "available" : existing.CapabilityStatus;
+            }
             operation = existing == null ? "create" : "update";
             return null;
         }

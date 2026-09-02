@@ -117,7 +117,8 @@ namespace RNAssistant.Harness
 
                 var guardedArguments = new JObject
                 {
-                    ["systemPrompt"] = "Guarded prompt"
+                    ["promptKey"] = "systemPrompt",
+                    ["value"] = "Guarded prompt"
                 };
                 var pending = ExecutePromptNative(
                     native, PromptToolCatalog.SaveToolId, guardedArguments);
@@ -156,7 +157,11 @@ namespace RNAssistant.Harness
 
                 var stalePending = ExecutePromptNative(
                     native, PromptToolCatalog.SaveToolId,
-                    new JObject { ["systemPrompt"] = "Intended prompt" });
+                    new JObject
+                    {
+                        ["promptKey"] = "systemPrompt",
+                        ["value"] = "Intended prompt"
+                    });
                 global.SystemPrompt = "External prompt";
                 var stale = ConfirmPromptNative(native, stalePending);
                 AssertEqual(ToolExecutionOutcome.Error, stale.Outcome,
@@ -190,7 +195,11 @@ namespace RNAssistant.Harness
                     "agent", false);
                 var mismatch = ExecutePromptNative(
                     mismatchRuntime, PromptToolCatalog.SaveToolId,
-                    new JObject { ["systemPrompt"] = "Ignored new prompt" });
+                    new JObject
+                    {
+                        ["promptKey"] = "systemPrompt",
+                        ["value"] = "Ignored new prompt"
+                    });
                 AssertEqual(ToolExecutionOutcome.Unknown, mismatch.Outcome,
                     "failed prompt read-back is unknown");
                 AssertEqual(ToolDispatchEvidence.MayHaveDispatched,
@@ -200,20 +209,23 @@ namespace RNAssistant.Harness
                     mismatch.Evidence.Effect,
                     "failed prompt read-back retains unknown effect");
 
-                var command = new ToolInvocation { ToolId = "common.prompts_save" };
-                command.Arguments["systemPrompt"] = "New prompt";
-                command.Arguments["agentToolsPrompt"] = "New tool prompt";
-                command.Arguments["agentSkillsPrompt"] = "New skill prompt";
-                command.Arguments["attachmentAnalysisPrompt"] = "New attachment prompt";
-
-                var result = executor.ExecuteManual(
-                    command,
-                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
-                    runtime,
-                    false,
-                    true);
-
-                AssertTrue(result.Success, "prompt save succeeds");
+                var promptTools = OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Concat(executor.GetControllerTools()).ToList();
+                foreach (var pair in new[]
+                {
+                    new[] { "systemPrompt", "New prompt" },
+                    new[] { "agentToolsPrompt", "New tool prompt" },
+                    new[] { "agentSkillsPrompt", "New skill prompt" },
+                    new[] { "attachmentAnalysisPrompt", "New attachment prompt" }
+                })
+                {
+                    var result = executor.ExecuteManual(
+                        Command("common.prompts_save", "promptKey", pair[0],
+                            "value", pair[1]), promptTools, runtime,
+                        false, true);
+                    AssertTrue(result.Success,
+                        "one-key prompt save succeeds: " + pair[0]);
+                }
                 AssertEqual("New prompt", global.SystemPrompt, "global prompt updated");
                 AssertEqual("New tool prompt", global.AgentToolsPrompt, "tool prompt updated");
                 AssertEqual("New skill prompt", global.AgentSkillsPrompt, "skill prompt updated");
@@ -409,8 +421,9 @@ namespace RNAssistant.Harness
                     "every mode teaches the same bounded result envelope");
                 AssertContains(prompt, "`status` is exactly `ok`, `error`, or `unknown`", "no extra model-facing result states");
                 AssertContains(prompt, "does not by itself prove an applied effect", "defaults require actual effect evidence");
-                AssertContains(prompt, "Task List, and HTML tools",
-                    "current prompt schema includes HTML in runtime-only result projection guidance");
+                AssertContains(prompt,
+                    "HTML, and Prompt/Tool/Skill authoring tools",
+                    "current prompt schema includes authoring in runtime-only result projection guidance");
                 AssertTrue(prompt.IndexOf("ok=true", StringComparison.OrdinalIgnoreCase) < 0, "defaults do not teach the legacy success flag");
             }
         }

@@ -30,11 +30,19 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(toolId,
                 SkillAuthoringCatalog.UpsertToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("skills.upsert.v1");
+                return new ToolBinding("skills.core-upsert.intent.v1");
             if (string.Equals(toolId,
                 SkillAuthoringCatalog.DeleteToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("skills.delete.v1");
+                return new ToolBinding("skills.core-delete.intent.v1");
+            if (string.Equals(toolId,
+                SkillAuthoringCatalog.ReferenceUpsertToolId,
+                StringComparison.Ordinal))
+                return new ToolBinding("skills.reference-upsert.intent.v1");
+            if (string.Equals(toolId,
+                SkillAuthoringCatalog.ReferenceDeleteToolId,
+                StringComparison.Ordinal))
+                return new ToolBinding("skills.reference-delete.intent.v1");
             return null;
         }
 

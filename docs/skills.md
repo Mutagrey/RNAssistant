@@ -39,8 +39,10 @@ It supports Markdown edit/preview, references, enable/disable, clone and custom
 delete; built-ins are read-only. It does not currently expose useful revision
 history, restore, provenance or a complete version display.
 
-Agent-side core/reference upsert and delete use exact Agent-only native
-`common.skills_upsert/delete` handlers and a versioned result contract. Preparation
+Agent-side authoring uses four exact Agent-only native intents: core
+`common.skills_upsert/delete` and reference
+`common.skills_reference_upsert/delete`. Their schemas cannot mix core and
+reference fields and use a versioned result contract. Preparation
 binds the accepted arguments and complete current package revision; confirmation
 rejects stale state before dispatch, and read-back distinguishes verified change,
 verified no-change and unknown effect. Direct UI Save/Delete is an explicit manual

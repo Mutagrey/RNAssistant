@@ -9,15 +9,12 @@ namespace RNAssistant.Office.Tools
     {
         internal const string DefinitionReadToolId =
             "common.tools_definition_read";
-        internal const string ValidateToolId = "common.tools_validate";
         internal const string UpsertToolId = "common.tools_upsert";
         internal const string DeleteToolId = "common.tools_delete";
 
         internal static bool Owns(string toolId)
         {
             return string.Equals(toolId, DefinitionReadToolId,
-                    StringComparison.Ordinal) ||
-                string.Equals(toolId, ValidateToolId,
                     StringComparison.Ordinal) ||
                 string.Equals(toolId, UpsertToolId,
                     StringComparison.Ordinal) ||
@@ -41,21 +38,29 @@ namespace RNAssistant.Office.Tools
 
             yield return Projection(
                 DefinitionReadToolId,
-                "Read-only authoring inspection: Read one custom tool definition including its implementation fields; omit id to list compact custom-tool metadata. This does not load a callable schema.",
-                OptionalIdSchema(), "tools_definition_read", false);
-            yield return Projection(
-                ValidateToolId,
-                "Read-only: Validate a manifest-based VBA tool definition without saving it. Agent authoring may use compact parameterDefinitions; advanced callers may pass complete native parameters objects.",
-                ToolPayloadSchema(false), "tools_validate", false);
+                "Read-only authoring inspection: Read one exact custom tool definition including its implementation fields. Use capability discovery to find ids; this operation does not load a callable schema.",
+                SchemaFor(DefinitionReadToolId), "tools_definition_read", false);
             yield return Projection(
                 UpsertToolId,
-                "Mutates settings: Create or update one custom tool after validating the effective definition. In Agent mode prefer compact parameterDefinitions; parameters remains the advanced native form. Omitted update fields are preserved.",
-                ToolUpsertSchema(), "tools_upsert", true);
+                "Mutates settings: Create or update one manifest-based VBA tool. Supply exact package components; runtime derives metadata, validates the complete definition, and applies conservative execution authority before confirmation/save. Omitted update fields are preserved.",
+                SchemaFor(UpsertToolId), "tools_upsert", true);
             yield return Projection(
                 DeleteToolId,
                 "Mutates settings: Delete a custom RNAssistant tool by id.",
-                "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable identifier.\"}},\"required\":[\"id\"],\"additionalProperties\":false}",
+                SchemaFor(DeleteToolId),
                 "tools_delete", true);
+        }
+
+        internal static string SchemaFor(string toolId)
+        {
+            if (string.Equals(toolId, DefinitionReadToolId,
+                    StringComparison.Ordinal)) return ExactIdSchema();
+            if (string.Equals(toolId, UpsertToolId,
+                    StringComparison.Ordinal)) return ToolUpsertSchema();
+            if (string.Equals(toolId, DeleteToolId,
+                    StringComparison.Ordinal)) return ExactIdSchema();
+            throw new ArgumentException("Unknown tool authoring id: " + toolId,
+                nameof(toolId));
         }
 
         private static ToolCatalogEntry Projection(

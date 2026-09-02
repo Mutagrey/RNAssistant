@@ -18,9 +18,6 @@ namespace RNAssistant.Office.Tools
         {
             if (!string.Equals(toolId,
                     ToolAuthoringCatalog.DefinitionReadToolId,
-                    StringComparison.Ordinal) &&
-                !string.Equals(toolId,
-                    ToolAuthoringCatalog.ValidateToolId,
                     StringComparison.Ordinal))
                 throw new ArgumentException(
                     "A read-only tool authoring id is required.",
@@ -35,11 +32,7 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(toolId,
                 ToolAuthoringCatalog.DefinitionReadToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("tools.definition-read.v1");
-            if (string.Equals(toolId,
-                ToolAuthoringCatalog.ValidateToolId,
-                StringComparison.Ordinal))
-                return new ToolBinding("tools.validate.v1");
+                return new ToolBinding("tools.definition-read.exact.v1");
             return null;
         }
 
@@ -48,11 +41,7 @@ namespace RNAssistant.Office.Tools
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var outcome = string.Equals(_toolId,
-                    ToolAuthoringCatalog.DefinitionReadToolId,
-                    StringComparison.Ordinal)
-                ? _service.Read(context.Arguments)
-                : _service.Validate(context.Arguments);
+            var outcome = _service.Read(context.Arguments);
             return Task.FromResult(
                 ToolAuthoringToolProjection.Project(outcome));
         }
@@ -81,7 +70,7 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(toolId,
                 ToolAuthoringCatalog.UpsertToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("tools.upsert.v1");
+                return new ToolBinding("tools.upsert.intent.v1");
             if (string.Equals(toolId,
                 ToolAuthoringCatalog.DeleteToolId,
                 StringComparison.Ordinal))

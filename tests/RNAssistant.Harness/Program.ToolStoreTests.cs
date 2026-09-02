@@ -200,10 +200,6 @@ namespace RNAssistant.Harness
 
                 var save = new ToolInvocation { ToolId = "common.tools_upsert" };
                 save.Arguments["id"] = shadow.Id;
-                save.Arguments["host"] = "Excel";
-                save.Arguments["description"] = "Invalid shadow.";
-                save.Arguments["executor"] = "vba";
-                save.Arguments["parameters"] = JObject.Parse(EmptyFormalToolSchema);
                 save.Arguments["components"] = ToolComponentsPayload(shadow);
                 var saveResult = executor.ExecuteManual(save, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(!saveResult.Success, "controller rejects reserved id");
@@ -342,6 +338,7 @@ namespace RNAssistant.Harness
 
         private static JToken MinimalSchemaValue(JObject schema)
         {
+            if (schema["const"] != null) return schema["const"].DeepClone();
             if (schema["default"] != null) return schema["default"].DeepClone();
             var alternatives = schema["anyOf"] as JArray;
             if (alternatives != null)
@@ -396,7 +393,9 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "\"requires_confirmation\":true",
                     "prompt includes typed confirmation metadata");
                 AssertTrue(prompt.IndexOf("\"optional\"", StringComparison.OrdinalIgnoreCase) < 0, "prompt has no literal optional args");
-                AssertContains(prompt, "common.tools_validate", "prompt includes tool validation");
+                AssertTrue(prompt.IndexOf("common.tools_validate",
+                        StringComparison.Ordinal) < 0,
+                    "model prompt omits internal tool validation");
                 AssertContains(prompt, "common.prompts_read", "prompt includes prompt reader");
 
                 var promptTools = ConversationPromptComposer.BuildTools(tools);
@@ -413,8 +412,106 @@ namespace RNAssistant.Harness
                 var skillParameters = (JObject)promptTools.OfType<JObject>()
                     .Single(item => string.Equals((string)item.SelectToken("function.name"), "common.skills_upsert", StringComparison.OrdinalIgnoreCase))
                     .SelectToken("function.parameters");
-                AssertTrue(skillParameters["properties"] == null && ((JArray)skillParameters["anyOf"]).Count == 2,
-                    "prompt exposes separate skill core and reference calls without a mixed union envelope");
+                AssertTrue(skillParameters["properties"] is JObject &&
+                        skillParameters["anyOf"] == null &&
+                        skillParameters.SelectToken("properties.referencePath") == null,
+                    "prompt exposes a dedicated skill-core schema");
+                AssertTrue(promptTools.OfType<JObject>().Any(item =>
+                        string.Equals((string)item.SelectToken("function.name"),
+                            SkillAuthoringCatalog.ReferenceUpsertToolId,
+                            StringComparison.Ordinal)),
+                    "prompt exposes dedicated skill-reference authoring");
+            });
+        }
+
+        private static void AuthoringIntentsAreSemantic()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
+                delegate(OfficeToolExecutor executor,
+                    FakeOfficeAdapter adapter)
+            {
+                var tools = executor.GetControllerTools().ToList();
+                var promptSave = JObject.Parse(tools.Single(tool =>
+                    tool.Id == PromptToolCatalog.SaveToolId)
+                    .ArgumentSchemaJson);
+                AssertTrue(promptSave.SelectToken("properties.promptKey") != null &&
+                        promptSave.SelectToken("properties.value") != null &&
+                        ((JObject)promptSave["properties"]).Count == 2,
+                    "prompt save exposes one key/value pair");
+
+                var toolUpsert = JObject.Parse(tools.Single(tool =>
+                    tool.Id == ToolAuthoringCatalog.UpsertToolId)
+                    .ArgumentSchemaJson);
+                foreach (var removed in new[]
+                {
+                    "host", "parameters", "parameterDefinitions", "executor",
+                    "enabled", "requiresConfirmation", "mutatesDocument",
+                    "mutatesLocalState", "agentCanRun", "riskLevel",
+                    "capabilityStatus"
+                })
+                    AssertTrue(toolUpsert["properties"][removed] == null,
+                        "tool upsert hides runtime-owned " + removed);
+                AssertTrue(tools.All(tool => tool.Id !=
+                        "common.tools_validate"),
+                    "tool validation is not callable by the model");
+
+                var builtInSkills = BuiltInSkillProvider.GetSkills(adapter);
+                AssertTrue(builtInSkills.All(skill => skill.Id !=
+                        "common.vba_tool_authoring"),
+                    "VBA package guidance has one entry skill");
+                var toolAuthoring = builtInSkills.Single(skill =>
+                    skill.Id == "common.tool_authoring").BodyMarkdown;
+                AssertContains(toolAuthoring, "Domain identity rationale:",
+                    "tool skill documents dynamic argument review");
+                AssertTrue(toolAuthoring.IndexOf("common.tools_validate",
+                        StringComparison.Ordinal) < 0,
+                    "tool skill does not teach retired validation");
+
+                string error;
+                AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("current_prompt",
+                            PromptToolCatalog.SaveToolId,
+                            "{\"promptKey\":\"systemPrompt\",\"value\":\"text\"}"),
+                        out error),
+                    "one-key prompt history is replayable");
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("old_prompt",
+                            PromptToolCatalog.SaveToolId,
+                            "{\"systemPrompt\":\"text\"}"), out error),
+                    "multi-field prompt history requires reset");
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("old_validate",
+                            "common.tools_validate", "{}"), out error),
+                    "retired model validation requires reset");
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("old_tool",
+                            ToolAuthoringCatalog.UpsertToolId,
+                            "{\"id\":\"excel.x\",\"uri\":\"rna://old\"}"),
+                        out error),
+                    "tool authoring history rejects runtime URI");
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("mixed_skill",
+                            SkillAuthoringCatalog.UpsertToolId,
+                            "{\"id\":\"excel.x\",\"referencePath\":\"references/x.md\"}"),
+                        out error),
+                    "skill core history rejects reference arguments");
+
+                var invocation = new ToolInvocation
+                {
+                    ToolCallId = "authoring_projection",
+                    ToolId = SkillAuthoringCatalog.ReferenceUpsertToolId
+                };
+                var projected = ModelToolResultProjection.Project(
+                    AgentJsonProtocol.CreateToolResultMessage(invocation,
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
+                            "Reference updated.",
+                            "{\"id\":\"excel.x\",\"referencePath\":\"references/x.md\",\"revision\":\"secret\",\"previousRevision\":\"old\"}"),
+                        ToolResultRoles.Tool));
+                AssertContains(projected.Content, "references/x.md",
+                    "authoring result retains semantic reference path");
+                AssertTrue(projected.Content.IndexOf("revision",
+                        StringComparison.OrdinalIgnoreCase) < 0,
+                    "authoring model result hides package revisions");
             });
         }
 
@@ -554,7 +651,7 @@ namespace RNAssistant.Harness
                 var definitions = executor.GetControllerTools()
                     .Where(tool => ToolAuthoringCatalog.Owns(tool.Id))
                     .ToList();
-                AssertEqual(4, definitions.Count,
+                AssertEqual(3, definitions.Count,
                     "complete tool authoring family registered");
                 foreach (var definition in definitions)
                 {
@@ -587,31 +684,21 @@ namespace RNAssistant.Harness
                 AssertTrue(native.Describe(new ToolCall(
                         "tool_authoring_read",
                         ToolAuthoringCatalog.DefinitionReadToolId,
-                        "{}")) != null,
+                        "{\"id\":\"excel.generated_report\"}")) != null,
                     "exact tool authoring id has a native binding");
                 AssertTrue(native.Describe(new ToolCall(
                         "tool_authoring_alias",
                         ToolAuthoringCatalog.DefinitionReadToolId
                             .ToUpperInvariant(), "{}")) == null,
                     "tool authoring has no case alias");
-                AssertEqual("tools.upsert.v1",
+                AssertEqual("tools.upsert.intent.v1",
                     DirectToolBindingCatalog.Resolve(
                         ToolAuthoringCatalog.UpsertToolId).HandlerId,
                     "tool upsert binding");
 
                 var command = new ToolInvocation { ToolId = "common.tools_upsert" };
                 command.Arguments["id"] = "excel.generated_report";
-                command.Arguments["host"] = "Excel";
-                command.Arguments["name"] = "Generated report";
-                command.Arguments["description"] = "Create a generated report sheet.";
-                command.Arguments["parameters"] = JObject.Parse(SheetFormalToolSchema);
-                command.Arguments["executor"] = "vba";
                 command.Arguments["components"] = ToolComponentsPayload(CustomTool("Excel", "excel.generated_report"));
-                command.Arguments["enabled"] = true;
-                command.Arguments["requiresConfirmation"] = true;
-                command.Arguments["mutatesDocument"] = true;
-                command.Arguments["agentCanRun"] = false;
-                command.Arguments["riskLevel"] = 2;
 
                 var blocked = executor.ExecuteManual(command, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings { AutoConfirmToolActions = false }, false, false);
                 AssertTrue(!blocked.Success, "tool create should require confirmation");
@@ -638,6 +725,14 @@ namespace RNAssistant.Harness
                     saved.Evidence.Effect,
                     "tool create verifies its read-back");
                 AssertContains(saved.Message, "created", "create message");
+                var conservative = new ToolStore(FixturePaths.Value).Load()
+                    .Single(tool => tool.Id == "excel.generated_report");
+                AssertTrue(conservative.RequiresConfirmation &&
+                        conservative.MutatesDocument &&
+                        conservative.MutatesLocalState &&
+                        conservative.AgentCanRun &&
+                        conservative.RiskLevel == 3,
+                    "model authoring receives conservative runtime authority");
 
                 var update = new ToolInvocation { ToolId = "common.tools_upsert" };
                 update.Arguments["id"] = "excel.generated_report";
@@ -877,7 +972,7 @@ namespace RNAssistant.Harness
                 var definitions = executor.GetControllerTools()
                     .Where(tool => SkillAuthoringCatalog.Owns(tool.Id))
                     .ToList();
-                AssertEqual(2, definitions.Count,
+                AssertEqual(4, definitions.Count,
                     "complete skill authoring family registered");
                 AssertTrue(definitions.All(tool =>
                         string.Join(",", tool.Policy.AllowedModes) == "agent" &&
@@ -899,7 +994,7 @@ namespace RNAssistant.Harness
                         SkillAuthoringCatalog.UpsertToolId.ToUpperInvariant(),
                         "{}")) == null,
                     "skill authoring has no case alias");
-                AssertEqual("skills.upsert.v1",
+                AssertEqual("skills.core-upsert.intent.v1",
                     DirectToolBindingCatalog.Resolve(
                         SkillAuthoringCatalog.UpsertToolId).HandlerId,
                     "skill upsert binding");
@@ -1007,7 +1102,7 @@ namespace RNAssistant.Harness
                     "skill can be updated after explicit refresh");
 
                 var referenceUpsert = Command(
-                    "common.skills_upsert",
+                    SkillAuthoringCatalog.ReferenceUpsertToolId,
                     "id", "excel.review_style",
                     "referencePath", "references/checklist.md",
                     "referenceMarkdown", "# Checklist\n\n- Preserve formats.");
@@ -1029,12 +1124,17 @@ namespace RNAssistant.Harness
                 AssertEqual("invalid_arguments", mixedResult.ErrorCode, "mixed skill core/reference call is rejected by its published schema");
                 AssertTrue(!string.Equals(mixedResult.ErrorCode, "mixed_skill_reference_update", StringComparison.Ordinal), "mixed call never reaches the old runtime trap");
 
-                var upsertDefinition = executor.GetControllerTools().Single(item => item.Id == "common.skills_upsert");
-                var responseSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { upsertDefinition }));
-                var upsertVariants = responseSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
-                AssertEqual(2, upsertVariants == null ? 0 : upsertVariants.Count, "skill upsert strict schema separates core and reference calls");
-                AssertTrue(upsertVariants.OfType<JObject>().Any(item => item.SelectToken("properties.referencePath") != null && item.SelectToken("properties.description") == null),
-                    "reference branch excludes core fields");
+                var upsertDefinition = executor.GetControllerTools()
+                    .Single(item => item.Id == "common.skills_upsert");
+                var referenceDefinition = executor.GetControllerTools()
+                    .Single(item => item.Id ==
+                        SkillAuthoringCatalog.ReferenceUpsertToolId);
+                AssertTrue(JObject.Parse(upsertDefinition.ArgumentSchemaJson)
+                        .SelectToken("properties.referencePath") == null,
+                    "skill core schema excludes reference fields");
+                AssertTrue(JObject.Parse(referenceDefinition.ArgumentSchemaJson)
+                        .SelectToken("properties.description") == null,
+                    "skill reference schema excludes core fields");
 
                 var referenceRead = executor.ExecuteManual(
                     Command("common.capabilities_read", "id", "excel.review_style", "referencePath", "references/checklist.md"),
@@ -1043,7 +1143,9 @@ namespace RNAssistant.Harness
                 AssertContains(referenceRead.DataJson, "Preserve formats", "agent-created reference content");
 
                 var referenceDelete = Command(
-                    "common.skills_delete", "id", "excel.review_style", "referencePath", "references/checklist.md");
+                    SkillAuthoringCatalog.ReferenceDeleteToolId,
+                    "id", "excel.review_style", "referencePath",
+                    "references/checklist.md");
                 AssertEqual("awaiting_confirmation",
                     executor.ExecuteManual(referenceDelete, tools, new AppSettings(), false, false).Status,
                     "agent reference delete requires confirmation");

@@ -99,8 +99,9 @@ There are three persisted modes and one structured execution service.
 
 `ConversationPromptComposer` selects the editable mode instruction, then appends one dynamic `RUNTIME_CONTEXT` containing mode, readable document state, current callable schemas, complete compact `capabilities.items`, user context and bounded semantic resource targets. Document keys, `ResourceRef` values and catalog/package/descriptor revisions are omitted. Callable capability membership is public id/kind plus `schemaLoaded`; unloaded tools and skills retain bounded selection metadata. Chat receives an empty capability catalog. Agent/Plan bootstrap is the four semantic resource/capability tools. `common.capabilities_search/read` have exact native handlers; runtime validates hidden descriptor/package revisions and projects stale evidence as error. Complete tool reads may stage one atomic optional extension, whose exact before/after state stays only in durable events while `TOOL_PACK_STATE` exposes public ids and admission outcome. One shared admission calculation covers messages, request options, repair overhead and continuation reserve. No execution touch or LRU eviction changes membership. Strict response JSON Schema comes from the same callable set. Confirmation, compaction and restart reconstruct authority from the exact durable chain; raw read results never grant it.
 
-R61/11O is the mandatory post-migration audit of that model-facing surface. 11O1
-has atomically switched Resources + Capabilities host-neutral; every remaining family
+R61/11O is the mandatory post-migration audit of that model-facing surface. 11O1–11O4
+have atomically switched Resources + Capabilities, planning, HTML and
+Prompt/Tool/Skill authoring host-neutral; every remaining family
 must similarly reduce its public schema to semantic intent while the same
 ToolRuntime receives runtime-owned exact target, reference, guard and continuation
 state. Durable `ResourceRef` provenance is retained, but the model and Library test
@@ -173,8 +174,11 @@ mutation and requires exact supplied-field read-back; stale preparation fails be
 dispatch and no-change is explicit. Their former controller executors and legacy
 result paths are deleted.
 
-11J1 moves `common.tools_definition_read`, `common.tools_validate`,
-`common.tools_upsert` and `common.tools_delete` to exact Agent-only native handlers.
+11J1 moved Tool authoring to Agent-only native handlers. R61/11O4 retains exact-id
+`common.tools_definition_read`, `common.tools_upsert` and `common.tools_delete`,
+removes model-facing `common.tools_validate` and list mode, and makes upsert a
+minimal semantic package-source intent with validation and conservative authority
+owned by runtime.
 Authoring mutations prepare a bounded exact-arguments/current-definition hash guard,
 reject stale confirmation before dispatch and require stored-definition read-back;
 exact no-change avoids storage dispatch. `ToolAuthoringExecutor` and its controller
@@ -185,7 +189,7 @@ runtime and bound VBA backend. Library install/remove/status consume the same ty
 source plus versioned result/effect DTO. `VbaPackageToolAdapter`,
 `VbaLegacyResultProjection` and their legacy custom execution branch are deleted.
 
-11K1 moves exact `common.skills_upsert/delete` to Agent-only native handlers over
+11K1 moves skill authoring to Agent-only native handlers over
 `SkillAuthoringService`. Each confirmed core/reference mutation binds the accepted
 arguments and complete current package revision, rejects stale state before storage
 dispatch and verifies the resulting package revision or absence. No-change avoids
@@ -193,7 +197,10 @@ dispatch. `SkillToolExecutor`, the final controller-executor branch and Skill us
 legacy result conversion are deleted. 11K2 gives the existing Skills UI one strict
 versioned package/result bridge, explicit per-package revision guards and the same
 service owner; controller-to-`SkillStore` mutation, raw catalog reconcile and
-unversioned/PascalCase response fallback are removed.
+unversioned/PascalCase response fallback are removed. R61/11O4 splits model-facing
+core `common.skills_upsert/delete` from
+`common.skills_reference_upsert/delete`, so no accepted call mixes package-core and
+reference scope.
 
 11T10 completes the mandatory existing-tool route. The Tools UI uses lowercase
 `rnassistant.toolLibrary`/mutation v1 DTOs with exact revision guards and the same

@@ -186,7 +186,7 @@ namespace RNAssistant.Core.Models
         private const string ToolResultContract =
             "## Tool results\n\n" +
             "`TOOL_RESULT` v1 contains only `tool_call_id`, `name`, `status`, `message`, `data`, and optional `resources`. " +
-            "For switched resource, capability, question, Plan document, Task List, and HTML tools, the model projection omits runtime references, revisions, hashes, cursors, guards, source identity, and internal ids; runtime retains that exact evidence durably. Other tool families may expose `resources` until their own contract cutover. " +
+            "For switched resource, capability, question, Plan document, Task List, HTML, and Prompt/Tool/Skill authoring tools, the model projection omits runtime references, revisions, hashes, cursors, guards, source identity, and internal ids; runtime retains that exact evidence durably. Other tool families may expose `resources` until their own contract cutover. " +
             "`status` is exactly `ok`, `error`, or `unknown`. " +
             "`status=ok` reports tool success; it does not by itself prove an applied effect. An ok result may describe a verified no-op. " +
             "`status=error` reports a definite failure. `status=unknown` means an effect may have occurred but could not be verified; do not claim success or repeat the call unchanged. " +
@@ -248,7 +248,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 20;
+        public const int CurrentAgentPromptSchemaVersion = 21;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

@@ -33,7 +33,7 @@ namespace RNAssistant.Office.Tools
     internal sealed class PromptSaveToolHandler : IPreparableToolHandler
     {
         internal static readonly ToolBinding Binding =
-            new ToolBinding("prompts.save.v1");
+            new ToolBinding("prompts.save.intent.v1");
 
         private readonly PromptSettingsService _service;
 

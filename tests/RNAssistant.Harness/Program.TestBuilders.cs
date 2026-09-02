@@ -46,6 +46,49 @@ namespace RNAssistant.Harness
                 }));
         }
 
+        private static ToolCatalogEntry CustomToolWithParameter(
+            string id, string parameterName, string description)
+        {
+            var schema = new Newtonsoft.Json.Linq.JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new Newtonsoft.Json.Linq.JObject
+                {
+                    [parameterName] = new Newtonsoft.Json.Linq.JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = description
+                    }
+                },
+                ["required"] = new Newtonsoft.Json.Linq.JArray(parameterName),
+                ["additionalProperties"] = false
+            };
+            var manifest = new
+            {
+                protocolVersion = 1,
+                id,
+                host = "Excel",
+                name = id,
+                description = "Test custom tool.",
+                packageVersion = "1.0.0",
+                entryPoint = "Run",
+                components = new[] { "RNA_Test" },
+                argumentOrder = new[] { parameterName },
+                parameters = schema,
+                mutatesDocument = false,
+                agentCanRun = true,
+                requiresConfirmation = false
+            };
+            var code = "Option Explicit\n' <RNAssistantTool>\n' " +
+                JsonConvert.SerializeObject(manifest) +
+                "\n' </RNAssistantTool>\nPublic Function Run(ByVal " +
+                parameterName + " As String) As String\n    Run = \"ok\"\nEnd Function";
+            var parsed = new VbaToolManifestParser().Parse(code);
+            AssertTrue(parsed.Success,
+                "custom parameter fixture manifest: " + parsed.ErrorMessage);
+            return parsed.Tool;
+        }
+
         private static bool HasTool(IEnumerable<ToolCatalogEntry> tools, string id)
         {
             foreach (var tool in tools)

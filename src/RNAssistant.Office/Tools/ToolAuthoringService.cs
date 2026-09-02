@@ -39,9 +39,9 @@ namespace RNAssistant.Office.Tools
             var id = ToolArgumentReader.String(
                 arguments, "id", string.Empty);
             if (string.IsNullOrWhiteSpace(id))
-            {
-                return ListTools();
-            }
+                return ToolAuthoringOutcome.Error(
+                    "An exact custom tool id is required.", null,
+                    "tool_id_required", true);
             var tool = VisibleTools().FirstOrDefault(candidate =>
                 string.Equals(candidate.Id, id,
                     StringComparison.OrdinalIgnoreCase));
@@ -56,21 +56,6 @@ namespace RNAssistant.Office.Tools
                 ToolPayload(tool).ToString(Formatting.None));
         }
 
-        internal ToolAuthoringOutcome Validate(
-            IDictionary<string, object> arguments)
-        {
-            var parameterError = ValidateParameterInput(arguments);
-            if (parameterError != null) return parameterError;
-            var tool = ReadToolDefinition(arguments);
-            var reserved = ValidateAuthoredToolId(tool.Id);
-            if (reserved != null) return reserved;
-            var validation = ValidateToolDefinition(tool);
-            if (!validation.Success) return validation;
-            return ToolAuthoringOutcome.Ok(
-                "Tool definition is valid: " + tool.Id,
-                ToolPayload(tool).ToString(Formatting.None));
-        }
-
         internal ToolAuthoringOutcome ValidateDefinition(
             ToolCatalogEntry tool)
         {
@@ -79,40 +64,20 @@ namespace RNAssistant.Office.Tools
             return reserved ?? ValidateToolDefinition(tool);
         }
 
-        private ToolAuthoringOutcome ListTools()
-        {
-            var tools = VisibleTools().Select(t => new
-            {
-                id = t.Id,
-                host = t.Host,
-                name = t.Name,
-                description = t.Description,
-                executor = t.Executor,
-                enabled = t.Enabled,
-                requiresConfirmation = t.RequiresConfirmation,
-                mutatesDocument = t.MutatesDocument,
-                agentCanRun = t.AgentCanRun,
-                riskLevel = t.RiskLevel,
-                capabilityStatus = t.CapabilityStatus,
-                limitations = t.Limitations
-            }).ToArray();
-            return ToolAuthoringOutcome.Ok(
-                "Custom tools listed.", JsonConvert.SerializeObject(tools));
-        }
-
         private static ToolCatalogEntry ReadToolDefinition(
             IDictionary<string, object> arguments)
         {
             var id = ToolArgumentReader.String(arguments, "id", string.Empty);
             var components = ReadComponents(ToolArgumentReader.String(
                 arguments, "components", "[]"));
-            return NormalizeVbaEntryCode(new ToolCatalogEntry
+            var tool = NormalizeVbaEntryCode(new ToolCatalogEntry
             {
                 Id = id,
                 Host = ToolArgumentReader.String(arguments, "host", DefaultHostFromId(id)),
                 Name = ToolArgumentReader.String(arguments, "name", id),
                 Description = ToolArgumentReader.String(arguments, "description", string.Empty),
-                ArgumentSchemaJson = ResolveParameterSchema(arguments, "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
+                ArgumentSchemaJson = ToolArgumentReader.String(arguments,
+                    "parameters", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
                 Executor = ToolArgumentReader.String(arguments, "executor", "vba"),
                 Readme = ToolArgumentReader.String(arguments, "readme", string.Empty),
                 Enabled = ReadBool(arguments, "enabled", true),
@@ -128,6 +93,11 @@ namespace RNAssistant.Office.Tools
                 Limitations = ToolArgumentReader.String(arguments, "limitations", string.Empty),
                 Components = components
             });
+            var manifest = new VbaToolManifestParser().Parse(tool.Code);
+            if (manifest.Success && string.Equals(id, manifest.Tool.Id,
+                    StringComparison.OrdinalIgnoreCase))
+                tool.Host = manifest.Tool.Host;
+            return tool;
         }
 
         private static ToolCatalogEntry UpdateToolDefinition(
@@ -139,10 +109,9 @@ namespace RNAssistant.Office.Tools
             SetString(arguments, "host", value => tool.Host = value);
             SetString(arguments, "name", value => tool.Name = value);
             SetString(arguments, "description", value => tool.Description = value);
-            if (HasArgument(arguments, "parameters") || HasArgument(arguments, "parameterDefinitions"))
-            {
-                tool.ArgumentSchemaJson = ResolveParameterSchema(arguments, tool.ArgumentSchemaJson);
-            }
+            if (HasArgument(arguments, "parameters"))
+                tool.ArgumentSchemaJson = ToolArgumentReader.String(
+                    arguments, "parameters", tool.ArgumentSchemaJson);
             SetString(arguments, "executor", value => tool.Executor = value);
 
             SetString(arguments, "readme", value => tool.Readme = value);
@@ -158,146 +127,6 @@ namespace RNAssistant.Office.Tools
             if (HasArgument(arguments, "riskLevel")) tool.RiskLevel = ReadInt(arguments, "riskLevel", tool.RiskLevel);
             if (HasArgument(arguments, "components")) tool.Components = ReadComponents(ToolArgumentReader.String(arguments, "components", "[]"));
             return NormalizeVbaEntryCode(tool);
-        }
-
-        private static ToolAuthoringOutcome ValidateParameterInput(
-            IDictionary<string, object> arguments)
-        {
-            if (HasArgument(arguments, "parameters") && HasArgument(arguments, "parameterDefinitions"))
-            {
-                return ToolAuthoringOutcome.Error(
-                    "Supply either parameters or parameterDefinitions, not both. Prefer parameterDefinitions in Agent mode.",
-                    null,
-                    "tool_parameters_ambiguous",
-                    true);
-            }
-            if (!HasArgument(arguments, "parameterDefinitions")) return null;
-            try
-            {
-                BuildParameterSchema(ToolArgumentReader.String(arguments, "parameterDefinitions", "[]"));
-                return null;
-            }
-            catch (InvalidOperationException ex)
-            {
-                return ToolAuthoringOutcome.Error(ex.Message, null, "invalid_tool_parameter_definitions", true);
-            }
-            catch (JsonException ex)
-            {
-                return ToolAuthoringOutcome.Error("parameterDefinitions must be a native JSON array: " + ex.Message, null, "invalid_tool_parameter_definitions", true);
-            }
-        }
-
-        private static string ResolveParameterSchema(
-            IDictionary<string, object> arguments, string fallback)
-        {
-            if (HasArgument(arguments, "parameterDefinitions"))
-            {
-                return BuildParameterSchema(ToolArgumentReader.String(arguments, "parameterDefinitions", "[]"));
-            }
-            return ToolArgumentReader.String(arguments, "parameters", fallback);
-        }
-
-        private static string BuildParameterSchema(string definitionsJson)
-        {
-            var definitions = JArray.Parse(string.IsNullOrWhiteSpace(definitionsJson) ? "[]" : definitionsJson);
-            var properties = new JObject();
-            var required = new JArray();
-            foreach (var definition in definitions.OfType<JObject>())
-            {
-                var name = ((string)definition["name"] ?? string.Empty).Trim();
-                var type = ((string)definition["type"] ?? string.Empty).Trim();
-                var description = ((string)definition["description"] ?? string.Empty).Trim();
-                if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Every parameterDefinitions item requires a non-empty name.");
-                if (properties[name] != null) throw new InvalidOperationException("parameterDefinitions contains duplicate argument " + name + ".");
-                if (string.IsNullOrWhiteSpace(description)) throw new InvalidOperationException("parameterDefinitions." + name + ".description is required.");
-                if (!new[] { "string", "integer", "number", "boolean", "array" }.Contains(type, StringComparer.Ordinal))
-                {
-                    throw new InvalidOperationException("parameterDefinitions." + name + ".type is unsupported.");
-                }
-
-                JToken typeToken = type;
-                if ((bool?)definition["nullable"] == true) typeToken = new JArray(type, "null");
-                var property = new JObject { ["type"] = typeToken, ["description"] = description };
-                if (string.Equals(type, "array", StringComparison.Ordinal))
-                {
-                    var itemsType = ((string)definition["itemsType"] ?? string.Empty).Trim();
-                    if (!new[] { "string", "integer", "number", "boolean" }.Contains(itemsType, StringComparer.Ordinal))
-                    {
-                        throw new InvalidOperationException("parameterDefinitions." + name + ".itemsType is required for an array and must be scalar.");
-                    }
-                    property["items"] = new JObject { ["type"] = itemsType };
-                    CopyNumberConstraint(definition, property, "minItems", true);
-                    CopyNumberConstraint(definition, property, "maxItems", true);
-                }
-                else if (string.Equals(type, "string", StringComparison.Ordinal))
-                {
-                    var enumValues = definition["enumValues"] as JArray;
-                    if (enumValues != null && enumValues.Count > 0)
-                    {
-                        var allowed = (JArray)enumValues.DeepClone();
-                        if ((bool?)definition["nullable"] == true) allowed.Add(JValue.CreateNull());
-                        property["enum"] = allowed;
-                    }
-                    CopyNumberConstraint(definition, property, "minLength", true);
-                    CopyNumberConstraint(definition, property, "maxLength", true);
-                    CopyDefault(definition, property, "defaultString");
-                }
-                else if (string.Equals(type, "integer", StringComparison.Ordinal))
-                {
-                    CopyNumberConstraint(definition, property, "minimum", false);
-                    CopyNumberConstraint(definition, property, "maximum", false);
-                    CopyDefault(definition, property, "defaultInteger");
-                }
-                else if (string.Equals(type, "number", StringComparison.Ordinal))
-                {
-                    CopyNumberConstraint(definition, property, "minimum", false);
-                    CopyNumberConstraint(definition, property, "maximum", false);
-                    CopyDefault(definition, property, "defaultNumber");
-                }
-                else
-                {
-                    CopyDefault(definition, property, "defaultBoolean");
-                }
-                ValidateConstraintOrder(property, name, "minimum", "maximum");
-                ValidateConstraintOrder(property, name, "minLength", "maxLength");
-                ValidateConstraintOrder(property, name, "minItems", "maxItems");
-                properties[name] = property;
-                if ((bool?)definition["required"] == true) required.Add(name);
-            }
-            if (definitions.Count != properties.Count)
-            {
-                throw new InvalidOperationException("Every parameterDefinitions item must be an object.");
-            }
-            return new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = required,
-                ["additionalProperties"] = false
-            }.ToString(Formatting.None);
-        }
-
-        private static void CopyDefault(JObject source, JObject target, string name)
-        {
-            if (source[name] != null && source[name].Type != JTokenType.Null) target["default"] = source[name].DeepClone();
-        }
-
-        private static void CopyNumberConstraint(JObject source, JObject target, string name, bool integer)
-        {
-            var value = source[name];
-            if (value == null || value.Type == JTokenType.Null) return;
-            if (integer && value.Type != JTokenType.Integer) throw new InvalidOperationException(name + " must be an integer.");
-            if (value.Type != JTokenType.Integer && value.Type != JTokenType.Float) throw new InvalidOperationException(name + " must be numeric.");
-            target[name] = value.DeepClone();
-        }
-
-        private static void ValidateConstraintOrder(JObject schema, string argumentName, string minimumName, string maximumName)
-        {
-            if (schema[minimumName] != null && schema[maximumName] != null &&
-                schema[minimumName].Value<double>() > schema[maximumName].Value<double>())
-            {
-                throw new InvalidOperationException("parameterDefinitions." + argumentName + " has " + minimumName + " greater than " + maximumName + ".");
-            }
         }
 
         private static ToolCatalogEntry NormalizeVbaEntryCode(ToolCatalogEntry tool)
@@ -389,6 +218,29 @@ namespace RNAssistant.Office.Tools
             return arguments != null && arguments.Keys.Any(name =>
                 !string.Equals(name, "id", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(name, "mode", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool HasInternalPolicyArguments(
+            IDictionary<string, object> arguments)
+        {
+            return new[]
+            {
+                "host", "name", "description", "parameters",
+                "executor", "enabled",
+                "requiresConfirmation", "mutatesDocument",
+                "mutatesLocalState", "agentCanRun", "riskLevel",
+                "capabilityStatus"
+            }.Any(name => HasArgument(arguments, name));
+        }
+
+        private static void ApplyConservativeAuthoringPolicy(
+            ToolCatalogEntry tool)
+        {
+            if (tool == null) return;
+            tool.RequiresConfirmation = true;
+            tool.MutatesDocument = true;
+            tool.MutatesLocalState = true;
+            tool.RiskLevel = 3;
         }
 
         private static void SetString(

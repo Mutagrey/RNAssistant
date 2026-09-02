@@ -85,15 +85,25 @@ namespace RNAssistant.Harness
                 try { store.SaveOne(pipeline); }
                 catch (NotSupportedException) { rejected = true; }
                 AssertTrue(rejected && store.Load().Count == 0, "storage rejects pipeline writes");
-                foreach (var id in new[] { "common.tools_validate", "common.tools_upsert" })
-                {
-                    var schema = JObject.Parse(FindTool(executor.GetControllerTools(), id).ArgumentSchemaJson);
-                    AssertTrue(schema.SelectToken("properties.pipeline") == null && schema.SelectToken("properties.pipelineSteps") == null,
-                        "pipeline authoring fields removed");
-                    var result = executor.ExecuteManual(Command(id, "id", pipeline.Id, "executor", "pipeline"),
-                        executor.GetControllerTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, true);
-                    AssertTrue(!result.Success && result.Status != "awaiting_confirmation", "model/manual authoring rejected");
-                }
+                AssertTrue(FindTool(executor.GetControllerTools(),
+                        "common.tools_validate") == null,
+                    "model-facing validation is removed");
+                var schema = JObject.Parse(FindTool(
+                    executor.GetControllerTools(),
+                    ToolAuthoringCatalog.UpsertToolId).ArgumentSchemaJson);
+                AssertTrue(schema.SelectToken("properties.pipeline") == null &&
+                        schema.SelectToken("properties.pipelineSteps") == null &&
+                        schema.SelectToken("properties.executor") == null,
+                    "model authoring exposes neither pipeline nor executor choice");
+                var result = executor.ExecuteManual(
+                    Command(ToolAuthoringCatalog.UpsertToolId,
+                        "id", pipeline.Id, "executor", "pipeline"),
+                    executor.GetControllerTools().ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false, true);
+                AssertTrue(!result.Success &&
+                        result.Status != "awaiting_confirmation",
+                    "removed executor argument is rejected before authoring");
             });
         }
     }

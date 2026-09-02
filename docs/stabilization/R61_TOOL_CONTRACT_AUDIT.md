@@ -1,11 +1,11 @@
 # R61/11O — audit границы model-facing tools
 
 Дата фиксации: 2026-09-02. Статус: 11O1 Resources + Capabilities, 11O2 Plan
-questions/doc/task-list и 11O3 HTML завершены host-neutral; остальные family cutovers,
-dynamic custom-package review и UI ещё не выполнены.
+questions/doc/task-list, 11O3 HTML и 11O4 Prompt/Tool/Skill authoring завершены
+host-neutral; VBA/macro, core-pack и UI ещё не выполнены.
 
-Для Resources + Capabilities, planning и HTML family этот документ фиксирует
-реализованные контракты 11O1–11O3. Для остальных семейств до их атомарного
+Для Resources + Capabilities, planning, HTML и authoring families этот документ
+фиксирует реализованные контракты 11O1–11O4. Для остальных семейств до их атомарного
 переключения действует текущий канонический контракт. R61 не вводит второй
 executor, generic router, pipelines, aliases или dual schema.
 
@@ -82,9 +82,9 @@ delegate-ом. Это доказывает механическую исполн
 число calls, argument/format repairs, tool errors, continuation restarts и итоговую
 успешность задачи.
 
-11O0 добавил, а 11O1–11O3 обновили machine-checked
-[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 67 уникальных built-in ids
-и 70 effective host-вариантов фиксируют exact descriptor revision, host, mode,
+11O0 добавил, а 11O1–11O4 обновили machine-checked
+[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 68 уникальных built-in ids
+и 71 effective host-вариант фиксируют exact descriptor revision, host, mode,
 direct binding и все рекурсивные schema property paths. Четыре host-specific
 варианта принадлежат `common.html_data_bind`. Поле, похожее на
 runtime plumbing, не может появиться без явного решения; допустимые public
@@ -95,18 +95,17 @@ defaults и validation, не создавая второй schema source.
 Произвольные argument schemas установленных custom packages нельзя честно
 зафиксировать в source baseline: они package-owned и меняются только новой exact
 package revision. Их поля не удаляются автоматически по имени (`customerId` может
-быть domain identity). R61 Tool-authoring/Library slice обязан показать их в том же
-property audit, потребовать явное rationale для plumbing-shaped inputs и
-fail-closed оставить непроверенный package вне release evidence. Это оставшийся
-dynamic inventory gate, а не причина задерживать независимый built-in family
-switch.
+быть domain identity). 11O4 требует явное `Domain identity rationale:` для
+plumbing-shaped inputs как при upsert/Library validation, так и при загрузке ранее
+установленного package; непроверенный package fail-closed не становится callable.
+Финальная Library/WQ проверка остаётся UI/evidence gate, а не вторым schema path.
 
 ## 4. 11O0 baseline и current inventory `common.*`
 
 Source inventory содержит до 30 built-in `common.*` ids. Число условное:
 `common.html_data_bind` публикуется только при наличии допустимых Office data-source
 tools, Tool/Skill/Prompt authoring зависит от доступности stores/settings, а VBA —
-от host. Все 33 schemas одновременно модели не передаются:
+от host. Все 30 schemas одновременно модели не передаются:
 
 - Chat получает две resource schemas;
 - Plan начинает с четырёх bootstrap schemas — resources и capabilities;
@@ -118,7 +117,7 @@ tools, Tool/Skill/Prompt authoring зависит от доступности st
 Progressive loading уменьшает token cost, но не делает лишний tool полезным и не
 исправляет сложный schema после загрузки. Таблица сохраняет 11O0 baseline и
 default-направление R61; resource/capability rows реализованы в 11O1, planning
-rows — в 11O2, HTML rows — в 11O3, остальные ids действуют до своего cutover. `KEEP` означает сохранить самостоятельный model
+rows — в 11O2, HTML rows — в 11O3, authoring rows — в 11O4; остальные ids действуют до своего cutover. `KEEP` означает сохранить самостоятельный model
 intent, `ON-DEMAND` — не держать schema в default core, `MERGE`/`SPLIT` — сменить
 public responsibility атомарно, `INTERNAL/UI` — убрать из model-facing catalog без
 удаления функции.
@@ -150,14 +149,14 @@ public id также нельзя «вспоминать» приблизите�
 | `common.html_data_refresh` | Manual refresh иногда нужен | `DONE 11O3`: optional semantic name/all; policy внутренний |
 | `common.html_data_freeze` | Отличимый intent: сохранить JSON и удалить binding | `DONE 11O3`: отдельный verified-write effect |
 | retired `common.html_workspace_inspect`, `common.html_workspace_set_active`, `common.html_workspace_upsert` | Не нужны модели | `DONE 11O3`: удалены из catalog без aliases; preflight/selection остались internal UI/runtime |
-| `common.prompts_read` | Нужен только при явном prompt/settings authoring | `ON-DEMAND KEEP` |
-| `common.prompts_save` | Нужен только при явном authoring | `ON-DEMAND KEEP`; один `promptKey` + typed value за call вместо девяти независимых optional полей |
-| `common.tools_definition_read` | Нужен для изменения exact custom tool | `ON-DEMAND KEEP`; compact list mode удалить как duplicate capabilities search, exact public tool id допустим |
-| `common.tools_validate` | Перед upsert не нужен отдельный model step | `INTERNAL/UI`; upsert обязан валидировать до write и вернуть те же diagnostics, Library может иметь dry-run |
-| `common.tools_upsert` | Нужен только для явного custom-tool authoring | `ON-DEMAND KEEP` после сокращения: убрать parallel advanced `parameters`, constant executor и self-granted safety/authority fields; runtime валидирует и назначает conservative policy |
-| `common.tools_delete` | Нужен по явному запросу | `ON-DEMAND KEEP`; exact custom tool id semantic, confirmation сохраняется |
-| `common.skills_upsert` | Skill core и reference authoring нужны, но это две ответственности | `SPLIT` на core upsert и reference upsert; current mixed anyOf удалить при atomic cutover |
-| `common.skills_delete` | Whole skill и one-reference delete различаются scope/risk | `SPLIT` на exact core delete и reference delete; current optional `referencePath` branch удалить |
+| `common.prompts_read` | Нужен только при явном prompt/settings authoring | `DONE 11O4`: `ON-DEMAND KEEP` |
+| `common.prompts_save` | Нужен только при явном authoring | `DONE 11O4`: один enumerated `promptKey` + complete value за call; девять optional полей удалены |
+| `common.tools_definition_read` | Нужен для изменения exact custom tool | `DONE 11O4`: exact-id `ON-DEMAND KEEP`; list mode удалён как duplicate capabilities search |
+| retired `common.tools_validate` | Перед upsert не нужен отдельный model step | `DONE 11O4`: удалён из model catalog; upsert и Library validation валидируют до write |
+| `common.tools_upsert` | Нужен только для явного custom-tool authoring | `DONE 11O4`: id/mode/components/docs only; manifest и runtime владеют schema/metadata/conservative authority |
+| `common.tools_delete` | Нужен по явному запросу | `DONE 11O4`: exact custom tool id semantic, confirmation сохранена |
+| `common.skills_upsert/delete` | Skill core authoring нужен отдельно | `DONE 11O4`: exact core intents без reference branch |
+| `common.skills_reference_upsert/delete` | One-reference authoring имеет отдельный scope | `DONE 11O4`: отдельные narrow intents; mixed anyOf удалён |
 | `common.vba_restore_backup` | Нужен только для явного rollback | `ON-DEMAND KEEP`; readable backup candidate/module intent, raw backupId внутренний |
 | `common.vba_write_module` | Whole-source write нужен | `KEEP`, но `SPLIT` rename в отдельный intent; write получает module/source и только meaningful creation policy/type |
 | `common.vba_apply_patch` | Exact minimal edit нужен | `KEEP`; hunks `find/text`, constant `op=replace` внутренний; guards/read snapshot внутренние |
@@ -166,7 +165,7 @@ public id также нельзя «вспоминать» приблизите�
 
 ### `common.*` skill ids, которые не являются tools
 
-Отдельно source содержит девять built-in Common skills. Их compact ids участвуют в
+11O0 source содержал девять built-in Common skills; после merge в 11O4 их восемь. Их compact ids участвуют в
 capability selection, а загруженный Markdown напрямую управляет выбором tools и
 arguments. Поэтому skill body является consumer tool contract и переключается в
 том же atomic family slice; нельзя оставить инструкцию с удалённым id/аргументом.
@@ -177,10 +176,10 @@ arguments. Поэтому skill body является consumer tool contract и 
 | `common.text_search_replace` | `KEEP ON-DEMAND`; это guidance над host search/replace tools, не отдельный common tool |
 | `common.vba_code_editing` | `KEEP`; удалить provider/kind/URI/cursor/backupId choreography, описать semantic find/read и отдельный rename intent |
 | `common.vba_userform_authoring` | `KEEP ON-DEMAND`; отдельная specialist responsibility оправдана, ссылки обновляются вместе с VBA family |
-| `common.tool_authoring` | `KEEP`; сделать единственным entry skill для поддерживаемого custom-tool authoring |
-| `common.vba_tool_authoring` | `MERGE` в `common.tool_authoring` как bounded reference/section: единственный executor уже VBA, два entry skills дублируют выбор и правила |
-| `common.skill_authoring` | `KEEP`; обновить под разделённые core/reference mutations и убрать caller offset/maxChars |
-| `common.prompt_authoring` | `KEEP ON-DEMAND`; обновить под one-key prompt save и новый resource/capability contract |
+| `common.tool_authoring` | `DONE 11O4 KEEP`; единственный entry skill, включая VBA manifest/package rules |
+| retired `common.vba_tool_authoring` | `DONE 11O4 MERGE` в `common.tool_authoring`; дублирующий skill удалён |
+| `common.skill_authoring` | `DONE 11O4 KEEP`; учит четырём отдельным core/reference mutations без caller offset/maxChars |
+| `common.prompt_authoring` | `DONE 11O4 KEEP ON-DEMAND`; учит one-key prompt save |
 | `common.html_workspace_authoring` | `KEEP ON-DEMAND`; убрать обязательный inspect call, manual set-active, nested source-tool arguments и cursor choreography |
 
 `common.text_search_replace` из широкого string search нельзя считать пропущенным
@@ -188,10 +187,10 @@ tool: он создаётся `BuiltInSkillProvider` как skill. Host-specific
 skills всё равно входят в последующий property/consumer inventory, но не смешиваются
 с этим exact Common baseline.
 
-Из текущих common tools первичные кандидаты на удаление из model-facing surface —
-`resources_resolve`, `html_workspace_inspect`, `html_workspace_set_active` и
-`tools_validate`. List/search и create/update pairs являются кандидатами на merge;
-write/rename и смешанные skill/reference branches — на split. Поэтому raw registry
+Из исходных common tools `resources_resolve`, `html_workspace_inspect`,
+`html_workspace_set_active` и `tools_validate` уже удалены из model-facing surface.
+Resource list/search и Plan create/update объединены; смешанные skill/reference
+branches разделены. VBA write/rename остаётся следующим split. Поэтому raw registry
 count может уменьшиться незначительно: главный результат — меньший default callable
 pack и резко более узкие schemas, а не искусственно минимальное число названий.
 
@@ -293,9 +292,28 @@ responsibility:
   arguments, URI, cursor, revision или candidate id. Refresh повторно проверяет
   сохранённый exact source schema и принимает только optional semantic name.
 - Durable workspace/result сохраняет revision, resource refs, binding source и
-  guards. Model projection удаляет их. HTML switch ввёл prompt schema 19; текущая
-  whole-resource correction поднимает schema до 20, а history preflight требует
-  explicit new chat/reset для старых calls.
+  guards. Model projection удаляет их. HTML switch ввёл prompt schema 19,
+  whole-resource correction — 20, а authoring switch — текущую 21; history
+  preflight требует explicit new chat/reset для старых calls.
+
+### Prompt, Tool и Skill authoring
+
+- `common.prompts_save` принимает ровно один `promptKey/value`; runtime связывает
+  guard и сохраняет остальные prompt settings без model-owned multi-field merge.
+- Tool authoring содержит exact read/upsert/delete. Отдельный
+  `common.tools_validate` и list mode удалены; upsert всегда валидирует полный
+  package до write, получает host/schema/metadata из manifest и применяет
+  conservative confirmation/effect authority.
+- Dynamic package с plumbing-shaped argument становится callable только при
+  явном `Domain identity rationale:` в schema description. То же правило действует
+  при загрузке уже установленного package, поэтому прямой file install не обходит
+  проверку.
+- Skill core и reference mutations разделены на четыре exact ids. Built-in
+  consumers переключены вместе; `common.vba_tool_authoring` слит в
+  `common.tool_authoring`.
+- Model result/replay сохраняют semantic package id/reference path, но удаляют
+  revision/hash/storage evidence. Старые multi-field/mixed/retired calls требуют
+  explicit new chat/reset.
 
 ### VBA mutations
 
@@ -351,7 +369,7 @@ R61 не закрывается только schema snapshot-тестами. М�
    возвращаются upsert-ом, а модель не может сама понизить conservative authority.
 10. Skill core и reference create/update/delete проходят через отдельные узкие
     schemas без смешанного core/reference anyOf и без потери неизменённых данных.
-    Все девять built-in Common skill bodies проверяются на retired ids/arguments и
+    Все восемь текущих built-in Common skill bodies проверяются на retired ids/arguments и
     проходят scenario после загрузки через capability reader.
 11. Модель находит два названных VBA modules, читает их и добавляет тест. Реальное
     изменение через VBE между read и mutation обнаруживается без silent rebase,
@@ -374,9 +392,9 @@ R61 не закрывается только schema snapshot-тестами. М�
 
 1. Source-built-in часть property-level inventory завершена в 11O0: все effective
    Common/host variants проверяются по exact revision/mode/host/binding/property
-   paths, а девять Common skill consumers перечислены выше. Dynamic installed
-   custom-package property review и callable-pack comparison остаются своими
-   gates Tool-authoring и core-pack slices; они не подменяются source snapshot.
+   paths, а исходные девять Common skill consumers перечислены выше. Dynamic
+   installed-package review выполнен в 11O4; callable-pack comparison остаётся
+   отдельным core-pack gate и не подменяется source snapshot.
 2. Resources + Capabilities завершены host-neutral в 11O1: minimal schemas,
    runtime-owned resolution/continuation/revision validation, durable exact
    evidence и semantic model projection переключены атомарно; старые resource ids
@@ -387,8 +405,8 @@ R61 не закрывается только schema snapshot-тестами. М�
 4. HTML workspace/data binding завершён host-neutral в 11O3: семь semantic intents,
    accepted-read binding, automatic preflight и удаление model-facing diagnostics/
    UI selection paths переключены атомарно.
-5. Переключить Prompt, Tool и Skill authoring, включая internal validation и
-   conservative authority.
+5. **Done host-neutral 11O4:** Prompt, Tool и Skill authoring переключены вместе с
+   internal validation, installed-package review и conservative authority.
 6. Переключить VBA/macro family, сохранив exact mutation safety и выбор patch/write.
 7. Повторно вычислить минимальный mode/host core pack по eval evidence; optional
    exact schemas остаются доступны через capability admission.
@@ -397,7 +415,7 @@ R61 не закрывается только schema snapshot-тестами. М�
 9. Собрать final live-provider, Windows WebView2/Office и WQ-PACK evidence только на
    post-cutover catalog.
 
-Ближайший шаг — 11O4 Prompt/Tool/Skill authoring. Накопленные Windows rebuild,
+Ближайший шаг — 11O5 VBA/macro family. Накопленные Windows rebuild,
 live-provider и WebView2 gates остаются обязательными для final WQ, но по §16.1 не
 блокируют следующий dependency-safe host-neutral подэтап. Phase 12 до полного R61
 и qualification не начинается.

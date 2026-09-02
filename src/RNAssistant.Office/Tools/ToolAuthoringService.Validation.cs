@@ -93,21 +93,21 @@ namespace RNAssistant.Office.Tools
                 {
                     return ToolAuthoringOutcome.Error(manifest.ErrorMessage, null, manifest.ErrorCode, false);
                 }
-                if (!string.Equals(tool.Id, manifest.Tool.Id, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(tool.Host, manifest.Tool.Host, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(tool.Id, manifest.Tool.Id,
+                    StringComparison.OrdinalIgnoreCase))
                 {
-                    return ToolAuthoringOutcome.Error("tool.json id/host must match the VBA manifest.", null, "vba_manifest_metadata_mismatch", false);
+                    return ToolAuthoringOutcome.Error(
+                        "The authored id must match the VBA manifest id.",
+                        null, "vba_manifest_metadata_mismatch", false);
                 }
                 tool.Name = manifest.Tool.Name;
                 tool.Description = manifest.Tool.Description;
+                tool.Host = manifest.Tool.Host;
                 tool.ArgumentSchemaJson = manifest.Tool.ArgumentSchemaJson;
                 tool.EntryPoint = manifest.Tool.EntryPoint;
                 tool.PackageVersion = manifest.Tool.PackageVersion;
                 tool.ArgumentOrder = manifest.Tool.ArgumentOrder;
-                tool.MutatesDocument = manifest.Tool.MutatesDocument;
-                tool.AgentCanRun = manifest.Tool.AgentCanRun;
-                tool.RequiresConfirmation = manifest.Tool.RequiresConfirmation;
-                tool.RiskLevel = manifest.Tool.RiskLevel;
+                ApplyConservativeAuthoringPolicy(tool);
                 if ((tool.Name ?? string.Empty).Length > 200 ||
                     (tool.Description ?? string.Empty).Length > 8000 ||
                     (tool.ArgumentSchemaJson ?? string.Empty).Length > 64000)
@@ -167,9 +167,30 @@ namespace RNAssistant.Office.Tools
                 {
                     return ToolAuthoringOutcome.Error("VBA package source is missing declared component: " + missing, null, "vba_component_missing", false);
                 }
+
+                if (!ToolSchemaSupport.TryParse(
+                        tool, out normalizedSchema, out schemaError))
+                    return ToolAuthoringOutcome.Error(
+                        schemaError, null, "invalid_tool_schema", false);
+                var rationale = ValidateDomainIdentityRationales(
+                    normalizedSchema);
+                if (rationale != null) return rationale;
             }
 
+            ApplyConservativeAuthoringPolicy(tool);
             return ToolAuthoringOutcome.Ok("Tool definition is valid.");
+        }
+
+        private static ToolAuthoringOutcome ValidateDomainIdentityRationales(
+            JObject schema)
+        {
+            string propertyName;
+            if (ToolSchemaSupport.TryValidateDomainIdentityRationales(
+                    schema, out propertyName)) return null;
+            return ToolAuthoringOutcome.Error(
+                "Custom argument " + propertyName +
+                " looks like runtime plumbing. Its schema description must include 'Domain identity rationale:' followed by why the caller chooses this domain value.",
+                null, "tool_parameter_rationale_required", false);
         }
 
     }

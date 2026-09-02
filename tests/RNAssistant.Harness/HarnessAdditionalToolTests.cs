@@ -726,18 +726,38 @@ namespace RNAssistant.Harness
                 var store = new ToolStore(paths);
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
                 var tool = CustomTool("Excel", "excel.validated");
-                var command = Command("common.tools_validate", "id", tool.Id, "host", tool.Host,
-                    "description", tool.Description, "executor", "vba", "components", ToolComponentsPayload(tool));
-                var result = executor.ExecuteManual(command, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings(), false, false);
+                var result = executor.ValidateToolDefinition(tool);
                 AssertTrue(result.Success, "VBA tool validates: " + result.Message);
                 AssertTrue(!HasTool(store.Load(), tool.Id), "validation does not save");
-                command.Arguments["parameterDefinitions"] = new JArray();
-                var compact = executor.ExecuteManual(command, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings(), false, false);
-                AssertTrue(compact.Success, "compact parameters remain supported");
-                AssertContains(compact.DataJson, "\"parameters\":{", "native parameter schema returned");
-                command.Arguments["parameters"] = JObject.Parse(EmptyFormalToolSchema);
-                var ambiguous = executor.ExecuteManual(command, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings(), false, false);
-                AssertEqual("tool_parameters_ambiguous", ambiguous.ErrorCode, "ambiguous parameter input rejected");
+
+                var unsafeIdentity = CustomToolWithParameter(
+                    "excel.customer_lookup", "customerId",
+                    "Customer identifier.");
+                var rejected = executor.ValidateToolDefinition(unsafeIdentity);
+                AssertEqual("tool_parameter_rationale_required",
+                    rejected.ErrorCode,
+                    "plumbing-shaped custom argument requires rationale");
+                AssertEqual("tool_parameter_rationale_required",
+                    executor.ValidateToolDefinition(CustomToolWithParameter(
+                        "excel.uri_lookup", "uri", "Resource URI."))
+                        .ErrorCode,
+                    "runtime URI-shaped custom argument requires rationale");
+                AssertTrue(executor.ValidateToolDefinition(
+                        CustomToolWithParameter("excel.valid_state", "valid",
+                            "Whether the current domain state is valid."))
+                        .Success,
+                    "ordinary names ending in lowercase id are not false positives");
+                var reviewedIdentity = CustomToolWithParameter(
+                    "excel.customer_lookup", "customerId",
+                    "Domain identity rationale: customer record explicitly selected by the user.");
+                AssertTrue(executor.ValidateToolDefinition(reviewedIdentity).Success,
+                    "explicit domain identity rationale is accepted");
+                store.Save(new[] { unsafeIdentity });
+                AssertTrue(!HasTool(store.Load(), unsafeIdentity.Id),
+                    "unreviewed installed package is not callable");
+                store.Save(new[] { reviewedIdentity });
+                AssertTrue(HasTool(store.Load(), reviewedIdentity.Id),
+                    "reviewed installed package remains callable");
             });
         }
 

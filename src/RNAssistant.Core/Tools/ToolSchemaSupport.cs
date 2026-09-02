@@ -148,6 +148,61 @@ namespace RNAssistant.Core.Tools
             return clone;
         }
 
+        public static bool TryValidateDomainIdentityRationales(
+            JObject schema, out string propertyName)
+        {
+            return TryValidateDomainIdentityRationales(
+                schema, string.Empty, out propertyName);
+        }
+
+        private static bool TryValidateDomainIdentityRationales(
+            JObject schema, string parentPath, out string propertyName)
+        {
+            propertyName = null;
+            var properties = schema == null
+                ? null : schema["properties"] as JObject;
+            foreach (var property in properties == null
+                ? Enumerable.Empty<JProperty>() : properties.Properties())
+            {
+                var path = string.IsNullOrEmpty(parentPath)
+                    ? property.Name : parentPath + "." + property.Name;
+                if (IsPlumbingShapedArgument(property.Name))
+                {
+                    var description = (string)property.Value["description"] ??
+                        string.Empty;
+                    const string marker = "Domain identity rationale:";
+                    var markerIndex = description.IndexOf(
+                        marker, StringComparison.OrdinalIgnoreCase);
+                    var explanation = markerIndex < 0
+                        ? string.Empty
+                        : description.Substring(
+                            markerIndex + marker.Length).Trim();
+                    if (explanation.Length < 8)
+                    {
+                        propertyName = path;
+                        return false;
+                    }
+                }
+                var child = property.Value as JObject;
+                if (child != null &&
+                    !TryValidateDomainIdentityRationales(
+                        child, path, out propertyName)) return false;
+                var items = child == null ? null : child["items"] as JObject;
+                if (items != null &&
+                    !TryValidateDomainIdentityRationales(
+                        items, path + "[]", out propertyName)) return false;
+            }
+            var alternatives = schema == null
+                ? null : schema["anyOf"] as JArray;
+            foreach (var alternative in alternatives == null
+                ? Enumerable.Empty<JObject>() : alternatives.OfType<JObject>())
+            {
+                if (!TryValidateDomainIdentityRationales(
+                        alternative, parentPath, out propertyName)) return false;
+            }
+            return true;
+        }
+
         public static JObject ForPrompt(JObject schema)
         {
             var clone = schema == null ? EmptyObjectSchema() : (JObject)schema.DeepClone();
@@ -865,6 +920,36 @@ namespace RNAssistant.Core.Tools
             {
                 enumValues.Add(JValue.CreateNull());
             }
+        }
+
+        private static bool IsPlumbingShapedArgument(string name)
+        {
+            return HasPlumbingNameOrSuffix(name, "id") ||
+                HasPlumbingNameOrSuffix(name, "uri") ||
+                HasPlumbingNameOrSuffix(name, "revision") ||
+                HasPlumbingNameOrSuffix(name, "cursor") ||
+                HasPlumbingNameOrSuffix(name, "offset") ||
+                HasPlumbingNameOrSuffix(name, "etag") ||
+                HasPlumbingNameOrSuffix(name, "token") ||
+                HasPlumbingNameOrSuffix(name, "guard") ||
+                HasPlumbingNameOrSuffix(name, "hash") ||
+                HasPlumbingNameOrSuffix(name, "sha256");
+        }
+
+        private static bool HasPlumbingNameOrSuffix(
+            string name, string suffix)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            if (string.Equals(name, suffix,
+                    StringComparison.OrdinalIgnoreCase) ||
+                name.EndsWith("_" + suffix,
+                    StringComparison.OrdinalIgnoreCase) ||
+                name.EndsWith("-" + suffix,
+                    StringComparison.OrdinalIgnoreCase)) return true;
+            var start = name.Length - suffix.Length;
+            return start > 0 && char.IsUpper(name[start]) &&
+                string.Equals(name.Substring(start), suffix,
+                    StringComparison.OrdinalIgnoreCase);
         }
 
     }

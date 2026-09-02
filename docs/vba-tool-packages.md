@@ -158,7 +158,7 @@ Whole-source upsert может создавать `StdModule`, `ClassModule` и 
 
 Excel, Word и PowerPoint публикуют один общий model-facing tool `common.office_run_macro`. Он запускает любой существующий макрос по точному имени, принимаемому `Application.Run`, без manifest/allowlist, и до 30 позиционных scalar-аргументов. 11T9A удалил прежние `excel.run_macro`, `word.run_macro` и `powerpoint.run_macro` backend-команды; с 11T9B вызов идёт через exact native handler и bound typed backend, а Outlook этот runtime не публикует. Это high-risk external-effect operation с обязательным confirmation при выключенном auto-confirm: произвольный VBA может менять документ, файловую систему или внешнее состояние, а source backup не откатывает выполненные эффекты. Пустой output допустим для `Sub`; backend success означает только возврат `Application.Run` без исключения, а runtime effect после dispatch всегда остаётся `unknown`.
 
-Правила генерации и редактирования также встроены как skills `common.vba_tool_authoring`, `common.vba_code_editing` и `common.vba_userform_authoring`, чтобы модель получала их только при релевантном сценарии.
+Правила генерации package/manifest входят в единый skill `common.tool_authoring`; отдельный дублирующий `common.vba_tool_authoring` удалён в R61/11O4. Редактирование document VBA и CodeOnly UserForms остаётся в `common.vba_code_editing` и `common.vba_userform_authoring`, которые модель загружает только при релевантном сценарии.
 
 ## Обязательная проверка на Windows
 

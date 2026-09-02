@@ -55,6 +55,7 @@ version check still apply.
 | Inert uploaded-HTML preview/import and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `Program.ContextBridgeTests.cs`; UI contract in `tests/web/html-upload-import.test.js` | `html import:`, `bridge: typed html import` |
 | Exact HTML binding checkpoint/recovery/export and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ContextBridgeTests.cs`; UI contract in `tests/web/html-workspace-export.test.js` | `html export:`, `tools: html workspace updates session`, `bridge: typed html export` |
 | R61 HTML semantic schemas, accepted-read binding, automatic preflight and model-result/history isolation | `Program.HtmlWorkspaceToolTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs`; UI policy check in `tests/web/html-workspace-export.test.js` | `html tools:`, `tools: html workspace updates session`, `tools: html source`, `tools: R61 built-in contract inventory` |
+| R61 Prompt/Tool/Skill semantic authoring, installed-package review and replay isolation | `Program.ChatSettingsTests.cs`, `Program.ToolStoreTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs` | `tools: authoring intents are semantic`, `tools: validate payload without saving`, `chat: prompt save preserves global model`, `tools: agent CRUD preserves omitted fields`, `skills: CRUD preserves omitted fields`, `tools: R61 built-in contract inventory` |
 | Plan exact Markdown lineage, restore/removal and pinned-URI handoff | `Program.PlanModeTests.cs`; UI restore/preflight/handoff contract in `tests/web/plan-document.test.js` | `plan document:`, `plan mode:` |
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
 | Immutable run/UI projection and ordering | `Program.RunViewStateTests.cs`, replay/recovery in `Program.SessionEventStoreTests.cs`, boundary check in `Program.ProjectStructureTests.cs`; static UI in `tests/web/run-view-state.test.js` | `run view:`, `kernel replay:`, `kernel recovery:`, `architecture:` |
@@ -264,8 +265,9 @@ checks; real VBIDE/Trust Access/crash behavior remains Windows qualification. Se
 ## Skill authoring native runtime (Phase 11K1)
 
 The `skills:` filter covers the complete current-package revision, core/reference
-CRUD and collision/validation behavior. The CRUD case also verifies exact native
-`common.skills_upsert/delete` registration, Agent-only confirmed-write policy,
+CRUD and collision/validation behavior. The CRUD case also verifies the four exact
+core `common.skills_upsert/delete` and reference
+`common.skills_reference_upsert/delete` registrations, Agent-only confirmed-write policy,
 versioned result data, no dispatch before confirmation, verified change/no-change
 and rejection of a stale prepared package. Focused `agent: confirmation`,
 `protocol context:` and `kernel replay:`/`kernel recovery:` cases keep durable
@@ -369,7 +371,8 @@ uses schema 16 for durable turn-scoped reconstruction; R61/11O1 uses schema 17 f
 the semantic Resource/Capability boundary; R61/11O2 uses schema 18 for semantic
 questions, Plan documents and Task Lists; R61/11O3 uses schema 19 for semantic HTML
 authoring and accepted-read binding; the user-requested R61/11O1 correction uses
-schema 20 for whole resource reads and the direct bound VBA-project target. Tests
+schema 20 for whole resource reads and the direct bound VBA-project target;
+R61/11O4 uses schema 21 for semantic Prompt/Tool/Skill authoring. Tests
 preserve, review, or reset saved older/future markers explicitly. JS review behavior
 is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
@@ -401,8 +404,15 @@ one readable target; bind reuses the latest successful eligible accepted Office 
 from the current run without nested source arguments; refresh takes only an optional
 name. Use `html`, `tools: R61 built-in contract inventory` and
 `node tests/web/html-workspace-export.test.js`. Prompt schema 19 and accepted-history
-validation introduced the HTML switch; current schema 20 requires a new chat/reset
-for every retained pre-correction call.
+validation introduced the HTML switch; schema 20 added whole-resource correction.
+
+R61/11O4 makes prompt save one exact key/value mutation, removes model-facing
+`common.tools_validate` and Tool read list mode, reduces Tool upsert to semantic
+package source/docs, and splits Skill core/reference mutations. Runtime derives
+manifest metadata, applies conservative authority and rejects plumbing-shaped
+custom arguments without `Domain identity rationale:` both on validation and load.
+Use the focused authoring filters in the matrix above plus the R61 inventory.
+Current prompt schema 21 requires a new chat/reset for retained pre-switch calls.
 
 ## Full suite
 

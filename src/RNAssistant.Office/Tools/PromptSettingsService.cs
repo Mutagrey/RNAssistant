@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
@@ -173,11 +172,11 @@ namespace RNAssistant.Office.Tools
         private PromptToolOutcome ValidateSave(
             IDictionary<string, object> arguments)
         {
-            var fields = SuppliedFields(arguments);
-            if (fields.Length == 0)
+            var key = PromptKey(arguments);
+            if (string.IsNullOrWhiteSpace(key))
             {
                 return PromptToolOutcome.Error(
-                    "Prompt save requires at least one supplied prompt field.",
+                    "Prompt save requires one recognized promptKey and value.",
                     null, "prompt_update_empty", true);
             }
             if (_loadSettings == null)
@@ -192,16 +191,24 @@ namespace RNAssistant.Office.Tools
                     "Prompt settings store is read-only.", null,
                     "prompt_settings_read_only", false);
             }
-            if (fields.Where(field => !string.Equals(
-                    field, "systemPromptRole", StringComparison.Ordinal))
-                .Select(field => ToolArgumentReader.String(
-                    arguments, field, string.Empty))
-                .Any(value => (value ?? string.Empty).Length >
-                    MaximumPromptCharacters))
+            var value = ToolArgumentReader.String(
+                arguments, "value", string.Empty);
+            if (!string.Equals(key, "systemPromptRole",
+                    StringComparison.Ordinal) &&
+                (value ?? string.Empty).Length > MaximumPromptCharacters)
             {
                 return PromptToolOutcome.Error(
                     "Prompt template exceeds the 100000 character limit.",
                     null, "prompt_too_large", false);
+            }
+            if (string.Equals(key, "systemPromptRole",
+                    StringComparison.Ordinal) &&
+                Array.IndexOf(new[] { "developer", "system", "user" },
+                    value) < 0)
+            {
+                return PromptToolOutcome.Error(
+                    "systemPromptRole must be developer, system, or user.",
+                    null, "prompt_value_invalid", true);
             }
             return null;
         }
@@ -211,30 +218,28 @@ namespace RNAssistant.Office.Tools
             IDictionary<string, object> arguments)
         {
             var settings = (source ?? new AppSettings()).Clone();
-            foreach (var field in SuppliedFields(arguments))
-            {
-                SetValue(settings, field, ToolArgumentReader.String(
-                    arguments, field, string.Empty));
-            }
+            SetValue(settings, PromptKey(arguments),
+                ToolArgumentReader.String(arguments, "value", string.Empty));
             return settings;
         }
 
         private static string[] SuppliedFields(
             IDictionary<string, object> arguments)
         {
-            return EditableFields.Where(field => arguments != null &&
-                    arguments.ContainsKey(field))
-                .ToArray();
+            var key = PromptKey(arguments);
+            return string.IsNullOrWhiteSpace(key)
+                ? new string[0] : new[] { key };
         }
 
         private static JObject ArgumentPayload(
             IDictionary<string, object> arguments)
         {
-            var result = new JObject();
-            foreach (var field in SuppliedFields(arguments))
-                result[field] = ToolArgumentReader.String(
-                    arguments, field, string.Empty);
-            return result;
+            return new JObject
+            {
+                ["promptKey"] = PromptKey(arguments),
+                ["value"] = ToolArgumentReader.String(
+                    arguments, "value", string.Empty)
+            };
         }
 
         private static JObject TargetPayload(
@@ -257,8 +262,7 @@ namespace RNAssistant.Office.Tools
                 case "agentSkillsPrompt": settings.AgentSkillsPrompt = value; break;
                 case "chatSystemPrompt": settings.ChatSystemPrompt = value; break;
                 case "planSystemPrompt": settings.PlanSystemPrompt = value; break;
-                case "systemPromptRole": settings.SystemPromptRole =
-                    NormalizePromptRole(value); break;
+                case "systemPromptRole": settings.SystemPromptRole = value; break;
                 case "contextCompactionPrompt":
                     settings.ContextCompactionPrompt = value; break;
                 case "chatTitlePrompt": settings.ChatTitlePrompt = value; break;
@@ -304,13 +308,14 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static string NormalizePromptRole(string value)
+        private static string PromptKey(
+            IDictionary<string, object> arguments)
         {
-            if (string.Equals(value, "system",
-                StringComparison.OrdinalIgnoreCase)) return "system";
-            if (string.Equals(value, "user",
-                StringComparison.OrdinalIgnoreCase)) return "user";
-            return "developer";
+            var key = ToolArgumentReader.String(
+                arguments, "promptKey", string.Empty);
+            return Array.IndexOf(EditableFields, key) >= 0 &&
+                arguments != null && arguments.ContainsKey("value")
+                    ? key : string.Empty;
         }
 
         private static string Hash(JToken value)

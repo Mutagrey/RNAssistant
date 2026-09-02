@@ -208,6 +208,28 @@ namespace RNAssistant.Office.Tools
                 return ResolveDelete(arguments, out current, out intended,
                     out operation, out referencePath);
             }
+            if (string.Equals(toolId,
+                SkillAuthoringCatalog.ReferenceUpsertToolId,
+                StringComparison.Ordinal))
+            {
+                var id = ToolArgumentReader.String(
+                    arguments, "id", string.Empty);
+                var reserved = ValidateAuthoredSkillId(id);
+                current = FindStoredSkill(id);
+                intended = null;
+                operation = string.Empty;
+                referencePath = null;
+                if (reserved != null) return reserved;
+                return ResolveReferenceUpsert(arguments, current,
+                    out intended, out operation, out referencePath);
+            }
+            if (string.Equals(toolId,
+                SkillAuthoringCatalog.ReferenceDeleteToolId,
+                StringComparison.Ordinal))
+            {
+                return ResolveReferenceDelete(arguments, out current,
+                    out intended, out operation, out referencePath);
+            }
             current = null;
             intended = null;
             operation = string.Empty;

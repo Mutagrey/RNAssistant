@@ -65,6 +65,10 @@ namespace RNAssistant.Office.Services
             {
                 RemoveHtmlRuntimeState(data);
             }
+            else if (IsAuthoringResult(wire.Name))
+            {
+                RemoveAuthoringRuntimeState(data);
+            }
             else
             {
                 RemoveCapabilityRuntimeState(data);
@@ -110,7 +114,8 @@ namespace RNAssistant.Office.Services
         private static string CanonicalSwitchedName(string name)
         {
             if (IsResourceResult(name) || IsCapabilityResult(name) ||
-                IsPlanningResult(name) || IsHtmlResult(name)) return name;
+                IsPlanningResult(name) || IsHtmlResult(name) ||
+                IsAuthoringResult(name)) return name;
             return null;
         }
 
@@ -149,6 +154,9 @@ namespace RNAssistant.Office.Services
                 case "common.html_workspace_upsert":
                 case "common.html_workspace_upsert_file":
                     error = "Public HTML upsert was split into semantic file/data writes in 11O3.";
+                    return false;
+                case "common.tools_validate":
+                    error = "Tool validation is internal to upsert and Library in 11O4.";
                     return false;
                 case ResourceToolCatalog.FindToolId:
                     schema = ResourceFindToolHandler.Descriptor.ParametersJson;
@@ -193,6 +201,21 @@ namespace RNAssistant.Office.Services
                     break;
                 case HtmlWorkspaceToolCatalog.FreezeDataToolId:
                     schema = HtmlWorkspaceToolCatalog.FreezeSchema();
+                    break;
+                case PromptToolCatalog.ReadToolId:
+                case PromptToolCatalog.SaveToolId:
+                    schema = PromptToolCatalog.SchemaFor(call.Name);
+                    break;
+                case ToolAuthoringCatalog.DefinitionReadToolId:
+                case ToolAuthoringCatalog.UpsertToolId:
+                case ToolAuthoringCatalog.DeleteToolId:
+                    schema = ToolAuthoringCatalog.SchemaFor(call.Name);
+                    break;
+                case SkillAuthoringCatalog.UpsertToolId:
+                case SkillAuthoringCatalog.DeleteToolId:
+                case SkillAuthoringCatalog.ReferenceUpsertToolId:
+                case SkillAuthoringCatalog.ReferenceDeleteToolId:
+                    schema = SkillAuthoringCatalog.SchemaFor(call.Name);
                     break;
                 default:
                     return true;
@@ -245,6 +268,13 @@ namespace RNAssistant.Office.Services
         private static bool IsHtmlResult(string name)
         {
             return HtmlWorkspaceToolCatalog.Owns(name);
+        }
+
+        private static bool IsAuthoringResult(string name)
+        {
+            return PromptToolCatalog.Owns(name) ||
+                ToolAuthoringCatalog.Owns(name) ||
+                SkillAuthoringCatalog.Owns(name);
         }
 
         private static JToken ParseData(string value)
@@ -364,6 +394,24 @@ namespace RNAssistant.Office.Services
             var preflight = root["preflight"] as JObject;
             if (preflight != null)
                 RemoveProperties(preflight, "runtimeExecuted");
+        }
+
+        private static void RemoveAuthoringRuntimeState(JToken token)
+        {
+            var value = token as JObject;
+            if (value != null)
+            {
+                RemoveProperties(value, "revision", "previousRevision",
+                    "expectedRevision", "beforeSha256", "intendedSha256",
+                    "expectedSha256", "actualSha256", "argumentsSha256",
+                    "storagePath", "fileName");
+                foreach (var property in value.Properties().ToList())
+                    RemoveAuthoringRuntimeState(property.Value);
+                return;
+            }
+            var array = token as JArray;
+            if (array == null) return;
+            foreach (var item in array) RemoveAuthoringRuntimeState(item);
         }
 
         private static void RemoveProperties(JObject value, params string[] names)

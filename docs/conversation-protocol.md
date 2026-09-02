@@ -61,7 +61,7 @@ No callable schema is touched by execution or removed by LRU. Before publication
 
 When JSON names an exact runnable-catalog tool whose schema is not in the current callable set, the parser reports `Tool schema is not loaded` and the format-repair instruction requires a separate `common.capabilities_read` call for that exact id. It reports `Unknown tool` only for an id absent from the runnable catalog. This distinction prevents a known unloaded tool from entering a repeated unknown-id repair loop without silently auto-loading or retrying it.
 
-A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Successful resource/capability evidence is never replaced by a successful transport preview: the complete resource representation or capability body/chunk must fit together with request options and both reserves. Otherwise the projection returns explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 20 records the whole-resource read boundary together with the earlier R61 semantic resource/capability, planning and HTML contracts; schema 19 and any other older marker preserve stored text and require explicit review/reset before Agent/Plan execution.
+A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Successful resource/capability evidence is never replaced by a successful transport preview: the complete resource representation or capability body/chunk must fit together with request options and both reserves. Otherwise the projection returns explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 21 records the semantic Prompt/Tool/Skill authoring boundary together with the earlier R61 resource/capability, planning, HTML and whole-resource contracts; schema 20 and any other older marker preserve stored text and require explicit review/reset before Agent/Plan execution.
 
 Planning and execution tracking are separate. Exact native `common.plan_doc_save` accepts only the complete title/Markdown/status intent; runtime creates the active plan when absent or binds the exact active head and appends a guarded linear revision. `common.plan_doc_restore` accepts one user-visible version, while runtime resolves its exact source and current guard. `common.plan_doc_delete` has no arguments and retains the explicit-request guard plus removal tombstone semantics. `RUNTIME_CONTEXT.active_plan` exposes only current readable metadata, while the body is found and read through the semantic resource pair. `common.questions_ask` accepts prompt/options without question or option ids; runtime generates UI-only ids, and submitted answers return question text plus selected labels/free text. `common.task_list_set` has small typed `save` and `close` branches; runtime owns active-list and stable step ids while the model supplies the complete goal/ordered step state or terminal outcome. Model Tool Results omit all these internal identities and guards. A ready-plan handoff revalidates the exact selected revision internally, switches to Agent, and submits a semantic instruction to find/read the active plan; no URI enters the model request.
 
@@ -192,12 +192,17 @@ A confirmation pause persists its pending id, cumulative iteration/tool-step cou
 
 `ModelProtocolClient` permits `MaxAgentFormatRetries` total protocol responses per logical step (default 10, normalized 1–20), **including the first response**. Limit 1 means no format repair; limit 20 accepts a valid twentieth response and stops after twenty invalid responses. Every repair starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored in accepted history. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. Native provider refusal is a separate accepted metadata outcome, including when accompanied by JSON content; it cannot dispatch calls. A model-authored refusal sentence is ordinary `message` text and does not set runtime status. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
-The Prompts UI and exact Agent-only native `common.prompts_read/save` handlers expose the three Agent sections plus `ChatSystemPrompt`, `PlanSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Save requires at least one schema-declared field and confirmation. Preparation binds the exact accepted arguments to hashes of the supplied current fields; confirmation rejects a changed pre-state before dispatch, preserves every unrelated setting, marks the storage boundary before save, then verifies the supplied fields by read-back. An already matching request returns verified no-change without dispatch. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
+The Prompts UI and exact Agent-only native `common.prompts_read/save` handlers expose the three Agent sections plus `ChatSystemPrompt`, `PlanSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Model-facing save accepts exactly one enumerated `promptKey` plus its complete `value` and requires confirmation; role values are validated as `developer`, `system`, or `user`. Preparation binds that one accepted field to its current hash; confirmation rejects a changed pre-state before dispatch, preserves every unrelated setting, marks the storage boundary before save, then verifies the supplied value by read-back. An already matching request returns verified no-change without dispatch. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
 
-The four exact Agent-only `common.tools_definition_read`, `common.tools_validate`,
-`common.tools_upsert` and `common.tools_delete` authoring operations also execute
-through native ToolRuntime handlers. Upsert/delete preparation binds the exact
-accepted arguments, operation and current stored definition hash; confirmation
+The three exact Agent-only `common.tools_definition_read`, `common.tools_upsert`
+and `common.tools_delete` authoring operations execute through native ToolRuntime
+handlers. Read requires one exact semantic tool id. Upsert accepts only that id,
+existence policy, complete ordered VBA components and human documentation; the VBA
+manifest owns callable metadata/schema while runtime assigns conservative authority
+and validates the complete effective definition before any write. Separate
+model-facing `common.tools_validate`, list mode, executor, storage names and
+self-granted safety/capability fields are absent. Upsert/delete preparation binds
+the exact accepted arguments, operation and current stored definition hash; confirmation
 rejects drift before dispatch. Storage writes are marked before the possible effect
 and verified by exact effective-definition/absence read-back. A matching upsert is
 verified no-change and does not dispatch. Authoring never changes the immutable
@@ -318,7 +323,7 @@ transport. The strict reader rejects aliases, extra fields, duplicate keys,
 comments, trailing content and unsupported statuses; ISO and literal strings are
 not date-converted. Writer, probes and all replay roles use the same contract.
 
-For the R61-switched resource, capability, question, Plan, Task List and HTML families, Tool Result v1 keeps the
+For the R61-switched resource, capability, question, Plan, Task List, HTML and Prompt/Tool/Skill authoring families, Tool Result v1 keeps the
 same required correlation/status fields but its model projection omits
 `resources` and removes opaque identity from nested `data`; the accepted durable
 result retains exact references for replay, provenance, hydration and read-back.
@@ -343,8 +348,8 @@ pauses remain controlled by the kernel. Cancelling old pending work remains poss
 Native handlers pass typed results directly to materialization. Existing custom VBA
 packages do the same since 11J2: their exact registration captures
 `ToolPackageSource` contract v1, and arbitrary macro dispatch produces `unknown`
-effect evidence even when VBA returns a normal string. Since 11K1,
-`common.skills_upsert/delete` also return a versioned native result with explicit
+effect evidence even when VBA returns a normal string. Since 11K1, skill authoring
+also returns a versioned native result with explicit
 dispatch/change evidence after complete-package read-back. Since 11T10 no generic
 definition/result adapter remains: model materialization consumes the typed runtime
 record directly, while manual/bridge consumers receive strict `ToolRunResult` v1.
@@ -353,7 +358,9 @@ non-dispatch are runtime controls/evidence,
 not inferred from prose or `data.code`. Known outcome/evidence is saved before
 optional projection; projection failure cannot erase a known effect or authorize retry.
 
-Current prompt schema is 19. Existing custom text and older markers are preserved
+R61/11O4 splits that family into exact core `common.skills_upsert/delete` and
+reference `common.skills_reference_upsert/delete` intents; mixed core/reference
+arguments are not replayable. Current prompt schema is 21. Existing custom text and older markers are preserved
 until explicit review/reset. Built-in prompt authoring requires only model call
 name/arguments and assigns IDs to runtime (R31); matching `status=ok` alone does not
 prove that a document changed.

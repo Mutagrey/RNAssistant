@@ -59,7 +59,10 @@ namespace RNAssistant.Core.Storage
                 if (!HasSupportedMetadata(tool)) continue;
                 JObject schema;
                 string schemaError;
+                string unreviewedArgument;
                 if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError) ||
+                    !ToolSchemaSupport.TryValidateDomainIdentityRationales(
+                        schema, out unreviewedArgument) ||
                     string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(tool.Code))
                 {
                     continue;
@@ -352,10 +355,13 @@ namespace RNAssistant.Core.Storage
             tool.EntryPoint = parsed.Tool.EntryPoint;
             tool.PackageVersion = parsed.Tool.PackageVersion;
             tool.ArgumentOrder = parsed.Tool.ArgumentOrder;
-            tool.MutatesDocument = parsed.Tool.MutatesDocument;
-            tool.AgentCanRun = parsed.Tool.AgentCanRun;
-            tool.RequiresConfirmation = parsed.Tool.RequiresConfirmation;
-            tool.RiskLevel = parsed.Tool.RiskLevel;
+            // Arbitrary VBA receives one conservative runtime-owned policy.
+            // Availability remains a Library choice stored in tool.json; the
+            // manifest cannot downgrade execution safety.
+            tool.MutatesDocument = true;
+            tool.MutatesLocalState = true;
+            tool.RequiresConfirmation = true;
+            tool.RiskLevel = 3;
             return true;
         }
 
