@@ -9,6 +9,13 @@ Next step for tools: 11O3 atomically switches HTML workspace/data-binding contra
 Required context: [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), [conversation protocol](../conversation-protocol.md), [Artifact Library](../artifact-library.md), [migration map](MIGRATION_MAP.md), exact HTML catalog/service/handlers and the 11C/11T9C4 evidence only.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O2 are complete host-neutral; HTML, authoring, VBA/macro, final core-pack, dynamic-package and Library UI slices remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63 is fixed host-neutral; exact real Excel bind/refresh on Windows remains open. R51 remains open for PDF/audio viewers, other committed-resource removal and Windows WebView image/PDF/lifecycle qualification; 11D2 image behavior is complete host-neutral. R64 keeps exact Windows x86 PDF text extraction and explicit visual-PDF capability refusal open; only x64 native PDF rendering is present. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
+Phase 11D2 image WebView correction (2026-09-02, user-reported): the main UI CSP
+now admits the local `blob:` URL already owned by the image viewer; remote image
+and network sources remain denied. The image stage uses the remaining artifact
+preview height while fit mode preserves aspect ratio. Focused CSP/viewer checks
+cover both contracts; real Windows WebView2 reload/download/lifetime retest remains
+open.
+
 Phase 11D2 image/preview-first viewers (2026-09-02, user-requested host-neutral):
 `ArtifactViewerService` now admits only one exact revision-pinned image attachment
 with matching source message, kind, allowlisted JPEG/PNG/GIF/WebP MIME, byte length

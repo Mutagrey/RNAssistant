@@ -104,10 +104,11 @@ const csp = directives(cspMatch[1]);
 assert.deepEqual(csp["connect-src"], ["'none'"]);
 assert.deepEqual(csp["worker-src"], ["'none'"]);
 assert.deepEqual(csp["font-src"], ["'self'"]);
+assert.deepEqual(csp["img-src"], ["'self'", "data:", "blob:"]);
 assert.deepEqual(manifest.policy.csp.connectSrc, csp["connect-src"]);
 assert.deepEqual(manifest.policy.csp.workerSrc, csp["worker-src"]);
 assert.deepEqual(manifest.policy.csp.fontSrc, csp["font-src"]);
-console.log("PASS vendor gate: index loads only manifested local assets and CSP denies connect/workers by default");
+console.log("PASS vendor gate: index loads only manifested local assets; CSP admits local image Blobs and denies connect/workers");
 
 assert.equal(manifest.policy.runtimeNetwork, "deny");
 assert.equal(manifest.policy.telemetry, "deny");

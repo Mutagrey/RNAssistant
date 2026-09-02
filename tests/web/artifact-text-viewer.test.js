@@ -179,10 +179,15 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
     }
   });
   assert.ok(detail.querySelector(".artifact-detail-pane-preview").querySelector("img"));
+  assert.equal(detail.classList.contains("is-image-preview"), true);
+  const resourceViewerCss = fs.readFileSync(path.join(root, "web/css/app-resource-viewer.css"), "utf8");
+  assert.match(resourceViewerCss, /\.artifact-detail-preview\.is-image-preview\s*\{[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\)/s);
+  assert.match(resourceViewerCss, /\.artifact-detail-preview\.is-image-preview \.rn-image-viewer-stage\s*\{[^}]*max-height:\s*none/s);
   assert.ok(detail.querySelector(".artifact-detail-pane-details").classList.contains("hidden"));
   context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(detail, {
     type: "artifact", item: { Kind: "file", Title: "unknown.bin", MimeType: "application/octet-stream", Revision: 1 }
   }, "", {});
+  assert.equal(detail.classList.contains("is-image-preview"), false);
   assert.deepEqual(revokedUrls, [objectUrls[0], objectUrls[1]]);
   console.log("PASS artifact image viewer: local Blob preview supports dimensions, zoom, download and URL revocation");
 
@@ -258,7 +263,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.ok(index.includes("app-text-viewer.js?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-text-viewer.css?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-resource-viewer.js?v=artifact-preview-20260902-1"));
-  assert.ok(index.includes("app-resource-viewer.css?v=artifact-preview-20260902-1"));
+  assert.ok(index.includes("app-resource-viewer.css?v=artifact-preview-20260902-3"));
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-preview-20260902-1"));
   assert.ok(index.indexOf("app-viewer-registry.js") < index.indexOf("app-text-viewer.js"));
   assert.ok(index.indexOf("app-artifact-viewer-actions.js") < index.indexOf("app-html-workspace-actions.js"));

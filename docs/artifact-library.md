@@ -151,9 +151,11 @@ placeholder rather than falling forward to another revision.
   JSON; a dirty Plan preview is explicitly a non-durable draft.
 - Image: the exact revision-pinned JPEG/PNG/GIF/WebP bytes are read from attachment
   CAS through a typed bridge under the existing 20 MiB attachment bound. The
-  UI-only viewer provides fit/100%/zoom, natural dimensions and download. At most
-  two image payloads remain in the per-chat viewer cache; object URLs are revoked
-  on selection/chat/window changes.
+  UI-only viewer provides fit/100%/zoom, natural dimensions and download, and its
+  stage occupies the remaining artifact-preview height without distorting the
+  image. Main-UI CSP admits only local `data:`/`blob:` image sources. At most two
+  image payloads remain in the per-chat viewer cache; object URLs are revoked on
+  selection/chat/window changes.
 - PDF: page navigation plus extracted-text view and scan/extraction warning. Current
   upload ingestion already extracts text and page metadata through the managed
   AnyCPU PdfPig path; this is independent of visual rendering. Any PDF.js/native

@@ -502,6 +502,8 @@
   function renderDetail(root, selected, editorValue, actions) {
     actions = actions || {};
     clearDetail(root);
+    root.classList.toggle("is-image-preview",
+      selected.type === "artifact" && artifactViewerKind(selected.item) === "image");
     appendDetailTabs(root, function (preview) {
       if (selected.type === "plan") {
         var planMetadata = {};
