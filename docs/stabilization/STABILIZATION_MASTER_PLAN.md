@@ -2566,6 +2566,19 @@ endpoint.
 15. **11N — Pipelines:** remain disabled. Reconsider only by another explicit
     decision after the preceding runtime/tool/host contracts are qualified; no
     compatibility with the removed format is required.
+16. **11O / R61 — mandatory all-tool contract correction:** audit every effective
+    model-facing schema and separate semantic intent from runtime-owned identity,
+    continuation and concurrency state. The model and Library test form must not
+    fabricate URI/UUID/artifact IDs, revisions, hashes or cursors; exact durable
+    `ResourceRef`, guards and continuation remain internal execution/evidence state
+    and ambiguity fails closed. Populate human documentation for every built-in only
+    through a proven UI-only boundary, then replace the flat text test form with
+    JSON-Schema-aware controls and fix the reported Implementation/Test pane layout.
+    Each tool family switches atomically through the existing ToolRuntime and
+    deletes its replaced argument path; no alias, dual schema or hidden latest
+    fallback. This user-requested stabilization contour is mandatory before final
+    Milestone WQ/Phase 12, unlike optional Phase 11 product expansions. Exact scope
+    and gates: [Tool Library R61](../tool-library.md#mandatory-all-tool-contract-audit-r61).
 
 ### Правило допуска
 
@@ -2670,6 +2683,11 @@ document binding/lifetime и VBA/Excel effects предпочтительно в
 identity probe перед production factory switch. Fake-host tests не заменяют COM,
 WebView2 или live-provider validation. Phase 12 повторяет итоговые release gates, а не
 служит первым реальным тестированием candidate.
+
+R61/11O closes before final Milestone WQ: model-facing schemas, built-in
+documentation isolation and the Library test surface are part of the candidate
+catalog. Any schema/catalog change requires new WQ-PACK, live-provider and affected
+WebView2 evidence; earlier evidence cannot qualify the changed candidate.
 
 - [ ] Полный host-neutral harness.
 - [ ] Architecture tests.

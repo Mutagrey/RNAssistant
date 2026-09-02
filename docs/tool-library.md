@@ -59,6 +59,128 @@ Controller-owned catalog reconciliation, `StoragePath` identity, generic executi
 and unversioned response fallback are absent. This does not make the flat store
 immutable history.
 
+## Mandatory all-tool contract audit (R61)
+
+The current schemas are not accepted as the final user/model contract. A source
+audit already shows runtime plumbing in public arguments: resource tools expose
+canonical `uri`, `revision` and `cursor`; capability search exposes a cursor; Plan
+mutations expose internal artifact revision IDs. The Library test form currently
+renders every argument as a plain text field regardless of JSON Schema type. These
+are audit findings, not proof that the affected tools have been corrected.
+
+Every published tool must be reviewed individually, including Office, VBA/macro,
+resources, capabilities, questions, Plan, Task List, HTML, prompts, Tool/Skill
+authoring and custom-package execution. The review classifies every input as either
+semantic intent or runtime-owned state:
+
+- Model-visible arguments contain only choices or content the model must actually
+  decide. Sheet names, A1 ranges, slide numbers, component names and requested text
+  may remain when they identify a real domain target.
+- Call/run/chat/document/endpoint IDs, UUIDs, internal artifact IDs, catalog or
+  package revisions, optimistic-concurrency hashes, prepared guards, cursors,
+  offsets and page tokens are runtime-owned. They are not typed or invented by the
+  model or by a person testing a tool.
+- A canonical revision-pinned `ResourceRef` remains the durable identity for
+  replay, provenance and result evidence. The runtime maps a bounded semantic
+  selection or previously returned candidate to that exact reference; the model
+  does not assemble an `rna://` URI, pair it with a revision or carry a continuation
+  token. Ambiguity fails closed and asks for a meaningful target choice; it never
+  falls back silently to the latest or active resource.
+- Continuation belongs to the read implementation. It may expose a user-facing
+  `Next` action or perform a bounded safe continuation, but a cursor/revision pair
+  is copied and validated by code. Revision drift restarts only a read under its
+  declared policy and never causes an automatic mutation retry.
+- Defaults derivable from the bound session, selected endpoint, current immutable
+  run snapshot or prior accepted result are injected after model validation. They
+  do not appear as nullable ceremony in the model schema.
+
+The target therefore has two explicit views of one tool contract: a minimal strict
+intent schema for the model and Library test form, plus an internal execution
+context containing resolved identity, continuation and guard state. Both views
+reach the same `ToolRuntime` registration, policy, confirmation and handler; this is
+not a second executor or a permissive adapter. A system-owned field may remain
+public only with a per-tool written rationale proving that the caller must choose it
+and that no bounded semantic selector can preserve the same safety.
+
+The cutover is atomic per tool family. Until its slice switches, the existing exact
+URI/revision/cursor contract remains the implemented behavior; no alias, dual
+schema, guessed value or compatibility fallback is added.
+
+## Human documentation without model-context cost
+
+Every built-in/system tool must have non-empty human documentation in Library.
+Documentation is separate from the compact model selection summary and executable
+argument schema. It covers purpose, target selection, semantic arguments, defaults,
+types/enums/bounds, confirmation/effect semantics, result and common error examples,
+limitations and a safe Library test recipe.
+
+The existing `Readme` surface may be populated only after contract tests prove that
+built-in documentation is absent from `ConversationPromptComposer.BuildDescription`,
+model tool descriptors, `RUNTIME_CONTEXT`, capability search/read, Tool Result and
+request-token accounting. Changing built-in documentation must not change the
+executable ToolPack registration or model capability-catalog revision. Library list
+payloads remain compact; full Markdown is loaded only for the selected exact tool
+through a UI-only detail projection. If the existing field cannot satisfy those
+boundaries, a separate Library documentation DTO is introduced before content is
+added.
+
+Model-facing descriptions stay short and operational. `UseWhen`, `DoNotUseWhen`
+and limitations are audited for selection value rather than copied from the human
+manual. Custom package README/provenance remains package-owned and is not
+automatically injected into model context.
+
+## Library test form and layout
+
+Library testing uses the effective minimal intent schema and the normal production
+runtime. The form must provide:
+
+- checkbox/switch for boolean, numeric controls with integer/number step and
+  min/max, select/radio for enum, multiline input for long strings, and bounded
+  structured editors for arrays/objects;
+- explicit required/optional state, omit/null controls where the contract permits
+  them, visible defaults and inline validation before run;
+- a wrapping description below each argument instead of a truncated placeholder,
+  with consistent spacing between the argument name, description and control;
+- runtime-owned values resolved from the selected host/document, current test
+  fixture and prior read result. UUIDs, URIs, revisions, hashes and cursors are not
+  editable fields. An advanced diagnostic may show the resolved execution context
+  read-only after preparation;
+- `Next`/continuation UX for paged reads and typed result/effect evidence, without
+  teaching the user to copy an opaque cursor;
+- the same confirmation, document binding, safety and disposable-document rules as
+  a normal invocation. Test mode cannot expand authority.
+
+The reported layout defects are explicit acceptance cases: opening
+`Implementation` must keep the editor, tabs and actions inside the right pane at
+all supported widths; no horizontal displacement or hidden controls are allowed.
+The `Test` page must keep labels and controls aligned, wrap full descriptions and
+remain usable in the narrow Office task pane. CodeMirror refresh after tab changes,
+`min-width:0`, overflow ownership and responsive grids are verified in real
+WebView2, not inferred from a desktop browser screenshot.
+
+## R61 delivery and gates
+
+1. Freeze an inventory of every effective tool ID/schema by mode and host. For each
+   property record semantic owner, source/default, validation, internal resolver,
+   result dependency, test fixture and keep/remove decision.
+2. Add contract checks that fail on unreviewed or unexplained plumbing-shaped
+   arguments (`*Id`, UUID, URI, revision/hash/etag, cursor/offset/page token). Names
+   are a review trigger, not an unsafe automatic stripping rule.
+3. Switch resource/continuation and revision-guard families first, then the
+   remaining tools one semantic family at a time. Delete each replaced public
+   argument path in the same slice.
+4. Run deterministic model scenarios proving that calls complete without invented
+   opaque values and that cursor/revision confusion is structurally impossible,
+   not merely discouraged by descriptions.
+5. Populate and verify UI-only documentation for every built-in tool, then switch
+   the typed test form and fix both reported layouts with focused browser tests.
+6. Qualify the final exact catalog with live providers and Windows WebView2/Office.
+   Earlier evidence for a changed schema/catalog cannot close WQ-PACK or release.
+
+R61 is a stabilization correction and a Phase 12 prerequisite explicitly requested
+on 2026-09-02. It follows the currently reported Windows rebuild, but final
+Milestone WQ evidence must be collected against the post-cutover catalog.
+
 ## Read-only Tool Inspector first
 
 Before authoring is expanded, Library → Tools must expose capability truth for the
@@ -113,7 +235,7 @@ history. Tool result payloads may still be materialized as ordinary artifacts by
 the existing bounded result boundary; that does not make the tool definition an
 artifact.
 
-## Phase 11 slices and gates
+## R56 Tool Library slices and gates
 
 1. Read-only selected-endpoint Tool Inspector and capability/availability DTO.
 2. Exact run/result/evidence links and host capability matrix in the Issue Center.

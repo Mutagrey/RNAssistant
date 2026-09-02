@@ -52,6 +52,15 @@ arbitrary first artifact.
 
 Every provider implements bounded `list`, `resolve`, `search`, and `read(ResourceReadRequest)`. The read request carries one `ResourceRef`, representation, opaque cursor, and character limit, so revision evidence cannot be lost between routing and the provider. The public/default text page is 2,048 characters (explicit range 128–32,000), leaving conservative model-step headroom while preserving every returned character; larger content continues only through the provider-owned cursor. Immutable text uses an offset internally because its URI is already pinned. Every continuation also carries an opaque SHA-256 scope binding: list cursors bind provider plus normalized kind, and read cursors bind the canonical URI plus normalized representation. Live Office/VBA chunks additionally bind the internal position to the content hash; collection pages bind it to a deterministic collection fingerprint. Equal content or collection hashes therefore cannot make a cursor valid for another resource or query. Model-facing list/read results expose only the usable `nextCursor`, never the current-page cursor or raw offset. Continuation copies it unchanged into `cursor` only for the same operation and exact list query or resource representation. Reusing a cursor after drift fails with retryable `resource_revision_changed`: a fresh read repeats the same URI/representation with both `cursor` and `revision` omitted, while a fresh list omits `cursor`. A cursor from another operation/query/resource fails non-retryably as `resource_cursor_invalid` and is omitted before restarting the exact operation.
 
+R61/11O reopens caller ownership, not resource identity: the canonical
+`ResourceRef`, revision binding and cursor remain internal provider/runtime evidence,
+while the final model/Library intent schema must not require a caller to assemble a
+URI or copy a revision/cursor pair. A bounded semantic choice is resolved to the
+exact reference by code and ambiguity fails closed. This is a mandatory future
+per-family cutover; the preceding current contract remains in force until then.
+[Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61) owns the
+inventory and acceptance gates.
+
 HTML workspace mutations return the exact artifact `ResourceRef` plus the current
 member paths and opaque member URIs. `common.resources_resolve` accepts either one
 exact URI or an exact parent revision URI plus `memberPath` and optional

@@ -2,12 +2,30 @@
 
 Current target: 16.1.0
 Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
-Current task: reported Windows `RNAssistant.OfficeHosts` compile blockers and stale local portable publishing are corrected in the direct path; the exact Windows rebuild and remaining live-provider gates are still open.
-Execution mode: mandatory host-neutral route 0–11T10 и WQ-A1–A5 implementation завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption; накопленная Windows qualification обязательна до Phase 12.
+Current task: reported Windows `RNAssistant.OfficeHosts` compile blockers and stale local portable publishing are corrected in the direct path. User-requested R61/11O all-tool contract correction is now a separate mandatory pre-release contour; code/UI work has not started. The exact Windows rebuild and remaining live-provider gates are still open.
+Execution mode: mandatory host-neutral route 0–11T10 и WQ-A1–A5 implementation завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. After the current Windows rebuild, R61 switches the final model-facing schemas before final catalog/live-provider WQ evidence; Phase 12 remains blocked.
 
-Next step for tools: execute the mandatory Windows x64 + Office + VS 2022 Milestone WQ matrix against the exact candidate; any failure is fixed only in the typed direct path. Phase 12 starts only after the accumulated qualification gates are satisfied.
-Required context: [11T10 evidence](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md), [qualification contract](../qualification.md), [migration map](MIGRATION_MAP.md), WQ0/WQ-SESSION and host/VBA/ToolPack/WebView packs.
-Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+Next step for tools: finish the exact Windows x64 + Office + VS 2022 rebuild already in progress. Then execute R61 as a separate host-neutral inventory and per-family contract cutover before collecting final WQ-PACK/live-provider evidence; any changed schema invalidates earlier catalog evidence. Phase 12 starts only after R61 and the accumulated qualification gates are satisfied.
+Required context: [R61 Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [conversation protocol](../conversation-protocol.md), [Resource Fabric](../resource-fabric.md), [11T10 evidence](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md), [qualification contract](../qualification.md) and exact current catalog/schema sources.
+Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 is open for all-tool argument ownership, cursor/revision removal from caller intent, UI-only system documentation and typed Library Test/Implementation layout. R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+
+R61 all-tool contract and Library UX target (2026-09-02, user-requested docs-only):
+the initial source audit confirms that current public schemas expose resource
+`uri/revision/cursor`, capability pagination state and Plan artifact revision IDs,
+while the Library Test form renders all JSON Schema types as plain text inputs.
+The target now requires a per-tool semantic/runtime ownership inventory, minimal
+model/UI intent schemas, runtime-owned exact references/guards/continuations, no
+fabricated UUID/URI/revision/cursor, and atomic family cutovers over the same typed
+ToolRuntime. Every built-in receives human documentation only after tests prove it
+does not enter model descriptors, capability context/results, token accounting or
+executable revisions; full documentation is a selected-tool UI detail. Test forms
+use type-native enum/boolean/integer/number/array/object controls, visible wrapping
+descriptions and auto-resolved system context. Reported Implementation overflow and
+Test spacing/truncation/narrow-pane defects are explicit real-WebView acceptance
+cases. Runtime, schemas and UI are unchanged by this record; R61 is open and final
+WQ evidence must use its post-cutover catalog. `git diff --check` and 402 local
+Markdown links/anchors in nine changed files pass; no build/harness/Office
+validation is run for this docs-only contract update.
 
 Windows OfficeHosts compile correction (2026-09-02): the reported 13-error build
 contained seven primary C# errors and six downstream `CS0006` failures. Excel now
@@ -1424,7 +1442,8 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 11C | done host-neutral: 11C1–11C3 | [11C1](PHASE_11C1_HTML_LINEAGE.md), [11C2](PHASE_11C2_HTML_IMPORT_PREVIEW.md), [11C3](PHASE_11C3_HTML_BINDING_EXPORT.md) | 11C3: harness 8/8; web 21/21; JS syntax | not performed | Unique lineage, inert exact import and one guarded exact binding/recovery/export checkpoint path switched; Windows WebView/Office remains |
 | 11D | in progress: 11D1 done host-neutral | [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md) | harness 4/4; web 48/48; JS syntax | not performed | Exact bounded text/source + complete-only sanitized Markdown switched; image/PDF/audio and Windows WebView remain |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
-| 11 | mandatory existing-tool route done host-neutral through 11T10; optional product/UI contours remain separately gated | 11A–11D1 evidence above; [11J1](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md), [11J2](PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md), [11K1](PHASE_11K1_SKILL_AUTHORING_NATIVE_RUNTIME.md), [11K2](PHASE_11K2_SKILLS_UI_TYPED_BOUNDARY.md), [11T10](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md) | 11T10: full harness 589/589; Tool Library web 6/6; architecture/source inclusion and MockDemo pass | not performed | Active tool legacy removed; Milestone WQ required before Phase 12 |
+| 11 | existing-tool migration route done host-neutral through 11T10; R61 semantic contract correction pending | 11A–11D1 evidence above; [11J1](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md), [11J2](PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md), [11K1](PHASE_11K1_SKILL_AUTHORING_NATIVE_RUNTIME.md), [11K2](PHASE_11K2_SKILLS_UI_TYPED_BOUNDARY.md), [11T10](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md) | 11T10: full harness 589/589; Tool Library web 6/6; architecture/source inclusion and MockDemo pass | not performed | Active legacy removed; separate mandatory R61 all-tool schemas/docs/test UX remains before final Milestone WQ |
+| 11O / R61 | pending; docs-only target accepted | [Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61) | source audit only; runtime tests not run | not performed | Per-tool intent/runtime ownership, UI-only built-in docs, typed Test form and Implementation/Test layout |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
 ## Phase 0 substeps
@@ -2102,4 +2121,8 @@ lifecycle only and cannot select a tool execution target.
 - R50/R55: runner и exact-build admission contained host-neutral через WQ-A5; missing
   adapters остаются N/A. Реальная подпись, PowerShell/certificate store и полный
   Windows/live pack matrix открыты.
+- R61: все effective tool schemas требуют отдельного intent/runtime ownership
+  audit; current URI/revision/cursor и internal artifact guard arguments ещё не
+  переключены. Built-in docs isolation, typed Library Test UI, reported layout и
+  post-cutover WQ-PACK/live-provider/WebView evidence открыты.
 - Подробности и защиты: [RISK_REGISTER.md](RISK_REGISTER.md).

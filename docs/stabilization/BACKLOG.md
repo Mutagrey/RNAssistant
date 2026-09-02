@@ -5,9 +5,10 @@
 зафиксированного в master §16.1 режима dependency-safe deferred qualification:
 Windows-blocked gate остаётся открыт, а независимый обязательный slice идёт дальше.
 Новые optional product contours Phase 11 не являются prerequisite release
-qualification; mandatory 11T existing-tool migration и final active-legacy cleanup,
-напротив, обязательны до Phase 12. Artifact Library milestone 11A отдельно и явно
-допущен пользователем раньше stable core параллельно WQ.
+qualification; mandatory 11T existing-tool migration/final active-legacy cleanup
+и user-requested R61 all-tool contract correction, напротив, обязательны до
+Phase 12. Artifact Library milestone 11A отдельно и явно допущен пользователем
+раньше stable core параллельно WQ.
 
 | Phase | Работа | Условие начала / проверки |
 |---|---|---|
@@ -48,8 +49,9 @@ qualification; mandatory 11T existing-tool migration и final active-legacy clea
 | 9B4 / R39 | Compact diff vendor gate | done host-neutral without runtime/vendor change: действующие consumers имеют exact before/after, но не authoritative unified diff; Diff2Html не admitted, второй diff algorithm запрещён. [Evidence](R39_DIFF_VENDOR_GATE.md); повторная оценка только после source-owned contract |
 | 10 | Финальная структурная сверка и architecture tests | **done host-neutral:** 10A–10D dependency/physical/canonical audit; host helpers and application façade moved; resource legacy projection removed; project includes and architecture suite pass; R49 fixed host-neutral. [Audit](PHASE_10A_BOUNDARY_AUDIT.md), [10B1](PHASE_10B1_DOCUMENT_IDENTITY_MOVE.md), [10B2](PHASE_10B2_VBA_HOST_BACKEND_MOVE.md), [10C1](PHASE_10C1_ASSISTANT_RUNTIME_MOVE.md), [10C2](PHASE_10C2_RESOURCE_PROJECTION_CLEANUP.md), [10D](PHASE_10D_FINAL_ARCHITECTURE_AUDIT.md) |
 | WQ-A | In-app Qualification Center и расширяемые host packs | **WQ-A0–A5 done host-neutral:** A3 — единый identity owner/helper и `excel.wq0.identity`; A4 — closed versioned suite catalog с fail-closed readiness; A5 — detached signed exact-build provenance и complete-only `release.candidate`. Отсутствующий production adapter/environment остаётся N/A. [Contract](../qualification.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md). Next Milestone WQ: real Windows/live runs, evidence signing and release admission |
-| 12 | Release qualification и packaging | Gates основного маршрута; Windows x64 + Office x64 + VS 2022; mandatory 11T existing-tool migration and active-legacy cleanup completed |
+| 12 | Release qualification и packaging | Gates основного маршрута; Windows x64 + Office x64 + VS 2022; mandatory 11T existing-tool migration/active-legacy cleanup completed; R61 all-tool contract correction and post-cutover WQ evidence required |
 | 11 | Migration and optional contours | 11A lifecycle/Library, 11B exact Plan, 11C complete HTML, 11D1 bounded text/Markdown viewers, atomic 11T0/7D bound Excel and 11T1–11T5 all current typed Excel families done host-neutral; pre-R37 trajectory inference removed. Mandatory tool route continues with independently bound Word, PowerPoint and Outlook verticals → direct VBA/controller/custom authoring → final removal of generic host catalog/dispatch and legacy definition/result/UI bridges → Windows WQ0/full matrix before Phase 12. Каждый switch удаляет свой старый path; expansions идут отдельно after evals. Новые optional Library/Host Fabric/Browser/Automation capabilities не становятся обязательными. Pipelines remain disabled. [Master](STABILIZATION_MASTER_PLAN.md#phase-11--migration-and-optional-contours), [11T5](PHASE_11T5_EXCEL_CHARTS.md), [Artifacts](../artifact-library.md), [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md), [Tools](../tool-library.md), [migration](MIGRATION_MAP.md), [Host Fabric](../host-fabric.md). |
+| 11O / R61 | Deep audit and correction of every model-facing tool contract, followed by UI-only built-in documentation and typed Library Test/Implementation UX fixes | Explicit mandatory stabilization contour after the reported Windows rebuild and before final Milestone WQ/Phase 12. Inventory first; runtime-owned URI/UUID/revision/cursor/guard state is removed from minimal intent schemas one family at a time without aliases or dual execution. Final live-provider/WQ-PACK and WebView2 evidence must use the post-cutover catalog. [Contract](../tool-library.md#mandatory-all-tool-contract-audit-r61) |
 
 До каждого switch сверять его scope и acceptance с [архитектурным аудитом](RISK_REGISTER.md#архитектурный-аудит-2026-08-28) и соответствующим разделом master plan. Уточнение target contracts не запускает будущую фазу и не закрывает runtime gates; R29 исправлен отдельным v4 protocol change; его qualification нельзя подменять реализацией Phase 4.
 
