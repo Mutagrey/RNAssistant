@@ -40,15 +40,25 @@ continuation и guard принадлежит runtime.
 |---|---|---|
 | Имя VBA component, лист, диапазон, слайд, искомый текст, новое содержимое | Domain intent | Строго типизированное semantic значение |
 | Provider routing и provider-specific `kind` vocabulary | Resource runtime | Только устойчивую semantic category, если она реально нужна для выбора |
-| Canonical revision-pinned `rna://` URI / `ResourceRef` | Resource Fabric | Читаемый candidate/результат и provenance; URI не собирается и не копируется в следующий call |
-| Revision, content hash, etag, collection fingerprint | Provider/runtime | Не является аргументом; используется для fail-closed concurrency |
+| Canonical revision-pinned `rna://` URI / `ResourceRef` | Resource Fabric | Только читаемое semantic описание цели и предметный результат; exact reference не попадает в model projection |
+| Revision, content hash, etag, collection fingerprint | Provider/runtime | Не является аргументом или model-visible metadata; используется для fail-closed concurrency |
 | Cursor, offset, page token, representation scope | Read implementation | Bounded result и при необходимости semantic `Next`, без opaque token |
-| ToolCallId, run/chat/document IDs, UUID, confirmation и prepared guards | Kernel/ToolRuntime | Не создаются и не переносятся моделью |
+| ToolCallId, run/chat/document IDs, UUID, confirmation и prepared guards | Kernel/ToolRuntime | Только runtime-generated `tool_call_id` виден как transport correlation; остальные значения скрыты |
 | VBA backup identity | VBA journal/runtime | Читаемый candidate/время или выбор «последняя для этого module»; raw backup ID не вводится caller-ом |
 
 Если runtime-owned state должен пережить model step, он сохраняется в уже
 существующем typed event/result chain. Отдельный mutable side index или скрытая
 execution authority не вводится.
+
+Граница видимости строже границы аргументов. После cutover exact `ResourceRef`,
+URI, revision/hash, cursor, guard, snapshot/package revision и внутренние IDs не
+материализуются ни в schema, ни в `RUNTIME_CONTEXT`, ни в обычный Tool Result, ни в
+replayed model history. Durable result/event сохраняет их для provenance, replay,
+continuation и read-back, а model projection содержит только semantic target и
+domain data. Нельзя замаскировать ту же обязанность новым opaque `candidateId`.
+Допустимы только exact public tool/skill id как реальная semantic identity и
+runtime-generated `tool_call_id` для сопоставления принятого вызова с результатом;
+последний не является argument и никогда не создаётся моделью.
 
 ## 3. Текущая поверхность и почему имеющихся тестов недостаточно
 
@@ -207,7 +217,8 @@ existing ToolRuntime policy / confirmation / handler / evidence
 Read continuation выполняется внутри bounded policy. Если явное продолжение всё же
 необходимо, UI/runtime публикует operation-specific semantic действие `Next`, но
 opaque binding остаётся в typed result/event chain и не появляется в аргументах
-модели. При неоднозначном pending read runtime запрашивает semantic target и
+модели, её контексте или результате. При неоднозначном pending read runtime
+запрашивает semantic target и
 останавливается fail-closed, а не угадывает URI. Для read-only drift policy может
 начать новое чтение и явно сообщить об этом.
 Mutation никогда автоматически не retry/rebase, не применяет fuzzy patch и не
@@ -243,8 +254,9 @@ responsibility:
   категорию, это небольшой стабильный enum предметной области, а не свободная
   строка provider-specific `kind`.
 - `search` получает query и semantic scope. `read` принимает выбранный candidate
-  или semantic target; URI/revision/cursor/page size связывает runtime, а результат
-  всё равно содержит exact `ResourceRef` как evidence.
+  или semantic target; URI/revision/cursor/page size связывает runtime. Exact
+  `ResourceRef` остаётся только durable runtime evidence, а model-facing результат
+  содержит читаемую цель и предметные данные без opaque identity.
 - `resolve` по умолчанию становится внутренней подготовкой. Public tool допустим
   только если independent scenario докажет самостоятельное semantic действие.
 - VBA discovery/read остаётся только через единый Resource Fabric. Вторые VBA read
@@ -317,6 +329,11 @@ R61 не закрывается только schema snapshot-тестами. М�
     schema-load calls, argument/format repairs, tool errors, input tokens, latency и
     effect evidence. Обычные Excel/Plan/Chat задачи проверяют, что сокращение pack не
     добавило лишнюю capability-discovery цепочку.
+14. Fully materialized request, Tool Results и replayed history после каждого
+    cutover не содержат `ResourceRef`, `rna://`, revision/hash, cursor/offset,
+    guards или internal IDs. Harness создаёт exact resource/capability state только
+    за runtime boundary и не подставляет его scripted model delegate-ом. Отдельно
+    разрешены и проверяются только public tool/skill id и runtime `tool_call_id`.
 
 ## 9. Порядок исполнения и gate
 

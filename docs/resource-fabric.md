@@ -16,7 +16,8 @@ Status: implemented and re-audited. Core contracts, providers, the unified Chat/
 
 `ChatArtifact` is an internal replay projection of immutable content/provenance stored through CAS. It is not a second model transport. Model-facing chat resources always use an exact revision URI; active HTML/plan/checkpoint ids remain internal domain pointers and are projected to that URI before entering a message or prompt. There is deliberately no mutable model-facing head URI whose meaning could change during replay.
 
-`ResourceRef` is the compact value carried by messages, tool results, events, and the model working set:
+`ResourceRef` is the compact durable identity. In the current pre-R61 transport it
+is carried by messages, tool results, events, and the model working set:
 
 ```json
 {"uri":"rna://chat/s1/artifact/a1/revision/2","revision":"2"}
@@ -52,12 +53,15 @@ arbitrary first artifact.
 
 Every provider implements bounded `list`, `resolve`, `search`, and `read(ResourceReadRequest)`. The read request carries one `ResourceRef`, representation, opaque cursor, and character limit, so revision evidence cannot be lost between routing and the provider. The public/default text page is 2,048 characters (explicit range 128–32,000), leaving conservative model-step headroom while preserving every returned character; larger content continues only through the provider-owned cursor. Immutable text uses an offset internally because its URI is already pinned. Every continuation also carries an opaque SHA-256 scope binding: list cursors bind provider plus normalized kind, and read cursors bind the canonical URI plus normalized representation. Live Office/VBA chunks additionally bind the internal position to the content hash; collection pages bind it to a deterministic collection fingerprint. Equal content or collection hashes therefore cannot make a cursor valid for another resource or query. Model-facing list/read results expose only the usable `nextCursor`, never the current-page cursor or raw offset. Continuation copies it unchanged into `cursor` only for the same operation and exact list query or resource representation. Reusing a cursor after drift fails with retryable `resource_revision_changed`: a fresh read repeats the same URI/representation with both `cursor` and `revision` omitted, while a fresh list omits `cursor`. A cursor from another operation/query/resource fails non-retryably as `resource_cursor_invalid` and is omitted before restarting the exact operation.
 
-R61/11O reopens caller ownership, not resource identity: the canonical
-`ResourceRef`, revision binding and cursor remain internal provider/runtime evidence,
-while the final model/Library intent schema must not require a caller to assemble a
-URI or copy a revision/cursor pair. A bounded semantic choice is resolved to the
-exact reference by code and ambiguity fails closed. This is a mandatory future
-per-family cutover; the preceding current contract remains in force until then.
+R61/11O reopens visibility and caller ownership, not resource identity: the
+canonical `ResourceRef`, revision binding and cursor remain typed durable
+provider/runtime evidence. After a family cutover they are not materialized into
+model arguments, Tool Results, `RUNTIME_CONTEXT`, model-message projections or
+replayed model history. A bounded readable semantic choice is resolved to the exact
+reference by code; the model receives domain content/evidence without URI,
+revision, hash or cursor. Ambiguity fails closed, and the runtime does not expose a
+replacement opaque `candidateId`. This is a mandatory future per-family cutover;
+the preceding current contract remains in force until then.
 [Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61) owns the
 inventory and acceptance gates; the observed empty-list/kind/revision/cursor cluster
 and target ownership boundary are classified in the
@@ -100,11 +104,24 @@ Chat and Agent use one buffered structured loop. The policy differs, the transpo
 - Tool schemas start from a finite mode/host core. Complete exact-revision reads may stage one atomic optional extension for the next model-step boundary only after the full request fits and its accepted event is durable. Membership is monotonic for the logical turn: execution does not touch it, there is no LRU/partial publication, and replay reconstructs only the ordered accepted turn chain.
 - Skill bodies remain revision-matched context evidence rather than callable-pack membership. Compaction, truncation, or revision change requires another exact read.
 
-The prompt contains compact resource references relevant to the conversation. On a later question such as “что на той картинке?” the model resolves or reads the referenced URI again. Raw media is hydrated only for the next model step and then released; the durable reference remains.
+The prompt currently contains compact resource references relevant to the
+conversation. On a later question such as “что на той картинке?” the model resolves
+or reads the referenced URI again. Raw media is hydrated only for the next model
+step and then released; the durable reference remains. R61 replaces this
+pre-cutover transport with a semantic resource projection: runtime keeps and
+resolves the exact reference, while the model sees the readable attachment/target
+description and hydrated content, never the URI or revision.
 
 All four public resource operations execute as exact native read-only `ToolRuntime` handlers over the same `ResourceGatewayService` and provider registry. Their descriptor, policy, and binding are source-owned beside the handler. The controller catalog projects those same descriptors, schemas and exact policy instances through `ControllerToolDefinition`; resource files do not use `LegacyToolDefinitionAdapter`, and the projection adds no execution authority. Every call enters a fresh `DocumentAccessGate` operation root; nested live Office/VBA access through `HostRuntime` reenters only that same synchronous document operation. The Core result contains provider-bounded JSON plus exact `ResourceRef` values; list, resolve and search repeat every directly returned resource at Tool Result root, and read carries the selected resource plus its provider-owned related refs, so URI evidence survives independently of nested result layout. A successful page/chunk is passed intact or replaced by explicit `resource_evidence_context_too_large`, never by `status:ok` with a transport preview. If media or later materialization cannot reach the model, a formerly successful exact read fails closed as `status:error`; mutation outcome/effect authority is not rewritten by projection failure. For a media read, an Office adapter holds bytes only as request-local materialization until the immediate next model step, then releases them; bytes, CAS paths, and internal artifact ids do not become a second result transport.
 
 Ordinary large tool results keep the full value exact. The result envelope carries optional `resources:[{uri,revision,relation?}]`; `relation:"result"` distinguishes the CAS-backed `tool_result` containing the complete payload from other produced/cited resources. Materialization selects the largest inline projection that keeps the shared repair and continuation reserves; a zero-preview case uses a compact externalized marker rather than pretending an oversized truncation wrapper fit. Resource/schema/skill reads are not rewrapped as untrusted artifacts. Chart payloads become their specialized immutable artifact at the same result boundary, so the next model step receives kind plus exact URI rather than a duplicate chart body. Durable activity also keeps only that pointer; the storage/UI projection rehydrates the chart from CAS instead of storing or creating a duplicate.
+
+That envelope is the currently implemented model transport. In the R61 target the
+durable accepted result still owns the exact `resources` relation, but the
+model-facing Tool Result projection omits it and any nested opaque identity. Media
+and externalized payloads are hydrated by runtime from that same evidence; they do
+not require the model to echo a handle. This is one event with separate typed
+runtime/model projections, not a second resource store or result authority.
 
 ## Ingestion and derived data
 

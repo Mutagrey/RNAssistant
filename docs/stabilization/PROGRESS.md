@@ -23,6 +23,16 @@ The new targeted filter passes 1/1 with four existing CA1416 warnings. Runtime,
 public ids/schemas, skill bodies and UI are unchanged; next is 11O1 Resources +
 Capabilities characterization and atomic cutover. Windows/Office was not run.
 
+R61 model-visibility rule (2026-09-02, user-requested docs-only): the accepted
+post-cutover contract now excludes `ResourceRef`, `rna://`, revision/hash,
+cursor/offset, guards and internal IDs not only from arguments but also from
+materialized Tool Results, `RUNTIME_CONTEXT` and replayed model history. Exact state
+remains in the existing typed durable/runtime evidence and is resolved from a
+readable semantic target without a replacement opaque candidate ID. Only stable
+public tool/skill identity and runtime-generated Tool Result `tool_call_id` are
+explicit exceptions; implementation starts with the still-open 11O1 Resources +
+Capabilities atomic cutover. No runtime/schema/UI or Windows evidence changed.
+
 Engineering rules and documentation consolidation (2026-09-02, user-requested
 docs-only): [development rules](../development-rules.md) are the permanent owner
 for cross-cutting responsibilities, typed contracts, file placement, risk-based

@@ -101,14 +101,18 @@ semantic intent or runtime-owned state:
   may remain when they identify a real domain target.
 - Call/run/chat/document/endpoint IDs, UUIDs, internal artifact IDs, catalog or
   package revisions, optimistic-concurrency hashes, prepared guards, cursors,
-  offsets and page tokens are runtime-owned. They are not typed or invented by the
-  model or by a person testing a tool.
+  offsets and page tokens are runtime-owned. After a family cutover they are absent
+  from model-facing arguments, ordinary Tool Result data, `RUNTIME_CONTEXT` and
+  replayed model history; they are not typed, copied or even selected by the model
+  or by a person testing a tool.
 - A canonical revision-pinned `ResourceRef` remains the durable identity for
-  replay, provenance and result evidence. The runtime maps a bounded semantic
-  selection or previously returned candidate to that exact reference; the model
-  does not assemble an `rna://` URI, pair it with a revision or carry a continuation
-  token. Ambiguity fails closed and asks for a meaningful target choice; it never
-  falls back silently to the latest or active resource.
+  replay, provenance and result evidence, but is present only in the accepted typed
+  event/execution projection. The runtime maps a bounded semantic selection or a
+  previously accepted semantic candidate to that exact reference. The model-facing
+  result contains a readable target description and domain data, not `ResourceRef`,
+  `rna://` URI, revision, hash or cursor. Ambiguity fails closed and asks for a
+  meaningful target choice; it never falls back silently to the latest or active
+  resource and never substitutes another opaque `candidateId`.
 - Continuation belongs to the read implementation. It may expose a user-facing
   `Next` action or perform a bounded safe continuation, but a cursor/revision pair
   is copied and validated by code. Revision drift restarts only a read under its
@@ -116,12 +120,18 @@ semantic intent or runtime-owned state:
 - Defaults derivable from the bound session, selected endpoint, current immutable
   run snapshot or prior accepted result are injected after model validation. They
   do not appear as nullable ceremony in the model schema.
+- Exact public tool/skill ids may remain only when they are stable semantic
+  identities the model must choose from the current catalog. The runtime-generated
+  `tool_call_id` may remain in the Tool Result wire solely to correlate an accepted
+  call with its result; it is never an argument or model-generated state. Descriptor
+  revisions, admission guards and snapshot identities remain internal.
 
 The target therefore has two explicit views of one tool contract: a minimal strict
 intent schema for the model and Library test form, plus an internal execution
-context containing resolved identity, continuation and guard state. Both views
+context containing resolved identity, continuation and guard state. The internal
+view is never serialized into a model request or model-visible result. Both views
 reach the same `ToolRuntime` registration, policy, confirmation and handler; this is
-not a second executor or a permissive adapter. A system-owned field may remain
+not a second executor, store or permissive adapter. A system-owned field may remain
 public only with a per-tool written rationale proving that the caller must choose it
 and that no bounded semantic selector can preserve the same safety.
 
@@ -167,7 +177,8 @@ runtime. The form must provide:
 - runtime-owned values resolved from the selected host/document, current test
   fixture and prior read result. UUIDs, URIs, revisions, hashes and cursors are not
   editable fields. An advanced diagnostic may show the resolved execution context
-  read-only after preparation;
+  read-only to the human after preparation, but it is never copied into test
+  arguments, model context or model-visible result;
 - `Next`/continuation UX for paged reads and typed result/effect evidence, without
   teaching the user to copy an opaque cursor;
 - the same confirmation, document binding, safety and disposable-document rules as
@@ -195,9 +206,14 @@ WebView2, not inferred from a desktop browser screenshot.
 4. Run deterministic model scenarios proving that calls complete without invented
    opaque values and that cursor/revision confusion is structurally impossible,
    not merely discouraged by descriptions.
-5. Populate and verify UI-only documentation for every built-in tool, then switch
+5. Inspect the fully materialized request, Tool Results and replayed model history:
+   after each family cutover they contain no `ResourceRef`, `rna://`, revision/hash,
+   cursor or internal id outside the two explicit public-id/correlation exceptions.
+   Harness fixtures create and retain exact state behind runtime; scenarios cannot
+   inject it through scripted model arguments.
+6. Populate and verify UI-only documentation for every built-in tool, then switch
    the typed test form and fix both reported layouts with focused browser tests.
-6. Qualify the final exact catalog with live providers and Windows WebView2/Office.
+7. Qualify the final exact catalog with live providers and Windows WebView2/Office.
    Earlier evidence for a changed schema/catalog cannot close WQ-PACK or release.
 
 R61 is a stabilization correction and a Phase 12 prerequisite explicitly requested
@@ -245,6 +261,14 @@ contract is:
   shadowed;
 - import/export carries exact provenance and never treats an uploaded file as
   trusted before explicit validation and confirmation;
+- VBA/custom-tool authoring defines only user/domain parameters consumed by the
+  implementation. Bound host/document, `ResourceRef`, revisions, guards, package
+  fingerprints and execution IDs are supplied by runtime outside the authored JSON
+  Schema and never become hidden macro parameters. Plumbing-shaped authored fields
+  fail validation unless the package records an explicit domain-identity rationale;
+- authoring preview and Library test use generated runtime fixtures behind the same
+  preparation boundary. The author/model fills only the effective semantic form;
+  exact prepared state may appear only in a human read-only diagnostic;
 - a catalog change becomes available only at the next run boundary and cannot
   mutate the snapshot of an accepted run;
 - editor test executes through normal `ToolRuntime`, policy, confirmation,

@@ -69,9 +69,17 @@ ModelProtocol.
   parsing и произвольные строковые статусы не добавляются как application contract.
 - Model-facing schema описывает semantic intent: цель и действие, понятные модели
   и человеку.
-- URI, revision, cursor, offset, UUID, content hash, collection fingerprint,
-  `ToolCallId`, confirmation и prepared guard принадлежат runtime. Caller их не
-  создаёт и не переносит между вызовами.
+- `ResourceRef`, URI, revision, cursor, offset, UUID, content hash, collection
+  fingerprint, confirmation и prepared guard принадлежат runtime. После
+  переключения семейства они не входят ни в model-facing schema, ни в обычный
+  Tool Result/`RUNTIME_CONTEXT`/history projection: exact значения остаются только
+  в typed durable event и execution evidence. Модель получает semantic target и
+  предметный результат, а не opaque handle; замена `ResourceRef` на новый
+  `candidateId` запрещена.
+- Исключения ограничены exact public tool/skill id, когда это реальная выбираемая
+  semantic identity, и runtime-generated `tool_call_id` транспортного Tool Result.
+  `tool_call_id` нужен только для сопоставления принятого вызова с результатом,
+  никогда не является argument и не создаётся моделью.
 - Resource — данные, Tool — действие. Resource read не выдаёт execution authority.
 - Safety-critical решение не принимается по словам в model message, exception text
   или UI label.
