@@ -55,7 +55,7 @@ namespace RNAssistant.Office.Services
         internal ArtifactViewerService(
             ResourceGatewayService gateway,
             Func<ChatAttachment, byte[]> readAttachmentBytes,
-            Func<byte[], int, ArtifactPdfPageRenderResult> renderPdfPage)
+            Func<byte[], int, int, ArtifactPdfPageRenderResult> renderPdfPage)
         {
             _gateway = gateway ?? throw new ArgumentNullException("gateway");
             _readAttachmentBytes = readAttachmentBytes;
@@ -70,6 +70,11 @@ namespace RNAssistant.Office.Services
         public ArtifactPdfPageDto ReadPdfPage(ChatSession session, string resourceUri, int pageIndex)
         {
             return _pdfViewer.ReadPage(session, resourceUri, pageIndex);
+        }
+
+        public ArtifactPdfPageDto ReadPdfThumbnail(ChatSession session, string resourceUri, int pageIndex)
+        {
+            return _pdfViewer.ReadThumbnail(session, resourceUri, pageIndex);
         }
 
         public ArtifactImageViewerDto ReadImage(ChatSession session, string resourceUri)

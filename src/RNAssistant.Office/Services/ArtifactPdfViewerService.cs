@@ -21,10 +21,12 @@ namespace RNAssistant.Office.Services
         public const int MaximumPages = 10000;
         public const int MaximumPageDimension = 2048;
         public const long MaximumPageImageBytes = 10L * 1024L * 1024L;
+        public const int MaximumThumbnailDimension = 320;
+        public const long MaximumThumbnailImageBytes = 1L * 1024L * 1024L;
 
         private readonly ResourceGatewayService _gateway;
         private readonly Func<ChatAttachment, byte[]> _readAttachmentBytes;
-        private readonly Func<byte[], int, ArtifactPdfPageRenderResult> _renderPage;
+        private readonly Func<byte[], int, int, ArtifactPdfPageRenderResult> _renderPage;
 
         public ArtifactPdfViewerService(
             ResourceGatewayService gateway,
@@ -36,7 +38,7 @@ namespace RNAssistant.Office.Services
         internal ArtifactPdfViewerService(
             ResourceGatewayService gateway,
             Func<ChatAttachment, byte[]> readAttachmentBytes,
-            Func<byte[], int, ArtifactPdfPageRenderResult> renderPage)
+            Func<byte[], int, int, ArtifactPdfPageRenderResult> renderPage)
         {
             _gateway = gateway ?? throw new ArgumentNullException("gateway");
             _readAttachmentBytes = readAttachmentBytes;
@@ -76,6 +78,31 @@ namespace RNAssistant.Office.Services
 
         public ArtifactPdfPageDto ReadPage(ChatSession session, string resourceUri, int pageIndex)
         {
+            return ReadRenderedPage(
+                session,
+                resourceUri,
+                pageIndex,
+                MaximumPageDimension,
+                MaximumPageImageBytes);
+        }
+
+        public ArtifactPdfPageDto ReadThumbnail(ChatSession session, string resourceUri, int pageIndex)
+        {
+            return ReadRenderedPage(
+                session,
+                resourceUri,
+                pageIndex,
+                MaximumThumbnailDimension,
+                MaximumThumbnailImageBytes);
+        }
+
+        private ArtifactPdfPageDto ReadRenderedPage(
+            ChatSession session,
+            string resourceUri,
+            int pageIndex,
+            int maximumDimension,
+            long maximumImageBytes)
+        {
             if (_readAttachmentBytes == null || _renderPage == null)
             {
                 throw new InvalidOperationException("Artifact PDF renderer is unavailable.");
@@ -92,7 +119,7 @@ namespace RNAssistant.Office.Services
             ArtifactPdfPageRenderResult rendered;
             try
             {
-                rendered = _renderPage(pdfBytes, pageIndex);
+                rendered = _renderPage(pdfBytes, pageIndex, maximumDimension);
             }
             catch (Exception error) when (IsNativeRendererLoadFailure(error))
             {
@@ -100,9 +127,9 @@ namespace RNAssistant.Office.Services
                     "PDF page rendering is unavailable for the current process architecture.", error);
             }
             if (rendered == null || rendered.Bytes == null || rendered.Bytes.LongLength <= 0 ||
-                rendered.Bytes.LongLength > MaximumPageImageBytes ||
-                rendered.Width <= 0 || rendered.Width > MaximumPageDimension ||
-                rendered.Height <= 0 || rendered.Height > MaximumPageDimension ||
+                rendered.Bytes.LongLength > maximumImageBytes ||
+                rendered.Width <= 0 || rendered.Width > maximumDimension ||
+                rendered.Height <= 0 || rendered.Height > maximumDimension ||
                 !IsJpeg(rendered.Bytes))
             {
                 throw new InvalidOperationException("Artifact PDF renderer returned an invalid bounded page image.");
@@ -193,7 +220,7 @@ namespace RNAssistant.Office.Services
             return pageTextLengths;
         }
 
-        private static ArtifactPdfPageRenderResult RenderPage(byte[] pdfBytes, int pageIndex)
+        private static ArtifactPdfPageRenderResult RenderPage(byte[] pdfBytes, int pageIndex, int maximumDimension)
         {
             var size = Conversion.GetPageSize(pdfBytes, new Index(pageIndex));
             if (size.Width <= 0 || size.Height <= 0 ||
@@ -207,14 +234,14 @@ namespace RNAssistant.Office.Services
             RenderOptions options;
             if (size.Width >= size.Height)
             {
-                width = MaximumPageDimension;
-                height = Math.Max(1, (int)Math.Round(MaximumPageDimension * size.Height / size.Width));
+                width = maximumDimension;
+                height = Math.Max(1, (int)Math.Round(maximumDimension * size.Height / size.Width));
                 options = new RenderOptions(Width: width, Height: null, WithAspectRatio: true);
             }
             else
             {
-                height = MaximumPageDimension;
-                width = Math.Max(1, (int)Math.Round(MaximumPageDimension * size.Width / size.Height));
+                height = maximumDimension;
+                width = Math.Max(1, (int)Math.Round(maximumDimension * size.Width / size.Height));
                 options = new RenderOptions(Width: null, Height: height, WithAspectRatio: true);
             }
             using (var output = new MemoryStream())

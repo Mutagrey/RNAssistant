@@ -200,6 +200,24 @@
           "sha256": "81b700e1f8e7c1aed5c147ccf8cc3c8d757734e34de4b38c94794443149c0de1"
         }
       ]
+    },
+    {
+      "id": "viewerjs",
+      "npmPackage": "viewerjs",
+      "version": "1.12.0",
+      "license": "MIT",
+      "gitHead": "035a042afd2bcfd386eca588a9e4315289ab1f45",
+      "npmTarball": "https://registry.npmjs.org/viewerjs/-/viewerjs-1.12.0.tgz",
+      "npmIntegrity": "sha512-eQrV7FvqXj2Ysavd9LINI6bFAvXtw5YbdlMtdIo6Bmrv25hEOBeXoOX9E7cJwYuFAOPFzmppFvDn02QNHB120w==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "Only the pinned UMD and CSS assets are shipped. RNAssistant supplies verified local Blob images, owns PDF page navigation and revokes every Blob URL on viewer teardown; Viewer.js has no bridge or network access.",
+      "licenseFiles": [
+        {
+          "path": "licenses/viewerjs-1.12.0/LICENSE",
+          "sha256": "eb917650781dcf06a60b97cba9b05bf583931ec2d311d8a5548a8dca90a57e0f"
+        }
+      ]
     }
   ],
   "files": [
@@ -470,6 +488,20 @@
       "bytes": 21756,
       "sha256": "1ae1d7d7e5a78650b49b3b4d5e0af9c3119ce06ad23a05b0ddc8931e99776ddb",
       "provenanceUrl": "https://unpkg.com/wunderbaum@0.14.1/dist/wunderbaum.css"
+    },
+    {
+      "path": "js/vendor/viewer.min.js",
+      "package": "viewerjs",
+      "bytes": 38314,
+      "sha256": "4f9739e55704ddd1534b0b431c091f7af41f72aa2f144d98b0aa812c552eae40",
+      "provenanceUrl": "https://unpkg.com/viewerjs@1.12.0/dist/viewer.min.js"
+    },
+    {
+      "path": "css/vendor/viewer.min.css",
+      "package": "viewerjs",
+      "bytes": 7451,
+      "sha256": "a6588e8c990f85e4f1eb88dea73fee72ed3697943c7226558c84d3ee32ead406",
+      "provenanceUrl": "https://unpkg.com/viewerjs@1.12.0/dist/viewer.min.css"
     }
   ]
 }

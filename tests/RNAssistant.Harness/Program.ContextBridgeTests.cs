@@ -1085,6 +1085,15 @@ namespace RNAssistant.Harness
             AssertTrue(envelope["ok"].Value<bool>(), "artifact PDF page bridge response ok");
             AssertEqual(0, envelope["payload"]["pageIndex"].Value<int>(),
                 "artifact PDF page forwards zero-based page index");
+            response = bridge.HandleMessageAsync(
+                "{\"id\":\"artifact-pdf-thumbnail\",\"type\":\"readArtifactPdfThumbnail\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + pdfUri +
+                "\",\"pageIndex\":0}}")
+                .GetAwaiter().GetResult();
+            envelope = JObject.Parse(response);
+            AssertTrue(envelope["ok"].Value<bool>(), "artifact PDF thumbnail bridge response ok");
+            AssertEqual(160, envelope["payload"]["width"].Value<int>(),
+                "artifact PDF thumbnail returns bounded preview width");
         }
 
         private static void BridgeUsesTypedHtmlNetworkPayloads()

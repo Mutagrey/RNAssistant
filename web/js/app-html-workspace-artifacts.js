@@ -196,6 +196,19 @@
         initialTab: viewer.activeTab || "pages",
         onTabChange: function (tab) { viewer.activeTab = tab; },
         page: viewer.pdfPage,
+        thumbnails: viewer.pdfThumbnails || {},
+        thumbnailScrollTop: Number(viewer.pdfThumbnailScrollTop || 0),
+        onThumbnailScroll: function (scrollTop) { viewer.pdfThumbnailScrollTop = Number(scrollTop || 0); },
+        onThumbnailRequest: typeof actions.loadArtifactPdfThumbnail === "function"
+          ? function (pageIndex) {
+            return actions.loadArtifactPdfThumbnail({ resourceUri: uri, pageIndex: pageIndex });
+          }
+          : null,
+        onPageSelect: typeof actions.selectArtifactPdfPage === "function"
+          ? function (pageIndex) {
+            return actions.selectArtifactPdfPage({ resourceUri: uri, pageIndex: pageIndex });
+          }
+          : null,
         textPage: pdfTextPage,
         fullText: viewer.complete ? viewer.fullText : null,
         textComplete: viewer.complete === true,
@@ -552,8 +565,9 @@
   function renderDetail(root, selected, editorValue, actions) {
     actions = actions || {};
     clearDetail(root);
-    root.classList.toggle("is-image-preview",
-      selected.type === "artifact" && artifactViewerKind(selected.item) === "image");
+    var selectedViewerKind = selected.type === "artifact" ? artifactViewerKind(selected.item) : "";
+    root.classList.toggle("is-image-preview", selectedViewerKind === "image");
+    root.classList.toggle("is-media-preview", selectedViewerKind === "image" || selectedViewerKind === "pdf");
     appendDetailTabs(root, function (preview) {
       if (selected.type === "plan") {
         var planMetadata = {};

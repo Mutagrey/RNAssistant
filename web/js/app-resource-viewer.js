@@ -29,51 +29,160 @@
 
   function createImage(options) {
     options = options || {};
+    if (typeof window.Viewer !== "function") throw new Error("Viewer.js is unavailable.");
     var bytes = bytesFromBase64(options.base64Content);
     if (bytes.byteLength !== Number(options.byteLength || 0)) throw new Error("Image byte length is inconsistent.");
     var objectUrl = URL.createObjectURL(new Blob([bytes], { type: options.mimeType }));
     var root = element("div", "rn-image-viewer");
+    if (options.documentPage) root.classList.add("is-document-page");
     var toolbar = element("div", "rn-resource-viewer-toolbar");
     var dimensions = element("span", "rn-resource-viewer-status", formatBytes(options.byteLength));
-    var fit = element("button", "secondary compact active", "Вписать");
-    var actual = element("button", "secondary compact", "100%");
-    var zoomOut = element("button", "secondary compact", "−");
-    var zoomIn = element("button", "secondary compact", "+");
     var download = element("button", "secondary compact", options.downloadLabel || "Скачать");
-    [fit, actual, zoomOut, zoomIn, download].forEach(function (button) { button.type = "button"; });
-    var stage = element("div", "rn-image-viewer-stage is-fit");
-    var image = element("img", "rn-image-viewer-image");
+    download.type = "button";
+    download.title = options.downloadLabel || "Скачать";
+    var stageShell = element("div", "rn-image-viewer-stage-shell");
+    if (options.documentPage) stageShell.classList.add("is-document-page");
+    stageShell.tabIndex = 0;
+    stageShell.setAttribute("role", "group");
+    stageShell.setAttribute("aria-label", options.documentPage ? "Страница документа" : "Просмотр изображения");
+    var image = element("img", "rn-viewerjs-source");
     image.alt = String(options.title || "Image");
-    image.src = objectUrl;
     var naturalWidth = 0;
     var naturalHeight = 0;
-    var scale = 1;
+    var vendorViewer = null;
+    var resizeObserver = null;
+    var resizeFrame = 0;
+    var resizeTimer = 0;
+    var released = false;
 
-    function applyScale(nextScale) {
-      if (!naturalWidth) return;
-      scale = Math.max(0.1, Math.min(8, Number(nextScale || 1)));
-      stage.classList.remove("is-fit");
-      fit.classList.remove("active");
-      actual.classList.toggle("active", scale === 1);
-      image.style.width = Math.round(naturalWidth * scale) + "px";
-      dimensions.textContent = naturalWidth + " × " + naturalHeight + " px · " + Math.round(scale * 100) + "% · " + formatBytes(options.byteLength);
+    function updateDimensions(label) {
+      dimensions.textContent = (naturalWidth && naturalHeight
+        ? naturalWidth + " × " + naturalHeight + " px · "
+        : "") + (label ? label + " · " : "") + formatBytes(options.byteLength);
+    }
+
+    function localizeViewerControls() {
+      var labels = {
+        "viewer-zoom-in": "Увеличить",
+        "viewer-zoom-out": "Уменьшить",
+        "viewer-one-to-one": "Размер 100%",
+        "viewer-reset": "Вписать",
+        "viewer-rotate-left": "Повернуть влево",
+        "viewer-rotate-right": "Повернуть вправо"
+      };
+      Object.keys(labels).forEach(function (className) {
+        var control = stageShell.querySelector("." + className);
+        if (!control) return;
+        control.title = labels[className];
+        control.setAttribute("aria-label", labels[className]);
+      });
+    }
+
+    function fittedRatio() {
+      if (!naturalWidth || !naturalHeight) return 1;
+      var width = Number(stageShell.clientWidth || 0);
+      var height = Number(stageShell.clientHeight || 0);
+      if (width <= 0 || height <= 0) return 1;
+      return Math.max(0.05, Math.min(8, Math.min(width / naturalWidth, height / naturalHeight)));
+    }
+
+    function fitViewer() {
+      if (!vendorViewer) return;
+      vendorViewer.reset();
+      vendorViewer.zoomTo(fittedRatio(), false);
+    }
+
+    function showActualSize() {
+      if (!vendorViewer) return;
+      vendorViewer.reset();
+      vendorViewer.zoomTo(1, true);
+    }
+
+    function scheduleViewerResize() {
+      if (released || resizeFrame) return;
+      var schedule = typeof window.requestAnimationFrame === "function"
+        ? window.requestAnimationFrame.bind(window)
+        : function (callback) { return window.setTimeout(callback, 0); };
+      resizeFrame = schedule(function () {
+        resizeFrame = 0;
+        if (released || !vendorViewer) return;
+        if (typeof vendorViewer.resize === "function") vendorViewer.resize();
+        fitViewer();
+      });
+    }
+
+    function ensureViewer() {
+      if (released || vendorViewer) return;
+      vendorViewer = new window.Viewer(image, {
+        inline: true,
+        backdrop: false,
+        button: false,
+        navbar: false,
+        title: false,
+        toolbar: {
+          zoomIn: "large",
+          zoomOut: "large",
+          oneToOne: { show: true, size: "large", click: showActualSize },
+          reset: { show: true, size: "large", click: fitViewer },
+          rotateLeft: true,
+          rotateRight: true
+        },
+        className: "rn-vendor-image-viewer",
+        initialCoverage: 1,
+        keyboard: true,
+        focus: false,
+        loop: false,
+        minWidth: 100,
+        minHeight: 100,
+        minZoomRatio: 0.05,
+        maxZoomRatio: 8,
+        movable: true,
+        rotatable: true,
+        scalable: false,
+        slideOnTouch: false,
+        toggleOnDblclick: false,
+        tooltip: true,
+        transition: true,
+        zoomOnTouch: true,
+        zoomOnWheel: true,
+        zoomRatio: 0.15,
+        ready: function () {
+          localizeViewerControls();
+          if (typeof window.ResizeObserver === "function") {
+            resizeObserver = new window.ResizeObserver(scheduleViewerResize);
+            resizeObserver.observe(stageShell);
+          }
+          scheduleViewerResize();
+          resizeTimer = window.setTimeout(function () {
+            resizeTimer = 0;
+            scheduleViewerResize();
+          }, 50);
+        },
+        viewed: function () {
+          var data = this.viewer && this.viewer.imageData;
+          updateDimensions(data && data.ratio ? Math.round(data.ratio * 100) + "%" : "Вписано");
+        },
+        zoomed: function (event) {
+          var ratio = event && event.detail ? Number(event.detail.ratio || 0) : 0;
+          if (ratio > 0) updateDimensions(Math.round(ratio * 100) + "%");
+        }
+      });
     }
 
     image.addEventListener("load", function () {
       naturalWidth = image.naturalWidth || 0;
       naturalHeight = image.naturalHeight || 0;
-      dimensions.textContent = (naturalWidth && naturalHeight ? naturalWidth + " × " + naturalHeight + " px · " : "") + formatBytes(options.byteLength);
+      updateDimensions("Вписано");
+      ensureViewer();
     });
-    fit.addEventListener("click", function () {
-      stage.classList.add("is-fit");
-      fit.classList.add("active");
-      actual.classList.remove("active");
-      image.style.width = "";
-      dimensions.textContent = (naturalWidth && naturalHeight ? naturalWidth + " × " + naturalHeight + " px · " : "") + formatBytes(options.byteLength);
+    stageShell.addEventListener("dblclick", function (event) {
+      if (!vendorViewer) return;
+      var ratio = vendorViewer.imageData ? Number(vendorViewer.imageData.ratio || 0) : 0;
+      if (Math.abs(ratio - 1) < 0.01) fitViewer();
+      else showActualSize();
+      if (event && typeof event.preventDefault === "function") event.preventDefault();
+      if (event && typeof event.stopPropagation === "function") event.stopPropagation();
     });
-    actual.addEventListener("click", function () { applyScale(1); });
-    zoomOut.addEventListener("click", function () { applyScale(scale / 1.25); });
-    zoomIn.addEventListener("click", function () { applyScale(scale * 1.25); });
     download.addEventListener("click", function () {
       var link = document.createElement("a");
       link.href = objectUrl;
@@ -83,24 +192,71 @@
       link.remove();
     });
     toolbar.appendChild(dimensions);
-    toolbar.appendChild(fit);
-    toolbar.appendChild(actual);
-    toolbar.appendChild(zoomOut);
-    toolbar.appendChild(zoomIn);
     toolbar.appendChild(download);
-    stage.appendChild(image);
-    root.appendChild(toolbar);
-    root.appendChild(stage);
+    stageShell.appendChild(image);
 
-    var released = false;
+    var navigation = options.navigation || null;
+    function runNavigation(action, label) {
+      if (typeof action !== "function") return;
+      var previousLabel = label.textContent;
+      label.textContent = "Загружаю…";
+      Promise.resolve(action()).then(function (changed) {
+        if (changed === false) label.textContent = "Страница недоступна";
+        else label.textContent = previousLabel;
+      }).catch(function () { label.textContent = "Страница недоступна"; });
+    }
+    if (navigation) {
+      root.classList.add("has-navigation");
+      var previous = element("button", "rn-preview-nav rn-preview-nav-previous", "‹");
+      var next = element("button", "rn-preview-nav rn-preview-nav-next", "›");
+      var pageLabel = element("span", "rn-preview-page-label", String(navigation.label || ""));
+      previous.type = next.type = "button";
+      previous.disabled = navigation.hasPrevious !== true;
+      next.disabled = navigation.hasNext !== true;
+      previous.title = "Предыдущая страница";
+      next.title = "Следующая страница";
+      previous.setAttribute("aria-label", previous.title);
+      next.setAttribute("aria-label", next.title);
+      pageLabel.setAttribute("aria-live", "polite");
+      previous.addEventListener("click", function () { runNavigation(navigation.onPrevious, pageLabel); });
+      next.addEventListener("click", function () { runNavigation(navigation.onNext, pageLabel); });
+      stageShell.appendChild(previous);
+      stageShell.appendChild(next);
+      stageShell.appendChild(pageLabel);
+    }
+    stageShell.addEventListener("keydown", function (event) {
+      var key = event && event.key;
+      if (navigation && key === "ArrowLeft" && !previous.disabled) runNavigation(navigation.onPrevious, pageLabel);
+      else if (navigation && key === "ArrowRight" && !next.disabled) runNavigation(navigation.onNext, pageLabel);
+      else if (vendorViewer && (key === "+" || key === "=")) vendorViewer.zoom(0.15, true);
+      else if (vendorViewer && key === "-") vendorViewer.zoom(-0.15, true);
+      else if (vendorViewer && key === "0") showActualSize();
+      else if (vendorViewer && (key === "f" || key === "F")) fitViewer();
+      else return;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      if (typeof event.stopPropagation === "function") event.stopPropagation();
+    });
+    root.appendChild(toolbar);
+    root.appendChild(stageShell);
+    image.src = objectUrl;
+
     function release() {
       if (released) return;
       released = true;
+      if (resizeObserver) resizeObserver.disconnect();
+      resizeObserver = null;
+      if (resizeFrame && typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = 0;
+      if (resizeTimer) window.clearTimeout(resizeTimer);
+      resizeTimer = 0;
+      if (vendorViewer && typeof vendorViewer.destroy === "function") vendorViewer.destroy();
+      vendorViewer = null;
       URL.revokeObjectURL(objectUrl);
     }
     window.addEventListener("beforeunload", release);
     return {
       element: root,
+      sourceUrl: objectUrl,
       destroy: function () {
         window.removeEventListener("beforeunload", release);
         release();
@@ -154,6 +310,115 @@
     return { element: root, destroy: function () { root.replaceChildren(); } };
   }
 
+  function createPdfThumbnailRail(options, currentPage, thumbnailUrl, currentPageUrl) {
+    var rowHeight = 126;
+    var pageCount = Math.max(1, Number(options.pageCount || 1));
+    var currentIndex = Math.max(0, Math.min(Number(currentPage.pageIndex || 0), pageCount - 1));
+    var rail = element("aside", "rn-pdf-thumbnail-rail");
+    rail.setAttribute("aria-label", "Страницы PDF");
+    var header = element("div", "rn-pdf-thumbnail-header");
+    header.appendChild(element("span", "rn-pdf-thumbnail-title", "Страницы"));
+    var input = element("input", "rn-pdf-page-input");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(pageCount);
+    input.value = String(currentIndex + 1);
+    input.disabled = options.pending === true || typeof options.onPageSelect !== "function";
+    input.setAttribute("aria-label", "Перейти к странице");
+    header.appendChild(input);
+    header.appendChild(element("span", "rn-pdf-page-count", "/ " + pageCount));
+    var list = element("div", "rn-pdf-thumbnail-list");
+    list.tabIndex = 0;
+    var track = element("div", "rn-pdf-thumbnail-track");
+    track.style.height = (pageCount * rowHeight) + "px";
+    list.appendChild(track);
+    rail.appendChild(header);
+    rail.appendChild(list);
+
+    function selectPage(pageIndex) {
+      if (pageIndex === currentIndex || options.pending || typeof options.onPageSelect !== "function") return;
+      options.onPageSelect(pageIndex);
+    }
+
+    function commitInput() {
+      var requested = Number(input.value);
+      if (!Number.isInteger(requested)) {
+        input.value = String(currentIndex + 1);
+        return;
+      }
+      requested = Math.max(1, Math.min(pageCount, requested));
+      input.value = String(requested);
+      selectPage(requested - 1);
+    }
+
+    input.addEventListener("change", commitInput);
+    input.addEventListener("keydown", function (event) {
+      if (event && event.key === "Enter") {
+        commitInput();
+        if (typeof event.preventDefault === "function") event.preventDefault();
+      }
+    });
+
+    function renderRows() {
+      var viewportHeight = Number(list.clientHeight || 560);
+      var first = Math.max(0, Math.floor(Number(list.scrollTop || 0) / rowHeight) - 2);
+      var last = Math.min(pageCount - 1, Math.ceil((Number(list.scrollTop || 0) + viewportHeight) / rowHeight) + 2);
+      var requested = [];
+      track.replaceChildren();
+      for (var pageIndex = first; pageIndex <= last; pageIndex += 1) {
+        var item = element("button", "rn-pdf-thumbnail-item" + (pageIndex === currentIndex ? " active" : ""));
+        item.type = "button";
+        item.disabled = options.pending === true;
+        item.style.top = (pageIndex * rowHeight) + "px";
+        item.setAttribute("data-page-index", String(pageIndex));
+        item.setAttribute("aria-label", "Страница " + (pageIndex + 1));
+        if (pageIndex === currentIndex) item.setAttribute("aria-current", "page");
+        item.appendChild(element("span", "rn-pdf-thumbnail-number", String(pageIndex + 1)));
+        var preview = element("span", "rn-pdf-thumbnail-preview");
+        var thumbnail = pageIndex === currentIndex
+          ? currentPage
+          : ((options.thumbnails || {})[String(pageIndex)] || null);
+        if (thumbnail && (!thumbnail.status || thumbnail.status === "ready")) {
+          try {
+            var image = element("img", "rn-pdf-thumbnail-image");
+            image.alt = "";
+            image.src = pageIndex === currentIndex && currentPageUrl
+              ? currentPageUrl
+              : thumbnailUrl(thumbnail);
+            preview.appendChild(image);
+          } catch (error) {
+            preview.appendChild(element("span", "rn-pdf-thumbnail-unavailable", "×"));
+          }
+        } else if (thumbnail && thumbnail.status === "error") {
+          preview.appendChild(element("span", "rn-pdf-thumbnail-unavailable", "×"));
+          item.title = thumbnail.message || "Миниатюра недоступна";
+        } else {
+          preview.appendChild(element("span", "rn-pdf-thumbnail-loading", "…"));
+          if (!thumbnail && typeof options.onThumbnailRequest === "function") requested.push(pageIndex);
+        }
+        item.appendChild(preview);
+        (function (selectedIndex) {
+          item.addEventListener("click", function () { selectPage(selectedIndex); });
+        }(pageIndex));
+        track.appendChild(item);
+      }
+      requested.forEach(function (pageIndex) { options.onThumbnailRequest(pageIndex); });
+    }
+
+    list.addEventListener("scroll", function () {
+      if (typeof options.onThumbnailScroll === "function") options.onThumbnailScroll(list.scrollTop);
+      renderRows();
+    });
+    var initialScrollTop = Math.max(0, Number(options.thumbnailScrollTop || 0));
+    var visibleFirst = Math.floor(initialScrollTop / rowHeight);
+    if (currentIndex < visibleFirst || currentIndex > visibleFirst + 4) {
+      initialScrollTop = Math.max(0, (currentIndex - 2) * rowHeight);
+    }
+    list.scrollTop = initialScrollTop;
+    renderRows();
+    return rail;
+  }
+
   function createPdf(options) {
     options = options || {};
     var root = element("div", "rn-pdf-viewer");
@@ -170,20 +435,29 @@
     var body = element("div", "rn-pdf-viewer-body");
     root.appendChild(body);
     var child = null;
+    var thumbnailUrls = {};
+
+    function pdfThumbnailUrl(page) {
+      var key = String(page.pageIndex) + ":" + String(page.imageContentSha256 || "");
+      if (thumbnailUrls[key]) return thumbnailUrls[key];
+      var bytes = bytesFromBase64(page.imageBase64Content);
+      if (bytes.byteLength !== Number(page.imageByteLength || 0)) {
+        throw new Error("PDF thumbnail byte length is inconsistent.");
+      }
+      thumbnailUrls[key] = URL.createObjectURL(new Blob([bytes], { type: page.imageMimeType }));
+      return thumbnailUrls[key];
+    }
+
+    function releaseThumbnailUrls() {
+      Object.keys(thumbnailUrls).forEach(function (key) { URL.revokeObjectURL(thumbnailUrls[key]); });
+      thumbnailUrls = {};
+    }
 
     function clear() {
       if (child && typeof child.destroy === "function") child.destroy();
       child = null;
+      releaseThumbnailUrls();
       body.replaceChildren();
-    }
-
-    function changePage(direction, status) {
-      var action = direction === "previous" ? options.onPrevious : options.onNext;
-      if (typeof action !== "function") return;
-      status.textContent = "Загружаю…";
-      Promise.resolve(action()).then(function (changed) {
-        if (!changed) status.textContent = "Страница недоступна";
-      }).catch(function () { status.textContent = "Страница недоступна"; });
     }
 
     function showPages() {
@@ -192,29 +466,28 @@
       pagesButton.classList.add("active");
       textButton.classList.remove("active");
       var page = options.page || {};
-      var navigation = element("div", "rn-resource-viewer-toolbar rn-pdf-page-navigation");
-      var status = element("span", "rn-resource-viewer-status",
-        "Страница " + (Number(page.pageIndex || 0) + 1) + " из " + Number(options.pageCount || 0) +
-        " · " + Number(page.width || 0) + " × " + Number(page.height || 0) + " px");
-      var previous = element("button", "secondary compact", "←");
-      var next = element("button", "secondary compact", "→");
-      previous.type = next.type = "button";
-      previous.disabled = options.pending || Number(page.pageIndex || 0) <= 0 || typeof options.onPrevious !== "function";
-      next.disabled = options.pending || Number(page.pageIndex || 0) + 1 >= Number(options.pageCount || 0) || typeof options.onNext !== "function";
-      previous.addEventListener("click", function () { changePage("previous", status); });
-      next.addEventListener("click", function () { changePage("next", status); });
-      navigation.appendChild(status);
-      navigation.appendChild(previous);
-      navigation.appendChild(next);
-      body.appendChild(navigation);
       child = createImage({
         title: fileName(options.title, "document.pdf") + ".page-" + (Number(page.pageIndex || 0) + 1) + ".jpg",
         mimeType: page.imageMimeType,
         byteLength: page.imageByteLength,
         base64Content: page.imageBase64Content,
-        downloadLabel: "Скачать страницу"
+        downloadLabel: "Скачать страницу",
+        documentPage: true,
+        navigation: {
+          label: (Number(page.pageIndex || 0) + 1) + " / " + Number(options.pageCount || 0),
+          hasPrevious: !options.pending && Number(page.pageIndex || 0) > 0 && typeof options.onPrevious === "function",
+          hasNext: !options.pending && Number(page.pageIndex || 0) + 1 < Number(options.pageCount || 0) &&
+            typeof options.onNext === "function",
+          onPrevious: options.onPrevious,
+          onNext: options.onNext
+        }
       });
-      body.appendChild(child.element);
+      var layout = element("div", "rn-pdf-pages-layout");
+      var pageHost = element("div", "rn-pdf-page-host");
+      pageHost.appendChild(child.element);
+      layout.appendChild(createPdfThumbnailRail(options, page, pdfThumbnailUrl, child.sourceUrl));
+      layout.appendChild(pageHost);
+      body.appendChild(layout);
     }
 
     function showText() {

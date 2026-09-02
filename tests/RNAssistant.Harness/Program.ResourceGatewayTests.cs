@@ -1118,11 +1118,15 @@ namespace RNAssistant.Harness
             var viewer = new ArtifactViewerService(
                 new ResourceGatewayService(),
                 item => pdfBytes,
-                (payload, pageIndex) => new ArtifactPdfPageRenderResult
+                (payload, pageIndex, maximumDimension) => new ArtifactPdfPageRenderResult
                 {
                     Bytes = jpeg,
-                    Width = pageIndex == 0 ? 800 : 600,
-                    Height = pageIndex == 0 ? 600 : 800
+                    Width = maximumDimension == ArtifactPdfViewerService.MaximumThumbnailDimension
+                        ? (pageIndex == 0 ? 160 : 120)
+                        : (pageIndex == 0 ? 800 : 600),
+                    Height = maximumDimension == ArtifactPdfViewerService.MaximumThumbnailDimension
+                        ? (pageIndex == 0 ? 120 : 160)
+                        : (pageIndex == 0 ? 600 : 800)
                 });
 
             var info = viewer.ReadPdfInfo(session, uri);
@@ -1139,11 +1143,25 @@ namespace RNAssistant.Harness
             AssertEqual(600, page.Width, "PDF viewer preserves bounded render width");
             AssertEqual(Convert.ToBase64String(jpeg), page.ImageBase64Content,
                 "PDF viewer returns exact rendered JPEG bytes");
+            var thumbnail = viewer.ReadPdfThumbnail(session, uri, 1);
+            AssertEqual(120, thumbnail.Width, "PDF viewer renders a separately bounded thumbnail width");
+            AssertEqual(160, thumbnail.Height, "PDF viewer preserves thumbnail aspect ratio");
             RuntimeThrows<InvalidOperationException>(() => viewer.ReadPdfPage(session, uri, 2));
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPdfThumbnail(session, uri, 2));
             RuntimeThrows<InvalidOperationException>(() =>
                 new ArtifactViewerService(
                     new ResourceGatewayService(), item => pdfBytes,
-                    (payload, pageIndex) => { throw new BadImageFormatException(); })
+                    (payload, pageIndex, maximumDimension) => new ArtifactPdfPageRenderResult
+                    {
+                        Bytes = jpeg,
+                        Width = maximumDimension + 1,
+                        Height = maximumDimension
+                    })
+                    .ReadPdfThumbnail(session, uri, 0));
+            RuntimeThrows<InvalidOperationException>(() =>
+                new ArtifactViewerService(
+                    new ResourceGatewayService(), item => pdfBytes,
+                    (payload, pageIndex, maximumDimension) => { throw new BadImageFormatException(); })
                     .ReadPdfPage(session, uri, 0));
         }
 

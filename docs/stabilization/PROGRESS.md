@@ -24,6 +24,22 @@ read, closed-document omission, strict no-`rna://` model context/history, skill
 guidance, source inclusion and R61 property inventory. Windows live VBE/WebView
 qualification remains open.
 
+Phase 11D2/11D3 media-viewer UX correction (2026-09-02, user-reported
+host-neutral): image and PDF pages now proportionally upscale in Fit mode to use the
+whole preview area through locally pinned Viewer.js 1.12.0, zoom by wheel/pinch,
+toggle Fit/100% on double-click and accept keyboard zoom shortcuts. PDF navigation
+adds a virtualized left thumbnail rail and numeric jump over a typed 320 px / 1 MiB
+render, with four reads in flight and 24 cached results at most; centered hover/focus
+arrows, the persistent page indicator and Left/Right shortcuts remain independent.
+PDF.js stays disconnected because the trust boundary admits verified bounded JPEGs,
+not raw PDF bytes; a PDF.js viewer/worker/raw-byte/CSP cutover remains separate.
+Focused Harness checks pass 4/4; web viewer/vendor/affected checks pass 37/37 and
+five changed JavaScript files pass syntax. MockDemo actual-controller compile is
+0 errors / 5 expected PDF platform warnings. A local 1280×720 Chromium smoke shows
+eight visible rows for a 60-page rail and proportional uncropped page fit. Windows
+WebView2 image/PDF/thumbnail interaction remains open.
+[Evidence](PHASE_11D3_PDF_PREVIEW_X86.md).
+
 R61/11O3 HTML semantic intent switch (2026-09-02, user-requested
 host-neutral): the eight prior model tools became seven exact verified writes.
 File/data whole writes are separate; patch has only exact operations; delete takes

@@ -53,6 +53,9 @@
       changeArtifactPdfPage: function (request) {
         return workspaceActions && workspaceActions.changeArtifactPdfPage(request);
       },
+      selectArtifactPdfPage: function (request) {
+        return workspaceActions && workspaceActions.selectArtifactPdfPage(request);
+      },
       changeArtifactViewerPage: function (request) {
         return workspaceActions && workspaceActions.changeArtifactViewerPage(request);
       },
@@ -76,6 +79,9 @@
       },
       loadArtifactPdf: function (request) {
         return workspaceActions && workspaceActions.loadArtifactPdf(request);
+      },
+      loadArtifactPdfThumbnail: function (request) {
+        return workspaceActions && workspaceActions.loadArtifactPdfThumbnail(request);
       },
       loadArtifactViewer: function (request) {
         return workspaceActions && workspaceActions.loadArtifactViewer(request);

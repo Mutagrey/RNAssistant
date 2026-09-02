@@ -158,11 +158,12 @@ placeholder rather than falling forward to another revision.
   JSON; a dirty Plan preview is explicitly a non-durable draft.
 - Image: the exact revision-pinned JPEG/PNG/GIF/WebP bytes are read from attachment
   CAS through a typed bridge under the existing 20 MiB attachment bound. The
-  UI-only viewer provides fit/100%/zoom, natural dimensions and download, and its
-  stage occupies the remaining artifact-preview height without distorting the
-  image. Main-UI CSP admits only local `data:`/`blob:` image sources. At most two
-  image payloads remain in the per-chat viewer cache; object URLs are revoked on
-  selection/chat/window changes.
+  locally vendored Viewer.js 1.12.0 receives one admitted Blob image and provides
+  proportional fit with upscaling, 100%/button/wheel/pinch zoom, pan, rotation,
+  Fit/100% double-click toggle and keyboard shortcuts. RNAssistant retains natural
+  dimensions, download and teardown. The stage occupies the remaining preview
+  height without cropping or distortion. Main-UI CSP admits only local `data:`/
+  `blob:` image sources and denies vendor network/worker access.
 - PDF: exact revision info exposes the PdfPig page count plus hash/count/completeness
   evidence and an explicit truncation/scan warning; it does not return the whole
   extracted body. Text uses the same exact viewer paging as other sources: 32,000
@@ -170,11 +171,20 @@ placeholder rather than falling forward to another revision.
   may retain up to 1,000,000 extracted characters, so a larger or incomplete
   extraction remains explicitly partial in the viewer. Page navigation renders one
   requested page at a time to JPEG through the separately admitted local
-  PDFtoImage/PDFium/Skia path, bounded to 2,048 px and 10 MiB per page; the viewer
-  defaults to pages and keeps extracted text on its own tab. Matching exact-package
-  PE32+ x64 and PE32 x86 native libraries are vendored and selected by process
-  architecture. Repository wiring is not execution evidence: real Windows x64/x86
-  Office/WebView import, preview, scanned-page and model-send qualification remains
+  PDFtoImage/PDFium/Skia path, bounded to 2,048 px and 10 MiB per page. The same
+  Viewer.js instance type displays that verified JPEG. A separate typed thumbnail
+  read renders at most 320 px / 1 MiB; a virtualized left rail exposes direct page
+  selection and a numeric jump without constructing 10,000 DOM rows. Thumbnail
+  rendering is capped at four concurrent reads and 24 ephemeral cached results.
+  The viewer defaults to pages, keeps extracted text on its own tab and also uses
+  centered hover/focus arrows, a persistent page position and Left/Right navigation.
+  Matching exact-package PE32+ x64 and PE32 x86 native libraries are vendored and
+  selected by process architecture. A native x64 DLL is not admitted into an x86
+  Office process; managed caller bitness does not remove that native loader boundary.
+  At most two media viewer states remain in the per-chat cache; main-page and
+  thumbnail Blob URLs are revoked on tab, selection, chat and window teardown.
+  Repository wiring is not execution evidence: real Windows x64/x86 Office/WebView
+  import, preview, thumbnail rail, scanned-page and model-send qualification remains
   open.
 - Audio: local bounded player and optional transcript relation; no autoplay.
 - JSON/chart/tool result: existing lossless bounded JSON/domain viewers remain
@@ -211,16 +221,29 @@ goal/progress/steps and image as media; domain JSON remains a domain viewer. Gen
 metadata, raw Task List/JSON payloads and revision history live under `Details` and
 do not precede or replace the primary preview.
 
-For 11D3, PDF info and rendered pages are separate typed bridge calls. Both bind the
-same canonical artifact URI, original binary SHA-256 and page count. Extracted text
-stays on the existing typed viewer-page call and is bound by its separate extracted-
-text SHA-256, total length, cursor and contiguous offsets; the UI cross-checks all
-three responses before admitting the preview. The render call accepts only a zero-
-based index inside the PdfPig count and returns a JPEG whose signature, size and
-dimensions are checked before WebView. Native load or machine-type failure is
-surfaced as an explicit renderer-unavailable error and is never retried automatically.
-`ArtifactPdfViewerService` owns PDF admission and PDFtoImage rendering; the generic
-`ArtifactViewerService` only delegates that format and keeps shared exact text paging.
+For 11D3, PDF info, full page and thumbnail are separate typed bridge calls. All bind
+the same canonical artifact URI, original binary SHA-256 and page count. Extracted
+text stays on the existing typed viewer-page call and is bound by its separate
+extracted-text SHA-256, total length, cursor and contiguous offsets; the UI
+cross-checks info/text/full-page responses before admitting the preview and checks
+each thumbnail against the admitted source hash/count. Render calls accept only a
+zero-based index inside the PdfPig count and return JPEGs whose signature, size and
+dimensions are checked before WebView. Native load or machine-type failure is an
+explicit renderer-unavailable error and is never retried automatically.
+`ArtifactPdfViewerService` owns PDF admission and both PDFtoImage render sizes; the
+generic `ArtifactViewerService` only delegates that format and keeps shared exact
+text paging. Viewer.js is UI-only and receives no PDF bytes, bridge handle or URI.
+
+PDF.js is intentionally not part of this 11D3 implementation. Its full viewer is a
+separate browser application, while the admitted WebView contract currently receives
+one hash-checked, bounded JPEG page plus separately bounded extracted text rather than
+the original PDF bytes. Adopting PDF.js requires its exact local viewer/worker assets,
+raw-PDF bridge admission and memory bounds, CSP/worker policy, cache teardown and
+Windows WebView qualification as one separate cutover. It must not be presented as a
+cosmetic drop-in or silently run beside PDFtoImage. Official references:
+[PDF.js project](https://github.com/mozilla/pdf.js/blob/master/README.md),
+[viewer options](https://github.com/mozilla/pdf.js/wiki/Viewer-options) and
+[binary-data opening](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions).
 
 ## Edit and delete semantics
 

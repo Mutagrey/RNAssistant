@@ -627,6 +627,25 @@ namespace RNAssistant.Office
                 ImageBase64Content = "/9j/2Q=="
             };
         }
+        public ArtifactPdfPageDto ReadArtifactPdfThumbnail(string chatId, string resourceUri, int pageIndex)
+        {
+            LastChatId = chatId;
+            LastArtifactViewerResourceUri = resourceUri;
+            return new ArtifactPdfPageDto
+            {
+                ResourceUri = resourceUri,
+                ViewerKind = "pdf",
+                ContentSha256 = new string('d', 64),
+                PageIndex = pageIndex,
+                PageCount = 1,
+                Width = 160,
+                Height = 120,
+                ImageMimeType = "image/jpeg",
+                ImageContentSha256 = new string('a', 64),
+                ImageByteLength = 4,
+                ImageBase64Content = "/9j/2Q=="
+            };
+        }
         public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(
             string chatId,
             string sourceResourceUri,

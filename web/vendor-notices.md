@@ -17,6 +17,7 @@ only; the application never loads the manifest or those URLs at runtime.
 | KaTeX | 0.16.11 | MIT | [`licenses/katex-0.16.11/LICENSE`](licenses/katex-0.16.11/LICENSE) |
 | Apache ECharts | 5.6.0 | Apache-2.0; bundled d3 notice BSD-3-Clause | [`licenses/echarts-5.6.0`](licenses/echarts-5.6.0/) |
 | Wunderbaum | 0.14.1 | MIT | [`licenses/wunderbaum-0.14.1/LICENSE`](licenses/wunderbaum-0.14.1/LICENSE) |
+| Viewer.js | 1.12.0 | MIT | [`licenses/viewerjs-1.12.0/LICENSE`](licenses/viewerjs-1.12.0/LICENSE) |
 
 KaTeX ships only the 20 WOFF2 files used by current WebView2. Its local CSS is a
 documented derivative of the exact 0.16.11 distribution: unused `.woff`/`.ttf`
@@ -30,6 +31,13 @@ Wunderbaum ships its pinned UMD and CSS only. RNAssistant's `TreeAdapter` accept
 bounded local arrays and does not expose URL/lazy loading, edit, DnD, grid or
 persistence capabilities. Its local icon layer uses CSS masks; no icon font or
 remote asset is loaded.
+
+Viewer.js ships its pinned UMD and CSS only. It receives one already admitted local
+Blob image at a time and owns inline fit, focal wheel/pinch zoom, pan, rotation and
+its toolbar. RNAssistant retains download, PDF page navigation and Blob URL teardown;
+the vendor cannot call the bridge, fetch a page or retain a document-level cache.
+The separate PDF thumbnail rail remains RNAssistant-owned and gives Viewer.js no
+additional images, identifiers or execution authority.
 
 Selected existing inline SVG paths are adapted from Feather Icons. Feather is
 source-only: its JavaScript package and npm dependencies are not loaded at runtime.

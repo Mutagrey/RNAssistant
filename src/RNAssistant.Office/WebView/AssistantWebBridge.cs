@@ -415,6 +415,13 @@ namespace RNAssistant.Office.WebView
                             artifactPdfPage.ResourceUri,
                             artifactPdfPage.PageIndex);
                         break;
+                    case "readArtifactPdfThumbnail":
+                        var artifactPdfThumbnail = Payload<ArtifactPdfPagePayload>(payload);
+                        responsePayload = _controller.ReadArtifactPdfThumbnail(
+                            artifactPdfThumbnail.ChatId,
+                            artifactPdfThumbnail.ResourceUri,
+                            artifactPdfThumbnail.PageIndex);
+                        break;
                     case "importUploadedHtmlToWorkspace":
                         var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);
                         responsePayload = _controller.ImportUploadedHtmlToWorkspace(

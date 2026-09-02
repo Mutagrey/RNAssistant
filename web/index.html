@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="css/vendor/highlight-github-dark.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/vendor/wunderbaum.css">
+  <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=json-surfaces-20260829-1">
   <link rel="stylesheet" href="css/app-chat.css?v=run-view-state-20260830-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=json-viewer-20260829-1">
@@ -31,7 +32,7 @@
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-ui-20260825-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-viewer-20260829-2">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
-  <link rel="stylesheet" href="css/app-resource-viewer.css?v=artifact-preview-20260902-3">
+  <link rel="stylesheet" href="css/app-resource-viewer.css?v=artifact-thumbnails-20260902-1">
   <link rel="stylesheet" href="css/app-trajectory.css?v=run-journal-20260829-1">
   <link rel="stylesheet" href="css/app-run-journal.css?v=runtime-diagnostics-20260901-1">
   <link rel="stylesheet" href="css/app-qualification.css?v=qualification-center-20260831-1">
@@ -1011,6 +1012,7 @@
   <script src="js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
   <script src="js/vendor/wunderbaum.umd.min.js"></script>
+  <script src="js/vendor/viewer.min.js"></script>
   <script src="js/app-core.js?v=bridge-bootstrap-20260831-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=run-view-state-20260830-1"></script>
@@ -1023,7 +1025,7 @@
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
   <script src="js/app-json-viewer.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
-  <script src="js/app-resource-viewer.js?v=artifact-preview-20260902-2"></script>
+  <script src="js/app-resource-viewer.js?v=artifact-thumbnails-20260902-1"></script>
   <script src="js/app-run-journal.js?v=runtime-diagnostics-20260901-1"></script>
   <script src="js/app-trajectory.js?v=runtime-diagnostics-20260831-1"></script>
   <script src="js/app-qualification.js?v=qualification-center-20260831-1"></script>
@@ -1045,14 +1047,14 @@
   <script src="js/app-vba-project.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-vba.js?v=resource-intent-20260902-1"></script>
   <script src="js/app-html-workspace-preview.js?v=html-echarts-20260902-1"></script>
-  <script src="js/app-html-workspace-artifacts.js?v=artifact-preview-20260902-3"></script>
+  <script src="js/app-html-workspace-artifacts.js?v=artifact-thumbnails-20260902-1"></script>
   <script src="js/app-html-workspace-model.js?v=artifact-refresh-20260902-1"></script>
   <script src="js/app-html-workspace-editor.js?v=artifact-text-20260831-1"></script>
   <script src="js/app-tree-adapter.js?v=tree-adapter-20260829-1"></script>
   <script src="js/app-html-workspace-tree.js?v=artifact-library-20260831-1"></script>
-  <script src="js/app-artifact-viewer-actions.js?v=artifact-preview-20260902-2"></script>
-  <script src="js/app-html-workspace-actions.js?v=html-intents-20260902-1"></script>
-  <script src="js/app-html-workspace.js?v=artifact-refresh-20260902-1"></script>
+  <script src="js/app-artifact-viewer-actions.js?v=artifact-thumbnails-20260902-1"></script>
+  <script src="js/app-html-workspace-actions.js?v=artifact-thumbnails-20260902-1"></script>
+  <script src="js/app-html-workspace.js?v=artifact-thumbnails-20260902-1"></script>
   <script src="js/app-context.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-context-inspector.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-agent-data.js?v=json-viewer-20260829-1"></script>
