@@ -30,6 +30,24 @@
       return cache()[uri] || null;
     }
 
+    function thumbnailCache() {
+      var thumbnails = state.artifactViewerThumbnails;
+      if (!thumbnails || !thumbnails.items || !Array.isArray(thumbnails.order) ||
+          !Array.isArray(thumbnails.queue)) {
+        thumbnails = { items: {}, order: [], queue: [], pending: 0 };
+        state.artifactViewerThumbnails = thumbnails;
+      }
+      return thumbnails;
+    }
+
+    function artifactImageThumbnailState(uri) {
+      var store = thumbnailCache();
+      var key = String(uri || "");
+      var item = store.items[key] || null;
+      if (item && (item.status === "ready" || item.status === "error")) touchThumbnail(store, key);
+      return item;
+    }
+
     function viewerTextContentSha256(viewer) {
       return viewer.textContentSha256 || viewer.contentSha256;
     }
@@ -115,6 +133,150 @@
         byteLength: byteLength,
         base64Content: base64Content
       };
+    }
+
+    function normalizeImageThumbnail(response, uri) {
+      response = response || {};
+      var returnedUri = value(response, "ResourceUri", "resourceUri", "") || "";
+      var viewerKind = String(value(response, "ViewerKind", "viewerKind", "") || "").toLowerCase();
+      var hash = value(response, "ContentSha256", "contentSha256", "") || "";
+      var width = Number(value(response, "Width", "width", 0));
+      var height = Number(value(response, "Height", "height", 0));
+      var imageMimeType = String(value(response, "ImageMimeType", "imageMimeType", "") || "").toLowerCase();
+      var imageHash = value(response, "ImageContentSha256", "imageContentSha256", "") || "";
+      var imageByteLength = Number(value(response, "ImageByteLength", "imageByteLength", -1));
+      var imageBase64Content = value(response, "ImageBase64Content", "imageBase64Content", "") || "";
+      if (returnedUri !== uri || viewerKind !== "image" || !/^[a-f0-9]{64}$/i.test(hash) ||
+          !Number.isInteger(width) || width <= 0 || width > 320 ||
+          !Number.isInteger(height) || height <= 0 || height > 320 ||
+          imageMimeType !== "image/jpeg" || !/^[a-f0-9]{64}$/i.test(imageHash) ||
+          imageByteLength <= 0 || imageByteLength > 512 * 1024 ||
+          base64ByteLength(imageBase64Content) !== imageByteLength) {
+        throw new Error("Artifact image thumbnail returned inconsistent render evidence.");
+      }
+      return {
+        status: "ready",
+        resourceUri: returnedUri,
+        viewerKind: viewerKind,
+        contentSha256: hash,
+        width: width,
+        height: height,
+        imageMimeType: imageMimeType,
+        imageContentSha256: imageHash,
+        imageByteLength: imageByteLength,
+        imageBase64Content: imageBase64Content
+      };
+    }
+
+    function touchThumbnail(store, uri) {
+      store.order = store.order.filter(function (value) { return value !== uri; });
+      store.order.push(uri);
+      while (store.order.length > 48) {
+        var candidate = store.order.shift();
+        var item = store.items[candidate];
+        if (item && (item.status === "loading" || item.status === "queued")) {
+          continue;
+        } else {
+          delete store.items[candidate];
+        }
+      }
+    }
+
+    function notifyThumbnail(uri, thumbnail) {
+      if (typeof options.onArtifactThumbnailChange === "function") {
+        options.onArtifactThumbnailChange(uri, thumbnail);
+      }
+    }
+
+    function cancelThumbnailQueue(store) {
+      while (store.queue.length) {
+        var entry = store.queue.shift();
+        if (entry && typeof entry.resolve === "function") entry.resolve(false);
+      }
+    }
+
+    function drainThumbnailQueue(store) {
+      if (state.artifactViewerThumbnails !== store) {
+        cancelThumbnailQueue(store);
+        return;
+      }
+      while (store.pending < 4 && store.queue.length) {
+        (function (entry) {
+          if (!entry || store.items[entry.resourceUri] !== entry ||
+              entry.chatId !== state.activeChatId) {
+            if (entry && typeof entry.resolve === "function") entry.resolve(false);
+            return;
+          }
+          entry.status = "loading";
+          store.pending += 1;
+          notifyThumbnail(entry.resourceUri, entry);
+          var completed = false;
+          options.send("readArtifactImageThumbnail", {
+            chatId: entry.chatId,
+            resourceUri: entry.resourceUri
+          }).then(function (response) {
+            if (state.activeChatId !== entry.chatId || state.artifactViewerThumbnails !== store ||
+                store.items[entry.resourceUri] !== entry) return false;
+            var thumbnail = normalizeImageThumbnail(response, entry.resourceUri);
+            store.items[entry.resourceUri] = thumbnail;
+            touchThumbnail(store, entry.resourceUri);
+            notifyThumbnail(entry.resourceUri, thumbnail);
+            return true;
+          }).catch(function (error) {
+            if (state.activeChatId === entry.chatId && state.artifactViewerThumbnails === store &&
+                store.items[entry.resourceUri] === entry) {
+              var failure = {
+                status: "error",
+                resourceUri: entry.resourceUri,
+                message: error.detail || error.message || "Image thumbnail is unavailable."
+              };
+              store.items[entry.resourceUri] = failure;
+              touchThumbnail(store, entry.resourceUri);
+              notifyThumbnail(entry.resourceUri, failure);
+              if (!store.reportedError) {
+                store.reportedError = true;
+                options.log(failure.message, "error");
+              }
+            }
+            return false;
+          }).then(function (result) {
+            completed = result;
+          }).finally(function () {
+            store.pending = Math.max(0, Number(store.pending || 0) - 1);
+            drainThumbnailQueue(store);
+            if (typeof entry.resolve === "function") entry.resolve(completed);
+          });
+        }(store.queue.shift()));
+      }
+    }
+
+    function loadArtifactImageThumbnail(request) {
+      request = request || {};
+      var uri = String(request.resourceUri || "");
+      if (state.bridgeUnavailable || !uri) return Promise.resolve(false);
+      var store = thumbnailCache();
+      var current = store.items[uri];
+      if (current) {
+        if (current.status === "ready" || current.status === "error") touchThumbnail(store, uri);
+        if (current.status === "ready") return Promise.resolve(true);
+        if (current.status === "error") return Promise.resolve(false);
+        return current.promise || Promise.resolve(false);
+      }
+      if (store.queue.length >= 256) return Promise.resolve(false);
+      var resolveRequest;
+      var promise = new Promise(function (resolve) { resolveRequest = resolve; });
+      var entry = {
+        status: "queued",
+        resourceUri: uri,
+        chatId: state.activeChatId,
+        promise: promise,
+        resolve: resolveRequest
+      };
+      store.items[uri] = entry;
+      store.queue.push(entry);
+      notifyThumbnail(uri, entry);
+      drainThumbnailQueue(store);
+      return promise;
     }
 
     function normalizePdfInfo(response, uri) {
@@ -574,11 +736,13 @@
     }
 
     return {
+      artifactImageThumbnailState: artifactImageThumbnailState,
       artifactViewerState: artifactViewerState,
       changeArtifactPdfPage: changeArtifactPdfPage,
       changeArtifactViewerPage: changeArtifactViewerPage,
       downloadArtifactViewer: downloadArtifactViewer,
       loadArtifactImage: loadArtifactImage,
+      loadArtifactImageThumbnail: loadArtifactImageThumbnail,
       loadArtifactPdf: loadArtifactPdf,
       loadArtifactPdfThumbnail: loadArtifactPdfThumbnail,
       loadArtifactViewer: loadArtifactViewer,

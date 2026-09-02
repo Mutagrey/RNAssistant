@@ -19,6 +19,7 @@ class Element {
   constructor(tag) {
     this.tagName = String(tag).toLowerCase(); this.className = ""; this.classList = new ClassList(this);
     this.childNodes = []; this.parentNode = null; this.handlers = {}; this.attributes = {};
+    this.dataset = {};
     this.disabled = false; this.value = ""; this._text = ""; this._html = ""; this.style = {};
     this.clientWidth = 0; this.clientHeight = 0; this.scrollLeft = 0; this.scrollTop = 0;
     this.naturalWidth = tag === "img" ? 640 : 0; this.naturalHeight = tag === "img" ? 480 : 0;
@@ -28,6 +29,7 @@ class Element {
   replaceChildren(...children) { this.childNodes.forEach(child => { child.parentNode = null; }); this.childNodes = []; children.forEach(child => this.appendChild(child)); this._text = ""; this._html = ""; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   addEventListener(name, handler) { (this.handlers[name] ||= []).push(handler); }
+  removeEventListener(name, handler) { this.handlers[name] = (this.handlers[name] || []).filter(item => item !== handler); }
   dispatch(name, event = {}) { (this.handlers[name] || []).forEach(handler => handler(event)); }
   click() { if (!this.disabled) (this.handlers.click || []).forEach(handler => handler({})); }
   remove() { if (this.parentNode) this.parentNode.removeChild(this); }
@@ -82,7 +84,7 @@ context.Viewer = class ViewerStub {
   reset() { this.calls.push(["reset"]); }
   destroy() { this.destroyed = true; }
 };
-for (const file of ["app-viewer-registry.js", "app-text-viewer.js", "app-resource-viewer.js", "app-html-workspace-artifacts.js"]) {
+for (const file of ["app-viewer-registry.js", "app-text-viewer.js", "app-sequence-viewer.js", "app-resource-viewer.js", "app-html-workspace-artifacts.js"]) {
   vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
 }
 
@@ -208,12 +210,13 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(detail.classList.contains("is-image-preview"), true);
   assert.equal(detail.classList.contains("is-media-preview"), true);
   const resourceViewerCss = fs.readFileSync(path.join(root, "web/css/app-resource-viewer.css"), "utf8");
+  const sequenceViewerCss = fs.readFileSync(path.join(root, "web/css/app-sequence-viewer.css"), "utf8");
   assert.match(resourceViewerCss, /\.artifact-detail-preview\.is-media-preview\s*\{[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\)/s);
   assert.match(resourceViewerCss, /\.rn-vendor-image-viewer\.viewer-container/);
   assert.match(resourceViewerCss, /\.rn-viewerjs-source\s*\{[^}]*display:\s*none/s);
   assert.match(resourceViewerCss, /\.rn-image-viewer-stage-shell:hover \.rn-preview-nav:not\(:disabled\)/);
   assert.match(resourceViewerCss, /\.rn-pdf-pages-layout\s*\{[^}]*grid-template-columns:\s*150px minmax\(0,\s*1fr\)/s);
-  assert.match(resourceViewerCss, /\.rn-pdf-thumbnail-item\s*\{[^}]*position:\s*absolute/s);
+  assert.match(sequenceViewerCss, /\.rn-sequence-item\s*\{[^}]*position:\s*absolute/s);
   assert.ok(detail.querySelector(".artifact-detail-pane-details").classList.contains("hidden"));
   context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(detail, {
     type: "artifact", item: { Kind: "file", Title: "unknown.bin", MimeType: "application/octet-stream", Revision: 1 }
@@ -247,13 +250,13 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   });
   assert.equal(pdfHost.querySelector(".rn-preview-page-label").textContent, "1 / 10000");
   assert.ok(pdfHost.querySelector(".rn-pdf-thumbnail-rail"));
-  assert.equal(pdfHost.querySelectorAll(".rn-pdf-thumbnail-item").length, 8);
-  assert.equal(pdfHost.querySelector(".rn-pdf-thumbnail-track").style.height, "1260000px");
+  assert.equal(pdfHost.querySelectorAll(".rn-sequence-item").length, 8);
+  assert.equal(pdfHost.querySelector(".rn-sequence-track").style.height, "1260000px");
   assert.equal(objectUrls.length, 3, "current thumbnail reuses the main-page Blob URL");
   assert.deepEqual(requestedPdfThumbnails, [1, 2, 3, 4, 5, 6, 7]);
-  pdfHost.querySelectorAll(".rn-pdf-thumbnail-item")[1].click();
+  pdfHost.querySelectorAll(".rn-sequence-item")[1].click();
   assert.equal(selectedPdfPage, 1);
-  const pageInput = pdfHost.querySelector(".rn-pdf-page-input");
+  const pageInput = pdfHost.querySelector(".rn-sequence-input");
   pageInput.value = "2";
   pageInput.dispatch("change");
   assert.equal(selectedPdfPage, 1);
@@ -313,6 +316,68 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.ok(revokedUrls.includes(detailMainUrl));
   console.log("PASS artifact PDF viewer: pages are primary, extracted text is secondary and page URLs are revoked");
 
+  const galleryUri = "rna://chat/chat-text/artifact/gallery-current/revision/1";
+  const galleryItems = ["previous", "current", "next"].map((name, index) => ({
+    resourceUri: `rna://chat/chat-text/artifact/gallery-${name}/revision/1`,
+    title: name + ".png",
+    contentSha256: "d".repeat(64),
+    artifact: { Id: "gallery-" + name, Kind: "image", Title: name + ".png", ResourceUri: `rna://chat/chat-text/artifact/gallery-${name}/revision/1` }
+  }));
+  galleryItems[1].resourceUri = galleryUri;
+  galleryItems[1].artifact.ResourceUri = galleryUri;
+  const requestedGalleryThumbnails = [];
+  let selectedGalleryIndex = -1;
+  const galleryDetail = new Element("div");
+  context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(galleryDetail, {
+    type: "artifact",
+    item: { Kind: "image", Title: "current.png", MimeType: "image/png", ResourceUri: galleryUri, Revision: 1 }
+  }, "", {
+    artifactViewerState() {
+      return {
+        status: "ready", resourceUri: galleryUri, viewerKind: "image", title: "current.png",
+        mimeType: "image/png", contentSha256: "d".repeat(64), byteLength: 3, base64Content: "AQID"
+      };
+    },
+    imageGalleryContext() { return { items: galleryItems, currentIndex: 1, scrollOffset: 0 }; },
+    artifactImageThumbnailState(uri) {
+      return uri === galleryItems[0].resourceUri
+        ? { status: "ready", resourceUri: uri, imageMimeType: "image/jpeg", imageBase64Content: "/9j/2Q==", contentSha256: "d".repeat(64) }
+        : null;
+    },
+    loadArtifactImageThumbnail(request) { requestedGalleryThumbnails.push(request.resourceUri); },
+    selectImageGalleryItem(index) { selectedGalleryIndex = index; return true; }
+  });
+  assert.ok(galleryDetail.querySelector(".rn-sequence-rail"));
+  assert.equal(galleryDetail.querySelectorAll(".rn-sequence-item").length, 3);
+  assert.deepEqual(requestedGalleryThumbnails, [galleryItems[2].resourceUri]);
+  galleryDetail.querySelectorAll(".rn-sequence-item")[0].click();
+  assert.equal(selectedGalleryIndex, 0);
+  context.RNAssistantViewerRegistry.unmount(galleryDetail.querySelector(".artifact-viewer-host"));
+  console.log("PASS artifact image gallery: exact collection context reuses the virtual sequence shell");
+
+  const collectionDetail = new Element("div");
+  const collectionThumbnailRequests = [];
+  let openedCollectionArtifact = "";
+  context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(collectionDetail, {
+    type: "collection", item: { id: "artifact-files" }
+  }, "", {
+    collectionItems() {
+      return [
+        { Id: "image-1", Kind: "image", Title: "Image 1", MimeType: "image/png", ResourceUri: galleryItems[0].resourceUri },
+        { Id: "file-1", Kind: "attachment", Title: "Notes.txt", MimeType: "text/plain",
+          ResourceUri: "rna://chat/chat-text/artifact/file-1/revision/1" }
+      ];
+    },
+    artifactImageThumbnailState() { return null; },
+    loadArtifactImageThumbnail(request) { collectionThumbnailRequests.push(request.resourceUri); },
+    openCollectionArtifact(artifact) { openedCollectionArtifact = artifact.Id; }
+  });
+  assert.equal(collectionDetail.querySelectorAll(".artifact-collection-card").length, 2);
+  assert.deepEqual(collectionThumbnailRequests, [galleryItems[0].resourceUri]);
+  collectionDetail.querySelectorAll(".artifact-collection-card")[0].click();
+  assert.equal(openedCollectionArtifact, "image-1");
+  console.log("PASS artifact collection: selecting a Library group opens a thumbnail grid");
+
   const actionContext = vm.createContext({ Promise });
   actionContext.window = actionContext;
   actionContext.alert = () => {};
@@ -327,6 +392,9 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   const downloaded = [];
   const deferredPdfThumbnails = [];
   let deferPdfThumbnails = false;
+  const deferredImageThumbnails = [];
+  let deferImageThumbnails = false;
+  const thumbnailChanges = [];
   const state = { activeChatId: "chat-text", bridgeUnavailable: false };
   const actions = actionContext.RNAssistantHtmlWorkspaceActions.create({
     state,
@@ -342,6 +410,23 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
           byteLength: 3,
           base64Content: "AQID"
         };
+      }
+      if (method === "readArtifactImageThumbnail") {
+        const response = {
+          resourceUri: payload.resourceUri,
+          viewerKind: "image",
+          contentSha256: "d".repeat(64),
+          width: 160,
+          height: 120,
+          imageMimeType: "image/jpeg",
+          imageContentSha256: "b".repeat(64),
+          imageByteLength: 4,
+          imageBase64Content: "/9j/2Q=="
+        };
+        if (deferImageThumbnails) {
+          return new Promise(resolve => deferredImageThumbnails.push({ resolve, response }));
+        }
+        return response;
       }
       if (method === "readArtifactPdfInfo") {
         return {
@@ -439,6 +524,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
     applyArtifactViewerText: (resourceUri, hash, text) => applied.push({ resourceUri, hash, text }),
     downloadArtifactText: value => downloaded.push(value),
     log: () => {},
+    onArtifactThumbnailChange: (resourceUri, thumbnail) => thumbnailChanges.push([resourceUri, thumbnail.status]),
     render: () => {}
   });
   assert.equal(await actions.loadArtifactViewer({ resourceUri: uri }), true);
@@ -454,6 +540,34 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(await actions.loadArtifactImage({ resourceUri: actionImageUri }), true);
   assert.equal(actions.artifactViewerState(actionImageUri).viewerKind, "image");
   assert.equal(calls.at(-1).method, "readArtifactImage");
+  assert.equal(await actions.loadArtifactImageThumbnail({ resourceUri: actionImageUri }), true);
+  assert.equal(actions.artifactImageThumbnailState(actionImageUri).width, 160);
+  assert.equal(calls.at(-1).method, "readArtifactImageThumbnail");
+  deferImageThumbnails = true;
+  const queuedImageUris = [1, 2, 3, 4, 5].map(index => actionImageUri + "-" + index);
+  const queuedImageLoads = queuedImageUris.map(resourceUri => actions.loadArtifactImageThumbnail({ resourceUri }));
+  assert.equal(state.artifactViewerThumbnails.pending, 4);
+  assert.equal(state.artifactViewerThumbnails.queue.length, 1);
+  assert.equal(state.artifactViewerThumbnails.order.some(resourceUri => queuedImageUris.includes(resourceUri)), false,
+    "queued reads do not consume the completed-thumbnail LRU");
+  deferredImageThumbnails.splice(0, 4).forEach(item => item.resolve(item.response));
+  await settle();
+  await settle();
+  assert.equal(deferredImageThumbnails.length, 1);
+  deferredImageThumbnails.shift().resolve({
+    resourceUri: queuedImageUris[4], viewerKind: "image", contentSha256: "d".repeat(64),
+    width: 160, height: 120, imageMimeType: "image/jpeg", imageContentSha256: "b".repeat(64),
+    imageByteLength: 4, imageBase64Content: "/9j/2Q=="
+  });
+  assert.deepEqual(await Promise.all(queuedImageLoads), [true, true, true, true, true]);
+  deferImageThumbnails = false;
+  assert.ok(thumbnailChanges.some(change => change[1] === "ready"));
+  for (let index = 0; index < 50; index += 1) {
+    assert.equal(await actions.loadArtifactImageThumbnail({ resourceUri: actionImageUri + "-lru-" + index }), true);
+  }
+  assert.equal(state.artifactViewerThumbnails.order.length, 48);
+  assert.equal(Object.values(state.artifactViewerThumbnails.items)
+    .filter(item => item.status === "ready" || item.status === "error").length, 48);
   const actionPdfUri = "rna://chat/chat-text/artifact/pdf-action/revision/1";
   assert.equal(await actions.loadArtifactPdf({ resourceUri: actionPdfUri }), true);
   assert.equal(actions.artifactViewerState(actionPdfUri).pdfPage.pageIndex, 0);
@@ -491,12 +605,15 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-text-viewer.js?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-text-viewer.css?v=artifact-text-20260831-1"));
-  assert.ok(index.includes("app-resource-viewer.js?v=artifact-thumbnails-20260902-1"));
-  assert.ok(index.includes("app-resource-viewer.css?v=artifact-thumbnails-20260902-1"));
+  assert.ok(index.includes("app-sequence-viewer.js?v=artifact-gallery-20260902-1"));
+  assert.ok(index.includes("app-sequence-viewer.css?v=artifact-gallery-20260902-1"));
+  assert.ok(index.includes("app-resource-viewer.js?v=artifact-gallery-20260902-1"));
+  assert.ok(index.includes("app-resource-viewer.css?v=artifact-gallery-20260902-1"));
   assert.ok(index.includes("js/vendor/viewer.min.js"));
   assert.ok(index.includes("css/vendor/viewer.min.css"));
   assert.ok(index.indexOf("js/vendor/viewer.min.js") < index.indexOf("app-resource-viewer.js"));
-  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-thumbnails-20260902-1"));
+  assert.ok(index.indexOf("app-sequence-viewer.js") < index.indexOf("app-resource-viewer.js"));
+  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-gallery-20260902-1"));
   assert.ok(index.indexOf("app-viewer-registry.js") < index.indexOf("app-text-viewer.js"));
   assert.ok(index.indexOf("app-artifact-viewer-actions.js") < index.indexOf("app-html-workspace-actions.js"));
   const viewerSource = fs.readFileSync(path.join(root, "web/js/app-text-viewer.js"), "utf8");
@@ -510,5 +627,5 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.match(actionSource, /readArtifactViewerPage/);
   assert.match(actionSource, /readArtifactPdfThumbnail/);
   console.log("PASS artifact viewers: allowlisted modules are UI-only and loaded after their registry");
-  console.log("OK 8/8");
+  console.log("OK 10/10");
 })().catch(error => { console.error(error.stack || error); process.exitCode = 1; });

@@ -1064,9 +1064,44 @@ namespace RNAssistant.Harness
             AssertEqual(bytes.LongLength, image.ByteLength, "image viewer preserves exact byte length");
             AssertEqual(Convert.ToBase64String(bytes), image.Base64Content, "image viewer returns exact local bytes");
 
+            var jpeg = new byte[] { 0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9 };
+            var requestedDimension = 0;
+            var thumbnailViewer = new ArtifactViewerService(
+                new ResourceGatewayService(),
+                item => bytes,
+                null,
+                (payload, maximumDimension) =>
+                {
+                    requestedDimension = maximumDimension;
+                    return new ArtifactImageThumbnailRenderResult
+                    {
+                        Bytes = jpeg,
+                        Width = 160,
+                        Height = 120
+                    };
+                });
+            var thumbnail = thumbnailViewer.ReadImageThumbnail(session, uri);
+            AssertEqual(ArtifactViewerService.MaximumImageThumbnailDimension, requestedDimension,
+                "image thumbnail uses the bounded renderer dimension");
+            AssertEqual(uri, thumbnail.ResourceUri, "image thumbnail pins exact canonical URI");
+            AssertEqual(hash, thumbnail.ContentSha256, "image thumbnail preserves source hash evidence");
+            AssertEqual(160, thumbnail.Width, "image thumbnail returns bounded width");
+            AssertEqual(Convert.ToBase64String(jpeg), thumbnail.ImageBase64Content,
+                "image thumbnail returns the separately rendered JPEG");
+
             RuntimeThrows<InvalidOperationException>(() =>
                 new ArtifactViewerService(new ResourceGatewayService(), item => new byte[] { 1 })
                     .ReadImage(session, uri));
+            RuntimeThrows<InvalidOperationException>(() =>
+                new ArtifactViewerService(
+                    new ResourceGatewayService(), item => bytes, null,
+                    (payload, maximumDimension) => new ArtifactImageThumbnailRenderResult
+                    {
+                        Bytes = jpeg,
+                        Width = maximumDimension + 1,
+                        Height = maximumDimension
+                    })
+                    .ReadImageThumbnail(session, uri));
             RuntimeThrows<InvalidOperationException>(() => viewer.ReadImage(
                 session, uri.Replace(session.Id, "other-chat")));
         }

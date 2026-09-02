@@ -9,7 +9,11 @@ const root = path.join(__dirname, "../..");
 const source = fs.readFileSync(path.join(root, "web/js/app-artifacts.js"), "utf8");
 const context = vm.createContext({});
 context.window = context;
+context.document = { getElementById() { return null; } };
+context.$ = () => null;
+context.switchTab = () => {};
 context.state = {
+  activeChatId: "c",
   activePlanDocumentArtifactId: "plan-r2",
   activeHtmlArtifactId: "html-left",
   artifacts: [
@@ -104,17 +108,51 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.match(htmlUi, /response\.artifactLibrary/);
   assert.match(htmlUi, /RNAssistantRunViewState\.accept/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-core.js?v=bridge-bootstrap-20260831-1"), "core bridge bootstrap has the bridge cache key");
-  assert.ok(index.includes("app-chat-state.js?v=tool-contract-20260901-1"), "chat state has the typed Tool contract cache key");
+  assert.ok(index.includes("app-core.js?v=artifact-gallery-20260902-1"), "core has the artifact gallery cache key");
+  assert.ok(index.includes("app-chat-state.js?v=artifact-gallery-20260902-1"), "chat state has the artifact gallery cache key");
   assert.ok(index.includes("app-chat-session.js?v=tool-contract-20260901-1"), "chat session has the typed Tool contract cache key");
-  assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "artifact cards have the removal cache key");
-  assert.ok(index.includes("app-html-workspace-model.js?v=artifact-refresh-20260902-1"), "artifact selection model has the refresh cache key");
-  assert.ok(index.includes("app-html-workspace.js?v=artifact-thumbnails-20260902-1"), "artifact actions have the refresh cache key");
-  assert.ok(index.includes("app-html-workspace-actions.js?v=artifact-thumbnails-20260902-1"), "artifact tool calls have the current cache key");
-  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-thumbnails-20260902-1"), "artifact paging owner has the current cache key");
-  assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-thumbnails-20260902-1"), "artifact detail has the current cache key");
-  assert.ok(index.includes("app-html-workspace-editor.js?v=artifact-text-20260831-1"), "artifact action bridge has the current cache key");
+  assert.ok(index.includes("app-artifacts.js?v=artifact-gallery-20260902-1"), "artifact cards have the gallery cache key");
+  assert.ok(index.includes("app-html-workspace-model.js?v=artifact-gallery-20260902-1"), "artifact selection model has the gallery cache key");
+  assert.ok(index.includes("app-html-workspace.js?v=artifact-gallery-20260902-1"), "artifact actions have the gallery cache key");
+  assert.ok(index.includes("app-html-workspace-actions.js?v=artifact-gallery-20260902-1"), "artifact tool calls have the gallery cache key");
+  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-gallery-20260902-1"), "artifact paging owner has the gallery cache key");
+  assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-gallery-20260902-1"), "artifact detail has the gallery cache key");
+  assert.ok(index.includes("app-html-workspace-editor.js?v=artifact-gallery-20260902-1"), "artifact action bridge has the gallery cache key");
   console.log("PASS artifact library: client lineage inference and Plan JSON label are removed");
 }
 
-console.log("OK 4/4");
+{
+  const first = {
+    id: "image-1", kind: "image", title: "One.png", revision: 1, mimeType: "image/png",
+    resourceUri: "rna://chat/c/artifact/image-1/revision/1", metadataJson: "{\"attachmentId\":\"a-1\"}"
+  };
+  const second = {
+    id: "image-2", kind: "image", title: "Two.png", revision: 1, mimeType: "image/png",
+    resourceUri: "rna://chat/c/artifact/image-2/revision/1", metadataJson: "{\"attachmentId\":\"a-2\"}"
+  };
+  context.state.artifacts.push(first, second);
+  context.state.artifactLibrary.heads.push(
+    { artifactId: "image-1", resourceClass: "immutable_original", group: "files_media", displayKind: "image",
+      history: [{ artifactId: "image-1", revision: 1, resourceUri: first.resourceUri }] },
+    { artifactId: "image-2", resourceClass: "immutable_original", group: "files_media", displayKind: "image",
+      history: [{ artifactId: "image-2", revision: 1, resourceUri: second.resourceUri }] }
+  );
+  const files = Array.from(context.artifactCollectionItems("artifact-files"));
+  assert.deepEqual(files.map(item => item.id), ["image-1", "upload", "image-2"].sort((left, right) => {
+    const titles = { "image-1": "One.png", upload: "notes.md", "image-2": "Two.png" };
+    return titles[left].localeCompare(titles[right]);
+  }));
+  context.openArtifactResource(first, [first, second]);
+  assert.equal(context.state.artifactImageGalleryContext.items.length, 2);
+  assert.equal(context.state.htmlWorkspaceSelection.id, "image-1");
+  assert.equal(context.selectArtifactImageGalleryItem(1), true);
+  assert.equal(context.state.htmlWorkspaceSelection.id, "image-2");
+  const attachmentIds = context.messageImageAttachmentIds({
+    resourceRefs: [{ uri: first.resourceUri }, { uri: second.resourceUri }]
+  });
+  assert.equal(attachmentIds["a-1"], true);
+  assert.equal(attachmentIds["a-2"], true);
+  console.log("PASS artifact library: collection and chat image contexts stay exact and ephemeral");
+}
+
+console.log("OK 5/5");

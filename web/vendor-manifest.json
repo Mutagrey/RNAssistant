@@ -211,7 +211,7 @@
       "npmIntegrity": "sha512-eQrV7FvqXj2Ysavd9LINI6bFAvXtw5YbdlMtdIo6Bmrv25hEOBeXoOX9E7cJwYuFAOPFzmppFvDn02QNHB120w==",
       "packageDependencies": {},
       "browserRuntimeDependencies": [],
-      "dependencyNotes": "Only the pinned UMD and CSS assets are shipped. RNAssistant supplies verified local Blob images, owns PDF page navigation and revokes every Blob URL on viewer teardown; Viewer.js has no bridge or network access.",
+      "dependencyNotes": "Only the pinned UMD and CSS assets are shipped. RNAssistant supplies one verified local Blob image, owns gallery/PDF sequence navigation and revokes every Blob URL on viewer teardown; Viewer.js has no bridge or network access.",
       "licenseFiles": [
         {
           "path": "licenses/viewerjs-1.12.0/LICENSE",

@@ -9,7 +9,7 @@
     maxTooltipChars: 1200,
     maxKeyChars: 600
   };
-  var ITEM_TYPES = { artifact: true, data: true, file: true, plan: true };
+  var ITEM_TYPES = { artifact: true, collection: true, data: true, file: true, plan: true };
   var ICON_KINDS = {
     audio: true, chart: true, css: true, file: true, folder: true, html: true,
     image: true, js: true, json: true, markdown: true, plan: true, system: true
@@ -297,7 +297,7 @@
       click: function (event) {
         if (event.event && event.event.target && event.event.target.closest(".rn-tree-action")) return false;
         var data = nodeData(event.node);
-        if (data.rnGroupKey && event.info && event.info.region === "title") {
+        if (data.rnGroupKey && !data.rnItemType && event.info && event.info.region === "title") {
           event.node.setExpanded(!event.node.expanded, { scrollIntoView: false });
           return false;
         }

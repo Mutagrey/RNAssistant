@@ -7,9 +7,17 @@ using System.Security.Cryptography;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
+using SkiaSharp;
 
 namespace RNAssistant.Office.Services
 {
+    internal sealed class ArtifactImageThumbnailRenderResult
+    {
+        public byte[] Bytes { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+    }
+
     internal static class ArtifactViewerKinds
     {
         public const string Text = "text";
@@ -23,6 +31,8 @@ namespace RNAssistant.Office.Services
         public const int PageCharacters = 32000;
         public const int MaximumDocumentCharacters = 512000;
         public const long MaximumImageBytes = 20L * 1024L * 1024L;
+        public const int MaximumImageThumbnailDimension = 320;
+        public const long MaximumImageThumbnailBytes = 512L * 1024L;
 
         private static readonly HashSet<string> SourceExtensions = new HashSet<string>(
             new[]
@@ -37,6 +47,7 @@ namespace RNAssistant.Office.Services
         private readonly ResourceGatewayService _gateway;
         private readonly Func<ChatAttachment, byte[]> _readAttachmentBytes;
         private readonly ArtifactPdfViewerService _pdfViewer;
+        private readonly Func<byte[], int, ArtifactImageThumbnailRenderResult> _renderImageThumbnail;
 
         public ArtifactViewerService(ResourceGatewayService gateway)
             : this(gateway, null)
@@ -46,20 +57,30 @@ namespace RNAssistant.Office.Services
         public ArtifactViewerService(
             ResourceGatewayService gateway,
             Func<ChatAttachment, byte[]> readAttachmentBytes)
+            : this(gateway, readAttachmentBytes, null, null)
         {
-            _gateway = gateway ?? throw new ArgumentNullException("gateway");
-            _readAttachmentBytes = readAttachmentBytes;
-            _pdfViewer = new ArtifactPdfViewerService(_gateway, readAttachmentBytes);
         }
 
         internal ArtifactViewerService(
             ResourceGatewayService gateway,
             Func<ChatAttachment, byte[]> readAttachmentBytes,
             Func<byte[], int, int, ArtifactPdfPageRenderResult> renderPdfPage)
+            : this(gateway, readAttachmentBytes, renderPdfPage, null)
+        {
+        }
+
+        internal ArtifactViewerService(
+            ResourceGatewayService gateway,
+            Func<ChatAttachment, byte[]> readAttachmentBytes,
+            Func<byte[], int, int, ArtifactPdfPageRenderResult> renderPdfPage,
+            Func<byte[], int, ArtifactImageThumbnailRenderResult> renderImageThumbnail)
         {
             _gateway = gateway ?? throw new ArgumentNullException("gateway");
             _readAttachmentBytes = readAttachmentBytes;
-            _pdfViewer = new ArtifactPdfViewerService(_gateway, readAttachmentBytes, renderPdfPage);
+            _pdfViewer = renderPdfPage == null
+                ? new ArtifactPdfViewerService(_gateway, readAttachmentBytes)
+                : new ArtifactPdfViewerService(_gateway, readAttachmentBytes, renderPdfPage);
+            _renderImageThumbnail = renderImageThumbnail ?? RenderImageThumbnail;
         }
 
         public ArtifactPdfViewerDto ReadPdfInfo(ChatSession session, string resourceUri)
@@ -79,38 +100,65 @@ namespace RNAssistant.Office.Services
 
         public ArtifactImageViewerDto ReadImage(ChatSession session, string resourceUri)
         {
-            if (_readAttachmentBytes == null)
-            {
-                throw new InvalidOperationException("Artifact image byte reader is unavailable.");
-            }
-            var artifact = ResolveExactArtifact(session, resourceUri);
-            var descriptor = _gateway.Resolve(session, resourceUri).Resource;
-            var attachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
-            var mimeType = NormalizeMimeType(attachment == null ? null : attachment.ContentType);
-            if (attachment == null ||
-                !string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
-                !IsImageMimeType(mimeType) ||
-                !string.Equals(NormalizeMimeType(artifact.MimeType), mimeType, StringComparison.Ordinal) ||
-                !string.Equals(NormalizeMimeType(descriptor == null ? null : descriptor.MimeType), mimeType, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("Artifact has no admitted exact image representation.");
-            }
-            if (!attachment.ContentByteLength.HasValue || attachment.ContentByteLength.Value <= 0 ||
-                attachment.ContentByteLength.Value > MaximumImageBytes)
-            {
-                throw new InvalidOperationException("Artifact image exceeds the admitted viewer bound.");
-            }
-            var bytes = ReadExactAttachmentBytes(attachment, MaximumImageBytes, "image");
+            ResourceDescriptor descriptor;
+            ChatArtifact artifact;
+            ChatAttachment attachment;
+            string mimeType;
+            var bytes = ReadExactImageBytes(
+                session, resourceUri, out descriptor, out artifact, out attachment, out mimeType);
             return new ArtifactImageViewerDto
             {
                 ResourceUri = resourceUri,
                 ViewerKind = ArtifactViewerKinds.Image,
-                Title = descriptor.Title ?? artifact.Title ?? attachment.FileName ?? "Image",
+                Title = (descriptor == null ? null : descriptor.Title) ?? artifact.Title ?? attachment.FileName ?? "Image",
                 MimeType = mimeType,
                 ContentSha256 = attachment.ContentSha256,
                 ByteLength = bytes.LongLength,
                 Base64Content = Convert.ToBase64String(bytes)
+            };
+        }
+
+        public ArtifactImageThumbnailDto ReadImageThumbnail(ChatSession session, string resourceUri)
+        {
+            if (_renderImageThumbnail == null)
+            {
+                throw new InvalidOperationException("Artifact image thumbnail renderer is unavailable.");
+            }
+            ResourceDescriptor descriptor;
+            ChatArtifact artifact;
+            ChatAttachment attachment;
+            string mimeType;
+            var bytes = ReadExactImageBytes(
+                session, resourceUri, out descriptor, out artifact, out attachment, out mimeType);
+            ArtifactImageThumbnailRenderResult rendered;
+            try
+            {
+                rendered = _renderImageThumbnail(bytes, MaximumImageThumbnailDimension);
+            }
+            catch (Exception error) when (IsNativeImageRendererLoadFailure(error))
+            {
+                throw new InvalidOperationException(
+                    "Image thumbnail rendering is unavailable for the current process architecture.", error);
+            }
+            if (rendered == null || rendered.Bytes == null || rendered.Bytes.LongLength <= 0 ||
+                rendered.Bytes.LongLength > MaximumImageThumbnailBytes ||
+                rendered.Width <= 0 || rendered.Width > MaximumImageThumbnailDimension ||
+                rendered.Height <= 0 || rendered.Height > MaximumImageThumbnailDimension ||
+                !IsJpeg(rendered.Bytes))
+            {
+                throw new InvalidOperationException("Artifact image renderer returned an invalid bounded thumbnail.");
+            }
+            return new ArtifactImageThumbnailDto
+            {
+                ResourceUri = resourceUri,
+                ViewerKind = ArtifactViewerKinds.Image,
+                ContentSha256 = attachment.ContentSha256,
+                Width = rendered.Width,
+                Height = rendered.Height,
+                ImageMimeType = "image/jpeg",
+                ImageContentSha256 = Sha256(rendered.Bytes),
+                ImageByteLength = rendered.Bytes.LongLength,
+                ImageBase64Content = Convert.ToBase64String(rendered.Bytes)
             };
         }
 
@@ -259,6 +307,122 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Artifact viewer URI is not the canonical exact revision.");
             }
             return artifact;
+        }
+
+        private byte[] ReadExactImageBytes(
+            ChatSession session,
+            string resourceUri,
+            out ResourceDescriptor descriptor,
+            out ChatArtifact artifact,
+            out ChatAttachment attachment,
+            out string mimeType)
+        {
+            if (_readAttachmentBytes == null)
+            {
+                throw new InvalidOperationException("Artifact image byte reader is unavailable.");
+            }
+            artifact = ResolveExactArtifact(session, resourceUri);
+            descriptor = _gateway.Resolve(session, resourceUri).Resource;
+            attachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
+            mimeType = NormalizeMimeType(attachment == null ? null : attachment.ContentType);
+            if (attachment == null ||
+                !string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) ||
+                !IsImageMimeType(mimeType) ||
+                !string.Equals(NormalizeMimeType(artifact.MimeType), mimeType, StringComparison.Ordinal) ||
+                !string.Equals(NormalizeMimeType(descriptor == null ? null : descriptor.MimeType), mimeType, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Artifact has no admitted exact image representation.");
+            }
+            if (!attachment.ContentByteLength.HasValue || attachment.ContentByteLength.Value <= 0 ||
+                attachment.ContentByteLength.Value > MaximumImageBytes)
+            {
+                throw new InvalidOperationException("Artifact image exceeds the admitted viewer bound.");
+            }
+            return ReadExactAttachmentBytes(attachment, MaximumImageBytes, "image");
+        }
+
+        private static ArtifactImageThumbnailRenderResult RenderImageThumbnail(
+            byte[] imageBytes,
+            int maximumDimension)
+        {
+            using (var source = new MemoryStream(imageBytes, false))
+            using (var codec = SKCodec.Create(source))
+            {
+                if (codec == null || codec.Info.Width <= 0 || codec.Info.Height <= 0)
+                {
+                    throw new InvalidOperationException("Image thumbnail source cannot be decoded.");
+                }
+                if ((long)codec.Info.Width * codec.Info.Height > 64000000L)
+                {
+                    throw new InvalidOperationException("Image thumbnail source dimensions exceed the decoder bound.");
+                }
+                var scale = Math.Min(1f, maximumDimension /
+                    (float)Math.Max(codec.Info.Width, codec.Info.Height));
+                var decodedSize = codec.GetScaledDimensions(scale);
+                if (decodedSize.Width <= 0 || decodedSize.Height <= 0)
+                {
+                    throw new InvalidOperationException("Image thumbnail source cannot be scaled.");
+                }
+                var decodedInfo = new SKImageInfo(
+                    decodedSize.Width,
+                    decodedSize.Height,
+                    SKColorType.Rgba8888,
+                    SKAlphaType.Premul);
+                using (var decoded = new SKBitmap(decodedInfo))
+                {
+                    if (codec.GetPixels(decodedInfo, decoded.GetPixels()) != SKCodecResult.Success)
+                    {
+                        throw new InvalidOperationException("Image thumbnail source cannot be decoded exactly.");
+                    }
+                    var width = Math.Max(1, (int)Math.Round(codec.Info.Width * scale));
+                    var height = Math.Max(1, (int)Math.Round(codec.Info.Height * scale));
+                    width = Math.Min(maximumDimension, width);
+                    height = Math.Min(maximumDimension, height);
+                    using (var thumbnail = new SKBitmap(
+                        width, height, SKColorType.Rgba8888, SKAlphaType.Opaque))
+                    using (var canvas = new SKCanvas(thumbnail))
+                    using (var paint = new SKPaint { IsAntialias = true })
+                    {
+                        canvas.Clear(SKColors.White);
+                        canvas.DrawBitmap(decoded, new SKRect(0, 0, width, height), paint);
+                        canvas.Flush();
+                        using (var image = SKImage.FromBitmap(thumbnail))
+                        using (var data = image.Encode(SKEncodedImageFormat.Jpeg, 82))
+                        {
+                            if (data == null)
+                            {
+                                throw new InvalidOperationException("Image thumbnail cannot be encoded.");
+                            }
+                            return new ArtifactImageThumbnailRenderResult
+                            {
+                                Bytes = data.ToArray(),
+                                Width = width,
+                                Height = height
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        private static bool IsNativeImageRendererLoadFailure(Exception error)
+        {
+            for (var current = error; current != null; current = current.InnerException)
+            {
+                if (current is DllNotFoundException || current is BadImageFormatException ||
+                    current is EntryPointNotFoundException)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool IsJpeg(byte[] bytes)
+        {
+            return bytes.Length >= 4 && bytes[0] == 0xff && bytes[1] == 0xd8 &&
+                bytes[bytes.Length - 2] == 0xff && bytes[bytes.Length - 1] == 0xd9;
         }
 
         private static bool IsImageMimeType(string mimeType)

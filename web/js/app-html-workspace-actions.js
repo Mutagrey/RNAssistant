@@ -77,11 +77,11 @@
 
     async function saveSelection() {
       var selected = options.getSelection();
-      if (!selected || selected.type === "artifact" || state.bridgeUnavailable) return;
+      if (!selected || selected.type === "artifact" || selected.type === "collection" || state.bridgeUnavailable) return;
       var chatId = state.activeChatId;
       options.syncEditor();
       selected = options.getSelection();
-      if (!selected || selected.type === "artifact") return;
+      if (!selected || selected.type === "artifact" || selected.type === "collection") return;
       try {
         if (selected.type === "plan") {
           await savePlan(selected, chatId);
@@ -148,7 +148,7 @@
 
     async function deleteSelection(target) {
       var selected = target && typeof target.type === "string" ? target : options.getSelection();
-      if (!selected || selected.type === "artifact" || state.bridgeUnavailable) return;
+      if (!selected || selected.type === "artifact" || selected.type === "collection" || state.bridgeUnavailable) return;
       var chatId = state.activeChatId;
 
       try {
@@ -520,11 +520,13 @@
       exportWorkspace: exportWorkspace,
       handoffPlan: handoffPlan,
       importUploadedHtml: importUploadedHtml,
+      artifactImageThumbnailState: artifactViewers.artifactImageThumbnailState,
       artifactViewerState: artifactViewers.artifactViewerState,
       changeArtifactPdfPage: artifactViewers.changeArtifactPdfPage,
       changeArtifactViewerPage: artifactViewers.changeArtifactViewerPage,
       downloadArtifactViewer: artifactViewers.downloadArtifactViewer,
       loadArtifactImage: artifactViewers.loadArtifactImage,
+      loadArtifactImageThumbnail: artifactViewers.loadArtifactImageThumbnail,
       loadArtifactPdf: artifactViewers.loadArtifactPdf,
       loadArtifactPdfThumbnail: artifactViewers.loadArtifactPdfThumbnail,
       loadArtifactViewer: artifactViewers.loadArtifactViewer,

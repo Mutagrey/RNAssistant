@@ -47,6 +47,9 @@
     preview: htmlPreview,
     artifacts: workspaceArtifacts,
     artifactActions: {
+      artifactImageThumbnailState: function (uri) {
+        return workspaceActions && workspaceActions.artifactImageThumbnailState(uri);
+      },
       artifactViewerState: function (uri) {
         return workspaceActions && workspaceActions.artifactViewerState(uri);
       },
@@ -77,6 +80,9 @@
       loadArtifactImage: function (request) {
         return workspaceActions && workspaceActions.loadArtifactImage(request);
       },
+      loadArtifactImageThumbnail: function (request) {
+        return workspaceActions && workspaceActions.loadArtifactImageThumbnail(request);
+      },
       loadArtifactPdf: function (request) {
         return workspaceActions && workspaceActions.loadArtifactPdf(request);
       },
@@ -91,6 +97,26 @@
       },
       uploadedHtmlPreview: function (uri) {
         return workspaceActions && workspaceActions.uploadedHtmlPreview(uri);
+      },
+      collectionItems: function (collectionId) {
+        return typeof window.artifactCollectionItems === "function"
+          ? window.artifactCollectionItems(collectionId)
+          : [];
+      },
+      openCollectionArtifact: function (artifact, collectionItems, collectionId) {
+        return typeof window.openArtifactResource === "function"
+          ? window.openArtifactResource(artifact, collectionItems, "library:" + String(collectionId || ""))
+          : false;
+      },
+      imageGalleryContext: function (artifact) {
+        return typeof window.artifactImageGalleryContext === "function"
+          ? window.artifactImageGalleryContext(artifact)
+          : null;
+      },
+      selectImageGalleryItem: function (index) {
+        return typeof window.selectArtifactImageGalleryItem === "function"
+          ? window.selectArtifactImageGalleryItem(index)
+          : false;
       }
     }
   });
@@ -126,6 +152,11 @@
     applyArtifactViewerText: applyArtifactViewerText,
     validatePlanDraft: workspaceArtifacts.validatePlanDraft,
     hideCreate: hideHtmlWorkspaceCreate,
+    onArtifactThumbnailChange: function (uri, thumbnail) {
+      if (typeof window.updateArtifactThumbnailViews === "function") {
+        window.updateArtifactThumbnailViews(uri, thumbnail);
+      }
+    },
     render: renderHtmlWorkspace
   });
 
@@ -211,6 +242,7 @@
       window.alert("Сначала сохраните изменения текущего артефакта.");
       return false;
     }
+    state.artifactImageGalleryContext = null;
     state.htmlWorkspaceSelection = { type: type, id: id };
     renderHtmlWorkspace();
     return true;
@@ -488,7 +520,10 @@
   }
 
   function bindHtmlWorkspaceActions() {
-    $("htmlWorkspaceSearchInput").addEventListener("input", renderHtmlWorkspaceList);
+    $("htmlWorkspaceSearchInput").addEventListener("input", function () {
+      renderHtmlWorkspaceList();
+      if (selectedItem() && selectedItem().type === "collection") renderHtmlWorkspaceEditor();
+    });
     $("saveHtmlWorkspaceButton").addEventListener("click", workspaceActions.saveSelection);
     $("deleteHtmlWorkspaceButton").addEventListener("click", workspaceActions.deleteSelection);
     $("undoHtmlWorkspaceButton").addEventListener("click", workspaceActions.undo);
@@ -528,4 +563,8 @@
   window.saveHtmlWorkspaceSelection = workspaceActions.saveSelection;
   window.markHtmlWorkspaceDirty = markHtmlWorkspaceDirty;
   window.confirmDiscardHtmlWorkspaceChanges = confirmDiscardArtifactChanges;
+  window.RNAssistantArtifactThumbnailRuntime = {
+    load: workspaceActions.loadArtifactImageThumbnail,
+    state: workspaceActions.artifactImageThumbnailState
+  };
 }());

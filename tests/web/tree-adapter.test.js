@@ -137,6 +137,10 @@ assert.throws(() => adapter.normalize("/tree.json"), /local array/);
 assert.throws(() => adapter.normalize([{ key: "a", children: [{ key: "a" }] }]), /Duplicate tree key/);
 assert.throws(() => adapter.normalize([{ key: "a", children: "/lazy" }]), /children must be a local array/);
 assert.throws(() => adapter.normalize([{ key: "a", itemType: "url", itemId: "1" }]), /Unsupported tree item type/);
+const collection = adapter.normalize([{ key: "group::media", groupKey: "media", title: "Медиа",
+  itemType: "collection", itemId: "media", children: [] }]).nodes[0];
+assert.equal(collection.unselectable, false);
+assert.equal(collection.rnItemType, "collection");
 console.log("PASS tree adapter: local typed input and hard node/depth/key bounds are fail-closed");
 
 const root = new Element("div"); root.id = "tree"; root.className = "tool-list html-workspace-tree";
@@ -165,20 +169,41 @@ const controller = adapter.mount(root, {
   assert.ok(root.getAttribute("aria-activedescendant"));
   assert.equal(root.querySelectorAll("img").length, 0);
 
-  const group = FakeWunderbaum.last.findKey("group::files");
-  FakeWunderbaum.last.options.click({
-    tree: FakeWunderbaum.last, node: group, info: { region: "title" },
+  const primaryTree = FakeWunderbaum.last;
+  const group = primaryTree.findKey("group::files");
+  primaryTree.options.click({
+    tree: primaryTree, node: group, info: { region: "title" },
     event: { target: { closest() { return null; } } }
   });
   assert.deepEqual(toggled.at(-1), ["files", false]);
 
-  await FakeWunderbaum.last.findKey("item::file::2").setActive(true);
+  const selectableGroupRoot = new Element("div"); selectableGroupRoot.id = "collection-tree"; roots.push(selectableGroupRoot);
+  const collectionController = adapter.mount(selectableGroupRoot, {
+    nodes: [{ key: "group::media", groupKey: "media", itemType: "collection", itemId: "media",
+      title: "Медиа", expanded: true, children: [] }],
+    onActivate(item) { activated.push(item); return true; },
+    onToggle(key, expanded) { toggled.push([key, expanded]); }
+  });
+  await collectionController.ready;
+  const selectableGroup = FakeWunderbaum.last.findKey("group::media");
+  const toggleCount = toggled.length;
+  FakeWunderbaum.last.options.click({
+    tree: FakeWunderbaum.last, node: selectableGroup, info: { region: "title" },
+    event: { target: { closest() { return null; } } }
+  });
+  assert.equal(toggled.length, toggleCount, "selectable collection title is navigation, not a forced toggle");
+  await selectableGroup.setActive(true);
+  assert.equal(activated.at(-1).type, "collection");
+  assert.equal(activated.at(-1).id, "media");
+  collectionController.destroy();
+
+  await primaryTree.findKey("item::file::2").setActive(true);
   assert.equal(activated.at(-1).id, "2");
-  assert.equal(FakeWunderbaum.last.getActiveNode().key, "item::file::1", "rejected activation restores the prior visible item");
+  assert.equal(primaryTree.getActiveNode().key, "item::file::1", "rejected activation restores the prior visible item");
   root.querySelector(".rn-tree-action").click();
   assert.equal(deleted.at(-1).id, "1");
 
-  const tree = FakeWunderbaum.last;
+  const tree = primaryTree;
   controller.destroy();
   assert.equal(tree.destroyed, true);
   assert.equal(root.className, "tool-list html-workspace-tree");
@@ -214,10 +239,19 @@ const controller = adapter.mount(root, {
   assert.equal(sourceDepth(captured.nodes), 12);
   assert.match(sourceNode(captured.nodes, "item::file::deep").tooltip, /a\/b\/c\/d\/e\/f\/g\/h\/i\/j\/k\/deep\.html/);
   assert.equal(captured.nodes.some(node => node.groupKey === "artifact-plans"), true);
+  const generatedCollection = captured.nodes.find(node => node.groupKey === "artifact-generated");
+  assert.equal(generatedCollection.itemType, "collection");
+  assert.equal(generatedCollection.itemId, "artifact-generated");
   captured.onActivate({ type: "file", id: "h" });
   assert.deepEqual(selected.at(-1), ["file", "h"]);
   captured.onToggle("html-styles", true);
   assert.equal(context.state.collapsedResourceGroups["html-styles"], false);
+  context.RNAssistantHtmlWorkspaceTree.render({
+    root,
+    artifacts: [{ id: "a", title: "Chart", kind: "chart", meta: "chart", text: "chart" }],
+    selected: { type: "collection", id: "artifact-generated" }
+  });
+  assert.equal(captured.selectedKey, "group::artifact-generated");
   console.log("PASS tree consumer: domain grouping, search state, stable selection and collapse ownership are preserved");
 
   const index = fs.readFileSync(path.join(__dirname, "../../web/index.html"), "utf8");

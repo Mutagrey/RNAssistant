@@ -1,6 +1,7 @@
-# Vendored PDF rendering
+# Vendored media/PDF rendering
 
-These files make PDF page rendering available without NuGet restore:
+These files make bounded image thumbnails and PDF page rendering available without
+NuGet restore:
 
 - `managed/PDFtoImage.dll` — PDFtoImage 5.2.1 (`net471`)
 - `managed/SkiaSharp.dll` — SkiaSharp 3.119.2 (`net462`)
@@ -9,6 +10,10 @@ These files make PDF page rendering available without NuGet restore:
 - `runtimes/win-x64/native/libSkiaSharp.dll` — SkiaSharp.NativeAssets.Win32 3.119.2
 - `runtimes/win-x86/native/pdfium.dll` — bblanchon.PDFium.Win32 147.0.7690
 - `runtimes/win-x86/native/libSkiaSharp.dll` — SkiaSharp.NativeAssets.Win32 3.119.2
+
+SkiaSharp is the shared local raster codec used for exact image-to-JPEG thumbnails.
+PDFtoImage and PDFium are used only by the PDF page provider; no universal document
+viewer is introduced by this package layout.
 
 The files were taken unchanged from the corresponding NuGet packages. Their
 licenses and SkiaSharp third-party notices are in `licenses/`.
@@ -23,4 +28,5 @@ cross-loaded. SHA-256:
 - x86 `libSkiaSharp.dll`: `0a8a5ce7f24837d78b622b123eff0956bdd81437d7aa8554cb1282d4eae186b0`
 
 Repository presence and portable packaging are host-neutral evidence only. Real
-Windows x86 Office loading/rendering remains a separate qualification gate.
+Windows x86 Office image-thumbnail and PDF loading/rendering remain separate
+qualification gates.

@@ -91,6 +91,24 @@
     return value(reference, "Uri", "uri", "") || "";
   }
 
+  function artifactResourceUri(artifact) {
+    var direct = value(artifact, "ResourceUri", "resourceUri", "") || "";
+    if (direct) return direct;
+    var id = String(artifactId(artifact) || "").toLowerCase();
+    var revision = artifactRevision(artifact);
+    var head = libraryHeadForArtifact(artifact);
+    var exact = libraryHistory(head).filter(function (item) {
+      return String(value(item, "ArtifactId", "artifactId", "") || "").toLowerCase() === id &&
+        Number(value(item, "Revision", "revision", 1) || 1) === revision;
+    })[0] || null;
+    return value(exact, "ResourceUri", "resourceUri", "") || "";
+  }
+
+  function isImageArtifact(artifact) {
+    var mimeType = String(value(artifact, "MimeType", "mimeType", "") || "").split(";", 1)[0].toLowerCase();
+    return artifactKind(artifact) === "image" || /^image\/(?:jpeg|png|gif|webp)$/.test(mimeType);
+  }
+
   function artifactIdentityFromReference(reference) {
     var uri = resourceRefUri(reference);
     if (uri.indexOf("rna://chat/") !== 0) return null;
@@ -108,6 +126,168 @@
     if (!identity) return null;
     var artifact = artifactById(identity.id);
     return artifact && artifactRevision(artifact) === identity.revision ? artifact : null;
+  }
+
+  function artifactCollectionLabel(collectionId) {
+    return {
+      "artifact-plans": "Планы",
+      "artifact-authored": "Документы",
+      "artifact-files": "Файлы и медиа",
+      "artifact-generated": "Созданные снимки",
+      "artifact-system": "Служебные данные"
+    }[String(collectionId || "")] || "Ресурсы";
+  }
+
+  function collectionIdForArtifact(artifact) {
+    if (artifactKind(artifact) === "plan") return "artifact-plans";
+    return "artifact-" + kindCategory(artifact);
+  }
+
+  function artifactCollectionItems(collectionId) {
+    var items = artifactResourceHeads().filter(function (artifact) {
+      if (artifactKind(artifact) === "html_workspace") return false;
+      if (collectionId === "artifact-plans") return artifactKind(artifact) === "plan";
+      if (artifactKind(artifact) === "plan") return false;
+      return collectionIdForArtifact(artifact) === collectionId;
+    });
+    var search = document.getElementById("htmlWorkspaceSearchInput");
+    var query = String(search && search.value || "").trim().toLowerCase();
+    if (query) {
+      items = items.filter(function (artifact) {
+        return [
+          artifactTitle(artifact), artifactKind(artifact),
+          value(artifact, "MimeType", "mimeType", ""),
+          value(artifact, "RelativePath", "relativePath", ""),
+          artifactMeta(artifact)
+        ].join(" ").toLowerCase().indexOf(query) >= 0;
+      });
+    }
+    return items.sort(function (left, right) {
+      return String(artifactTitle(left)).localeCompare(String(artifactTitle(right)));
+    });
+  }
+
+  function createImageGalleryContext(source, artifacts, selectedArtifact) {
+    var seen = {};
+    var items = (artifacts || []).filter(isImageArtifact).map(function (artifact) {
+      var uri = artifactResourceUri(artifact);
+      if (!uri || seen[uri]) return null;
+      seen[uri] = true;
+      return {
+        artifact: artifact,
+        artifactId: artifactId(artifact),
+        resourceUri: uri,
+        title: artifactTitle(artifact),
+        contentSha256: value(artifact, "ContentSha256", "contentSha256", "") || ""
+      };
+    }).filter(Boolean).slice(0, 10000);
+    var selectedUri = artifactResourceUri(selectedArtifact);
+    var currentIndex = items.findIndex(function (item) { return item.resourceUri === selectedUri; });
+    if (currentIndex < 0 && selectedArtifact && selectedUri) {
+      items.unshift({
+        artifact: selectedArtifact,
+        artifactId: artifactId(selectedArtifact),
+        resourceUri: selectedUri,
+        title: artifactTitle(selectedArtifact),
+        contentSha256: value(selectedArtifact, "ContentSha256", "contentSha256", "") || ""
+      });
+      items = items.slice(0, 10000);
+      currentIndex = 0;
+    }
+    var context = {
+      chatId: state.activeChatId,
+      source: source || "library",
+      items: items,
+      currentIndex: Math.max(0, currentIndex),
+      scrollOffset: 0
+    };
+    state.artifactImageGalleryContext = context;
+    return context;
+  }
+
+  function artifactImageGalleryContext(artifact) {
+    if (!artifact || !isImageArtifact(artifact)) return null;
+    var uri = artifactResourceUri(artifact);
+    var current = state.artifactImageGalleryContext;
+    if (current && current.chatId === state.activeChatId && Array.isArray(current.items)) {
+      var currentIndex = current.items.findIndex(function (item) { return item.resourceUri === uri; });
+      if (currentIndex >= 0) {
+        current.currentIndex = currentIndex;
+        return current;
+      }
+    }
+    var collectionId = collectionIdForArtifact(artifact);
+    return createImageGalleryContext(
+      "library:" + collectionId,
+      artifactCollectionItems(collectionId),
+      artifact);
+  }
+
+  function selectArtifactImageGalleryItem(index) {
+    var context = state.artifactImageGalleryContext;
+    index = Number(index);
+    if (!context || context.chatId !== state.activeChatId || !Array.isArray(context.items) ||
+        !Number.isInteger(index) || index < 0 || index >= context.items.length) return false;
+    var item = context.items[index];
+    var artifact = item && item.artifact;
+    if (!artifact || artifactRemoved(artifact) || artifactResourceUri(artifact) !== item.resourceUri) return false;
+    context.currentIndex = index;
+    state.htmlWorkspaceSelection = { type: "artifact", id: artifactId(artifact) };
+    setChatResourcePopoverOpen(false);
+    switchTab("artifacts");
+    if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
+    return true;
+  }
+
+  function thumbnailRuntime() {
+    return window.RNAssistantArtifactThumbnailRuntime || null;
+  }
+
+  function artifactThumbnailState(resourceUri) {
+    var runtime = thumbnailRuntime();
+    return runtime && typeof runtime.state === "function" ? runtime.state(resourceUri) : null;
+  }
+
+  function loadArtifactThumbnail(resourceUri) {
+    var runtime = thumbnailRuntime();
+    return runtime && typeof runtime.load === "function"
+      ? runtime.load({ resourceUri: resourceUri })
+      : Promise.resolve(false);
+  }
+
+  function renderArtifactThumbnailNode(node, resourceUri, thumbnail, title) {
+    if (!node) return;
+    node.classList.add("rn-artifact-thumbnail");
+    node.dataset.resourceUri = String(resourceUri || "");
+    node.replaceChildren();
+    node.title = "";
+    node.classList.remove("is-ready", "is-error", "is-loading");
+    thumbnail = thumbnail || artifactThumbnailState(resourceUri);
+    if (thumbnail && thumbnail.status === "ready" && thumbnail.resourceUri === resourceUri) {
+      var image = document.createElement("img");
+      image.alt = title || "";
+      image.loading = "lazy";
+      image.src = "data:" + thumbnail.imageMimeType + ";base64," + thumbnail.imageBase64Content;
+      node.appendChild(image);
+      node.classList.add("is-ready");
+    } else if (thumbnail && thumbnail.status === "error") {
+      var unavailable = document.createElement("span");
+      unavailable.className = "rn-artifact-thumbnail-unavailable";
+      unavailable.textContent = "×";
+      node.appendChild(unavailable);
+      node.classList.add("is-error");
+      node.title = thumbnail.message || "Миниатюра недоступна";
+    } else {
+      node.classList.add("is-loading");
+    }
+  }
+
+  function updateArtifactThumbnailViews(resourceUri, thumbnail) {
+    Array.prototype.slice.call(document.querySelectorAll(".rn-artifact-thumbnail")).forEach(function (node) {
+      if (node.dataset && node.dataset.resourceUri === resourceUri) {
+        renderArtifactThumbnailNode(node, resourceUri, thumbnail, node.dataset.title || "");
+      }
+    });
   }
 
   function kindLabel(kind) {
@@ -234,9 +414,17 @@
     });
   }
 
-  function openArtifactResource(artifact) {
-    if (!artifact) return;
+  function openArtifactResource(artifact, galleryArtifacts, gallerySource) {
+    if (!artifact) return false;
     var kind = artifactKind(artifact);
+    if (isImageArtifact(artifact)) {
+      createImageGalleryContext(
+        gallerySource || (Array.isArray(galleryArtifacts) ? "chat" : "library:" + collectionIdForArtifact(artifact)),
+        Array.isArray(galleryArtifacts) ? galleryArtifacts : artifactCollectionItems(collectionIdForArtifact(artifact)),
+        artifact);
+    } else {
+      state.artifactImageGalleryContext = null;
+    }
     if (kind === "html_workspace" && artifactId(artifact) === state.activeHtmlArtifactId) {
       var workspace = state.htmlWorkspace || {};
       var activeFileId = value(workspace, "ActiveFileId", "activeFileId", "") || "";
@@ -254,6 +442,7 @@
     setChatResourcePopoverOpen(false);
     switchTab("artifacts");
     if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
+    return true;
   }
 
   function artifactCard(artifact) {
@@ -313,6 +502,93 @@
     });
   }
 
+  function messageImageArtifacts(message) {
+    var seen = {};
+    return messageResourceRefs(message).map(artifactByReference).filter(Boolean).filter(function (artifact) {
+      if (!isImageArtifact(artifact)) return false;
+      var uri = artifactResourceUri(artifact);
+      if (!uri || seen[uri]) return false;
+      seen[uri] = true;
+      return true;
+    });
+  }
+
+  function imageAttachmentId(artifact) {
+    try {
+      var metadata = JSON.parse(value(artifact, "MetadataJson", "metadataJson", "{}") || "{}");
+      return String(metadata.attachmentId || metadata.AttachmentId || "").toLowerCase();
+    } catch (ignore) {
+      return "";
+    }
+  }
+
+  function messageImageAttachmentIds(message) {
+    var result = {};
+    messageImageArtifacts(message).forEach(function (artifact) {
+      var id = imageAttachmentId(artifact);
+      if (id) result[id] = true;
+    });
+    return result;
+  }
+
+  var chatThumbnailObserver = null;
+
+  function resetMessageMediaThumbnails() {
+    if (chatThumbnailObserver) chatThumbnailObserver.disconnect();
+    chatThumbnailObserver = null;
+  }
+
+  function observeChatThumbnail(node, resourceUri) {
+    if (typeof window.IntersectionObserver !== "function") {
+      loadArtifactThumbnail(resourceUri);
+      return;
+    }
+    if (!chatThumbnailObserver) {
+      chatThumbnailObserver = new window.IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          chatThumbnailObserver.unobserve(entry.target);
+          loadArtifactThumbnail(entry.target.dataset.resourceUri);
+        });
+      }, { rootMargin: "160px" });
+    }
+    chatThumbnailObserver.observe(node);
+  }
+
+  function appendArtifactMediaGallery(parent, artifacts, className) {
+    artifacts = (artifacts || []).filter(isImageArtifact);
+    if (!parent || !artifacts.length) return;
+    var wrap = document.createElement("div");
+    wrap.className = "chat-media-gallery count-" + Math.min(4, artifacts.length) + (className ? " " + className : "");
+    artifacts.slice(0, 4).forEach(function (artifact, index) {
+      var uri = artifactResourceUri(artifact);
+      if (!uri) return;
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "chat-media-item";
+      button.title = "Открыть изображение «" + artifactTitle(artifact) + "»";
+      button.setAttribute("aria-label", button.title);
+      var thumbnail = document.createElement("span");
+      thumbnail.dataset.title = artifactTitle(artifact);
+      renderArtifactThumbnailNode(thumbnail, uri, artifactThumbnailState(uri), artifactTitle(artifact));
+      button.appendChild(thumbnail);
+      if (index === 3 && artifacts.length > 4) {
+        var more = document.createElement("span");
+        more.className = "chat-media-more";
+        more.textContent = "+" + (artifacts.length - 4);
+        button.appendChild(more);
+      }
+      button.addEventListener("click", function () { openArtifactResource(artifact, artifacts, "chat"); });
+      wrap.appendChild(button);
+      observeChatThumbnail(thumbnail, uri);
+    });
+    parent.appendChild(wrap);
+  }
+
+  function appendMessageMediaGallery(parent, message) {
+    appendArtifactMediaGallery(parent, messageImageArtifacts(message), "message-media-gallery");
+  }
+
   function appendMessageArtifactCards(parent, message, seenArtifactIds) {
     if (!parent || !message) return;
     var artifacts = messageArtifacts(message).filter(function (artifact) {
@@ -345,6 +621,22 @@
     return artifactResourceHeads(artifacts);
   }
 
+  function collectRunImageArtifacts(items, finalMessage) {
+    var messages = (items || []).map(function (item) { return item && item.message; });
+    if (finalMessage && finalMessage.message) messages.push(finalMessage.message);
+    var seen = {};
+    var artifacts = [];
+    messages.filter(Boolean).forEach(function (message) {
+      messageImageArtifacts(message).forEach(function (artifact) {
+        var uri = artifactResourceUri(artifact);
+        if (!uri || seen[uri]) return;
+        seen[uri] = true;
+        artifacts.push(artifact);
+      });
+    });
+    return artifacts;
+  }
+
   function resourceBundleMeta(artifacts) {
     var labels = [];
     var seen = {};
@@ -360,6 +652,7 @@
 
   function appendAgentRunResourceCards(parent, items, finalMessage) {
     if (!parent) return;
+    appendArtifactMediaGallery(parent, collectRunImageArtifacts(items, finalMessage), "agent-run-media-gallery");
     var artifacts = collectRunArtifacts(items, finalMessage);
     if (!artifacts.length) return;
 
@@ -549,7 +842,17 @@
     removed: artifactRemoved
   };
   window.artifactResourceHeads = artifactResourceHeads;
+  window.artifactCollectionItems = artifactCollectionItems;
+  window.artifactCollectionLabel = artifactCollectionLabel;
+  window.artifactImageGalleryContext = artifactImageGalleryContext;
+  window.selectArtifactImageGalleryItem = selectArtifactImageGalleryItem;
+  window.renderArtifactThumbnailNode = renderArtifactThumbnailNode;
+  window.updateArtifactThumbnailViews = updateArtifactThumbnailViews;
+  window.loadArtifactThumbnail = loadArtifactThumbnail;
   window.messageResourceRefs = messageResourceRefs;
+  window.messageImageAttachmentIds = messageImageAttachmentIds;
+  window.appendMessageMediaGallery = appendMessageMediaGallery;
+  window.resetMessageMediaThumbnails = resetMessageMediaThumbnails;
   window.appendMessageArtifactCards = appendMessageArtifactCards;
   window.appendAgentRunResourceCards = appendAgentRunResourceCards;
   window.bindChatResourceNavigation = bindChatResourceNavigation;

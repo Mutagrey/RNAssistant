@@ -34,6 +34,8 @@
   }
 
   function clearDetail(root) {
+    if (typeof root.__rnArtifactDetailCleanup === "function") root.__rnArtifactDetailCleanup();
+    root.__rnArtifactDetailCleanup = null;
     if (window.RNAssistantViewerRegistry) {
       [".artifact-viewer-host", ".artifact-json-viewer", ".artifact-typed-viewer"].forEach(function (selector) {
         Array.prototype.slice.call(root.querySelectorAll(selector)).forEach(function (target) {
@@ -97,6 +99,23 @@
     error.className = "artifact-detail-error";
     error.textContent = message;
     root.appendChild(error);
+  }
+
+  function renderThumbnailProjection(root, resourceUri, thumbnail, title) {
+    if (typeof window.renderArtifactThumbnailNode === "function") {
+      window.renderArtifactThumbnailNode(root, resourceUri, thumbnail, title);
+      return thumbnail ? thumbnail.status : "";
+    }
+    root.className = "rn-artifact-thumbnail";
+    root.dataset.resourceUri = resourceUri;
+    if (thumbnail && thumbnail.status === "ready") {
+      var image = document.createElement("img");
+      image.alt = title || "";
+      image.src = "data:" + thumbnail.imageMimeType + ";base64," + thumbnail.imageBase64Content;
+      root.appendChild(image);
+      return "ready";
+    }
+    return thumbnail ? thumbnail.status : "";
   }
 
   function appendTypedArtifactViewer(root, artifact, actions, draftText) {
@@ -164,12 +183,73 @@
       var imageTarget = document.createElement("div");
       imageTarget.className = "artifact-viewer-host artifact-typed-viewer";
       root.appendChild(imageTarget);
+      var gallery = typeof actions.imageGalleryContext === "function"
+        ? actions.imageGalleryContext(artifact)
+        : null;
+      var galleryItems = gallery && Array.isArray(gallery.items) ? gallery.items : [];
+      var galleryIndex = galleryItems.length
+        ? Math.max(0, Math.min(Number(gallery.currentIndex || 0), galleryItems.length - 1))
+        : 0;
+      var galleryItem = galleryItems[galleryIndex] || null;
+      if (galleryItem && galleryItem.contentSha256 &&
+          String(galleryItem.contentSha256).toLowerCase() !== String(viewer.contentSha256 || "").toLowerCase()) {
+        appendViewerError(root, "Image gallery changed exact revision evidence.");
+        return true;
+      }
+      var selectGallery = function (index) {
+        return typeof actions.selectImageGalleryItem === "function"
+          ? actions.selectImageGalleryItem(index)
+          : false;
+      };
+      var sequence = galleryItems.length > 1 ? {
+        ariaLabel: "Изображения коллекции",
+        title: "Изображения",
+        count: galleryItems.length,
+        currentIndex: galleryIndex,
+        scrollOffset: Number(gallery.scrollOffset || 0),
+        getItem: function (index) { return galleryItems[index] || null; },
+        itemLabel: function (index, item) {
+          return (item && item.title || "Изображение") + " · " + (index + 1) + " из " + galleryItems.length;
+        },
+        onScroll: function (offset) { gallery.scrollOffset = Number(offset || 0); },
+        onSelect: function (index) { return selectGallery(index); },
+        onRequest: typeof actions.loadArtifactImageThumbnail === "function"
+          ? function (index, item) {
+            if (item && item.resourceUri) actions.loadArtifactImageThumbnail({ resourceUri: item.resourceUri });
+          }
+          : null,
+        renderItem: function (index, item, preview) {
+          if (!item || !item.resourceUri) return { status: "error", message: "Exact image URI is unavailable." };
+          var thumbnail = typeof actions.artifactImageThumbnailState === "function"
+            ? actions.artifactImageThumbnailState(item.resourceUri)
+            : null;
+          if (thumbnail && thumbnail.status === "ready" && item.contentSha256 &&
+              String(thumbnail.contentSha256 || "").toLowerCase() !== String(item.contentSha256).toLowerCase()) {
+            return { status: "error", message: "Thumbnail changed exact revision evidence." };
+          }
+          var node = document.createElement("span");
+          node.dataset.title = item.title || "";
+          preview.appendChild(node);
+          return renderThumbnailProjection(node, item.resourceUri, thumbnail, item.title);
+        }
+      } : null;
       window.RNAssistantViewerRegistry.mount("image", imageTarget, {
         title: viewer.title,
         mimeType: viewer.mimeType,
         contentSha256: viewer.contentSha256,
         byteLength: viewer.byteLength,
-        base64Content: viewer.base64Content
+        base64Content: viewer.base64Content,
+        navigation: sequence ? {
+          label: (galleryIndex + 1) + " / " + galleryItems.length,
+          hasPrevious: galleryIndex > 0,
+          hasNext: galleryIndex + 1 < galleryItems.length,
+          onPrevious: function () { return selectGallery(galleryIndex - 1); },
+          onNext: function () { return selectGallery(galleryIndex + 1); },
+          previousLabel: "Предыдущее изображение",
+          nextLabel: "Следующее изображение",
+          unavailableLabel: "Изображение недоступно"
+        } : null,
+        sequence: sequence
       });
       return true;
     }
@@ -562,9 +642,134 @@
     show(false);
   }
 
+  function collectionLabel(collectionId) {
+    if (typeof window.artifactCollectionLabel === "function") {
+      return window.artifactCollectionLabel(collectionId);
+    }
+    return {
+      "artifact-plans": "Планы",
+      "artifact-authored": "Документы",
+      "artifact-files": "Файлы и медиа",
+      "artifact-generated": "Созданные снимки",
+      "artifact-system": "Служебные данные"
+    }[String(collectionId || "")] || "Ресурсы";
+  }
+
+  function collectionItems(collectionId, actions) {
+    return actions && typeof actions.collectionItems === "function"
+      ? actions.collectionItems(collectionId) || []
+      : [];
+  }
+
+  function collectionCount(collectionId, actions) {
+    return collectionItems(collectionId, actions).length;
+  }
+
+  function appendArtifactCollection(root, selected, actions) {
+    var collectionId = selected && selected.item ? selected.item.id : "";
+    var items = collectionItems(collectionId, actions);
+    var heading = document.createElement("div");
+    heading.className = "artifact-collection-heading";
+    var title = document.createElement("strong");
+    title.textContent = collectionLabel(collectionId);
+    var count = document.createElement("span");
+    count.textContent = items.length + " ресурсов";
+    heading.appendChild(title);
+    heading.appendChild(count);
+    root.appendChild(heading);
+    if (!items.length) {
+      appendContentLabel(root, "В этой коллекции ничего не найдено.");
+      return;
+    }
+
+    var observer = null;
+    if (typeof window.IntersectionObserver === "function") {
+      observer = new window.IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          observer.unobserve(entry.target);
+          if (typeof actions.loadArtifactImageThumbnail === "function") {
+            actions.loadArtifactImageThumbnail({ resourceUri: entry.target.dataset.resourceUri });
+          }
+        });
+      }, { rootMargin: "220px" });
+    }
+    root.__rnArtifactDetailCleanup = function () {
+      if (observer) observer.disconnect();
+      observer = null;
+    };
+
+    var grid = document.createElement("div");
+    grid.className = "artifact-collection-grid";
+    items.forEach(function (artifact, index) {
+      var kind = artifactKind(artifact);
+      var removed = window.RNAssistantArtifactVisuals &&
+        typeof window.RNAssistantArtifactVisuals.removed === "function" &&
+        window.RNAssistantArtifactVisuals.removed(artifact);
+      var card = document.createElement("button");
+      card.type = "button";
+      card.className = "artifact-collection-card kind-" + kind;
+      card.disabled = !!removed;
+      card.title = removed ? "Ресурс удалён" : "Открыть «" + prop(artifact, "Title", "title", "Артефакт") + "»";
+      var visual = document.createElement("span");
+      visual.className = "artifact-collection-visual";
+      if (artifactViewerKind(artifact) === "image") {
+        var uri = exactArtifactUri(artifact);
+        var thumbnail = typeof actions.artifactImageThumbnailState === "function"
+          ? actions.artifactImageThumbnailState(uri)
+          : null;
+        var thumbnailNode = document.createElement("span");
+        thumbnailNode.dataset.title = prop(artifact, "Title", "title", "Изображение");
+        renderThumbnailProjection(thumbnailNode, uri, thumbnail, thumbnailNode.dataset.title);
+        visual.appendChild(thumbnailNode);
+        if (uri && !thumbnail) {
+          if (observer) observer.observe(thumbnailNode);
+          else if (index < 24 && typeof actions.loadArtifactImageThumbnail === "function") {
+            actions.loadArtifactImageThumbnail({ resourceUri: uri });
+          }
+        }
+      } else {
+        var icon = document.createElement("span");
+        icon.className = "artifact-type-icon";
+        icon.innerHTML = window.RNAssistantArtifactVisuals &&
+          typeof window.RNAssistantArtifactVisuals.iconSvg === "function"
+          ? window.RNAssistantArtifactVisuals.iconSvg(kind)
+          : "";
+        visual.appendChild(icon);
+      }
+      var copy = document.createElement("span");
+      copy.className = "artifact-collection-copy";
+      var name = document.createElement("strong");
+      name.textContent = prop(artifact, "Title", "title", "Артефакт");
+      var meta = document.createElement("span");
+      meta.textContent = window.RNAssistantArtifactVisuals &&
+        typeof window.RNAssistantArtifactVisuals.meta === "function"
+        ? window.RNAssistantArtifactVisuals.meta(artifact)
+        : typeLabel(kind);
+      copy.appendChild(name);
+      copy.appendChild(meta);
+      card.appendChild(visual);
+      card.appendChild(copy);
+      if (!removed) {
+        card.addEventListener("click", function () {
+          if (typeof actions.openCollectionArtifact === "function") {
+            actions.openCollectionArtifact(artifact, items, collectionId);
+          }
+        });
+      }
+      grid.appendChild(card);
+    });
+    root.appendChild(grid);
+  }
+
   function renderDetail(root, selected, editorValue, actions) {
     actions = actions || {};
     clearDetail(root);
+    if (selected.type === "collection") {
+      root.classList.remove("is-image-preview", "is-media-preview");
+      appendArtifactCollection(root, selected, actions);
+      return;
+    }
     var selectedViewerKind = selected.type === "artifact" ? artifactViewerKind(selected.item) : "";
     root.classList.toggle("is-image-preview", selectedViewerKind === "image");
     root.classList.toggle("is-media-preview", selectedViewerKind === "image" || selectedViewerKind === "pdf");
@@ -610,6 +815,8 @@
   }
 
   window.RNAssistantHtmlWorkspaceArtifacts = {
+    collectionCount: collectionCount,
+    collectionLabel: collectionLabel,
     planSummary: planSummary,
     isUploadedHtmlArtifact: isUploadedHtmlArtifact,
     renderDetail: renderDetail,

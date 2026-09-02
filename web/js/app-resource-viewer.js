@@ -50,6 +50,7 @@
     var naturalWidth = 0;
     var naturalHeight = 0;
     var vendorViewer = null;
+    var sequenceController = null;
     var resizeObserver = null;
     var resizeFrame = 0;
     var resizeTimer = 0;
@@ -201,9 +202,9 @@
       var previousLabel = label.textContent;
       label.textContent = "Загружаю…";
       Promise.resolve(action()).then(function (changed) {
-        if (changed === false) label.textContent = "Страница недоступна";
+        if (changed === false) label.textContent = navigation.unavailableLabel || "Элемент недоступен";
         else label.textContent = previousLabel;
-      }).catch(function () { label.textContent = "Страница недоступна"; });
+      }).catch(function () { label.textContent = navigation.unavailableLabel || "Элемент недоступен"; });
     }
     if (navigation) {
       root.classList.add("has-navigation");
@@ -213,8 +214,8 @@
       previous.type = next.type = "button";
       previous.disabled = navigation.hasPrevious !== true;
       next.disabled = navigation.hasNext !== true;
-      previous.title = "Предыдущая страница";
-      next.title = "Следующая страница";
+      previous.title = navigation.previousLabel || "Предыдущий элемент";
+      next.title = navigation.nextLabel || "Следующий элемент";
       previous.setAttribute("aria-label", previous.title);
       next.setAttribute("aria-label", next.title);
       pageLabel.setAttribute("aria-live", "polite");
@@ -238,6 +239,41 @@
     });
     root.appendChild(toolbar);
     root.appendChild(stageShell);
+    var sequence = options.sequence || null;
+    if (sequence && Number(sequence.count || 0) > 1) {
+      if (!window.RNAssistantSequenceViewer) throw new Error("Sequence viewer is unavailable.");
+      root.classList.add("has-sequence");
+      sequenceController = window.RNAssistantSequenceViewer.createRail({
+        ariaLabel: sequence.ariaLabel || "Изображения",
+        title: sequence.title || "Изображения",
+        count: sequence.count,
+        currentIndex: sequence.currentIndex,
+        orientation: "horizontal",
+        itemExtent: sequence.itemExtent || 92,
+        showJump: false,
+        showNumbers: false,
+        pending: sequence.pending === true,
+        scrollOffset: sequence.scrollOffset,
+        getItem: sequence.getItem,
+        itemLabel: sequence.itemLabel,
+        onScroll: sequence.onScroll,
+        onRequest: sequence.onRequest,
+        onSelect: sequence.onSelect,
+        renderItem: function (index, item, preview) {
+          if (index === Number(sequence.currentIndex || 0)) {
+            var current = element("img", "rn-sequence-current-image");
+            current.alt = "";
+            current.src = objectUrl;
+            preview.appendChild(current);
+            return "ready";
+          }
+          return typeof sequence.renderItem === "function"
+            ? sequence.renderItem(index, item, preview)
+            : null;
+        }
+      });
+      root.appendChild(sequenceController.element);
+    }
     image.src = objectUrl;
 
     function release() {
@@ -249,6 +285,8 @@
       resizeFrame = 0;
       if (resizeTimer) window.clearTimeout(resizeTimer);
       resizeTimer = 0;
+      if (sequenceController) sequenceController.destroy();
+      sequenceController = null;
       if (vendorViewer && typeof vendorViewer.destroy === "function") vendorViewer.destroy();
       vendorViewer = null;
       URL.revokeObjectURL(objectUrl);
@@ -311,70 +349,26 @@
   }
 
   function createPdfThumbnailRail(options, currentPage, thumbnailUrl, currentPageUrl) {
-    var rowHeight = 126;
+    if (!window.RNAssistantSequenceViewer) throw new Error("Sequence viewer is unavailable.");
     var pageCount = Math.max(1, Number(options.pageCount || 1));
     var currentIndex = Math.max(0, Math.min(Number(currentPage.pageIndex || 0), pageCount - 1));
-    var rail = element("aside", "rn-pdf-thumbnail-rail");
-    rail.setAttribute("aria-label", "Страницы PDF");
-    var header = element("div", "rn-pdf-thumbnail-header");
-    header.appendChild(element("span", "rn-pdf-thumbnail-title", "Страницы"));
-    var input = element("input", "rn-pdf-page-input");
-    input.type = "number";
-    input.min = "1";
-    input.max = String(pageCount);
-    input.value = String(currentIndex + 1);
-    input.disabled = options.pending === true || typeof options.onPageSelect !== "function";
-    input.setAttribute("aria-label", "Перейти к странице");
-    header.appendChild(input);
-    header.appendChild(element("span", "rn-pdf-page-count", "/ " + pageCount));
-    var list = element("div", "rn-pdf-thumbnail-list");
-    list.tabIndex = 0;
-    var track = element("div", "rn-pdf-thumbnail-track");
-    track.style.height = (pageCount * rowHeight) + "px";
-    list.appendChild(track);
-    rail.appendChild(header);
-    rail.appendChild(list);
-
-    function selectPage(pageIndex) {
-      if (pageIndex === currentIndex || options.pending || typeof options.onPageSelect !== "function") return;
-      options.onPageSelect(pageIndex);
-    }
-
-    function commitInput() {
-      var requested = Number(input.value);
-      if (!Number.isInteger(requested)) {
-        input.value = String(currentIndex + 1);
-        return;
-      }
-      requested = Math.max(1, Math.min(pageCount, requested));
-      input.value = String(requested);
-      selectPage(requested - 1);
-    }
-
-    input.addEventListener("change", commitInput);
-    input.addEventListener("keydown", function (event) {
-      if (event && event.key === "Enter") {
-        commitInput();
-        if (typeof event.preventDefault === "function") event.preventDefault();
-      }
-    });
-
-    function renderRows() {
-      var viewportHeight = Number(list.clientHeight || 560);
-      var first = Math.max(0, Math.floor(Number(list.scrollTop || 0) / rowHeight) - 2);
-      var last = Math.min(pageCount - 1, Math.ceil((Number(list.scrollTop || 0) + viewportHeight) / rowHeight) + 2);
-      var requested = [];
-      track.replaceChildren();
-      for (var pageIndex = first; pageIndex <= last; pageIndex += 1) {
-        var item = element("button", "rn-pdf-thumbnail-item" + (pageIndex === currentIndex ? " active" : ""));
-        item.type = "button";
-        item.disabled = options.pending === true;
-        item.style.top = (pageIndex * rowHeight) + "px";
-        item.setAttribute("data-page-index", String(pageIndex));
-        item.setAttribute("aria-label", "Страница " + (pageIndex + 1));
-        if (pageIndex === currentIndex) item.setAttribute("aria-current", "page");
-        item.appendChild(element("span", "rn-pdf-thumbnail-number", String(pageIndex + 1)));
-        var preview = element("span", "rn-pdf-thumbnail-preview");
+    return window.RNAssistantSequenceViewer.createRail({
+      className: "rn-pdf-thumbnail-rail",
+      ariaLabel: "Страницы PDF",
+      title: "Страницы",
+      count: pageCount,
+      currentIndex: currentIndex,
+      currentRole: "page",
+      orientation: "vertical",
+      itemExtent: 126,
+      jumpLabel: "Перейти к странице",
+      pending: options.pending === true,
+      scrollOffset: options.thumbnailScrollTop,
+      itemLabel: function (pageIndex) { return "Страница " + (pageIndex + 1); },
+      onScroll: options.onThumbnailScroll,
+      onRequest: options.onThumbnailRequest,
+      onSelect: options.onPageSelect,
+      renderItem: function (pageIndex, item, preview) {
         var thumbnail = pageIndex === currentIndex
           ? currentPage
           : ((options.thumbnails || {})[String(pageIndex)] || null);
@@ -386,37 +380,17 @@
               ? currentPageUrl
               : thumbnailUrl(thumbnail);
             preview.appendChild(image);
+            return "ready";
           } catch (error) {
-            preview.appendChild(element("span", "rn-pdf-thumbnail-unavailable", "×"));
+            return { status: "error", message: "Миниатюра недоступна" };
           }
-        } else if (thumbnail && thumbnail.status === "error") {
-          preview.appendChild(element("span", "rn-pdf-thumbnail-unavailable", "×"));
-          item.title = thumbnail.message || "Миниатюра недоступна";
-        } else {
-          preview.appendChild(element("span", "rn-pdf-thumbnail-loading", "…"));
-          if (!thumbnail && typeof options.onThumbnailRequest === "function") requested.push(pageIndex);
         }
-        item.appendChild(preview);
-        (function (selectedIndex) {
-          item.addEventListener("click", function () { selectPage(selectedIndex); });
-        }(pageIndex));
-        track.appendChild(item);
+        if (thumbnail && thumbnail.status === "error") {
+          return { status: "error", message: thumbnail.message || "Миниатюра недоступна" };
+        }
+        return thumbnail ? thumbnail.status : "";
       }
-      requested.forEach(function (pageIndex) { options.onThumbnailRequest(pageIndex); });
-    }
-
-    list.addEventListener("scroll", function () {
-      if (typeof options.onThumbnailScroll === "function") options.onThumbnailScroll(list.scrollTop);
-      renderRows();
     });
-    var initialScrollTop = Math.max(0, Number(options.thumbnailScrollTop || 0));
-    var visibleFirst = Math.floor(initialScrollTop / rowHeight);
-    if (currentIndex < visibleFirst || currentIndex > visibleFirst + 4) {
-      initialScrollTop = Math.max(0, (currentIndex - 2) * rowHeight);
-    }
-    list.scrollTop = initialScrollTop;
-    renderRows();
-    return rail;
   }
 
   function createPdf(options) {
@@ -435,6 +409,7 @@
     var body = element("div", "rn-pdf-viewer-body");
     root.appendChild(body);
     var child = null;
+    var railChild = null;
     var thumbnailUrls = {};
 
     function pdfThumbnailUrl(page) {
@@ -456,6 +431,8 @@
     function clear() {
       if (child && typeof child.destroy === "function") child.destroy();
       child = null;
+      if (railChild && typeof railChild.destroy === "function") railChild.destroy();
+      railChild = null;
       releaseThumbnailUrls();
       body.replaceChildren();
     }
@@ -479,13 +456,17 @@
           hasNext: !options.pending && Number(page.pageIndex || 0) + 1 < Number(options.pageCount || 0) &&
             typeof options.onNext === "function",
           onPrevious: options.onPrevious,
-          onNext: options.onNext
+          onNext: options.onNext,
+          previousLabel: "Предыдущая страница",
+          nextLabel: "Следующая страница",
+          unavailableLabel: "Страница недоступна"
         }
       });
       var layout = element("div", "rn-pdf-pages-layout");
       var pageHost = element("div", "rn-pdf-page-host");
       pageHost.appendChild(child.element);
-      layout.appendChild(createPdfThumbnailRail(options, page, pdfThumbnailUrl, child.sourceUrl));
+      railChild = createPdfThumbnailRail(options, page, pdfThumbnailUrl, child.sourceUrl);
+      layout.appendChild(railChild.element);
       layout.appendChild(pageHost);
       body.appendChild(layout);
     }

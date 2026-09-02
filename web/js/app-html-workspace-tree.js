@@ -73,8 +73,8 @@
     return "authored";
   }
 
-  function groupNode(key, title, count, children, iconKind) {
-    return {
+  function groupNode(key, title, count, children, iconKind, selectable) {
+    var node = {
       key: groupKey(key),
       groupKey: key,
       title: title,
@@ -84,6 +84,11 @@
       expanded: isGroupExpanded(key),
       children: children
     };
+    if (selectable) {
+      node.itemType = "collection";
+      node.itemId = key;
+    }
+    return node;
   }
 
   function itemNode(type, id, title, meta, description, kind, deletable) {
@@ -193,12 +198,14 @@
         selectionType === "plan"
       );
     });
-    return groupNode(key, label, children.length, children, selectionType === "plan" ? "plan" : "folder");
+    return groupNode(key, label, children.length, children,
+      selectionType === "plan" ? "plan" : "folder", true);
   }
 
   function selectedKey(options) {
     var selected = options.selected || {};
     if (!selected.type || !selected.id) return "";
+    if (selected.type === "collection") return groupKey(selected.id);
     return itemKey(selected.type, selected.id);
   }
 

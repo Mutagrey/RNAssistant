@@ -192,6 +192,8 @@ function applyChatState(response) {
   if (chatChanged) {
     captureChatDraft(previousChatId);
     state.artifactViewerPages = {};
+    state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };
+    state.artifactImageGalleryContext = null;
   }
   if (typeof resetMessageEditState === "function") {
     resetMessageEditState();

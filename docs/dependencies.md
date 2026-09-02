@@ -6,22 +6,26 @@ NuGet packages are committed in `packages/`:
 - `Newtonsoft.Json 13.0.3`
 - `PdfPig 0.1.15` and its managed dependencies
 
-PDF rendering dependencies are committed as selected binaries in
+Media/PDF rendering dependencies are committed as selected binaries in
 `vendor/pdf-rendering/` and referenced directly by `RNAssistant.Office`:
 
 - `PDFtoImage 5.2.1`
 - `SkiaSharp 3.119.2`
 - `bblanchon.PDFium.Win32 147.0.7690`
 
-Matching Windows x64 and x86 native binaries are included. Building and running PDF
-page rendering does not require restoring these NuGet packages.
+Matching Windows x64 and x86 native binaries are included. Building and running
+bounded image thumbnails or PDF page rendering does not require restoring these
+NuGet packages. SkiaSharp is the shared raster codec; PDFtoImage/PDFium remains a
+PDF-only provider path.
 
-## PDF bitness boundary
+## Native rendering bitness boundary
 
-PDF text reading and PDF page rendering are separate dependency paths:
+Image thumbnails, PDF text reading and PDF page rendering are separate dependency
+paths:
 
 | Operation | Runtime dependencies | x86 status |
 |---|---|---|
+| Exact image-to-JPEG thumbnail | `RNAssistant.Office` + managed `SkiaSharp.dll` + matching native `libSkiaSharp.dll` | Structurally packaged with reviewed PE32 x86 native binary; exact Windows x86 Office/WebView thumbnail execution is still an open qualification gate. |
 | Signature validation, storage, text/page-count extraction | `RNAssistant.Core` + PdfPig `net471` closure | Structurally compatible: all six shipped PdfPig assemblies and their five managed runtime dependencies are IL-only `32/64` with no unmanaged imports. Exact Windows x86 execution is still an open gate. |
 | Page-to-JPEG conversion for preview or a vision model | `RNAssistant.Office` + managed `PDFtoImage.dll`/`SkiaSharp.dll` + matching native `pdfium.dll`/`libSkiaSharp.dll` | Structurally packaged with reviewed PE32 x86 binaries; exact Windows x86 Office load/render/send remains an open qualification gate. |
 
@@ -33,11 +37,12 @@ machine type must match the Office process. The managed PDFtoImage and SkiaSharp
 facades are also AnyCPU, but rendering still requires same-bitness native PDFium
 and Skia.
 
-The x86 publisher now carries the matching reviewed/licensed native pair, so both
-text and visual code paths are structurally present. This is not execution evidence:
-real Windows x86 Office must still cover text-readable extraction, page preview,
-scanned/image-only rendering and image-capable model sending. Copying the x64 pair
-into x86 remains invalid. This qualification gap is tracked in the
+The x86 publisher now carries the matching reviewed/licensed native pair, so image
+thumbnail, PDF text and PDF visual code paths are structurally present. This is not
+execution evidence: real Windows x86 Office must still cover image thumbnails,
+text-readable extraction, page preview, scanned/image-only rendering and image-
+capable model sending. Copying the x64 pair into x86 remains invalid. This
+qualification gap is tracked in the
 [risk register](stabilization/RISK_REGISTER.md).
 
 Task pane JS/CSS is committed in `web/`:
@@ -49,6 +54,7 @@ Task pane JS/CSS is committed in `web/`:
 - `KaTeX 0.16.11`
 - `Apache ECharts 5.6.0`
 - `Wunderbaum 0.14.1`
+- `Viewer.js 1.12.0`
 
 Exact runtime files, SHA-256 hashes, package commits/integrities, transitive browser
 asset decisions and local license texts are recorded in

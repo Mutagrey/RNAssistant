@@ -32,7 +32,8 @@
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-ui-20260825-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-viewer-20260829-2">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
-  <link rel="stylesheet" href="css/app-resource-viewer.css?v=artifact-thumbnails-20260902-1">
+  <link rel="stylesheet" href="css/app-sequence-viewer.css?v=artifact-gallery-20260902-1">
+  <link rel="stylesheet" href="css/app-resource-viewer.css?v=artifact-gallery-20260902-1">
   <link rel="stylesheet" href="css/app-trajectory.css?v=run-journal-20260829-1">
   <link rel="stylesheet" href="css/app-run-journal.css?v=runtime-diagnostics-20260901-1">
   <link rel="stylesheet" href="css/app-qualification.css?v=qualification-center-20260831-1">
@@ -41,7 +42,7 @@
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=utility-dock-20260826-1">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-gallery-20260902-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-export-20260831-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=composer-polish-20260826-1">
@@ -1013,7 +1014,7 @@
   <script src="js/vendor/codemirror/addon/selection/active-line.min.js"></script>
   <script src="js/vendor/wunderbaum.umd.min.js"></script>
   <script src="js/vendor/viewer.min.js"></script>
-  <script src="js/app-core.js?v=bridge-bootstrap-20260831-1"></script>
+  <script src="js/app-core.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-layout.js"></script>
@@ -1025,7 +1026,8 @@
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
   <script src="js/app-json-viewer.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
-  <script src="js/app-resource-viewer.js?v=artifact-thumbnails-20260902-1"></script>
+  <script src="js/app-sequence-viewer.js?v=artifact-gallery-20260902-1"></script>
+  <script src="js/app-resource-viewer.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-run-journal.js?v=runtime-diagnostics-20260901-1"></script>
   <script src="js/app-trajectory.js?v=runtime-diagnostics-20260831-1"></script>
   <script src="js/app-qualification.js?v=qualification-center-20260831-1"></script>
@@ -1036,7 +1038,7 @@
   <script src="js/app-model-render.js?v=media-routing-20260824-1"></script>
   <script src="js/app-models.js?v=chat-binding-20260824-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=tool-contract-20260901-1"></script>
+  <script src="js/app-chat-state.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-list.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-tools-structured.js?v=library-dirty-20260825-1"></script>
   <script src="js/app-tools-actions.js?v=tool-contract-20260901-1"></script>
@@ -1047,25 +1049,25 @@
   <script src="js/app-vba-project.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-vba.js?v=resource-intent-20260902-1"></script>
   <script src="js/app-html-workspace-preview.js?v=html-echarts-20260902-1"></script>
-  <script src="js/app-html-workspace-artifacts.js?v=artifact-thumbnails-20260902-1"></script>
-  <script src="js/app-html-workspace-model.js?v=artifact-refresh-20260902-1"></script>
-  <script src="js/app-html-workspace-editor.js?v=artifact-text-20260831-1"></script>
-  <script src="js/app-tree-adapter.js?v=tree-adapter-20260829-1"></script>
-  <script src="js/app-html-workspace-tree.js?v=artifact-library-20260831-1"></script>
-  <script src="js/app-artifact-viewer-actions.js?v=artifact-thumbnails-20260902-1"></script>
-  <script src="js/app-html-workspace-actions.js?v=artifact-thumbnails-20260902-1"></script>
-  <script src="js/app-html-workspace.js?v=artifact-thumbnails-20260902-1"></script>
+  <script src="js/app-html-workspace-artifacts.js?v=artifact-gallery-20260902-1"></script>
+  <script src="js/app-html-workspace-model.js?v=artifact-gallery-20260902-1"></script>
+  <script src="js/app-html-workspace-editor.js?v=artifact-gallery-20260902-1"></script>
+  <script src="js/app-tree-adapter.js?v=artifact-gallery-20260902-1"></script>
+  <script src="js/app-html-workspace-tree.js?v=artifact-gallery-20260902-1"></script>
+  <script src="js/app-artifact-viewer-actions.js?v=artifact-gallery-20260902-1"></script>
+  <script src="js/app-html-workspace-actions.js?v=artifact-gallery-20260902-1"></script>
+  <script src="js/app-html-workspace.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-context.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-context-inspector.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-agent-data.js?v=json-viewer-20260829-1"></script>
   <script src="js/app-agent-model.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-chart-artifacts.js?v=chart-json-owner-20260829-1"></script>
-  <script src="js/app-artifacts.js?v=plan-tombstone-20260831-1"></script>
+  <script src="js/app-artifacts.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-task-list.js?v=planning-intents-20260902-1"></script>
   <script src="js/app-agent-activity.js?v=planning-intents-20260902-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-agent.js?v=runtime-diagnostics-20260831-1"></script>
-  <script src="js/app-messages.js?v=artifact-commit-20260831-1"></script>
+  <script src="js/app-messages.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
   <script src="js/app-attachments.js?v=multi-chat-20260902-1"></script>
   <script src="js/app-chat-session.js?v=tool-contract-20260901-1"></script>

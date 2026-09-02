@@ -65,17 +65,17 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const editor = fs.readFileSync(path.join(root, "web/js/app-html-workspace-editor.js"), "utf8");
   const questions = fs.readFileSync(path.join(root, "web/js/app-agent-activity.js"), "utf8");
   const taskList = fs.readFileSync(path.join(root, "web/js/app-task-list.js"), "utf8");
-  assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "removed message cards keep the tombstone cache key");
-  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-thumbnails-20260902-1"),
+  assert.ok(index.includes("app-artifacts.js?v=artifact-gallery-20260902-1"), "artifact cards use the gallery cache key");
+  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-gallery-20260902-1"),
     "artifact actions have the current artifact cache key");
-  assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-thumbnails-20260902-1"),
+  assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-gallery-20260902-1"),
     "artifact detail has the current artifact cache key");
-  assert.ok(index.includes("app-html-workspace-editor.js?v=artifact-text-20260831-1"));
+  assert.ok(index.includes("app-html-workspace-editor.js?v=artifact-gallery-20260902-1"));
   ["app-task-list.js", "app-agent-activity.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=planning-intents-20260902-1"), asset + " has the current planning-intent cache key");
   });
   ["app-html-workspace-actions.js", "app-html-workspace.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=artifact-thumbnails-20260902-1"), asset + " has the current preview cache key");
+    assert.ok(index.includes(asset + "?v=artifact-gallery-20260902-1"), asset + " has the current preview cache key");
   });
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /switchChatMode:\s*function\s*\(mode\)/);

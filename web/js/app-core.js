@@ -26,6 +26,8 @@ var state = {
   artifacts: [],
   artifactLibrary: { sessionRevision: 0, heads: [] },
   artifactViewerPages: {},
+  artifactViewerThumbnails: { items: {}, order: [], queue: [], pending: 0 },
+  artifactImageGalleryContext: null,
   activeContextCheckpointId: "",
   activeHtmlArtifactId: "",
   activeTaskListArtifactId: "",

@@ -1,6 +1,16 @@
 var CHAT_BOTTOM_THRESHOLD = 64;
 var renderedMessagesChatId = null;
 
+function messageVisibleAttachments(message) {
+  var represented = typeof messageImageAttachmentIds === "function"
+    ? messageImageAttachmentIds(message)
+    : {};
+  return messageAttachments(message).filter(function (attachment) {
+    var id = String(attachment && (attachment.id !== undefined ? attachment.id : attachment.Id) || "").toLowerCase();
+    return !id || !represented[id];
+  });
+}
+
 function chatDistanceFromBottom(box) {
   if (!box) {
     return 0;
@@ -251,7 +261,8 @@ function renderActivityArticle(message, index, activity, options) {
   node.className = classes.join(" ");
 
   if (message) {
-    var attachments = messageAttachments(message);
+    if (typeof appendMessageMediaGallery === "function") appendMessageMediaGallery(node, message);
+    var attachments = messageVisibleAttachments(message);
     if (attachments.length) {
       var attachmentBox = document.createElement("div");
       attachmentBox.className = "message-attachments";
@@ -361,7 +372,8 @@ function renderMessageArticle(message, index) {
     }
     return activityArticle;
   }
-  var attachments = messageAttachments(message);
+  if (typeof appendMessageMediaGallery === "function") appendMessageMediaGallery(node, message);
+  var attachments = messageVisibleAttachments(message);
 
   if (attachments.length) {
     var attachmentBox = document.createElement("div");
@@ -445,6 +457,7 @@ function scheduleLiveStreamRender() {
 
 function renderMessages(options) {
   options = options || {};
+  if (typeof resetMessageMediaThumbnails === "function") resetMessageMediaThumbnails();
   if (typeof renderChatResourceNavigation === "function") renderChatResourceNavigation();
   var box = $("messages");
   var chatChanged = renderedMessagesChatId !== state.activeChatId;

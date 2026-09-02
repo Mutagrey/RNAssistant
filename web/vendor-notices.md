@@ -34,10 +34,10 @@ remote asset is loaded.
 
 Viewer.js ships its pinned UMD and CSS only. It receives one already admitted local
 Blob image at a time and owns inline fit, focal wheel/pinch zoom, pan, rotation and
-its toolbar. RNAssistant retains download, PDF page navigation and Blob URL teardown;
-the vendor cannot call the bridge, fetch a page or retain a document-level cache.
-The separate PDF thumbnail rail remains RNAssistant-owned and gives Viewer.js no
-additional images, identifiers or execution authority.
+its toolbar. RNAssistant retains download, gallery/PDF sequence navigation and Blob
+URL teardown; the vendor cannot call the bridge, fetch a page or retain a document-
+level cache. The shared virtualized thumbnail rail remains RNAssistant-owned and
+gives Viewer.js no additional images, identifiers or execution authority.
 
 Selected existing inline SVG paths are adapted from Feather Icons. Feather is
 source-only: its JavaScript package and npm dependencies are not loaded at runtime.

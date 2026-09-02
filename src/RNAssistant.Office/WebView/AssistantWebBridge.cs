@@ -402,6 +402,12 @@ namespace RNAssistant.Office.WebView
                             artifactImage.ChatId,
                             artifactImage.ResourceUri);
                         break;
+                    case "readArtifactImageThumbnail":
+                        var artifactImageThumbnail = Payload<ArtifactImageThumbnailPayload>(payload);
+                        responsePayload = _controller.ReadArtifactImageThumbnail(
+                            artifactImageThumbnail.ChatId,
+                            artifactImageThumbnail.ResourceUri);
+                        break;
                     case "readArtifactPdfInfo":
                         var artifactPdf = Payload<ArtifactPdfViewerPayload>(payload);
                         responsePayload = _controller.ReadArtifactPdfInfo(

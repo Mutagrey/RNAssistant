@@ -18,6 +18,12 @@ namespace RNAssistant.Office.Contracts
         public string ResourceUri { get; set; }
     }
 
+    public sealed class ArtifactImageThumbnailPayload : ChatPayload
+    {
+        [JsonProperty("resourceUri")]
+        public string ResourceUri { get; set; }
+    }
+
     public sealed class ArtifactPdfViewerPayload : ChatPayload
     {
         [JsonProperty("resourceUri")]
@@ -62,6 +68,19 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("contentSha256")] public string ContentSha256 { get; set; }
         [JsonProperty("byteLength")] public long ByteLength { get; set; }
         [JsonProperty("base64Content")] public string Base64Content { get; set; }
+    }
+
+    public sealed class ArtifactImageThumbnailDto
+    {
+        [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
+        [JsonProperty("viewerKind")] public string ViewerKind { get; set; }
+        [JsonProperty("contentSha256")] public string ContentSha256 { get; set; }
+        [JsonProperty("width")] public int Width { get; set; }
+        [JsonProperty("height")] public int Height { get; set; }
+        [JsonProperty("imageMimeType")] public string ImageMimeType { get; set; }
+        [JsonProperty("imageContentSha256")] public string ImageContentSha256 { get; set; }
+        [JsonProperty("imageByteLength")] public long ImageByteLength { get; set; }
+        [JsonProperty("imageBase64Content")] public string ImageBase64Content { get; set; }
     }
 
     public sealed class ArtifactPdfViewerDto

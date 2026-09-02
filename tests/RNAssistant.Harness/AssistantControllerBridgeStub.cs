@@ -590,6 +590,23 @@ namespace RNAssistant.Office
                 Base64Content = "AQID"
             };
         }
+        public ArtifactImageThumbnailDto ReadArtifactImageThumbnail(string chatId, string resourceUri)
+        {
+            LastChatId = chatId;
+            LastArtifactViewerResourceUri = resourceUri;
+            return new ArtifactImageThumbnailDto
+            {
+                ResourceUri = resourceUri,
+                ViewerKind = "image",
+                ContentSha256 = new string('c', 64),
+                Width = 160,
+                Height = 120,
+                ImageMimeType = "image/jpeg",
+                ImageContentSha256 = new string('f', 64),
+                ImageByteLength = 4,
+                ImageBase64Content = "/9j/2Q=="
+            };
+        }
         public ArtifactPdfViewerDto ReadArtifactPdfInfo(string chatId, string resourceUri)
         {
             LastChatId = chatId;

@@ -185,6 +185,9 @@
       var selection = state.htmlWorkspaceSelection || {};
       var id = selection.id || "";
       var result = null;
+      if (selection.type === "collection") {
+        return id ? { type: "collection", item: { id: id } } : null;
+      }
       if (selection.type === "plan" || selection.type === "artifact") {
         var artifact = artifactById(id);
         return artifact ? { type: selection.type, item: artifact } : null;

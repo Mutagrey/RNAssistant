@@ -1064,6 +1064,14 @@ namespace RNAssistant.Harness
                 "artifact image forwards exact resource URI");
             AssertEqual("image", (string)envelope["payload"]["viewerKind"],
                 "artifact image returns typed viewer kind");
+            response = bridge.HandleMessageAsync(
+                "{\"id\":\"artifact-image-thumbnail\",\"type\":\"readArtifactImageThumbnail\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + imageUri + "\"}}")
+                .GetAwaiter().GetResult();
+            envelope = JObject.Parse(response);
+            AssertTrue(envelope["ok"].Value<bool>(), "artifact image thumbnail bridge response ok");
+            AssertEqual(160, envelope["payload"]["width"].Value<int>(),
+                "artifact image thumbnail returns bounded preview width");
 
             const string pdfUri = "rna://chat/chat-view/artifact/pdf-r1/revision/1";
             response = bridge.HandleMessageAsync(

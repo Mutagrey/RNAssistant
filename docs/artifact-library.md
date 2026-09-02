@@ -6,11 +6,11 @@ projection. 11B1–11B3 complete the host-neutral Plan domain owner, exact whole
 lineage, restore/removal UX and ready handoff by pinned URI. 11C1–11C3 complete the
 host-neutral HTML lineage, inert uploaded-source import, binding evidence, recovery
 and guarded exact export contour. 11D1 implements host-neutral bounded text/source
-and complete-only sanitized Markdown viewers. 11D2 adds exact local image preview
-and the shared preview-first/Details presentation for Plan, Task List, Markdown,
-image and existing domain viewers. 11D3 adds bounded PDF pages, paged extracted-
-text / scan state and matching x64/x86 native packaging; audio remains a later
-independent slice.
+and complete-only sanitized Markdown viewers. 11D2 adds exact local image preview,
+bounded thumbnails, collection/chat galleries and the shared preview-first/Details
+presentation for Plan, Task List, Markdown, image and existing domain viewers. 11D3
+adds bounded PDF pages, paged extracted-text / scan state, the shared sequence shell
+and matching x64/x86 native packaging; audio remains a later independent slice.
 The existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
@@ -110,9 +110,13 @@ card or second model transport. See [Skill Library](skills.md).
 
 ## Library and revision display
 
-The default Artifact Library shows one row per immutable resource or logical
-document head, grouped as authored documents, files/media, generated snapshots and
-system evidence. Drafts, when shown, are always separated and labelled non-durable.
+The Artifact Library tree shows one row per immutable resource or logical document
+head, grouped as authored documents, files/media, generated snapshots and system
+evidence. A group title is also a selectable collection: selecting it opens the
+current filtered/sorted resources as a responsive grid, while its expander continues
+to control the tree. Drafts, when shown, are always separated and labelled
+non-durable. The grid is another view over `artifactLibrary.heads[]`; it is not a
+second projection or durable store.
 
 Each row exposes title, type, size where meaningful, source turn, created/updated
 time and exact-reference copy. Versioned documents additionally expose current
@@ -147,6 +151,32 @@ Message cards resolve their pinned revision even when a newer head exists. If th
 resource was explicitly removed, the message shows a stable `Resource removed`
 placeholder rather than falling forward to another revision.
 
+### Collections, thumbnails and sequences
+
+Collection cards load media lazily near the viewport. Image thumbnails use a
+separate typed exact-revision read: the source attachment URI/hash/length is checked
+as for the full viewer, then a local Skia provider returns JPEG at no more than
+320 px and 512 KiB. The UI admits the returned source hash, thumbnail hash, byte
+length and dimensions, runs at most four reads concurrently and retains at most 48
+ephemeral results per chat. Thumbnail state is cleared on chat switch and is never
+an artifact, revision, message event or model-facing resource.
+
+Messages render exact committed image refs as a compact mosaic of at most four
+cells; additional images use a `+N` overlay. Opening a cell carries every exact image
+ref from that message into an ephemeral gallery context. Opening an image from a
+Library collection carries the collection's current filtered/sorted image refs.
+Previous/next navigation and the thumbnail filmstrip therefore do not guess latest
+revisions or require repeated tree clicks. A corresponding generic attachment tile
+is suppressed only when its exact image artifact identifies the same attachment.
+
+`RNAssistantSequenceViewer` is the reusable UI-only sequence shell. It owns bounded
+virtualized vertical/horizontal rails, current position, direct selection, optional
+numeric jump and keyboard-compatible navigation, but owns no bytes, bridge calls or
+format semantics. The format provider supplies item count, labels, thumbnails and
+selection callbacks. PDF pages use this shell vertically; image galleries use it
+horizontally. One PDF or future presentation remains one artifact: its pages/slides
+are preview frames, never child artifacts or independently durable revisions.
+
 ## Viewer contracts
 
 - Text/source: fixed 32,000-character pages within a 512,000-character viewer
@@ -162,8 +192,11 @@ placeholder rather than falling forward to another revision.
   proportional fit with upscaling, 100%/button/wheel/pinch zoom, pan, rotation,
   Fit/100% double-click toggle and keyboard shortcuts. RNAssistant retains natural
   dimensions, download and teardown. The stage occupies the remaining preview
-  height without cropping or distortion. Main-UI CSP admits only local `data:`/
-  `blob:` image sources and denies vendor network/worker access.
+  height without cropping or distortion. Collection/message thumbnails and the
+  horizontal gallery filmstrip use the separately bounded thumbnail contract above;
+  selecting an item loads only that exact full image into Viewer.js. Main-UI CSP
+  admits only local `data:`/`blob:` image sources and denies vendor network/worker
+  access.
 - PDF: exact revision info exposes the PdfPig page count plus hash/count/completeness
   evidence and an explicit truncation/scan warning; it does not return the whole
   extracted body. Text uses the same exact viewer paging as other sources: 32,000
@@ -173,9 +206,10 @@ placeholder rather than falling forward to another revision.
   requested page at a time to JPEG through the separately admitted local
   PDFtoImage/PDFium/Skia path, bounded to 2,048 px and 10 MiB per page. The same
   Viewer.js instance type displays that verified JPEG. A separate typed thumbnail
-  read renders at most 320 px / 1 MiB; a virtualized left rail exposes direct page
-  selection and a numeric jump without constructing 10,000 DOM rows. Thumbnail
-  rendering is capped at four concurrent reads and 24 ephemeral cached results.
+  read renders at most 320 px / 1 MiB; the shared vertical sequence rail exposes
+  direct page selection and a numeric jump without constructing 10,000 DOM rows.
+  PDF thumbnail rendering is capped at four concurrent reads and 24 ephemeral
+  cached results.
   The viewer defaults to pages, keeps extracted text on its own tab and also uses
   centered hover/focus arrows, a persistent page position and Left/Right navigation.
   Matching exact-package PE32+ x64 and PE32 x86 native libraries are vendored and
@@ -204,6 +238,16 @@ ViewerRegistry remains UI-only dispatch. Fetching bounded text/media and checkin
 the exact revision belong to the Artifact Library owner and the shared resource
 gateway. Viewers receive already authorized data plus completeness metadata and
 cannot call tools, bridge, CAS or network themselves.
+
+The extension boundary is provider-based, not a universal viewer dependency. A
+future PowerPoint artifact provider may expose exact presentation info, one bounded
+rendered slide, bounded slide thumbnails and separately evidenced extracted text to
+the existing sequence shell. It must select and qualify its local conversion SDK,
+font/layout behavior, input/output/memory bounds and Windows x64/x86 support as its
+own slice; no PowerPoint bridge contract or vendor is predeclared here. A live
+browser remains the separately permissioned 11L session/package and never reuses an
+artifact or HTML-preview WebView as browser authority. Only an explicit browser
+snapshot/download may enter the Library as an immutable artifact with provenance.
 
 For 11D1/11D2, `ArtifactViewerService` accepts only a canonical revision-pinned URI from
 the active chat and returns a typed page projection over `ResourceGatewayService`.
