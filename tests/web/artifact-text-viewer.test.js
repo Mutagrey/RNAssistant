@@ -11,6 +11,7 @@ class ClassList {
   write(values) { this.owner.className = Array.from(values).join(" "); }
   add(...names) { const values = this.values(); names.forEach(name => values.add(name)); this.write(values); }
   remove(...names) { const values = this.values(); names.forEach(name => values.delete(name)); this.write(values); }
+  toggle(name, force) { const values = this.values(); const enabled = force === undefined ? !values.has(name) : !!force; if (enabled) values.add(name); else values.delete(name); this.write(values); return enabled; }
   contains(name) { return this.values().has(name); }
 }
 
@@ -18,14 +19,18 @@ class Element {
   constructor(tag) {
     this.tagName = String(tag).toLowerCase(); this.className = ""; this.classList = new ClassList(this);
     this.childNodes = []; this.parentNode = null; this.handlers = {}; this.attributes = {};
-    this.disabled = false; this.value = ""; this._text = ""; this._html = "";
+    this.disabled = false; this.value = ""; this._text = ""; this._html = ""; this.style = {};
+    this.naturalWidth = tag === "img" ? 640 : 0; this.naturalHeight = tag === "img" ? 480 : 0;
   }
   get firstElementChild() { return this.childNodes[0] || null; }
   appendChild(child) { child.parentNode = this; this.childNodes.push(child); return child; }
   replaceChildren(...children) { this.childNodes.forEach(child => { child.parentNode = null; }); this.childNodes = []; children.forEach(child => this.appendChild(child)); this._text = ""; this._html = ""; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   addEventListener(name, handler) { (this.handlers[name] ||= []).push(handler); }
+  dispatch(name) { (this.handlers[name] || []).forEach(handler => handler({})); }
   click() { if (!this.disabled) (this.handlers.click || []).forEach(handler => handler({})); }
+  remove() { if (this.parentNode) this.parentNode.removeChild(this); }
+  removeChild(child) { this.childNodes.splice(this.childNodes.indexOf(child), 1); child.parentNode = null; return child; }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   querySelectorAll(selector) {
     const matches = node => selector.startsWith(".") ? node.classList.contains(selector.slice(1)) : node.tagName === selector.toLowerCase();
@@ -42,17 +47,29 @@ class Element {
 const root = path.join(__dirname, "../..");
 const copied = [];
 const downloads = [];
+const objectUrls = [];
+const revokedUrls = [];
+const body = new Element("body");
 const context = vm.createContext({
-  document: { createElement: tag => new Element(tag) },
+  document: { body, createElement: tag => new Element(tag) },
   state: {},
-  Promise
+  Promise,
+  Blob,
+  Uint8Array,
+  URL: {
+    createObjectURL() { const url = "blob:test-" + (objectUrls.length + 1); objectUrls.push(url); return url; },
+    revokeObjectURL(url) { revokedUrls.push(url); }
+  }
 });
 context.window = context;
+context.atob = value => Buffer.from(String(value), "base64").toString("binary");
+context.addEventListener = () => {};
+context.removeEventListener = () => {};
 context.copyTextResult = text => { copied.push(String(text)); return Promise.resolve(); };
 context.markdown = text => "<p>" + String(text).replace(/</g, "&lt;") + "</p>";
 context.enhanceMarkdown = node => { node.attributes.enhanced = "true"; };
 context.clearMarkdownEnhancements = () => {};
-for (const file of ["app-viewer-registry.js", "app-text-viewer.js"]) {
+for (const file of ["app-viewer-registry.js", "app-text-viewer.js", "app-resource-viewer.js", "app-html-workspace-artifacts.js"]) {
   vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
 }
 
@@ -135,6 +152,40 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(button(incompleteMarkdown, "Скачать"), undefined);
   console.log("PASS artifact Markdown viewer: truncated source never becomes rendered or full-download authority");
 
+  const imageHost = new Element("div");
+  context.RNAssistantViewerRegistry.mount("image", imageHost, {
+    title: "pixel.png", mimeType: "image/png", byteLength: 3, base64Content: "AQID"
+  });
+  const image = imageHost.querySelector("img");
+  image.dispatch("load");
+  assert.match(imageHost.textContent, /640 × 480 px/);
+  button(imageHost, "+").click();
+  assert.equal(image.style.width, "800px");
+  button(imageHost, "Скачать").click();
+  assert.equal(body.querySelector("a"), null);
+  context.RNAssistantViewerRegistry.unmount(imageHost);
+  assert.deepEqual(revokedUrls, [objectUrls[0]]);
+  const imageUri = "rna://chat/chat-text/artifact/image/revision/1";
+  const detail = new Element("div");
+  context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(detail, {
+    type: "artifact",
+    item: { Kind: "image", Title: "pixel.png", MimeType: "image/png", ResourceUri: imageUri, Revision: 1 }
+  }, "", {
+    artifactViewerState() {
+      return {
+        status: "ready", resourceUri: imageUri, viewerKind: "image", title: "pixel.png",
+        mimeType: "image/png", contentSha256: "d".repeat(64), byteLength: 3, base64Content: "AQID"
+      };
+    }
+  });
+  assert.ok(detail.querySelector(".artifact-detail-pane-preview").querySelector("img"));
+  assert.ok(detail.querySelector(".artifact-detail-pane-details").classList.contains("hidden"));
+  context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(detail, {
+    type: "artifact", item: { Kind: "file", Title: "unknown.bin", MimeType: "application/octet-stream", Revision: 1 }
+  }, "", {});
+  assert.deepEqual(revokedUrls, [objectUrls[0], objectUrls[1]]);
+  console.log("PASS artifact image viewer: local Blob preview supports dimensions, zoom, download and URL revocation");
+
   const actionContext = vm.createContext({ Promise });
   actionContext.window = actionContext;
   actionContext.alert = () => {};
@@ -151,6 +202,17 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
     state,
     send: async (method, payload) => {
       calls.push({ method, payload: JSON.parse(JSON.stringify(payload)) });
+      if (method === "readArtifactImage") {
+        return {
+          resourceUri: payload.resourceUri,
+          viewerKind: "image",
+          title: "pixel.png",
+          mimeType: "image/png",
+          contentSha256: "d".repeat(64),
+          byteLength: 3,
+          base64Content: "AQID"
+        };
+      }
       const offset = payload.cursor ? 32000 : 0;
       const text = exact.slice(offset, offset + 32000);
       return {
@@ -186,12 +248,18 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   actions.downloadArtifactViewer({ resourceUri: uri });
   assert.equal(downloaded[0].resourceUri, uri);
   assert.equal(downloaded[0].text, exact);
+  const actionImageUri = "rna://chat/chat-text/artifact/image-action/revision/1";
+  assert.equal(await actions.loadArtifactImage({ resourceUri: actionImageUri }), true);
+  assert.equal(actions.artifactViewerState(actionImageUri).viewerKind, "image");
+  assert.equal(calls.at(-1).method, "readArtifactImage");
   console.log("PASS artifact viewer owner: exact pinned pages assemble contiguously before full copy/download");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-text-viewer.js?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-text-viewer.css?v=artifact-text-20260831-1"));
-  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-text-20260831-1"));
+  assert.ok(index.includes("app-resource-viewer.js?v=artifact-preview-20260902-1"));
+  assert.ok(index.includes("app-resource-viewer.css?v=artifact-preview-20260902-1"));
+  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-preview-20260902-1"));
   assert.ok(index.indexOf("app-viewer-registry.js") < index.indexOf("app-text-viewer.js"));
   assert.ok(index.indexOf("app-artifact-viewer-actions.js") < index.indexOf("app-html-workspace-actions.js"));
   const viewerSource = fs.readFileSync(path.join(root, "web/js/app-text-viewer.js"), "utf8");
@@ -200,5 +268,5 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.match(viewerSource, /window\.markdown\(String\(options\.fullText\)\)/);
   assert.match(actionSource, /readArtifactViewerPage/);
   console.log("PASS artifact viewers: allowlisted modules are UI-only and loaded after their registry");
-  console.log("OK 6/6");
+  console.log("OK 7/7");
 })().catch(error => { console.error(error.stack || error); process.exitCode = 1; });

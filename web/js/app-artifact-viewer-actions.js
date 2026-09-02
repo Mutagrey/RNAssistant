@@ -19,6 +19,10 @@
       var viewers = cache();
       if (!viewers[uri] && Object.keys(viewers).length >= 8) delete viewers[Object.keys(viewers)[0]];
       viewers[uri] = viewerState;
+      var mediaUris = Object.keys(viewers).filter(function (key) {
+        return viewers[key] && viewers[key].viewerKind === "image";
+      });
+      while (mediaUris.length > 2) delete viewers[mediaUris.shift()];
       return viewerState;
     }
 
@@ -76,6 +80,39 @@
       };
     }
 
+    function base64ByteLength(content) {
+      content = String(content || "");
+      if (!content || content.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(content)) return -1;
+      var padding = content.slice(-2) === "==" ? 2 : (content.slice(-1) === "=" ? 1 : 0);
+      return content.length / 4 * 3 - padding;
+    }
+
+    function normalizeImage(response, uri) {
+      response = response || {};
+      var returnedUri = value(response, "ResourceUri", "resourceUri", "") || "";
+      var viewerKind = String(value(response, "ViewerKind", "viewerKind", "") || "").toLowerCase();
+      var mimeType = String(value(response, "MimeType", "mimeType", "") || "").split(";", 1)[0].toLowerCase();
+      var hash = value(response, "ContentSha256", "contentSha256", "") || "";
+      var byteLength = Number(value(response, "ByteLength", "byteLength", -1));
+      var base64Content = value(response, "Base64Content", "base64Content", "") || "";
+      if (returnedUri !== uri || viewerKind !== "image" ||
+          ["image/jpeg", "image/png", "image/gif", "image/webp"].indexOf(mimeType) < 0 ||
+          !/^[a-f0-9]{64}$/i.test(hash) || byteLength <= 0 || byteLength > 20 * 1024 * 1024 ||
+          base64ByteLength(base64Content) !== byteLength) {
+        throw new Error("Artifact image returned inconsistent exact-read evidence.");
+      }
+      return {
+        status: "ready",
+        resourceUri: returnedUri,
+        viewerKind: viewerKind,
+        title: value(response, "Title", "title", "Image") || "Image",
+        mimeType: mimeType,
+        contentSha256: hash,
+        byteLength: byteLength,
+        base64Content: base64Content
+      };
+    }
+
     async function readPage(uri, cursor, expectedOffset, startLine, chatId) {
       var response = await options.send("readArtifactViewerPage", {
         chatId: chatId,
@@ -125,6 +162,40 @@
           status: "error",
           resourceUri: uri,
           message: error.detail || error.message || "Artifact source is unavailable."
+        });
+        options.log(error.detail || error.message, "error");
+        if (options.render) options.render();
+        return false;
+      }
+    }
+
+    async function loadArtifactImage(request) {
+      request = request || {};
+      var uri = request.resourceUri || "";
+      if (state.bridgeUnavailable || !uri) return false;
+      var current = artifactViewerState(uri);
+      if (current && (current.status === "loading" || current.status === "ready")) return current.status === "ready";
+      var chatId = state.activeChatId;
+      cacheViewer(uri, { status: "loading", resourceUri: uri, viewerKind: "image" });
+      try {
+        var response = await options.send("readArtifactImage", {
+          chatId: chatId,
+          resourceUri: uri
+        });
+        if (state.activeChatId !== chatId) throw new Error("Artifact image read belongs to another chat.");
+        cacheViewer(uri, normalizeImage(response, uri));
+        if (options.render) options.render();
+        return true;
+      } catch (error) {
+        if (state.activeChatId !== chatId) {
+          delete cache()[uri];
+          return false;
+        }
+        cacheViewer(uri, {
+          status: "error",
+          resourceUri: uri,
+          viewerKind: "image",
+          message: error.detail || error.message || "Artifact image is unavailable."
         });
         options.log(error.detail || error.message, "error");
         if (options.render) options.render();
@@ -243,6 +314,7 @@
       artifactViewerState: artifactViewerState,
       changeArtifactViewerPage: changeArtifactViewerPage,
       downloadArtifactViewer: downloadArtifactViewer,
+      loadArtifactImage: loadArtifactImage,
       loadArtifactViewer: loadArtifactViewer,
       loadArtifactViewerFull: loadArtifactViewerFull
     };

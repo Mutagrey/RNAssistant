@@ -66,14 +66,16 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const questions = fs.readFileSync(path.join(root, "web/js/app-agent-activity.js"), "utf8");
   const taskList = fs.readFileSync(path.join(root, "web/js/app-task-list.js"), "utf8");
   assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "removed message cards keep the tombstone cache key");
-  ["app-artifact-viewer-actions.js", "app-html-workspace-artifacts.js",
-    "app-html-workspace-editor.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=artifact-text-20260831-1"), asset + " has the current artifact cache key");
+  ["app-artifact-viewer-actions.js", "app-html-workspace-artifacts.js"].forEach(asset => {
+    assert.ok(index.includes(asset + "?v=artifact-preview-20260902-1"), asset + " has the current artifact cache key");
   });
-  ["app-html-workspace-actions.js", "app-task-list.js", "app-agent-activity.js"].forEach(asset => {
+  assert.ok(index.includes("app-html-workspace-editor.js?v=artifact-text-20260831-1"));
+  ["app-task-list.js", "app-agent-activity.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=planning-intents-20260902-1"), asset + " has the current planning-intent cache key");
   });
-  assert.ok(index.includes("app-html-workspace.js?v=resource-intent-20260902-1"), "HTML workspace handoff has the resource-intent cache key");
+  ["app-html-workspace-actions.js", "app-html-workspace.js"].forEach(asset => {
+    assert.ok(index.includes(asset + "?v=artifact-preview-20260902-1"), asset + " has the current preview cache key");
+  });
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /switchChatMode:\s*function\s*\(mode\)/);
   assert.doesNotMatch(workspace, /switchChatMode:\s*saveChatMode/);

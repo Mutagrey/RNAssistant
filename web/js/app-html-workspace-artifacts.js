@@ -35,7 +35,7 @@
 
   function clearDetail(root) {
     if (window.RNAssistantViewerRegistry) {
-      [".artifact-json-viewer", ".artifact-typed-viewer"].forEach(function (selector) {
+      [".artifact-viewer-host", ".artifact-json-viewer", ".artifact-typed-viewer"].forEach(function (selector) {
         Array.prototype.slice.call(root.querySelectorAll(selector)).forEach(function (target) {
           window.RNAssistantViewerRegistry.unmount(target);
         });
@@ -57,7 +57,7 @@
     }
     appendContentLabel(root, label);
     var target = document.createElement("div");
-    target.className = "artifact-json-viewer";
+    target.className = "artifact-viewer-host artifact-json-viewer";
     root.appendChild(target);
     window.RNAssistantViewerRegistry.mount("json", target, {
       text: String(text),
@@ -71,6 +71,8 @@
     var mediaType = artifactMimeType(artifact).split(";", 1)[0].trim();
     var kind = artifactKind(artifact);
     var title = String(prop(artifact, "Title", "title", "") || "");
+    if (kind === "task_list" || mediaType === "application/vnd.rnassistant.task-list+json") return "task_list";
+    if (kind === "image" || /^image\/(?:jpeg|png|gif|webp)$/.test(mediaType)) return "image";
     if (mediaType === "text/markdown" || mediaType === "text/x-markdown" || kind === "plan" || kind === "markdown" ||
         /\.(?:md|markdown|mdx)$/i.test(title)) return "markdown";
     if (mediaType === "text/html" || mediaType === "application/xhtml+xml" ||
@@ -106,7 +108,7 @@
     }
     if (typeof draftText === "string") {
       var draftTarget = document.createElement("div");
-      draftTarget.className = "artifact-typed-viewer";
+      draftTarget.className = "artifact-viewer-host artifact-typed-viewer";
       root.appendChild(draftTarget);
       window.RNAssistantViewerRegistry.mount("markdown", draftTarget, {
         text: draftText,
@@ -118,6 +120,15 @@
       });
       return true;
     }
+    if (expectedKind === "task_list") {
+      var taskTarget = document.createElement("div");
+      taskTarget.className = "artifact-viewer-host artifact-typed-viewer";
+      root.appendChild(taskTarget);
+      window.RNAssistantViewerRegistry.mount("task_list", taskTarget, {
+        text: artifactInlineText(artifact)
+      });
+      return true;
+    }
     var uri = exactArtifactUri(artifact);
     if (!uri) {
       appendViewerError(root, "Artifact has no exact revision URI.");
@@ -125,8 +136,12 @@
     }
     var viewer = typeof actions.artifactViewerState === "function" ? actions.artifactViewerState(uri) : null;
     if (!viewer) {
-      appendContentLabel(root, "Загружаю exact source…");
-      if (typeof actions.loadArtifactViewer === "function") actions.loadArtifactViewer({ resourceUri: uri });
+      appendContentLabel(root, expectedKind === "image" ? "Загружаю изображение…" : "Загружаю exact source…");
+      if (expectedKind === "image" && typeof actions.loadArtifactImage === "function") {
+        actions.loadArtifactImage({ resourceUri: uri });
+      } else if (typeof actions.loadArtifactViewer === "function") {
+        actions.loadArtifactViewer({ resourceUri: uri });
+      }
       return true;
     }
     if (viewer.status === "loading") {
@@ -137,6 +152,23 @@
       appendViewerError(root, viewer.message || "Artifact source is unavailable.");
       return true;
     }
+    if (expectedKind === "image") {
+      if (viewer.viewerKind !== "image") {
+        appendViewerError(root, "Artifact viewer state does not match the selected revision.");
+        return true;
+      }
+      var imageTarget = document.createElement("div");
+      imageTarget.className = "artifact-viewer-host artifact-typed-viewer";
+      root.appendChild(imageTarget);
+      window.RNAssistantViewerRegistry.mount("image", imageTarget, {
+        title: viewer.title,
+        mimeType: viewer.mimeType,
+        contentSha256: viewer.contentSha256,
+        byteLength: viewer.byteLength,
+        base64Content: viewer.base64Content
+      });
+      return true;
+    }
     var pages = viewer.pages || [];
     var pageIndex = Math.max(0, Math.min(Number(viewer.pageIndex || 0), Math.max(0, pages.length - 1)));
     var page = pages[pageIndex];
@@ -145,7 +177,7 @@
       return true;
     }
     var target = document.createElement("div");
-    target.className = "artifact-typed-viewer";
+    target.className = "artifact-viewer-host artifact-typed-viewer";
     root.appendChild(target);
     window.RNAssistantViewerRegistry.mount(expectedKind, target, {
       text: page.text,
@@ -170,17 +202,16 @@
 
   function appendArtifactContent(root, artifact, actions) {
     var inline = artifactInlineText(artifact);
-    var metadataJson = prop(artifact, "MetadataJson", "metadataJson", "") || "";
+    if (appendTypedArtifactViewer(root, artifact, actions)) return;
     if (inline) {
       if (isJsonArtifact(artifact)) {
         appendJsonContent(root, inline, artifactInlineTruncated(artifact) ? "preview" : "full", "Содержимое JSON");
-      } else if (!appendTypedArtifactViewer(root, artifact, actions)) {
+      } else {
         appendContentLabel(root, "Для этого формата typed viewer ещё не подключён.");
       }
       return;
     }
-    if (appendTypedArtifactViewer(root, artifact, actions)) return;
-    if (metadataJson) appendJsonContent(root, metadataJson, "full", "Metadata JSON");
+    appendContentLabel(root, "Для этого формата preview ещё не подключён.");
   }
 
   function planStableId(artifact) {
@@ -421,46 +452,89 @@
     root.appendChild(details);
   }
 
+  function appendArtifactDetails(root, artifact, actions) {
+    appendMetadata(root, artifact);
+    var inline = artifactInlineText(artifact);
+    if (inline && (artifactKind(artifact) === "task_list" || isJsonArtifact(artifact))) {
+      appendJsonContent(root, inline, artifactInlineTruncated(artifact) ? "preview" : "full",
+        artifactKind(artifact) === "task_list" ? "Данные Task List" : "Содержимое JSON");
+    }
+    var metadataJson = prop(artifact, "MetadataJson", "metadataJson", "") || "";
+    if (metadataJson) appendJsonContent(root, metadataJson, "full", "Metadata JSON");
+    appendLibraryHistory(root, artifact, actions);
+  }
+
+  function appendDetailTabs(root, buildPreview, buildDetails) {
+    var tabs = document.createElement("div");
+    tabs.className = "artifact-detail-tabs";
+    var previewButton = document.createElement("button");
+    var detailsButton = document.createElement("button");
+    previewButton.type = detailsButton.type = "button";
+    previewButton.className = "secondary compact active";
+    detailsButton.className = "secondary compact";
+    previewButton.textContent = "Просмотр";
+    detailsButton.textContent = "Детали";
+    var preview = document.createElement("div");
+    var details = document.createElement("div");
+    preview.className = "artifact-detail-pane artifact-detail-pane-preview";
+    details.className = "artifact-detail-pane artifact-detail-pane-details hidden";
+
+    function show(showDetails) {
+      preview.classList.toggle("hidden", showDetails);
+      details.classList.toggle("hidden", !showDetails);
+      previewButton.classList.toggle("active", !showDetails);
+      detailsButton.classList.toggle("active", showDetails);
+      previewButton.setAttribute("aria-selected", showDetails ? "false" : "true");
+      detailsButton.setAttribute("aria-selected", showDetails ? "true" : "false");
+    }
+    previewButton.addEventListener("click", function () { show(false); });
+    detailsButton.addEventListener("click", function () { show(true); });
+    tabs.appendChild(previewButton);
+    tabs.appendChild(detailsButton);
+    root.appendChild(tabs);
+    root.appendChild(preview);
+    root.appendChild(details);
+    buildPreview(preview);
+    buildDetails(details);
+    show(false);
+  }
+
   function renderDetail(root, selected, editorValue, actions) {
     actions = actions || {};
     clearDetail(root);
-    if (selected.type === "plan") {
-      var planMetadata = {};
-      try { planMetadata = JSON.parse(prop(selected.item, "MetadataJson", "metadataJson", "{}") || "{}"); } catch (ignore) {}
-      if (String(planMetadata.status || planMetadata.Status || "draft").toLowerCase() === "ready" &&
-          artifactId(selected.item) === state.activePlanDocumentArtifactId) {
-        var handoff = document.createElement("button");
-        handoff.type = "button";
-        handoff.className = "primary";
-        handoff.textContent = "Начать выполнение";
-        handoff.disabled = !!state.activeTaskListArtifactId || !!state.htmlWorkspaceDirty ||
-          !prop(selected.item, "ResourceUri", "resourceUri", "") ||
-          typeof actions.handoffPlan !== "function";
-        if (state.activeTaskListArtifactId) handoff.title = "Сначала закройте активный Task List.";
-        handoff.addEventListener("click", function () {
-          var revisionUri = prop(selected.item, "ResourceUri", "resourceUri", "") || "";
-          if (!revisionUri || typeof actions.handoffPlan !== "function") return;
-          actions.handoffPlan({
-            expectedRevisionArtifactId: artifactId(selected.item),
-            revisionUri: revisionUri
+    appendDetailTabs(root, function (preview) {
+      if (selected.type === "plan") {
+        var planMetadata = {};
+        try { planMetadata = JSON.parse(prop(selected.item, "MetadataJson", "metadataJson", "{}") || "{}"); } catch (ignore) {}
+        if (String(planMetadata.status || planMetadata.Status || "draft").toLowerCase() === "ready" &&
+            artifactId(selected.item) === state.activePlanDocumentArtifactId) {
+          var handoff = document.createElement("button");
+          handoff.type = "button";
+          handoff.className = "primary";
+          handoff.textContent = "Начать выполнение";
+          handoff.disabled = !!state.activeTaskListArtifactId || !!state.htmlWorkspaceDirty ||
+            !prop(selected.item, "ResourceUri", "resourceUri", "") ||
+            typeof actions.handoffPlan !== "function";
+          if (state.activeTaskListArtifactId) handoff.title = "Сначала закройте активный Task List.";
+          handoff.addEventListener("click", function () {
+            var revisionUri = prop(selected.item, "ResourceUri", "resourceUri", "") || "";
+            if (!revisionUri || typeof actions.handoffPlan !== "function") return;
+            actions.handoffPlan({
+              expectedRevisionArtifactId: artifactId(selected.item),
+              revisionUri: revisionUri
+            });
           });
-        });
-        root.appendChild(handoff);
+          preview.appendChild(handoff);
+        }
+        appendTypedArtifactViewer(preview, selected.item, actions,
+          state.htmlWorkspaceDirty ? String(editorValue || "") : null);
+        return;
       }
-      appendMetadata(root, selected.item);
-      appendTypedArtifactViewer(root, selected.item, actions,
-        state.htmlWorkspaceDirty ? String(editorValue || "") : null);
-      appendLibraryHistory(root, selected.item, actions);
-      return;
-    }
-
-    appendMetadata(root, selected.item);
-    if (isUploadedHtmlArtifact(selected.item)) {
-      appendUploadedHtml(root, selected.item, actions);
-      return;
-    }
-    appendArtifactContent(root, selected.item, actions);
-    appendLibraryHistory(root, selected.item, actions);
+      if (isUploadedHtmlArtifact(selected.item)) appendUploadedHtml(preview, selected.item, actions);
+      else appendArtifactContent(preview, selected.item, actions);
+    }, function (details) {
+      appendArtifactDetails(details, selected.item, actions);
+    });
   }
 
   function validatePlanDraft(artifact) {

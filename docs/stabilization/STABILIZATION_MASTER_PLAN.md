@@ -2221,7 +2221,10 @@ endpoint.
      document bound; full copy/download requires a contiguous stable-hash read,
      while sanitized Markdown renders only when complete and retains exact Source.
      [Evidence](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md).
-   - 11D2: image bytes, dimensions, fit/zoom/download and object-URL lifetime;
+   - [x] 11D2: exact allowlisted image bytes, dimensions, fit/zoom/download,
+     bounded cache/object-URL lifetime and preview-first artifact detail with raw
+     metadata/JSON/history on `Details`.
+     [Evidence](PHASE_11D2_IMAGE_PREVIEW.md);
    - 11D3: PDF pages plus extracted text, explicit scan/truncation state and a
      separately admitted local renderer/worker;
    - 11D4: bounded audio player and transcript relation without autoplay.

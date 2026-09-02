@@ -67,6 +67,9 @@
       loadUploadedHtmlSource: function (request) {
         return workspaceActions && workspaceActions.loadUploadedHtmlSource(request);
       },
+      loadArtifactImage: function (request) {
+        return workspaceActions && workspaceActions.loadArtifactImage(request);
+      },
       loadArtifactViewer: function (request) {
         return workspaceActions && workspaceActions.loadArtifactViewer(request);
       },

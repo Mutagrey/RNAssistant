@@ -6,8 +6,10 @@ projection. 11B1–11B3 complete the host-neutral Plan domain owner, exact whole
 lineage, restore/removal UX and ready handoff by pinned URI. 11C1–11C3 complete the
 host-neutral HTML lineage, inert uploaded-source import, binding evidence, recovery
 and guarded exact export contour. 11D1 implements host-neutral bounded text/source
-and complete-only sanitized Markdown viewers; image, PDF and audio remain later
-independent slices. The existing Resource Fabric ingestion, CAS,
+and complete-only sanitized Markdown viewers. 11D2 adds exact local image preview
+and the shared preview-first/Details presentation for Plan, Task List, Markdown,
+image and existing domain viewers; PDF and audio remain later independent slices.
+The existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
 introduce another artifact transport or store.
@@ -147,8 +149,11 @@ placeholder rather than falling forward to another revision.
 - Markdown: rendered/sanitized view plus exact Source. Rendering is disabled until
   the full exact source is available. Plan uses this viewer and is never labelled
   JSON; a dirty Plan preview is explicitly a non-durable draft.
-- Image: local bytes only, fit/zoom, dimensions and download; object URLs are
-  revoked on selection/chat/window changes.
+- Image: the exact revision-pinned JPEG/PNG/GIF/WebP bytes are read from attachment
+  CAS through a typed bridge under the existing 20 MiB attachment bound. The
+  UI-only viewer provides fit/100%/zoom, natural dimensions and download. At most
+  two image payloads remain in the per-chat viewer cache; object URLs are revoked
+  on selection/chat/window changes.
 - PDF: page navigation plus extracted-text view and scan/extraction warning. Current
   upload ingestion already extracts text and page metadata through the managed
   AnyCPU PdfPig path; this is independent of visual rendering. Any PDF.js/native
@@ -175,14 +180,21 @@ the exact revision belong to the Artifact Library owner and the shared resource
 gateway. Viewers receive already authorized data plus completeness metadata and
 cannot call tools, bridge, CAS or network themselves.
 
-For 11D1, `ArtifactViewerService` accepts only a canonical revision-pinned URI from
+For 11D1/11D2, `ArtifactViewerService` accepts only a canonical revision-pinned URI from
 the active chat and returns a typed page projection over `ResourceGatewayService`.
 Attachment text pages carry the extracted-text hash, never the source binary hash.
 The screen owner validates contiguous offset, representation hash, total and viewer
 kind before granting full-source actions. Page state is ephemeral, bounded to eight
 selected resources and cleared on chat switch; it is not an event, artifact revision
-or persisted index. HTML/JSON are rejected by this generic text bridge and remain
-with their specialized viewer owners.
+or persisted index. Image reads additionally require one exact source-message /
+attachment identity, matching kind/MIME/hash/length and a recomputed binary SHA-256
+before the payload reaches WebView. HTML/JSON are rejected by the generic text
+bridge and remain with their specialized viewer owners.
+
+Artifact detail is preview-first. Plan/Markdown renders as a document, Task List as
+goal/progress/steps and image as media; domain JSON remains a domain viewer. Generic
+metadata, raw Task List/JSON payloads and revision history live under `Details` and
+do not precede or replace the primary preview.
 
 ## Edit and delete semantics
 
@@ -280,8 +292,12 @@ Phase 11 is implemented as separate changes:
    - 11D1 — done host-neutral: exact bounded text/source paging, complete-only full
      copy/download and complete-only sanitized Markdown with exact Source.
      [Evidence](stabilization/PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md).
-   - Image, PDF and audio remain separate measured slices with their own security
-     and Windows gates.
+   - 11D2 — done host-neutral: exact allowlisted image bytes, dimensions,
+     fit/zoom/download, bounded cache/object-URL lifetime and shared preview-first /
+     Details layout for Plan, Task List, Markdown, image and existing domain content.
+     [Evidence](stabilization/PHASE_11D2_IMAGE_PREVIEW.md).
+   - PDF and audio remain separate measured slices with their own security and
+     Windows gates.
 5. The Artifact milestone closes only after one Windows WebView pass covers the
    Library, Plan and HTML together: reload, exact history navigation, stale
    revisions, viewer cleanup and bounded large payloads. Product-wide Problems and
@@ -296,4 +312,4 @@ cannot replace a newer projection; immutable uploads cannot be mutated; restore 
 branch lineage replay exactly; removed resources do not silently resolve; viewers
 respect bounds, MIME allowlists, clipboard/download failure and zero-network rules.
 Real WebView2 image/PDF/clipboard/lifecycle behavior remains a Windows qualification
-gate.
+gate; host-neutral image behavior is implemented but does not close that gate.

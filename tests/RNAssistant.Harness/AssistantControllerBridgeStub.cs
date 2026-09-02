@@ -575,6 +575,21 @@ namespace RNAssistant.Office
                 MaximumDocumentCharacters = 512000
             };
         }
+        public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri)
+        {
+            LastChatId = chatId;
+            LastArtifactViewerResourceUri = resourceUri;
+            return new ArtifactImageViewerDto
+            {
+                ResourceUri = resourceUri,
+                ViewerKind = "image",
+                Title = "pixel.png",
+                MimeType = "image/png",
+                ContentSha256 = new string('c', 64),
+                ByteLength = 3,
+                Base64Content = "AQID"
+            };
+        }
         public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(
             string chatId,
             string sourceResourceUri,

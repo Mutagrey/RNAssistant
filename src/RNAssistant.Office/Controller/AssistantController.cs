@@ -93,7 +93,9 @@ namespace RNAssistant.Office
             _uploadedHtmlResources = new UploadedHtmlResourceService(
                 _toolExecutor.ResourceGateway,
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
-            _artifactViewer = new ArtifactViewerService(_toolExecutor.ResourceGateway);
+            _artifactViewer = new ArtifactViewerService(
+                _toolExecutor.ResourceGateway,
+                attachment => _attachmentStore.ReadBytes(attachment));
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
             _officeContextCapture = new OfficeContextCaptureService(_adapter, _toolExecutor.DocumentRuntime);
             _skillCatalog = new SkillCatalogService(_adapter, skillStore);

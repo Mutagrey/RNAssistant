@@ -514,6 +514,7 @@
       artifactViewerState: artifactViewers.artifactViewerState,
       changeArtifactViewerPage: artifactViewers.changeArtifactViewerPage,
       downloadArtifactViewer: artifactViewers.downloadArtifactViewer,
+      loadArtifactImage: artifactViewers.loadArtifactImage,
       loadArtifactViewer: artifactViewers.loadArtifactViewer,
       loadArtifactViewerFull: artifactViewers.loadArtifactViewerFull,
       loadUploadedHtmlSource: loadUploadedHtmlSource,

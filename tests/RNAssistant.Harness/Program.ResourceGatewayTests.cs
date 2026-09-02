@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -946,6 +947,60 @@ namespace RNAssistant.Harness
             session.Artifacts.Add(html);
             RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(
                 session, ChatResourceUri.CreateArtifactRevisionUri(session, html), null));
+        }
+
+        private static void ArtifactViewerReadsExactImageBytes()
+        {
+            var bytes = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZKmsAAAAASUVORK5CYII=");
+            string hash;
+            using (var sha = SHA256.Create())
+            {
+                hash = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
+            }
+            var attachment = new ChatAttachment
+            {
+                Id = "image-a",
+                Kind = "image",
+                FileName = "pixel.png",
+                ContentType = "image/png",
+                ContentSha256 = hash,
+                ContentByteLength = bytes.LongLength
+            };
+            var message = new ChatMessage
+            {
+                Id = "image-message",
+                Attachments = new List<ChatAttachment> { attachment }
+            };
+            var artifact = new ChatArtifact
+            {
+                Id = "attachment_image-a",
+                Kind = ChatArtifactKinds.Image,
+                Title = "pixel.png",
+                MimeType = "image/png",
+                SourceMessageId = message.Id,
+                ContentSha256 = hash,
+                ContentByteLength = bytes.LongLength,
+                MetadataJson = "{\"attachmentId\":\"image-a\"}"
+            };
+            var session = new ChatSession();
+            session.Messages.Add(message);
+            session.Artifacts.Add(artifact);
+            var uri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
+            var viewer = new ArtifactViewerService(new ResourceGatewayService(), item => bytes);
+
+            var image = viewer.ReadImage(session, uri);
+            AssertEqual(ArtifactViewerKinds.Image, image.ViewerKind, "image viewer returns typed kind");
+            AssertEqual(uri, image.ResourceUri, "image viewer pins exact canonical URI");
+            AssertEqual(hash, image.ContentSha256, "image viewer preserves binary hash evidence");
+            AssertEqual(bytes.LongLength, image.ByteLength, "image viewer preserves exact byte length");
+            AssertEqual(Convert.ToBase64String(bytes), image.Base64Content, "image viewer returns exact local bytes");
+
+            RuntimeThrows<InvalidOperationException>(() =>
+                new ArtifactViewerService(new ResourceGatewayService(), item => new byte[] { 1 })
+                    .ReadImage(session, uri));
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadImage(
+                session, uri.Replace(session.Id, "other-chat")));
         }
 
         private static void ResourceGatewayRejectsAmbiguousChatArtifacts()

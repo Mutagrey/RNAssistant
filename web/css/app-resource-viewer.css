@@ -1,0 +1,134 @@
+.artifact-detail-tabs,
+.rn-resource-viewer-toolbar,
+.rn-task-list-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.artifact-detail-tabs {
+  position: sticky;
+  top: -16px;
+  z-index: 3;
+  margin: -16px -18px 14px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.artifact-detail-tabs .active,
+.rn-resource-viewer-toolbar .active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--accent);
+}
+
+.artifact-detail-pane.hidden {
+  display: none;
+}
+
+.artifact-detail-pane-details {
+  display: grid;
+  gap: 14px;
+}
+
+.rn-resource-viewer-status {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rn-image-viewer {
+  display: grid;
+  min-height: 260px;
+  gap: 10px;
+}
+
+.rn-image-viewer-stage {
+  min-height: 240px;
+  max-height: min(680px, 72vh);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: repeating-conic-gradient(#e9ebef 0 25%, #fff 0 50%) 50% / 18px 18px;
+  text-align: center;
+}
+
+.rn-image-viewer-image {
+  display: block;
+  margin: auto;
+}
+
+.rn-image-viewer-stage.is-fit {
+  display: grid;
+  place-items: center;
+}
+
+.rn-image-viewer-stage.is-fit .rn-image-viewer-image {
+  width: auto;
+  max-width: 100%;
+  max-height: min(660px, 70vh);
+}
+
+.rn-task-list-viewer {
+  display: grid;
+  max-width: 760px;
+  gap: 12px;
+}
+
+.rn-task-list-goal {
+  margin: 0;
+  font-size: 18px;
+}
+
+.rn-task-list-status {
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: var(--secondary-bg);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--label-font-weight);
+}
+
+.rn-task-list-status.status-completed,
+.rn-task-list-step.status-completed .rn-task-list-step-mark {
+  color: var(--success);
+}
+
+.rn-task-list-status.status-blocked,
+.rn-task-list-step.status-blocked .rn-task-list-step-mark {
+  color: var(--danger);
+}
+
+.rn-task-list-progress {
+  width: 100%;
+}
+
+.rn-task-list-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rn-task-list-step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--secondary-bg);
+}
+
+.rn-task-list-step-mark {
+  text-align: center;
+  font-weight: 700;
+}
+
+.rn-task-list-step.status-cancelled .rn-task-list-step-text {
+  color: var(--muted);
+  text-decoration: line-through;
+}

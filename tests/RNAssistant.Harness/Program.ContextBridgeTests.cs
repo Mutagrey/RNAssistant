@@ -1052,6 +1052,18 @@ namespace RNAssistant.Harness
             AssertEqual("32000", controller.LastArtifactViewerCursor, "artifact viewer forwards opaque continuation");
             AssertEqual("markdown", (string)envelope["payload"]["viewerKind"],
                 "artifact viewer returns typed viewer kind");
+
+            const string imageUri = "rna://chat/chat-view/artifact/image-r1/revision/1";
+            response = bridge.HandleMessageAsync(
+                "{\"id\":\"artifact-image\",\"type\":\"readArtifactImage\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + imageUri + "\"}}")
+                .GetAwaiter().GetResult();
+            envelope = JObject.Parse(response);
+            AssertTrue(envelope["ok"].Value<bool>(), "artifact image bridge response ok");
+            AssertEqual(imageUri, controller.LastArtifactViewerResourceUri,
+                "artifact image forwards exact resource URI");
+            AssertEqual("image", (string)envelope["payload"]["viewerKind"],
+                "artifact image returns typed viewer kind");
         }
 
         private static void BridgeUsesTypedHtmlNetworkPayloads()

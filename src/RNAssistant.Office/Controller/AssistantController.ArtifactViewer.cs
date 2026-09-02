@@ -11,5 +11,10 @@ namespace RNAssistant.Office
         {
             return _artifactViewer.ReadPage(LoadSession(chatId), resourceUri, cursor);
         }
+
+        public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri)
+        {
+            return _artifactViewer.ReadImage(LoadSession(chatId), resourceUri);
+        }
     }
 }

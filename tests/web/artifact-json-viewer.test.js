@@ -52,7 +52,7 @@ const context = vm.createContext({
 context.window = context;
 context.markdown = text => String(text);
 context.clearMarkdownEnhancements = () => {};
-for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-text-viewer.js", "app-html-workspace-artifacts.js"]) {
+for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-text-viewer.js", "app-resource-viewer.js", "app-html-workspace-artifacts.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 
@@ -113,6 +113,20 @@ function render(item, actions) {
   assert.equal(copied.at(-1), metadataText);
   console.log("PASS artifact JSON viewer: metadata fallback uses exact shared viewer");
 
+  const taskPayload = JSON.stringify({
+    protocolVersion: 1, goal: "Ship preview", status: "active",
+    steps: [{ id: "one", text: "Render task list", status: "completed" }, { id: "two", text: "Keep JSON in details", status: "in_progress" }]
+  });
+  const task = render({ Kind: "task_list", MimeType: "application/vnd.rnassistant.task-list+json", InlineText: taskPayload, Revision: 1 });
+  assert.ok(task.querySelector(".rn-task-list-viewer"));
+  assert.match(task.querySelector(".artifact-detail-pane-preview").textContent, /Ship preview/);
+  assert.match(task.querySelector(".artifact-detail-pane-preview").textContent, /1 из 2/);
+  assert.ok(task.querySelector(".artifact-detail-pane-details").classList.contains("hidden"));
+  button(task, "Детали").click();
+  assert.equal(task.querySelector(".artifact-detail-pane-details").classList.contains("hidden"), false);
+  assert.ok(task.querySelector(".artifact-json-viewer"));
+  console.log("PASS artifact detail: task preview is primary and raw JSON stays on Details");
+
   const htmlUri = "rna://chat/c/artifact/upload-html/revision/1";
   const hostileHtml = "<script>window.parent.postMessage('run')</script><img onerror=alert(1)>";
   const imported = [];
@@ -159,5 +173,5 @@ function render(item, actions) {
   assert.equal(/JSON\.stringify\(JSON\.parse\(content\)/.test(source), false);
   assert.equal(/createElement\("pre"\)[\s\S]{0,120}JSON\.parse\(content\)/.test(source), false);
   console.log("PASS artifact JSON viewer: re-render unmounts viewer and old pretty/pre path is removed");
-  console.log("OK 6/6");
+  console.log("OK 7/7");
 })().catch(error => { console.error(error); process.exitCode = 1; });
