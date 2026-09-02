@@ -73,6 +73,7 @@
     var title = String(prop(artifact, "Title", "title", "") || "");
     if (kind === "task_list" || mediaType === "application/vnd.rnassistant.task-list+json") return "task_list";
     if (kind === "image" || /^image\/(?:jpeg|png|gif|webp)$/.test(mediaType)) return "image";
+    if (mediaType === "application/pdf") return "pdf";
     if (mediaType === "text/markdown" || mediaType === "text/x-markdown" || kind === "plan" || kind === "markdown" ||
         /\.(?:md|markdown|mdx)$/i.test(title)) return "markdown";
     if (mediaType === "text/html" || mediaType === "application/xhtml+xml" ||
@@ -136,9 +137,12 @@
     }
     var viewer = typeof actions.artifactViewerState === "function" ? actions.artifactViewerState(uri) : null;
     if (!viewer) {
-      appendContentLabel(root, expectedKind === "image" ? "Загружаю изображение…" : "Загружаю exact source…");
+      appendContentLabel(root, expectedKind === "image" ? "Загружаю изображение…" :
+        (expectedKind === "pdf" ? "Готовлю PDF preview…" : "Загружаю exact source…"));
       if (expectedKind === "image" && typeof actions.loadArtifactImage === "function") {
         actions.loadArtifactImage({ resourceUri: uri });
+      } else if (expectedKind === "pdf" && typeof actions.loadArtifactPdf === "function") {
+        actions.loadArtifactPdf({ resourceUri: uri });
       } else if (typeof actions.loadArtifactViewer === "function") {
         actions.loadArtifactViewer({ resourceUri: uri });
       }
@@ -166,6 +170,52 @@
         contentSha256: viewer.contentSha256,
         byteLength: viewer.byteLength,
         base64Content: viewer.base64Content
+      });
+      return true;
+    }
+    if (expectedKind === "pdf") {
+      var pdfTextPages = viewer.pages || [];
+      var pdfTextPageIndex = Math.max(0, Math.min(
+        Number(viewer.pageIndex || 0), Math.max(0, pdfTextPages.length - 1)));
+      var pdfTextPage = pdfTextPages[pdfTextPageIndex];
+      if (viewer.viewerKind !== "pdf" || !viewer.pdfPage || !pdfTextPage) {
+        appendViewerError(root, "Artifact viewer state does not match the selected revision.");
+        return true;
+      }
+      var pdfTarget = document.createElement("div");
+      pdfTarget.className = "artifact-viewer-host artifact-typed-viewer";
+      root.appendChild(pdfTarget);
+      window.RNAssistantViewerRegistry.mount("pdf", pdfTarget, {
+        title: viewer.title,
+        pageCount: viewer.pageCount,
+        pageTextLengths: viewer.pageTextLengths,
+        extractedCharacters: viewer.extractedCharacters,
+        textTruncated: viewer.textTruncated,
+        extractionWarning: viewer.extractionWarning,
+        pending: viewer.pending,
+        initialTab: viewer.activeTab || "pages",
+        onTabChange: function (tab) { viewer.activeTab = tab; },
+        page: viewer.pdfPage,
+        textPage: pdfTextPage,
+        fullText: viewer.complete ? viewer.fullText : null,
+        textComplete: viewer.complete === true,
+        sourceComplete: viewer.sourceComplete,
+        viewerLimitReached: viewer.viewerLimitReached,
+        fullReadAllowed: viewer.fullReadAllowed && !viewer.pending,
+        hasTextPrevious: !viewer.pending && pdfTextPageIndex > 0,
+        hasTextNext: !viewer.pending &&
+          (pdfTextPageIndex + 1 < pdfTextPages.length || !!pdfTextPage.nextCursor),
+        onPrevious: function () { return actions.changeArtifactPdfPage({ resourceUri: uri, direction: "previous" }); },
+        onNext: function () { return actions.changeArtifactPdfPage({ resourceUri: uri, direction: "next" }); },
+        onTextPrevious: typeof actions.changeArtifactViewerPage === "function"
+          ? function () { return actions.changeArtifactViewerPage({ resourceUri: uri, direction: "previous" }); }
+          : null,
+        onTextNext: typeof actions.changeArtifactViewerPage === "function"
+          ? function () { return actions.changeArtifactViewerPage({ resourceUri: uri, direction: "next" }); }
+          : null,
+        onLoadTextFull: typeof actions.loadArtifactViewerFull === "function"
+          ? function () { return actions.loadArtifactViewerFull({ resourceUri: uri }); }
+          : null
       });
       return true;
     }

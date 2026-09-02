@@ -443,6 +443,7 @@ namespace RNAssistant.Harness
                 Test("resources: empty text remains exact", ResourceGatewayPreservesEmptyTextRepresentations),
                 Test("artifact viewer: exact bounded text and markdown", ArtifactViewerReadsExactBoundedTextAndMarkdown),
                 Test("artifact viewer: exact image bytes", ArtifactViewerReadsExactImageBytes),
+                Test("artifact viewer: exact PDF preview", ArtifactViewerReadsExactPdfPreview),
                 Test("resources: live Office and VBA are bounded and guarded", LiveOfficeAndVbaResourcesAreBoundedAndGuarded),
                 Test("artifacts: prompt uses bounded working set", ArtifactPromptUsesBoundedWorkingSet),
                 Test("artifacts: historical attachments stay reference-only", HistoricalAttachmentsStayReferenceOnly),

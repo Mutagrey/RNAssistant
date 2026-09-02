@@ -1003,6 +1003,82 @@ namespace RNAssistant.Harness
                 session, uri.Replace(session.Id, "other-chat")));
         }
 
+        private static void ArtifactViewerReadsExactPdfPreview()
+        {
+            var pdfBytes = System.Text.Encoding.ASCII.GetBytes("%PDF-1.4\nexact-test-payload");
+            string pdfHash;
+            using (var sha = SHA256.Create())
+            {
+                pdfHash = BitConverter.ToString(sha.ComputeHash(pdfBytes)).Replace("-", string.Empty).ToLowerInvariant();
+            }
+            var extracted = "[PDF page 1]\nVisible text\n[PDF page 2]\n\n";
+            var attachment = new ChatAttachment
+            {
+                Id = "pdf-a",
+                Kind = "pdf",
+                FileName = "exact.pdf",
+                ContentType = "application/pdf",
+                ContentSha256 = pdfHash,
+                ContentByteLength = pdfBytes.LongLength,
+                ExtractedText = extracted,
+                ExtractedTextSha256 = TextPatternEngine.Sha256(extracted),
+                ExtractedCharCount = extracted.Length,
+                PageCount = 2,
+                PageTextLengths = new List<int> { 12, 0 }
+            };
+            var message = new ChatMessage
+            {
+                Id = "pdf-message",
+                Attachments = new List<ChatAttachment> { attachment }
+            };
+            var artifact = new ChatArtifact
+            {
+                Id = "attachment_pdf-a",
+                Kind = ChatArtifactKinds.Attachment,
+                Title = "exact.pdf",
+                MimeType = "application/pdf",
+                SourceMessageId = message.Id,
+                ContentSha256 = pdfHash,
+                ContentByteLength = pdfBytes.LongLength,
+                MetadataJson = "{\"attachmentId\":\"pdf-a\"}"
+            };
+            var session = new ChatSession();
+            session.Messages.Add(message);
+            session.Artifacts.Add(artifact);
+            var uri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
+            var jpeg = new byte[] { 0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9 };
+            var viewer = new ArtifactViewerService(
+                new ResourceGatewayService(),
+                item => pdfBytes,
+                (payload, pageIndex) => new ArtifactPdfPageRenderResult
+                {
+                    Bytes = jpeg,
+                    Width = pageIndex == 0 ? 800 : 600,
+                    Height = pageIndex == 0 ? 600 : 800
+                });
+
+            var info = viewer.ReadPdfInfo(session, uri);
+            AssertEqual(ArtifactViewerKinds.Pdf, info.ViewerKind, "PDF viewer returns typed kind");
+            AssertEqual(2, info.PageCount, "PDF viewer returns exact page count");
+            AssertTrue(!info.TextTruncated, "complete PDF extraction stays complete");
+            var textPage = viewer.ReadPage(session, uri, null);
+            AssertEqual(ArtifactViewerKinds.Pdf, textPage.ViewerKind,
+                "PDF extracted text uses the bounded generic viewer kind");
+            AssertEqual(extracted, textPage.Text, "PDF viewer returns exact bounded extracted text");
+
+            var page = viewer.ReadPdfPage(session, uri, 1);
+            AssertEqual(1, page.PageIndex, "PDF viewer renders requested zero-based page");
+            AssertEqual(600, page.Width, "PDF viewer preserves bounded render width");
+            AssertEqual(Convert.ToBase64String(jpeg), page.ImageBase64Content,
+                "PDF viewer returns exact rendered JPEG bytes");
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPdfPage(session, uri, 2));
+            RuntimeThrows<InvalidOperationException>(() =>
+                new ArtifactViewerService(
+                    new ResourceGatewayService(), item => pdfBytes,
+                    (payload, pageIndex) => { throw new BadImageFormatException(); })
+                    .ReadPdfPage(session, uri, 0));
+        }
+
         private static void ResourceGatewayRejectsAmbiguousChatArtifacts()
         {
             var session = new ChatSession();

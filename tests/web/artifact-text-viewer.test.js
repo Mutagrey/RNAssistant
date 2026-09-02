@@ -191,6 +191,64 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.deepEqual(revokedUrls, [objectUrls[0], objectUrls[1]]);
   console.log("PASS artifact image viewer: local Blob preview supports dimensions, zoom, download and URL revocation");
 
+  let nextPdfPage = 0;
+  let activePdfTab = "";
+  const pdfHost = new Element("div");
+  context.RNAssistantViewerRegistry.mount("pdf", pdfHost, {
+    title: "exact.pdf", pageCount: 2, pageTextLengths: [12, 0],
+    extractedCharacters: 20, textTruncated: false, sourceComplete: true,
+    textComplete: true, fullText: "[PDF page 1]\nVisible",
+    textPage: {
+      text: "[PDF page 1]\nVisible", offset: 0, startLine: 1, totalCharacters: 20
+    },
+    extractionWarning: "Page 2 has little or no extractable text.",
+    onTabChange(tab) { activePdfTab = tab; },
+    page: {
+      pageIndex: 0, width: 800, height: 600, imageMimeType: "image/jpeg",
+      imageByteLength: 4, imageBase64Content: "/9j/2Q=="
+    },
+    onNext() { nextPdfPage += 1; return true; }
+  });
+  assert.match(pdfHost.textContent, /Страница 1 из 2/);
+  assert.equal(activePdfTab, "pages");
+  assert.match(pdfHost.textContent, /little or no extractable text/);
+  button(pdfHost, "→").click();
+  await settle();
+  assert.equal(nextPdfPage, 1);
+  button(pdfHost, "Текст").click();
+  assert.equal(activePdfTab, "text");
+  assert.equal(pdfHost.querySelector(".rn-text-viewer-content").textContent, "[PDF page 1]\nVisible");
+  context.RNAssistantViewerRegistry.unmount(pdfHost);
+  assert.ok(revokedUrls.includes(objectUrls[2]));
+
+  const pdfUri = "rna://chat/chat-text/artifact/pdf/revision/1";
+  const pdfDetail = new Element("div");
+  context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(pdfDetail, {
+    type: "artifact",
+    item: { Kind: "attachment", Title: "exact.pdf", MimeType: "application/pdf", ResourceUri: pdfUri, Revision: 1 }
+  }, "", {
+    artifactViewerState() {
+      return {
+        status: "ready", resourceUri: pdfUri, viewerKind: "pdf", title: "exact.pdf",
+        pageCount: 1, pageTextLengths: [7], extractedCharacters: 7,
+        textTruncated: false, sourceComplete: true, fullReadAllowed: true,
+        complete: true, fullText: "visible", pageIndex: 0,
+        pages: [{ text: "visible", offset: 0, startLine: 1, totalCharacters: 7 }],
+        pdfPage: {
+          pageIndex: 0, width: 800, height: 600, imageMimeType: "image/jpeg",
+          imageByteLength: 4, imageBase64Content: "/9j/2Q=="
+        }
+      };
+    },
+    changeArtifactPdfPage() {}
+  });
+  assert.ok(pdfDetail.querySelector(".rn-pdf-viewer"));
+  context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(pdfDetail, {
+    type: "artifact", item: { Kind: "file", Title: "unknown.bin", MimeType: "application/octet-stream", Revision: 1 }
+  }, "", {});
+  assert.ok(revokedUrls.includes(objectUrls[3]));
+  console.log("PASS artifact PDF viewer: pages are primary, extracted text is secondary and page URLs are revoked");
+
   const actionContext = vm.createContext({ Promise });
   actionContext.window = actionContext;
   actionContext.alert = () => {};
@@ -199,6 +257,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   }
   const uri = "rna://chat/chat-text/artifact/notes/revision/1";
   const exact = "x".repeat(32000) + "tail exact";
+  const pdfExtracted = "[PDF page 1]\n" + "v".repeat(32000) + "\n[PDF page 2]\nVisible";
   const calls = [];
   const applied = [];
   const downloaded = [];
@@ -216,6 +275,59 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
           contentSha256: "d".repeat(64),
           byteLength: 3,
           base64Content: "AQID"
+        };
+      }
+      if (method === "readArtifactPdfInfo") {
+        return {
+          resourceUri: payload.resourceUri,
+          viewerKind: "pdf",
+          title: "exact.pdf",
+          mimeType: "application/pdf",
+          contentSha256: "e".repeat(64),
+          byteLength: 100,
+          pageCount: 2,
+          pageTextLengths: [32000, 7],
+          extractedTextSha256: "f".repeat(64),
+          extractedCharacters: pdfExtracted.length,
+          textTruncated: false,
+          extractionWarning: "Page 2 is scanned."
+        };
+      }
+      if (method === "readArtifactPdfPage") {
+        return {
+          resourceUri: payload.resourceUri,
+          viewerKind: "pdf",
+          contentSha256: "e".repeat(64),
+          pageIndex: payload.pageIndex,
+          pageCount: 2,
+          width: payload.pageIndex ? 600 : 800,
+          height: payload.pageIndex ? 800 : 600,
+          imageMimeType: "image/jpeg",
+          imageContentSha256: "a".repeat(64),
+          imageByteLength: 4,
+          imageBase64Content: "/9j/2Q=="
+        };
+      }
+      if (method === "readArtifactViewerPage" && payload.resourceUri !== uri) {
+        const offset = payload.cursor ? 32000 : 0;
+        const text = pdfExtracted.slice(offset, offset + 32000);
+        return {
+          resourceUri: payload.resourceUri,
+          viewerKind: "pdf",
+          title: "exact.pdf",
+          mimeType: "application/pdf",
+          contentSha256: "f".repeat(64),
+          text,
+          offset,
+          returnedCharacters: text.length,
+          totalCharacters: pdfExtracted.length,
+          nextCursor: offset ? null : "pdf-32000",
+          complete: offset > 0,
+          truncated: offset === 0,
+          sourceComplete: true,
+          fullReadAllowed: true,
+          viewerLimitReached: false,
+          maximumDocumentCharacters: 512000
         };
       }
       const offset = payload.cursor ? 32000 : 0;
@@ -257,14 +369,24 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(await actions.loadArtifactImage({ resourceUri: actionImageUri }), true);
   assert.equal(actions.artifactViewerState(actionImageUri).viewerKind, "image");
   assert.equal(calls.at(-1).method, "readArtifactImage");
+  const actionPdfUri = "rna://chat/chat-text/artifact/pdf-action/revision/1";
+  assert.equal(await actions.loadArtifactPdf({ resourceUri: actionPdfUri }), true);
+  assert.equal(actions.artifactViewerState(actionPdfUri).pdfPage.pageIndex, 0);
+  assert.equal(actions.artifactViewerState(actionPdfUri).pages.length, 1);
+  assert.equal(await actions.changeArtifactViewerPage({ resourceUri: actionPdfUri, direction: "next" }), true);
+  assert.equal(actions.artifactViewerState(actionPdfUri).pages.length, 2);
+  assert.equal(calls.at(-1).method, "readArtifactViewerPage");
+  assert.equal(await actions.changeArtifactPdfPage({ resourceUri: actionPdfUri, direction: "next" }), true);
+  assert.equal(actions.artifactViewerState(actionPdfUri).pdfPage.pageIndex, 1);
+  assert.equal(calls.at(-1).method, "readArtifactPdfPage");
   console.log("PASS artifact viewer owner: exact pinned pages assemble contiguously before full copy/download");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-text-viewer.js?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-text-viewer.css?v=artifact-text-20260831-1"));
-  assert.ok(index.includes("app-resource-viewer.js?v=artifact-preview-20260902-1"));
+  assert.ok(index.includes("app-resource-viewer.js?v=artifact-preview-20260902-2"));
   assert.ok(index.includes("app-resource-viewer.css?v=artifact-preview-20260902-3"));
-  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-preview-20260902-1"));
+  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-preview-20260902-2"));
   assert.ok(index.indexOf("app-viewer-registry.js") < index.indexOf("app-text-viewer.js"));
   assert.ok(index.indexOf("app-artifact-viewer-actions.js") < index.indexOf("app-html-workspace-actions.js"));
   const viewerSource = fs.readFileSync(path.join(root, "web/js/app-text-viewer.js"), "utf8");
@@ -273,5 +395,5 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.match(viewerSource, /window\.markdown\(String\(options\.fullText\)\)/);
   assert.match(actionSource, /readArtifactViewerPage/);
   console.log("PASS artifact viewers: allowlisted modules are UI-only and loaded after their registry");
-  console.log("OK 7/7");
+  console.log("OK 8/8");
 })().catch(error => { console.error(error.stack || error); process.exitCode = 1; });

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var allowedKinds = { image: true, json: true, markdown: true, task_list: true, text: true };
+  var allowedKinds = { image: true, json: true, markdown: true, pdf: true, task_list: true, text: true };
   var factories = Object.create(null);
   var mounted = typeof WeakMap === "function" ? new WeakMap() : null;
 

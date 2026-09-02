@@ -7,7 +7,19 @@ Execution mode: mandatory host-neutral route 0–11T10 и WQ-A1–A5 implementat
 
 Next step for tools: 11O3 atomically switches HTML workspace/data-binding contracts, internalizes model-facing diagnostics/UI selection and removes source-tool/runtime identity plumbing without weakening typed Office reads, exact artifact guards or verified writes. The accumulated Windows rebuild/R62/R63 retests remain mandatory before final WQ evidence.
 Required context: [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), [conversation protocol](../conversation-protocol.md), [Artifact Library](../artifact-library.md), [migration map](MIGRATION_MAP.md), exact HTML catalog/service/handlers and the 11C/11T9C4 evidence only.
-Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O2 are complete host-neutral; HTML, authoring, VBA/macro, final core-pack, dynamic-package and Library UI slices remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63 is fixed host-neutral; exact real Excel bind/refresh on Windows remains open. R51 remains open for PDF/audio viewers, other committed-resource removal and Windows WebView image/PDF/lifecycle qualification; 11D2 image behavior is complete host-neutral. R64 keeps exact Windows x86 PDF text extraction and explicit visual-PDF capability refusal open; only x64 native PDF rendering is present. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O2 are complete host-neutral; HTML, authoring, VBA/macro, final core-pack, dynamic-package and Library UI slices remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63 is fixed host-neutral; exact real Excel bind/refresh on Windows remains open. R51 remains open for audio, other committed-resource removal and Windows WebView image/PDF/lifecycle qualification; 11D2 image and 11D3 PDF behavior are complete host-neutral. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+
+Phase 11D3 PDF preview + x86 native runtime (2026-09-02, user-requested
+host-neutral): typed exact PDF info and one-page JPEG render calls now compose with
+the existing 32,000 / 512,000-character exact text paging path; metadata no longer
+returns the whole extracted body. UI defaults to page preview with navigation,
+fit/zoom/download and a secondary bounded text tab, while outer metadata/JSON stays
+under `Детали`. Matching PE32 x86 PDFium/Skia files from the exact reviewed x64
+package versions are vendored and wired to Office and portable outputs; x64 native
+DLLs are never loaded in x86. Harness passes 3/3 artifact viewers and 1/1 typed
+bridge; affected web checks pass 37/37 and changed JS syntax passes. Real Windows
+x86/x64 Office/WebView import, preview, scanned-page, loader and model-send gates
+remain open. [Evidence](PHASE_11D3_PDF_PREVIEW_X86.md).
 
 Phase 11D2 image WebView correction (2026-09-02, user-reported): the main UI CSP
 now admits the local `blob:` URL already owned by the image viewer; remote image
@@ -48,7 +60,8 @@ CA1416 warnings on the compiling run. Plan/HTML/artifact web checks pass 22/22.
 No full harness or Office/VSTO validation was run. Windows question/Plan/Task
 persistence and WebView qualification remain open.
 
-PDF x86 capability characterization (2026-09-02, user-requested docs/evidence):
+PDF x86 capability characterization before 11D3 (2026-09-02, user-requested
+docs/evidence):
 current PDF text/page-metadata ingestion is owned by Core/PdfPig, while visual page
 conversion for model images is a separate PDFtoImage/PDFium/Skia path. The complete
 production PdfPig `net471` reader closure (six PdfPig plus five managed runtime
@@ -60,9 +73,10 @@ project or managed facade bitness is not the text-reader limitation: x86 text
 extraction is structurally compatible, while visual/scanned-page rendering is
 unsupported and not qualified. Because an image-capable model may invoke visual
 rendering even after extraction, complete PDF sending is also not x86-qualified.
-This ARM/macOS host cannot execute a Windows x86 process, so exact 32-bit Office
-import and explicit visual-capability failure remain R64/open. Runtime/packages and
-11D3 were not changed.
+This ARM/macOS host cannot execute a Windows x86 process. The later 11D3 slice adds
+the matching reviewed x86 native pair and host-neutral packaging, superseding the
+earlier repository-availability conclusion; exact 32-bit Office execution remains
+R64/open.
 
 R63 HTML Office data-source owner-STA correction (2026-09-02,
 user-requested host-neutral): native HTML ownership had removed the old outer
@@ -1615,9 +1629,9 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 11A | done host-neutral: 11A1–11A2 | [11A1](PHASE_11A1_ARTIFACT_COMMIT_PROJECTION.md), [11A2](PHASE_11A2_ARTIFACT_LIBRARY_PROJECTION.md) | 11A2: harness 9/9; web 10/10; MockDemo full self-test | not performed | Commit projection + exact Library heads/history/classes/labels; Plan/HTML/viewer slices and R51 Windows gates remain |
 | 11B | done host-neutral: 11B1–11B3 | [11B1](PHASE_11B1_PLAN_REVISION_GUARD.md), [11B2](PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md), [11B3](PHASE_11B3_PLAN_HISTORY_HANDOFF.md) | 11B3: web Plan 7/7; Artifact Library 3/3; JS syntax 4/4 | not performed | Complete exact Plan lineage/restore/removal/history/handoff contour; Windows WebView remains |
 | 11C | done host-neutral: 11C1–11C3 | [11C1](PHASE_11C1_HTML_LINEAGE.md), [11C2](PHASE_11C2_HTML_IMPORT_PREVIEW.md), [11C3](PHASE_11C3_HTML_BINDING_EXPORT.md) | 11C3: harness 8/8; web 21/21; JS syntax | not performed | Unique lineage, inert exact import and one guarded exact binding/recovery/export checkpoint path switched; Windows WebView/Office remains |
-| 11D | in progress: 11D1–11D2 done host-neutral | [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md), [11D2](PHASE_11D2_IMAGE_PREVIEW.md) | 11D2 harness 3/3; affected web 36/36; JS syntax | not performed | Text/Markdown and exact image preview-first viewers switched; PDF/audio and Windows WebView remain |
+| 11D | in progress: 11D1–11D3 done host-neutral | [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md), [11D2](PHASE_11D2_IMAGE_PREVIEW.md), [11D3](PHASE_11D3_PDF_PREVIEW_X86.md) | 11D3 harness 4/4; affected web 37/37; JS syntax | not performed | Text/Markdown, exact image and bounded PDF preview-first viewers switched; audio and Windows WebView remain |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
-| 11 | existing-tool migration route done host-neutral through 11T10; R61 correction active with 11O2 complete | 11A–11D2 evidence above; [11J1](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md), [11J2](PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md), [11K1](PHASE_11K1_SKILL_AUTHORING_NATIVE_RUNTIME.md), [11K2](PHASE_11K2_SKILLS_UI_TYPED_BOUNDARY.md), [11T10](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md) | 11T10 full harness 589/589; 11O1 Resources/Capabilities and 11O2 planning targeted checks pass | not performed | Active legacy removed; remaining R61 family schemas/docs/test UX required before final Milestone WQ |
+| 11 | existing-tool migration route done host-neutral through 11T10; R61 correction active with 11O2 complete | 11A–11D3 evidence above; [11J1](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md), [11J2](PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md), [11K1](PHASE_11K1_SKILL_AUTHORING_NATIVE_RUNTIME.md), [11K2](PHASE_11K2_SKILLS_UI_TYPED_BOUNDARY.md), [11T10](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md) | 11T10 full harness 589/589; 11O1 Resources/Capabilities and 11O2 planning targeted checks pass | not performed | Active legacy removed; remaining R61 family schemas/docs/test UX required before final Milestone WQ |
 | 11O / R61 | in progress; 11O0–11O2 done host-neutral | [Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [audit](R61_TOOL_CONTRACT_AUDIT.md) | 11O2 focused harness 18/18; web 22/22; version/diff checks | not performed | 11O3 HTML next; later authoring/VBA/core-pack and Library UX remain |
 | 12 | pending | — | — | — | Release hardening / qualification |
 

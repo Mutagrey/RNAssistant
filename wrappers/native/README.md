@@ -26,13 +26,12 @@ build-local.cmd
 Use `build-local.cmd x64` or `build-local.cmd x86` for one architecture. Output
 is written under `artifacts\portable\Release` and also published directly to
 `C:\Temp\RNAssistant` (x64) or `C:\Temp\RNAssistant-x86` (x86). The x86 package
-contains the managed AnyCPU PdfPig text reader, but not the x64-only native PDF
-page-rendering binaries. Thus text extraction/page metadata are the intended x86
-ingestion path; scanned or visual PDF pages cannot be converted to images in x86.
-The current request builder may enter that visual path when the selected model
-supports images, even for a PDF whose text was extracted, so complete PDF sending is
-not x86-qualified. Presence of the managed `PDFtoImage.dll` and `SkiaSharp.dll`
-facades does not provide a matching native runtime. See the exact
+contains the managed AnyCPU PdfPig reader plus matching PE32 x86 PDFium/Skia native
+libraries. Project output keeps architecture subdirectories; the portable publisher
+copies only the requested architecture's pair into its package root, which is the
+loader's matching fallback. Never copy the x64 pair into an x86 package. Exact
+Windows x86 import, page preview, scanned-page rendering and image-capable model
+sending remain qualification gates despite the complete package wiring. See the exact
 [PDF bitness boundary](../../docs/dependencies.md#pdf-bitness-boundary).
 
 Each publish replaces its known output directory as one exact package, so files

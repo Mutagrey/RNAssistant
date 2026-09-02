@@ -20,6 +20,9 @@
     <Error Condition="!Exists('$(RepoRoot)packages\Microsoft.Web.WebView2.1.0.2903.40\build\native\x64\WebView2Loader.dll')" Text="Vendored x64 WebView2Loader.dll not found." />
     <Error Condition="!Exists('$(RepoRoot)packages\Microsoft.Web.WebView2.1.0.2903.40\build\native\x86\WebView2Loader.dll')" Text="Vendored x86 WebView2Loader.dll not found." />
     <Error Condition="!Exists('$(RepoRoot)vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll')" Text="Vendored x64 PDF runtime not found." />
+    <Error Condition="!Exists('$(RepoRoot)vendor\pdf-rendering\runtimes\win-x64\native\libSkiaSharp.dll')" Text="Vendored x64 Skia runtime not found." />
+    <Error Condition="!Exists('$(RepoRoot)vendor\pdf-rendering\runtimes\win-x86\native\pdfium.dll')" Text="Vendored x86 PDF runtime not found." />
+    <Error Condition="!Exists('$(RepoRoot)vendor\pdf-rendering\runtimes\win-x86\native\libSkiaSharp.dll')" Text="Vendored x86 Skia runtime not found." />
     <Message Importance="High" Text="Inputs found. Native compilation also requires Visual Studio 2022 C++/CLI v143, .NET Framework 4.8 targeting pack, Windows SDK and installed Office PIAs." />
   </Target>
 

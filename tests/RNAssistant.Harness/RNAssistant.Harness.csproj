@@ -11,6 +11,14 @@
       <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net6.0\Newtonsoft.Json.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="PDFtoImage">
+      <HintPath>..\..\vendor\pdf-rendering\managed\net8.0\PDFtoImage.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="SkiaSharp">
+      <HintPath>..\..\vendor\pdf-rendering\managed\net8.0\SkiaSharp.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <Reference Include="UglyToad.PdfPig">
       <HintPath>..\..\packages\PdfPig.0.1.15\lib\net8.0\UglyToad.PdfPig.dll</HintPath>
       <Private>true</Private>

@@ -8,7 +8,9 @@ host-neutral HTML lineage, inert uploaded-source import, binding evidence, recov
 and guarded exact export contour. 11D1 implements host-neutral bounded text/source
 and complete-only sanitized Markdown viewers. 11D2 adds exact local image preview
 and the shared preview-first/Details presentation for Plan, Task List, Markdown,
-image and existing domain viewers; PDF and audio remain later independent slices.
+image and existing domain viewers. 11D3 adds bounded PDF pages, paged extracted-
+text / scan state and matching x64/x86 native packaging; audio remains a later
+independent slice.
 The existing Resource Fabric ingestion, CAS,
 `ResourceRef`, provider and model-context semantics remain authoritative. This
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
@@ -156,17 +158,19 @@ placeholder rather than falling forward to another revision.
   image. Main-UI CSP admits only local `data:`/`blob:` image sources. At most two
   image payloads remain in the per-chat viewer cache; object URLs are revoked on
   selection/chat/window changes.
-- PDF: page navigation plus extracted-text view and scan/extraction warning. Current
-  upload ingestion already extracts text and page metadata through the managed
-  AnyCPU PdfPig path; this is independent of visual rendering. Any PDF.js/native
-  renderer is a separately admitted local asset/runtime with bounded pages, worker
-  lifecycle, manifest/license/CSP and Windows WebView qualification. The currently
-  vendored PDFtoImage/PDFium/Skia visual path has only x64 native binaries, so it is
-  unavailable in x86 even though its managed facade is AnyCPU. A model with image
-  support may currently request visual pages after successful text extraction, so
-  x86 ingestion compatibility is not end-to-end send compatibility. Exact Windows
-  x86 text extraction and explicit visual-capability refusal remain open gates; 11D3
-  is not admitted by this clarification.
+- PDF: exact revision info exposes the PdfPig page count plus hash/count/completeness
+  evidence and an explicit truncation/scan warning; it does not return the whole
+  extracted body. Text uses the same exact viewer paging as other sources: 32,000
+  characters per read within the 512,000-character viewer ceiling. Storage ingestion
+  may retain up to 1,000,000 extracted characters, so a larger or incomplete
+  extraction remains explicitly partial in the viewer. Page navigation renders one
+  requested page at a time to JPEG through the separately admitted local
+  PDFtoImage/PDFium/Skia path, bounded to 2,048 px and 10 MiB per page; the viewer
+  defaults to pages and keeps extracted text on its own tab. Matching exact-package
+  PE32+ x64 and PE32 x86 native libraries are vendored and selected by process
+  architecture. Repository wiring is not execution evidence: real Windows x64/x86
+  Office/WebView import, preview, scanned-page and model-send qualification remains
+  open.
 - Audio: local bounded player and optional transcript relation; no autoplay.
 - JSON/chart/tool result: existing lossless bounded JSON/domain viewers remain
   owners of their formats.
@@ -197,6 +201,15 @@ Artifact detail is preview-first. Plan/Markdown renders as a document, Task List
 goal/progress/steps and image as media; domain JSON remains a domain viewer. Generic
 metadata, raw Task List/JSON payloads and revision history live under `Details` and
 do not precede or replace the primary preview.
+
+For 11D3, PDF info and rendered pages are separate typed bridge calls. Both bind the
+same canonical artifact URI, original binary SHA-256 and page count. Extracted text
+stays on the existing typed viewer-page call and is bound by its separate extracted-
+text SHA-256, total length, cursor and contiguous offsets; the UI cross-checks all
+three responses before admitting the preview. The render call accepts only a zero-
+based index inside the PdfPig count and returns a JPEG whose signature, size and
+dimensions are checked before WebView. Native load or machine-type failure is
+surfaced as an explicit renderer-unavailable error and is never retried automatically.
 
 ## Edit and delete semantics
 
@@ -298,8 +311,11 @@ Phase 11 is implemented as separate changes:
      fit/zoom/download, bounded cache/object-URL lifetime and shared preview-first /
      Details layout for Plan, Task List, Markdown, image and existing domain content.
      [Evidence](stabilization/PHASE_11D2_IMAGE_PREVIEW.md).
-   - PDF and audio remain separate measured slices with their own security and
-     Windows gates.
+   - 11D3 — done host-neutral: exact PDF info/extracted text, single-page bounded
+     JPEG rendering/navigation, scan/truncation state and matching exact-package
+     x64/x86 native vendor/publisher wiring.
+     [Evidence](stabilization/PHASE_11D3_PDF_PREVIEW_X86.md).
+   - Audio remains a separate measured slice with its own security and Windows gate.
 5. The Artifact milestone closes only after one Windows WebView pass covers the
    Library, Plan and HTML together: reload, exact history navigation, stale
    revisions, viewer cleanup and bounded large payloads. Product-wide Problems and

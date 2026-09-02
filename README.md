@@ -22,7 +22,7 @@ Local AI assistant for Excel, Word, PowerPoint and Outlook.
 - `wrappers/native` - VBA source modules for Office-native launcher wrappers.
 - `web` - static local task pane UI, no npm build.
 - `packages` - vendored NuGet packages for offline restore.
-- `vendor/pdf-rendering` - vendored PDFtoImage/PDFium/SkiaSharp binaries for Windows x64.
+- `vendor/pdf-rendering` - vendored PDFtoImage/PDFium/SkiaSharp binaries for Windows x64 and x86.
 - `vendor/webview2-runtime` - optional fixed WebView2 x64 runtime folder.
 
 The documentation entry point and placement rules are in
@@ -71,16 +71,13 @@ network or terminate Office. Outputs are written both to
 `artifacts\build-local.log`. Close Office before building because the native DLL
 remains loaded in the Office process and cannot be replaced.
 
-The x86 output still includes the managed PdfPig reader used for PDF text and page
-metadata extraction. Those assemblies are AnyCPU; this path is structurally x86-
-compatible, although the exact Windows x86 runtime check remains open. The package
-intentionally omits the x64-only native `pdfium.dll` and `libSkiaSharp.dll`, so PDF
-page-to-image rendering, including scanned-page input for a vision model, is not
-available in x86. The managed `PDFtoImage.dll`/`SkiaSharp.dll` facades do not remove
-that native bitness requirement. An image-capable model can request this visual path
-even after text extraction succeeded, so end-to-end PDF sending is not yet x86-
-qualified. The complete supported target remains Office x64. Package/import the VBA
-and Ribbon sources from `wrappers\native`; see `wrappers\native\README.md`.
+The x86 output includes the managed AnyCPU PdfPig reader and matching PE32 x86
+PDFium/Skia native libraries from the same reviewed package versions as x64. The
+publisher selects matching machine types; x64 native DLLs cannot be loaded by an
+x86 Office process. Repository/package wiring is complete, but real Windows x86
+Office import, preview, scanned-page rendering and model-send checks remain required
+before x86 is called qualified. Package/import the VBA and Ribbon sources from
+`wrappers\native`; see `wrappers\native\README.md`.
 
 ## Windows Desktop Quick Start
 

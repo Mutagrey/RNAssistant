@@ -39,7 +39,7 @@
     var actual = element("button", "secondary compact", "100%");
     var zoomOut = element("button", "secondary compact", "−");
     var zoomIn = element("button", "secondary compact", "+");
-    var download = element("button", "secondary compact", "Скачать");
+    var download = element("button", "secondary compact", options.downloadLabel || "Скачать");
     [fit, actual, zoomOut, zoomIn, download].forEach(function (button) { button.type = "button"; });
     var stage = element("div", "rn-image-viewer-stage is-fit");
     var image = element("img", "rn-image-viewer-image");
@@ -154,8 +154,117 @@
     return { element: root, destroy: function () { root.replaceChildren(); } };
   }
 
+  function createPdf(options) {
+    options = options || {};
+    var root = element("div", "rn-pdf-viewer");
+    if (options.extractionWarning) {
+      root.appendChild(element("div", "rn-pdf-viewer-warning", options.extractionWarning));
+    }
+    var tabs = element("div", "rn-pdf-viewer-tabs");
+    var pagesButton = element("button", "secondary compact active", "Страницы");
+    var textButton = element("button", "secondary compact", "Текст");
+    pagesButton.type = textButton.type = "button";
+    tabs.appendChild(pagesButton);
+    tabs.appendChild(textButton);
+    root.appendChild(tabs);
+    var body = element("div", "rn-pdf-viewer-body");
+    root.appendChild(body);
+    var child = null;
+
+    function clear() {
+      if (child && typeof child.destroy === "function") child.destroy();
+      child = null;
+      body.replaceChildren();
+    }
+
+    function changePage(direction, status) {
+      var action = direction === "previous" ? options.onPrevious : options.onNext;
+      if (typeof action !== "function") return;
+      status.textContent = "Загружаю…";
+      Promise.resolve(action()).then(function (changed) {
+        if (!changed) status.textContent = "Страница недоступна";
+      }).catch(function () { status.textContent = "Страница недоступна"; });
+    }
+
+    function showPages() {
+      clear();
+      if (typeof options.onTabChange === "function") options.onTabChange("pages");
+      pagesButton.classList.add("active");
+      textButton.classList.remove("active");
+      var page = options.page || {};
+      var navigation = element("div", "rn-resource-viewer-toolbar rn-pdf-page-navigation");
+      var status = element("span", "rn-resource-viewer-status",
+        "Страница " + (Number(page.pageIndex || 0) + 1) + " из " + Number(options.pageCount || 0) +
+        " · " + Number(page.width || 0) + " × " + Number(page.height || 0) + " px");
+      var previous = element("button", "secondary compact", "←");
+      var next = element("button", "secondary compact", "→");
+      previous.type = next.type = "button";
+      previous.disabled = options.pending || Number(page.pageIndex || 0) <= 0 || typeof options.onPrevious !== "function";
+      next.disabled = options.pending || Number(page.pageIndex || 0) + 1 >= Number(options.pageCount || 0) || typeof options.onNext !== "function";
+      previous.addEventListener("click", function () { changePage("previous", status); });
+      next.addEventListener("click", function () { changePage("next", status); });
+      navigation.appendChild(status);
+      navigation.appendChild(previous);
+      navigation.appendChild(next);
+      body.appendChild(navigation);
+      child = createImage({
+        title: fileName(options.title, "document.pdf") + ".page-" + (Number(page.pageIndex || 0) + 1) + ".jpg",
+        mimeType: page.imageMimeType,
+        byteLength: page.imageByteLength,
+        base64Content: page.imageBase64Content,
+        downloadLabel: "Скачать страницу"
+      });
+      body.appendChild(child.element);
+    }
+
+    function showText() {
+      clear();
+      if (typeof options.onTabChange === "function") options.onTabChange("text");
+      pagesButton.classList.remove("active");
+      textButton.classList.add("active");
+      if (!window.RNAssistantArtifactTextViewers) {
+        body.appendChild(element("div", "artifact-detail-error", "Text viewer is unavailable."));
+        return;
+      }
+      var page = options.textPage || {};
+      var text = String(page.text || "");
+      child = window.RNAssistantArtifactTextViewers.createText({
+        text: text,
+        fullText: options.textComplete ? options.fullText : null,
+        complete: options.textComplete === true,
+        offset: Number(page.offset || 0),
+        startLine: Number(page.startLine || 1),
+        totalCharacters: Number(page.totalCharacters || options.extractedCharacters || text.length),
+        sourceComplete: options.sourceComplete === true,
+        viewerLimitReached: options.viewerLimitReached === true,
+        fullReadAllowed: options.fullReadAllowed === true,
+        hasPrevious: options.hasTextPrevious === true,
+        hasNext: options.hasTextNext === true,
+        onPrevious: options.onTextPrevious,
+        onNext: options.onTextNext,
+        onLoadFull: options.onLoadTextFull,
+        onCopy: window.copyTextResult
+      });
+      body.appendChild(child.element);
+    }
+
+    pagesButton.addEventListener("click", showPages);
+    textButton.addEventListener("click", showText);
+    if (options.initialTab === "text") showText();
+    else showPages();
+    return {
+      element: root,
+      destroy: function () { clear(); root.replaceChildren(); }
+    };
+  }
+
   if (!window.RNAssistantViewerRegistry) throw new Error("Viewer registry is unavailable.");
   window.RNAssistantViewerRegistry.register("image", createImage);
+  window.RNAssistantViewerRegistry.register("pdf", createPdf);
   window.RNAssistantViewerRegistry.register("task_list", createTaskList);
-  window.RNAssistantArtifactResourceViewers = { createImage: createImage, createTaskList: createTaskList };
+  window.RNAssistantArtifactResourceViewers = {
+    createImage: createImage,
+    createPdf: createPdf,
+    createTaskList: createTaskList
+  };
 }());

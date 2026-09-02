@@ -111,6 +111,38 @@
   gap: 12px;
 }
 
+.rn-pdf-viewer {
+  display: grid;
+  min-height: 300px;
+  gap: 10px;
+}
+
+.rn-pdf-viewer-tabs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.rn-pdf-viewer-tabs .active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--accent);
+}
+
+.rn-pdf-viewer-body {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.rn-pdf-viewer-warning {
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line));
+  border-radius: var(--control-radius);
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--danger) 5%, var(--panel));
+  color: var(--text);
+  font-size: 12px;
+}
+
 .rn-task-list-goal {
   margin: 0;
   font-size: 18px;

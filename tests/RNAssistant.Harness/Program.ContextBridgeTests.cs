@@ -1064,6 +1064,27 @@ namespace RNAssistant.Harness
                 "artifact image forwards exact resource URI");
             AssertEqual("image", (string)envelope["payload"]["viewerKind"],
                 "artifact image returns typed viewer kind");
+
+            const string pdfUri = "rna://chat/chat-view/artifact/pdf-r1/revision/1";
+            response = bridge.HandleMessageAsync(
+                "{\"id\":\"artifact-pdf\",\"type\":\"readArtifactPdfInfo\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + pdfUri + "\"}}")
+                .GetAwaiter().GetResult();
+            envelope = JObject.Parse(response);
+            AssertTrue(envelope["ok"].Value<bool>(), "artifact PDF info bridge response ok");
+            AssertEqual("pdf", (string)envelope["payload"]["viewerKind"],
+                "artifact PDF info returns typed viewer kind");
+            AssertTrue(envelope["payload"]["extractedText"] == null,
+                "artifact PDF info does not bypass bounded extracted-text paging");
+            response = bridge.HandleMessageAsync(
+                "{\"id\":\"artifact-pdf-page\",\"type\":\"readArtifactPdfPage\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + pdfUri +
+                "\",\"pageIndex\":0}}")
+                .GetAwaiter().GetResult();
+            envelope = JObject.Parse(response);
+            AssertTrue(envelope["ok"].Value<bool>(), "artifact PDF page bridge response ok");
+            AssertEqual(0, envelope["payload"]["pageIndex"].Value<int>(),
+                "artifact PDF page forwards zero-based page index");
         }
 
         private static void BridgeUsesTypedHtmlNetworkPayloads()

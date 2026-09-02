@@ -20,7 +20,7 @@
       if (!viewers[uri] && Object.keys(viewers).length >= 8) delete viewers[Object.keys(viewers)[0]];
       viewers[uri] = viewerState;
       var mediaUris = Object.keys(viewers).filter(function (key) {
-        return viewers[key] && viewers[key].viewerKind === "image";
+        return viewers[key] && (viewers[key].viewerKind === "image" || viewers[key].viewerKind === "pdf");
       });
       while (mediaUris.length > 2) delete viewers[mediaUris.shift()];
       return viewerState;
@@ -28,6 +28,10 @@
 
     function artifactViewerState(uri) {
       return cache()[uri] || null;
+    }
+
+    function viewerTextContentSha256(viewer) {
+      return viewer.textContentSha256 || viewer.contentSha256;
     }
 
     function pageNewlines(text) {
@@ -53,7 +57,7 @@
       var fullReadAllowed = value(response, "FullReadAllowed", "fullReadAllowed", false) === true;
       var nextCursor = value(response, "NextCursor", "nextCursor", null);
       var maximum = Number(value(response, "MaximumDocumentCharacters", "maximumDocumentCharacters", 0) || 0);
-      if (returnedUri !== uri || (viewerKind !== "text" && viewerKind !== "markdown") ||
+      if (returnedUri !== uri || (viewerKind !== "text" && viewerKind !== "markdown" && viewerKind !== "pdf") ||
           !/^[a-f0-9]{64}$/i.test(hash) || offset !== expectedOffset || returned !== text.length ||
           total < offset + returned || !maximum || total < 0 ||
           (complete && (!sourceComplete || nextCursor))) {
@@ -110,6 +114,81 @@
         contentSha256: hash,
         byteLength: byteLength,
         base64Content: base64Content
+      };
+    }
+
+    function normalizePdfInfo(response, uri) {
+      response = response || {};
+      var returnedUri = value(response, "ResourceUri", "resourceUri", "") || "";
+      var viewerKind = String(value(response, "ViewerKind", "viewerKind", "") || "").toLowerCase();
+      var mimeType = String(value(response, "MimeType", "mimeType", "") || "").split(";", 1)[0].toLowerCase();
+      var hash = value(response, "ContentSha256", "contentSha256", "") || "";
+      var byteLength = Number(value(response, "ByteLength", "byteLength", -1));
+      var pageCount = Number(value(response, "PageCount", "pageCount", 0));
+      var pageTextLengths = value(response, "PageTextLengths", "pageTextLengths", []);
+      var extractedHash = value(response, "ExtractedTextSha256", "extractedTextSha256", "") || "";
+      var extractedCharacters = Number(value(response, "ExtractedCharacters", "extractedCharacters", -1));
+      var textTruncated = value(response, "TextTruncated", "textTruncated", false) === true;
+      if (returnedUri !== uri || viewerKind !== "pdf" || mimeType !== "application/pdf" ||
+          !/^[a-f0-9]{64}$/i.test(hash) || !Number.isInteger(byteLength) ||
+          byteLength <= 0 || byteLength > 20 * 1024 * 1024 ||
+          !Number.isInteger(pageCount) || pageCount <= 0 || pageCount > 10000 ||
+          !Array.isArray(pageTextLengths) || pageTextLengths.length > pageCount ||
+          pageTextLengths.some(function (length) { return !Number.isInteger(length) || length < 0; }) ||
+          !/^[a-f0-9]{64}$/i.test(extractedHash) || !Number.isInteger(extractedCharacters) || extractedCharacters < 0 ||
+          extractedCharacters > 1000000 || (!textTruncated && pageTextLengths.length < pageCount)) {
+        throw new Error("Artifact PDF returned inconsistent exact-read evidence.");
+      }
+      return {
+        resourceUri: returnedUri,
+        viewerKind: viewerKind,
+        title: value(response, "Title", "title", "PDF") || "PDF",
+        mimeType: mimeType,
+        contentSha256: hash,
+        byteLength: byteLength,
+        pageCount: pageCount,
+        pageTextLengths: pageTextLengths.slice(),
+        extractedTextSha256: extractedHash,
+        extractedCharacters: extractedCharacters,
+        textTruncated: textTruncated,
+        extractionWarning: value(response, "ExtractionWarning", "extractionWarning", "") || ""
+      };
+    }
+
+    function normalizePdfPage(response, uri, expectedPageIndex) {
+      response = response || {};
+      var returnedUri = value(response, "ResourceUri", "resourceUri", "") || "";
+      var viewerKind = String(value(response, "ViewerKind", "viewerKind", "") || "").toLowerCase();
+      var hash = value(response, "ContentSha256", "contentSha256", "") || "";
+      var pageIndex = Number(value(response, "PageIndex", "pageIndex", -1));
+      var pageCount = Number(value(response, "PageCount", "pageCount", 0));
+      var width = Number(value(response, "Width", "width", 0));
+      var height = Number(value(response, "Height", "height", 0));
+      var imageMimeType = String(value(response, "ImageMimeType", "imageMimeType", "") || "").toLowerCase();
+      var imageHash = value(response, "ImageContentSha256", "imageContentSha256", "") || "";
+      var imageByteLength = Number(value(response, "ImageByteLength", "imageByteLength", -1));
+      var imageBase64Content = value(response, "ImageBase64Content", "imageBase64Content", "") || "";
+      if (returnedUri !== uri || viewerKind !== "pdf" || !/^[a-f0-9]{64}$/i.test(hash) ||
+          pageIndex !== expectedPageIndex || !Number.isInteger(pageCount) || pageCount <= 0 || pageCount > 10000 ||
+          !Number.isInteger(width) || width <= 0 || width > 2048 ||
+          !Number.isInteger(height) || height <= 0 || height > 2048 ||
+          imageMimeType !== "image/jpeg" || !/^[a-f0-9]{64}$/i.test(imageHash) ||
+          imageByteLength <= 0 || imageByteLength > 10 * 1024 * 1024 ||
+          base64ByteLength(imageBase64Content) !== imageByteLength) {
+        throw new Error("Artifact PDF page returned inconsistent render evidence.");
+      }
+      return {
+        resourceUri: returnedUri,
+        viewerKind: viewerKind,
+        contentSha256: hash,
+        pageIndex: pageIndex,
+        pageCount: pageCount,
+        width: width,
+        height: height,
+        imageMimeType: imageMimeType,
+        imageContentSha256: imageHash,
+        imageByteLength: imageByteLength,
+        imageBase64Content: imageBase64Content
       };
     }
 
@@ -203,6 +282,95 @@
       }
     }
 
+    async function loadArtifactPdf(request) {
+      request = request || {};
+      var uri = request.resourceUri || "";
+      if (state.bridgeUnavailable || !uri) return false;
+      var current = artifactViewerState(uri);
+      if (current && (current.status === "loading" || current.status === "ready")) {
+        return current.status === "ready" && current.viewerKind === "pdf";
+      }
+      var chatId = state.activeChatId;
+      cacheViewer(uri, { status: "loading", resourceUri: uri, viewerKind: "pdf" });
+      try {
+        var responses = await Promise.all([
+          options.send("readArtifactPdfInfo", { chatId: chatId, resourceUri: uri }),
+          options.send("readArtifactPdfPage", { chatId: chatId, resourceUri: uri, pageIndex: 0 }),
+          readPage(uri, null, 0, 1, chatId)
+        ]);
+        if (state.activeChatId !== chatId) throw new Error("Artifact PDF read belongs to another chat.");
+        var info = normalizePdfInfo(responses[0], uri);
+        var pdfPage = normalizePdfPage(responses[1], uri, 0);
+        var textPage = responses[2];
+        if (info.contentSha256.toLowerCase() !== pdfPage.contentSha256.toLowerCase() ||
+            info.pageCount !== pdfPage.pageCount || textPage.viewerKind !== "pdf" ||
+            String(textPage.mimeType || "").split(";", 1)[0].toLowerCase() !== info.mimeType ||
+            info.extractedTextSha256.toLowerCase() !== textPage.contentSha256.toLowerCase() ||
+            info.extractedCharacters !== textPage.totalCharacters ||
+            info.textTruncated !== !textPage.sourceComplete) {
+          throw new Error("Artifact PDF info, text and page changed exact revision evidence.");
+        }
+        info.status = "ready";
+        info.pdfPage = pdfPage;
+        info.textContentSha256 = textPage.contentSha256;
+        info.pages = [textPage];
+        info.pageIndex = 0;
+        info.fullReadAllowed = textPage.fullReadAllowed;
+        info.sourceComplete = textPage.sourceComplete;
+        info.viewerLimitReached = textPage.viewerLimitReached;
+        info.fullText = textPage.complete && textPage.fullReadAllowed ? textPage.text : null;
+        info.complete = textPage.complete && textPage.fullReadAllowed;
+        cacheViewer(uri, info);
+        if (options.render) options.render();
+        return true;
+      } catch (error) {
+        if (state.activeChatId !== chatId) {
+          delete cache()[uri];
+          return false;
+        }
+        cacheViewer(uri, {
+          status: "error", resourceUri: uri, viewerKind: "pdf",
+          message: error.detail || error.message || "Artifact PDF is unavailable."
+        });
+        options.log(error.detail || error.message, "error");
+        if (options.render) options.render();
+        return false;
+      }
+    }
+
+    async function changeArtifactPdfPage(request) {
+      request = request || {};
+      var uri = request.resourceUri || "";
+      var viewer = artifactViewerState(uri);
+      if (!viewer || viewer.status !== "ready" || viewer.viewerKind !== "pdf" || viewer.pending) return false;
+      var delta = request.direction === "previous" ? -1 : 1;
+      var pageIndex = viewer.pdfPage.pageIndex + delta;
+      if (pageIndex < 0 || pageIndex >= viewer.pageCount) return false;
+      var chatId = state.activeChatId;
+      viewer.pending = true;
+      try {
+        var response = await options.send("readArtifactPdfPage", {
+          chatId: chatId,
+          resourceUri: uri,
+          pageIndex: pageIndex
+        });
+        if (state.activeChatId !== chatId) return false;
+        var page = normalizePdfPage(response, uri, pageIndex);
+        if (viewer.contentSha256.toLowerCase() !== page.contentSha256.toLowerCase() ||
+            viewer.pageCount !== page.pageCount) {
+          throw new Error("Artifact PDF page changed exact revision evidence.");
+        }
+        viewer.pdfPage = page;
+        return true;
+      } catch (error) {
+        if (state.activeChatId === chatId) options.log(error.detail || error.message, "error");
+        return false;
+      } finally {
+        viewer.pending = false;
+        if (state.activeChatId === chatId && options.render) options.render();
+      }
+    }
+
     async function changeArtifactViewerPage(request) {
       request = request || {};
       var uri = request.resourceUri || "";
@@ -231,7 +399,8 @@
           previous.offset + previous.returnedCharacters,
           previous.startLine + pageNewlines(previous.text),
           chatId);
-        if (page.contentSha256 !== viewer.contentSha256 || page.totalCharacters !== previous.totalCharacters ||
+        if (page.contentSha256 !== viewerTextContentSha256(viewer) ||
+            page.totalCharacters !== previous.totalCharacters ||
             page.viewerKind !== viewer.viewerKind) {
           throw new Error("Artifact viewer continuation changed exact revision evidence.");
         }
@@ -268,7 +437,8 @@
             previous.offset + previous.returnedCharacters,
             previous.startLine + pageNewlines(previous.text),
             chatId);
-          if (page.contentSha256 !== viewer.contentSha256 || page.totalCharacters !== previous.totalCharacters ||
+          if (page.contentSha256 !== viewerTextContentSha256(viewer) ||
+              page.totalCharacters !== previous.totalCharacters ||
               page.viewerKind !== viewer.viewerKind) {
             throw new Error("Artifact viewer continuation changed exact revision evidence.");
           }
@@ -282,7 +452,7 @@
         viewer.complete = true;
         viewer.pageIndex = 0;
         if (typeof options.applyArtifactViewerText === "function") {
-          options.applyArtifactViewerText(uri, viewer.contentSha256, fullText);
+          options.applyArtifactViewerText(uri, viewerTextContentSha256(viewer), fullText);
         }
         return true;
       } catch (error) {
@@ -312,9 +482,11 @@
 
     return {
       artifactViewerState: artifactViewerState,
+      changeArtifactPdfPage: changeArtifactPdfPage,
       changeArtifactViewerPage: changeArtifactViewerPage,
       downloadArtifactViewer: downloadArtifactViewer,
       loadArtifactImage: loadArtifactImage,
+      loadArtifactPdf: loadArtifactPdf,
       loadArtifactViewer: loadArtifactViewer,
       loadArtifactViewerFull: loadArtifactViewerFull
     };

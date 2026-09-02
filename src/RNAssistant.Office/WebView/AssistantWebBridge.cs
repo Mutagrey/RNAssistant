@@ -402,6 +402,19 @@ namespace RNAssistant.Office.WebView
                             artifactImage.ChatId,
                             artifactImage.ResourceUri);
                         break;
+                    case "readArtifactPdfInfo":
+                        var artifactPdf = Payload<ArtifactPdfViewerPayload>(payload);
+                        responsePayload = _controller.ReadArtifactPdfInfo(
+                            artifactPdf.ChatId,
+                            artifactPdf.ResourceUri);
+                        break;
+                    case "readArtifactPdfPage":
+                        var artifactPdfPage = Payload<ArtifactPdfPagePayload>(payload);
+                        responsePayload = _controller.ReadArtifactPdfPage(
+                            artifactPdfPage.ChatId,
+                            artifactPdfPage.ResourceUri,
+                            artifactPdfPage.PageIndex);
+                        break;
                     case "importUploadedHtmlToWorkspace":
                         var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);
                         responsePayload = _controller.ImportUploadedHtmlToWorkspace(

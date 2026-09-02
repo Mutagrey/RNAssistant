@@ -2225,8 +2225,9 @@ endpoint.
      bounded cache/object-URL lifetime and preview-first artifact detail with raw
      metadata/JSON/history on `Details`.
      [Evidence](PHASE_11D2_IMAGE_PREVIEW.md);
-   - 11D3: PDF pages plus extracted text, explicit scan/truncation state and a
-     separately admitted local renderer/worker;
+   - [x] 11D3: exact PDF pages plus extracted text, explicit scan/truncation state,
+     separately admitted local PDFtoImage/PDFium/Skia renderer and matching x64/x86
+     native publisher wiring. [Evidence](PHASE_11D3_PDF_PREVIEW_X86.md);
    - 11D4: bounded audio player and transcript relation without autoplay.
    Every slice keeps `ViewerRegistry` UI-only and has its own MIME/security/vendor/
    lifetime tests. The milestone ends with Windows WebView qualification of

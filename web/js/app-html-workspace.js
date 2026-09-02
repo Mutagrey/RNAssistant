@@ -49,6 +49,9 @@
       artifactViewerState: function (uri) {
         return workspaceActions && workspaceActions.artifactViewerState(uri);
       },
+      changeArtifactPdfPage: function (request) {
+        return workspaceActions && workspaceActions.changeArtifactPdfPage(request);
+      },
       changeArtifactViewerPage: function (request) {
         return workspaceActions && workspaceActions.changeArtifactViewerPage(request);
       },
@@ -69,6 +72,9 @@
       },
       loadArtifactImage: function (request) {
         return workspaceActions && workspaceActions.loadArtifactImage(request);
+      },
+      loadArtifactPdf: function (request) {
+        return workspaceActions && workspaceActions.loadArtifactPdf(request);
       },
       loadArtifactViewer: function (request) {
         return workspaceActions && workspaceActions.loadArtifactViewer(request);

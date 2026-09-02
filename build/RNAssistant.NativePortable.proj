@@ -47,6 +47,8 @@
     <RequiredFile Include="$(OfficeOutput)SkiaSharp.dll" />
     <RequiredFile Include="$(RepoRoot)vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll" Condition="'$(Architecture)' == 'x64'" />
     <RequiredFile Include="$(RepoRoot)vendor\pdf-rendering\runtimes\win-x64\native\libSkiaSharp.dll" Condition="'$(Architecture)' == 'x64'" />
+    <RequiredFile Include="$(RepoRoot)vendor\pdf-rendering\runtimes\win-x86\native\pdfium.dll" Condition="'$(Architecture)' == 'x86'" />
+    <RequiredFile Include="$(RepoRoot)vendor\pdf-rendering\runtimes\win-x86\native\libSkiaSharp.dll" Condition="'$(Architecture)' == 'x86'" />
 
     <InteropFile Include="$(HostsOutput)Microsoft.Office.Interop.*.dll" />
     <InteropFile Include="$(HostsOutput)Office.dll" Condition="Exists('$(HostsOutput)Office.dll')" />
@@ -83,7 +85,6 @@
     <Copy SourceFiles="@(PortableDoc)" DestinationFolder="$(PublishRoot)docs" />
     <WriteLinesToFile File="$(PublishRoot)panel-owner-mode.txt" Lines="OwnerWindow" Encoding="ASCII" Overwrite="true" />
 
-    <Warning Condition="'$(Architecture)' == 'x86'" Text="x86 portable output does not include native PDF rendering binaries; the supported complete target remains Office x64." />
     <Message Importance="High" Text="Native portable output: $(PublishRoot)" />
   </Target>
 </Project>
