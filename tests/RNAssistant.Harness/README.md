@@ -363,15 +363,19 @@ serialization and action handlers with minimal DOM/transport substitutes, includ
 cancel/failure/reset and Plan preservation; it does not verify WebView layout.
 R29 introduced v4/schema 13; Phase 4B introduced Tool Result v1/schema 14; Phase 8B
 uses schema 15 for atomic callable-pack admission and no-eviction guidance; Phase 8C
-uses schema 16 for durable turn-scoped reconstruction. Tests preserve, review, or
-reset saved older/future markers explicitly. JS review behavior is unchanged.
+uses schema 16 for durable turn-scoped reconstruction; R61/11O1 uses schema 17 for
+the semantic Resource/Capability boundary. Tests preserve, review, or reset saved
+older/future markers explicitly. JS review behavior is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
-Phase 8D keeps the four `common.resources_*` schemas stable while switching their
-execution to exact native read-only handlers. Use `tool runtime: native resource tools`,
-`resources:`, the focused media/replay cases, and `harness: production projects include
-all source files` to cover policy, gateway bounds/cursors, `ResourceRef`, request-local
-media materialization, and old-style project inclusion. See [8D evidence](../../docs/stabilization/PHASE_8D_RESOURCE_DATA_PLANE.md).
+Phase 8D moved the original resource data plane to native handlers. R61/11O1 now
+publishes only semantic `common.resources_find/read`, keeping provider routing,
+revision-pinned `ResourceRef` and continuation state inside runtime/durable evidence.
+Use `tool runtime: native resource tools`, `resources:`, the focused model-projection,
+media/replay cases, and `harness: production projects include all source files` to
+cover the intent boundary, internal guards and old-style project inclusion. See
+[8D evidence](../../docs/stabilization/PHASE_8D_RESOURCE_DATA_PLANE.md) and the
+[R61 audit](../../docs/stabilization/R61_TOOL_CONTRACT_AUDIT.md).
 
 ## Full suite
 

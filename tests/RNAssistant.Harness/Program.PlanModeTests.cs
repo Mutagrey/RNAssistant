@@ -90,8 +90,11 @@ namespace RNAssistant.Harness
                     "id", planId, "expectedRevisionArtifactId", revisionId, "markdown", "# Ready\n\nExecute.", "status", "ready"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(updated.Success, "guarded revision succeeds");
-                AssertContains(ConversationPromptComposer.BuildRuntimeContext(ChatModes.Plan, adapter, tools, null, null, session),
-                    "revision_uri", "active plan URI enters runtime context");
+                var runtimeContext = ConversationPromptComposer.BuildRuntimeContext(
+                    ChatModes.Plan, adapter, tools, null, null, session);
+                AssertTrue(runtimeContext.IndexOf("revision_uri", StringComparison.Ordinal) < 0 &&
+                    runtimeContext.IndexOf("rna://", StringComparison.Ordinal) < 0,
+                    "active plan runtime context hides exact resource identity");
                 var updateMessage = AgentTranscript.CreateLocalResultMessage(
                     Command(PlanDocumentToolCatalog.UpdateToolId), updated);
                 session.Messages.Add(updateMessage);
@@ -460,15 +463,14 @@ namespace RNAssistant.Harness
                     "session-level tombstone prevents historical Plan resurrection");
 
                 var removedRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
-                    "uri", firstUri, "representation", "text"),
+                    "target", "plan: " + first.Title, "representation", "text"),
                     tools, new AppSettings(), false, false, loaded);
-                AssertEqual("resource_removed", removedRead.ErrorCode,
-                    "exact historical read reports stable removal instead of falling forward");
-                AssertEqual(false, removedRead.Retryable, "removed resource read is terminal");
-                var listed = executor.ExecuteManual(Command(ResourceToolCatalog.ListToolId,
-                    "provider", "chat", "kind", ChatArtifactKinds.PlanDocument),
+                AssertEqual("resource_target_not_found", removedRead.ErrorCode,
+                    "removed historical target is not resolved or silently moved to another revision");
+                var listed = executor.ExecuteManual(Command(ResourceToolCatalog.FindToolId,
+                    "query", first.Title, "scope", "conversation"),
                     tools, new AppSettings(), false, false, loaded);
-                AssertTrue(listed.Success, "resource list remains available after Plan removal");
+                AssertTrue(listed.Success, "semantic resource find remains available after Plan removal");
                 AssertEqual(0, (int)JObject.Parse(listed.DataJson)["total"],
                     "removed Plan revisions and tombstone are absent from discovery");
 

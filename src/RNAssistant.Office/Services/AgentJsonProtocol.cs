@@ -59,7 +59,7 @@ namespace RNAssistant.Office.Services
                     };
                 var boundedData = data as JObject;
                 if ((bool?)boundedData?["truncated"] == true)
-                    boundedData["hint"] = "The full result is available through the resource with relation=result. Read its exact URI with common.resources_read, or request a smaller scope.";
+                    boundedData["hint"] = "The full result is available as a resource with relation=result. Find its semantic target with common.resources_find, then read that target, or request a smaller scope.";
             }
             var bounded = new TerminalResult(result.Status,
                 BoundText(result.Message, MaxToolResultMessageTokens, settings),

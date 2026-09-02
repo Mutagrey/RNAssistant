@@ -26,6 +26,7 @@ namespace RNAssistant.Office.Tools
             IDictionary<string, object> arguments,
             IReadOnlyList<ToolCatalogEntry> runnableCatalog,
             IReadOnlyList<SkillDefinition> skills,
+            ChatSession session,
             bool manualRun)
         {
             arguments = arguments ??
@@ -44,7 +45,7 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(toolId, CapabilityToolCatalog.ReadToolId,
                 StringComparison.Ordinal))
             {
-                return Read(arguments, tools, enabledSkills);
+                return Read(arguments, tools, enabledSkills, session);
             }
             return CapabilityToolOutcome.Error(
                 "Unknown capability tool: " + toolId, null,
@@ -101,7 +102,6 @@ namespace RNAssistant.Office.Tools
                 .ToArray();
             return new JObject
             {
-                ["revision"] = CatalogRevision(toolCatalog, skillCatalog),
                 ["items"] = new JArray(selected),
                 ["shown"] = selected.Length,
                 ["total"] = entries.Count,
@@ -175,7 +175,8 @@ namespace RNAssistant.Office.Tools
         private CapabilityToolOutcome Read(
             IDictionary<string, object> arguments,
             IReadOnlyList<ToolCatalogEntry> tools,
-            IReadOnlyList<SkillDefinition> skills)
+            IReadOnlyList<SkillDefinition> skills,
+            ChatSession session)
         {
             var id = ToolArgumentReader.String(
                 arguments, "id", string.Empty).Trim();
@@ -201,8 +202,7 @@ namespace RNAssistant.Office.Tools
             if (tool != null)
             {
                 if (HasArgument(arguments, "referencePath") ||
-                    HasArgument(arguments, "offset") ||
-                    HasArgument(arguments, "maxChars"))
+                    HasArgument(arguments, "action"))
                 {
                     return CapabilityToolOutcome.Error(
                         "Skill reference arguments cannot be used with tool capability " + id + ".",
@@ -212,7 +212,7 @@ namespace RNAssistant.Office.Tools
                 }
                 return ReadTool(tool);
             }
-            return ReadSkill(arguments, skill);
+            return ReadSkill(arguments, skill, session);
         }
 
         private static CapabilityToolOutcome ReadTool(ToolCatalogEntry tool)
@@ -278,31 +278,29 @@ namespace RNAssistant.Office.Tools
             }
             var kind = ToolArgumentReader.String(
                 arguments, "kind", string.Empty).Trim().ToLowerInvariant();
-            var cursor = Math.Max(0, ToolArgumentReader.Int32(
-                arguments, "cursor", 0));
-            var limit = Math.Max(1, Math.Min(MaximumSearchPageSize,
-                ToolArgumentReader.Int32(arguments, "limit", 10)));
             var matches = Records(tools, skills)
                 .Where(record => string.IsNullOrWhiteSpace(kind) || string.Equals(record.Kind, kind, StringComparison.Ordinal))
                 .Where(record => record.SearchText.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
                 .OrderBy(record => SearchRank(record, query))
                 .ThenBy(record => record.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            cursor = Math.Min(cursor, matches.Count);
-            var page = matches.Skip(cursor).Take(limit)
+            var page = matches.Take(MaximumSearchPageSize)
                 .Select(record => Metadata(record, null, MaximumSummaryCharacters)).ToArray();
-            var next = cursor + page.Length;
             return CapabilityToolOutcome.Ok(
-                "Capability metadata search completed.", new JObject
+                matches.Count == 0
+                    ? "No capabilities matched the query."
+                    : "Capability metadata search completed.", new JObject
             {
-                ["kind"] = "capability-search-page",
+                ["kind"] = "capability-search",
                 ["catalogRevision"] = CatalogRevision(tools, skills),
                 ["query"] = query,
                 ["capabilityKind"] = string.IsNullOrWhiteSpace(kind) ? JValue.CreateNull() : (JToken)new JValue(kind),
-                ["cursor"] = cursor,
                 ["items"] = new JArray(page),
-                ["nextCursor"] = next < matches.Count ? (JToken)new JValue(next) : JValue.CreateNull(),
+                ["shown"] = page.Length,
                 ["total"] = matches.Count,
+                ["complete"] = page.Length == matches.Count,
+                ["refineQuery"] = page.Length < matches.Count,
+                ["empty"] = matches.Count == 0,
                 ["loaded"] = false
             }.ToString(Formatting.None));
         }
@@ -362,8 +360,7 @@ namespace RNAssistant.Office.Tools
             var result = new JObject
             {
                 ["id"] = record.Id,
-                ["kind"] = record.Kind,
-                ["revision"] = record.Revision
+                ["kind"] = record.Kind
             };
             if (record.Tool != null && schemaLoaded == true)
             {
@@ -515,9 +512,7 @@ namespace RNAssistant.Office.Tools
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"query\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200,\"description\":\"Literal query over capability ids and compact metadata.\"}," +
-                "\"kind\":{\"type\":\"string\",\"enum\":[\"tool\",\"skill\"],\"description\":\"Optional exact capability kind.\"}," +
-                "\"cursor\":{\"type\":\"integer\",\"minimum\":0,\"default\":0,\"description\":\"Zero-based result offset.\"}," +
-                "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":20,\"default\":10,\"description\":\"Maximum matches.\"}}," +
+                "\"kind\":{\"type\":\"string\",\"enum\":[\"tool\",\"skill\"],\"description\":\"Optional exact capability kind.\"}}," +
                 "\"required\":[\"query\"],\"additionalProperties\":false}";
         }
 
@@ -548,18 +543,12 @@ namespace RNAssistant.Office.Tools
                     ["description"] = "Exact references/*.md path listed by a loaded skill.",
                     ["maxLength"] = 260
                 },
-                ["offset"] = new JObject
+                ["action"] = new JObject
                 {
-                    ["type"] = "integer",
-                    ["description"] = "Zero-based character offset for a skill reference chunk.",
-                    ["minimum"] = 0
-                },
-                ["maxChars"] = new JObject
-                {
-                    ["type"] = "integer",
-                    ["description"] = "Maximum skill reference characters returned.",
-                    ["minimum"] = 1,
-                    ["maximum"] = 50000
+                    ["type"] = "string",
+                    ["description"] = "Use read to start or restart this reference; use next only after hasMore=true.",
+                    ["enum"] = new JArray("read", "next"),
+                    ["default"] = "read"
                 }
             };
             var properties = (JObject)referenceProperties.DeepClone();

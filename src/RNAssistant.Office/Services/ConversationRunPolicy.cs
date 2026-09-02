@@ -12,9 +12,7 @@ namespace RNAssistant.Office.Services
         private static readonly HashSet<string> ChatToolIds = new HashSet<string>(
             new[]
             {
-                ResourceToolCatalog.ListToolId,
-                ResourceToolCatalog.ResolveToolId,
-                ResourceToolCatalog.SearchToolId,
+                ResourceToolCatalog.FindToolId,
                 ResourceToolCatalog.ReadToolId
             },
             StringComparer.OrdinalIgnoreCase);

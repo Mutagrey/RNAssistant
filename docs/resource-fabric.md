@@ -1,11 +1,11 @@
 # Resource Fabric
 
-Status: implemented and re-audited. Core contracts, providers, the unified Chat/Agent loop, automatic ingestion, progressive tool discovery, and the event/projection cutover use one canonical resource path; replaced paths are removed, not retained as aliases.
+Status: implemented through R61/11O1 host-neutral. Providers retain exact typed resource state; the public model surface is the semantic `common.resources_find/read` pair. Replaced public list/resolve/search handlers and ids are removed without aliases.
 
 ## Goals
 
 - A pasted, dropped, or attached file immediately becomes a chat-scoped resource draft; Send promotes it to a durable chat-owned resource before model dispatch. No separate “В запрос” action is required.
-- Model context keeps compact references and a bounded working set, never every artifact body.
+- Model context keeps compact semantic targets and a bounded working set, never exact resource identity or every artifact body.
 - Chat can use read-only resources; Agent uses the same reads plus policy-approved mutations.
 - A multimodal primary model reads supported media directly. A helper model is used only when the primary model lacks that modality or when durable derived text is explicitly useful.
 - HTML, plans, uploads, generated images, live Office content, VBA projects, tool results, and future objects share discovery/read contracts without losing domain-specific mutation semantics.
@@ -14,10 +14,10 @@ Status: implemented and re-audited. Core contracts, providers, the unified Chat/
 
 `Resource` is addressable data, never execution authority, callable-tool state, or a hidden command. A resource may be live and mutable, such as the active workbook, or backed by immutable revisions, such as an uploaded image or plan. Reading it does not grant a tool, change a `ToolPack`, or bypass domain mutation policy.
 
-`ChatArtifact` is an internal replay projection of immutable content/provenance stored through CAS. It is not a second model transport. Model-facing chat resources always use an exact revision URI; active HTML/plan/checkpoint ids remain internal domain pointers and are projected to that URI before entering a message or prompt. There is deliberately no mutable model-facing head URI whose meaning could change during replay.
+`ChatArtifact` is an internal replay projection of immutable content/provenance stored through CAS. It is not a second model transport. Active HTML/plan/checkpoint ids and exact revision URIs remain runtime/domain pointers; model context receives readable semantic targets. There is deliberately no mutable model-facing head URI whose meaning could change during replay.
 
-`ResourceRef` is the compact durable identity. In the current pre-R61 transport it
-is carried by messages, tool results, events, and the model working set:
+`ResourceRef` is the compact durable identity carried by messages, accepted tool
+results and events, but not by the R61 resource/capability model projection:
 
 ```json
 {"uri":"rna://chat/s1/artifact/a1/revision/2","revision":"2"}
@@ -51,27 +51,30 @@ revision is excluded from list/search and exact resolve/read fails closed; the
 provider, shared reference helpers and bounded model prompt never choose an
 arbitrary first artifact.
 
-Every provider implements bounded `list`, `resolve`, `search`, and `read(ResourceReadRequest)`. The read request carries one `ResourceRef`, representation, opaque cursor, and character limit, so revision evidence cannot be lost between routing and the provider. The public/default text page is 2,048 characters (explicit range 128–32,000), leaving conservative model-step headroom while preserving every returned character; larger content continues only through the provider-owned cursor. Immutable text uses an offset internally because its URI is already pinned. Every continuation also carries an opaque SHA-256 scope binding: list cursors bind provider plus normalized kind, and read cursors bind the canonical URI plus normalized representation. Live Office/VBA chunks additionally bind the internal position to the content hash; collection pages bind it to a deterministic collection fingerprint. Equal content or collection hashes therefore cannot make a cursor valid for another resource or query. Model-facing list/read results expose only the usable `nextCursor`, never the current-page cursor or raw offset. Continuation copies it unchanged into `cursor` only for the same operation and exact list query or resource representation. Reusing a cursor after drift fails with retryable `resource_revision_changed`: a fresh read repeats the same URI/representation with both `cursor` and `revision` omitted, while a fresh list omits `cursor`. A cursor from another operation/query/resource fails non-retryably as `resource_cursor_invalid` and is omitted before restarting the exact operation.
+Every provider still implements bounded internal `list`, `resolve`, `search`, and
+`read(ResourceReadRequest)`. Those typed calls carry the exact `ResourceRef`,
+representation, opaque cursor and size so revision evidence cannot be lost. R61/11O1
+does not weaken their SHA-256 scope bindings, immutable revision checks or live
+content/collection drift failures.
 
-R61/11O reopens visibility and caller ownership, not resource identity: the
-canonical `ResourceRef`, revision binding and cursor remain typed durable
-provider/runtime evidence. After a family cutover they are not materialized into
-model arguments, Tool Results, `RUNTIME_CONTEXT`, model-message projections or
-replayed model history. A bounded readable semantic choice is resolved to the exact
-reference by code; the model receives domain content/evidence without URI,
-revision, hash or cursor. Ambiguity fails closed, and the runtime does not expose a
-replacement opaque `candidateId`. This is a mandatory future per-family cutover;
-the preceding current contract remains in force until then.
+The public surface is now `common.resources_find` and `common.resources_read`.
+`find` accepts only optional literal `query` and semantic `scope`, returns at most
+20 readable targets, distinguishes true empty from unavailable/partial scopes and
+keeps provider routing, kind vocabulary and paging internal. `read` accepts one
+exact returned `target`, optional representation and semantic `action=read|next`;
+runtime resolves the exact reference and returns fixed 8,000-character chunks.
+`next` reconstructs the accepted internal read chain from durable results. URI,
+revision/hash, cursor, offset and page size are absent from schema, model result,
+`RUNTIME_CONTEXT`, media provenance and replayed model history. Ambiguity or drift
+fails closed; no opaque replacement candidate id is exposed.
 [Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61) owns the
 inventory and acceptance gates; the observed empty-list/kind/revision/cursor cluster
 and target ownership boundary are classified in the
 [R61 tool contract audit](stabilization/R61_TOOL_CONTRACT_AUDIT.md).
 
-HTML workspace mutations return the exact artifact `ResourceRef` plus the current
-member paths and opaque member URIs. `common.resources_resolve` accepts either one
-exact URI or an exact parent revision URI plus `memberPath` and optional
-`memberType`; only this central resolver translates a human-readable path into a
-member key. Exact chat resolution distinguishes invalid URI, active-chat mismatch,
+HTML workspace mutations still retain exact artifact/member `ResourceRef` values in
+their durable results. The central internal resolver translates a semantic target
+to the exact artifact/member key. Exact chat resolution distinguishes invalid URI, active-chat mismatch,
 missing artifact/revision/member, noncanonical member key and corrupt persisted
 payload. Tool errors include the stable code and a recovery hint; the enclosing
 Tool Result `tool_call_id` remains the correlation identity, so Resource Fabric does
@@ -92,36 +95,31 @@ text contains non-whitespace characters. A valid empty or whitespace-only immuta
 representation is returned as complete exact content; a missing body still fails
 closed.
 
-Search v1 is bounded case-insensitive literal search plus provider structure. Regex, embeddings, and a durable vector index are intentionally absent until they have a concrete use and bounded semantics. Skills are trusted instructions, not untrusted document resources: their complete revision-matched bodies are read through the unified `common.capabilities_read` id path shared with tool schemas. HTML files/data and plans remain subresources of the chat provider so ownership, revision lineage, and CAS checks are not duplicated. The existing host-neutral `IOfficeApplicationAdapter` supplies document/VBA reads; a second `IOfficeResourceAdapter` would only repeat that boundary.
+Semantic find is bounded case-insensitive literal search plus provider structure. Regex, embeddings, and a durable vector index are intentionally absent until they have a concrete use and bounded semantics. Skills are trusted instructions, not untrusted document resources: their runtime revision-matched bodies are read through the unified `common.capabilities_read` id path shared with tool schemas. HTML files/data and plans remain subresources of the chat provider so ownership, revision lineage, and CAS checks are not duplicated. The existing host-neutral `IOfficeApplicationAdapter` supplies document/VBA reads; a second `IOfficeResourceAdapter` would only repeat that boundary.
 
 ## Conversation loop
 
 Chat and Agent use one buffered structured loop. The policy differs, the transport and transcript do not:
 
-- Chat receives exactly the four resource discovery/read tools and no mutation tools, confirmation, or skills.
+- Chat receives exactly the two resource discovery/read tools and no mutation tools, confirmation, or skills.
 - Agent keeps the complete mode/session-filtered catalog only as local execution authority. The initial model prompt contains resource and unified capability bootstrap schemas plus a compact exact-id tool/skill catalog.
-- `RUNTIME_CONTEXT.capabilities.items` always contains the complete compact schema-free capability index. `common.capabilities_search` is an optional bounded metadata filter over it. `common.capabilities_read` loads one exact revisioned tool descriptor or complete skill body according to the catalog kind; only complete, untruncated tool-schema evidence matching the current descriptor enters the callable working set.
-- Tool schemas start from a finite mode/host core. Complete exact-revision reads may stage one atomic optional extension for the next model-step boundary only after the full request fits and its accepted event is durable. Membership is monotonic for the logical turn: execution does not touch it, there is no LRU/partial publication, and replay reconstructs only the ordered accepted turn chain.
-- Skill bodies remain revision-matched context evidence rather than callable-pack membership. Compaction, truncation, or revision change requires another exact read.
+- `RUNTIME_CONTEXT.capabilities.items` contains the complete compact exact-public-id index without catalog, package or descriptor revisions. `common.capabilities_search` accepts only query/kind; `common.capabilities_read` accepts exact id and, for a listed skill reference, path plus `action=read|next`.
+- Tool schemas start from a finite mode/host core. Runtime validates hidden exact revisions and may stage one atomic optional extension for the next model-step boundary only after the full request fits and its accepted event is durable. Membership is monotonic for the logical turn; model-visible state reports public ids and admission outcome only.
+- Skill bodies remain runtime revision-matched context evidence rather than callable-pack membership. Stale evidence is projected as an explicit error; compaction, truncation, or revision change requires another exact read.
 
-The prompt currently contains compact resource references relevant to the
-conversation. On a later question such as “что на той картинке?” the model resolves
-or reads the referenced URI again. Raw media is hydrated only for the next model
-step and then released; the durable reference remains. R61 replaces this
-pre-cutover transport with a semantic resource projection: runtime keeps and
-resolves the exact reference, while the model sees the readable attachment/target
-description and hydrated content, never the URI or revision.
+The prompt contains bounded semantic resource targets. On a later question such as
+“что на той картинке?” the model finds and reads that target. Raw media is hydrated
+only for the next model step and then released; its durable exact reference remains
+outside model context.
 
-All four public resource operations execute as exact native read-only `ToolRuntime` handlers over the same `ResourceGatewayService` and provider registry. Their descriptor, policy, and binding are source-owned beside the handler. The controller catalog projects those same descriptors, schemas and exact policy instances through `ControllerToolDefinition`; resource files do not use `LegacyToolDefinitionAdapter`, and the projection adds no execution authority. Every call enters a fresh `DocumentAccessGate` operation root; nested live Office/VBA access through `HostRuntime` reenters only that same synchronous document operation. The Core result contains provider-bounded JSON plus exact `ResourceRef` values; list, resolve and search repeat every directly returned resource at Tool Result root, and read carries the selected resource plus its provider-owned related refs, so URI evidence survives independently of nested result layout. A successful page/chunk is passed intact or replaced by explicit `resource_evidence_context_too_large`, never by `status:ok` with a transport preview. If media or later materialization cannot reach the model, a formerly successful exact read fails closed as `status:error`; mutation outcome/effect authority is not rewritten by projection failure. For a media read, an Office adapter holds bytes only as request-local materialization until the immediate next model step, then releases them; bytes, CAS paths, and internal artifact ids do not become a second result transport.
+Both public resource operations execute as exact native read-only `ToolRuntime` handlers over the same `ResourceGatewayService` and provider registry. Their descriptor, policy, and binding are source-owned beside the handler; no legacy adapter or second authority exists. Every call enters a fresh `DocumentAccessGate` operation root. The accepted durable result retains provider-bounded data plus exact `ResourceRef` values for continuation/provenance, while `ModelToolResultProjection` emits the same strict Tool Result v1 correlation/status with semantic data and no opaque state. A successful chunk is passed intact or replaced by explicit `resource_evidence_context_too_large`. Media bytes are request-local, appear only on the immediate model step, and are released afterward.
 
 Ordinary large tool results keep the full value exact. The result envelope carries optional `resources:[{uri,revision,relation?}]`; `relation:"result"` distinguishes the CAS-backed `tool_result` containing the complete payload from other produced/cited resources. Materialization selects the largest inline projection that keeps the shared repair and continuation reserves; a zero-preview case uses a compact externalized marker rather than pretending an oversized truncation wrapper fit. Resource/schema/skill reads are not rewrapped as untrusted artifacts. Chart payloads become their specialized immutable artifact at the same result boundary, so the next model step receives kind plus exact URI rather than a duplicate chart body. Durable activity also keeps only that pointer; the storage/UI projection rehydrates the chart from CAS instead of storing or creating a duplicate.
 
-That envelope is the currently implemented model transport. In the R61 target the
-durable accepted result still owns the exact `resources` relation, but the
-model-facing Tool Result projection omits it and any nested opaque identity. Media
-and externalized payloads are hydrated by runtime from that same evidence; they do
-not require the model to echo a handle. This is one event with separate typed
-runtime/model projections, not a second resource store or result authority.
+For the switched resource/capability families the durable accepted result owns the
+exact `resources` relation and hidden revisions, while the model-facing Tool Result
+omits them. Media is hydrated by runtime from that evidence; this is one accepted
+event with separate runtime/model projections, not a second store or authority.
 
 ## Ingestion and derived data
 
@@ -165,13 +163,13 @@ Helper output is query-specific evidence for that model step. It is not silently
 
 The append-only session event stream remains the durable source of truth. Events store resource references and CAS references, not copied bodies. Model requests persist the exact materialized working set before dispatch.
 
-Compaction preserves user intent, decisions, complete tool protocol pairs, and a deterministic bounded union of exact references from the compacted prefix, including resources attached to presentation-only activity messages. It may remove hydrated bodies and old read results. A later read reconstructs evidence from the provider. CAS garbage collection derives reachability from verified event streams and journals as before.
+Compaction preserves user intent, decisions and complete tool protocol pairs. The durable checkpoint retains the bounded exact references needed for reachability and replay, including resources attached to presentation-only activity messages; its model projection exposes only semantic targets. It may remove hydrated bodies and old read results. A later read reconstructs exact evidence from the provider. CAS garbage collection derives reachability from verified event streams and journals as before.
 
-Live Office/VBA resources are bound to the chat's document identity and carry content-hash revision evidence on materialized reads. `resources_list(provider=vba)` returns the project plus live component descriptors by default, so source discovery does not depend on hidden kind vocabulary; `kind=vba-backup` remains explicit, while an unknown non-empty kind returns `resource_kind_unknown` instead of an indistinguishable empty project. Their opaque document token is derived from the chat projection rather than a potentially newer adapter key; document-key migrations retain prior keys in the append-only projection, so an exact URI survives first save and Save As while a runtime identity proves that the live target is still the same document. Their provider calls share the document mutation gate, so journal reconciliation and source reads cannot observe an in-flight VBA mutation. Mutations keep domain-specific guards, confirmations, journals, and read-back verification; Resource Fabric does not bypass them.
+Live Office/VBA resources are bound to the chat's document identity and carry content-hash revision evidence on materialized reads. Public `common.resources_find` maps semantic `vba`/`backups` scopes to internal provider list/search and returns readable targets; `common.resources_read` resolves a target and reconstructs `next` from durable exact evidence. Provider vocabulary, opaque document token, URI, revision and cursor never enter model arguments or results. Document-key migrations retain prior keys in the append-only projection, so an internal exact URI survives first save and Save As while runtime identity proves that the live target is still the same document. Provider calls share the document mutation gate, so journal reconciliation and source reads cannot observe an in-flight VBA mutation. Mutations keep domain-specific guards, confirmations, journals, and read-back verification; Resource Fabric does not bypass them.
 
 ## Domain projections and UI
 
-Resource access is unified at the model/runtime boundary, not forced into one generic editor. The Artifacts view renders chat-owned attachments, plans, immutable chart snapshots, and HTML workspace revisions; VBA stays a live document view with its own editor and journaled mutations. Installed skills stay in Library and are not duplicated into Artifacts; a skill mutation may expose only a UI link to that Library entity. Message resource cards resolve exact revisions. Paste, drop, and paperclip are the normal attachment path. A future explicit `@artifact` composer affordance may insert an exact URI for disambiguation, but it is not a separate transport and is not required for later access.
+Resource access is unified at the model/runtime boundary, not forced into one generic editor. The Artifacts view renders chat-owned attachments, plans, immutable chart snapshots, and HTML workspace revisions; VBA stays a live document view with its own editor and journaled mutations. Installed skills stay in Library and are not duplicated into Artifacts; a skill mutation may expose only a UI link to that Library entity. Message resource cards resolve exact revisions. Paste, drop, and paperclip are the normal attachment path. A future explicit `@artifact` composer affordance may insert a readable semantic target for disambiguation; runtime resolves it to the exact durable reference, and no second transport is introduced.
 
 The library distinguishes immutable originals/snapshots, versioned domain
 documents/aggregates and derived resources. Uploaded TXT/Markdown/HTML remains an
@@ -201,7 +199,7 @@ HTML data bindings intentionally persist an approved typed read-only `toolId + a
 ## Audit decisions
 
 - Keep three providers instead of separate plan, HTML, skill, and media provider layers.
-- Keep exact revision URIs and internal active pointers instead of mutable model-facing heads.
+- Keep exact revision URIs and active pointers inside durable/runtime state instead of mutable or opaque model-facing heads.
 - Keep structured range/slide/mail reads and every mutation as typed tools; generic resources cover discovery and bounded content, not all domain commands.
 - Keep literal bounded search and disposable in-memory projections; do not add regex, semantic search, or a durable vector index speculatively.
 - Keep specialized UI projections over the shared backend instead of a single weakly typed artifact editor.
@@ -228,5 +226,6 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 5. **Done:** plan/HTML reads use canonical `chat` resources; live Office document/selection and VBA project/component/backup providers are registered. Duplicated plan/HTML/VBA reads plus host `get_context/get_selection` tools are removed without aliases; domain-specific range/slide/mail reads remain typed tools.
 6. **Done:** Agent receives one compact exact-id tool/skill catalog plus `common.capabilities_search/read`; exact revisioned tool schemas enter a finite-core plus atomic optional `CallableToolPack`, and full-schema catalog injection is removed. Optional membership has no LRU or execution touches and is reconstructed only from the exact accepted extension chain for the logical turn. Split model-facing tool/skill readers were removed without aliases. Custom-definition inspection remains `common.tools_definition_read`.
 7. **Done:** durable messages, media handoff, compaction, fork reachability, replay, and trajectory diagnostics carry revision-pinned `ResourceRef` values. Internal `ArtifactIds` message transport and `ChatArtifactService` are removed; event schema 3/session format 6 reject pre-cutover streams without migration.
+8. **Done host-neutral (R61/11O1):** public resource discovery is the semantic `find/read` pair; provider routing, exact references, revisions and continuations stay in durable runtime state and are removed from model arguments/results/context/history. Capability catalog/read follows the same model-visibility boundary while durable admission events retain exact revisions.
 
 Each slice must leave one authoritative path for the capability it migrates and add harness coverage for URI safety, provider bounds, replay, context compaction, media hydration lifetime, and Chat mutation denial.

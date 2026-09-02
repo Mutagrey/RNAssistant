@@ -306,8 +306,7 @@ namespace RNAssistant.Office.Vba
                         ["actualTargetCodeSha256"] = targetHash,
                         ["retrySameTool"] = true,
                         ["inspectTool"] = "common.resources_read",
-                        ["resourceProvider"] = VbaResourceProvider.ProviderName,
-                        ["resourceKind"] = VbaResourceProvider.ComponentKind
+                        ["discoveryScope"] = "vba"
                     },
                     "stale_vba_module",
                     true);

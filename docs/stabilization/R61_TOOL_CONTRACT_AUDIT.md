@@ -1,12 +1,13 @@
 # R61/11O — audit границы model-facing tools
 
-Дата фиксации: 2026-09-02. Статус: 11O0 source-built-in property inventory
-зафиксирован; runtime family cutovers, dynamic custom-package review и UI ещё
+Дата фиксации: 2026-09-02. Статус: 11O1 Resources + Capabilities завершён
+host-neutral; остальные family cutovers, dynamic custom-package review и UI ещё
 не выполнены.
 
-Этот документ не меняет runtime, public tool ids, schemas или UI. До атомарного
-переключения конкретного семейства действует его текущий канонический контракт.
-R61 не вводит второй executor, generic router, pipelines, aliases или dual schema.
+Для Resources + Capabilities этот документ теперь фиксирует реализованный
+контракт 11O1. Для остальных семейств до их атомарного переключения действует
+текущий канонический контракт. R61 не вводит второй executor, generic router,
+pipelines, aliases или dual schema.
 
 ## 1. Диагностический вывод
 
@@ -62,12 +63,11 @@ runtime-generated `tool_call_id` для сопоставления принят�
 
 ## 3. Текущая поверхность и почему имеющихся тестов недостаточно
 
-В Excel Agent core/bootstrap pack сейчас публикуется 26 schemas: шесть bootstrap,
-пятнадцать Excel и пять VBA/macro. Четыре `common.resources_*` дополнительно
-передают caller-у provider, kind, URI, revision, representation, cursor и limits.
-VBA provider материализует exact source внутри runtime, но публичный read по
-умолчанию отдаёт 2,048 символов и требует продолжения cursor-ом для крупных
-модулей.
+После 11O1 Excel Agent core/bootstrap pack публикует 24 schemas: четыре bootstrap,
+пятнадцать Excel и пять VBA/macro. Публичная resource-пара принимает только
+`query`/semantic `scope` и readable `target`/`representation`/`action`; fixed
+top-20 и 8,000-character page, provider routing, exact URI/revision и continuation
+принадлежат runtime.
 
 Существующие deterministic harness scenarios подтверждают guards и wiring, но
 часть model scenarios заранее подставляет provider, URI и cursor scripted
@@ -76,11 +76,11 @@ delegate-ом. Это доказывает механическую исполн
 число calls, argument/format repairs, tool errors, continuation restarts и итоговую
 успешность задачи.
 
-11O0 добавил machine-checked
-[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 73 уникальных built-in id
-и 76 effective host-вариантов фиксируют exact descriptor revision, host, mode,
-direct binding и все рекурсивные schema property paths. Четыре дополнительных
-варианта принадлежат host-specific `common.html_data_bind`. Поле, похожее на
+11O0 добавил, а 11O1 обновил machine-checked
+[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 71 уникальный built-in id
+и 74 effective host-варианта фиксируют exact descriptor revision, host, mode,
+direct binding и все рекурсивные schema property paths. Четыре host-specific
+варианта принадлежат `common.html_data_bind`. Поле, похожее на
 runtime plumbing, не может появиться без явного решения; допустимые public
 capability/tool/skill/mail identities отмечены отдельно от полей, которые R61
 internalizes/removes. Descriptor revision одновременно фиксирует description,
@@ -95,26 +95,27 @@ fail-closed оставить непроверенный package вне release e
 dynamic inventory gate, а не причина задерживать независимый built-in family
 switch.
 
-## 4. Полный current inventory `common.*`
+## 4. 11O0 baseline и current inventory `common.*`
 
-Source inventory содержит до 35 built-in `common.*` ids. Число условное:
+Source inventory содержит до 33 built-in `common.*` ids. Число условное:
 `common.html_data_bind` публикуется только при наличии допустимых Office data-source
 tools, Tool/Skill/Prompt authoring зависит от доступности stores/settings, а VBA —
-от host. Все 35 schemas одновременно модели не передаются:
+от host. Все 33 schemas одновременно модели не передаются:
 
-- Chat получает четыре resource schemas;
-- Plan начинает с шести bootstrap schemas — resources и capabilities;
-- Excel Agent core содержит 11 `common.*` schemas: те же шесть bootstrap плюс пять
-  VBA/macro; вместе с 15 Excel schemas это текущие 26 core schemas;
+- Chat получает две resource schemas;
+- Plan начинает с четырёх bootstrap schemas — resources и capabilities;
+- Excel Agent core содержит девять `common.*` schemas: те же четыре bootstrap плюс
+  пять VBA/macro; вместе с 15 Excel schemas это текущие 24 core schemas;
 - остальные exact ids видны в compact capability catalog, а полный schema
   загружается только через `common.capabilities_read`.
 
 Progressive loading уменьшает token cost, но не делает лишний tool полезным и не
-исправляет сложный schema после загрузки. Ниже зафиксировано default-направление
-R61. `KEEP` означает сохранить самостоятельный model intent, `ON-DEMAND` — не
-держать schema в default core, `MERGE`/`SPLIT` — сменить public responsibility
-атомарно, `INTERNAL/UI` — убрать из model-facing catalog без удаления функции.
-Финальные ids утверждаются после eval; текущие ids действуют до cutover.
+исправляет сложный schema после загрузки. Таблица сохраняет 11O0 baseline и
+default-направление R61; resource rows уже реализованы в 11O1, остальные ids
+действуют до своего cutover. `KEEP` означает сохранить самостоятельный model
+intent, `ON-DEMAND` — не держать schema в default core, `MERGE`/`SPLIT` — сменить
+public responsibility атомарно, `INTERNAL/UI` — убрать из model-facing catalog без
+удаления функции.
 
 Не всякое поле с именем `id` является transport leak. Public tool/skill id и id
 создаваемого custom package — user-visible domain identity: модель выбирает его из
@@ -124,10 +125,10 @@ public id также нельзя «вспоминать» приблизите�
 
 | Current tool | Нужен ли модели | Default R61 disposition |
 |---|---|---|
-| `common.resources_list` | Нужен сам intent «найти доступные ресурсы», но не provider discovery/paging | `MERGE` с `resources_search` в один semantic find; provider/kind/cursor/limit — runtime |
-| `common.resources_resolve` | Самостоятельного пользовательского действия обычно нет | `INTERNAL`; exact URI/member resolution выполняется между find/read, public остаётся только если отдельный eval докажет иной use case |
-| `common.resources_search` | Нужен поиск по query/scope | `MERGE` с list; модель задаёт только query и semantic scope |
-| `common.resources_read` | Нужен | `KEEP`; semantic candidate/target и при необходимости representation, но не URI/revision/cursor/maxChars |
+| `common.resources_list` | Нужен сам intent «найти доступные ресурсы», но не provider discovery/paging | `DONE 11O1`: merged with search as `common.resources_find`; old id deleted |
+| `common.resources_resolve` | Самостоятельного пользовательского действия обычно нет | `DONE 11O1`: internal exact preparation; public id deleted |
+| `common.resources_search` | Нужен поиск по query/scope | `DONE 11O1`: merged as `common.resources_find`; old id deleted |
+| `common.resources_read` | Нужен | `DONE 11O1`: semantic target/action/representation only; id retained |
 | `common.capabilities_search` | Нужен bootstrap discovery | `KEEP`; query/kind, paging и limit внутренние |
 | `common.capabilities_read` | Нужен для exact tool admission и skill loading | `KEEP`; public tool/skill id и semantic reference path допустимы, offset/maxChars/revision/admission state внутренние |
 | `common.questions_ask` | Нужен только Plan mode | `KEEP` mode-specific; question/option ids генерирует runtime, модель задаёт prompt/options и meaningful selection semantics |
@@ -244,21 +245,15 @@ responsibility:
 
 ### Resources
 
-- До cutover сохраняются четыре текущих id. Default target — один semantic find
-  вместо list/search, один read, а resolve становится внутренней подготовкой; exact
-  public shape подтверждается comparative eval и переключается атомарно без aliases.
-- `list` должен перечислять semantic resources. Provider discovery не должно
-  маскироваться успешным пустым `items`; истинно пустой результат отличается от
-  discovery/unavailable/access/filter mismatch.
-- Provider routing становится внутренним. Если caller действительно выбирает
-  категорию, это небольшой стабильный enum предметной области, а не свободная
-  строка provider-specific `kind`.
-- `search` получает query и semantic scope. `read` принимает выбранный candidate
-  или semantic target; URI/revision/cursor/page size связывает runtime. Exact
-  `ResourceRef` остаётся только durable runtime evidence, а model-facing результат
-  содержит читаемую цель и предметные данные без opaque identity.
-- `resolve` по умолчанию становится внутренней подготовкой. Public tool допустим
-  только если independent scenario докажет самостоятельное semantic действие.
+- 11O1 атомарно заменил четыре public ids на `common.resources_find/read`; aliases
+  и второй schema path отсутствуют. Provider list/resolve/search/read сохранены
+  только как внутренние операции gateway.
+- Find принимает optional literal query и малый semantic scope, возвращает не более
+  20 readable targets и различает true-empty, partial и unavailable.
+- Read принимает target, optional representation и `action=read|next`. URI,
+  revision, cursor и page size связывает runtime; exact `ResourceRef` остаётся
+  только durable evidence, а model projection содержит semantic target и domain
+  data.
 - VBA discovery/read остаётся только через единый Resource Fabric. Вторые VBA read
   ids и host-prefixed aliases не возвращаются.
 
@@ -342,8 +337,10 @@ R61 не закрывается только schema snapshot-тестами. М�
    paths, а девять Common skill consumers перечислены выше. Dynamic installed
    custom-package property review и callable-pack comparison остаются своими
    gates Tool-authoring и core-pack slices; они не подменяются source snapshot.
-2. Переключить Resources + Capabilities intent/preparation boundary и удалить
-   старые public plumbing arguments/ids.
+2. Resources + Capabilities завершены host-neutral в 11O1: minimal schemas,
+   runtime-owned resolution/continuation/revision validation, durable exact
+   evidence и semantic model projection переключены атомарно; старые resource ids
+   и handlers удалены без aliases.
 3. Переключить Plan questions/doc/task-list lifecycle без caller-owned ids/guards.
 4. Переключить HTML workspace/data binding и удалить model-facing diagnostics/UI
    selection paths.
@@ -357,6 +354,7 @@ R61 не закрывается только schema snapshot-тестами. М�
 9. Собрать final live-provider, Windows WebView2/Office и WQ-PACK evidence только на
    post-cutover catalog.
 
-Ближайший шаг не меняется: сначала завершается уже открытый Windows rebuild. Кодовая
-реализация R61 начинается отдельно после согласования inventory; Phase 12 до этого
-не начинается.
+Ближайший шаг — 11O2 Plan questions/doc/task-list. Накопленные Windows rebuild,
+live-provider и WebView2 gates остаются обязательными для final WQ, но по §16.1 не
+блокируют следующий dependency-safe host-neutral подэтап. Phase 12 до полного R61
+и qualification не начинается.

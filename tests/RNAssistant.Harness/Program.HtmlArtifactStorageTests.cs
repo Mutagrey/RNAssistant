@@ -262,7 +262,7 @@ namespace RNAssistant.Harness
             var read = new ToolInvocation
             {
                 ToolId = ResourceToolCatalog.ReadToolId,
-                Arguments = { ["uri"] = fileResource.Reference.Uri, ["representation"] = "source" }
+                Arguments = { ["target"] = "HTML file: index.html", ["representation"] = "source" }
             };
             var readResult = ReadResource(
                 new ResourceGatewayService(),

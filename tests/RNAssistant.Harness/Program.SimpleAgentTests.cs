@@ -368,7 +368,8 @@ namespace RNAssistant.Harness
             AssertContains(prompt, "excel.read_range", "second tool present");
             AssertContains(prompt, "common.test", "skill id present");
             AssertContains(prompt, "Test workflow", "skill description present");
-            AssertContains(prompt, "\"revision\":\"" + SkillRevision.Compute(skills[0]) + "\"", "skill revision present");
+            AssertTrue(prompt.IndexOf(SkillRevision.Compute(skills[0]), StringComparison.Ordinal) < 0,
+                "skill revision remains outside model catalog");
             AssertContains(prompt, "\"bodyChars\":27", "skill body size present");
             AssertContains(prompt, "\"referenceCount\":0", "skill reference count present");
             AssertTrue(prompt.IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0, "full skill is not in catalog");
@@ -426,7 +427,9 @@ namespace RNAssistant.Harness
                     file != null && string.Equals(file.Path, "index.html", StringComparison.OrdinalIgnoreCase)),
                     "closed-document HTML file saved");
                 var prompt = FlattenSimple(calls[0]);
-                AssertContains(prompt, "\"key\":\"closed-doc\"", "archived document identity in prompt");
+                AssertTrue(prompt.IndexOf("closed-doc", StringComparison.Ordinal) < 0,
+                    "internal document identity stays outside model context");
+                AssertContains(prompt, "\"title\":\"Closed.xlsx\"", "archived document title in prompt");
                 AssertContains(prompt, "\"office_tools_available\":false", "Office availability in prompt");
                 AssertContains(prompt, "\"id\":\"common.html_workspace_upsert\"",
                     "exact local HTML capability remains discoverable");
@@ -478,22 +481,25 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Do the test workflow.", NewSession(adapter), NewContext(adapter), new AppSettings(),
+                    "Do the test workflow.", session, NewContext(adapter), new AppSettings(),
                     tools, null, null, null, new[] { skill }, CancellationToken.None, true).GetAwaiter().GetResult();
 
                 AssertEqual("Инструкции учтены.", result.AssistantText, "skill-assisted response");
                 var revision = SkillRevision.Compute(skill);
                 AssertTrue(FlattenSimple(calls[0]).IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0,
                     "first request contains only catalog");
-                AssertContains(FlattenSimple(calls[0]), "\"revision\":\"" + revision + "\"", "catalog carries skill revision");
+                AssertTrue(FlattenSimple(calls[0]).IndexOf(revision, StringComparison.Ordinal) < 0,
+                    "catalog hides skill revision");
                 var replay = FlattenSimple(calls[1]);
                 AssertContains(replay, "TEST_SKILL_SENTINEL", "full instructions returned by tool");
                 AssertContains(replay, "TEST_SKILL_END", "skill body is not cut by the generic tool-result limit");
                 AssertContains(replay, "\"format\":\"markdown\"", "loaded skill format");
                 AssertContains(replay, "\"version\":\"2.0.0\"", "loaded skill version");
-                AssertContains(replay, "\"revision\":\"" + revision + "\"", "loaded skill revision matches catalog");
+                AssertTrue(replay.IndexOf(revision, StringComparison.Ordinal) < 0,
+                    "model result hides skill revision");
                 AssertContains(replay, "\"loaded\":true", "loaded skill result is explicit");
                 AssertContains(replay, "\"complete\":true", "loaded skill body is complete");
                 AssertContains(replay, "\"toolSchemasLoadedByThisRead\":false",
@@ -502,6 +508,14 @@ namespace RNAssistant.Harness
                     "skill result gives adjacent tool-schema loading guidance");
                 AssertTrue(replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) < 0,
                     "loaded skill is not duplicated into a truncated result");
+                var durableMessage = session.Messages.Last(message => string.Equals(
+                    message.ToolName, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal));
+                ToolResultWireReadResult durable;
+                string durableError;
+                AssertTrue(ToolResultHistoryReader.TryRead(durableMessage, out durable, out durableError),
+                    "durable skill result remains readable");
+                AssertContains(durable.Result.DataJson, "\"revision\":\"" + revision + "\"",
+                    "durable skill result retains exact revision");
             });
         }
 
@@ -1177,7 +1191,7 @@ namespace RNAssistant.Harness
                     (settings, messages, options, stream, cancellationToken) => Task.FromResult(
                         new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Проверяю ресурсы.\",\"tool_calls\":[{\"name\":\"common.resources_list\",\"arguments\":{}}]}",
+                            Content = "{\"message\":\"Проверяю ресурсы.\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}}]}",
                             PromptTokens = 5
                         }));
                 var limitedResult = limitedService.ExecuteAsync(
@@ -1338,9 +1352,12 @@ namespace RNAssistant.Harness
                     ModelContextBudget.ContinuationReserveTokens(promptSettings),
                     "mandatory Excel/VBA core keeps the shared continuation reserve");
                 var prompt = FlattenSimple(request);
-                AssertContains(prompt, "\"name\":\"common.resources_list\"", "resource discovery exposed");
+                AssertContains(prompt, "\"name\":\"common.resources_find\"", "semantic resource discovery exposed");
                 AssertContains(prompt, "\"name\":\"common.resources_read\"", "resource reads exposed");
-                AssertContains(prompt, "\"name\":\"common.resources_search\"", "resource search exposed");
+                AssertTrue(prompt.IndexOf("\"name\":\"common.resources_list\"", StringComparison.Ordinal) < 0 &&
+                    prompt.IndexOf("\"name\":\"common.resources_resolve\"", StringComparison.Ordinal) < 0 &&
+                    prompt.IndexOf("\"name\":\"common.resources_search\"", StringComparison.Ordinal) < 0,
+                    "retired resource transport tools are absent");
                 AssertContains(prompt, "\"name\":\"common.capabilities_search\"", "unified capability search exposed");
                 AssertContains(prompt, "\"name\":\"common.capabilities_read\"", "unified exact capability loading exposed");
                 AssertContains(prompt, "\"id\":\"common.vba_apply_patch\"", "exact VBA mutation id is in compact catalog");
@@ -1381,36 +1398,78 @@ namespace RNAssistant.Harness
 
         private static void AgentPreservesVbaResourceEvidenceWithinBudget()
         {
-            RunVbaResourceBudgetScenario(3000, false);
+            RunVbaResourceIntentScenario(6000, false);
         }
 
-        private static void AgentContinuesVbaResourceCursorWithinBudget()
+        private static void AgentContinuesVbaResourceWithinBudget()
         {
-            RunVbaResourceBudgetScenario(1000, true);
+            RunVbaResourceIntentScenario(9000, true);
         }
 
-        private static void AgentClassifiesExhaustedVbaContinuationBudget()
+        private static void AgentRejectsCallerOwnedVbaContinuationState()
         {
-            RunVbaResourceBudgetScenario(4096, false, true);
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var responses = new Queue<string>(new[]
+                {
+                    ModelProtocolWire.Write("Invalid caller state.", new[]
+                    {
+                        new ConversationToolCall
+                        {
+                            Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new Dictionary<string, object>
+                            {
+                                ["uri"] = "rna://vba/guessed/module",
+                                ["cursor"] = "guessed",
+                                ["maxChars"] = 1000
+                            }
+                        }
+                    }),
+                    ModelProtocolWire.Write("Нужна семантическая цель.", new ConversationToolCall[0])
+                });
+                var modelCalls = 0;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    modelCalls++;
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var session = NewSession(adapter);
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent,
+                    "Read guessed VBA continuation state.",
+                    session,
+                    NewContext(adapter),
+                    new AppSettings(),
+                    OfficeToolCatalog.ForHost(adapter.HostName)
+                        .Concat(executor.GetControllerTools()).ToList(),
+                    null,
+                    null,
+                    BuiltInSkillProvider.GetSkills(adapter)).GetAwaiter().GetResult();
+
+                AssertEqual("Нужна семантическая цель.", result.AssistantText,
+                    "model repair can recover with no tool dispatch");
+                AssertEqual(2, modelCalls, "caller-owned URI/cursor/page size is rejected before acceptance");
+                var counts = session.LastRun.KernelState.Summary.ToolCounts;
+                AssertEqual(0, counts.ReadOk + counts.ReadError + counts.WriteOk +
+                    counts.WriteError + counts.WriteUnknown,
+                    "invalid plumbing arguments never become an accepted tool call");
+            });
         }
 
-        private static void RunVbaResourceBudgetScenario(
-            int pageSize,
-            bool expectSecondPage,
-            bool expectProjectionBudgetStop = false)
+        private static void RunVbaResourceIntentScenario(
+            int sourceCharacters,
+            bool expectSecondPage)
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 const string moduleName = "BudgetModule";
                 const string sourceMarker = "VBA_RESOURCE_SOURCE_SENTINEL";
-                var source = "Option Explicit\n' " + sourceMarker + "\n" +
-                    string.Concat(Enumerable.Range(0, 420).Select(index =>
-                        "Public Sub BudgetLine" + index + "()\nDebug.Print \"" + index + "\"\nEnd Sub\n"));
+                var prefix = "Option Explicit\n' " + sourceMarker + "\n";
+                var source = prefix + new string('x', Math.Max(0, sourceCharacters - prefix.Length));
                 adapter.SetVbaModule(moduleName, source, "StdModule");
 
                 var calls = new List<Tuple<IReadOnlyList<ChatMessage>, LlmRequestOptions>>();
-                string componentUri = null;
-                string continuationCursor = null;
+                string semanticTarget = null;
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(Tuple.Create((IReadOnlyList<ChatMessage>)messages.ToList(), options));
@@ -1421,28 +1480,28 @@ namespace RNAssistant.Harness
                             {
                                 new ConversationToolCall
                                 {
-                                    Name = ResourceToolCatalog.ListToolId,
-                                    Arguments = new Dictionary<string, object> { ["provider"] = VbaResourceProvider.ProviderName }
+                                    Name = ResourceToolCatalog.FindToolId,
+                                    Arguments = new Dictionary<string, object> { ["scope"] = "vba", ["query"] = moduleName }
                                 }
                             }) });
                     }
 
                     if (calls.Count == 2)
                     {
-                        var wire = LastToolResult(messages, ResourceToolCatalog.ListToolId);
-                        AssertEqual("ok", (string)wire["status"], "VBA resource list remains successful");
+                        var wire = LastToolResult(messages, ResourceToolCatalog.FindToolId);
+                        AssertEqual("ok", (string)wire["status"], "VBA semantic find remains successful");
                         var data = wire["data"] as JObject;
                         AssertTrue(data != null && data["items"] is JArray,
-                            "VBA list data is preserved instead of a transport truncation wrapper");
+                            "VBA find data is preserved instead of a transport truncation wrapper");
                         var component = ((JArray)data["items"]).OfType<JObject>().Single(item =>
                             string.Equals((string)item["title"], moduleName, StringComparison.OrdinalIgnoreCase));
-                        var reference = component["reference"] as JObject;
-                        AssertTrue(reference != null && !string.IsNullOrWhiteSpace((string)reference["uri"]),
-                            "VBA component exposes its exact resource URI");
-                        componentUri = (string)reference["uri"];
-                        AssertTrue(wire["resources"] is JArray && ((JArray)wire["resources"]).OfType<JObject>()
-                            .Any(item => string.Equals((string)item["uri"], componentUri, StringComparison.Ordinal)),
-                            "listed VBA URIs are also exact Tool Result resources");
+                        semanticTarget = (string)component["target"];
+                        AssertEqual("VBA module: " + moduleName, semanticTarget,
+                            "VBA find exposes a readable target without provider vocabulary");
+                        AssertTrue(component["reference"] == null && component["provider"] == null && component["kind"] == null,
+                            "VBA candidate hides URI, revision, provider, and provider kind");
+                        AssertTrue(wire["resources"] == null,
+                            "model find result omits exact root resource evidence");
                         return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(
                             "Читаю исходник.", new[]
                             {
@@ -1451,9 +1510,8 @@ namespace RNAssistant.Harness
                                     Name = ResourceToolCatalog.ReadToolId,
                                     Arguments = new Dictionary<string, object>
                                     {
-                                        ["uri"] = componentUri,
-                                        ["representation"] = ResourceRepresentations.Source,
-                                        ["maxChars"] = pageSize
+                                        ["target"] = semanticTarget,
+                                        ["representation"] = ResourceRepresentations.Source
                                     }
                                 }
                             }) });
@@ -1465,16 +1523,23 @@ namespace RNAssistant.Harness
                         AssertEqual("ok", (string)readWire["status"],
                             "first VBA source page remains successful: " + readWire.ToString(Formatting.None));
                         var readData = readWire["data"] as JObject;
-                        AssertTrue(readData != null && readData["resource"] is JObject,
-                            "VBA source metadata is not replaced by a transport truncation wrapper");
-                        AssertEqual(source.Substring(0, pageSize), (string)readData["text"],
-                            "first provider-owned VBA page reaches the model intact");
+                        AssertTrue(readData != null && readData["resource"] == null && readData["nextCursor"] == null,
+                            "VBA read hides exact reference and continuation plumbing");
+                        var firstLength = Math.Min(ResourceReadToolHandler.IntentReadCharacters, source.Length);
+                        AssertEqual(source.Substring(0, firstLength), (string)readData["text"],
+                            "first runtime-bounded VBA chunk reaches the model intact");
                         AssertContains((string)readData["text"], sourceMarker, "VBA source reaches the model");
-                        continuationCursor = (string)readData["nextCursor"];
-                        AssertTrue(!string.IsNullOrWhiteSpace(continuationCursor),
-                            "bounded VBA source keeps its exact continuation cursor");
-                        AssertTrue(readWire["resources"] is JArray && ((JArray)readWire["resources"]).Count == 1,
-                            "VBA source read retains the exact root resource reference");
+                        AssertTrue(readWire["resources"] == null,
+                            "model VBA read omits the exact root resource reference");
+                        if (!expectSecondPage)
+                        {
+                            AssertEqual(true, (bool)readData["complete"], "small source completes in one runtime page");
+                            return Task.FromResult(new LlmCompletionResult
+                            {
+                                Content = ModelProtocolWire.Write("VBA прочитан.", new ConversationToolCall[0])
+                            });
+                        }
+                        AssertEqual(true, (bool)readData["hasMore"], "large source exposes semantic continuation action");
                         return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(
                             "Читаю продолжение.", new[]
                             {
@@ -1483,48 +1548,25 @@ namespace RNAssistant.Harness
                                     Name = ResourceToolCatalog.ReadToolId,
                                     Arguments = new Dictionary<string, object>
                                     {
-                                        ["uri"] = componentUri,
-                                        ["representation"] = ResourceRepresentations.Source,
-                                        ["cursor"] = continuationCursor,
-                                        ["maxChars"] = pageSize
+                                        ["target"] = semanticTarget,
+                                        ["action"] = "next"
                                     }
                                 }
                             }) });
                     }
 
                     var continuedWire = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
-                    if (expectProjectionBudgetStop)
-                    {
-                        throw new InvalidOperationException(
-                            "an unprojectable continuation must stop before another model dispatch");
-                    }
-                    if (!expectSecondPage)
-                    {
-                        AssertEqual("error", (string)continuedWire["status"],
-                            "oversized continuation becomes an explicit model-visible resource error");
-                        AssertEqual("resource_evidence_context_too_large",
-                            (string)continuedWire.SelectToken("data.code"),
-                            "oversized continuation reports the exact budget boundary");
-                        AssertTrue(continuedWire.SelectToken("data.text") == null &&
-                            continuedWire.SelectToken("data.preview") == null,
-                            "oversized continuation never masquerades as partial successful evidence");
-                        return Task.FromResult(new LlmCompletionResult
-                        {
-                            Content = ModelProtocolWire.Write(
-                                "Продолжение требует меньшей страницы.", new ConversationToolCall[0])
-                        });
-                    }
                     AssertEqual("ok", (string)continuedWire["status"],
                         "continued VBA source page remains successful: " + continuedWire.ToString(Formatting.None));
                     var continuedData = continuedWire["data"] as JObject;
-                    AssertTrue(continuedData != null && continuedData["resource"] is JObject,
-                        "continued VBA page keeps the structured resource evidence");
-                    AssertEqual(source.Substring(pageSize, pageSize), (string)continuedData["text"],
-                        "nextCursor selects the exact second provider page without overlap or omission");
-                    AssertTrue(!string.IsNullOrWhiteSpace((string)continuedData["nextCursor"]),
-                        "second bounded VBA page keeps the following continuation cursor");
-                    AssertTrue(continuedWire["resources"] is JArray && ((JArray)continuedWire["resources"]).Count == 1,
-                        "continued VBA source read retains the exact root resource reference");
+                    AssertTrue(continuedData != null && continuedData["resource"] == null && continuedData["nextCursor"] == null,
+                        "continued VBA page keeps cursor state inside runtime");
+                    AssertEqual(source.Substring(ResourceReadToolHandler.IntentReadCharacters),
+                        (string)continuedData["text"],
+                        "action=next selects the exact second provider page without overlap or omission");
+                    AssertEqual(true, (bool)continuedData["complete"], "second chunk completes the source");
+                    AssertTrue(continuedWire["resources"] == null,
+                        "continued model read omits exact root resource evidence");
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = ModelProtocolWire.Write("VBA прочитан.", new ConversationToolCall[0])
@@ -1535,7 +1577,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "Прочитай VBA-модуль " + moduleName + " страницами по " + pageSize + " символов.",
+                    "Прочитай VBA-модуль " + moduleName + ".",
                     session,
                     NewContext(adapter),
                     settings,
@@ -1551,20 +1593,28 @@ namespace RNAssistant.Harness
                         settings,
                         ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings),
                         ModelContextBudget.ContinuationReserveTokens(settings))).ToArray());
-                if (expectProjectionBudgetStop)
-                {
-                    AssertContains(result.AssistantText, "mandatory continuation reserve",
-                        "unprojectable exact evidence reports its budget boundary");
-                    AssertEqual(ModelProtocolFailureKind.PromptBudgetExceeded.ToString(),
-                        session.LastRun.KernelState.Summary.Reason,
-                        "result projection exhaustion remains a prompt-budget failure");
-                    AssertEqual(3, calls.Count,
-                        "no fourth model request is sent when even the explicit result cannot fit");
-                    return;
-                }
-                AssertEqual(expectSecondPage ? "VBA прочитан." : "Продолжение требует меньшей страницы.", result.AssistantText,
+                AssertEqual("VBA прочитан.", result.AssistantText,
                     "VBA resource loop completes; admitted requests=" + requestTotals);
-                AssertEqual(4, calls.Count, "list, two source pages, and final response use four model steps");
+                AssertEqual(expectSecondPage ? 4 : 3, calls.Count,
+                    "semantic find, bounded read chunks, and final response use the expected model steps");
+                var durableResults = session.Messages.Where(message => message != null &&
+                    message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
+                    message.AcceptedCallOrigin == null &&
+                    (string.Equals(message.ToolName, ResourceToolCatalog.FindToolId, StringComparison.Ordinal) ||
+                     string.Equals(message.ToolName, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal)))
+                    .ToList();
+                AssertEqual(expectSecondPage ? 3 : 2, durableResults.Count,
+                    "durable history retains every accepted resource result");
+                foreach (var durableMessage in durableResults)
+                {
+                    ToolResultWireReadResult durable;
+                    string durableError;
+                    AssertTrue(ToolResultHistoryReader.TryRead(
+                        durableMessage, out durable, out durableError),
+                        "durable resource result remains strict: " + durableError);
+                    AssertTrue(durable.Result.Resources.Count > 0,
+                        "durable resource result retains exact runtime evidence");
+                }
                 foreach (var request in calls)
                 {
                     var admitted = ModelContextBudget.EstimateAdmittedRequestTokens(
@@ -1802,8 +1852,10 @@ namespace RNAssistant.Harness
                     .IndexOf(runtimeMarker, StringComparison.Ordinal) >= 0);
                 var runtimeContext = JObject.Parse(runtimeMessage.Content.Substring(
                     runtimeMessage.Content.IndexOf(runtimeMarker, StringComparison.Ordinal) + runtimeMarker.Length));
-                AssertTrue(((JArray)runtimeContext["capabilities"]["optionalSchemas"])
-                        .OfType<JObject>().Any(item => (string)item["id"] == "common.skills_upsert"),
+                AssertTrue(((JArray)runtimeContext["capabilities"]["items"])
+                        .OfType<JObject>().Any(item =>
+                            (string)item["id"] == "common.skills_upsert" &&
+                            (bool?)item["schemaLoaded"] == true),
                     "confirmation rematerializes the durable optional schema");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "no stale waiting result");
                 var replayMessages = calls[2].ToList();
@@ -1964,9 +2016,9 @@ namespace RNAssistant.Harness
                 {
                     calls++;
                     if (calls == 1) return Task.FromResult(new LlmCompletionResult { Content =
-                        "{\"message\":\"Read twice\",\"tool_calls\":[{\"name\":\"common.resources_list\",\"arguments\":{}},{\"name\":\"common.resources_list\",\"arguments\":{}}]}" });
+                        "{\"message\":\"Read twice\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}},{\"name\":\"common.resources_find\",\"arguments\":{}}]}" });
                     var accepted = messages.Where(message => message.Role == "assistant" &&
-                        message.ToolName == "common.resources_list" && message.AcceptedCallOrigin != null).ToList();
+                        message.ToolName == ResourceToolCatalog.FindToolId && message.AcceptedCallOrigin != null).ToList();
                     AssertEqual(2, accepted.Count, "both identical read positions remain in history");
                     var ids = accepted.Select(message => message.ToolCallId).ToArray();
                     AssertEqual(2, ids.Distinct(StringComparer.OrdinalIgnoreCase).Count(), "runtime allocates distinct IDs");
@@ -2068,7 +2120,7 @@ namespace RNAssistant.Harness
                     {
                         Content = calls == 1 ? string.Empty : ModelProtocolWire.Write("Must not execute", new[]
                         {
-                            new ConversationToolCall { Name = "common.resources_list" }
+                            new ConversationToolCall { Name = ResourceToolCatalog.FindToolId }
                         }),
                         RefusalContent = "Запрос отклонён провайдером."
                     });
@@ -2128,7 +2180,7 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Проверяю доступные ресурсы.\",\"tool_calls\":[{\"name\":\"common.resources_list\",\"arguments\":{}}]}",
+                    "{\"message\":\"Проверяю доступные ресурсы.\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}}]}",
                     "{\"message\":\"Ресурсы доступны.\",\"tool_calls\":[]}"
                 });
                 var captured = new List<IReadOnlyList<ChatMessage>>();
@@ -2172,10 +2224,12 @@ namespace RNAssistant.Harness
                 AssertEqual(2, captured.Count, "resource result returns to the same conversation loop");
                 var firstPrompt = FlattenSimple(captured[0]);
                 AssertContains(firstPrompt, "RUNTIME_CONTEXT", "chat receives runtime context");
-                AssertContains(firstPrompt, "common.resources_list", "chat receives resource discovery");
-                AssertContains(firstPrompt, "common.resources_resolve", "chat receives resource resolution");
-                AssertContains(firstPrompt, "common.resources_search", "chat receives resource search");
+                AssertContains(firstPrompt, ResourceToolCatalog.FindToolId, "chat receives semantic resource discovery");
                 AssertContains(firstPrompt, "common.resources_read", "chat receives resource reads");
+                AssertTrue(firstPrompt.IndexOf("common.resources_list", StringComparison.Ordinal) < 0 &&
+                    firstPrompt.IndexOf("common.resources_resolve", StringComparison.Ordinal) < 0 &&
+                    firstPrompt.IndexOf("common.resources_search", StringComparison.Ordinal) < 0,
+                    "chat receives no retired resource transport tools");
                 AssertTrue(firstPrompt.IndexOf("excel.inspect", StringComparison.OrdinalIgnoreCase) < 0,
                     "chat excludes Office tools");
                 AssertTrue(firstPrompt.IndexOf("common.capabilities_read", StringComparison.OrdinalIgnoreCase) < 0 &&
@@ -2206,11 +2260,12 @@ namespace RNAssistant.Harness
                 };
                 session.Artifacts.Add(artifact);
                 var uri = ArtifactUri(session, artifact);
+                const string target = "note: Reference note";
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю заметку.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
+                    "{\"message\":\"Читаю заметку.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
                     "{\"message\":\"Первый ответ.\",\"tool_calls\":[]}",
-                    "{\"message\":\"Перечитываю заметку.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + uri + "\",\"representation\":\"text\"}}]}",
+                    "{\"message\":\"Перечитываю заметку.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
                     "{\"message\":\"Второй ответ.\",\"tool_calls\":[]}"
                 });
                 var captured = new List<IReadOnlyList<ChatMessage>>();
@@ -2235,11 +2290,13 @@ namespace RNAssistant.Harness
 
                 AssertEqual("Первый ответ.", first.AssistantText, "first artifact answer");
                 AssertEqual("Второй ответ.", second.AssistantText, "second artifact answer");
-                AssertContains(FlattenSimple(captured[0]), uri, "first request keeps the canonical reference");
+                AssertContains(FlattenSimple(captured[0]), target, "first request keeps the semantic target");
+                AssertTrue(FlattenSimple(captured[0]).IndexOf(uri, StringComparison.Ordinal) < 0,
+                    "resource index does not teach the model an exact URI argument");
                 AssertTrue(FlattenSimple(captured[0]).IndexOf("RESOURCE_REPLAY_SENTINEL", StringComparison.Ordinal) < 0,
                     "artifact body is absent before an explicit read");
                 AssertContains(FlattenSimple(captured[1]), "RESOURCE_REPLAY_SENTINEL", "first read returns the body");
-                AssertContains(FlattenSimple(captured[2]), uri, "later request still knows the canonical reference");
+                AssertContains(FlattenSimple(captured[2]), target, "later request still knows the semantic target");
                 AssertTrue(FlattenSimple(captured[2]).IndexOf("RESOURCE_REPLAY_SENTINEL", StringComparison.Ordinal) < 0,
                     "later request retains the reference after prior read evidence leaves context");
                 AssertContains(FlattenSimple(captured[3]), "RESOURCE_REPLAY_SENTINEL", "later turn can read the body again");

@@ -81,14 +81,13 @@ namespace RNAssistant.Office.Vba
                     ? "."
                     : ". Runtime also tried the normalized name " + normalizedName + ".") +
                 " To create it, call common.vba_write_module with moduleName, complete code, and mode=upsert. " +
-                "When the existing target name is unknown, list provider vba with kind vba-component.",
+                "When the existing target name is unknown, run common.resources_find with scope=vba.",
                 new Newtonsoft.Json.Linq.JObject
                 {
                     ["requestedModuleName"] = requestedModuleName,
                     ["normalizedModuleName"] = normalizedName,
-                    ["discoveryTool"] = "common.resources_list",
-                    ["resourceProvider"] = VbaResourceProvider.ProviderName,
-                    ["resourceKind"] = VbaResourceProvider.ComponentKind,
+                    ["discoveryTool"] = "common.resources_find",
+                    ["discoveryScope"] = "vba",
                     ["creationTool"] = ToolId("vba_write_module"),
                     ["creationMode"] = "upsert"
                 },

@@ -68,7 +68,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=artifact-text-20260831-1"), asset + " has the current HTML/Plan action cache key");
   });
-  assert.ok(index.includes("app-html-workspace.js?v=bridge-bootstrap-20260831-1"), "HTML workspace bootstrap has the bridge cache key");
+  assert.ok(index.includes("app-html-workspace.js?v=resource-intent-20260902-1"), "HTML workspace handoff has the resource-intent cache key");
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /switchChatMode:\s*function\s*\(mode\)/);
   assert.doesNotMatch(workspace, /switchChatMode:\s*saveChatMode/);
@@ -77,8 +77,19 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   assert.match(detail, /expectedRevisionArtifactId: headArtifactId/);
   assert.match(detail, /sourceRevisionArtifactId: revisionArtifactId/);
   assert.match(editor, /renderDetail\(detail, selected, selectedEditorValue\(selected\), options\.artifactActions\)/);
-  assert.match(workspace, /Выполни утверждённый план " \+ revisionUri/);
+  assert.match(workspace, /Выполни утверждённый активный план/);
+  assert.doesNotMatch(workspace, /input\.value\s*=.*revisionUri/);
   console.log("PASS plan document: removal projections and guarded UI calls are cache-busted together");
+}
+
+{
+  const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
+  const vba = fs.readFileSync(path.join(root, "web/js/app-vba.js"), "utf8");
+  assert.ok(index.includes("app-vba.js?v=resource-intent-20260902-1"),
+    "VBA chat handoff has the resource-intent cache key");
+  assert.match(vba, /common\.resources_find со scope=vba/);
+  assert.doesNotMatch(vba, /common\.resources_(?:list|resolve|search)|provider=vba|kind=vba-component/);
+  console.log("PASS plan document: VBA review handoff uses semantic resource intent");
 }
 
 (async function () {
@@ -179,7 +190,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   assert.deepEqual(handoffs, [uri]);
   console.log("PASS plan document: ready handoff accepts only the exact active pinned URI");
 
-  console.log("OK 7/7");
+  console.log("OK 8/8");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

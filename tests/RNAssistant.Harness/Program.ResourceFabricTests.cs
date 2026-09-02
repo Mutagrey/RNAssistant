@@ -78,6 +78,25 @@ namespace RNAssistant.Harness
             var selected = gateway.List(new ChatSession(), "alpha", null, null, 20);
             AssertEqual("alpha", selected.Provider, "selected provider is recorded");
             AssertEqual("rna://alpha/item", selected.Items.Single().Reference.Uri, "selected provider lists resources");
+
+            var semanticGateway = new ResourceGatewayService(new[]
+            {
+                new ChatArtifactResourceProvider()
+            });
+            var empty = semanticGateway.Find(new ChatSession(), null, "conversation");
+            AssertEqual(true, empty.Empty,
+                "semantic find identifies a genuinely empty available scope");
+            AssertEqual(true, empty.Complete, "empty available scope is complete");
+            AssertEqual(0, empty.UnavailableScopes.Count,
+                "true empty is not provider discovery or unavailability");
+
+            var unavailable = semanticGateway.Find(new ChatSession(), null, "vba");
+            AssertEqual(false, unavailable.Empty,
+                "missing semantic scope is not reported as true empty");
+            AssertEqual(false, unavailable.Complete,
+                "missing semantic scope is explicitly incomplete");
+            AssertTrue(unavailable.UnavailableScopes.Contains("vba"),
+                "missing VBA provider is reported through its semantic scope");
         }
 
         private static void ResourceToolsHardCutoverArtifactTools()
@@ -87,9 +106,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 foreach (var id in new[]
                 {
-                    ResourceToolCatalog.ListToolId,
-                    ResourceToolCatalog.ResolveToolId,
-                    ResourceToolCatalog.SearchToolId,
+                    ResourceToolCatalog.FindToolId,
                     ResourceToolCatalog.ReadToolId
                 })
                 {

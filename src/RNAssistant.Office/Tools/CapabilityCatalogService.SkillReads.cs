@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
@@ -41,7 +43,8 @@ namespace RNAssistant.Office.Tools
 
         private CapabilityToolOutcome ReadSkill(
             IDictionary<string, object> arguments,
-            SkillDefinition skill)
+            SkillDefinition skill,
+            ChatSession session)
         {
             if (skill == null)
             {
@@ -50,13 +53,13 @@ namespace RNAssistant.Office.Tools
                     "capability_reader_unavailable", false);
             }
             if (HasArgument(arguments, "referencePath"))
-                return ReadSkillReference(arguments, skill);
+                return ReadSkillReference(arguments, skill, session);
             if (HasArgument(arguments, "offset") ||
                 HasArgument(arguments, "maxChars"))
             {
                 return CapabilityToolOutcome.Error(
-                    "offset and maxChars require referencePath.", null,
-                    "skill_reference_path_required", false);
+                    "Capability reference offsets and page sizes are runtime-owned.", null,
+                    "capability_runtime_state_not_allowed", false);
             }
 
             return CapabilityToolOutcome.Ok(
@@ -96,7 +99,8 @@ namespace RNAssistant.Office.Tools
 
         private CapabilityToolOutcome ReadSkillReference(
             IDictionary<string, object> arguments,
-            SkillDefinition skill)
+            SkillDefinition skill,
+            ChatSession session)
         {
             var referencePath = ToolArgumentReader.String(
                 arguments, "referencePath", string.Empty);
@@ -115,15 +119,35 @@ namespace RNAssistant.Office.Tools
                     false);
             }
 
-            var offset = ToolArgumentReader.Int32(arguments, "offset", 0);
+            var action = ToolArgumentReader.String(
+                arguments, "action", "read").Trim().ToLowerInvariant();
+            var offset = 0;
+            if (action == "next")
+            {
+                string continuationError;
+                string continuationCode;
+                if (!TryReferenceContinuation(
+                    session,
+                    skill,
+                    metadata,
+                    out offset,
+                    out continuationError,
+                    out continuationCode))
+                {
+                    return CapabilityToolOutcome.Error(
+                        continuationError,
+                        null,
+                        continuationCode,
+                        false);
+                }
+            }
             if (offset < 0 || offset > (content ?? string.Empty).Length)
             {
                 return CapabilityToolOutcome.Error(
-                    "Skill reference offset is outside the file.", null,
-                    "skill_reference_offset_invalid", false);
+                    "Stored capability continuation is outside the current reference. Restart with action=read.", null,
+                    "capability_continuation_invalid", false);
             }
-            var maxChars = Math.Max(1, Math.Min(50000,
-                ToolArgumentReader.Int32(arguments, "maxChars", 24000)));
+            const int maxChars = 24000;
             var end = Math.Min(content.Length, offset + maxChars);
             if (end > offset && end < content.Length &&
                 char.IsHighSurrogate(content[end - 1]) &&
@@ -133,7 +157,9 @@ namespace RNAssistant.Office.Tools
             }
             var complete = end >= content.Length;
             return CapabilityToolOutcome.Ok(
-                "Skill reference read: " + metadata.Path,
+                complete
+                    ? "Skill reference read: " + metadata.Path
+                    : "Skill reference chunk read. Call the same id and referencePath with action=next to continue.",
                 JsonConvert.SerializeObject(new
                 {
                     kind = "reference",
@@ -142,13 +168,80 @@ namespace RNAssistant.Office.Tools
                     path = metadata.Path,
                     revision = metadata.Revision,
                     format = "markdown",
-                    offset = offset,
                     returnedChars = end - offset,
                     totalChars = content.Length,
+                    progressCharacters = end,
                     complete = complete,
-                    nextOffset = complete ? (int?)null : end,
+                    hasMore = !complete,
                     content = content.Substring(offset, end - offset)
                 }));
+        }
+
+        private static bool TryReferenceContinuation(
+            ChatSession session,
+            SkillDefinition skill,
+            SkillReferenceMetadata metadata,
+            out int offset,
+            out string error,
+            out string code)
+        {
+            offset = 0;
+            error = null;
+            code = null;
+            foreach (var message in (session == null
+                    ? new List<ChatMessage>()
+                    : session.Messages ?? new List<ChatMessage>())
+                .Where(item => item != null)
+                .Reverse())
+            {
+                ToolResultWireReadResult wire;
+                string parseError;
+                if (!ToolResultHistoryReader.TryRead(
+                        message, out wire, out parseError) ||
+                    !string.Equals(
+                        wire.Name,
+                        CapabilityToolCatalog.ReadToolId,
+                        StringComparison.Ordinal) ||
+                    wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
+                    string.IsNullOrWhiteSpace(wire.Result.DataJson)) continue;
+                JObject data;
+                try
+                {
+                    data = JObject.Parse(wire.Result.DataJson);
+                }
+                catch (JsonException)
+                {
+                    continue;
+                }
+                if (!string.Equals((string)data["kind"], "reference", StringComparison.Ordinal) ||
+                    !string.Equals((string)data["id"], skill.Id, StringComparison.Ordinal) ||
+                    !string.Equals((string)data["path"], metadata.Path, StringComparison.Ordinal)) continue;
+                if ((bool?)data["complete"] == true)
+                {
+                    error = "The latest read for this skill reference is already complete. Use action=read to start again.";
+                    code = "capability_continuation_complete";
+                    return false;
+                }
+                if (!string.Equals(
+                        (string)data["skillRevision"],
+                        SkillRevision.Compute(skill),
+                        StringComparison.Ordinal) ||
+                    !string.Equals(
+                        (string)data["revision"],
+                        metadata.Revision,
+                        StringComparison.Ordinal))
+                {
+                    error = "The skill reference changed after the previous chunk. Restart with action=read.";
+                    code = "skill_reference_changed";
+                    return false;
+                }
+                offset = (int?)data["progressCharacters"] ?? 0;
+                if (offset > 0) return true;
+                break;
+            }
+            error = "No incomplete accepted read exists for this skill reference. Start with action=read.";
+            code = "capability_continuation_missing";
+            return false;
         }
     }
 }

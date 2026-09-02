@@ -213,14 +213,16 @@ GC. Clear Chat/Data remains a separate explicit operation.
 ## Model context
 
 - Drafts never enter prompt inspection, resource indexes or model requests.
-- The committing turn receives bounded extracted text and supported media according
-  to model routing, plus exact durable refs already stored on the user message.
+- The committing turn receives bounded extracted text, supported media and readable
+  semantic targets according to model routing; exact durable refs remain stored on
+  the user message but do not enter model context.
 - Later turns receive only the bounded working-set manifest. Bodies are loaded on
-  demand through `common.resources_list/resolve/search/read`.
-- The active Plan and HTML workspace are advertised by exact revision refs; their
-  bodies are not injected on every step.
-- Compaction preserves a deterministic bounded union of exact refs and may discard
-  hydrated bodies/read results. A later exact read reconstructs them.
+  demand through `common.resources_find/read`.
+- The active Plan and HTML workspace are advertised by readable semantic targets;
+  their exact refs and bodies are not injected on every step.
+- Compaction preserves a deterministic bounded union of semantic targets and may
+  discard hydrated bodies/read results. Runtime reconstructs a later read from
+  durable exact evidence.
 - Existing resources require no `В запрос` dual transport. A future `@resource`
   affordance may insert an exact ref for disambiguation only.
 

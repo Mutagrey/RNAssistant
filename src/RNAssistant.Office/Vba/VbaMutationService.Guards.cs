@@ -226,8 +226,7 @@ namespace RNAssistant.Office.Vba
                     ["reloadEditor"] = editor,
                     ["reconcileBeforeOverwrite"] = wholeWrite,
                     ["inspectTool"] = "common.resources_read",
-                    ["resourceProvider"] = VbaResourceProvider.ProviderName,
-                    ["resourceKind"] = VbaResourceProvider.ComponentKind
+                    ["discoveryScope"] = "vba"
                 },
                 "stale_vba_module",
                 true);

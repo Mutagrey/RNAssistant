@@ -14,9 +14,7 @@ namespace RNAssistant.Office.Services
     internal sealed class CallableToolPack
     {
         private static readonly HashSet<string> BootstrapToolIds = ExactIds(
-            ResourceToolCatalog.ListToolId,
-            ResourceToolCatalog.ResolveToolId,
-            ResourceToolCatalog.SearchToolId,
+            ResourceToolCatalog.FindToolId,
             ResourceToolCatalog.ReadToolId,
             CapabilityToolCatalog.SearchToolId,
             CapabilityToolCatalog.ReadToolId);
@@ -122,7 +120,6 @@ namespace RNAssistant.Office.Services
                     {
                         ["restored"] = false,
                         ["code"] = _restorationFailureCode,
-                        ["snapshotRevision"] = Revision,
                         ["instruction"] = "The prior optional callable snapshot could not be reproduced exactly, so only the deterministic core is callable. Raw schema history grants no authority. Read and admit any still-needed optional schema again."
                     }.ToString(Formatting.None)
                 };
@@ -133,15 +130,6 @@ namespace RNAssistant.Office.Services
         {
             if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return null;
             var result = CapabilityCatalogService.BuildPromptCatalog(_catalog, skills, Tools);
-            result["policy"] = "tool-pack";
-            result["profile"] = ProfileId();
-            result["snapshotRevision"] = Revision;
-            result["coreSchemas"] = SchemaRefs(_coreIds);
-            result["optionalSchemas"] = SchemaRefs(_optionalIds);
-            result["extensionBoundary"] = "next_model_step";
-            result["admissionPolicy"] = "atomic_full_request_budget";
-            result["evictionPolicy"] = "none_until_run_end";
-            result["reconstructionPolicy"] = "durable_turn_event";
             if (!string.IsNullOrWhiteSpace(_restorationFailureCode))
                 result["reconstructionStatus"] = "invalidated_to_core";
             return result;
@@ -345,10 +333,6 @@ namespace RNAssistant.Office.Services
                 ProtocolMessage = true,
                 Content = "TOOL_PACK_STATE:\n" + new JObject
                 {
-                    ["profile"] = ProfileId(),
-                    ["catalogRevision"] = CapabilityCatalogService.ToolCatalogRevision(_catalog),
-                    ["previousSnapshotRevision"] = previousRevision,
-                    ["snapshotRevision"] = revision,
                     ["requestedSchemas"] = admitted
                         ? (JToken)new JArray(requestedIds)
                         : JValue.CreateNull(),
@@ -372,8 +356,7 @@ namespace RNAssistant.Office.Services
                 .OrderBy(id => id, StringComparer.Ordinal)
                 .Select(id => new JObject
                 {
-                    ["id"] = id,
-                    ["revision"] = CapabilityCatalogService.Revision(_catalogById[id])
+                    ["id"] = id
                 }));
         }
 

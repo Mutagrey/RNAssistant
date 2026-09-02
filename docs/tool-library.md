@@ -61,22 +61,23 @@ immutable history.
 
 ## Mandatory all-tool contract audit (R61)
 
-The current schemas are not accepted as the final user/model contract. A source
-audit already shows runtime plumbing in public arguments: resource tools expose
-canonical `uri`, `revision` and `cursor`; capability search exposes a cursor; Plan
-mutations expose internal artifact revision IDs. The Library test form currently
-renders every argument as a plain text field regardless of JSON Schema type. These
-are audit findings, not proof that the affected tools have been corrected.
+The full catalog is not yet accepted as the final user/model contract. R61/11O1
+has corrected Resources + Capabilities host-neutral: public resources are semantic
+`find/read`, capability search/read no longer accept caller paging/revisions, and
+their model context/results/history omit opaque state while durable records retain
+it. Plan and later families still expose internal guards pending their own atomic
+cutovers. The Library test form remains text-only and open.
 
-The concrete failure attribution, current state-ownership leak, merge/split rules
+The concrete failure attribution, state-ownership decisions, merge/split rules
 and required model evals are recorded in
 [R61 tool contract audit](stabilization/R61_TOOL_CONTRACT_AUDIT.md). That audit is
-planning evidence: it neither pre-approves final public IDs nor changes the current
-resource/VBA contracts before their atomic cutover.
+the per-family acceptance record; later-family IDs are not pre-approved by the
+completed Resources + Capabilities slice.
 
-The source baseline in that audit enumerates all 35 conditional built-in
-`common.*` tool IDs and all nine built-in Common skill IDs, with a default
-disposition for each. Progressive capability loading is acknowledged, but does not
+The 11O0 source baseline in that audit enumerated all 35 conditional built-in
+`common.*` tool IDs and all nine built-in Common skill IDs; after the 11O1 resource
+merge the current source contains 33 Common IDs. Progressive capability loading is
+acknowledged, but does not
 exempt optional tools from merge/split/internalization review or justify
 plumbing-heavy schemas after admission. Skill bodies are contract consumers and
 must switch atomically with the IDs/arguments they teach. R61 must also compare
@@ -84,8 +85,8 @@ current core membership with a smaller relevant pack; registry count alone is no
 an optimization target.
 
 11O0 freezes the source-built-in property baseline in the machine-checked
-[R61 inventory](stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv): 73 unique built-in
-IDs and 76 effective host variants record exact descriptor revision, allowed modes,
+[R61 inventory](stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv): after 11O1, 71 unique built-in
+IDs and 74 effective host variants record exact descriptor revision, allowed modes,
 direct binding and recursive property paths. Plumbing-shaped additions require an
 explicit semantic or runtime-owned decision. Dynamic installed custom-package
 schemas remain package-revision-owned and are reviewed in the Tool-authoring/
@@ -135,9 +136,9 @@ not a second executor, store or permissive adapter. A system-owned field may rem
 public only with a per-tool written rationale proving that the caller must choose it
 and that no bounded semantic selector can preserve the same safety.
 
-The cutover is atomic per tool family. Until its slice switches, the existing exact
-URI/revision/cursor contract remains the implemented behavior; no alias, dual
-schema, guessed value or compatibility fallback is added.
+The cutover is atomic per tool family. Resources + Capabilities are switched; until
+another slice switches, its existing contract remains authoritative. No alias,
+dual schema, guessed value or compatibility fallback is added.
 
 ## Human documentation without model-context cost
 
@@ -194,13 +195,13 @@ WebView2, not inferred from a desktop browser screenshot.
 
 ## R61 delivery and gates
 
-1. Freeze an inventory of every effective tool ID/schema by mode and host. For each
+1. **Done host-neutral (11O0, refreshed by 11O1):** freeze every effective built-in tool ID/schema by mode and host. For each
    property record semantic owner, source/default, validation, internal resolver,
    result dependency, test fixture and keep/remove decision.
-2. Add contract checks that fail on unreviewed or unexplained plumbing-shaped
+2. **Done for Resources + Capabilities:** contract checks fail on unreviewed or unexplained plumbing-shaped
    arguments (`*Id`, UUID, URI, revision/hash/etag, cursor/offset/page token). Names
    are a review trigger, not an unsafe automatic stripping rule.
-3. Switch resource/continuation and revision-guard families first, then the
+3. **Resources + Capabilities done host-neutral; remaining families open:** switch resource/continuation and revision-guard families first, then the
    remaining tools one semantic family at a time. Delete each replaced public
    argument path in the same slice.
 4. Run deterministic model scenarios proving that calls complete without invented

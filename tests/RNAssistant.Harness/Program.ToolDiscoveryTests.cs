@@ -8,6 +8,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Runtime;
@@ -19,6 +20,131 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ModelProjectionHidesRuntimeEvidence()
+        {
+            var reference = new ResourceRef(
+                ResourceUri.Create("chat", "session", "artifact", "item", "revision", "1"),
+                "1");
+            var resourceCommand = Command(ResourceToolCatalog.ReadToolId);
+            resourceCommand.ToolCallId = "resource_call";
+            var resourceMessage = AgentJsonProtocol.CreateToolResultMessage(
+                resourceCommand,
+                TerminalToolResult.Ok("Read.", new JObject
+                {
+                    ["kind"] = "resource-read",
+                    ["target"] = "note: Example",
+                    ["text"] = "body",
+                    ["uri"] = reference.Uri,
+                    ["revision"] = reference.Revision,
+                    ["nextCursor"] = "opaque",
+                    ["progressCharacters"] = 8000,
+                    ["artifactId"] = "item"
+                }.ToString(Newtonsoft.Json.Formatting.None), new[] { reference }));
+            resourceMessage.ResourceRefs.Add(reference);
+
+            var projectedResource = ModelToolResultProjection.Project(resourceMessage);
+            ToolResultWireReadResult projectedResourceWire;
+            string error;
+            AssertTrue(ToolResultHistoryReader.TryRead(
+                projectedResource, out projectedResourceWire, out error),
+                "projected resource result remains strict Tool Result v1");
+            AssertEqual(0, projectedResourceWire.Result.Resources.Count,
+                "model resource result omits exact references");
+            AssertEqual(0, projectedResource.ResourceRefs.Count,
+                "model message metadata omits exact references");
+            AssertContains(projectedResourceWire.Result.DataJson, "note: Example",
+                "semantic resource target remains visible");
+            AssertTrue(projectedResource.Content.IndexOf(reference.Uri, StringComparison.Ordinal) < 0 &&
+                projectedResource.Content.IndexOf("opaque", StringComparison.Ordinal) < 0 &&
+                projectedResource.Content.IndexOf("progressCharacters", StringComparison.Ordinal) < 0 &&
+                projectedResource.Content.IndexOf("artifactId", StringComparison.Ordinal) < 0,
+                "resource URI, cursor, revision, and internal id stay hidden");
+            AssertEqual(1, resourceMessage.ResourceRefs.Count,
+                "durable resource message retains exact evidence");
+
+            var nativeResource = AgentJsonProtocol.CreateToolResultMessage(
+                resourceCommand,
+                TerminalToolResult.Ok("Read.", new JObject
+                {
+                    ["kind"] = "resource-read",
+                    ["target"] = "note: Example",
+                    ["uri"] = reference.Uri
+                }.ToString(Newtonsoft.Json.Formatting.None), new[] { reference }),
+                ToolResultRoles.Tool);
+            var projectedNative = ModelToolResultProjection.Project(nativeResource);
+            ToolResultWireReadResult projectedNativeWire;
+            AssertTrue(ToolResultHistoryReader.TryRead(
+                projectedNative, out projectedNativeWire, out error),
+                "native-role resource result remains strict after projection");
+            AssertEqual(0, projectedNativeWire.Result.Resources.Count,
+                "native-role resource projection omits exact references");
+            AssertTrue(projectedNative.Content.IndexOf(reference.Uri,
+                StringComparison.Ordinal) < 0,
+                "native-role resource projection hides exact URI data");
+
+            var malformedResource = AgentJsonProtocol.CreateToolResultMessage(
+                resourceCommand,
+                TerminalToolResult.Ok("Read.", "{}"));
+            malformedResource.Content = "TOOL_RESULT:\n{\"uri\":\"" + reference.Uri + "\"";
+            var projectedMalformed = ModelToolResultProjection.Project(malformedResource);
+            ToolResultWireReadResult projectedMalformedWire;
+            AssertTrue(ToolResultHistoryReader.TryRead(
+                projectedMalformed, out projectedMalformedWire, out error),
+                "malformed switched evidence becomes a strict model error");
+            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,
+                projectedMalformedWire.Result.Status,
+                "malformed switched evidence fails closed");
+            AssertContains(projectedMalformedWire.Result.DataJson,
+                "tool_result_projection_invalid", "projection error has an explicit code");
+            AssertTrue(projectedMalformed.Content.IndexOf(reference.Uri,
+                StringComparison.Ordinal) < 0,
+                "malformed switched evidence cannot leak an exact reference");
+
+            var staleSkill = new SkillDefinition
+            {
+                Id = "common.fixture_skill",
+                Name = "Fixture",
+                BodyMarkdown = "old",
+                Enabled = true
+            };
+            var currentSkill = new SkillDefinition
+            {
+                Id = staleSkill.Id,
+                Name = staleSkill.Name,
+                BodyMarkdown = "new",
+                Enabled = true
+            };
+            var capabilityCommand = Command(CapabilityToolCatalog.ReadToolId);
+            capabilityCommand.ToolCallId = "capability_call";
+            var capabilityMessage = AgentJsonProtocol.CreateToolResultMessage(
+                capabilityCommand,
+                TerminalToolResult.Ok("Skill loaded.", new JObject
+                {
+                    ["kind"] = "skill",
+                    ["id"] = staleSkill.Id,
+                    ["revision"] = SkillRevision.Compute(staleSkill),
+                    ["loaded"] = true,
+                    ["complete"] = true,
+                    ["bodyMarkdown"] = staleSkill.BodyMarkdown
+                }.ToString(Newtonsoft.Json.Formatting.None)));
+            var projectedCapability = ModelToolResultProjection.Project(
+                capabilityMessage,
+                new ToolCatalogEntry[0],
+                new[] { currentSkill });
+            ToolResultWireReadResult projectedCapabilityWire;
+            AssertTrue(ToolResultHistoryReader.TryRead(
+                projectedCapability, out projectedCapabilityWire, out error),
+                "projected stale capability remains strict Tool Result v1");
+            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,
+                projectedCapabilityWire.Result.Status,
+                "runtime invalidates stale capability evidence");
+            AssertContains(projectedCapabilityWire.Result.DataJson,
+                "capability_evidence_stale", "stale capability has an explicit code");
+            AssertTrue(projectedCapability.Content.IndexOf(
+                SkillRevision.Compute(staleSkill), StringComparison.Ordinal) < 0,
+                "model capability result omits package revision");
+        }
+
         private static void ToolDiscoveryIsCompleteAndLoadsExactSchema()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -113,7 +239,7 @@ namespace RNAssistant.Harness
                     "removed split discovery ids have no aliases");
 
                 var search = executor.ExecuteManual(
-                    Command(CapabilityToolCatalog.SearchToolId, "query", "excel.review_workbook", "limit", 2),
+                    Command(CapabilityToolCatalog.SearchToolId, "query", "excel.review_workbook"),
                     catalog,
                     new AppSettings(),
                     false,
@@ -122,8 +248,11 @@ namespace RNAssistant.Harness
                     AppSettings.DefaultMaxAgentToolSteps,
                     skills);
                 AssertTrue(search.Success, "capability metadata search succeeds");
-                AssertTrue(((JArray)JObject.Parse(search.DataJson)["items"]).Count <= 2,
-                    "search result respects its bound");
+                var searchData = JObject.Parse(search.DataJson);
+                AssertTrue(((JArray)searchData["items"]).Count <= 20,
+                    "search result uses its runtime-owned bound");
+                AssertTrue(searchData["cursor"] == null && searchData["nextCursor"] == null,
+                    "capability search exposes no caller continuation state");
                 AssertContains(search.DataJson, "\"kind\":\"skill\"", "search returns explicit capability kind");
                 AssertTrue(search.DataJson.IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
                     "search contains no exact schemas");
@@ -593,8 +722,14 @@ namespace RNAssistant.Harness
                     AssertTrue(toolPack.Tools.Any(tool => tool.Id == id), "VBA core includes exact public tool " + id);
                 AssertTrue(!toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_1"),
                     "optional catalog schema is not injected into the core");
-                AssertEqual("excel-vba-core", (string)toolPack.CapabilityContext(null)["profile"],
-                    "mode and host choose one deterministic profile");
+                var capabilityContext = toolPack.CapabilityContext(null);
+                AssertTrue(capabilityContext["profile"] == null &&
+                    capabilityContext["snapshotRevision"] == null,
+                    "model capability context hides runtime profile and snapshot identity");
+                AssertTrue(((JArray)capabilityContext["items"]).OfType<JObject>().Any(item =>
+                    (string)item["id"] == ResourceToolCatalog.FindToolId &&
+                    (bool?)item["schemaLoaded"] == true),
+                    "model capability context exposes semantic callable membership");
 
                 var first = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_1", "read_1");
                 var second = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_2", "read_2");

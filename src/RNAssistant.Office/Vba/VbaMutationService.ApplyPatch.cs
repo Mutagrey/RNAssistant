@@ -166,8 +166,7 @@ namespace RNAssistant.Office.Vba
                     {
                         ["findSha256"] = TextPatternEngine.Sha256(patch.NormalizedFind),
                         ["inspectTool"] = "common.resources_read",
-                        ["resourceProvider"] = VbaResourceProvider.ProviderName,
-                        ["resourceKind"] = VbaResourceProvider.ComponentKind,
+                        ["discoveryScope"] = "vba",
                         ["retrySamePatch"] = false
                     },
                     "vba_patch_stale_source",
@@ -182,8 +181,7 @@ namespace RNAssistant.Office.Vba
                         ["matchCount"] = patch.MatchCount,
                         ["findSha256"] = TextPatternEngine.Sha256(patch.NormalizedFind),
                         ["inspectTool"] = "common.resources_read",
-                        ["resourceProvider"] = VbaResourceProvider.ProviderName,
-                        ["resourceKind"] = VbaResourceProvider.ComponentKind,
+                        ["discoveryScope"] = "vba",
                         ["retrySamePatch"] = false
                     },
                     "vba_patch_ambiguous",

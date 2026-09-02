@@ -107,7 +107,8 @@ namespace RNAssistant.Harness
                     var adapter = FakeOfficeAdapter.ForHost(host);
                     var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
                     var tools = executor.GetControllerTools().ToList();
-                    AssertTrue(HasTool(tools, "common.resources_read") && HasTool(tools, "common.resources_search"),
+                    AssertTrue(HasTool(tools, ResourceToolCatalog.ReadToolId) &&
+                        HasTool(tools, ResourceToolCatalog.FindToolId),
                         host + " exposes shared resource reads");
                     AssertTrue(HasTool(tools, "common.vba_write_module"), host + " exposes common VBA upsert");
                     AssertTrue(HasTool(tools, "common.vba_apply_patch"), host + " exposes common VBA patch");
@@ -1235,7 +1236,7 @@ namespace RNAssistant.Harness
             }), "skill body is required by shared validation");
         }
 
-        private static void SkillReferencesAreRevisionedAndPaged()
+        private static void SkillReferencesAreRevisionedAndRuntimeContinued()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
@@ -1251,12 +1252,14 @@ namespace RNAssistant.Harness
                 });
                 var stored = store.Load().Single(item => item.Id == "common.reference_test");
                 var bodyOnlyRevision = SkillRevision.Compute(stored);
+                var referenceContent = "# Details\n\nABCDEFGHIJ" +
+                    new string('A', 24000) + "TAIL";
                 string saveError;
                 SkillReferenceMetadata savedReference;
                 AssertTrue(store.TrySaveReference(
                     stored,
                     "references/details.md",
-                    "# Details\n\nABCDEFGHIJ",
+                    referenceContent,
                     out savedReference,
                     out saveError), "reference save succeeds: " + saveError);
                 AssertTrue(!store.TrySaveReference(
@@ -1268,7 +1271,7 @@ namespace RNAssistant.Harness
                 AssertTrue(store.TrySaveReference(
                     stored,
                     "references/DETAILS.md",
-                    "# Details\n\nABCDEFGHIJ",
+                    referenceContent,
                     out savedReference,
                     out saveError), "case-insensitive reference update preserves one file: " + saveError);
 
@@ -1305,20 +1308,37 @@ namespace RNAssistant.Harness
                 AssertEqual("references/details.md", (string)mainData.SelectToken("references[0].path"),
                     "core read lists references without their bodies");
 
+                var readSession = new ChatSession();
+                var firstCommand = Command("common.capabilities_read",
+                    "id", stored.Id,
+                    "referencePath", "references/details.md");
+                firstCommand.ToolCallId = "skill_reference_first";
                 var first = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/details.md", "maxChars", 8),
-                    tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
+                    firstCommand,
+                    tools, new AppSettings(), false, false, readSession, 40, runtimeSkills, CancellationToken.None);
                 var firstData = JObject.Parse(first.DataJson);
                 AssertEqual("reference", (string)firstData["kind"], "reference result kind");
-                AssertEqual(8, (int)firstData["returnedChars"], "reference chunk is bounded");
+                AssertEqual(24000, (int)firstData["returnedChars"], "reference chunk uses the runtime bound");
                 AssertEqual(false, (bool)firstData["complete"], "first reference chunk is incomplete");
-                AssertEqual(8, (int)firstData["nextOffset"], "next reference offset is explicit");
+                AssertEqual(24000, (int)firstData["progressCharacters"], "runtime result records continuation progress");
+                AssertTrue(firstData["offset"] == null && firstData["nextOffset"] == null,
+                    "reference result exposes no caller-owned offset");
                 AssertTrue(firstData["loaded"] == null, "reference chunk does not load the core skill");
+                readSession.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(
+                    firstCommand,
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
+                        first.Message,
+                        first.DataJson,
+                        first.ModelResourceRefs)));
 
                 var rest = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/details.md", "offset", 8, "maxChars", 50000),
-                    tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
-                AssertEqual(true, (bool)JObject.Parse(rest.DataJson)["complete"], "final reference chunk is complete");
+                    Command("common.capabilities_read", "id", stored.Id,
+                        "referencePath", "references/details.md", "action", "next"),
+                    tools, new AppSettings(), false, false, readSession, 40, runtimeSkills, CancellationToken.None);
+                var restData = JObject.Parse(rest.DataJson);
+                AssertEqual(true, (bool)restData["complete"], "final reference chunk is complete");
+                AssertEqual(referenceContent.Substring(24000), (string)restData["content"],
+                    "semantic next resumes at the runtime-owned exact offset");
 
                 var traversal = executor.ExecuteManual(
                     Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/../secret.md"),

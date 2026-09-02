@@ -29,12 +29,12 @@
   var ensureSelection = workspaceModel.ensureSelection;
   var workspaceActions = null;
 
-  function submitPlanHandoff(revisionUri) {
+  function submitPlanHandoff() {
     var input = $("chatInput");
     var form = $("chatForm");
-    if (!input || !form || typeof form.requestSubmit !== "function" || !revisionUri) return false;
-    input.value = "Выполни утверждённый план " + revisionUri +
-      ". Перед началом прочитай эту точную ревизию через common.resources_read.";
+    if (!input || !form || typeof form.requestSubmit !== "function") return false;
+    input.value = "Выполни утверждённый активный план. Перед началом найди его через " +
+      "common.resources_find и прочитай возвращённую семантическую цель через common.resources_read.";
     updateComposerInputState();
     form.requestSubmit();
     return true;

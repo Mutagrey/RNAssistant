@@ -85,17 +85,9 @@ namespace RNAssistant.Office.Runtime
                     !string.Equals(binding.EntryPoint, registration.Binding.EntryPoint, StringComparison.Ordinal))
                     throw new InvalidOperationException("Pinned native binding does not match its handler: " + registration.Descriptor.Id);
                 IToolHandler handler;
-                if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ListToolId, StringComparison.Ordinal))
+                if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.FindToolId, StringComparison.Ordinal))
                 {
-                    handler = new ResourceListToolHandler(gateway, session);
-                }
-                else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ResolveToolId, StringComparison.Ordinal))
-                {
-                    handler = new ResourceResolveToolHandler(gateway, session);
-                }
-                else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal))
-                {
-                    handler = new ResourceSearchToolHandler(gateway, session);
+                    handler = new ResourceFindToolHandler(gateway, session);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal))
                 {
@@ -220,7 +212,7 @@ namespace RNAssistant.Office.Runtime
                             "Capability handler dependencies are unavailable.");
                     handler = new CapabilityToolHandler(
                         registration.Descriptor.Id, capabilityTools,
-                        discoveryCatalog, skillCatalog, manualRun);
+                        discoveryCatalog, skillCatalog, session, manualRun);
                 }
                 else if (PromptToolCatalog.Owns(
                     registration.Descriptor.Id))
@@ -284,9 +276,7 @@ namespace RNAssistant.Office.Runtime
 
         internal static bool Owns(string toolId)
         {
-            return string.Equals(toolId, ResourceToolCatalog.ListToolId, StringComparison.Ordinal) ||
-                string.Equals(toolId, ResourceToolCatalog.ResolveToolId, StringComparison.Ordinal) ||
-                string.Equals(toolId, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal) ||
+            return string.Equals(toolId, ResourceToolCatalog.FindToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||

@@ -105,8 +105,8 @@ function reviewVbaInChat() {
   }
   var moduleName = vbaModuleName(module);
   var prompt = "Проверь VBA-модуль " + moduleName +
-    ": найди его точную ссылку через common.resources_search с provider=vba и kind=vba-component, " +
-    "затем прочитай source через common.resources_read и найди ошибки, риски и места для улучшения.";
+    ": найди его через common.resources_find со scope=vba, " +
+    "затем прочитай source по точному возвращённому semantic target через common.resources_read и найди ошибки, риски и места для улучшения.";
   if (String(state.activeChatMode || "agent").toLowerCase() === "agent") {
     prompt += " Для небольших правок используй common.vba_apply_patch.";
   }

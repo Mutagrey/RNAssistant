@@ -16,6 +16,7 @@ namespace RNAssistant.Office.Tools
         private readonly CapabilityCatalogService _service;
         private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
         private readonly IReadOnlyList<SkillDefinition> _skills;
+        private readonly ChatSession _session;
         private readonly bool _manualRun;
 
         internal CapabilityToolHandler(
@@ -23,6 +24,7 @@ namespace RNAssistant.Office.Tools
             CapabilityCatalogService service,
             IReadOnlyList<ToolCatalogEntry> catalog,
             IReadOnlyList<SkillDefinition> skills,
+            ChatSession session,
             bool manualRun)
         {
             if (!CapabilityToolCatalog.Owns(toolId))
@@ -32,6 +34,7 @@ namespace RNAssistant.Office.Tools
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _catalog = catalog ?? new ToolCatalogEntry[0];
             _skills = skills;
+            _session = session;
             _manualRun = manualRun;
         }
 
@@ -39,10 +42,10 @@ namespace RNAssistant.Office.Tools
         {
             if (string.Equals(toolId, CapabilityToolCatalog.SearchToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("capabilities.search.v1");
+                return new ToolBinding("capabilities.search.intent.v1");
             if (string.Equals(toolId, CapabilityToolCatalog.ReadToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("capabilities.read.v1");
+                return new ToolBinding("capabilities.read.intent.v1");
             return null;
         }
 
@@ -52,7 +55,7 @@ namespace RNAssistant.Office.Tools
         {
             cancellationToken.ThrowIfCancellationRequested();
             var outcome = _service.Execute(
-                _toolId, context.Arguments, _catalog, _skills, _manualRun);
+                _toolId, context.Arguments, _catalog, _skills, _session, _manualRun);
             if (outcome == null)
                 throw new InvalidOperationException(
                     "Capability service returned no outcome.");

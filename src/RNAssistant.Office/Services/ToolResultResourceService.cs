@@ -150,9 +150,7 @@ namespace RNAssistant.Office.Services
         internal static bool IsResourceEvidence(ToolInvocation command)
         {
             var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
-            return string.Equals(id, ResourceToolCatalog.ListToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(id, ResourceToolCatalog.ResolveToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(id, ResourceToolCatalog.SearchToolId, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(id, ResourceToolCatalog.FindToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(id, ResourceToolCatalog.ReadToolId, StringComparison.OrdinalIgnoreCase);
         }
 

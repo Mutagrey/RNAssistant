@@ -106,9 +106,7 @@
     <Compile Include="Runtime\HostRuntime.cs" />
     <Compile Include="Runtime\DocumentAccessGate.cs" />
     <Compile Include="Tools\ResourceToolHandlerBase.cs" />
-    <Compile Include="Tools\ResourceListToolHandler.cs" />
-    <Compile Include="Tools\ResourceResolveToolHandler.cs" />
-    <Compile Include="Tools\ResourceSearchToolHandler.cs" />
+    <Compile Include="Tools\ResourceFindToolHandler.cs" />
     <Compile Include="Tools\ResourceReadToolHandler.cs" />
     <Compile Include="Domains\Excel\ExcelReadContracts.cs" />
     <Compile Include="Domains\Excel\ExcelReadService.cs" />
@@ -217,12 +215,14 @@
     <Compile Include="Services\VbaResourceProvider.Read.cs" />
     <Compile Include="Services\ChatResourceIngestionService.cs" />
     <Compile Include="Services\ResourceGatewayService.cs" />
+    <Compile Include="Services\ResourceGatewayService.Intent.cs" />
     <Compile Include="Services\ResourceProviderRegistry.cs" />
     <Compile Include="Services\ResourceReadCursor.cs" />
     <Compile Include="Services\ToolResultResourceService.cs" />
     <Compile Include="Services\ToolResultMaterialization.cs" />
     <Compile Include="Services\ToolRunResultFactory.cs" />
     <Compile Include="Services\ToolResultHistoryReader.cs" />
+    <Compile Include="Services\ModelToolResultProjection.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\ConversationRunService.cs" />
     <Compile Include="Services\ConversationKernelAdapter.cs" />

@@ -1190,10 +1190,12 @@ namespace RNAssistant.Harness
             AssertContains(settings.AgentToolsPrompt, "unclassified calls are singleton", "tool prompt describes conservative batching");
             AssertContains(settings.AgentToolsPrompt, "TOOL_PACK_STATE", "tool prompt requires explicit optional admission");
             AssertContains(settings.AgentToolsPrompt, "without LRU eviction", "tool prompt preserves admitted schemas for the run");
-            AssertContains(settings.AgentToolsPrompt, "exact `resources` URI with `relation=result`", "tool prompt explains externalized results");
+            AssertContains(settings.AgentToolsPrompt, "exact references, revision guards, continuation cursors",
+                "tool prompt assigns opaque resource state to runtime");
             AssertTrue(settings.AgentSkillsPrompt.StartsWith("# Agent skill policy", StringComparison.Ordinal), "skill prompt is separate Markdown");
             AssertContains(settings.AgentSkillsPrompt, "metadata only", "skill catalog is explicitly not loaded guidance");
-            AssertContains(settings.AgentSkillsPrompt, "package `revision`", "skill prompt describes revisions");
+            AssertContains(settings.AgentSkillsPrompt, "package revisions are not model-owned state",
+                "skill prompt assigns package identity to runtime");
             AssertContains(settings.AgentSkillsPrompt, "`loaded=true`", "skill prompt defines explicit loaded evidence");
             AssertContains(settings.AgentSkillsPrompt, "do not retry unchanged", "skill prompt prevents truncated skill loops");
             AssertContains(settings.AgentSkillsPrompt, "referencePath", "skill prompt explains progressive reference reads");
@@ -1202,7 +1204,10 @@ namespace RNAssistant.Harness
             AssertContains(settings.ChatSystemPrompt, "## Response contract", "chat uses the structured response envelope");
             AssertContains(settings.ChatSystemPrompt, "multimodal model", "chat prompt keeps current media direct when supported");
             AssertTrue(settings.ContextCompactionPrompt.StartsWith("# Context compaction", StringComparison.Ordinal), "compaction prompt Markdown heading");
-            AssertContains(settings.ContextCompactionPrompt, "Skill ids and revisions", "compaction preserves pending skill references");
+            AssertContains(settings.ContextCompactionPrompt, "Exact public skill ids",
+                "compaction preserves public skill references without revisions");
+            AssertContains(settings.ContextCompactionPrompt, "Do not preserve resource URIs",
+                "compaction excludes opaque runtime identity");
             AssertTrue(settings.ChatTitlePrompt.StartsWith("# Chat title", StringComparison.Ordinal), "title prompt Markdown heading");
             AssertTrue(settings.AttachmentAnalysisPrompt.StartsWith("# Attachment analysis", StringComparison.Ordinal), "attachment worker prompt is editable Markdown");
             AssertEqual(AppSettings.DefaultMaxTokens, settings.MaxTokens, "long-run output token default");

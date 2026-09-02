@@ -127,7 +127,7 @@ namespace RNAssistant.Office.Services
             descriptor.Metadata["host"] = _adapter.HostName ?? string.Empty;
             descriptor.Metadata["live"] = "true";
             descriptor.Metadata["childKinds"] = ComponentKind + "," + BackupKind;
-            descriptor.Metadata["childDiscovery"] = "The default provider list includes live components; use kind=vba-backup for backups.";
+            descriptor.Metadata["childDiscovery"] = "Use common.resources_find with scope=backups for backup evidence.";
             return descriptor;
         }
 
@@ -302,7 +302,7 @@ namespace RNAssistant.Office.Services
         {
             return new ResourceRequestException(
                 "VBA resource is no longer available at this URI: " + resourceUri +
-                ". Call common.resources_list with provider=vba and kind=vba-component or vba-backup, then use the exact current URI.",
+                ". Run common.resources_find with scope=vba or scope=backups, then choose one exact returned semantic target.",
                 "resource_not_found",
                 true);
         }

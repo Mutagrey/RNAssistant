@@ -153,14 +153,10 @@ namespace RNAssistant.Office.Services
         {
             mode = ChatModes.Normalize(mode);
             var adapterHost = SafeAdapterValue(adapter, item => item.HostName);
-            var adapterDocumentKey = SafeAdapterValue(adapter, item => item.DocumentKey);
             var adapterDocumentTitle = SafeAdapterValue(adapter, item => item.DocumentTitle);
             var host = session != null && !string.IsNullOrWhiteSpace(session.Host)
                 ? session.Host
                 : adapterHost;
-            var documentKey = session != null && !string.IsNullOrWhiteSpace(session.DocumentKey)
-                ? session.DocumentKey
-                : adapterDocumentKey;
             var documentTitle = session != null && !string.IsNullOrWhiteSpace(session.DocumentTitle)
                 ? session.DocumentTitle
                 : adapterDocumentTitle;
@@ -173,7 +169,6 @@ namespace RNAssistant.Office.Services
                 ["host"] = host ?? string.Empty,
                 ["document"] = new JObject
                 {
-                    ["key"] = documentKey ?? string.Empty,
                     ["title"] = documentTitle ?? string.Empty,
                     ["office_tools_available"] = officeToolsAvailable,
                     ["office_tool_policy"] = string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal)
@@ -231,8 +226,7 @@ namespace RNAssistant.Office.Services
             {
                 ["id"] = planId,
                 ["status"] = status,
-                ["title"] = artifact.Title ?? string.Empty,
-                ["revision_uri"] = ChatResourceUri.CreateArtifactRevisionUri(session, artifact)
+                ["title"] = artifact.Title ?? string.Empty
             };
         }
 

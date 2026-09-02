@@ -20,12 +20,12 @@ namespace RNAssistant.Office.Tools
         {
             yield return Projection(
                 SearchToolId,
-                "Read-only: Filter the complete compact RUNTIME_CONTEXT.capabilities catalog by id or metadata. Results identify tools and skills but load neither; use the exact id with common.capabilities_read.",
+                "Read-only: Filter the complete compact RUNTIME_CONTEXT.capabilities catalog by id or metadata. Results identify tools and skills but load neither. Paging and limits are runtime-owned; refine the semantic query when complete=false.",
                 CapabilityCatalogService.SearchSchema(),
                 "capabilities_search");
             yield return Projection(
                 ReadToolId,
-                "Read-only: Read one exact capability id from RUNTIME_CONTEXT.capabilities or capabilities_search. A tool result loads its exact callable schema; a skill result loads its complete Markdown body. Never invent or derive an id.",
+                "Read-only: Read one exact public capability id from RUNTIME_CONTEXT.capabilities or capabilities_search. For a listed skill reference, use its semantic referencePath and action=next after hasMore=true; offsets, page sizes, catalog revisions, and admission state are runtime-owned.",
                 CapabilityCatalogService.ReadSchema(null, null),
                 "capabilities_read");
         }

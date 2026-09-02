@@ -514,8 +514,7 @@ namespace RNAssistant.OfficeHosts.Vba
                     actualExists = actualExists,
                     actualCodeSha256 = actualCodeSha256,
                     inspectTool = "common.resources_read",
-                    resourceProvider = "vba",
-                    resourceKind = "vba-component"
+                    discoveryScope = "vba"
                 },
                 "stale_vba_module",
                 true);

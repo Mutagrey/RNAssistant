@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Services
                     true);
             }
 
-            var candidates = history.Select(HistoricalContextProjector.Project).ToList();
+            var candidates = history.Select(message => ModelToolResultProjection.Project(message)).ToList();
             var required = EstimateMessages(candidates, settings);
             if (required > available)
             {

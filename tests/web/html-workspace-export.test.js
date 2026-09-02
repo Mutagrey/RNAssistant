@@ -113,7 +113,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"]
     .forEach(asset => assert.ok(index.includes(asset + "?v=" +
       (asset === "app-html-workspace-preview.js" ? "html-export-20260831-1" : "artifact-text-20260831-1")), asset));
-  assert.ok(index.includes("app-html-workspace.js?v=bridge-bootstrap-20260831-1"));
+  assert.ok(index.includes("app-html-workspace.js?v=resource-intent-20260902-1"));
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"));
   console.log("PASS HTML export: changed UI graph uses one cache key");
 

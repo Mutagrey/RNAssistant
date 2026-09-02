@@ -404,15 +404,34 @@ namespace RNAssistant.Office.Services
             }
             else
             {
+                var descriptors = (session == null || session.Artifacts == null
+                        ? new List<ChatArtifact>()
+                        : session.Artifacts.Where(item => item != null &&
+                            !string.IsNullOrWhiteSpace(item.Id)).ToList())
+                    .GroupBy(artifact => artifact.Id, StringComparer.OrdinalIgnoreCase)
+                    .Where(group => group.Count() == 1)
+                    .Select(group => group.Single())
+                    .ToDictionary(artifact => artifact.Id, artifact => new ResourceDescriptor
+                    {
+                        Kind = artifact.Kind,
+                        Title = artifact.Title,
+                        CreatedUtc = artifact.CreatedUtc
+                    }, StringComparer.OrdinalIgnoreCase);
+                var duplicateTargets = new HashSet<string>(descriptors.Values
+                    .GroupBy(ResourceGatewayService.IntentBaseTarget, StringComparer.OrdinalIgnoreCase)
+                    .Where(group => group.Count() > 1)
+                    .Select(group => group.Key), StringComparer.OrdinalIgnoreCase);
                 foreach (var artifact in artifacts.Take(100))
                 {
+                    ResourceDescriptor descriptor;
+                    if (!descriptors.TryGetValue(artifact.Id, out descriptor)) continue;
                     artifactIndex.AppendLine(
-                        ModelContextBudget.TruncateText(
-                            ChatResourceUri.CreateArtifactRevisionUri(session, artifact), 256, settings) + " | " +
-                        ModelContextBudget.TruncateText(artifact.Kind, 32, settings) + " | " +
-                        ModelContextBudget.TruncateText(artifact.Title, 128, settings) +
-                        " | revision=" + artifact.Revision + " | parent=" +
-                        ModelContextBudget.TruncateText(artifact.ParentArtifactId, 64, settings));
+                        "target=" + ModelContextBudget.TruncateText(
+                            ResourceGatewayService.IntentTarget(
+                                descriptor,
+                                duplicateTargets.Contains(ResourceGatewayService.IntentBaseTarget(descriptor))),
+                            256,
+                            settings) + " | type=" + ResourceGatewayService.IntentType(descriptor));
                 }
                 if (artifacts.Count > 100) artifactIndex.AppendLine("[additional artifacts omitted]");
             }
@@ -450,7 +469,7 @@ namespace RNAssistant.Office.Services
 
         private static ChatMessage ProjectMessage(ChatSession session, ChatMessage message)
         {
-            return HistoricalContextProjector.Project(message);
+            return ModelToolResultProjection.Project(message);
         }
 
         private static JObject ParseSummary(string content)

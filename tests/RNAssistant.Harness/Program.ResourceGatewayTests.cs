@@ -30,12 +30,8 @@ namespace RNAssistant.Harness
                 session.Mode = ChatModes.Chat;
                 session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "First", InlineText = "body" });
                 var tools = executor.GetControllerTools().ToArray();
-                AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.ListToolId),
-                    ResourceListToolHandler.Descriptor, ResourceListToolHandler.Policy, "resources_list");
-                AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.ResolveToolId),
-                    ResourceResolveToolHandler.Descriptor, ResourceResolveToolHandler.Policy, "resources_resolve");
-                AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.SearchToolId),
-                    ResourceSearchToolHandler.Descriptor, ResourceSearchToolHandler.Policy, "resources_search");
+                AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.FindToolId),
+                    ResourceFindToolHandler.Descriptor, ResourceFindToolHandler.Policy, "resources_find");
                 AssertResourceControllerProjection(tools.Single(item => item.Id == ResourceToolCatalog.ReadToolId),
                     ResourceReadToolHandler.Descriptor, ResourceReadToolHandler.Policy, "resources_read");
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Chat, false);
@@ -49,30 +45,32 @@ namespace RNAssistant.Harness
                         DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                 };
 
-                var listed = execute(ResourceToolCatalog.ListToolId, "{\"provider\":\"chat\"}");
-                AssertEqual(ToolExecutionOutcome.Ok, listed.Outcome, "native resource list succeeds in chat mode");
-                AssertEqual(ToolDispatchEvidence.MayHaveDispatched, listed.Evidence.Dispatch, "provider invocation is recorded");
-                AssertEqual(ToolEffectEvidence.None, listed.Evidence.Effect, "read success does not manufacture verified effect");
-                var resourceUri = JsonConvert.DeserializeObject<ResourceListPage>(listed.Result.DataJson)
-                    .Items.Single().Reference.Uri;
-                AssertTrue(resourceUri.StartsWith("rna://", StringComparison.Ordinal),
-                    "native list retains canonical resource references");
+                var found = execute(ResourceToolCatalog.FindToolId, "{\"scope\":\"conversation\"}");
+                AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "semantic resource find succeeds in chat mode");
+                AssertEqual(ToolDispatchEvidence.MayHaveDispatched, found.Evidence.Dispatch, "provider invocation is recorded");
+                AssertEqual(ToolEffectEvidence.None, found.Evidence.Effect, "read success does not manufacture verified effect");
+                var findData = JObject.Parse(found.Result.DataJson);
+                var candidate = ((JArray)findData["items"]).OfType<JObject>().Single(item =>
+                    string.Equals((string)item["title"], "First", StringComparison.Ordinal));
+                var resourceTarget = (string)candidate["target"];
+                AssertTrue(!string.IsNullOrWhiteSpace(resourceTarget), "find returns a readable semantic target");
+                AssertTrue(candidate["reference"] == null && candidate["provider"] == null && candidate["kind"] == null,
+                    "find data does not expose provider routing or exact reference plumbing");
+                var resourceUri = found.Result.Resources.Single(reference =>
+                    reference.Uri.StartsWith("rna://", StringComparison.Ordinal)).Uri;
 
                 var calls = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    [ResourceToolCatalog.ListToolId] = "{\"provider\":\"chat\"}",
-                    [ResourceToolCatalog.ResolveToolId] = JsonConvert.SerializeObject(new { uri = resourceUri }),
-                    [ResourceToolCatalog.SearchToolId] = "{\"provider\":\"chat\",\"query\":\"body\"}",
+                    [ResourceToolCatalog.FindToolId] = "{\"query\":\"body\",\"scope\":\"conversation\"}",
                     [ResourceToolCatalog.ReadToolId] = JsonConvert.SerializeObject(new
                     {
-                        uri = resourceUri,
-                        representation = ResourceRepresentations.Text,
-                        maxChars = 128
+                        target = resourceTarget,
+                        representation = ResourceRepresentations.Text
                     })
                 };
                 foreach (var item in calls)
                 {
-                    var record = item.Key == ResourceToolCatalog.ListToolId ? listed : execute(item.Key, item.Value);
+                    var record = execute(item.Key, item.Value);
                     AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, item.Key + " uses its native handler");
                     AssertTrue(record.Result.Resources.Any(reference => reference.Uri == resourceUri),
                         item.Key + " exposes each returned exact resource at Tool Result root");
@@ -102,44 +100,38 @@ namespace RNAssistant.Harness
                 var readRecord = execute(ResourceToolCatalog.ReadToolId, calls[ResourceToolCatalog.ReadToolId]);
                 AssertTrue(readRecord.Result.Resources.Any(reference => reference.Uri == resourceUri),
                     "native resource read retains the exact ResourceRef in typed result data");
+                var readData = JObject.Parse(readRecord.Result.DataJson);
+                AssertEqual(resourceTarget, (string)readData["target"], "read preserves the semantic target");
+                AssertEqual("body", (string)readData["text"], "read returns complete content without caller page size");
+                AssertTrue(readData["nextCursor"] == null && readData["resource"] == null,
+                    "read data hides cursor and exact resource plumbing");
                 HtmlWorkspaceToolService.UpsertFile(
                     session,
                     "nested/report.html",
                     "html",
                     "<main>Resolved through native tool</main>",
                     true);
-                var htmlArtifact = session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId);
-                var nativeMemberResolve = execute(ResourceToolCatalog.ResolveToolId,
-                    JsonConvert.SerializeObject(new
-                    {
-                        parentUri = ChatResourceUri.CreateArtifactRevisionUri(session, htmlArtifact),
-                        memberPath = "nested/report.html",
-                        memberType = "file"
-                    }));
-                AssertEqual(ToolExecutionOutcome.Ok, nativeMemberResolve.Outcome,
-                    "native resource resolver accepts the path alternative");
-                AssertEqual("nested/report.html",
-                    (string)JObject.Parse(nativeMemberResolve.Result.DataJson).SelectToken("resource.title"),
-                    "native path resolution returns the exact member descriptor");
-                var foreignSegments = ResourceUri.Parse(
-                    ChatResourceUri.CreateArtifactRevisionUri(session, htmlArtifact)).Segments.ToArray();
-                foreignSegments[0] = "foreign-chat";
-                var foreignResolve = execute(ResourceToolCatalog.ResolveToolId,
-                    JsonConvert.SerializeObject(new
-                    {
-                        uri = ResourceUri.Create(ChatArtifactResourceProvider.ProviderName, foreignSegments)
-                    }));
-                var foreignData = JObject.Parse(foreignResolve.Result.DataJson);
-                AssertEqual(ToolExecutionOutcome.Error, foreignResolve.Outcome,
-                    "foreign chat resolution is a typed runtime error");
-                AssertEqual("active_chat_mismatch", (string)foreignData["code"],
-                    "resource runtime preserves the precise error code");
-                AssertContains(foreignResolve.Message, "owning chat",
-                    "resource runtime includes actionable recovery guidance");
-                var invalidManual = executor.ExecuteManual(Command(ResourceToolCatalog.ListToolId, "limit", 51), tools,
+                var htmlFind = execute(ResourceToolCatalog.FindToolId,
+                    "{\"query\":\"nested/report.html\",\"scope\":\"html\"}");
+                AssertEqual("HTML file: nested/report.html",
+                    (string)JObject.Parse(htmlFind.Result.DataJson).SelectToken("items[0].target"),
+                    "path resolution is internal to semantic HTML discovery");
+                foreach (var retired in new[]
+                {
+                    "common.resources_list",
+                    "common.resources_resolve",
+                    "common.resources_search"
+                })
+                {
+                    AssertTrue(tools.All(item => !string.Equals(item.Id, retired, StringComparison.Ordinal)),
+                        retired + " is removed from the catalog");
+                    AssertTrue(runtime.Describe(new ToolCall("retired", retired, "{}")) == null,
+                        retired + " has no runtime alias");
+                }
+                var invalidManual = executor.ExecuteManual(Command(ResourceToolCatalog.FindToolId, "provider", "chat"), tools,
                     new AppSettings(), false, true, session);
                 AssertTrue(!invalidManual.Success && invalidManual.ErrorCode == "invalid_arguments",
-                    "manual command uses the same native validation boundary");
+                    "manual command rejects retired provider routing");
 
                 var hostRuntime = new HostRuntime(adapter, FixturePaths.Value);
                 var target = new OfficeDocumentExecutionExpectation
@@ -149,28 +141,28 @@ namespace RNAssistant.Harness
                     RuntimeDocumentKey = adapter.RuntimeDocumentKey
                 };
                 var backendCalls = adapter.TotalBackendCallCount;
-                var liveListArguments = "{\"provider\":\"vba\",\"kind\":\"vba-component\"}";
+                var liveFindArguments = "{\"scope\":\"vba\"}";
                 using (hostRuntime.BeginDocumentAccess(target))
                 {
-                    var blockedCall = new ToolCall("blocked_live_list", ResourceToolCatalog.ListToolId,
-                        liveListArguments);
+                    var blockedCall = new ToolCall("blocked_live_find", ResourceToolCatalog.FindToolId,
+                        liveFindArguments);
                     var blockedPolicy = runtime.Describe(blockedCall);
                     var blocked = runtime.ExecuteAsync(new ToolExecutionContext(blockedCall, blockedPolicy, "run", "turn", "step",
                         DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                     AssertEqual(ToolExecutionOutcome.Error, blocked.Outcome,
-                        "new native command cannot borrow document access held on the same thread");
+                        "semantic find cannot borrow document access held on the same thread");
                     AssertEqual("tool_mutation_busy", (string)JObject.Parse(blocked.Result.DataJson)["code"],
-                        "native live list reports the occupied document gate");
-                    AssertEqual(backendCalls, adapter.TotalBackendCallCount, "blocked native live list never reaches Office backend");
+                        "native live find reports the occupied document gate");
+                    AssertEqual(backendCalls, adapter.TotalBackendCallCount, "blocked native live find never reaches Office backend");
                 }
 
-                var releasedCall = new ToolCall("released_live_list", ResourceToolCatalog.ListToolId,
-                    liveListArguments);
+                var releasedCall = new ToolCall("released_live_find", ResourceToolCatalog.FindToolId,
+                    liveFindArguments);
                 var releasedPolicy = runtime.Describe(releasedCall);
                 var released = runtime.ExecuteAsync(new ToolExecutionContext(releasedCall, releasedPolicy, "run", "turn", "step",
                     DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
-                AssertEqual(ToolExecutionOutcome.Ok, released.Outcome, "native live list succeeds after document access release");
-                AssertTrue(adapter.TotalBackendCallCount > backendCalls, "released native live list reaches the Office backend");
+                AssertEqual(ToolExecutionOutcome.Ok, released.Outcome, "native live find succeeds after document access release");
+                AssertTrue(adapter.TotalBackendCallCount > backendCalls, "released native live find reaches the Office backend");
             });
         }
 
@@ -256,32 +248,25 @@ namespace RNAssistant.Harness
                 "resource list does not expose the current-page cursor");
             AssertContains(firstListJson, "\"nextCursor\"",
                 "resource list exposes only the usable continuation cursor");
-            var readRegistry = new ToolHandlerRegistry();
-            var readRegistration = ToolPackSnapshot.Capture(
-                ResourceReadToolHandler.Descriptor,
-                ResourceReadToolHandler.Policy,
-                ResourceReadToolHandler.Binding);
-            readRegistry.Register(readRegistration,
-                new ResourceReadToolHandler(pagingGateway, pagingSession, null));
-            var readRuntime = new ToolRuntime(readRegistry, ChatModes.Chat, false, false);
-            var crossCall = new ToolCall("cross_cursor", ResourceToolCatalog.ReadToolId,
-                JsonConvert.SerializeObject(new
+            ResourceRequestException crossOperationCursor = null;
+            try
+            {
+                pagingGateway.Read(pagingSession, new ResourceReadRequest
                 {
-                    uri = firstListPage.Items[0].Reference.Uri,
-                    representation = ResourceRepresentations.Text,
-                    cursor = firstListPage.Cursor
-                }));
-            var crossPolicy = readRuntime.Describe(crossCall);
-            var crossRecord = readRuntime.ExecuteAsync(new ToolExecutionContext(
-                crossCall, crossPolicy, "run", "turn", "step", DateTime.UtcNow, false, 1),
-                CancellationToken.None).GetAwaiter().GetResult();
-            var crossOperationCursor = ToolRunResultFactory.Create(crossRecord);
-            AssertEqual("resource_cursor_invalid", crossOperationCursor.ErrorCode,
-                "list cursor is rejected by resource read");
-            AssertTrue(crossOperationCursor.Retryable != true,
-                "invalid cross-operation cursor is not retried unchanged");
-            AssertContains(crossOperationCursor.Message, "Omit cursor",
-                "invalid cursor tells the model how to restart");
+                    Reference = firstListPage.Items[0].Reference,
+                    Representation = ResourceRepresentations.Text,
+                    Cursor = firstListPage.Cursor,
+                    MaxChars = ResourceReadRequest.MaximumCharacters
+                });
+            }
+            catch (ResourceRequestException ex)
+            {
+                crossOperationCursor = ex;
+            }
+            AssertEqual("resource_cursor_invalid", crossOperationCursor == null ? null : crossOperationCursor.ErrorCode,
+                "internal list cursor is rejected by resource read");
+            AssertTrue(crossOperationCursor != null && !crossOperationCursor.Retryable,
+                "invalid internal cross-operation cursor is not retried unchanged");
             ResourceRequestException crossListQuery = null;
             try
             {
@@ -332,9 +317,13 @@ namespace RNAssistant.Harness
                 "default resource page leaves conservative room for exact evidence and continuation");
             AssertTrue(!string.IsNullOrWhiteSpace(defaultRead.NextCursor),
                 "conservative default remains lossless through provider-owned paging");
-            AssertContains(ResourceReadToolHandler.Descriptor.ParametersJson,
-                "\"default\":" + ResourceReadRequest.DefaultCharacters,
-                "public resource schema advertises the same conservative default");
+            AssertTrue(ResourceReadToolHandler.Descriptor.ParametersJson.IndexOf(
+                    "maxChars", StringComparison.OrdinalIgnoreCase) < 0 &&
+                ResourceReadToolHandler.Descriptor.ParametersJson.IndexOf(
+                    "cursor", StringComparison.OrdinalIgnoreCase) < 0 &&
+                ResourceReadToolHandler.Descriptor.ParametersJson.IndexOf(
+                    "uri", StringComparison.OrdinalIgnoreCase) < 0,
+                "public resource schema hides provider paging and identity state");
 
             var resolved = gateway.Resolve(session, resourceUri);
             AssertEqual(resourceUri, resolved.Resource.Reference.Uri, "resource resolve is exact");
@@ -1030,7 +1019,8 @@ namespace RNAssistant.Harness
             var promptIndex = ChatResourcePromptIndex.Build(session, 5000, new AppSettings());
             AssertTrue(promptIndex.IndexOf(first.Id, StringComparison.OrdinalIgnoreCase) < 0,
                 "ambiguous id is omitted from the bounded prompt index");
-            AssertContains(promptIndex, unique.Id, "unrelated exact artifact remains in the prompt index");
+            AssertContains(promptIndex, "note: Unique.md",
+                "unrelated semantic artifact target remains in the prompt index");
             var runtimeContext = ConversationPromptComposer.BuildRuntimeContext(
                 ChatModes.Plan,
                 null,
@@ -1409,7 +1399,7 @@ namespace RNAssistant.Harness
                 AssertEqual("resource_revision_changed", vbaDrift == null ? null : vbaDrift.ErrorCode,
                     "VBA continuation fails instead of mixing source revisions");
                 AssertContains(vbaDrift == null ? null : vbaDrift.Message,
-                    "both cursor and revision omitted",
+                    "same semantic target with action=read",
                     "live revision drift gives one explicit fresh-read recovery action");
 
                 session.LastRun = new ChatRunRecord
@@ -1477,26 +1467,26 @@ namespace RNAssistant.Harness
                 var staleComponent = executor.ExecuteManual(
                     Command(
                         ResourceToolCatalog.ReadToolId,
-                        "uri", component.Reference.Uri,
+                        "target", "VBA module: ResourceModule",
                         "representation", ResourceRepresentations.Source),
                     tools,
                     new AppSettings(),
                     false,
                     false,
                     session);
-                AssertEqual("resource_not_found", staleComponent.ErrorCode,
-                    "renamed VBA component returns a stable missing-resource error");
+                AssertEqual("resource_target_not_found", staleComponent.ErrorCode,
+                    "renamed VBA component returns a stable missing-target error");
                 AssertEqual(true, staleComponent.Retryable,
-                    "stale VBA component URI invites fresh discovery");
-                AssertContains(staleComponent.Message, "common.resources_list",
-                    "stale VBA component URI explains exact recovery");
+                    "stale VBA component target invites fresh discovery");
+                AssertContains(staleComponent.Message, ResourceToolCatalog.FindToolId,
+                    "stale VBA component target explains exact recovery");
 
                 adapter.DocumentKeyValue = "other-document";
                 adapter.RuntimeDocumentKeyValue = "runtime-other-document";
                 var blocked = executor.ExecuteManual(
                     Command(
                         ResourceToolCatalog.ReadToolId,
-                        "uri", document.Reference.Uri,
+                        "target", ResourceGatewayService.IntentBaseTarget(document),
                         "representation", ResourceRepresentations.Text),
                     tools,
                     new AppSettings(),
@@ -1534,8 +1524,11 @@ namespace RNAssistant.Harness
 
             var prompt = ChatResourcePromptIndex.Build(session, 5000, new AppSettings());
             AssertContains(prompt, "showing=12/20", "artifact prompt exposes bounded working set");
-            AssertContains(prompt, "artifact_0", "active artifact remains visible");
-            AssertContains(prompt, "artifact_19", "recently referenced artifact remains visible");
+            AssertContains(prompt, "note: Artifact 0", "active artifact target remains visible");
+            AssertContains(prompt, "note: Artifact 19", "recently referenced artifact target remains visible");
+            AssertTrue(prompt.IndexOf("artifact_0", StringComparison.OrdinalIgnoreCase) < 0 &&
+                prompt.IndexOf("artifact_19", StringComparison.OrdinalIgnoreCase) < 0,
+                "artifact ids remain runtime-owned");
             AssertTrue(prompt.IndexOf("private/path", StringComparison.OrdinalIgnoreCase) < 0,
                 "artifact prompt does not expose local paths");
             AssertTrue(prompt.IndexOf("policy=", StringComparison.OrdinalIgnoreCase) < 0,
@@ -1586,7 +1579,10 @@ namespace RNAssistant.Harness
                 new DocumentContext(), new AppSettings(), session, null);
             var old = prompt.First(message => (message.Content ?? string.Empty).StartsWith("Old request", StringComparison.Ordinal));
             AssertEqual(0, old.Attachments.Count, "historical attachment bodies are removed from replay");
-            AssertContains(old.Content, "resource:" + historicUri, "historical canonical resource reference remains");
+            AssertTrue(old.Content.IndexOf(historicUri, StringComparison.Ordinal) < 0,
+                "historical model message hides canonical resource identity");
+            AssertContains(FlattenSimple(prompt), "target=attachment: Untitled",
+                "runtime context keeps a semantic resource target");
             AssertTrue(old.Content.IndexOf("artifact:attachment_old-text", StringComparison.Ordinal) < 0,
                 "model history does not expose a second artifact-id reference channel");
             AssertTrue(old.Content.IndexOf("attachment:old-text", StringComparison.Ordinal) < 0,
@@ -1617,8 +1613,8 @@ namespace RNAssistant.Harness
                 true,
                 null,
                 CancellationToken.None).GetAwaiter().GetResult();
-            AssertContains(compactionInput, "resource:" + historicUri,
-                "compaction receives the canonical resource reference");
+            AssertTrue(compactionInput.IndexOf(historicUri, StringComparison.Ordinal) < 0,
+                "compaction hides canonical resource identity");
             AssertTrue(compactionInput.IndexOf("HISTORICAL_BODY_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,
                 "compaction does not reopen historical attachment bodies");
             AssertTrue(compactionInput.IndexOf("HISTORICAL_ANALYSIS_MUST_NOT_REPLAY", StringComparison.Ordinal) < 0,
@@ -1663,6 +1659,7 @@ namespace RNAssistant.Harness
                 });
                 source.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
                 var resourceUri = ArtifactUri(session, session.Artifacts.Last());
+                const string resourceTarget = "image: chart.png";
                 var settings = new AppSettings { Model = "omni" };
                 settings.ModelCapabilities["omni"] = new ModelCapabilitySettings
                 {
@@ -1683,26 +1680,35 @@ namespace RNAssistant.Harness
                         AssertEqual(0, mediaMessages.Count, "historical media is absent before explicit read");
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
+                            Content = "{\"message\":\"Читаю изображение.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + resourceTarget + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     if (calls == 2)
                     {
                         AssertEqual(1, mediaMessages.Count, "media is hydrated for the next model step only");
                         materializedPrompt = JsonConvert.SerializeObject(messages);
-                        AssertContains(FlattenSimple(messages), resourceUri, "hydrated media retains resource URI provenance");
-                        AssertTrue(ReferencesArtifact(session, mediaMessages[0], "attachment_historic-image"),
-                            "hydrated media retains canonical resource provenance");
-                        AssertTrue(messages.Any(message => message != null &&
+                        AssertTrue(FlattenSimple(messages).IndexOf(resourceUri, StringComparison.Ordinal) < 0,
+                            "model projection hides resource URI provenance");
+                        AssertEqual(0, mediaMessages[0].ResourceRefs.Count,
+                            "model media projection hides canonical resource provenance");
+                        AssertTrue(!messages.Any(message => message != null &&
                             string.Equals(message.ToolName, ResourceToolCatalog.ReadToolId, StringComparison.OrdinalIgnoreCase) &&
                             (message.ResourceRefs ?? new List<ResourceRef>()).Any(reference => reference.Uri == resourceUri)),
-                            "resource tool result carries the same durable ResourceRef");
+                            "model tool result hides the durable ResourceRef");
+                        var durableMedia = session.Messages.First(message => message != null &&
+                            (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal));
+                        AssertTrue(ReferencesArtifact(session, durableMedia, "attachment_historic-image"),
+                            "durable media retains canonical resource provenance");
+                        AssertTrue(session.Messages.Any(message => message != null &&
+                            string.Equals(message.ToolName, ResourceToolCatalog.ReadToolId, StringComparison.OrdinalIgnoreCase) &&
+                            (message.ResourceRefs ?? new List<ResourceRef>()).Any(reference => reference.Uri == resourceUri)),
+                            "durable tool result retains the exact ResourceRef");
                         return Task.FromResult(new LlmCompletionResult { Content = "invalid envelope" });
                     }
                     AssertEqual(1, mediaMessages.Count, "format repair retains media from the same accepted prompt");
                     AssertEqual(materializedPrompt, JsonConvert.SerializeObject(messages.Where(message =>
                         !(message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal))),
-                        "repair does not change the materialized prompt or resource evidence");
+                        "repair does not change the materialized semantic prompt");
                     AssertTrue(messages.Any(message => message != null && !message.ExcludeFromModelContext &&
                         (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal)),
                         "media stays available until the logical model step accepts or fails");
@@ -1856,6 +1862,7 @@ namespace RNAssistant.Harness
                 });
                 source.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
                 var resourceUri = ArtifactUri(session, session.Artifacts.Last());
+                const string resourceTarget = "image: scan.png";
                 var settings = new AppSettings { Model = "text-only" };
                 settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings
                 {
@@ -1886,13 +1893,21 @@ namespace RNAssistant.Harness
                     {
                         return Task.FromResult(new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Читаю скан.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"uri\":\"" + resourceUri + "\",\"representation\":\"media\"}}]}"
+                            Content = "{\"message\":\"Читаю скан.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + resourceTarget + "\",\"representation\":\"media\"}}]}"
                         });
                     }
                     var evidenceMessage = messages.First(message => message != null && message.ProtocolMessage &&
                         (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal));
                     AssertTrue(evidenceMessage.AttachmentAnalysis != null, "helper evidence is attached to the protocol message");
                     AssertContains(evidenceMessage.AttachmentAnalysis.Content, "total of 42", "helper evidence reaches primary context");
+                    AssertTrue(FlattenSimple(messages).IndexOf(resourceUri, StringComparison.Ordinal) < 0,
+                        "helper-routed model context hides the resource URI");
+                    AssertEqual(0, evidenceMessage.ResourceRefs.Count,
+                        "helper-routed model context hides exact resource references");
+                    AssertTrue(session.Messages.Any(message => message != null &&
+                        string.Equals(message.ToolName, ResourceToolCatalog.ReadToolId, StringComparison.OrdinalIgnoreCase) &&
+                        (message.ResourceRefs ?? new List<ResourceRef>()).Any(reference => reference.Uri == resourceUri)),
+                        "helper-routed durable result retains exact resource evidence");
                     var rawRead = false;
                     new LlmMessageBuilder(delegate
                     {

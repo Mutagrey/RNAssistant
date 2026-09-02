@@ -103,7 +103,7 @@ namespace RNAssistant.Harness
                     ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.None));
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"List chat resources.\",\"tool_calls\":[{\"name\":\"common.resources_list\",\"arguments\":{\"provider\":\"chat\",\"limit\":1}}]}",
+                    "{\"message\":\"Find chat resources.\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{\"scope\":\"conversation\"}}]}",
                     "{\"message\":\"Resources listed.\",\"tool_calls\":[]}"
                 });
                 var modelCalls = 0;
@@ -126,7 +126,7 @@ namespace RNAssistant.Harness
                     if (saved.LastRun.KernelState.Summary.ToolCounts.ReadOk != 1) return;
                     var durable = new ChatStore(FixturePaths.Value).Load(saved.Host, saved.DocumentKey, saved.Id);
                     var activity = durable.Messages.Single(message => message.Activity != null &&
-                        message.Activity.ToolId == ResourceToolCatalog.ListToolId).Activity;
+                        message.Activity.ToolId == ResourceToolCatalog.FindToolId).Activity;
                     AssertEqual(expectedEvidence, JsonConvert.SerializeObject(activity.ExecutionEvidence),
                         "native read evidence is durable at completion and every later materialization save");
                     completedSaves++;
@@ -143,7 +143,7 @@ namespace RNAssistant.Harness
                 foreach (var projection in new[] { session, replay, clone })
                 {
                     var activity = projection.Messages.Single(message => message.Activity != null &&
-                        message.Activity.ToolId == ResourceToolCatalog.ListToolId).Activity;
+                        message.Activity.ToolId == ResourceToolCatalog.FindToolId).Activity;
                     AssertEqual(expectedEvidence, JsonConvert.SerializeObject(activity.ExecutionEvidence),
                         "producer evidence survives session replay and clone without inference");
                 }

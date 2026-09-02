@@ -7,7 +7,7 @@ using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed class ResourceGatewayService
+    internal sealed partial class ResourceGatewayService
     {
         private readonly ResourceProviderRegistry _registry;
         private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
@@ -171,7 +171,7 @@ namespace RNAssistant.Office.Services
             if (!ResourceUri.TryParse(resourceUri, out address))
             {
                 throw new ResourceRequestException(
-                    "A canonical resource URI is required. Copy an exact rna:// URI from a tool result or resource descriptor.",
+                    "Runtime preparation requires one canonical resource reference.",
                     "invalid_resource_uri",
                     false);
             }
@@ -182,8 +182,7 @@ namespace RNAssistant.Office.Services
             catch (KeyNotFoundException)
             {
                 throw new ResourceRequestException(
-                    "Unknown resource provider in URI: " + address.Provider +
-                    ". Use an exact URI returned by common.resources_list or a mutation result.",
+                    "Unknown resource provider in the runtime-bound reference: " + address.Provider + ".",
                     "invalid_resource_uri",
                     false);
             }
