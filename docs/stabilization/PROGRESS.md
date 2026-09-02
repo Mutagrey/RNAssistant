@@ -33,7 +33,15 @@ preparation over the same ToolRuntime. It preserves the model's explicit choice
 between exact patch and whole-source write, forbids automatic patch-to-write/fuzzy
 fallback, and audits merge/split by effect, confirmation, retry and result shape
 instead of creating a mega-tool. The dedicated audit records current surface,
-ownership table, Resource/VBA decisions and model eval scenarios. UI-only built-in
+ownership table, all 35 conditional built-in `common.*` tool ids and all nine
+built-in Common skill ids. Default
+directions now internalize `resources_resolve`, HTML inspect/active selection and
+`tools_validate`; merge resource discovery and active Plan/Task lifecycle; split
+VBA rename, HTML file/data write and Skill core/reference authoring; and simplify
+every retained schema. Overlapping `common.vba_tool_authoring` guidance merges into
+the general tool-authoring skill, and every retained skill switches with its tool
+contract. The audit also records family-complete model evals and
+requires evidence before changing current core membership. UI-only built-in
 documentation, typed Library Test controls and reported Implementation/Test layout
 defects remain in the same R61 gate. Runtime, schemas and UI are unchanged; final
 WQ evidence must use the post-cutover catalog. `git diff --check` and targeted R61

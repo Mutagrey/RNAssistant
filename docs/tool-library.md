@@ -74,6 +74,15 @@ and required model evals are recorded in
 planning evidence: it neither pre-approves final public IDs nor changes the current
 resource/VBA contracts before their atomic cutover.
 
+The source baseline in that audit enumerates all 35 conditional built-in
+`common.*` tool IDs and all nine built-in Common skill IDs, with a default
+disposition for each. Progressive capability loading is acknowledged, but does not
+exempt optional tools from merge/split/internalization review or justify
+plumbing-heavy schemas after admission. Skill bodies are contract consumers and
+must switch atomically with the IDs/arguments they teach. R61 must also compare
+current core membership with a smaller relevant pack; registry count alone is not
+an optimization target.
+
 Every published tool must be reviewed individually, including Office, VBA/macro,
 resources, capabilities, questions, Plan, Task List, HTML, prompts, Tool/Skill
 authoring and custom-package execution. The review classifies every input as either
