@@ -2086,10 +2086,14 @@ namespace RNAssistant.Harness
                 "common.vba_code_editing",
                 StringComparison.OrdinalIgnoreCase));
             AssertContains(editing.Description, "Use whenever a request changes VBA source", "catalog reliably triggers VBA editing guidance");
-            AssertContains(editing.BodyMarkdown, "kind omitted for the project plus live components",
-                "VBA discovery does not depend on hidden component-kind vocabulary");
-            AssertContains(editing.BodyMarkdown, "both cursor and revision omitted",
-                "VBA skill gives an explicit fresh-read recovery after revision drift");
+            AssertContains(editing.BodyMarkdown, "RUNTIME_CONTEXT.document.vba_project_target",
+                "project-wide VBA inspection starts directly from the bound project target");
+            AssertContains(editing.BodyMarkdown, "filtered search, not project inventory",
+                "VBA skill does not mistake one query match for the full project");
+            AssertContains(editing.BodyMarkdown, "first `VBA project` target",
+                "VBA discovery fallback selects the aggregate project target");
+            AssertContains(editing.BodyMarkdown, "one successful result contains the complete representation",
+                "VBA skill relies on whole model-facing resource reads");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
             AssertContains(editing.BodyMarkdown, "repeat the exact anchor block", "insertions use explicit exact replacement text");
             AssertContains(editing.BodyMarkdown, "mode=rename", "skill explains the strict rename branch");

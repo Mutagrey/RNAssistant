@@ -69,9 +69,11 @@ aliases вроде `rna_*` и replay старых URI/cursor arguments запр�
 
 После 11O1 Excel Agent core/bootstrap pack публикует 24 schemas: четыре bootstrap,
 пятнадцать Excel и пять VBA/macro. Публичная resource-пара принимает только
-`query`/semantic `scope` и readable `target`/`representation`/`action`; fixed
-top-20 и 8,000-character page, provider routing, exact URI/revision и continuation
-принадлежат runtime.
+`query`/semantic `scope` и readable `target`/`representation`. Find остаётся
+fixed top-20, но unfiltered VBA browse закрепляет project target первым, а exact
+bound runtime публикует тот же target напрямую. Read собирает bounded provider
+pages в одну полную representation; provider routing, exact URI/revision и
+continuation принадлежат runtime.
 
 Существующие deterministic harness scenarios подтверждают guards и wiring, но
 часть model scenarios заранее подставляет provider, URI и cursor scripted
@@ -132,7 +134,7 @@ public id также нельзя «вспоминать» приблизите�
 | `common.resources_list` | Нужен сам intent «найти доступные ресурсы», но не provider discovery/paging | `DONE 11O1`: merged with search as `common.resources_find`; old id deleted |
 | `common.resources_resolve` | Самостоятельного пользовательского действия обычно нет | `DONE 11O1`: internal exact preparation; public id deleted |
 | `common.resources_search` | Нужен поиск по query/scope | `DONE 11O1`: merged as `common.resources_find`; old id deleted |
-| `common.resources_read` | Нужен | `DONE 11O1`: semantic target/action/representation only; id retained |
+| `common.resources_read` | Нужен | `DONE 11O1 + whole-read correction`: semantic target/representation only; provider paging полностью internal; id retained |
 | `common.capabilities_search` | Нужен bootstrap discovery | `DONE 11O1`: query/kind only; paging и limit внутренние |
 | `common.capabilities_read` | Нужен для exact tool admission и skill loading | `DONE 11O1`: public tool/skill id и semantic reference path допустимы; offset/maxChars/revision/admission state внутренние |
 | `common.questions_ask` | Нужен только Plan mode | `DONE 11O2`: prompt/options only; runtime генерирует UI-only question/option ids, model replay их не содержит |
@@ -216,13 +218,13 @@ existing ToolRuntime policy / confirmation / handler / evidence
 работает после strict validation model arguments, в exact bound session, и передаёт
 доменному handler-у один typed execution context.
 
-Read continuation выполняется внутри bounded policy. Если явное продолжение всё же
-необходимо, UI/runtime публикует operation-specific semantic действие `Next`, но
-opaque binding остаётся в typed result/event chain и не появляется в аргументах
-модели, её контексте или результате. При неоднозначном pending read runtime
-запрашивает semantic target и
-останавливается fail-closed, а не угадывает URI. Для read-only drift policy может
-начать новое чтение и явно сообщить об этом.
+Resource read continuation выполняется только внутри bounded policy: public read
+возвращает полную representation либо ошибку и не публикует модели `Next`. Для
+других operation-specific paged UI/runtime reads допустимо semantic действие
+`Next`, но opaque binding остаётся в typed result/event chain. При неоднозначной
+цели runtime запрашивает semantic target и останавливается fail-closed, а не
+угадывает URI. Для read-only drift policy может начать новое чтение и явно
+сообщить об этом.
 Mutation никогда автоматически не retry/rebase, не применяет fuzzy patch и не
 подменяет patch whole-source write.
 
@@ -250,11 +252,15 @@ responsibility:
   и второй schema path отсутствуют. Provider list/resolve/search/read сохранены
   только как внутренние операции gateway.
 - Find принимает optional literal query и малый semantic scope, возвращает не более
-  20 readable targets и различает true-empty, partial и unavailable.
-- Read принимает target, optional representation и `action=read|next`. URI,
-  revision, cursor и page size связывает runtime; exact `ResourceRef` остаётся
-  только durable evidence, а model projection содержит semantic target и domain
-  data.
+  20 readable targets и различает true-empty, partial и unavailable. Query —
+  фильтр, не inventory; unfiltered VBA browse всегда закрепляет project target
+  первым.
+- Exact bound VBA-capable document публикует readable
+  `RUNTIME_CONTEXT.document.vba_project_target`, поэтому project-wide чтение не
+  требует предварительного find. Read принимает этот runtime target или target из
+  find и optional representation; внутренние pages/revision/cursor собираются в
+  один полный model-facing результат либо явную ошибку. Exact `ResourceRef`
+  остаётся только durable evidence.
 - VBA discovery/read остаётся только через единый Resource Fabric. Вторые VBA read
   ids и host-prefixed aliases не возвращаются.
 
@@ -287,8 +293,9 @@ responsibility:
   arguments, URI, cursor, revision или candidate id. Refresh повторно проверяет
   сохранённый exact source schema и принимает только optional semantic name.
 - Durable workspace/result сохраняет revision, resource refs, binding source и
-  guards. Model projection удаляет их, а prompt schema 19 и history preflight
-  требуют explicit new chat/reset для старых HTML calls.
+  guards. Model projection удаляет их. HTML switch ввёл prompt schema 19; текущая
+  whole-resource correction поднимает schema до 20, а history preflight требует
+  explicit new chat/reset для старых calls.
 
 ### VBA mutations
 

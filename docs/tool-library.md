@@ -66,7 +66,9 @@ corrected Resources + Capabilities host-neutral, 11O2 corrected planning, and 11
 corrected HTML authoring/data binding. HTML inspection and active selection are now
 internal; file/data writes are separate, patch/delete are semantic, and bind reuses
 accepted read evidence without model-owned source arguments. Model context/results/
-history omit opaque state while durable records retain it. Authoring, VBA/macro,
+history omit opaque state while durable records retain it. The later whole-read
+correction removes public resource continuation; the bound VBA project target is
+available directly in runtime context and unfiltered find keeps it first. Authoring, VBA/macro,
 core-pack and the typed Library test/UI slices remain open.
 
 The concrete failure attribution, state-ownership decisions, merge/split rules

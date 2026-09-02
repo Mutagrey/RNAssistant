@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Status: implemented through R61/11O1 host-neutral. Providers retain exact typed resource state; the public model surface is the semantic `common.resources_find/read` pair. Replaced public list/resolve/search handlers and ids are removed without aliases.
+Status: implemented through the user-requested R61/11O1 whole-read correction host-neutral. Providers retain exact typed resource state; the public model surface is the semantic `common.resources_find/read` pair. Replaced public list/resolve/search handlers, continuation arguments and ids are removed without aliases.
 
 ## Goals
 
@@ -60,13 +60,21 @@ content/collection drift failures.
 The public surface is now `common.resources_find` and `common.resources_read`.
 `find` accepts only optional literal `query` and semantic `scope`, returns at most
 20 readable targets, distinguishes true empty from unavailable/partial scopes and
-keeps provider routing, kind vocabulary and paging internal. `read` accepts one
-exact returned `target`, optional representation and semantic `action=read|next`;
-runtime resolves the exact reference and returns fixed 8,000-character chunks.
-`next` reconstructs the accepted internal read chain from durable results. URI,
-revision/hash, cursor, offset and page size are absent from schema, model result,
-`RUNTIME_CONTEXT`, media provenance and replayed model history. Ambiguity or drift
-fails closed; no opaque replacement candidate id is exposed.
+keeps provider routing, kind vocabulary and paging internal. A query is explicitly
+a filtered match set, not an inventory. For an unfiltered `vba` browse, the project
+target is pinned first even when the visible module candidates are truncated; its
+`structure` representation contains the complete discovered component inventory.
+For the exact bound VBA-capable document, `RUNTIME_CONTEXT.document` also exposes
+the readable `vba_project_target`; a project-wide question can therefore start with
+`read` and does not need a discovery round-trip. `read` accepts that runtime target
+or one exact target returned by `find`, plus an optional representation, and
+returns that representation whole in one public call. Providers may page internally,
+but runtime reconstructs one exact contiguous revision-guarded result before model
+publication. URI, revision/hash, cursor, offset, page size and continuation action
+are absent from schema, model result, `RUNTIME_CONTEXT`, media provenance and
+replayed model history. Ambiguity, drift, provider truncation or failure to fit the
+reserved model context fails explicitly; partial text is never reported as a
+successful read and no opaque replacement candidate id is exposed.
 [Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61) owns the
 inventory and acceptance gates; the observed empty-list/kind/revision/cursor cluster
 and target ownership boundary are classified in the
@@ -112,7 +120,7 @@ The prompt contains bounded semantic resource targets. On a later question such 
 only for the next model step and then released; its durable exact reference remains
 outside model context.
 
-Both public resource operations execute as exact native read-only `ToolRuntime` handlers over the same `ResourceGatewayService` and provider registry. Their descriptor, policy, and binding are source-owned beside the handler; no legacy adapter or second authority exists. Every call enters a fresh `DocumentAccessGate` operation root. The accepted durable result retains provider-bounded data plus exact `ResourceRef` values for continuation/provenance, while `ModelToolResultProjection` emits the same strict Tool Result v1 correlation/status with semantic data and no opaque state. A successful chunk is passed intact or replaced by explicit `resource_evidence_context_too_large`. Media bytes are request-local, appear only on the immediate model step, and are released afterward.
+Both public resource operations execute as exact native read-only `ToolRuntime` handlers over the same `ResourceGatewayService` and provider registry. Their descriptor, policy, and binding are source-owned beside the handler; no legacy adapter or second authority exists. Every internal provider page enters a fresh `DocumentAccessGate` operation root and is revision-bound to the same whole read. The accepted durable result retains the complete provider data plus exact `ResourceRef` provenance, while `ModelToolResultProjection` emits the same strict Tool Result v1 correlation/status with semantic data and no opaque state. A successful whole representation is passed intact or replaced by explicit `resource_evidence_context_too_large`; runtime never turns a prefix into success. Media bytes are request-local, appear only on the immediate model step, and are released afterward.
 
 Ordinary large tool results keep the full value exact. The result envelope carries optional `resources:[{uri,revision,relation?}]`; `relation:"result"` distinguishes the CAS-backed `tool_result` containing the complete payload from other produced/cited resources. Materialization selects the largest inline projection that keeps the shared repair and continuation reserves; a zero-preview case uses a compact externalized marker rather than pretending an oversized truncation wrapper fit. Resource/schema/skill reads are not rewrapped as untrusted artifacts. Chart payloads become their specialized immutable artifact at the same result boundary, so the next model step receives kind plus exact URI rather than a duplicate chart body. Durable activity also keeps only that pointer; the storage/UI projection rehydrates the chart from CAS instead of storing or creating a duplicate.
 
@@ -165,7 +173,7 @@ The append-only session event stream remains the durable source of truth. Events
 
 Compaction preserves user intent, decisions and complete tool protocol pairs. The durable checkpoint retains the bounded exact references needed for reachability and replay, including resources attached to presentation-only activity messages; its model projection exposes only semantic targets. It may remove hydrated bodies and old read results. A later read reconstructs exact evidence from the provider. CAS garbage collection derives reachability from verified event streams and journals as before.
 
-Live Office/VBA resources are bound to the chat's document identity and carry content-hash revision evidence on materialized reads. Public `common.resources_find` maps semantic `vba`/`backups` scopes to internal provider list/search and returns readable targets; `common.resources_read` resolves a target and reconstructs `next` from durable exact evidence. Provider vocabulary, opaque document token, URI, revision and cursor never enter model arguments or results. Document-key migrations retain prior keys in the append-only projection, so an internal exact URI survives first save and Save As while runtime identity proves that the live target is still the same document. Provider calls share the document mutation gate, so journal reconciliation and source reads cannot observe an in-flight VBA mutation. Mutations keep domain-specific guards, confirmations, journals, and read-back verification; Resource Fabric does not bypass them.
+Live Office/VBA resources are bound to the chat's document identity and carry content-hash revision evidence on materialized reads. Public `common.resources_find` maps semantic `vba`/`backups` scopes to internal provider list/search and returns readable targets; `common.resources_read` resolves a target and reconstructs all internal pages before returning one complete result. Provider vocabulary, opaque document token, URI, revision and cursor never enter model arguments or results. Document-key migrations retain prior keys in the append-only projection, so an internal exact URI survives first save and Save As while runtime identity proves that the live target is still the same document. Provider calls share the document mutation gate, so journal reconciliation and source reads cannot observe an in-flight VBA mutation. Mutations keep domain-specific guards, confirmations, journals, and read-back verification; Resource Fabric does not bypass them.
 
 ## Domain projections and UI
 
@@ -226,6 +234,6 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 5. **Done:** plan/HTML reads use canonical `chat` resources; live Office document/selection and VBA project/component/backup providers are registered. Duplicated plan/HTML/VBA reads plus host `get_context/get_selection` tools are removed without aliases; domain-specific range/slide/mail reads remain typed tools.
 6. **Done:** Agent receives one compact exact-id tool/skill catalog plus `common.capabilities_search/read`; exact revisioned tool schemas enter a finite-core plus atomic optional `CallableToolPack`, and full-schema catalog injection is removed. Optional membership has no LRU or execution touches and is reconstructed only from the exact accepted extension chain for the logical turn. Split model-facing tool/skill readers were removed without aliases. Custom-definition inspection remains `common.tools_definition_read`.
 7. **Done:** durable messages, media handoff, compaction, fork reachability, replay, and trajectory diagnostics carry revision-pinned `ResourceRef` values. Internal `ArtifactIds` message transport and `ChatArtifactService` are removed; event schema 3/session format 6 reject pre-cutover streams without migration.
-8. **Done host-neutral (R61/11O1):** public resource discovery is the semantic `find/read` pair; provider routing, exact references, revisions and continuations stay in durable runtime state and are removed from model arguments/results/context/history. Capability catalog/read follows the same model-visibility boundary while durable admission events retain exact revisions.
+8. **Done host-neutral (R61/11O1 plus whole-read correction):** public resource discovery is the semantic `find/read` pair; provider routing, exact references, revisions and internal continuations stay in runtime state and are removed from model arguments/results/context/history. One read call returns one complete representation or an explicit error. Capability catalog/read follows the same model-visibility boundary while durable admission events retain exact revisions.
 
 Each slice must leave one authoritative path for the capability it migrates and add harness coverage for URI safety, provider bounds, replay, context compaction, media hydration lifetime, and Chat mutation denial.

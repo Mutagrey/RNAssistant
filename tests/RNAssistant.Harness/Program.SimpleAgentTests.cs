@@ -440,6 +440,8 @@ namespace RNAssistant.Harness
                     "internal document identity stays outside model context");
                 AssertContains(prompt, "\"title\":\"Closed.xlsx\"", "archived document title in prompt");
                 AssertContains(prompt, "\"office_tools_available\":false", "Office availability in prompt");
+                AssertTrue(prompt.IndexOf("\"vba_project_target\":", StringComparison.Ordinal) < 0,
+                    "closed document exposes no directly readable live VBA project target");
                 AssertContains(prompt, "\"id\":\"common.html_workspace_write_file\"",
                     "exact local HTML capability remains discoverable");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.html_workspace_write_file\"", StringComparison.OrdinalIgnoreCase) < 0,
@@ -1407,12 +1409,12 @@ namespace RNAssistant.Harness
 
         private static void AgentPreservesVbaResourceEvidenceWithinBudget()
         {
-            RunVbaResourceIntentScenario(6000, false);
+            RunVbaResourceIntentScenario(6000);
         }
 
-        private static void AgentContinuesVbaResourceWithinBudget()
+        private static void AgentReadsLargeVbaResourceWholeWithinBudget()
         {
-            RunVbaResourceIntentScenario(9000, true);
+            RunVbaResourceIntentScenario(9000);
         }
 
         private static void AgentRejectsCallerOwnedVbaContinuationState()
@@ -1465,9 +1467,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void RunVbaResourceIntentScenario(
-            int sourceCharacters,
-            bool expectSecondPage)
+        private static void RunVbaResourceIntentScenario(int sourceCharacters)
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -1534,52 +1534,21 @@ namespace RNAssistant.Harness
                         var readData = readWire["data"] as JObject;
                         AssertTrue(readData != null && readData["resource"] == null && readData["nextCursor"] == null,
                             "VBA read hides exact reference and continuation plumbing");
-                        var firstLength = Math.Min(ResourceReadToolHandler.IntentReadCharacters, source.Length);
-                        AssertEqual(source.Substring(0, firstLength), (string)readData["text"],
-                            "first runtime-bounded VBA chunk reaches the model intact");
+                        AssertEqual(source, (string)readData["text"],
+                            "the complete VBA source reaches the model in one result");
                         AssertContains((string)readData["text"], sourceMarker, "VBA source reaches the model");
                         AssertTrue(readWire["resources"] == null,
                             "model VBA read omits the exact root resource reference");
-                        if (!expectSecondPage)
+                        AssertEqual(true, (bool)readData["complete"],
+                            "whole resource read is complete");
+                        AssertTrue(readData["hasMore"] == null && readData["progressCharacters"] == null,
+                            "whole read exposes no model continuation state");
+                        return Task.FromResult(new LlmCompletionResult
                         {
-                            AssertEqual(true, (bool)readData["complete"], "small source completes in one runtime page");
-                            return Task.FromResult(new LlmCompletionResult
-                            {
-                                Content = ModelProtocolWire.Write("VBA прочитан.", new ConversationToolCall[0])
-                            });
-                        }
-                        AssertEqual(true, (bool)readData["hasMore"], "large source exposes semantic continuation action");
-                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(
-                            "Читаю продолжение.", new[]
-                            {
-                                new ConversationToolCall
-                                {
-                                    Name = ResourceToolCatalog.ReadToolId,
-                                    Arguments = new Dictionary<string, object>
-                                    {
-                                        ["target"] = semanticTarget,
-                                        ["action"] = "next"
-                                    }
-                                }
-                            }) });
+                            Content = ModelProtocolWire.Write("VBA прочитан.", new ConversationToolCall[0])
+                        });
                     }
-
-                    var continuedWire = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
-                    AssertEqual("ok", (string)continuedWire["status"],
-                        "continued VBA source page remains successful: " + continuedWire.ToString(Formatting.None));
-                    var continuedData = continuedWire["data"] as JObject;
-                    AssertTrue(continuedData != null && continuedData["resource"] == null && continuedData["nextCursor"] == null,
-                        "continued VBA page keeps cursor state inside runtime");
-                    AssertEqual(source.Substring(ResourceReadToolHandler.IntentReadCharacters),
-                        (string)continuedData["text"],
-                        "action=next selects the exact second provider page without overlap or omission");
-                    AssertEqual(true, (bool)continuedData["complete"], "second chunk completes the source");
-                    AssertTrue(continuedWire["resources"] == null,
-                        "continued model read omits exact root resource evidence");
-                    return Task.FromResult(new LlmCompletionResult
-                    {
-                        Content = ModelProtocolWire.Write("VBA прочитан.", new ConversationToolCall[0])
-                    });
+                    throw new InvalidOperationException("Unexpected model step in whole VBA resource scenario.");
                 };
 
                 var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema };
@@ -1604,16 +1573,16 @@ namespace RNAssistant.Harness
                         ModelContextBudget.ContinuationReserveTokens(settings))).ToArray());
                 AssertEqual("VBA прочитан.", result.AssistantText,
                     "VBA resource loop completes; admitted requests=" + requestTotals);
-                AssertEqual(expectSecondPage ? 4 : 3, calls.Count,
-                    "semantic find, bounded read chunks, and final response use the expected model steps");
+                AssertEqual(3, calls.Count,
+                    "semantic find, one whole read, and final response use the expected model steps");
                 var durableResults = session.Messages.Where(message => message != null &&
                     message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                     message.AcceptedCallOrigin == null &&
                     (string.Equals(message.ToolName, ResourceToolCatalog.FindToolId, StringComparison.Ordinal) ||
                      string.Equals(message.ToolName, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal)))
                     .ToList();
-                AssertEqual(expectSecondPage ? 3 : 2, durableResults.Count,
-                    "durable history retains every accepted resource result");
+                AssertEqual(2, durableResults.Count,
+                    "durable history retains find and one complete read result");
                 foreach (var durableMessage in durableResults)
                 {
                     ToolResultWireReadResult durable;

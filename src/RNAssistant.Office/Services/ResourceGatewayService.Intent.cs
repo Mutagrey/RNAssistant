@@ -46,6 +46,9 @@ namespace RNAssistant.Office.Services
                         query, StringComparison.OrdinalIgnoreCase) >= 0)
                 .OrderByDescending(state => matches != null &&
                     matches.ContainsKey(state.Reference.Uri))
+                .ThenByDescending(state => query.Length == 0 &&
+                    string.Equals(scope, "vba", StringComparison.Ordinal) &&
+                    string.Equals(state.Type, "VBA project", StringComparison.Ordinal))
                 .ThenBy(state => state.Target, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             var shown = selected.Take(MaximumIntentResults)

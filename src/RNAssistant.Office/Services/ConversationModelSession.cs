@@ -400,8 +400,8 @@ namespace RNAssistant.Office.Services
                     "Tool result cannot be projected without removing evidence or the mandatory continuation reserve. " +
                     "The candidate request uses ≈" + candidateTokens + " tokens at an input limit of " +
                     ModelContextBudget.InputBudgetTokens(_settings) + " (inline data allowance ≈" +
-                    availableForData + "). Request a smaller resource page/chunk, " +
-                    "compact the context, or use a larger-context model.",
+                    availableForData + "). Select narrower evidence, compact the context, " +
+                    "or use a larger-context model.",
                     false);
             }
             message.ResourceRefs = AgentTranscript.CloneResourceRefs(result == null ? null : result.Result.Resources);
@@ -560,7 +560,7 @@ namespace RNAssistant.Office.Services
             materialized.ReplaceResult(RNAssistant.Core.Tools.Contracts.ToolResult.Error(
                 capability
                     ? "Capability evidence did not fit the reserved model context."
-                    : "Resource evidence did not fit the reserved model context; request a smaller page or compact context.",
+                    : "Resource evidence did not fit the reserved model context; choose a narrower semantic resource or compact context.",
                 data.ToString(Formatting.None),
                 capability ? materialized.Result.Resources : new ResourceRef[0]));
         }

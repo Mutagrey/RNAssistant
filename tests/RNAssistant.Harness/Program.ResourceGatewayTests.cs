@@ -46,6 +46,34 @@ namespace RNAssistant.Harness
                         DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                 };
 
+                var runtimeContext = JObject.Parse(
+                    ConversationPromptComposer.BuildRuntimeContext(
+                        ChatModes.Chat,
+                        adapter,
+                        tools,
+                        BuiltInSkillProvider.GetSkills(adapter),
+                        NewContext(adapter),
+                        session,
+                        new AppSettings()));
+                var contextProjectTarget =
+                    (string)runtimeContext.SelectToken("document.vba_project_target");
+                AssertEqual(
+                    VbaResourceProvider.ProjectSemanticTarget(adapter.DocumentTitle),
+                    contextProjectTarget,
+                    "bound VBA project target is directly available in runtime context");
+                var directProjectRead = execute(
+                    ResourceToolCatalog.ReadToolId,
+                    JsonConvert.SerializeObject(new
+                    {
+                        target = contextProjectTarget,
+                        representation = ResourceRepresentations.Structure
+                    }));
+                AssertEqual(ToolExecutionOutcome.Ok, directProjectRead.Outcome,
+                    "runtime-context VBA project target is readable without a preceding find call");
+                AssertEqual(1, ((JArray)JObject.Parse(
+                    (string)JObject.Parse(directProjectRead.Result.DataJson)["text"])["components"]).Count,
+                    "direct project read returns the exact bound component inventory");
+
                 var found = execute(ResourceToolCatalog.FindToolId, "{\"scope\":\"conversation\"}");
                 AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "semantic resource find succeeds in chat mode");
                 AssertEqual(ToolDispatchEvidence.MayHaveDispatched, found.Evidence.Dispatch, "provider invocation is recorded");
@@ -157,6 +185,13 @@ namespace RNAssistant.Harness
                     AssertEqual(backendCalls, adapter.TotalBackendCallCount, "blocked native live find never reaches Office backend");
                 }
 
+                for (var moduleIndex = 1; moduleIndex <= 80; moduleIndex++)
+                {
+                    adapter.SetVbaModule(
+                        "InventoryModule" + moduleIndex.ToString("D3"),
+                        "Option Explicit\n' inventory " + moduleIndex,
+                        "StdModule");
+                }
                 var releasedCall = new ToolCall("released_live_find", ResourceToolCatalog.FindToolId,
                     liveFindArguments);
                 var releasedPolicy = runtime.Describe(releasedCall);
@@ -164,6 +199,41 @@ namespace RNAssistant.Harness
                     DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(ToolExecutionOutcome.Ok, released.Outcome, "native live find succeeds after document access release");
                 AssertTrue(adapter.TotalBackendCallCount > backendCalls, "released native live find reaches the Office backend");
+                var vbaBrowse = JObject.Parse(released.Result.DataJson);
+                AssertTrue((int)vbaBrowse["total"] > 20 && !(bool)vbaBrowse["complete"],
+                    "large VBA browse reports that the visible candidates are not the complete inventory");
+                var projectCandidate = ((JArray)vbaBrowse["items"]).OfType<JObject>().First();
+                AssertEqual("VBA project", (string)projectCandidate["type"],
+                    "unfiltered VBA browse keeps the project inventory target visible before modules");
+                var projectTarget = (string)projectCandidate["target"];
+                var projectRead = execute(ResourceToolCatalog.ReadToolId,
+                    JsonConvert.SerializeObject(new
+                    {
+                        target = projectTarget,
+                        representation = ResourceRepresentations.Structure
+                    }));
+                AssertEqual(ToolExecutionOutcome.Ok, projectRead.Outcome,
+                    "large VBA project structure is read through one public call");
+                var projectReadData = JObject.Parse(projectRead.Result.DataJson);
+                AssertEqual(true, (bool)projectReadData["complete"],
+                    "large project structure is complete");
+                AssertTrue(projectReadData["hasMore"] == null &&
+                    projectReadData["progressCharacters"] == null,
+                    "whole project read exposes no model continuation state");
+                var projectManifest = JObject.Parse((string)projectReadData["text"]);
+                AssertEqual(81, ((JArray)projectManifest["components"]).Count,
+                    "project structure contains every live VBA module, not only the visible find page");
+
+                var retiredNext = execute(ResourceToolCatalog.ReadToolId,
+                    JsonConvert.SerializeObject(new
+                    {
+                        target = projectTarget,
+                        action = "next"
+                    }));
+                AssertEqual(ToolExecutionOutcome.Error, retiredNext.Outcome,
+                    "model-owned resource continuation action is rejected by the whole-read schema");
+                AssertEqual(ToolDispatchEvidence.NotDispatched, retiredNext.Evidence.Dispatch,
+                    "retired continuation never reaches a provider");
             });
         }
 
@@ -1528,8 +1598,8 @@ namespace RNAssistant.Harness
                 AssertEqual("resource_revision_changed", vbaDrift == null ? null : vbaDrift.ErrorCode,
                     "VBA continuation fails instead of mixing source revisions");
                 AssertContains(vbaDrift == null ? null : vbaDrift.Message,
-                    "same semantic target with action=read",
-                    "live revision drift gives one explicit fresh-read recovery action");
+                    "Run common.resources_read again for the same semantic target",
+                    "live revision drift gives one explicit fresh whole-read recovery");
 
                 session.LastRun = new ChatRunRecord
                 {

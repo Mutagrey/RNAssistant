@@ -117,7 +117,7 @@ namespace RNAssistant.Office.Services
             if (string.IsNullOrWhiteSpace(expected) ||
                 string.Equals(expected, actualRevision, StringComparison.OrdinalIgnoreCase)) return;
             throw new ResourceRequestException(
-                "The mutable resource changed after the previous chunk. Restart common.resources_read for the same semantic target with action=read.",
+                "The mutable resource changed during the read. Run common.resources_read again for the same semantic target.",
                 "resource_revision_changed",
                 true);
         }

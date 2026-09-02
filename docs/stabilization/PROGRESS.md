@@ -2,12 +2,27 @@
 
 Current target: 16.1.0
 Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
-Current task: R61/11O3 HTML workspace/data-binding semantic intent switch is complete host-neutral. Seven exact verified-write schemas expose only file/data content and semantic targets; inspection, preview selection, source-read identity/arguments, refresh policy, revisions and resource evidence remain runtime/UI-owned.
+Current task: the user-requested R61/11O1 whole-resource/VBA inventory correction after 11O3 is complete host-neutral. `common.resources_read` now accepts only target/representation and returns one complete representation or an explicit error; exact URI/revision/cursor and provider paging remain runtime-owned.
 Execution mode: mandatory host-neutral route 0–11T10 и WQ-A1–A5 implementation завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. По явному запросу пользователя host-neutral 11O продолжается с накопленными Windows gates по §16.1; final catalog/live-provider WQ evidence собирается только после всех R61 schema/UI switches. Phase 12 remains blocked.
 
 Next step for tools: 11O4 atomically switches Prompt/Tool/Skill authoring to minimal semantic schemas with internal validation and conservative runtime authority. The accumulated Windows rebuild/R62/R63 retests remain mandatory before final WQ evidence.
 Required context: [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), [Tool Library](../tool-library.md), [conversation protocol](../conversation-protocol.md), [migration map](MIGRATION_MAP.md) and exact prompt/tool/skill authoring owners only.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O3 are complete host-neutral; authoring, VBA/macro, final core-pack, dynamic-package and Library UI slices remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63 is fixed host-neutral; exact real Excel bind/refresh on Windows remains open. R51 remains open for audio, other committed-resource removal and Windows WebView image/PDF/lifecycle qualification; 11D2 image and 11D3 PDF behavior are complete host-neutral. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+
+R61/11O1 whole-resource/VBA discovery correction (2026-09-02,
+user-reported host-neutral): `common.resources_read` no longer exposes model-owned
+`action=next`; runtime assembles bounded internal pages and publishes one complete
+representation or an explicit error. Exact bound Excel/Word/PowerPoint context now
+publishes `document.vba_project_target`, so project-wide VBA inspection can read
+the complete project structure without a preceding find. Unfiltered VBA find keeps
+that project target first even beyond 20 components, while query results are
+explicitly filtered matches rather than inventory. The VBA editing skill and both
+resource descriptors teach the same route. Prompt schema is 20; retained old
+resource calls require explicit review/reset. Targeted harness checks pass 37/37,
+including direct runtime-target read, 81-component inventory, whole large-module
+read, closed-document omission, strict no-`rna://` model context/history, skill
+guidance, source inclusion and R61 property inventory. Windows live VBE/WebView
+qualification remains open.
 
 R61/11O3 HTML semantic intent switch (2026-09-02, user-requested
 host-neutral): the eight prior model tools became seven exact verified writes.
@@ -149,8 +164,9 @@ R61/11O1 Resources + Capabilities switch (2026-09-02, user-requested
 host-neutral): Chat/Plan/Agent now publish semantic `common.resources_find/read`;
 the retired public list/resolve/search ids and handlers are deleted without aliases,
 while internal provider operations retain exact URI/revision/cursor guards. Find is
-fixed top-20 by query/scope; read is fixed 8,000 characters by readable target,
-representation and `read|next`. Capability search/read likewise expose only
+fixed top-20 by query/scope. This entry originally shipped resource read as fixed
+8,000-character `read|next`; the whole-resource/VBA correction recorded at the top
+supersedes that public read shape. Capability search/read likewise expose only
 query/kind and exact public tool/skill id plus semantic skill reference path/action.
 `ModelToolResultProjection` separates durable exact evidence from all model-visible
 Tool Results/history, validates capability evidence against the current catalog and
@@ -1689,7 +1705,7 @@ Branch: `stabilization/16.1`. Новый baseline tag не создаётся.
 | 11D | in progress: 11D1–11D3 done host-neutral | [11D1](PHASE_11D1_TEXT_MARKDOWN_VIEWERS.md), [11D2](PHASE_11D2_IMAGE_PREVIEW.md), [11D3](PHASE_11D3_PDF_PREVIEW_X86.md) | 11D3 harness 4/4; affected web 37/37; JS syntax | not performed | Text/Markdown, exact image and bounded PDF preview-first viewers switched; audio and Windows WebView remain |
 | WQ-A | A0–A5 done host-neutral | [contract](../qualification.md), [A3](WQ_A3_EXCEL_WQ0.md), [A4](WQ_A4_SUITE_CATALOG.md), [A5](WQ_A5_BUILD_EVIDENCE.md), [ADR-0010](../decisions/ADR-0010-qualification-evidence-authority.md) | A5: qualification 14/14; versioning 6/6; source inclusion 1/1; web 5/5 | not performed | Exact-build admission implemented; production adapters/live suites, signed Windows evidence and Milestone WQ remain open |
 | 11 | existing-tool migration route done host-neutral through 11T10; R61 correction active with 11O3 complete | 11A–11D3 evidence above; [11J1](PHASE_11J1_TOOL_AUTHORING_NATIVE_RUNTIME.md), [11J2](PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md), [11K1](PHASE_11K1_SKILL_AUTHORING_NATIVE_RUNTIME.md), [11K2](PHASE_11K2_SKILLS_UI_TYPED_BOUNDARY.md), [11T10](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md), [11O3](PHASE_11O3_HTML_SEMANTIC_INTENTS.md) | 11T10 full harness 589/589; 11O3 harness 46/46; web 25/25; JS syntax | not performed | Active legacy removed; remaining R61 authoring/VBA/core-pack/docs/test UX required before final Milestone WQ |
-| 11O / R61 | in progress; 11O0–11O3 done host-neutral | [Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [audit](R61_TOOL_CONTRACT_AUDIT.md), [11O3](PHASE_11O3_HTML_SEMANTIC_INTENTS.md) | 11O3 harness 46/46; web 25/25; version/diff checks | not performed | 11O4 authoring next; later VBA/core-pack and Library UX remain |
+| 11O / R61 | in progress; 11O0–11O3 plus whole-resource correction done host-neutral | [Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [audit](R61_TOOL_CONTRACT_AUDIT.md), [11O3](PHASE_11O3_HTML_SEMANTIC_INTENTS.md) | 11O3 harness 46/46 + web 25/25; whole-resource correction harness 37/37; version/diff checks | not performed | 11O4 authoring next; later VBA/core-pack and Library UX remain |
 | 12 | pending | — | — | — | Release hardening / qualification |
 
 ## Phase 0 substeps

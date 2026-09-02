@@ -410,7 +410,7 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "`status` is exactly `ok`, `error`, or `unknown`", "no extra model-facing result states");
                 AssertContains(prompt, "does not by itself prove an applied effect", "defaults require actual effect evidence");
                 AssertContains(prompt, "Task List, and HTML tools",
-                    "schema 19 includes HTML in runtime-only result projection guidance");
+                    "current prompt schema includes HTML in runtime-only result projection guidance");
                 AssertTrue(prompt.IndexOf("ok=true", StringComparison.OrdinalIgnoreCase) < 0, "defaults do not teach the legacy success flag");
             }
         }

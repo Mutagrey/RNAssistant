@@ -240,7 +240,7 @@ namespace RNAssistant.Harness
                 Test("agent: characterization limit includes initial response", SimpleAgentClampsFormatRepairLimit),
                 Test("agent: exposes safe VBA editing tools", SimpleAgentExposesSafeVbaEditingTools),
                 Test("agent: preserves VBA resource evidence within request budget", AgentPreservesVbaResourceEvidenceWithinBudget),
-                Test("agent: continues VBA resource within request budget", AgentContinuesVbaResourceWithinBudget),
+                Test("agent: reads large VBA resource whole within request budget", AgentReadsLargeVbaResourceWholeWithinBudget),
                 Test("agent: rejects caller-owned VBA continuation state", AgentRejectsCallerOwnedVbaContinuationState),
                 Test("agent: loads and runs arbitrary macro", SimpleAgentLoadsAndRunsArbitraryMacro),
                 Test("agent: confirmation replays one final result", SimpleAgentConfirmationReplaysOnlyFinalResult),

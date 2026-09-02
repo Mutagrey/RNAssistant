@@ -118,7 +118,7 @@ namespace RNAssistant.Office.Services
                 Reference = new ResourceRef(ProjectUri(session)),
                 Provider = ProviderName,
                 Kind = ProjectKind,
-                Title = (_adapter.DocumentTitle ?? "Office document") + " VBA project",
+                Title = ProjectTitle(_adapter.DocumentTitle),
                 MimeType = "application/json",
                 Mutable = true
             };
@@ -129,6 +129,20 @@ namespace RNAssistant.Office.Services
             descriptor.Metadata["childKinds"] = ComponentKind + "," + BackupKind;
             descriptor.Metadata["childDiscovery"] = "Use common.resources_find with scope=backups for backup evidence.";
             return descriptor;
+        }
+
+        internal static string ProjectTitle(string documentTitle)
+        {
+            return (documentTitle ?? "Office document") + " VBA project";
+        }
+
+        internal static string ProjectSemanticTarget(string documentTitle)
+        {
+            return ResourceGatewayService.IntentBaseTarget(new ResourceDescriptor
+            {
+                Kind = ProjectKind,
+                Title = ProjectTitle(documentTitle)
+            });
         }
 
         private ResourceDescriptor DescribeComponent(ChatSession session, VbaResourceModule module, string codeSha256)

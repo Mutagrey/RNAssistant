@@ -163,20 +163,26 @@ namespace RNAssistant.Office.Services
             var officeToolsAvailable = session == null
                 ? adapter != null
                 : OfficeDocumentExecutionGuardState.SessionMatchesAdapter(adapter, session);
+            var document = new JObject
+            {
+                ["title"] = documentTitle ?? string.Empty,
+                ["office_tools_available"] = officeToolsAvailable,
+                ["office_tool_policy"] = string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal)
+                    ? "Chat cannot call Office object-model or mutation tools. It may only use the read-only tools listed in this runtime context."
+                    : officeToolsAvailable
+                        ? "Office object-model tools may target this open document."
+                        : "The chat document is closed or inactive. Do not call Office object-model tools until it is opened; continue with non-Office tools such as the HTML workspace when useful."
+            };
+            if (officeToolsAvailable && VbaResourceProvider.SupportsHost(adapterHost))
+            {
+                document["vba_project_target"] =
+                    VbaResourceProvider.ProjectSemanticTarget(adapterDocumentTitle);
+            }
             var root = new JObject
             {
                 ["mode"] = mode,
                 ["host"] = host ?? string.Empty,
-                ["document"] = new JObject
-                {
-                    ["title"] = documentTitle ?? string.Empty,
-                    ["office_tools_available"] = officeToolsAvailable,
-                    ["office_tool_policy"] = string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal)
-                        ? "Chat cannot call Office object-model or mutation tools. It may only use the read-only tools listed in this runtime context."
-                        : officeToolsAvailable
-                            ? "Office object-model tools may target this open document."
-                            : "The chat document is closed or inactive. Do not call Office object-model tools until it is opened; continue with non-Office tools such as the HTML workspace when useful."
-                },
+                ["document"] = document,
                 ["tools"] = BuildTools(tools),
                 ["capabilities"] = !string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal)
                     ? (JToken)(capabilityCatalog ?? CapabilityCatalogService.BuildPromptCatalog(tools, skills, tools))

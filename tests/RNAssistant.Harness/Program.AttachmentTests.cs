@@ -99,8 +99,12 @@ namespace RNAssistant.Harness
                     null);
                 AssertTrue(ReferencesArtifact(durable, durable.Messages.Single(), artifact.Id),
                     "uploaded resource is durably linked to the user turn");
-                AssertContains(FlattenSimple(modelRequest), uri,
-                    "canonical resource URI is materialized before model dispatch");
+                var flattenedRequest = FlattenSimple(modelRequest);
+                AssertContains(flattenedRequest, "attachment: notes.txt",
+                    "semantic resource target is materialized before model dispatch");
+                AssertTrue(flattenedRequest.IndexOf(uri, StringComparison.Ordinal) < 0 &&
+                    flattenedRequest.IndexOf("rna://", StringComparison.OrdinalIgnoreCase) < 0,
+                    "canonical resource URI remains durable and never enters model context");
                 AssertTrue(string.IsNullOrWhiteSpace(durable.Messages.Single().Attachments.Single().DraftChatId),
                     "persisted attachment no longer carries draft ownership");
             });

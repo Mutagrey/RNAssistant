@@ -368,8 +368,10 @@ uses schema 15 for atomic callable-pack admission and no-eviction guidance; Phas
 uses schema 16 for durable turn-scoped reconstruction; R61/11O1 uses schema 17 for
 the semantic Resource/Capability boundary; R61/11O2 uses schema 18 for semantic
 questions, Plan documents and Task Lists; R61/11O3 uses schema 19 for semantic HTML
-authoring and accepted-read binding. Tests preserve, review, or reset saved
-older/future markers explicitly. JS review behavior is unchanged.
+authoring and accepted-read binding; the user-requested R61/11O1 correction uses
+schema 20 for whole resource reads and the direct bound VBA-project target. Tests
+preserve, review, or reset saved older/future markers explicitly. JS review behavior
+is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
 Phase 8D moved the original resource data plane to native handlers. R61/11O1 now
@@ -380,6 +382,11 @@ media/replay cases, and `harness: production projects include all source files` 
 cover the intent boundary, internal guards and old-style project inclusion. See
 [8D evidence](../../docs/stabilization/PHASE_8D_RESOURCE_DATA_PLANE.md) and the
 [R61 audit](../../docs/stabilization/R61_TOOL_CONTRACT_AUDIT.md).
+
+The schema-20 correction makes `common.resources_read` return one complete bounded
+representation or an explicit error. Broad VBA inspection starts from
+`RUNTIME_CONTEXT.document.vba_project_target`; unfiltered VBA find is only fallback
+discovery and keeps the project target first, while queried find remains filtered.
 
 R61/11O2 replaces Plan create/update with `common.plan_doc_save`, replaces the
 three Task List lifecycle ids with `common.task_list_set`, and removes caller-owned
@@ -394,7 +401,8 @@ one readable target; bind reuses the latest successful eligible accepted Office 
 from the current run without nested source arguments; refresh takes only an optional
 name. Use `html`, `tools: R61 built-in contract inventory` and
 `node tests/web/html-workspace-export.test.js`. Prompt schema 19 and accepted-history
-validation require a new chat/reset for retained pre-11O3 calls.
+validation introduced the HTML switch; current schema 20 requires a new chat/reset
+for every retained pre-correction call.
 
 ## Full suite
 

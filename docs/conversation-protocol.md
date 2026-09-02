@@ -61,18 +61,25 @@ No callable schema is touched by execution or removed by LRU. Before publication
 
 When JSON names an exact runnable-catalog tool whose schema is not in the current callable set, the parser reports `Tool schema is not loaded` and the format-repair instruction requires a separate `common.capabilities_read` call for that exact id. It reports `Unknown tool` only for an id absent from the runnable catalog. This distinction prevents a known unloaded tool from entering a repeated unknown-id repair loop without silently auto-loading or retrying it.
 
-A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Successful resource/capability evidence is never replaced by a successful transport preview: the complete domain page/chunk must fit together with request options and both reserves. Otherwise the projection returns explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 18 records the R61 semantic resource/capability and planning boundaries; schema 17 and any other marker preserve stored text and require explicit review/reset before Agent/Plan execution.
+A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Successful resource/capability evidence is never replaced by a successful transport preview: the complete resource representation or capability body/chunk must fit together with request options and both reserves. Otherwise the projection returns explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 20 records the whole-resource read boundary together with the earlier R61 semantic resource/capability, planning and HTML contracts; schema 19 and any other older marker preserve stored text and require explicit review/reset before Agent/Plan execution.
 
 Planning and execution tracking are separate. Exact native `common.plan_doc_save` accepts only the complete title/Markdown/status intent; runtime creates the active plan when absent or binds the exact active head and appends a guarded linear revision. `common.plan_doc_restore` accepts one user-visible version, while runtime resolves its exact source and current guard. `common.plan_doc_delete` has no arguments and retains the explicit-request guard plus removal tombstone semantics. `RUNTIME_CONTEXT.active_plan` exposes only current readable metadata, while the body is found and read through the semantic resource pair. `common.questions_ask` accepts prompt/options without question or option ids; runtime generates UI-only ids, and submitted answers return question text plus selected labels/free text. `common.task_list_set` has small typed `save` and `close` branches; runtime owns active-list and stable step ids while the model supplies the complete goal/ordered step state or terminal outcome. Model Tool Results omit all these internal identities and guards. A ready-plan handoff revalidates the exact selected revision internally, switches to Agent, and submits a semantic instruction to find/read the active plan; no URI enters the model request.
 
 The resource index is a bounded semantic working-set manifest, not a body store.
 `common.resources_find` accepts optional literal `query` plus semantic `scope` and
-returns at most 20 readable targets. `common.resources_read` accepts one returned
-target, optional `metadata|text|structure|source|media` representation and
-`action=read|next`; runtime supplies the exact reference and fixed 8,000-character
-page. Internal provider list/resolve/search/read still use revision-pinned
-`ResourceRef`, scope-bound cursors and live hash/collection guards. Drift returns
-the existing fail-closed error; the model restarts with `action=read`. Model
+returns at most 20 readable targets. Query results are filtered matches, not a
+complete inventory. An unfiltered VBA browse pins the `VBA project` target first;
+reading its `structure` returns the complete discovered component inventory.
+When the exact bound document supports VBA, `RUNTIME_CONTEXT.document.vba_project_target`
+publishes that same readable project target so a project-wide request can read it
+without a preceding find. `common.resources_read` accepts this runtime target or
+one returned target plus an optional
+`metadata|text|structure|source|media` representation. Runtime supplies the exact
+reference, reads all internal provider pages under revision guards and publishes
+one complete representation. Internal provider list/resolve/search/read still use
+revision-pinned `ResourceRef`, scope-bound cursors and live hash/collection guards.
+Drift, provider truncation or insufficient request context returns an explicit
+error; no partial successful prefix or model continuation action exists. Model
 arguments, results, `RUNTIME_CONTEXT`, media projection, compaction input and replay
 contain no URI, revision/hash, cursor/offset, provider identity or internal id.
 
