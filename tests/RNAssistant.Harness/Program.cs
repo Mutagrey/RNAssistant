@@ -475,6 +475,7 @@ namespace RNAssistant.Harness
                 Test("tools: removed ids are unknown", RemovedToolIdsAreUnknown),
                 Test("tools: compact catalog rejects removed aliases", CompactToolCatalogRejectsRemovedAliases),
                 Test("tools: expanded built-ins visible", ExpandedBuiltInToolsAreVisible),
+                Test("tools: R61 built-in contract inventory", R61BuiltInContractInventory),
                 Test("tools: unbound catalog entry cannot dispatch", UnboundCatalogEntryCannotDispatch),
                 Test("tools: manual read-only run skips chat lease", ManualReadOnlyRunSkipsChatLease),
                 Test("tools: html workspace updates session", HtmlWorkspaceToolsUpdateChatSession),

@@ -83,6 +83,14 @@ must switch atomically with the IDs/arguments they teach. R61 must also compare
 current core membership with a smaller relevant pack; registry count alone is not
 an optimization target.
 
+11O0 freezes the source-built-in property baseline in the machine-checked
+[R61 inventory](stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv): 73 unique built-in
+IDs and 76 effective host variants record exact descriptor revision, allowed modes,
+direct binding and recursive property paths. Plumbing-shaped additions require an
+explicit semantic or runtime-owned decision. Dynamic installed custom-package
+schemas remain package-revision-owned and are reviewed in the Tool-authoring/
+Library slice; field names alone never trigger unsafe automatic stripping.
+
 Every published tool must be reviewed individually, including Office, VBA/macro,
 resources, capabilities, questions, Plan, Task List, HTML, prompts, Tool/Skill
 authoring and custom-package execution. The review classifies every input as either

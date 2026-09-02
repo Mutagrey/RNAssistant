@@ -1,7 +1,8 @@
 # R61/11O — audit границы model-facing tools
 
-Дата фиксации: 2026-09-02. Статус: обязательный docs-only вход для
-отдельного R61 после текущего Windows rebuild и до финального Milestone WQ.
+Дата фиксации: 2026-09-02. Статус: 11O0 source-built-in property inventory
+зафиксирован; runtime family cutovers, dynamic custom-package review и UI ещё
+не выполнены.
 
 Этот документ не меняет runtime, public tool ids, schemas или UI. До атомарного
 переключения конкретного семейства действует его текущий канонический контракт.
@@ -64,6 +65,25 @@ delegate-ом. Это доказывает механическую исполн
 понятность реальной модели. R61 поэтому измеряет не только handler success, но и
 число calls, argument/format repairs, tool errors, continuation restarts и итоговую
 успешность задачи.
+
+11O0 добавил machine-checked
+[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 73 уникальных built-in id
+и 76 effective host-вариантов фиксируют exact descriptor revision, host, mode,
+direct binding и все рекурсивные schema property paths. Четыре дополнительных
+варианта принадлежат host-specific `common.html_data_bind`. Поле, похожее на
+runtime plumbing, не может появиться без явного решения; допустимые public
+capability/tool/skill/mail identities отмечены отдельно от полей, которые R61
+internalizes/removes. Descriptor revision одновременно фиксирует description,
+defaults и validation, не создавая второй schema source.
+
+Произвольные argument schemas установленных custom packages нельзя честно
+зафиксировать в source baseline: они package-owned и меняются только новой exact
+package revision. Их поля не удаляются автоматически по имени (`customerId` может
+быть domain identity). R61 Tool-authoring/Library slice обязан показать их в том же
+property audit, потребовать явное rationale для plumbing-shaped inputs и
+fail-closed оставить непроверенный package вне release evidence. Это оставшийся
+dynamic inventory gate, а не причина задерживать независимый built-in family
+switch.
 
 ## 4. Полный current inventory `common.*`
 
@@ -300,10 +320,11 @@ R61 не закрывается только schema snapshot-тестами. М�
 
 ## 9. Порядок исполнения и gate
 
-1. Завершить property-level inventory всех effective common/host/custom schemas и
-   skill consumers по mode/host. Current 35-tool + 9-skill Common source list выше
-   является baseline, но не заменяет проверку каждого свойства, skill reference и
-   callable-pack membership.
+1. Source-built-in часть property-level inventory завершена в 11O0: все effective
+   Common/host variants проверяются по exact revision/mode/host/binding/property
+   paths, а девять Common skill consumers перечислены выше. Dynamic installed
+   custom-package property review и callable-pack comparison остаются своими
+   gates Tool-authoring и core-pack slices; они не подменяются source snapshot.
 2. Переключить Resources + Capabilities intent/preparation boundary и удалить
    старые public plumbing arguments/ids.
 3. Переключить Plan questions/doc/task-list lifecycle без caller-owned ids/guards.
