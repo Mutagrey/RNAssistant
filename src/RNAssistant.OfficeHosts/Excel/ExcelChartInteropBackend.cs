@@ -147,10 +147,10 @@ namespace RNAssistant.OfficeHosts
                             "Excel workbook chart limit for this operation was reached.",
                             "excel_chart_limit_reached", false);
                     if (!string.IsNullOrWhiteSpace(plan.ChartName) &&
-                        current.Charts.Any(chart => string.Equals(
-                            chart.Sheet, plan.Sheet,
+                        current.Charts.Any(existingChart => string.Equals(
+                            existingChart.Sheet, plan.Sheet,
                             StringComparison.OrdinalIgnoreCase) &&
-                            string.Equals(chart.Name, plan.ChartName,
+                            string.Equals(existingChart.Name, plan.ChartName,
                                 StringComparison.OrdinalIgnoreCase)))
                         throw Failure(
                             "Chart already exists: " + plan.ChartName,

@@ -18,6 +18,15 @@ unchanged, and no replaced path or compatibility adapter was added. Static sourc
 diff and version-format checks pass. The exact Windows x64 + Office + VS 2022
 OfficeHosts/VSTO rebuild remains required before this WQ blocker is closed.
 
+Windows OfficeHosts compile follow-up (2026-09-02): the next reported build exposed
+one remaining primary `CS0136` in `ExcelChartInteropBackend`; its `chart` lambda
+parameter collided with the later local chart variable, while the other six errors
+were downstream `CS0006`. The lambda parameter is now unambiguous; chart behavior
+is unchanged. A Roslyn source audit of all 438 production C# files found no syntax,
+member-name or lambda/local-scope collisions. Excel chart 4/4, architecture 4/4,
+production source inclusion 1/1, diff and version-format checks pass. The exact
+Windows OfficeHosts/VSTO rebuild remains the required gate.
+
 Phase 11T10 final active-legacy cleanup (2026-09-01):
 `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, dispatched/UI-thread
 wrappers and the remaining host switches are deleted. `OfficeBuiltInToolCatalog`
