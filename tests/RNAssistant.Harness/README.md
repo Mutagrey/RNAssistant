@@ -95,6 +95,7 @@ Versioning changes use the existing `Program.ProjectStructureTests.cs` suite:
 ```bash
 dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal
 dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "harness:"
+node tests/web/settings-version.test.js
 ```
 
 The `versioning` substring selects only versioning cases. These need Git and dotnet;
@@ -103,7 +104,9 @@ Fixture refs never affect the working repository or its origin. Coverage include
 unchanged product versions across ordinary builds/commits, source archives without Git
 (Debug/Release, explicit/unknown metadata and release rejection), invalid metadata,
 release-only gates, tag uniqueness and SDK/old-style assembly attributes. No Office
-projects or PowerShell release workflow are executed by this slice.
+projects or PowerShell release workflow are executed by this slice. The focused
+JavaScript check covers the Settings product/short-commit label and provenance
+fallbacks without WebView layout execution.
 
 ## Stabilization characterization
 

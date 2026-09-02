@@ -30,7 +30,9 @@ Requirements: [master plan, section 13](../stabilization/STABILIZATION_MASTER_PL
 Numeric version components must be 0–65534. Build number changes do not change
 product version. Git identity is resolved at build time and written into both SDK
 and old-style assembly metadata. Existing version readers can read informational
-version; no diagnostics UI or runtime code is changed in Phase 0.
+version. The Settings navigation renders a known Git build compactly as
+`v<product> · <7-char-sha>` and preserves its `dirty`/`unknown` marker, so
+ordinary development builds remain distinguishable without changing product version.
 
 The master plan recommends `AssemblyVersion=16.0.0.0` after checking VSTO/ClickOnce.
 That check has not run here. Retaining the actual baseline `16.0.4.0` avoids an

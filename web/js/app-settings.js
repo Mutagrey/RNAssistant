@@ -170,6 +170,21 @@ function readReasoningCustomJson(mode) {
   return JSON.stringify(value, null, 2);
 }
 
+function formatAppVersionLabel(value) {
+  var raw = String(value || "").trim().replace(/^v/i, "");
+  if (!raw) {
+    return "—";
+  }
+
+  var identified = raw.match(/^(.+)\+g([0-9a-f]{7,64})(?:\.(dirty|unknown))?$/i);
+  if (!identified) {
+    return "v" + raw;
+  }
+
+  var label = "v" + identified[1] + " · " + identified[2].substring(0, 7);
+  return identified[3] ? label + " · " + identified[3].toLowerCase() : label;
+}
+
 function renderSettings() {
   var s = state.settings || {};
   applyUiFontScale(s);
@@ -177,7 +192,8 @@ function renderSettings() {
   var appVersion = $("appVersion");
   if (appVersion) {
     var appVersionText = String(state.appVersion || "").trim();
-    appVersion.textContent = appVersionText ? "v" + appVersionText.replace(/^v/i, "") : "—";
+    appVersion.textContent = formatAppVersionLabel(appVersionText);
+    appVersion.title = appVersionText ? "Build: " + appVersionText : "";
   }
   $("baseUrlInput").value = s.BaseUrl || s.baseUrl || "";
   $("modelsConfigUrlInput").value = s.ModelsConfigUrl || s.modelsConfigUrl || "";
