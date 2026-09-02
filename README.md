@@ -71,9 +71,15 @@ network or terminate Office. Outputs are written both to
 `artifacts\build-local.log`. Close Office before building because the native DLL
 remains loaded in the Office process and cannot be replaced.
 
-The x86 output intentionally omits the x64-only native PDF rendering binaries.
-The complete supported target remains Office x64. Package/import the VBA and
-Ribbon sources from `wrappers\native`; see `wrappers\native\README.md`.
+The x86 output still includes the managed PdfPig reader used for PDF text and page
+metadata extraction. Those assemblies are AnyCPU; this path is structurally x86-
+compatible, although the exact Windows x86 runtime check remains open. The package
+intentionally omits the x64-only native `pdfium.dll` and `libSkiaSharp.dll`, so PDF
+page-to-image rendering, including scanned-page input for a vision model, is not
+available in x86. The managed `PDFtoImage.dll`/`SkiaSharp.dll` facades do not remove
+that native bitness requirement. The complete supported target remains Office x64.
+Package/import the VBA and Ribbon sources from `wrappers\native`; see
+`wrappers\native\README.md`.
 
 ## Windows Desktop Quick Start
 

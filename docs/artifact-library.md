@@ -149,9 +149,15 @@ placeholder rather than falling forward to another revision.
   JSON; a dirty Plan preview is explicitly a non-durable draft.
 - Image: local bytes only, fit/zoom, dimensions and download; object URLs are
   revoked on selection/chat/window changes.
-- PDF: page navigation plus extracted-text view and scan/extraction warning. Any
-  PDF.js/native renderer is a separately admitted local asset/runtime with bounded
-  pages, worker lifecycle, manifest/license/CSP and Windows WebView qualification.
+- PDF: page navigation plus extracted-text view and scan/extraction warning. Current
+  upload ingestion already extracts text and page metadata through the managed
+  AnyCPU PdfPig path; this is independent of visual rendering. Any PDF.js/native
+  renderer is a separately admitted local asset/runtime with bounded pages, worker
+  lifecycle, manifest/license/CSP and Windows WebView qualification. The currently
+  vendored PDFtoImage/PDFium/Skia visual path has only x64 native binaries, so it is
+  unavailable in x86 even though its managed facade is AnyCPU. Exact Windows x86
+  text extraction remains an open qualification gate; 11D3 is not admitted by this
+  clarification.
 - Audio: local bounded player and optional transcript relation; no autoplay.
 - JSON/chart/tool result: existing lossless bounded JSON/domain viewers remain
   owners of their formats.

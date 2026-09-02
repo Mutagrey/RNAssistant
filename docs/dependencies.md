@@ -17,6 +17,30 @@ Only Windows x64 native binaries are included because the supported target is
 Office x64. Building and running PDF page rendering does not require restoring
 these NuGet packages.
 
+## PDF bitness boundary
+
+PDF text reading and PDF page rendering are separate dependency paths:
+
+| Operation | Runtime dependencies | x86 status |
+|---|---|---|
+| Signature validation, storage, text/page-count extraction | `RNAssistant.Core` + PdfPig `net471` closure | Structurally compatible: all six shipped PdfPig assemblies and their five managed runtime dependencies are IL-only `32/64` with no unmanaged imports. Exact Windows x86 execution is still an open gate. |
+| Page-to-JPEG conversion for a vision model | `RNAssistant.Office` + managed `PDFtoImage.dll`/`SkiaSharp.dll` + native `pdfium.dll`/`libSkiaSharp.dll` | Unavailable: the repository contains only Windows x64 native binaries and the x86 publisher intentionally omits them. |
+
+The `PE32` container reported for a managed DLL does not by itself mean that the
+assembly is x86-only. The relevant CLR flags on the complete production reader
+closure are `ILONLY` without `32BITREQUIRED` (`32/64` in `pedump`), so the same
+reader can be loaded by x86 or x64 CLR. Native libraries are different: their
+machine type must match the Office process. The managed PDFtoImage and SkiaSharp
+facades are also AnyCPU, but rendering still requires same-bitness native PDFium
+and Skia.
+
+Consequently an x86 build may ingest a text-readable PDF without an x86 PDFium.
+A scanned/image-only PDF needs the visual path and is not currently x86-qualified.
+Copying the shipped x64 native DLLs into the x86 package is invalid; either matching
+reviewed/licensed x86 binaries or an explicit runtime capability refusal is required
+before visual PDF support can be claimed for x86. This open behavior is tracked in
+the [risk register](stabilization/RISK_REGISTER.md).
+
 Task pane JS/CSS is committed in `web/`:
 
 - `marked 12.0.2`
