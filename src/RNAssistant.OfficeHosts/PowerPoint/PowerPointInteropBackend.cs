@@ -439,7 +439,7 @@ namespace RNAssistant.OfficeHosts
                 throw Failure(
                     "Shape has no text frame.",
                     "powerpoint_shape_has_no_text", false);
-            return TextTarget(slide, shape, kind);
+            return CreateTextTarget(slide, shape, kind);
         }
 
         private static TextTarget ResolveTextTarget(
@@ -450,13 +450,14 @@ namespace RNAssistant.OfficeHosts
             var shapes = string.Equals(kind, "notes", StringComparison.Ordinal)
                 ? slide.NotesPage.Shapes : slide.Shapes;
             foreach (PowerPoint.Shape shape in shapes)
-                if (shape.Id == shapeId) return TextTarget(slide, shape, kind);
+                if (shape.Id == shapeId)
+                    return CreateTextTarget(slide, shape, kind);
             throw Failure(
                 "PowerPoint text target changed before dispatch.",
                 "powerpoint_text_target_changed", true);
         }
 
-        private static TextTarget TextTarget(
+        private static TextTarget CreateTextTarget(
             PowerPoint.Slide slide, PowerPoint.Shape shape, string kind)
         {
             var text = ShapeText(shape);

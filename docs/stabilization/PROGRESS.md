@@ -2,12 +2,21 @@
 
 Current target: 16.1.0
 Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
-Current task: 11T10 is done host-neutral: generic host catalog/dispatch, legacy definition/result/UI projections and retired fake queues are deleted; all current tools and both Tool/Skill Library mutation contours use typed direct owners. Real Windows/live-provider gates remain open.
+Current task: reported Windows `RNAssistant.OfficeHosts` compile blockers after the physical host moves are corrected in the direct path; the exact Windows rebuild and remaining live-provider gates are still open.
 Execution mode: mandatory host-neutral route 0–11T10 и WQ-A1–A5 implementation завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption; накопленная Windows qualification обязательна до Phase 12.
 
 Next step for tools: execute the mandatory Windows x64 + Office + VS 2022 Milestone WQ matrix against the exact candidate; any failure is fixed only in the typed direct path. Phase 12 starts only after the accumulated qualification gates are satisfied.
 Required context: [11T10 evidence](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md), [qualification contract](../qualification.md), [migration map](MIGRATION_MAP.md), WQ0/WQ-SESSION and host/VBA/ToolPack/WebView packs.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+
+Windows OfficeHosts compile correction (2026-09-02): the reported 13-error build
+contained seven primary C# errors and six downstream `CS0006` failures. Excel now
+imports `JToken`; Excel, Word and PowerPoint adapters import the moved
+`OfficeHosts.Vba` backend; Outlook, PowerPoint and Word helper methods no longer
+collide with their property/nested-type names. Runtime behavior and contracts are
+unchanged, and no replaced path or compatibility adapter was added. Static source,
+diff and version-format checks pass. The exact Windows x64 + Office + VS 2022
+OfficeHosts/VSTO rebuild remains required before this WQ blocker is closed.
 
 Phase 11T10 final active-legacy cleanup (2026-09-01):
 `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, dispatched/UI-thread

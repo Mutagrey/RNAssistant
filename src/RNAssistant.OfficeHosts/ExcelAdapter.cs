@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Excel = Microsoft.Office.Interop.Excel;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
@@ -11,6 +12,7 @@ using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Tools;
 using RNAssistant.OfficeHosts.Identity;
+using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {

@@ -10,6 +10,7 @@ using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Tools;
 using RNAssistant.OfficeHosts.Identity;
+using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {

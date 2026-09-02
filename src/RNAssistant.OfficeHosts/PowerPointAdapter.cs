@@ -12,6 +12,7 @@ using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Tools;
 using RNAssistant.OfficeHosts.Identity;
+using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {

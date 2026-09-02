@@ -88,11 +88,11 @@ namespace RNAssistant.OfficeHosts
                 {
                     if (_mail != null)
                     {
-                        if (WindowHwnd(_inspector) == 0) return false;
+                        if (ReadWindowHwnd(_inspector) == 0) return false;
                         var current = _inspector.CurrentItem as Outlook.MailItem;
                         return SameMail(_mail, current);
                     }
-                    if (WindowHwnd(_explorer) == 0) return false;
+                    if (ReadWindowHwnd(_explorer) == 0) return false;
                     var currentFolder = _explorer.CurrentFolder as Outlook.MAPIFolder;
                     return SameFolder(_folder, currentFolder);
                 }
@@ -185,7 +185,7 @@ namespace RNAssistant.OfficeHosts
             {
                 RequireOwnerAccess();
                 return _inspector != null
-                    ? WindowHwnd(_inspector) : WindowHwnd(_explorer);
+                    ? ReadWindowHwnd(_inspector) : ReadWindowHwnd(_explorer);
             }
         }
 
@@ -263,7 +263,7 @@ namespace RNAssistant.OfficeHosts
             return store + "\n" + path;
         }
 
-        private static long WindowHwnd(object window)
+        private static long ReadWindowHwnd(object window)
         {
             return NativeWindowInfo.ReadLongMemberPath(window, "HWND");
         }

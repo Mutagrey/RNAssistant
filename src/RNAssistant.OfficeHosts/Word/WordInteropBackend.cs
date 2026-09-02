@@ -140,7 +140,7 @@ namespace RNAssistant.OfficeHosts
             if (request == null) throw new ArgumentNullException(nameof(request));
             RequireMark(markDispatchPossible);
             var document = Document();
-            var before = WriteTarget(document, request);
+            var before = CreateWriteTarget(document, request);
             var inserted = request.Mode == "paragraph"
                 ? (request.Text ?? string.Empty) + Environment.NewLine
                 : request.Text ?? string.Empty;
@@ -517,7 +517,7 @@ namespace RNAssistant.OfficeHosts
             return ResolveSelectionRange(document);
         }
 
-        private static WriteTarget WriteTarget(
+        private static WriteTarget CreateWriteTarget(
             Word.Document document, WordWriteRequest request)
         {
             var content = document.Content;
@@ -540,7 +540,7 @@ namespace RNAssistant.OfficeHosts
             WordWriteRequest request,
             WriteTarget expected)
         {
-            var current = WriteTarget(document, request);
+            var current = CreateWriteTarget(document, request);
             if (!string.Equals(
                 expected.Token, current.Token, StringComparison.Ordinal))
                 throw Failure(
