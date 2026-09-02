@@ -21,6 +21,10 @@ assert.equal(
   "v16.1.0-dev · 2a2f69c · dirty"
 );
 assert.equal(
+  context.formatAppVersionLabel("16.1.0-dev+g2a2f69c38d90.unknown"),
+  "v16.1.0-dev · 2a2f69c · unknown"
+);
+assert.equal(
   context.formatAppVersionLabel("16.1.0-dev+source-archive.unknown"),
   "v16.1.0-dev+source-archive.unknown"
 );

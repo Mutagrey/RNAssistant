@@ -52,9 +52,11 @@ tree, inspect tags, contact remotes or modify source files.
 `ValidateRNAssistantVersion` was replaced, with no compatibility alias.
 
 Git is required for checkout builds. Ordinary source archive builds without `.git`
-are allowed in both Debug and Release configurations. Missing commit, branch and
-working-tree metadata is recorded as `unknown`, with a build warning; no SHA or clean
-state is invented. With no metadata, InformationalVersion is
+are allowed in both Debug and Release configurations. Git/GitHub archives substitute
+the exact source commit into the tracked archive-provenance file, so their
+InformationalVersion is `16.1.0-dev+g<12-char-sha>.unknown`; branch and
+post-extraction working-tree state remain unknown and the build is not release
+evidence. A plain copied archive without the substituted commit remains
 `16.1.0-dev+source-archive.unknown`. Git failures in an actual checkout still fail.
 For exact archive provenance, supply `RNAssistantCommitSha` (full SHA),
 `RNAssistantBranch` and `RNAssistantWorkingTreeState=clean|dirty` through MSBuild

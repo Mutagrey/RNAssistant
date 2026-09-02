@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildThisFileDirectory)build/RNAssistant.GitArchive.props" Condition="Exists('$(MSBuildThisFileDirectory)build/RNAssistant.GitArchive.props')" />
   <Import Project="$(MSBuildThisFileDirectory)Directory.Build.local.props" Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.local.props')" />
 
   <PropertyGroup>
@@ -8,16 +9,20 @@
     <_RNAssistantExpectedVersion Condition="'$(RNAssistantVersionSuffix)' != ''">$(RNAssistantVersionPrefix)-$(RNAssistantVersionSuffix)</_RNAssistantExpectedVersion>
     <_RNAssistantVersionPrefixValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionPrefix)', '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'))</_RNAssistantVersionPrefixValid>
     <_RNAssistantVersionSuffixValid Condition="'$(RNAssistantVersionSuffix)' != ''">$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionSuffix)', '^((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*$'))</_RNAssistantVersionSuffixValid>
+    <_RNAssistantArchiveCommitValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantArchiveCommitSha)', '^([0-9a-f]{40}|[0-9a-f]{64})$'))</_RNAssistantArchiveCommitValid>
   </PropertyGroup>
 
   <Target Name="ResolveRNAssistantBuildIdentity" BeforeTargets="GetAssemblyAttributes">
     <PropertyGroup Condition="!Exists('$(_RNAssistantRepositoryRoot).git')">
+      <RNAssistantCommitSha Condition="'$(RNAssistantCommitSha)' == '' and '$(_RNAssistantArchiveCommitValid)' == 'True'">$(RNAssistantArchiveCommitSha)</RNAssistantCommitSha>
       <RNAssistantCommitSha Condition="'$(RNAssistantCommitSha)' == ''">unknown</RNAssistantCommitSha>
       <RNAssistantBranch Condition="'$(RNAssistantBranch)' == ''">unknown</RNAssistantBranch>
       <RNAssistantWorkingTreeState Condition="'$(RNAssistantWorkingTreeState)' == ''">unknown</RNAssistantWorkingTreeState>
     </PropertyGroup>
-    <Warning Condition="!Exists('$(_RNAssistantRepositoryRoot).git') and ('$(RNAssistantCommitSha)' == 'unknown' or '$(RNAssistantBranch)' == 'unknown' or '$(RNAssistantWorkingTreeState)' == 'unknown')"
+    <Warning Condition="!Exists('$(_RNAssistantRepositoryRoot).git') and '$(RNAssistantCommitSha)' == 'unknown'"
              Text="Source archive build: Git provenance is unknown. For exact build identity, supply RNAssistantCommitSha, RNAssistantBranch and RNAssistantWorkingTreeState in Directory.Build.local.props. This build is not release evidence." />
+    <Warning Condition="!Exists('$(_RNAssistantRepositoryRoot).git') and '$(RNAssistantCommitSha)' != 'unknown' and ('$(RNAssistantBranch)' == 'unknown' or '$(RNAssistantWorkingTreeState)' == 'unknown')"
+             Text="Source archive build: commit $(RNAssistantCommitSha) is identified, but branch or working-tree state is unknown. This build is not release evidence." />
     <Exec Command="git rev-parse --verify HEAD" WorkingDirectory="$(_RNAssistantRepositoryRoot)"
           Condition="Exists('$(_RNAssistantRepositoryRoot).git') and '$(RNAssistantCommitSha)' == ''" ConsoleToMSBuild="true" StandardOutputImportance="Low">
       <Output TaskParameter="ConsoleOutput" PropertyName="RNAssistantCommitSha" />

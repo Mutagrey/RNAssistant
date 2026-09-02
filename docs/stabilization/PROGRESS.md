@@ -107,6 +107,13 @@ Source-archive/legacy version strings stay visible unchanged, and the asset quer
 advanced so WebView does not reuse the previous formatter. Targeted JavaScript and
 version-format checks cover the change; Windows WebView rendering remains open.
 
+GitHub archive build identity follow-up (2026-09-02, user-requested host-neutral build):
+Git/GitHub source archives now export-substitute their exact full commit into a tracked
+MSBuild provenance property. Archive builds therefore expose the same short commit in
+Settings without carrying `.git`; branch and post-extraction working-tree state remain
+explicitly unknown, so archive builds still cannot qualify as release evidence. Plain
+file copies without substituted provenance retain `source-archive.unknown`.
+
 R61/11O0 source-built-in property inventory (2026-09-02): a new targeted gate
 enumerates the exact effective built-in catalog across Excel, Word, PowerPoint and
 Outlook. It freezes 73 unique ids / 76 host-specific descriptor variants, their

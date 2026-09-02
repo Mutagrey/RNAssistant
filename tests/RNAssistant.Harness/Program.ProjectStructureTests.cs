@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -904,6 +905,30 @@ namespace RNAssistant.Harness
             using (var fixture = new VersioningFixture())
             {
                 var head = fixture.Git("rev-parse", "HEAD").Trim();
+                var archivePath = Path.Combine(fixture.TemporaryRoot, "source.zip");
+                var archiveRoot = Path.Combine(fixture.TemporaryRoot, "archive");
+                fixture.Git("archive", "--format=zip", "--output=" + archivePath, "HEAD");
+                ZipFile.ExtractToDirectory(archivePath, archiveRoot);
+                AssertContains(
+                    File.ReadAllText(Path.Combine(archiveRoot, "build", "RNAssistant.GitArchive.props")),
+                    head,
+                    "Git archive substitutes the exact source commit");
+                var archived = fixture.BuildAt(archiveRoot, "PrintBuildIdentity", true);
+                AssertContains(archived,
+                    "Identity=" + fixture.ProductVersion + "+g" + head.Substring(0, 12) + ".unknown",
+                    "GitHub-style archive recovers commit identity without a checkout");
+                AssertContains(archived, "working-tree state is unknown",
+                    "archive commit does not invent post-extraction cleanliness");
+                fixture.BuildAt(archiveRoot, "GenerateRNAssistantVersionInfo", true);
+                var archivedAttributes = File.ReadAllText(
+                    Path.Combine(archiveRoot, "obj", "RNAssistant.Version.g.cs"));
+                AssertContains(archivedAttributes,
+                    "AssemblyMetadataAttribute(\"CommitSha\", \"" + head + "\")",
+                    "archive assembly metadata keeps the full substituted commit");
+                AssertContains(archivedAttributes,
+                    "AssemblyMetadataAttribute(\"WorkingTreeState\", \"unknown\")",
+                    "archive assembly metadata keeps unknown post-extraction state");
+
                 Directory.Move(Path.Combine(fixture.Repository, ".git"), Path.Combine(fixture.TemporaryRoot, "saved-git"));
                 foreach (var configuration in new[] { "Debug", "Release" })
                 {
@@ -1071,7 +1096,11 @@ namespace RNAssistant.Harness
                 Directory.CreateDirectory(Path.Combine(Repository, "build"));
                 Directory.CreateDirectory(Path.Combine(Repository, "obj"));
                 var root = FindHarnessRepositoryRoot();
-                foreach (var file in new[] { "Directory.Build.props", "Directory.Build.targets", "build/RNAssistant.Release.targets" })
+                foreach (var file in new[]
+                {
+                    ".gitattributes", "Directory.Build.props", "Directory.Build.targets",
+                    "build/RNAssistant.GitArchive.props", "build/RNAssistant.Release.targets"
+                })
                     File.Copy(Path.Combine(root, file), Path.Combine(Repository, file));
                 var props = XDocument.Load(Path.Combine(Repository, "Directory.Build.props"));
                 VersionPrefix = props.Descendants().Single(element => element.Name.LocalName == "RNAssistantVersionPrefix").Value;
@@ -1110,7 +1139,12 @@ namespace RNAssistant.Harness
 
             public string Build(string target, bool success, params string[] properties)
             {
-                return RunVersioningCommand(Repository, "dotnet", success, new[]
+                return BuildAt(Repository, target, success, properties);
+            }
+
+            public string BuildAt(string repository, string target, bool success, params string[] properties)
+            {
+                return RunVersioningCommand(repository, "dotnet", success, new[]
                 {
                     "msbuild", "Versioning.csproj", "-nologo", "-v:minimal", "-t:" + target
                 }.Concat(properties).ToArray());
