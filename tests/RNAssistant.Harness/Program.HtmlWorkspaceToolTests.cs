@@ -1,12 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
@@ -22,30 +25,31 @@ namespace RNAssistant.Harness
                     var definitions = executor.GetControllerTools()
                         .Where(tool => HtmlWorkspaceToolCatalog.Owns(tool.Id))
                         .ToList();
-                    AssertEqual(8, definitions.Count,
-                        "complete HTML workspace family is registered");
+                    AssertEqual(7, definitions.Count,
+                        "semantic HTML workspace family is registered");
                     foreach (var definition in definitions)
                     {
                         AssertTrue(definition.Policy != null,
                             definition.Id + " owns an exact typed policy");
-                        AssertEqual(definition.Id ==
-                                HtmlWorkspaceToolCatalog.InspectWorkspaceToolId
-                                    ? ToolEffect.Read : ToolEffect.Write,
-                            definition.Policy.Effect,
+                        AssertEqual(ToolEffect.Write, definition.Policy.Effect,
                             definition.Id + " effect policy");
-                        AssertEqual(definition.Id ==
-                                HtmlWorkspaceToolCatalog.InspectWorkspaceToolId
-                                    ? ToolVerification.None :
-                                        ToolVerification.Tool,
+                        AssertEqual(ToolVerification.Tool,
                             definition.Policy.Verification,
                             definition.Id + " verification policy");
                         AssertEqual("agent",
                             string.Join(",", definition.Policy.AllowedModes),
                             definition.Id + " is Agent-only");
                     }
+                    var writeFileSchema = JObject.Parse(definitions.Single(definition =>
+                        definition.Id == HtmlWorkspaceToolCatalog.WriteFileToolId).ArgumentSchemaJson);
+                    AssertContains((string)writeFileSchema["properties"]["content"]["description"],
+                        "one literal source backslash",
+                        "HTML write schema defines the outer JSON escaping boundary");
 
+                    var allTools = OfficeToolCatalog.ForHost(adapter.HostName)
+                        .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
-                        session, definitions, new AppSettings(), "agent", false);
+                        session, allTools, new AppSettings(), "agent", false);
                     foreach (var definition in definitions)
                     {
                         AssertTrue(runtime.Describe(new ToolCall(
@@ -59,13 +63,11 @@ namespace RNAssistant.Harness
                     }
 
                     var upsert = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.UpsertToolId,
+                        HtmlWorkspaceToolCatalog.WriteFileToolId,
                         new JObject
                         {
-                            ["resourceType"] = "file",
-                            ["name"] = "index.html",
-                            ["content"] = "<main>native</main>",
-                            ["setActive"] = true
+                            ["path"] = "index.html",
+                            ["content"] = "<main>native</main>"
                         });
                     AssertEqual(ToolExecutionOutcome.Ok, upsert.Outcome,
                         "native HTML upsert succeeds");
@@ -79,12 +81,63 @@ namespace RNAssistant.Harness
                             reference.Uri.IndexOf("/artifact/",
                                 StringComparison.Ordinal) >= 0),
                         "HTML mutation exposes the exact revision resource");
+                    AssertTrue(JObject.Parse(upsert.Result.DataJson)
+                            ["preflight"] != null,
+                        "HTML write runs static preflight automatically");
+
+                    var projectedInvocation = new ToolInvocation
+                    {
+                        ToolCallId = "html_projection",
+                        ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId
+                    };
+                    var projected = ModelToolResultProjection.Project(
+                        AgentJsonProtocol.CreateToolResultMessage(
+                            projectedInvocation, upsert.Result,
+                            ToolResultRoles.Tool));
+                    AssertContains(projected.Content, "index.html",
+                        "HTML model result retains the semantic path");
+                    AssertTrue(projected.Content.IndexOf("rna://",
+                            StringComparison.Ordinal) < 0 &&
+                        projected.Content.IndexOf("artifactId",
+                            StringComparison.Ordinal) < 0 &&
+                        projected.Content.IndexOf("revisionArtifactId",
+                            StringComparison.Ordinal) < 0 &&
+                        projected.Content.IndexOf("contentSha256",
+                            StringComparison.Ordinal) < 0 &&
+                        projected.Content.IndexOf("sourceTool",
+                            StringComparison.Ordinal) < 0,
+                        "HTML model result hides URI, revision, hash, and source identity");
+
+                    string contractError;
+                    AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
+                            new ToolCall("html_current",
+                                HtmlWorkspaceToolCatalog.WriteFileToolId,
+                                "{\"path\":\"index.html\",\"content\":\"ok\"}"),
+                            out contractError),
+                        "current semantic HTML write is replayable");
+                    AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                            new ToolCall("html_old",
+                                "common.html_workspace_upsert_file", "{}"),
+                            out contractError),
+                        "retired HTML upsert requires reset");
+                    AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                            new ToolCall("html_runtime_arg",
+                                HtmlWorkspaceToolCatalog.WriteFileToolId,
+                                "{\"path\":\"index.html\",\"content\":\"ok\",\"uri\":\"rna://runtime\"}"),
+                            out contractError),
+                        "HTML history rejects runtime-owned arguments");
+                    AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                            new ToolCall("html_nested_read",
+                                HtmlWorkspaceToolCatalog.BindDataToolId,
+                                "{\"name\":\"sales\",\"sourceTool\":\"excel.read_range\"}"),
+                            out contractError),
+                        "HTML history rejects nested source execution");
 
                     var unchanged = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.ApplyPatchToolId,
                         new JObject
                         {
-                            ["name"] = "index.html",
+                            ["path"] = "index.html",
                             ["patch"] = new JArray(new JObject
                             {
                                 ["op"] = "replace",
@@ -101,19 +154,38 @@ namespace RNAssistant.Harness
                         unchanged.Evidence.Effect,
                         "no-change HTML patch is explicit");
 
+                    var noSourceBind = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.BindDataToolId,
+                        new JObject { ["name"] = "missingSource" });
+                    AssertEqual(ToolExecutionOutcome.Error,
+                        noSourceBind.Outcome,
+                        "HTML bind fails without an accepted read");
+                    AssertContains(noSourceBind.Result.DataJson,
+                        "html_data_source_read_required",
+                        "HTML bind reports the stable missing-read code");
+
                     adapter.ExcelBackendCalls.Clear();
+                    var sourceArguments = new JObject
+                    {
+                        ["sheet"] = "Data",
+                        ["address"] = "A1:B4",
+                        ["content"] = "values"
+                    };
+                    var source = ExecuteHtmlNative(runtime,
+                        "excel.read_range", sourceArguments);
+                    AssertEqual(ToolExecutionOutcome.Ok, source.Outcome,
+                        "HTML source read succeeds before bind");
+                    AppendAcceptedHtmlSource(session, "html_run",
+                        "html_source", "excel.read_range",
+                        sourceArguments, source.Result);
+                    AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
+                            operation == FakeOfficeAdapter.ExcelRangeReadOperation),
+                        "source is read once before binding");
                     var bind = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.BindDataToolId,
                         new JObject
                         {
-                            ["dataName"] = "sales",
-                            ["sourceTool"] = "excel.read_range",
-                            ["sourceArguments"] = new JObject
-                            {
-                                ["sheet"] = "Data",
-                                ["address"] = "A1:B4",
-                                ["content"] = "values"
-                            }
+                            ["name"] = "sales"
                         });
                     AssertEqual(ToolExecutionOutcome.Ok, bind.Outcome,
                         "native HTML bind succeeds");
@@ -122,8 +194,46 @@ namespace RNAssistant.Harness
                         "native HTML bind verifies its workspace revision");
                     AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.ExcelRangeReadOperation),
-                        "HTML bind reaches one typed bound read backend");
+                        "HTML bind reuses accepted data without a nested read");
                 });
+        }
+
+        private static void AppendAcceptedHtmlSource(
+            ChatSession session,
+            string runId,
+            string callId,
+            string toolId,
+            JObject arguments,
+            RNAssistant.Core.Tools.Contracts.ToolResult result)
+        {
+            session.LastRun = new ChatRunRecord
+            {
+                RunId = runId,
+                TurnId = runId + "_turn",
+                ResponseProtocolVersion = ConversationResponse.ProtocolVersion
+            };
+            var values = JsonConvert.DeserializeObject<Dictionary<string, object>>(
+                (arguments ?? new JObject()).ToString(Formatting.None));
+            var call = AgentJsonProtocol.CreateToolCallMessage(
+                new AgentToolCall
+                {
+                    Id = callId,
+                    Name = toolId,
+                    Arguments = values
+                }, "Read source.", null, ToolResultRoles.User,
+                new AcceptedToolCallOrigin("source_step", "source_attempt", 0));
+            call.RunId = runId;
+            session.Messages.Add(call);
+            var invocation = new ToolInvocation
+            {
+                ToolId = toolId,
+                ToolCallId = callId,
+                Arguments = values
+            };
+            var acceptedResult = AgentJsonProtocol.CreateToolResultMessage(
+                invocation, result, ToolResultRoles.User);
+            acceptedResult.RunId = runId;
+            session.Messages.Add(acceptedResult);
         }
 
         private static ToolExecutionRecord ExecuteHtmlNative(

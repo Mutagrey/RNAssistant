@@ -480,17 +480,26 @@
       state.htmlWorkspaceRefreshPending = true;
       options.render();
       try {
-        var args = { policy: policy || "all" };
-        if (name) args.name = name;
-        var result = await options.send("runTool", {
-          toolId: "common.html_data_refresh",
-          arguments: args,
-          dryRun: false
-        });
+        var targets = name ? [name] : [""];
+        if (!name && policy === "on_preview" &&
+            typeof options.refreshableDataNames === "function") {
+          targets = options.refreshableDataNames("on_preview") || [];
+        }
+        var failure = null;
+        for (var index = 0; index < targets.length; index += 1) {
+          var args = {};
+          if (targets[index]) args.name = targets[index];
+          var result = await options.send("runTool", {
+            toolId: "common.html_data_refresh",
+            arguments: args,
+            dryRun: false
+          });
+          if (!toolSucceeded(result) && !failure) failure = result;
+        }
         if (state.activeChatId !== chatId) return;
         if (!options.applyWorkspaceResponse(await options.send("getHtmlWorkspace", { chatId: chatId }), chatId)) return;
-        if (!toolSucceeded(result)) {
-          throw new Error(toolMessage(result, "Данные обновлены частично."));
+        if (failure) {
+          throw new Error(toolMessage(failure, "Данные обновлены частично."));
         }
         options.log(toolMessage(result, "Данные HTML обновлены."));
       } catch (error) {

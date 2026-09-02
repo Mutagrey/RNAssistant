@@ -11,52 +11,34 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class HtmlWorkspaceToolService
     {
-        internal static string UpsertWorkspaceSchema()
+        internal static string WriteFileSchema()
         {
-            var properties = new JObject
-            {
-                ["resourceType"] = new JObject { ["type"] = "string", ["enum"] = new JArray("file", "data"), ["description"] = "Resource to write: file or data." },
-                ["name"] = new JObject { ["type"] = "string", ["description"] = "Workspace-relative file path or stable data-source name.", ["minLength"] = 1, ["maxLength"] = 260 },
-                ["content"] = new JObject { ["type"] = "string", ["description"] = "Complete file text, or complete valid JSON text when resourceType=data.", ["maxLength"] = 300000 },
-                ["setActive"] = new JObject { ["type"] = "boolean", ["description"] = "For a written HTML file, select it as the active preview.", ["default"] = true },
-                ["mode"] = new JObject { ["type"] = "string", ["description"] = "upsert creates or updates; createOnly/updateOnly enforce exact existence.", ["default"] = "upsert", ["enum"] = new JArray("upsert", "createOnly", "updateOnly") }
-            };
             return new JObject
             {
                 ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = new JArray("resourceType", "name", "content"),
-                ["additionalProperties"] = false,
-                ["anyOf"] = new JArray
+                ["properties"] = new JObject
                 {
-                    HtmlResourceVariant(properties, new[] { "resourceType", "name", "content", "setActive", "mode" }, new[] { "resourceType", "name", "content" }, "file"),
-                    HtmlResourceVariant(properties, new[] { "resourceType", "name", "content", "mode" }, new[] { "resourceType", "name", "content" }, "data")
-                }
+                    ["path"] = new JObject { ["type"] = "string", ["description"] = "Workspace-relative .html, .css, or .js file path.", ["minLength"] = 1, ["maxLength"] = 260 },
+                    ["content"] = new JObject { ["type"] = "string", ["description"] = "Complete exact file source after JSON decoding. Preserve line breaks and backslashes; in the outer response JSON encode a real line break as \\n and one literal source backslash as \\\\.", ["maxLength"] = MaxHtmlChars }
+                },
+                ["required"] = new JArray("path", "content"),
+                ["additionalProperties"] = false
             }.ToString(Formatting.None);
         }
 
-        private static JObject HtmlResourceVariant(
-            JObject sourceProperties,
-            IEnumerable<string> allowed,
-            IEnumerable<string> required,
-            string resourceType = null)
+        internal static string WriteDataSchema()
         {
-            var properties = new JObject();
-            foreach (var name in allowed ?? new string[0])
-            {
-                if (sourceProperties[name] != null) properties[name] = sourceProperties[name].DeepClone();
-            }
-            if (!string.IsNullOrWhiteSpace(resourceType))
-            {
-                ((JObject)properties["resourceType"])["enum"] = new JArray(resourceType);
-            }
             return new JObject
             {
                 ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = new JArray(required ?? new string[0]),
+                ["properties"] = new JObject
+                {
+                    ["name"] = new JObject { ["type"] = "string", ["description"] = "Stable name exposed through window.RNAssistantData.", ["minLength"] = 1, ["maxLength"] = 128 },
+                    ["json"] = new JObject { ["type"] = "string", ["description"] = "Complete exact valid JSON value serialized as text. Escape its quotes and backslashes for the outer response JSON; runtime validates and stores the decoded text unchanged.", ["minLength"] = 1, ["maxLength"] = MaxDataChars }
+                },
+                ["required"] = new JArray("name", "json"),
                 ["additionalProperties"] = false
-            };
+            }.ToString(Formatting.None);
         }
 
         internal static string ApplyPatchSchema()
@@ -64,14 +46,14 @@ namespace RNAssistant.Office.Tools
             var find = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Non-empty exact source text or unique insertion anchor.",
+                ["description"] = "Non-empty exact decoded source text or unique insertion anchor. Preserve line breaks and backslashes; outer response JSON escaping applies.",
                 ["minLength"] = 1,
                 ["maxLength"] = MaxHtmlChars
             };
             var text = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Replacement or inserted source text; empty text is valid for replacement/deletion.",
+                ["description"] = "Exact decoded replacement or inserted source text; preserve line breaks and backslashes. Empty text is valid for replacement/deletion.",
                 ["maxLength"] = MaxHtmlChars
             };
             var operations = new JArray
@@ -84,38 +66,21 @@ namespace RNAssistant.Office.Tools
                     new JObject
                     {
                         ["find"] = find.DeepClone(),
-                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Non-empty source text to insert.", ["minLength"] = 1, ["maxLength"] = MaxHtmlChars }
+                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Non-empty exact decoded source text to insert; preserve line breaks and backslashes.", ["minLength"] = 1, ["maxLength"] = MaxHtmlChars }
                     }, "find", "text"),
                 PatchOperationSchema("insertAfter", "Insert non-empty text after one unique exact anchor.",
                     new JObject
                     {
                         ["find"] = find.DeepClone(),
-                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Non-empty source text to insert.", ["minLength"] = 1, ["maxLength"] = MaxHtmlChars }
+                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Non-empty exact decoded source text to insert; preserve line breaks and backslashes.", ["minLength"] = 1, ["maxLength"] = MaxHtmlChars }
                     }, "find", "text"),
-                PatchOperationSchema("replaceLines", "Replace or delete a current one-based line range after preceding operations.",
-                    new JObject
-                    {
-                        ["startLine"] = new JObject { ["type"] = "integer", ["description"] = "One-based first line.", ["minimum"] = 1 },
-                        ["deleteCount"] = new JObject { ["type"] = "integer", ["description"] = "Number of existing lines to delete.", ["minimum"] = 0 },
-                        ["text"] = text.DeepClone()
-                    }, "startLine", "deleteCount", "text"),
-                PatchOperationSchema("regexReplace", "Replace a bounded capture-group regex match set.",
-                    new JObject
-                    {
-                        ["pattern"] = new JObject { ["type"] = "string", ["description"] = "Non-empty regular expression.", ["minLength"] = 1, ["maxLength"] = TextPatternEngine.MaxPatternChars },
-                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Replacement text; capture groups such as $1 are supported.", ["maxLength"] = MaxHtmlChars },
-                        ["matchCase"] = new JObject { ["type"] = "boolean", ["description"] = "Whether matching is case-sensitive.", ["default"] = true },
-                        ["wholeWord"] = new JObject { ["type"] = "boolean", ["description"] = "Whether only whole-word matches are accepted.", ["default"] = false },
-                        ["replaceAll"] = new JObject { ["type"] = "boolean", ["description"] = "Whether every match is replaced.", ["default"] = true },
-                        ["maxReplacements"] = new JObject { ["type"] = "integer", ["description"] = "Maximum replacements allowed.", ["default"] = 500, ["minimum"] = 1, ["maximum"] = 500 }
-                    }, "pattern", "text")
             };
             return new JObject
             {
                 ["type"] = "object",
                 ["properties"] = new JObject
                 {
-                    ["name"] = new JObject
+                    ["path"] = new JObject
                     {
                         ["type"] = "string",
                         ["description"] = "Existing workspace-relative HTML, CSS, or JavaScript file path.",
@@ -131,7 +96,7 @@ namespace RNAssistant.Office.Tools
                         ["items"] = new JObject { ["anyOf"] = operations }
                     }
                 },
-                ["required"] = new JArray("name", "patch"),
+                ["required"] = new JArray("path", "patch"),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
         }
@@ -154,51 +119,6 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static HtmlWorkspaceToolOutcome ValidateWorkspaceUpsertMode(
-            ChatSession session, string resourceType, string name, string mode)
-        {
-            mode = (mode ?? "upsert").Trim();
-            if (!string.Equals(mode, "upsert", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
-            {
-                return HtmlWorkspaceToolOutcome.Error(
-                    "mode must be upsert, createOnly, or updateOnly.", null,
-                    "invalid_arguments", false);
-            }
-
-            var workspace = NormalizedWorkspaceCopy(session == null ? null : session.HtmlWorkspace);
-            bool exists;
-            if (string.Equals(resourceType, "file", StringComparison.OrdinalIgnoreCase))
-            {
-                var id = FileId(NormalizePath(name));
-                exists = workspace.Files.Any(item => item != null && string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
-            }
-            else if (string.Equals(resourceType, "data", StringComparison.OrdinalIgnoreCase))
-            {
-                var id = DataSourceId(NormalizeDataName(name));
-                exists = workspace.DataSources.Any(item => item != null && string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
-            }
-            else
-            {
-                return null;
-            }
-
-            if (exists && string.Equals(mode, "createOnly", StringComparison.OrdinalIgnoreCase))
-            {
-                return HtmlWorkspaceToolOutcome.Error(
-                    "HTML workspace " + resourceType + " already exists: " +
-                    name + ".", null, "html_workspace_item_exists", false);
-            }
-            if (!exists && string.Equals(mode, "updateOnly", StringComparison.OrdinalIgnoreCase))
-            {
-                return HtmlWorkspaceToolOutcome.Error(
-                    "HTML workspace " + resourceType + " was not found: " +
-                    name + ".", null, "html_workspace_item_not_found", false);
-            }
-            return null;
-        }
-
         private static HtmlWorkspaceToolOutcome ApplyWorkspacePatch(
             ChatSession session,
             IDictionary<string, object> arguments,
@@ -209,7 +129,7 @@ namespace RNAssistant.Office.Tools
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var name = ToolArgumentReader.String(
-                    arguments, "name", string.Empty);
+                    arguments, "path", string.Empty);
                 var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
                 var file = FindFile(workspace, name, false);
                 var before = file.Content ?? string.Empty;
@@ -222,7 +142,7 @@ namespace RNAssistant.Office.Tools
                 {
                     ["type"] = "rnassistant.htmlWorkspacePatch",
                     ["version"] = 1,
-                    ["name"] = file.Path,
+                    ["path"] = file.Path,
                     ["kind"] = file.Kind,
                     ["saved"] = changed,
                     ["changed"] = changed,
@@ -289,21 +209,40 @@ namespace RNAssistant.Office.Tools
                 array = text == null ? JArray.FromObject(raw) : JArray.Parse(text);
             }
 
-            return array.Select(item => item as JObject).Select(item => item == null
-                ? null
-                : new StructuredTextPatchOperation
+            var result = new List<StructuredTextPatchOperation>();
+            foreach (var tokenItem in array)
+            {
+                var item = tokenItem as JObject;
+                if (item == null)
                 {
-                    Op = (string)item["op"],
+                    throw new JsonException("Each HTML patch operation must be an object.");
+                }
+
+                var unsupported = item.Properties().FirstOrDefault(property =>
+                    property.Name != "op" && property.Name != "find" &&
+                    property.Name != "text");
+                if (unsupported != null)
+                {
+                    throw new JsonException(
+                        "Unsupported HTML patch property: " + unsupported.Name + ".");
+                }
+
+                var op = (string)item["op"];
+                if (op != "replace" && op != "replaceAll" &&
+                    op != "insertBefore" && op != "insertAfter")
+                {
+                    throw new JsonException("Unsupported HTML patch operation: " +
+                        (op ?? "<missing>") + ".");
+                }
+
+                result.Add(new StructuredTextPatchOperation
+                {
+                    Op = op,
                     Find = (string)item["find"],
-                    Text = (string)item["text"],
-                    Pattern = (string)item["pattern"],
-                    StartLine = (int?)item["startLine"],
-                    DeleteCount = (int?)item["deleteCount"],
-                    MatchCase = (bool?)item["matchCase"] ?? true,
-                    WholeWord = (bool?)item["wholeWord"] ?? false,
-                    ReplaceAll = (bool?)item["replaceAll"] ?? true,
-                    MaxReplacements = (int?)item["maxReplacements"] ?? 500
-                }).ToList();
+                    Text = (string)item["text"]
+                });
+            }
+            return result;
         }
 
         private static int SourceLineCount(string source)

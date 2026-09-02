@@ -122,7 +122,13 @@
           status.textContent = "Ресурсов пока нет.";
         } else {
           var resourceCount = typeof artifactResourceHeads === "function" ? artifactResourceHeads().length : (state.artifacts || []).length;
-          status.textContent = resourceCount + " ресурсов · " + files().length + " файлов · " + dataSources().length + " наборов данных" + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
+          var preflight = state.htmlWorkspacePreflight || {};
+          var errors = Number(preflight.errorCount || preflight.ErrorCount || 0);
+          var warnings = Number(preflight.warningCount || preflight.WarningCount || 0);
+          var diagnostic = errors || warnings
+            ? " · проверка: " + errors + " ошибок, " + warnings + " предупреждений"
+            : "";
+          status.textContent = resourceCount + " ресурсов · " + files().length + " файлов · " + dataSources().length + " наборов данных" + diagnostic + (state.htmlWorkspaceDirty ? " · не сохранено" : "");
         }
       }
       if (save) {

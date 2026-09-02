@@ -1596,9 +1596,9 @@ namespace RNAssistant.Harness
                                 ["Id"] = "accepted-message-1",
                                 ["RunId"] = "run-1",
                                 ["ToolCallId"] = "call-1",
-                                ["ToolName"] = "common.html_workspace_upsert",
+                                ["ToolName"] = "common.html_workspace_write_file",
                                 ["AcceptedCallOrigin"] = new JObject { ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-2", ["CallIndex"] = 0 },
-                                ["ToolCalls"] = new JArray(new JObject { ["Id"] = "call-1", ["Name"] = "common.html_workspace_upsert", ["Arguments"] = "{\"html\":\"<main>ok</main>\"}" })
+                                ["ToolCalls"] = new JArray(new JObject { ["Id"] = "call-1", ["Name"] = "common.html_workspace_write_file", ["Arguments"] = "{\"path\":\"index.html\",\"content\":\"<main>ok</main>\"}" })
                             } }
                         })
                     }),
@@ -1611,12 +1611,12 @@ namespace RNAssistant.Harness
                             ["Data"] = new JObject { ["Value"] = new JObject { ["Activity"] = new JObject
                             {
                                 ["RunId"] = "run-1", ["StepId"] = "logical-1", ["ToolCallId"] = "call-1",
-                                ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "running"
+                                ["ToolId"] = "common.html_workspace_write_file", ["Status"] = "running"
                             } } }
                         })
                     }),
                 TrajectoryEvent(10, "tool.execution.started", started.AddSeconds(9), "run-1", "turn-1", "logical-1",
-                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "running", ["Boundary"] = "office_tool_executor" }),
+                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "common.html_workspace_write_file", ["Status"] = "running", ["Boundary"] = "office_tool_executor" }),
                 TrajectoryEvent(11, "domain.effect.prepared", started.AddSeconds(10), "run-1", "turn-1", "logical-1",
                     new JObject { ["ToolCallId"] = "call-1", ["MutationId"] = "mutation-1", ["JournalRunId"] = "journal-run-1", ["Status"] = "prepared" }),
                 TrajectoryEvent(12, "domain.effect.dispatched", started.AddSeconds(11), "run-1", "turn-1", "logical-1",
@@ -1624,7 +1624,7 @@ namespace RNAssistant.Harness
                 TrajectoryEvent(13, "domain.effect.verified", started.AddSeconds(12), "run-1", "turn-1", "logical-1",
                     new JObject { ["ToolCallId"] = "call-1", ["MutationId"] = "mutation-1", ["JournalRunId"] = "journal-run-1", ["Status"] = "committed" }),
                 TrajectoryEvent(14, "tool.execution.completed", started.AddSeconds(13), "run-1", "turn-1", "logical-1",
-                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "ok", ["Boundary"] = "office_tool_executor" }),
+                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "common.html_workspace_write_file", ["Status"] = "ok", ["Boundary"] = "office_tool_executor" }),
                 TrajectoryEvent(15, SessionEventTypes.SessionCommit, started.AddSeconds(14), "run-1", "turn-1", "logical-1",
                     new JObject
                     {
@@ -1634,8 +1634,8 @@ namespace RNAssistant.Harness
                             ["Data"] = new JObject { ["Value"] = new JObject { ["Activity"] = new JObject
                             {
                                 ["RunId"] = "run-1", ["StepId"] = "logical-1", ["ToolCallId"] = "call-1",
-                                ["ToolId"] = "common.html_workspace_upsert", ["Status"] = "completed", ["ExecutionStatus"] = "completed",
-                                ["ArgumentsJson"] = "{\"html\":\"<main>ok</main>\"}",
+                                ["ToolId"] = "common.html_workspace_write_file", ["Status"] = "completed", ["ExecutionStatus"] = "completed",
+                                ["ArgumentsJson"] = "{\"path\":\"index.html\",\"content\":\"<main>ok</main>\"}",
                                 ["ResultMessage"] = "Workspace updated.", ["DataJson"] = "{\"changed\":true}",
                                 ["ExecutionEvidence"] = new JObject { ["Dispatch"] = "MayHaveDispatched", ["Effect"] = "VerifiedChange" }
                             } } }
@@ -1645,8 +1645,8 @@ namespace RNAssistant.Harness
                             ["Type"] = SessionOperationTypes.ToolResultRecorded,
                             ["Data"] = new JObject { ["Value"] = new JObject
                             {
-                                ["ToolCallId"] = "call-1", ["ToolName"] = "common.html_workspace_upsert",
-                                ["Content"] = "TOOL_RESULT:\n{\"version\":1,\"tool_call_id\":\"call-1\",\"name\":\"common.html_workspace_upsert\",\"status\":\"ok\",\"message\":\"Workspace updated.\",\"data\":{\"changed\":true}}"
+                                ["ToolCallId"] = "call-1", ["ToolName"] = "common.html_workspace_write_file",
+                                ["Content"] = "TOOL_RESULT:\n{\"version\":1,\"tool_call_id\":\"call-1\",\"name\":\"common.html_workspace_write_file\",\"status\":\"ok\",\"message\":\"Workspace updated.\",\"data\":{\"changed\":true}}"
                             } }
                         })
                     }),

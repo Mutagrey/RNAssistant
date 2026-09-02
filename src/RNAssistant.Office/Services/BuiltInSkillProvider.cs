@@ -89,21 +89,22 @@ namespace RNAssistant.Office.Services
                 Skill(
                     "common.html_workspace_authoring",
                     "HTML workspace authoring",
-                    "Build, inspect, search, patch, and maintain local HTML reports, dashboards, CSS, scripts, static JSON, and refreshable Office-bound data when visual presentation materially helps.",
+                    "Build, search, patch, and maintain local HTML reports, dashboards, CSS, scripts, static JSON, and refreshable Office-bound data when visual presentation materially helps.",
                     "# HTML Workspace Authoring\n\n## Inspect and edit\n\n" +
                     "- For an existing workspace, call common.resources_find with scope=html and choose the exact returned workspace, HTML file, or HTML data target. Read structure/source/text as needed; after hasMore=true continue the same target with action=next. Provider, member URI, revision, cursor, and page size are runtime-owned.\n" +
-                    "- Use common.html_workspace_upsert for new resources, small files, and intentional whole-source rewrites. Default mode=upsert creates or updates; use createOnly/updateOnly only when existence itself matters.\n" +
-                    "- Use common.html_workspace_apply_patch for targeted edits to an existing HTML/CSS/JavaScript file. Pass patch as a native ordered array. A separate read is optional because runtime applies all operations atomically to current source. Prefer unique replace/insert anchors or replaceLines; use replaceAll only intentionally.\n" +
-                    "- After material edits, call common.html_workspace_inspect as a static preflight. Fix errors; treat unresolved-reference warnings as review prompts because runtime-created DOM/data may be valid. This tool does not execute JavaScript or render WebView.\n" +
-                    "- Use common.html_workspace_delete for removal. Workspace mutations are recoverable artifact revisions and do not require VBA-style backups.\n\n" +
+                    "- Use common.html_workspace_write_file with path/content for a new file or an intentional whole-source rewrite. Use common.html_data_write with name/json for static JSON; file/data kind and preview selection are not model arguments.\n" +
+                    "- Use common.html_workspace_apply_patch with path and an ordered patch array for targeted edits. Runtime applies only exact replace/replaceAll/insertBefore/insertAfter operations atomically to current source; use replaceAll only intentionally.\n" +
+                    "- `content`, `json`, `find`, and `text` are exact decoded strings. In the outer conversation JSON use `\\n` for an actual line break and `\\\\` for one literal source backslash; for example source `\\n` or regex `\\d` must appear as `\\\\n` or `\\\\d`. Runtime stores decoded text unchanged.\n" +
+                    "- Static preflight runs automatically after writes, patches, data changes, and preview projection. Fix returned errors; unresolved-reference warnings may describe runtime-created DOM/data. Do not call a separate inspection or active-file tool.\n" +
+                    "- Use common.html_workspace_delete with the exact readable target path or data name. Runtime determines its kind and rejects ambiguity. Workspace mutations are recoverable artifact revisions.\n\n" +
                     "## Runtime model\n\n" +
                     "- The active HTML file is the entry page. RNAssistant injects every workspace CSS file into its head and every classic JavaScript file before its closing body in workspace order. Do not add local link/script references and do not use ES module import/export.\n" +
                     "- Every script runs on every active entry page. Use an IIFE or one stable namespace, avoid global collisions, and guard DOM lookups. Keep the main DOM in the entry HTML; split substantial styling and behavior into focused CSS and JavaScript files.\n" +
                     "- For charts use bundled ECharts: `var chart = echarts.init(node); chart.setOption(option);`. Do not add Chart.js or CDN loaders.\n" +
                     "- Default to a responsive accessible full-page layout with body margin 0; do not force a narrow centered card unless requested.\n\n" +
                     "## Data and safety\n\n" +
-                    "- For Office-backed data that should stay current, use common.html_data_bind with an approved read-only source. Choose sourceTool first and pass only fields from that tool's exact schema in sourceArguments. For excel.read_range these are sheet, address and content; never pass kind. Prefer transform=table for grids/charts and raw when the source already suits the page. Read it through window.RNAssistantData and handle missing, empty, and binding-error states.\n" +
-                    "- Refresh bound data instead of copying Office values into scripts. Prefer common.html_data_freeze before intentionally converting a binding to static JSON.\n" +
+                    "- For live Office data, first run the intended approved read-only Office tool, then call common.html_data_bind with only name and optional transform/headers. Runtime reuses the most recent successful accepted read and its exact arguments from the current Agent run; never copy a nested tool name, arguments, URI, cursor, revision, or candidate id into bind. Prefer table for row arrays and raw otherwise.\n" +
+                    "- Call common.html_data_refresh with an optional name, or omit it to refresh all bindings under runtime policy. Use common.html_data_freeze before intentionally keeping current JSON as static data.\n" +
                     "- Network fetch is allowed only through the RNAssistant host after the user explicitly allows the HTTP(S) origin. Do not rely on CDN scripts, remote frames, credentials, mode:no-cors, or embedded secrets.")
             };
 

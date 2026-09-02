@@ -81,6 +81,7 @@ var state = {
   vbaSidebarHidden: false,
   htmlWorkspaceDirty: false,
   htmlWorkspaceCreateKind: "",
+  htmlWorkspacePreflight: { status: "ok", passed: true, errorCount: 0, warningCount: 0, issues: [] },
   htmlWorkspace: { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } },
   collapsedResourceGroups: {},
   promptDrafts: {},

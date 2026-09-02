@@ -493,13 +493,11 @@ namespace RNAssistant.Harness
 
             var htmlGateway = new ResourceGatewayService();
             var mutation = new HtmlWorkspaceToolService().Execute(
-                HtmlWorkspaceToolCatalog.UpsertToolId,
+                HtmlWorkspaceToolCatalog.WriteFileToolId,
                 Command(
-                    HtmlWorkspaceToolCatalog.UpsertToolId,
-                    "resourceType", "file",
-                    "name", "reports/oil-production-chart.html",
-                    "content", "<main>Oil chart</main>",
-                    "setActive", false).Arguments,
+                    HtmlWorkspaceToolCatalog.WriteFileToolId,
+                    "path", "reports/oil-production-chart.html",
+                    "content", "<main>Oil chart</main>").Arguments,
                 htmlSession,
                 delegate { },
                 CancellationToken.None);

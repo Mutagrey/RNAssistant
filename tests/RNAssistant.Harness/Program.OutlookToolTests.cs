@@ -64,22 +64,23 @@ namespace RNAssistant.Harness
 
                     var reads = adapter.OutlookBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.OutlookReadMailOperation);
+                    AppendAcceptedHtmlSource(session, "outlook_html_run",
+                        "outlook_html_source", OutlookToolIds.ReadMail,
+                        new JObject
+                        {
+                            ["content"] = "both",
+                            ["maxChars"] = 12000
+                        }, read.Result);
                     var bound = executor.ExecuteManual(Command(
                         HtmlWorkspaceToolCatalog.BindDataToolId,
-                        "dataName", "outlook_mail",
-                        "sourceTool", OutlookToolIds.ReadMail,
-                        "sourceArguments", new JObject
-                        {
-                            ["content"] = "message",
-                            ["maxChars"] = 12000
-                        }), tools, new AppSettings(), false, false, session);
+                        "name", "outlook_mail"), tools, new AppSettings(), false, false, session);
                     AssertTrue(bound.Success,
                         "Outlook HTML binding shares the typed read route: " +
                         (bound.Message ?? bound.ErrorCode ?? "no error"));
-                    AssertEqual(reads + 1,
+                    AssertEqual(reads,
                         adapter.OutlookBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.OutlookReadMailOperation),
-                        "Outlook HTML binding enters direct backend once");
+                        "Outlook HTML binding does not nest another backend read");
 
                     var drafts = adapter.OutlookBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.OutlookCreateDraftOperation);

@@ -64,21 +64,22 @@ namespace RNAssistant.Harness
 
                     var reads = adapter.PowerPointBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.PowerPointReadSlidesOperation);
+                    AppendAcceptedHtmlSource(session, "powerpoint_html_run",
+                        "powerpoint_html_source", PowerPointToolIds.ReadSlides,
+                        new JObject
+                        {
+                            ["slideIndex"] = 1,
+                            ["content"] = "both"
+                        }, read.Result);
                     var bound = executor.ExecuteManual(Command(
                         HtmlWorkspaceToolCatalog.BindDataToolId,
-                        "dataName", "powerpoint_slides",
-                        "sourceTool", PowerPointToolIds.ReadSlides,
-                        "sourceArguments", new JObject
-                        {
-                            ["content"] = "both",
-                            ["maxSlides"] = 20
-                        }), tools, new AppSettings(), false, false, session);
+                        "name", "powerpoint_slides"), tools, new AppSettings(), false, false, session);
                     AssertTrue(bound.Success,
                         "PowerPoint HTML binding shares the typed read route");
-                    AssertEqual(reads + 1,
+                    AssertEqual(reads,
                         adapter.PowerPointBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.PowerPointReadSlidesOperation),
-                        "PowerPoint HTML binding enters direct backend once");
+                        "PowerPoint HTML binding does not nest another backend read");
 
                     var writes = adapter.PowerPointBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.PowerPointAddSlideOperation);

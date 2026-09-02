@@ -61,6 +61,10 @@ namespace RNAssistant.Office.Services
             {
                 RemovePlanningRuntimeState(wire.Name, data);
             }
+            else if (IsHtmlResult(wire.Name))
+            {
+                RemoveHtmlRuntimeState(data);
+            }
             else
             {
                 RemoveCapabilityRuntimeState(data);
@@ -106,7 +110,7 @@ namespace RNAssistant.Office.Services
         private static string CanonicalSwitchedName(string name)
         {
             if (IsResourceResult(name) || IsCapabilityResult(name) ||
-                IsPlanningResult(name)) return name;
+                IsPlanningResult(name) || IsHtmlResult(name)) return name;
             return null;
         }
 
@@ -114,7 +118,7 @@ namespace RNAssistant.Office.Services
         {
             error = null;
             if (call == null || string.IsNullOrWhiteSpace(call.Name)) return true;
-            if (call.Name.StartsWith("rna_", StringComparison.Ordinal))
+            if (call.Name.StartsWith("rna_", StringComparison.OrdinalIgnoreCase))
             {
                 error = "Synthetic rna_* tool names are not part of the public catalog.";
                 return false;
@@ -135,6 +139,16 @@ namespace RNAssistant.Office.Services
                 case "common.task_list_update":
                 case "common.task_list_close":
                     error = "Public Task List lifecycle calls were replaced by common.task_list_set in 11O2.";
+                    return false;
+                case "common.html_workspace_inspect":
+                    error = "Public HTML inspection was internalized in 11O3.";
+                    return false;
+                case "common.html_workspace_set_active":
+                    error = "Public HTML preview selection was internalized in 11O3.";
+                    return false;
+                case "common.html_workspace_upsert":
+                case "common.html_workspace_upsert_file":
+                    error = "Public HTML upsert was split into semantic file/data writes in 11O3.";
                     return false;
                 case ResourceToolCatalog.FindToolId:
                     schema = ResourceFindToolHandler.Descriptor.ParametersJson;
@@ -158,6 +172,27 @@ namespace RNAssistant.Office.Services
                     break;
                 case TaskListToolCatalog.SetToolId:
                     schema = TaskListToolCatalog.Schema();
+                    break;
+                case HtmlWorkspaceToolCatalog.WriteFileToolId:
+                    schema = HtmlWorkspaceToolService.WriteFileSchema();
+                    break;
+                case HtmlWorkspaceToolCatalog.WriteDataToolId:
+                    schema = HtmlWorkspaceToolService.WriteDataSchema();
+                    break;
+                case HtmlWorkspaceToolCatalog.ApplyPatchToolId:
+                    schema = HtmlWorkspaceToolService.ApplyPatchSchema();
+                    break;
+                case HtmlWorkspaceToolCatalog.DeleteToolId:
+                    schema = HtmlWorkspaceToolCatalog.DeleteSchema();
+                    break;
+                case HtmlWorkspaceToolCatalog.BindDataToolId:
+                    schema = HtmlWorkspaceToolService.BindSchema();
+                    break;
+                case HtmlWorkspaceToolCatalog.RefreshDataToolId:
+                    schema = HtmlWorkspaceToolCatalog.RefreshSchema();
+                    break;
+                case HtmlWorkspaceToolCatalog.FreezeDataToolId:
+                    schema = HtmlWorkspaceToolCatalog.FreezeSchema();
                     break;
                 default:
                     return true;
@@ -205,6 +240,11 @@ namespace RNAssistant.Office.Services
                     StringComparison.Ordinal) ||
                 PlanDocumentToolCatalog.Owns(name) ||
                 TaskListToolCatalog.Owns(name);
+        }
+
+        private static bool IsHtmlResult(string name)
+        {
+            return HtmlWorkspaceToolCatalog.Owns(name);
         }
 
         private static JToken ParseData(string value)
@@ -309,6 +349,21 @@ namespace RNAssistant.Office.Services
             foreach (var step in (taskList["steps"] as JArray ??
                 new JArray()).OfType<JObject>())
                 RemoveProperties(step, "id");
+        }
+
+        private static void RemoveHtmlRuntimeState(JToken token)
+        {
+            RemoveResourceRuntimeState(token);
+            var root = token as JObject;
+            if (root == null) return;
+            RemoveProperties(root, "artifactRef", "updatedUtc", "sourceTool",
+                "refreshPolicy", "dryRun", "runtimeExecuted");
+            foreach (var item in (root["results"] as JArray ??
+                new JArray()).OfType<JObject>())
+                RemoveProperties(item, "sourceTool");
+            var preflight = root["preflight"] as JObject;
+            if (preflight != null)
+                RemoveProperties(preflight, "runtimeExecuted");
         }
 
         private static void RemoveProperties(JObject value, params string[] names)

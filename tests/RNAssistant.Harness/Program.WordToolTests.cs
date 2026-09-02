@@ -68,21 +68,22 @@ namespace RNAssistant.Harness
 
                     var htmlReads = adapter.WordBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.WordReadTextOperation);
-                    var bound = executor.ExecuteManual(Command(
-                        HtmlWorkspaceToolCatalog.BindDataToolId,
-                        "dataName", "word_text",
-                        "sourceTool", WordToolIds.ReadText,
-                        "sourceArguments", new JObject
+                    AppendAcceptedHtmlSource(session, "word_html_run",
+                        "word_html_source", WordToolIds.ReadText,
+                        new JObject
                         {
                             ["source"] = "document",
-                            ["maxChars"] = 12000
-                        }), tools, new AppSettings(), false, false, session);
+                            ["maxChars"] = 24
+                        }, read.Result);
+                    var bound = executor.ExecuteManual(Command(
+                        HtmlWorkspaceToolCatalog.BindDataToolId,
+                        "name", "word_text"), tools, new AppSettings(), false, false, session);
                     AssertTrue(bound.Success,
                         "Word HTML binding shares the typed read route");
-                    AssertEqual(htmlReads + 1,
+                    AssertEqual(htmlReads,
                         adapter.WordBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.WordReadTextOperation),
-                        "Word HTML binding enters the direct backend once");
+                        "Word HTML binding does not nest another backend read");
 
                     var writes = adapter.WordBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.WordWriteOperation);

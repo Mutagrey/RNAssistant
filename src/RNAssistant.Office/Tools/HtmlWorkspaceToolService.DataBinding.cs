@@ -32,97 +32,44 @@ namespace RNAssistant.Office.Tools
 
         internal string BuildBindDescription()
         {
-            return "Workspace: Execute one approved read-only Office tool, save its JSON as a refreshable HTML data source, and bind it to the active document. " +
-                "Choose sourceTool first and pass only arguments declared by that exact tool in sourceArguments; do not copy selector fields from another source. " +
-                "Use transform=table only when the source returns row arrays. Available sources: " +
+            return "Workspace: Bind the most recent successful approved Office read from this Agent run as a refreshable HTML data source. " +
+                "Run the intended source read first; its exact tool and arguments are reused from accepted runtime evidence. " +
+                "Use transform=table only when that result contains row arrays. Eligible reads: " +
                 string.Join(", ", _dataSourceTools.Keys.ToArray()) + ".";
         }
 
-        internal string BuildBindSchema()
+        internal static string BindSchema()
         {
-            var sourceIds = _dataSourceTools.Keys.OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToArray();
-            var sourceProperties = new JObject();
-            var alternatives = new JArray();
-            foreach (var tool in _dataSourceTools.Values.OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase))
-            {
-                JObject schema;
-                string error;
-                if (!ToolSchemaSupport.TryParse(tool, out schema, out error)) continue;
-                foreach (var property in ((JObject)schema["properties"]).Properties())
-                {
-                    if (sourceProperties[property.Name] == null)
-                    {
-                        sourceProperties[property.Name] = property.Value.DeepClone();
-                    }
-                }
-
-                schema["description"] = "Arguments accepted by " + tool.Id + "; omit every field not declared in this selected source schema.";
-                alternatives.Add(new JObject
-                {
-                    ["type"] = "object",
-                    ["properties"] = BindProperties(new[] { tool.Id }, schema),
-                    ["required"] = new JArray("dataName", "sourceTool", "sourceArguments"),
-                    ["additionalProperties"] = false
-                });
-            }
-
             return new JObject
             {
                 ["type"] = "object",
-                ["properties"] = BindProperties(sourceIds, new JObject
+                ["properties"] = new JObject
                 {
-                    ["type"] = "object",
-                    ["description"] = "Arguments for the selected sourceTool; the matching anyOf branch defines the exact allowed fields.",
-                    ["properties"] = sourceProperties,
-                    ["required"] = new JArray(),
-                    ["additionalProperties"] = false
-                }),
-                ["required"] = new JArray("dataName", "sourceTool", "sourceArguments"),
-                ["additionalProperties"] = false,
-                ["anyOf"] = alternatives
+                    ["name"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Stable data-source name exposed through window.RNAssistantData.",
+                        ["minLength"] = 1,
+                        ["maxLength"] = 128
+                    },
+                    ["transform"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JArray("raw", "table"),
+                        ["description"] = "raw preserves source JSON; table converts a returned row array to columns plus object rows.",
+                        ["default"] = "raw"
+                    },
+                    ["headers"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JArray("firstRow", "none"),
+                        ["description"] = "For table transform, firstRow uses row 1 as labels; none generates labels.",
+                        ["default"] = "firstRow"
+                    }
+                },
+                ["required"] = new JArray("name"),
+                ["additionalProperties"] = false
             }.ToString(Formatting.None);
-        }
-
-        private static JObject BindProperties(IEnumerable<string> sourceIds, JObject sourceArgumentsSchema)
-        {
-            return new JObject
-            {
-                ["dataName"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["description"] = "Stable data-source name exposed to HTML as window.RNAssistantData[dataName].",
-                    ["minLength"] = 1,
-                    ["maxLength"] = 128
-                },
-                ["sourceTool"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["enum"] = new JArray((sourceIds ?? new string[0]).ToArray()),
-                    ["description"] = "Exact approved read-only Office tool whose result will be stored and refreshed."
-                },
-                ["sourceArguments"] = sourceArgumentsSchema,
-                ["transform"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["enum"] = new JArray("raw", "table"),
-                    ["description"] = "raw preserves source JSON; table converts a returned row array to columns plus object rows.",
-                    ["default"] = "raw"
-                },
-                ["headers"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["enum"] = new JArray("firstRow", "none"),
-                    ["description"] = "For transform=table, firstRow uses row 1 as column labels; none generates column labels.",
-                    ["default"] = "firstRow"
-                },
-                ["refreshPolicy"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["enum"] = new JArray("manual", "on_preview"),
-                    ["description"] = "manual refreshes only through common.html_data_refresh; on_preview also refreshes when HTML preview opens.",
-                    ["default"] = "on_preview"
-                }
-            };
         }
 
         private HtmlWorkspaceToolOutcome BindDataSource(
@@ -133,36 +80,26 @@ namespace RNAssistant.Office.Tools
         {
             EnsureAdapterMatchesSession(session);
             var name = NormalizeDataName(ToolArgumentReader.String(
-                arguments, "dataName", string.Empty));
-            var sourceToolId = ToolArgumentReader.String(
-                arguments, "sourceTool", string.Empty);
+                arguments, "name", string.Empty));
             var transform = NormalizeTransform(ToolArgumentReader.String(
                 arguments, "transform", "raw"));
             var headers = NormalizeHeaders(ToolArgumentReader.String(
                 arguments, "headers", "firstRow"));
-            var refreshPolicy = NormalizeRefreshPolicy(ToolArgumentReader.String(
-                arguments, "refreshPolicy", "on_preview"));
-            var sourceArguments = ReadObjectArgument(
-                arguments, "sourceArguments");
+            const string refreshPolicy = "on_preview";
+            var accepted = HtmlAcceptedReadSourceResolver.Resolve(
+                session, _dataSourceTools);
             ToolCatalogEntry sourceTool;
             JObject normalizedSourceArguments;
             var normalizedArguments = BuildSourceArguments(
-                sourceToolId, sourceArguments, out sourceTool,
+                accepted.ToolId, accepted.Arguments, out sourceTool,
                 out normalizedSourceArguments);
+            if (normalizedArguments == null)
+                throw new InvalidOperationException(
+                    "Accepted HTML binding source arguments are unavailable.");
 
             cancellationToken.ThrowIfCancellationRequested();
-            var sourceResult = ExecuteDataSource(
-                session, sourceTool.Id, normalizedArguments, cancellationToken);
-            if (!sourceResult.Success)
-            {
-                return HtmlWorkspaceToolOutcome.Error(
-                    "Could not bind HTML data " + name + ": " + (sourceResult.Message ?? "Office source failed."),
-                    sourceResult.DataJson,
-                    sourceResult.ErrorCode ?? "html_data_source_failed",
-                    sourceResult.Retryable);
-            }
-
-            var json = TransformSourceJson(sourceResult.DataJson, transform, headers);
+            var json = TransformSourceJson(
+                accepted.DataJson, transform, headers);
             ValidateDataSource(name, json);
             var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
             var id = DataSourceId(name);
@@ -192,7 +129,7 @@ namespace RNAssistant.Office.Tools
                 DocumentTitle = session.DocumentTitle,
                 Status = "ready",
                 LastError = null,
-                PayloadCompleteness = SourcePayloadCompleteness(sourceResult.DataJson),
+                PayloadCompleteness = SourcePayloadCompleteness(accepted.DataJson),
                 ContentSha256 = TextPatternEngine.Sha256(json),
                 CreatedUtc = now,
                 UpdatedUtc = now,
@@ -217,13 +154,6 @@ namespace RNAssistant.Office.Tools
             EnsureAdapterMatchesSession(session);
             var name = ToolArgumentReader.String(
                 arguments, "name", string.Empty);
-            var policy = ToolArgumentReader.String(
-                arguments, "policy", "all");
-            if (!string.Equals(policy, "all", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(policy, "on_preview", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("policy must be all or on_preview.");
-            }
 
             var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
             List<HtmlWorkspaceDataSource> targets;
@@ -235,9 +165,8 @@ namespace RNAssistant.Office.Tools
             }
             else
             {
-                targets = workspace.DataSources.Where(item => item != null && item.Binding != null &&
-                    (!string.Equals(policy, "on_preview", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(item.Binding.RefreshPolicy, "on_preview", StringComparison.OrdinalIgnoreCase))).ToList();
+                targets = workspace.DataSources.Where(item =>
+                    item != null && item.Binding != null).ToList();
             }
 
             if (targets.Count == 0)
@@ -550,22 +479,6 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static JObject ReadObjectArgument(
-            IDictionary<string, object> arguments, string name)
-        {
-            object raw;
-            if (arguments == null ||
-                !arguments.TryGetValue(name, out raw) || raw == null)
-            {
-                return new JObject();
-            }
-            var token = raw as JToken;
-            if (token is JObject) return (JObject)token.DeepClone();
-            var text = raw as string;
-            if (text != null) return JObject.Parse(text);
-            return JObject.FromObject(raw);
-        }
-
         private static string TransformSourceJson(string sourceJson, string transform, string headers)
         {
             if (string.IsNullOrWhiteSpace(sourceJson))
@@ -820,7 +733,8 @@ namespace RNAssistant.Office.Tools
 
         private static string NormalizeRefreshPolicy(string value)
         {
-            return string.Equals(value, "manual", StringComparison.OrdinalIgnoreCase) ? "manual" : "on_preview";
+            return string.Equals(value, "manual", StringComparison.OrdinalIgnoreCase)
+                ? "manual" : "on_preview";
         }
 
         private static string SourcePayloadCompleteness(string sourceJson)

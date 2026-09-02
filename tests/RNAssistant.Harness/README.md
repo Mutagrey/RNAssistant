@@ -54,6 +54,7 @@ version check still apply.
 | HTML whole-workspace revision lineage and branch recovery | `Program.HtmlArtifactStorageTests.cs`; replay/recovery in `Program.SessionEventStoreTests.cs` | `html lineage:`, `storage: html navigation`, `storage: html redo branches`, `storage: html recovery` |
 | Inert uploaded-HTML preview/import and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `Program.ContextBridgeTests.cs`; UI contract in `tests/web/html-upload-import.test.js` | `html import:`, `bridge: typed html import` |
 | Exact HTML binding checkpoint/recovery/export and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ContextBridgeTests.cs`; UI contract in `tests/web/html-workspace-export.test.js` | `html export:`, `tools: html workspace updates session`, `bridge: typed html export` |
+| R61 HTML semantic schemas, accepted-read binding, automatic preflight and model-result/history isolation | `Program.HtmlWorkspaceToolTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs`; UI policy check in `tests/web/html-workspace-export.test.js` | `html tools:`, `tools: html workspace updates session`, `tools: html source`, `tools: R61 built-in contract inventory` |
 | Plan exact Markdown lineage, restore/removal and pinned-URI handoff | `Program.PlanModeTests.cs`; UI restore/preflight/handoff contract in `tests/web/plan-document.test.js` | `plan document:`, `plan mode:` |
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
 | Immutable run/UI projection and ordering | `Program.RunViewStateTests.cs`, replay/recovery in `Program.SessionEventStoreTests.cs`, boundary check in `Program.ProjectStructureTests.cs`; static UI in `tests/web/run-view-state.test.js` | `run view:`, `kernel replay:`, `kernel recovery:`, `architecture:` |
@@ -366,7 +367,8 @@ R29 introduced v4/schema 13; Phase 4B introduced Tool Result v1/schema 14; Phase
 uses schema 15 for atomic callable-pack admission and no-eviction guidance; Phase 8C
 uses schema 16 for durable turn-scoped reconstruction; R61/11O1 uses schema 17 for
 the semantic Resource/Capability boundary; R61/11O2 uses schema 18 for semantic
-questions, Plan documents and Task Lists. Tests preserve, review, or reset saved
+questions, Plan documents and Task Lists; R61/11O3 uses schema 19 for semantic HTML
+authoring and accepted-read binding. Tests preserve, review, or reset saved
 older/future markers explicitly. JS review behavior is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
@@ -385,6 +387,14 @@ question/option/plan/artifact/list/step/revision identity. Use `plan mode:`,
 `plan document:`, `task lists:`, the focused model-projection case and the R61
 property inventory. The services still bind exact active revisions and stable ids
 internally; incompatible retained calls require a new chat/reset.
+
+R61/11O3 replaces HTML inspect/set-active/general upsert with internal diagnostics/
+selection and separate semantic file/data writes. Patch is exact-only; delete takes
+one readable target; bind reuses the latest successful eligible accepted Office read
+from the current run without nested source arguments; refresh takes only an optional
+name. Use `html`, `tools: R61 built-in contract inventory` and
+`node tests/web/html-workspace-export.test.js`. Prompt schema 19 and accepted-history
+validation require a new chat/reset for retained pre-11O3 calls.
 
 ## Full suite
 

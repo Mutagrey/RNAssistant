@@ -158,6 +158,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("workspace")]
         public HtmlWorkspaceDto Workspace { get; set; }
 
+        [JsonProperty("staticPreflight")]
+        public HtmlWorkspacePreflightDto StaticPreflight { get; set; }
+
         [JsonProperty("redoChoiceRequired")]
         public bool RedoChoiceRequired { get; set; }
 
@@ -175,6 +178,32 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("exportContentSha256", NullValueHandling = NullValueHandling.Ignore)]
         public string ExportContentSha256 { get; set; }
+    }
+
+    public sealed class HtmlWorkspacePreflightDto
+    {
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+        [JsonProperty("passed")] public bool Passed { get; set; }
+        [JsonProperty("entryName")] public string EntryName { get; set; }
+        [JsonProperty("errorCount")] public int ErrorCount { get; set; }
+        [JsonProperty("warningCount")] public int WarningCount { get; set; }
+        [JsonProperty("issueCount")] public int IssueCount { get; set; }
+        [JsonProperty("truncated")] public bool Truncated { get; set; }
+        [JsonProperty("issues")] public IReadOnlyList<HtmlWorkspacePreflightIssueDto> Issues { get; set; }
+    }
+
+    public sealed class HtmlWorkspacePreflightIssueDto
+    {
+        [JsonProperty("severity")] public string Severity { get; set; }
+        [JsonProperty("code")] public string Code { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("line", NullValueHandling = NullValueHandling.Ignore)]
+        public int? Line { get; set; }
+        [JsonProperty("column", NullValueHandling = NullValueHandling.Ignore)]
+        public int? Column { get; set; }
     }
 
     public sealed class HtmlWorkspaceDto

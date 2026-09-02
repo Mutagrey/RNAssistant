@@ -238,11 +238,9 @@ namespace RNAssistant.Harness
 
             var session = new ChatSession();
             var executor = new HtmlWorkspaceToolService();
-            var write = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.UpsertToolId };
-            write.Arguments["resourceType"] = "file";
-            write.Arguments["name"] = "index.html";
+            var write = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId };
+            write.Arguments["path"] = "index.html";
             write.Arguments["content"] = "<h1>Report</h1>";
-            write.Arguments["setActive"] = true;
             var writeResult = executor.Execute(
                 write.ToolId, write.Arguments, session, delegate { },
                 CancellationToken.None);
@@ -282,7 +280,7 @@ namespace RNAssistant.Harness
             {
                 Role = "assistant",
                 HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
-                Activity = new ChatActivity { ToolId = HtmlWorkspaceToolCatalog.SetActiveToolId, DataJson = writeResult.DataJson }
+                Activity = new ChatActivity { ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId, DataJson = writeResult.DataJson }
             };
             session.Messages.Add(writeMessage);
             session.Messages.Add(duplicateMutationMessage);

@@ -314,6 +314,11 @@ Phase 11 is implemented as separate changes:
      returns its pinned URI/CAS hash before standalone assembly. Raw JSON strings
      are not parsed/stringified during export.
      [Evidence](stabilization/PHASE_11C3_HTML_BINDING_EXPORT.md).
+   - R61/11O3 — done host-neutral: model authoring uses separate semantic file/data
+     writes, exact patch/delete and identity-free bind/refresh/freeze. Inspection and
+     active selection are internal; bind consumes exact accepted read evidence while
+     URI/revision/hash/source arguments remain durable/runtime-only.
+     [Evidence](stabilization/PHASE_11O3_HTML_SEMANTIC_INTENTS.md).
 4. Typed viewers:
    - 11D1 — done host-neutral: exact bounded text/source paging, complete-only full
      copy/download and complete-only sanitized Markdown with exact Source.

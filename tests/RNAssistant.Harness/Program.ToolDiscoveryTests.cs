@@ -476,12 +476,12 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                const string optionalId = "common.html_workspace_upsert";
+                const string optionalId = "common.html_workspace_write_file";
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Создаю сразу.\",\"tool_calls\":[{\"name\":\"common.html_workspace_upsert\",\"arguments\":{\"resourceType\":\"file\",\"name\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
+                    "{\"message\":\"Создаю сразу.\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
                     LoadToolSchemaResponse(optionalId),
-                    "{\"message\":\"Создаю после admission.\",\"tool_calls\":[{\"name\":\"common.html_workspace_upsert\",\"arguments\":{\"resourceType\":\"file\",\"name\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
+                    "{\"message\":\"Создаю после admission.\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
                     "{\"message\":\"HTML создан.\",\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();

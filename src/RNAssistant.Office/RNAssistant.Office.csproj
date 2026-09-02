@@ -299,6 +299,7 @@
     <Compile Include="Tools\PromptToolHandler.cs" />
     <Compile Include="Tools\ResourceToolCatalog.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolCatalog.cs" />
+    <Compile Include="Tools\HtmlAcceptedReadSourceResolver.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolContracts.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolHandler.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolService.cs" />

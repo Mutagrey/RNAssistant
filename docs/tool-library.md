@@ -62,12 +62,12 @@ immutable history.
 ## Mandatory all-tool contract audit (R61)
 
 The full catalog is not yet accepted as the final user/model contract. R61/11O1
-corrected Resources + Capabilities host-neutral. R61/11O2 also corrected Plan
-questions/doc/task-list: question/option IDs are UI-only, Plan save/restore/delete
-bind exact revisions internally, and one typed Task List set tool owns save/close
-without caller IDs. Their model context/results/history omit opaque state while
-durable records retain it. HTML and later families plus the text-only Library test
-form remain open.
+corrected Resources + Capabilities host-neutral, 11O2 corrected planning, and 11O3
+corrected HTML authoring/data binding. HTML inspection and active selection are now
+internal; file/data writes are separate, patch/delete are semantic, and bind reuses
+accepted read evidence without model-owned source arguments. Model context/results/
+history omit opaque state while durable records retain it. Authoring, VBA/macro,
+core-pack and the typed Library test/UI slices remain open.
 
 The concrete failure attribution, state-ownership decisions, merge/split rules
 and required model evals are recorded in
@@ -76,8 +76,8 @@ the per-family acceptance record; later-family IDs are not pre-approved by the
 completed Resources + Capabilities slice.
 
 The 11O0 source baseline in that audit enumerated all 35 conditional built-in
-`common.*` tool IDs and all nine built-in Common skill IDs; after the 11O1 resource
-and 11O2 planning merges the current source contains 30 Common IDs. Progressive capability loading is
+`common.*` tool IDs and all nine built-in Common skill IDs; after the 11O1–11O3
+switches the current source contains 29 Common IDs. Progressive capability loading is
 acknowledged, but does not
 exempt optional tools from merge/split/internalization review or justify
 plumbing-heavy schemas after admission. Skill bodies are contract consumers and
@@ -86,8 +86,8 @@ current core membership with a smaller relevant pack; registry count alone is no
 an optimization target.
 
 11O0 freezes the source-built-in property baseline in the machine-checked
-[R61 inventory](stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv): after 11O2, 68 unique built-in
-IDs and 71 effective host variants record exact descriptor revision, allowed modes,
+[R61 inventory](stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv): after 11O3, 67 unique built-in
+IDs and 70 effective host variants record exact descriptor revision, allowed modes,
 direct binding and recursive property paths. Plumbing-shaped additions require an
 explicit semantic or runtime-owned decision. Dynamic installed custom-package
 schemas remain package-revision-owned and are reviewed in the Tool-authoring/
@@ -196,15 +196,15 @@ WebView2, not inferred from a desktop browser screenshot.
 
 ## R61 delivery and gates
 
-1. **Done host-neutral (11O0, refreshed through 11O2):** freeze every effective built-in tool ID/schema by mode and host. For each
+1. **Done host-neutral (11O0, refreshed through 11O3):** freeze every effective built-in tool ID/schema by mode and host. For each
    property record semantic owner, source/default, validation, internal resolver,
    result dependency, test fixture and keep/remove decision.
-2. **Done for Resources + Capabilities and planning:** contract checks fail on unreviewed or unexplained plumbing-shaped
+2. **Done for Resources + Capabilities, planning and HTML:** contract checks fail on unreviewed or unexplained plumbing-shaped
    arguments (`*Id`, UUID, URI, revision/hash/etag, cursor/offset/page token). Names
    are a review trigger, not an unsafe automatic stripping rule.
-3. **Resources + Capabilities and planning done host-neutral; remaining families open:** switch the
+3. **Resources + Capabilities, planning and HTML done host-neutral; remaining families open:** switch the
    remaining tools one semantic family at a time. Delete each replaced public
-   argument path in the same slice; HTML is next.
+   argument path in the same slice; Prompt/Tool/Skill authoring is next.
 4. Run deterministic model scenarios proving that calls complete without invented
    opaque values and that cursor/revision confusion is structurally impossible,
    not merely discouraged by descriptions.

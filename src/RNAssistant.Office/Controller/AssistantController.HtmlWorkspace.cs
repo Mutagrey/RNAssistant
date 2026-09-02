@@ -1,12 +1,15 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RNAssistant.Office
 {
@@ -198,6 +201,25 @@ namespace RNAssistant.Office
 
         private static HtmlWorkspaceResponse HtmlWorkspaceState(ChatSession session, bool redoChoiceRequired = false)
         {
+            var preflight = HtmlWorkspaceToolService.InspectForPreview(
+                session, CancellationToken.None);
+            HtmlWorkspacePreflightDto preflightDto;
+            try
+            {
+                preflightDto = string.IsNullOrWhiteSpace(preflight.DataJson)
+                    ? new HtmlWorkspacePreflightDto()
+                    : JsonConvert.DeserializeObject<HtmlWorkspacePreflightDto>(
+                        preflight.DataJson) ?? new HtmlWorkspacePreflightDto();
+            }
+            catch (JsonException)
+            {
+                preflightDto = new HtmlWorkspacePreflightDto();
+            }
+            preflightDto.Status = preflight.Status ==
+                HtmlWorkspaceOutcomeStatus.Ok ? "ok" : "error";
+            preflightDto.Message = preflight.Message;
+            preflightDto.Issues = preflightDto.Issues ??
+                new List<HtmlWorkspacePreflightIssueDto>();
             return new HtmlWorkspaceResponse
             {
                 SessionRevision = session == null ? 0 : session.Revision,
@@ -208,6 +230,7 @@ namespace RNAssistant.Office
                 Workspace = HtmlWorkspaceDto.From(
                     session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
                     session == null ? null : session.HtmlWorkspaceRecovery),
+                StaticPreflight = preflightDto,
                 RedoChoiceRequired = redoChoiceRequired
             };
         }

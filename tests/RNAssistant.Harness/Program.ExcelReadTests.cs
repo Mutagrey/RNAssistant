@@ -237,19 +237,32 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var sourceArguments = new JObject
+                {
+                    ["sheet"] = "Data",
+                    ["address"] = "A1:B4",
+                    ["content"] = "values"
+                };
+                var source = executor.ExecuteManual(Command(
+                    ExcelReadToolIds.ReadRange,
+                    "sheet", "Data", "address", "A1:B4",
+                    "content", "values"), tools, new AppSettings(),
+                    false, false, session);
+                AssertTrue(source.Success,
+                    "HTML source read succeeds through the typed route");
+                AppendAcceptedHtmlSource(session, "excel_html_run",
+                    "excel_html_source", ExcelReadToolIds.ReadRange,
+                    sourceArguments,
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
+                        source.Message, source.DataJson));
                 var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId,
-                    "dataName", "sales",
-                    "sourceTool", ExcelReadToolIds.ReadRange,
-                    "sourceArguments", new JObject
-                    {
-                        ["sheet"] = "Data", ["address"] = "A1:B4", ["content"] = "values"
-                    },
+                    "name", "sales",
                     "transform", "table", "headers", "firstRow");
                 var bound = executor.ExecuteManual(bind, tools, new AppSettings(), false, false, session);
                 AssertTrue(bound.Success, "HTML bind succeeds through the typed read route");
                 AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelRangeReadOperation),
-                    "HTML bind uses the direct backend once");
+                    "HTML bind reuses the accepted direct read");
 
                 var refresh = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.RefreshDataToolId, "name", "sales"),
                     tools, new AppSettings(), false, false, session);
@@ -292,15 +305,26 @@ namespace RNAssistant.Harness
                     };
                     var tools = OfficeToolCatalog.ForHost(host.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
+                    var sourceArguments = new JObject
+                    {
+                        ["sheet"] = "Data",
+                        ["address"] = "A1:B4",
+                        ["content"] = "values"
+                    };
+                    var source = executor.ExecuteManual(Command(
+                        ExcelReadToolIds.ReadRange,
+                        "sheet", "Data", "address", "A1:B4",
+                        "content", "values"), tools, new AppSettings(),
+                        false, false, session);
+                    AssertTrue(source.Success,
+                        "bound HTML source read succeeds on owner STA");
+                    AppendAcceptedHtmlSource(session, "bound_excel_html_run",
+                        "bound_excel_html_source", ExcelReadToolIds.ReadRange,
+                        sourceArguments,
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
+                            source.Message, source.DataJson));
                     var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId,
-                        "dataName", "sales",
-                        "sourceTool", ExcelReadToolIds.ReadRange,
-                        "sourceArguments", new JObject
-                        {
-                            ["sheet"] = "Data",
-                            ["address"] = "A1:B4",
-                            ["content"] = "values"
-                        },
+                        "name", "sales",
                         "transform", "table", "headers", "firstRow");
 
                     var bound = executor.ExecuteManual(
@@ -314,7 +338,7 @@ namespace RNAssistant.Harness
                     AssertTrue(refreshed.Success,
                         "bound HTML refresh succeeds through owner STA dispatch");
                     AssertEqual(2, ownerStaReads,
-                        "bind and refresh each dispatch one read to the owner STA");
+                        "accepted source read and refresh each dispatch once to owner STA");
                 }
             });
         }

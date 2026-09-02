@@ -108,18 +108,47 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   assert.match(logs.at(-1).message, /incomplete revision evidence/);
   console.log("PASS HTML export: incomplete revision evidence fails closed before download");
 
+  const refreshCalls = [];
+  const refreshState = {
+    activeChatId: "chat-refresh",
+    bridgeUnavailable: false,
+    htmlWorkspaceDirty: false,
+    htmlWorkspace: {}
+  };
+  const refreshActions = context.RNAssistantHtmlWorkspaceActions.create({
+    state: refreshState,
+    send: async (method, payload) => {
+      refreshCalls.push({ method, payload: JSON.parse(JSON.stringify(payload)) });
+      return method === "runTool"
+        ? { success: true, message: "Updated." }
+        : { workspace: {}, activeChatId: "chat-refresh" };
+    },
+    hasRefreshableData: () => true,
+    refreshableDataNames: () => ["sales", "costs"],
+    applyWorkspaceResponse: () => true,
+    log: () => {},
+    render: () => {}
+  });
+  await refreshActions.refreshAuto();
+  const toolRefreshes = refreshCalls.filter(call => call.method === "runTool");
+  assert.deepEqual(toolRefreshes.map(call => call.payload.arguments),
+    [{ name: "sales" }, { name: "costs" }]);
+  assert.ok(toolRefreshes.every(call => call.payload.arguments.policy === undefined));
+  console.log("PASS HTML refresh: UI keeps policy internal and sends semantic names only");
+
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   ["app-html-workspace-preview.js", "app-artifact-viewer-actions.js", "app-html-workspace-actions.js",
     "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"]
     .forEach(asset => assert.ok(index.includes(asset + "?v=" +
       (asset === "app-html-workspace-preview.js" ? "html-echarts-20260902-1" :
         (asset === "app-html-workspace-editor.js" ? "artifact-text-20260831-1" :
-          (asset === "app-html-workspace-artifacts.js" ? "artifact-preview-20260902-3" : "artifact-preview-20260902-2")))), asset));
+          (asset === "app-html-workspace-artifacts.js" ? "artifact-preview-20260902-3" :
+            (asset === "app-html-workspace-actions.js" ? "html-intents-20260902-1" : "artifact-preview-20260902-2"))))), asset));
   assert.ok(index.includes("app-html-workspace.js?v=artifact-refresh-20260902-1"));
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"));
   console.log("PASS HTML export: changed UI graph uses one cache key");
 
-  console.log("OK 6/6");
+  console.log("OK 7/7");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

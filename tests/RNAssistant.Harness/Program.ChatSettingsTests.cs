@@ -385,6 +385,10 @@ namespace RNAssistant.Harness
             AssertTrue(authoring.IndexOf("Each call needs a unique id", StringComparison.OrdinalIgnoreCase) < 0,
                 "R31 model-owned identity guidance cannot return");
             var htmlAuthoring = skills.Single(skill => skill.Id == "common.html_workspace_authoring").BodyMarkdown;
+            AssertContains(htmlAuthoring, "exact decoded strings",
+                "HTML authoring preserves model-provided source text exactly");
+            AssertContains(htmlAuthoring, "Runtime stores decoded text unchanged",
+                "HTML authoring forbids a second source unescape");
             AssertContains(htmlAuthoring, "echarts.init(node); chart.setOption(option)",
                 "HTML authoring teaches the concise bundled chart runtime");
             AssertContains(htmlAuthoring, "Do not add Chart.js or CDN loaders",
@@ -405,6 +409,8 @@ namespace RNAssistant.Harness
                     "every mode teaches the same bounded result envelope");
                 AssertContains(prompt, "`status` is exactly `ok`, `error`, or `unknown`", "no extra model-facing result states");
                 AssertContains(prompt, "does not by itself prove an applied effect", "defaults require actual effect evidence");
+                AssertContains(prompt, "Task List, and HTML tools",
+                    "schema 19 includes HTML in runtime-only result projection guidance");
                 AssertTrue(prompt.IndexOf("ok=true", StringComparison.OrdinalIgnoreCase) < 0, "defaults do not teach the legacy success flag");
             }
         }

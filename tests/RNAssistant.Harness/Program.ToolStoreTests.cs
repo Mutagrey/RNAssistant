@@ -389,9 +389,12 @@ namespace RNAssistant.Harness
                     NewSession(fake),
                     null));
 
-                AssertContains(prompt, "mode: read", "prompt includes read mode");
-                AssertContains(prompt, "mode: mutation", "prompt includes mutation mode");
-                AssertContains(prompt, "confirmation: required", "prompt includes confirmation metadata");
+                AssertContains(prompt, "\"mutates_document\":false",
+                    "prompt includes typed read safety");
+                AssertContains(prompt, "\"mutates_document\":true",
+                    "prompt includes typed mutation safety");
+                AssertContains(prompt, "\"requires_confirmation\":true",
+                    "prompt includes typed confirmation metadata");
                 AssertTrue(prompt.IndexOf("\"optional\"", StringComparison.OrdinalIgnoreCase) < 0, "prompt has no literal optional args");
                 AssertContains(prompt, "common.tools_validate", "prompt includes tool validation");
                 AssertContains(prompt, "common.prompts_read", "prompt includes prompt reader");
@@ -400,12 +403,12 @@ namespace RNAssistant.Harness
                 var bindParameters = (JObject)promptTools.OfType<JObject>()
                     .Single(item => string.Equals((string)item.SelectToken("function.name"), HtmlWorkspaceToolCatalog.BindDataToolId, StringComparison.OrdinalIgnoreCase))
                     .SelectToken("function.parameters");
-                AssertTrue(bindParameters["properties"] == null && bindParameters["anyOf"] is JArray,
-                    "prompt removes the misleading HTML bind union envelope");
-                var rangeBranch = ((JArray)bindParameters["anyOf"]).OfType<JObject>().Single(item =>
-                    string.Equals((string)item.SelectToken("properties.sourceTool.enum[0]"), "excel.read_range", StringComparison.OrdinalIgnoreCase));
-                AssertTrue(rangeBranch.SelectToken("properties.sourceArguments.properties.kind") == null,
-                    "prompt does not advertise inspect.kind for bound excel.read_range");
+                AssertTrue(bindParameters["properties"] is JObject &&
+                        bindParameters["anyOf"] == null,
+                    "prompt exposes one semantic HTML bind schema");
+                AssertTrue(bindParameters.SelectToken("properties.sourceTool") == null &&
+                        bindParameters.SelectToken("properties.sourceArguments") == null,
+                    "prompt does not expose nested source execution");
 
                 var skillParameters = (JObject)promptTools.OfType<JObject>()
                     .Single(item => string.Equals((string)item.SelectToken("function.name"), "common.skills_upsert", StringComparison.OrdinalIgnoreCase))

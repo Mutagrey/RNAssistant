@@ -7,30 +7,26 @@ namespace RNAssistant.Office.Tools
 {
     internal static class HtmlWorkspaceToolCatalog
     {
-        internal const string InspectWorkspaceToolId =
-            "common.html_workspace_inspect";
-        internal const string UpsertToolId =
-            "common.html_workspace_upsert";
+        internal const string WriteFileToolId =
+            "common.html_workspace_write_file";
+        internal const string WriteDataToolId =
+            "common.html_data_write";
         internal const string ApplyPatchToolId =
             "common.html_workspace_apply_patch";
         internal const string DeleteToolId =
             "common.html_workspace_delete";
-        internal const string SetActiveToolId =
-            "common.html_workspace_set_active";
         internal const string BindDataToolId = "common.html_data_bind";
         internal const string RefreshDataToolId = "common.html_data_refresh";
         internal const string FreezeDataToolId = "common.html_data_freeze";
 
         internal static bool Owns(string toolId)
         {
-            return string.Equals(toolId, InspectWorkspaceToolId,
+            return string.Equals(toolId, WriteFileToolId,
                     StringComparison.Ordinal) ||
-                string.Equals(toolId, UpsertToolId, StringComparison.Ordinal) ||
+                string.Equals(toolId, WriteDataToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ApplyPatchToolId,
                     StringComparison.Ordinal) ||
                 string.Equals(toolId, DeleteToolId, StringComparison.Ordinal) ||
-                string.Equals(toolId, SetActiveToolId,
-                    StringComparison.Ordinal) ||
                 string.Equals(toolId, BindDataToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, RefreshDataToolId,
                     StringComparison.Ordinal) ||
@@ -40,8 +36,7 @@ namespace RNAssistant.Office.Tools
 
         internal static bool IsMutation(string toolId)
         {
-            return Owns(toolId) && !string.Equals(
-                toolId, InspectWorkspaceToolId, StringComparison.Ordinal);
+            return Owns(toolId);
         }
 
         internal static bool RequiresOfficeDocument(string toolId)
@@ -56,40 +51,51 @@ namespace RNAssistant.Office.Tools
             HtmlWorkspaceToolService service)
         {
             if (service == null) throw new ArgumentNullException(nameof(service));
-            yield return Projection(InspectWorkspaceToolId,
-                "Read-only: Run bounded static preflight diagnostics for one HTML entry and the CSS, classic scripts, and data injected into it. Does not execute JavaScript or render WebView.",
-                HtmlWorkspaceToolService.InspectWorkspaceSchema(),
-                "html_workspace_inspect", false, 0);
-            yield return Projection(UpsertToolId,
-                "Workspace: Write the complete content of one file or JSON data source. File kind is inferred from its extension; default upsert creates or updates, while strict modes can require one state.",
-                HtmlWorkspaceToolService.UpsertWorkspaceSchema(),
-                "html_workspace_upsert", true, 0);
+            yield return Projection(WriteFileToolId,
+                "Workspace: Create or replace one complete HTML, CSS, or JavaScript file. The runtime infers its kind, selects a written HTML entry for preview, and runs bounded static preflight automatically.",
+                HtmlWorkspaceToolService.WriteFileSchema(),
+                "html_workspace_write_file", true, 0);
+            yield return Projection(WriteDataToolId,
+                "Workspace: Create or replace one named JSON data source and run bounded static preflight automatically.",
+                HtmlWorkspaceToolService.WriteDataSchema(),
+                "html_data_write", true, 0);
             yield return Projection(ApplyPatchToolId,
                 "Workspace: Apply ordered structured text edits atomically to one existing HTML/CSS/JavaScript file. Runtime reads current source and records one recoverable workspace revision.",
                 HtmlWorkspaceToolService.ApplyPatchSchema(),
                 "html_workspace_apply_patch", true, 0);
             yield return Projection(DeleteToolId,
-                "Workspace: Delete one exact file or JSON data source. Workspace history keeps the operation recoverable.",
-                "{\"type\":\"object\",\"properties\":{\"resourceType\":{\"type\":\"string\",\"enum\":[\"file\",\"data\"],\"description\":\"Resource to delete: file or data.\"},\"name\":{\"type\":\"string\",\"description\":\"Exact workspace-relative file path or data-source name.\",\"maxLength\":260}},\"required\":[\"resourceType\",\"name\"],\"additionalProperties\":false}",
+                "Workspace: Delete one exact file path or named JSON data source. The runtime resolves its kind and rejects ambiguous targets; workspace history keeps the operation recoverable.",
+                DeleteSchema(),
                 "html_workspace_delete", true, 1);
-            yield return Projection(SetActiveToolId,
-                "Workspace: Select the active HTML file displayed on the HTML tab for the active chat.",
-                "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact workspace-relative HTML file path.\",\"default\":\"index.html\",\"maxLength\":260}},\"required\":[],\"additionalProperties\":false}",
-                "html_workspace_set_active", true, 0);
             if (service.HasDataSourceTools)
             {
                 yield return Projection(BindDataToolId,
-                    service.BuildBindDescription(), service.BuildBindSchema(),
+                    service.BuildBindDescription(), HtmlWorkspaceToolService.BindSchema(),
                     "html_data_bind", true, 0);
             }
             yield return Projection(RefreshDataToolId,
-                "Workspace: Re-run a bound read-only Office source and replace its JSON without another model request. Omit name to refresh all matching bound sources.",
-                "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Optional exact bound data-source name; omit to refresh all matching sources.\",\"maxLength\":128},\"policy\":{\"type\":\"string\",\"enum\":[\"all\",\"on_preview\"],\"description\":\"Refresh all bound sources or only sources configured for preview refresh.\",\"default\":\"all\"}},\"required\":[],\"additionalProperties\":false}",
+                "Workspace: Re-run a bound read-only Office source and replace its JSON without another model request. Omit name to refresh all bound sources; refresh policy is runtime-owned.",
+                RefreshSchema(),
                 "html_data_refresh", true, 0);
             yield return Projection(FreezeDataToolId,
                 "Workspace: Keep the current JSON of one bound data source but remove its Office binding so future refreshes cannot overwrite it.",
-                "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact bound data-source name.\",\"maxLength\":128}},\"required\":[\"name\"],\"additionalProperties\":false}",
+                FreezeSchema(),
                 "html_data_freeze", true, 0);
+        }
+
+        internal static string DeleteSchema()
+        {
+            return "{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\",\"description\":\"Exact workspace-relative file path or data-source name.\",\"minLength\":1,\"maxLength\":260}},\"required\":[\"target\"],\"additionalProperties\":false}";
+        }
+
+        internal static string RefreshSchema()
+        {
+            return "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Optional exact bound data-source name; omit to refresh all bound sources.\",\"minLength\":1,\"maxLength\":128}},\"required\":[],\"additionalProperties\":false}";
+        }
+
+        internal static string FreezeSchema()
+        {
+            return "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Exact bound data-source name.\",\"minLength\":1,\"maxLength\":128}},\"required\":[\"name\"],\"additionalProperties\":false}";
         }
 
         private static ToolCatalogEntry Projection(

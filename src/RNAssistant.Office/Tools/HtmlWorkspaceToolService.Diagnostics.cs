@@ -31,13 +31,66 @@ namespace RNAssistant.Office.Tools
         private static readonly Regex DataIndexPattern = InspectionRegex("\\bRNAssistantData\\s*\\[\\s*(?:\"(?<value>[^\"]+)\"|'(?<value>[^']+)')\\s*\\]", RegexOptions.None);
         private static readonly Regex DataAccessorPattern = InspectionRegex("\\bRNAssistant\\s*\\.\\s*data\\s*\\.\\s*(?:get|meta)\\s*\\(\\s*(?:\"(?<value>[^\"]+)\"|'(?<value>[^']+)')", RegexOptions.None);
 
-        internal static string InspectWorkspaceSchema()
+        internal static HtmlWorkspaceToolOutcome InspectForPreview(
+            ChatSession session, CancellationToken cancellationToken)
         {
-            return "{\"type\":\"object\",\"properties\":{" +
-                "\"entryName\":{\"type\":\"string\",\"description\":\"Optional exact HTML entry path; defaults to the active HTML file.\",\"maxLength\":260}," +
-                "\"includeWarnings\":{\"type\":\"boolean\",\"description\":\"Include advisory unresolved-reference diagnostics in returned issues.\",\"default\":true}," +
-                "\"maxIssues\":{\"type\":\"integer\",\"description\":\"Maximum diagnostics returned; counts remain exact.\",\"default\":100,\"minimum\":1,\"maximum\":500}" +
-                "},\"required\":[],\"additionalProperties\":false}";
+            if (session == null)
+                return HtmlWorkspaceToolOutcome.Error(
+                    "HTML workspace requires an active chat session.", null,
+                    "html_workspace_session_required", false);
+            return InspectWorkspace(session,
+                new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase),
+                cancellationToken);
+        }
+
+        private static HtmlWorkspaceToolOutcome WithAutomaticPreflight(
+            ChatSession session,
+            HtmlWorkspaceToolOutcome outcome,
+            CancellationToken cancellationToken)
+        {
+            if (outcome == null ||
+                outcome.Status == HtmlWorkspaceOutcomeStatus.Error)
+                return outcome;
+
+            var inspection = InspectWorkspace(session,
+                new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "includeWarnings", true },
+                    { "maxIssues", 25 }
+                }, cancellationToken);
+            JObject data;
+            try
+            {
+                data = string.IsNullOrWhiteSpace(outcome.DataJson)
+                    ? new JObject()
+                    : JObject.Parse(outcome.DataJson);
+            }
+            catch (JsonException)
+            {
+                data = new JObject { ["result"] = outcome.DataJson };
+            }
+
+            if (inspection.Status == HtmlWorkspaceOutcomeStatus.Ok)
+            {
+                data["preflight"] = JObject.Parse(inspection.DataJson);
+            }
+            else
+            {
+                data["preflight"] = new JObject
+                {
+                    ["passed"] = false,
+                    ["status"] = "error",
+                    ["code"] = inspection.ErrorCode,
+                    ["message"] = inspection.Message
+                };
+            }
+
+            var json = data.ToString(Formatting.None);
+            return outcome.Status == HtmlWorkspaceOutcomeStatus.Unknown
+                ? HtmlWorkspaceToolOutcome.Unknown(
+                    outcome.Message, json, outcome.ErrorCode)
+                : HtmlWorkspaceToolOutcome.Ok(
+                    outcome.Message, json, outcome.Effect);
         }
 
         private static HtmlWorkspaceToolOutcome InspectWorkspace(

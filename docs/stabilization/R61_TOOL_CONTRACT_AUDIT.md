@@ -1,11 +1,11 @@
 # R61/11O — audit границы model-facing tools
 
-Дата фиксации: 2026-09-02. Статус: 11O1 Resources + Capabilities и 11O2 Plan
-questions/doc/task-list завершены host-neutral; остальные family cutovers,
+Дата фиксации: 2026-09-02. Статус: 11O1 Resources + Capabilities, 11O2 Plan
+questions/doc/task-list и 11O3 HTML завершены host-neutral; остальные family cutovers,
 dynamic custom-package review и UI ещё не выполнены.
 
-Для Resources + Capabilities и planning family этот документ фиксирует
-реализованные контракты 11O1–11O2. Для остальных семейств до их атомарного
+Для Resources + Capabilities, planning и HTML family этот документ фиксирует
+реализованные контракты 11O1–11O3. Для остальных семейств до их атомарного
 переключения действует текущий канонический контракт. R61 не вводит второй
 executor, generic router, pipelines, aliases или dual schema.
 
@@ -80,9 +80,9 @@ delegate-ом. Это доказывает механическую исполн
 число calls, argument/format repairs, tool errors, continuation restarts и итоговую
 успешность задачи.
 
-11O0 добавил, а 11O1–11O2 обновили machine-checked
-[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 68 уникальных built-in ids
-и 71 effective host-вариант фиксируют exact descriptor revision, host, mode,
+11O0 добавил, а 11O1–11O3 обновили machine-checked
+[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 67 уникальных built-in ids
+и 70 effective host-вариантов фиксируют exact descriptor revision, host, mode,
 direct binding и все рекурсивные schema property paths. Четыре host-specific
 варианта принадлежат `common.html_data_bind`. Поле, похожее на
 runtime plumbing, не может появиться без явного решения; допустимые public
@@ -116,7 +116,7 @@ tools, Tool/Skill/Prompt authoring зависит от доступности st
 Progressive loading уменьшает token cost, но не делает лишний tool полезным и не
 исправляет сложный schema после загрузки. Таблица сохраняет 11O0 baseline и
 default-направление R61; resource/capability rows реализованы в 11O1, planning
-rows — в 11O2, остальные ids действуют до своего cutover. `KEEP` означает сохранить самостоятельный model
+rows — в 11O2, HTML rows — в 11O3, остальные ids действуют до своего cutover. `KEEP` означает сохранить самостоятельный model
 intent, `ON-DEMAND` — не держать schema в default core, `MERGE`/`SPLIT` — сменить
 public responsibility атомарно, `INTERNAL/UI` — убрать из model-facing catalog без
 удаления функции.
@@ -140,14 +140,14 @@ public id также нельзя «вспоминать» приблизите�
 | `common.plan_doc_restore` | Нужен только по явному запросу восстановить историю | `DONE 11O2`: модель выбирает readable version, runtime связывает exact source/current guard |
 | `common.plan_doc_delete` | Нужен только по явному запросу удалить plan | `DONE 11O2`: empty arguments; active identity/revision и explicit-request guard внутренние |
 | `common.task_list_set` | Нужен visible task state и terminal close | `DONE 11O2`: small typed save/close branches; runtime создаёт list ids и генерирует/сохраняет stable step ids |
-| `common.html_workspace_inspect` | Static preflight нужен, отдельный model call обычно нет | `INTERNAL/UI`; запускать после write/patch/preview, оставить Library diagnostic только если independent troubleshooting eval это требует |
-| `common.html_workspace_upsert` | Whole-content authoring нужен, но file и JSON data имеют разные validation | `SPLIT` на file write и data write; resourceType не должен создавать большой union branch |
-| `common.html_workspace_apply_patch` | Exact source edit нужен | `KEEP`; сократить до exact operations, advanced regex/line variants не держать в основном schema, whole write остаётся выбором |
-| `common.html_workspace_delete` | Нужен semantic delete | `ON-DEMAND KEEP`; target candidate/path определяет file/data без ручного transport id |
-| `common.html_workspace_set_active` | Это UI/session selection, не content intent | `INTERNAL/UI`; write может вернуть/выбрать созданный entry, пользователь переключает preview в UI |
-| `common.html_data_bind` | Live binding нужен, текущий nested tool-call authoring слишком общий | `KEEP` после redesign: bind prior accepted read/candidate; убрать `sourceTool` + произвольный `sourceArguments` из обязанностей модели |
-| `common.html_data_refresh` | Manual refresh иногда нужен | `ON-DEMAND KEEP`; optional semantic data name/all, policy/defaults внутренние |
-| `common.html_data_freeze` | Отличимый intent: сохранить JSON и удалить binding | `ON-DEMAND KEEP`; не объединять с refresh из-за другого effect |
+| `common.html_workspace_write_file` | Whole-file authoring нужен | `DONE 11O3`: path/content only; file kind, preview selection, revision и preflight внутренние |
+| `common.html_data_write` | Static JSON authoring нужен отдельно от file validation | `DONE 11O3`: name/json only; заменил data branch общего upsert |
+| `common.html_workspace_apply_patch` | Exact source edit нужен | `DONE 11O3`: path + exact replace/replaceAll/insertBefore/insertAfter; regex/line variants удалены |
+| `common.html_workspace_delete` | Нужен semantic delete | `DONE 11O3`: readable target определяет file/data; ambiguity fail-closed |
+| `common.html_data_bind` | Live binding нужен | `DONE 11O3`: name/transform/headers only; runtime использует latest successful eligible accepted read того же run |
+| `common.html_data_refresh` | Manual refresh иногда нужен | `DONE 11O3`: optional semantic name/all; policy внутренний |
+| `common.html_data_freeze` | Отличимый intent: сохранить JSON и удалить binding | `DONE 11O3`: отдельный verified-write effect |
+| retired `common.html_workspace_inspect`, `common.html_workspace_set_active`, `common.html_workspace_upsert` | Не нужны модели | `DONE 11O3`: удалены из catalog без aliases; preflight/selection остались internal UI/runtime |
 | `common.prompts_read` | Нужен только при явном prompt/settings authoring | `ON-DEMAND KEEP` |
 | `common.prompts_save` | Нужен только при явном authoring | `ON-DEMAND KEEP`; один `promptKey` + typed value за call вместо девяти независимых optional полей |
 | `common.tools_definition_read` | Нужен для изменения exact custom tool | `ON-DEMAND KEEP`; compact list mode удалить как duplicate capabilities search, exact public tool id допустим |
@@ -273,6 +273,23 @@ responsibility:
   task-tracking skill, accepted-history preflight и model Tool Result projection
   переключены атомарно; старые вызовы требуют explicit new chat/reset.
 
+### HTML workspace и data binding
+
+- 11O3 публикует семь Agent-only verified-write tools: отдельные
+  `common.html_workspace_write_file` и `common.html_data_write`, exact patch,
+  semantic delete, bind, refresh и freeze. Старые inspect/set-active/upsert ids
+  удалены без aliases; UI selection и bounded static preflight остались internal.
+- Patch принимает только path и exact replace/replaceAll/insertBefore/insertAfter.
+  Delete принимает readable path/data name и fail-closed отвергает ambiguity.
+- Bind принимает name и optional transform/headers. Runtime выбирает последний
+  успешный eligible accepted Office read того же Agent run, проверяет exact
+  call/result pair и полный result artifact; model не передаёт source tool,
+  arguments, URI, cursor, revision или candidate id. Refresh повторно проверяет
+  сохранённый exact source schema и принимает только optional semantic name.
+- Durable workspace/result сохраняет revision, resource refs, binding source и
+  guards. Model projection удаляет их, а prompt schema 19 и history preflight
+  требуют explicit new chat/reset для старых HTML calls.
+
 ### VBA mutations
 
 - Whole-source write и exact-hunk patch остаются двумя явными вариантами модели.
@@ -360,8 +377,9 @@ R61 не закрывается только schema snapshot-тестами. М�
 3. Plan questions/doc/task-list завершены host-neutral в 11O2: semantic schemas,
    runtime-owned identities/guards, model projection, prompt/skill/UI consumers и
    удаление пяти старых lifecycle ids переключены атомарно.
-4. Переключить HTML workspace/data binding и удалить model-facing diagnostics/UI
-   selection paths.
+4. HTML workspace/data binding завершён host-neutral в 11O3: семь semantic intents,
+   accepted-read binding, automatic preflight и удаление model-facing diagnostics/
+   UI selection paths переключены атомарно.
 5. Переключить Prompt, Tool и Skill authoring, включая internal validation и
    conservative authority.
 6. Переключить VBA/macro family, сохранив exact mutation safety и выбор patch/write.
@@ -372,7 +390,7 @@ R61 не закрывается только schema snapshot-тестами. М�
 9. Собрать final live-provider, Windows WebView2/Office и WQ-PACK evidence только на
    post-cutover catalog.
 
-Ближайший шаг — 11O3 HTML workspace/data binding. Накопленные Windows rebuild,
+Ближайший шаг — 11O4 Prompt/Tool/Skill authoring. Накопленные Windows rebuild,
 live-provider и WebView2 gates остаются обязательными для final WQ, но по §16.1 не
 блокируют следующий dependency-safe host-neutral подэтап. Phase 12 до полного R61
 и qualification не начинается.

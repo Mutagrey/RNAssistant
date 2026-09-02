@@ -107,6 +107,10 @@
     hasRefreshableData: function (policy) {
       return boundDataSources(policy === "on_preview" ? "on_preview" : "").length > 0;
     },
+    refreshableDataNames: function (policy) {
+      return boundDataSources(policy === "on_preview" ? "on_preview" : "")
+        .map(dataName);
+    },
     switchChatMode: function (mode) {
       return typeof window.saveChatMode === "function" ? window.saveChatMode(mode) : false;
     },
@@ -221,6 +225,8 @@
     if (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined) {
       state.activeHtmlArtifactId = response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || "";
     }
+    state.htmlWorkspacePreflight = response.staticPreflight || response.StaticPreflight ||
+      { status: "ok", passed: true, errorCount: 0, warningCount: 0, issues: [] };
     state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
     state.htmlWorkspaceDirty = false;
     renderHtmlWorkspace();

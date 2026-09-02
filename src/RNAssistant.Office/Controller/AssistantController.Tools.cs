@@ -423,10 +423,10 @@ namespace RNAssistant.Office
 
         private static bool IsSessionArtifactTool(string toolId)
         {
-            return string.Equals(toolId, HtmlWorkspaceToolCatalog.UpsertToolId, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(toolId, HtmlWorkspaceToolCatalog.WriteFileToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, HtmlWorkspaceToolCatalog.WriteDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.ApplyPatchToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.DeleteToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, HtmlWorkspaceToolCatalog.SetActiveToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.BindDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.RefreshDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.FreezeDataToolId, StringComparison.OrdinalIgnoreCase) ||

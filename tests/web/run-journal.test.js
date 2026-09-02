@@ -86,7 +86,7 @@ const rows = [
   row(2, "model.request.prepared", "prepared", { RunId: "run-1", ModelAttemptId: "attempt-1" }),
   row(3, "llm.response", "received", { RunId: "run-1", ModelAttemptId: "attempt-1" }),
   row(4, "model.attempt.rejected", "rejected", { RunId: "run-1", ModelAttemptId: "attempt-1", FailureCount: 1, DataTruncated: true }),
-  row(5, "tool.call.recorded", "accepted", { RunId: "run-1", ToolCallId: "call-1", ToolId: "common.html_workspace_upsert" }),
+  row(5, "tool.call.recorded", "accepted", { RunId: "run-1", ToolCallId: "call-1", ToolId: "common.html_workspace_write_file" }),
   row(6, "domain.effect.verified", "committed", { RunId: "run-1", ToolCallId: "call-1", MutationId: "mutation-1" }),
   row(7, "diagnostic.evidence.missing", "missing", { RunId: "run-1", ToolCallId: "call-2", FailureCount: 1, SourceEventSeqs: [5, 7], SourceEventIds: ["evt-5", "evt-7"] }),
   row(8, "turn.ended", "failed", { RunId: "run-1", TurnId: "turn-1" })

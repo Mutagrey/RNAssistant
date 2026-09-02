@@ -408,8 +408,8 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("common.html_workspace_upsert"),
-                    "{\"message\":\"Создаю локальный HTML.\",\"tool_calls\":[{\"name\":\"common.html_workspace_upsert\",\"arguments\":{\"resourceType\":\"file\",\"name\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
+                    LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.WriteFileToolId),
+                    "{\"message\":\"Создаю локальный HTML.\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
                     "{\"message\":\"Локальный HTML готов.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -440,11 +440,11 @@ namespace RNAssistant.Harness
                     "internal document identity stays outside model context");
                 AssertContains(prompt, "\"title\":\"Closed.xlsx\"", "archived document title in prompt");
                 AssertContains(prompt, "\"office_tools_available\":false", "Office availability in prompt");
-                AssertContains(prompt, "\"id\":\"common.html_workspace_upsert\"",
+                AssertContains(prompt, "\"id\":\"common.html_workspace_write_file\"",
                     "exact local HTML capability remains discoverable");
-                AssertTrue(prompt.IndexOf("\"name\":\"common.html_workspace_upsert\"", StringComparison.OrdinalIgnoreCase) < 0,
+                AssertTrue(prompt.IndexOf("\"name\":\"common.html_workspace_write_file\"", StringComparison.OrdinalIgnoreCase) < 0,
                     "local HTML schema is not injected before discovery");
-                AssertContains(FlattenSimple(calls[1]), "\"name\":\"common.html_workspace_upsert\"",
+                AssertContains(FlattenSimple(calls[1]), "\"name\":\"common.html_workspace_write_file\"",
                     "exact local HTML schema is available after read");
                 AssertTrue(prompt.IndexOf("excel.read_range", StringComparison.OrdinalIgnoreCase) < 0,
                     "Office tools omitted for a closed document");
@@ -2071,16 +2071,16 @@ namespace RNAssistant.Harness
                 {
                     new ConversationToolCall
                     {
-                        Name = HtmlWorkspaceToolCatalog.UpsertToolId,
+                        Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
                         Arguments = new Dictionary<string, object>
                         {
-                            ["resourceType"] = "file", ["name"] = "report.html", ["content"] = html, ["setActive"] = true
+                            ["path"] = "report.html", ["content"] = html
                         }
                     }
                 });
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.UpsertToolId), rawWrite, rawWrite,
+                    LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.WriteFileToolId), rawWrite, rawWrite,
                     ModelProtocolWire.Write("Done.", new ConversationToolCall[0])
                 });
                 var requestCount = 0;
@@ -2099,7 +2099,7 @@ namespace RNAssistant.Harness
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "valid calls complete without repair");
                 AssertEqual(4, requestCount, "two independently accepted writes require no extra model attempt");
                 var accepted = session.Messages.Where(message => message.Role == "assistant" &&
-                    message.ToolName == HtmlWorkspaceToolCatalog.UpsertToolId && message.AcceptedCallOrigin != null).ToList();
+                    message.ToolName == HtmlWorkspaceToolCatalog.WriteFileToolId && message.AcceptedCallOrigin != null).ToList();
                 AssertEqual(2, accepted.Count, "identical payloads are not deduplicated or rejected as ID collisions");
                 AssertEqual(2, accepted.Select(message => message.ToolCallId).Distinct().Count(), "repeated writes have distinct runtime IDs");
                 foreach (var message in accepted)
