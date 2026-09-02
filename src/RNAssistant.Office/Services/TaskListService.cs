@@ -12,7 +12,42 @@ namespace RNAssistant.Office.Services
         internal const int MaxGoalCharacters = 500;
         internal const int MaxStepCharacters = 500;
 
-        internal TaskListMutation Create(ChatSession session, string goal,
+        internal TaskListMutation Set(ChatSession session, string goal,
+            List<ChatTaskStep> steps, Action beforeMutation)
+        {
+            RequireSession(session);
+            if (string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId))
+                return Create(session, goal, BindStepIds(steps, null), beforeMutation);
+
+            ChatTaskList current;
+            var currentArtifact = FindRevision(session, null, out current);
+            if (currentArtifact == null || current == null ||
+                !string.Equals(current.Status, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                return TaskListMutation.Fail(
+                    "The active task list is unavailable or ambiguous; reset the chat before saving.",
+                    "task_list_active_revision_invalid", false);
+            }
+            return Update(session, currentArtifact.Id, goal, true,
+                BindStepIds(steps, current), true, beforeMutation);
+        }
+
+        internal TaskListMutation CloseActive(ChatSession session,
+            string outcome, Action beforeMutation)
+        {
+            RequireSession(session);
+            ChatTaskList current;
+            var currentArtifact = FindRevision(session, null, out current);
+            if (currentArtifact == null)
+            {
+                return TaskListMutation.Fail(
+                    "This chat has no unambiguous active task list to close.",
+                    "task_list_not_found", false);
+            }
+            return Close(session, currentArtifact.Id, outcome, beforeMutation);
+        }
+
+        private TaskListMutation Create(ChatSession session, string goal,
             List<ChatTaskStep> steps, Action beforeMutation)
         {
             RequireSession(session);
@@ -35,7 +70,7 @@ namespace RNAssistant.Office.Services
                 "Task list created: " + taskList.Goal, taskList, artifact, false);
         }
 
-        internal TaskListMutation Update(ChatSession session, string id,
+        private TaskListMutation Update(ChatSession session, string id,
             string goal, bool hasGoal, List<ChatTaskStep> steps, bool hasSteps,
             Action beforeMutation)
         {
@@ -73,7 +108,7 @@ namespace RNAssistant.Office.Services
                 "Task list updated: " + updated.Goal, updated, artifact, false);
         }
 
-        internal TaskListMutation Close(ChatSession session, string id,
+        private TaskListMutation Close(ChatSession session, string id,
             string outcome, Action beforeMutation)
         {
             RequireSession(session);
@@ -274,6 +309,45 @@ namespace RNAssistant.Office.Services
                 value == "superseded") return value;
             throw new InvalidOperationException(
                 "Unknown task-list outcome: " + value);
+        }
+
+        private static List<ChatTaskStep> BindStepIds(
+            IEnumerable<ChatTaskStep> requested,
+            ChatTaskList current)
+        {
+            var prior = (current == null ? null : current.Steps) ??
+                new List<ChatTaskStep>();
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var result = new List<ChatTaskStep>();
+            var index = 0;
+            foreach (var step in requested ?? new ChatTaskStep[0])
+            {
+                var text = step == null ? string.Empty : (step.Text ?? string.Empty).Trim();
+                var match = prior.FirstOrDefault(candidate => candidate != null &&
+                    !string.IsNullOrWhiteSpace(candidate.Id) &&
+                    !used.Contains(candidate.Id) &&
+                    string.Equals((candidate.Text ?? string.Empty).Trim(), text,
+                        StringComparison.OrdinalIgnoreCase));
+                if (match == null && index < prior.Count)
+                {
+                    var positional = prior[index];
+                    if (positional != null &&
+                        !string.IsNullOrWhiteSpace(positional.Id) &&
+                        !used.Contains(positional.Id)) match = positional;
+                }
+                var id = match == null
+                    ? "step_" + Guid.NewGuid().ToString("N")
+                    : match.Id;
+                used.Add(id);
+                result.Add(new ChatTaskStep
+                {
+                    Id = id,
+                    Text = text,
+                    Status = step == null ? null : step.Status
+                });
+                index++;
+            }
+            return result;
         }
 
         private static ChatTaskList Clone(ChatTaskList value)

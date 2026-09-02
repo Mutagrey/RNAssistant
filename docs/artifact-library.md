@@ -188,25 +188,29 @@ with their specialized viewer owners.
 
 Only domain-owned mutable resources expose Save/Delete:
 
-- Plan Save uses an exact-current-revision guard and writes the complete Markdown
-  payload as a new revision. Restore copies an exact historical revision into a new
-  guarded head. Delete appends a tombstone for the logical Plan only after an explicit
-  warning; it does not erase prior revisions or message references.
+- Plan Save writes the complete Markdown payload as a new revision; runtime resolves
+  and enforces the exact-current guard. Restore selects a readable version and runtime
+  copies its exact historical revision into a new guarded head. Delete appends a
+  tombstone for the logical Plan only after an explicit warning; it does not erase
+  prior revisions or message references.
 - HTML Save/delete/bind/refresh operates on exact workspace members and produces a
   complete new workspace revision. A failed refresh keeps the last-good JSON.
 - Immutable uploads/snapshots have no in-place editor. `Create editable copy` or
   `Import` creates a related resource and leaves the original unchanged.
 
-`Office.Services.PlanDocumentService` owns the complete Plan lifecycle lineage. Create and
-Save validate non-empty Markdown without normalizing it: leading/trailing whitespace
-and Markdown hard-break spaces are stored exactly. Update accepts only the active
-exact artifact id and appends `vN+1` as its linear child; duplicate, skipped or
-branched revision state fails closed. The tool executor only adapts arguments/results.
-Restore requires the same exact-current guard, copies one exact non-tombstone revision
-and appends it as `vN+1` with `restoredFromArtifactId` provenance. Delete requires the
-exact current head and appends a `removed:true` child revision while clearing the
-active pointer. Historical `ResourceRef` values are never rewritten; Library and the
-new working set omit the removed Plan, while exact resolve/read returns
+`Office.Services.PlanDocumentService` owns the complete Plan lifecycle lineage.
+`common.plan_doc_save` validates non-empty title/Markdown/status without normalizing
+the Markdown: leading/trailing whitespace and hard-break spaces are stored exactly.
+The service creates a plan when absent; otherwise it resolves the active exact
+artifact and appends `vN+1` as its linear child. Duplicate, skipped or branched state
+fails closed. `common.plan_doc_restore` accepts only a user-visible version; the
+service binds the same exact-current guard, resolves one exact non-tombstone revision
+and appends it as `vN+1` with `restoredFromArtifactId` provenance. Argument-free
+`common.plan_doc_delete` resolves the exact current head and appends a `removed:true`
+child revision while clearing the active pointer. Runtime-only ids/guards remain in
+durable evidence and are removed from the model projection. Historical `ResourceRef`
+values are never rewritten; Library and the new working set omit the removed Plan,
+while exact resolve/read returns
 `resource_removed`. A model-linked tombstone follows its source message during
 history editing/forking; a direct UI deletion is session-level.
 
@@ -249,10 +253,11 @@ Phase 11 is implemented as separate changes:
    - 11B2 — done host-neutral: append-only restore-as-new-head and guarded tombstone
      removal preserve exact historical message refs and project `resource_removed`.
      [Evidence](stabilization/PHASE_11B2_PLAN_RESTORE_TOMBSTONE.md).
-   - 11B3 — done host-neutral: historical revisions expose guarded
-     restore-as-new-head; removal preflight lists every referencing message before
-     confirmation; ready handoff revalidates and submits only the exact active pinned
-     URI. [Evidence](stabilization/PHASE_11B3_PLAN_HISTORY_HANDOFF.md).
+   - 11B3 + R61/11O1–11O2 — done host-neutral: historical revisions expose semantic
+     version restore while runtime binds the exact head/source; removal preflight
+     lists every referencing message before confirmation; ready handoff revalidates
+     internally and submits only a readable semantic target, never a URI or artifact
+     id. [Baseline evidence](stabilization/PHASE_11B3_PLAN_HISTORY_HANDOFF.md).
 3. HTML, separate changes:
    - 11C1 — done host-neutral: every whole-workspace save uses the next revision
      number across all branches, retains the exact active parent, and refuses

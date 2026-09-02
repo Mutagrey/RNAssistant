@@ -14,7 +14,7 @@ using RNAssistant.Office.Tools;
 namespace RNAssistant.Office.Services
 {
     // Durable results retain exact runtime evidence. This projection is the only
-    // representation of switched resource/capability results sent to a model.
+    // representation of results from each R61-switched family sent to a model.
     internal static class ModelToolResultProjection
     {
         private const string Prefix = "TOOL_RESULT:\n";
@@ -56,6 +56,10 @@ namespace RNAssistant.Office.Services
             else if (IsResourceResult(wire.Name))
             {
                 RemoveResourceRuntimeState(data);
+            }
+            else if (IsPlanningResult(wire.Name))
+            {
+                RemovePlanningRuntimeState(wire.Name, data);
             }
             else
             {
@@ -101,7 +105,8 @@ namespace RNAssistant.Office.Services
 
         private static string CanonicalSwitchedName(string name)
         {
-            if (IsResourceResult(name) || IsCapabilityResult(name)) return name;
+            if (IsResourceResult(name) || IsCapabilityResult(name) ||
+                IsPlanningResult(name)) return name;
             return null;
         }
 
@@ -109,6 +114,11 @@ namespace RNAssistant.Office.Services
         {
             error = null;
             if (call == null || string.IsNullOrWhiteSpace(call.Name)) return true;
+            if (call.Name.StartsWith("rna_", StringComparison.Ordinal))
+            {
+                error = "Synthetic rna_* tool names are not part of the public catalog.";
+                return false;
+            }
             string schema;
             switch (call.Name)
             {
@@ -116,6 +126,15 @@ namespace RNAssistant.Office.Services
                 case "common.resources_resolve":
                 case "common.resources_search":
                     error = "Public resource list/resolve/search calls were retired by 11O1.";
+                    return false;
+                case "common.plan_doc_create":
+                case "common.plan_doc_update":
+                    error = "Public Plan create/update calls were replaced by common.plan_doc_save in 11O2.";
+                    return false;
+                case "common.task_list_create":
+                case "common.task_list_update":
+                case "common.task_list_close":
+                    error = "Public Task List lifecycle calls were replaced by common.task_list_set in 11O2.";
                     return false;
                 case ResourceToolCatalog.FindToolId:
                     schema = ResourceFindToolHandler.Descriptor.ParametersJson;
@@ -128,6 +147,17 @@ namespace RNAssistant.Office.Services
                     break;
                 case CapabilityToolCatalog.ReadToolId:
                     schema = CapabilityCatalogService.ReadSchema(null, null);
+                    break;
+                case UserQuestionToolCatalog.AskToolId:
+                    schema = UserQuestionToolCatalog.Schema();
+                    break;
+                case PlanDocumentToolCatalog.SaveToolId:
+                case PlanDocumentToolCatalog.RestoreToolId:
+                case PlanDocumentToolCatalog.DeleteToolId:
+                    schema = PlanDocumentToolCatalog.SchemaFor(call.Name);
+                    break;
+                case TaskListToolCatalog.SetToolId:
+                    schema = TaskListToolCatalog.Schema();
                     break;
                 default:
                     return true;
@@ -167,6 +197,14 @@ namespace RNAssistant.Office.Services
         {
             return string.Equals(name, CapabilityToolCatalog.SearchToolId, StringComparison.Ordinal) ||
                 string.Equals(name, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal);
+        }
+
+        private static bool IsPlanningResult(string name)
+        {
+            return string.Equals(name, UserQuestionToolCatalog.AskToolId,
+                    StringComparison.Ordinal) ||
+                PlanDocumentToolCatalog.Owns(name) ||
+                TaskListToolCatalog.Owns(name);
         }
 
         private static JToken ParseData(string value)
@@ -235,6 +273,42 @@ namespace RNAssistant.Office.Services
                 foreach (var item in references.OfType<JObject>())
                     RemoveProperties(item, "revision", "skillRevision");
             }
+        }
+
+        private static void RemovePlanningRuntimeState(string name, JToken token)
+        {
+            var root = token as JObject;
+            if (root == null) return;
+            if (string.Equals(name, UserQuestionToolCatalog.AskToolId,
+                StringComparison.Ordinal))
+            {
+                RemoveProperties(root, "questionSetId");
+                foreach (var question in (root["questions"] as JArray ??
+                    new JArray()).OfType<JObject>())
+                {
+                    RemoveProperties(question, "id");
+                    foreach (var option in (question["options"] as JArray ??
+                        new JArray()).OfType<JObject>())
+                        RemoveProperties(option, "id");
+                }
+                return;
+            }
+            if (PlanDocumentToolCatalog.Owns(name))
+            {
+                if (root["revision"] != null && root["version"] == null)
+                    root["version"] = root["revision"].DeepClone();
+                RemoveProperties(root, "planId", "artifactId", "revision",
+                    "restoredFromArtifactId", "referencingMessageIds");
+                return;
+            }
+            if (!TaskListToolCatalog.Owns(name)) return;
+            RemoveProperties(root, "artifactId", "revision");
+            var taskList = root["taskList"] as JObject;
+            if (taskList == null) return;
+            RemoveProperties(taskList, "id");
+            foreach (var step in (taskList["steps"] as JArray ??
+                new JArray()).OfType<JObject>())
+                RemoveProperties(step, "id");
         }
 
         private static void RemoveProperties(JObject value, params string[] names)

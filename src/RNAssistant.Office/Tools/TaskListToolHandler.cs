@@ -15,7 +15,6 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class TaskListToolHandler : IToolHandler
     {
-        private readonly string _toolId;
         private readonly ChatSession _session;
         private readonly TaskListService _service;
 
@@ -24,22 +23,15 @@ namespace RNAssistant.Office.Tools
             if (!TaskListToolCatalog.Owns(toolId))
                 throw new ArgumentException(
                     "An exact Task List tool id is required.", nameof(toolId));
-            _toolId = toolId;
             _session = session;
             _service = new TaskListService();
         }
 
         internal static ToolBinding BindingFor(string toolId)
         {
-            if (string.Equals(toolId, TaskListToolCatalog.CreateToolId,
+            if (string.Equals(toolId, TaskListToolCatalog.SetToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("conversation.task-list.create.v1");
-            if (string.Equals(toolId, TaskListToolCatalog.UpdateToolId,
-                StringComparison.Ordinal))
-                return new ToolBinding("conversation.task-list.update.v1");
-            if (string.Equals(toolId, TaskListToolCatalog.CloseToolId,
-                StringComparison.Ordinal))
-                return new ToolBinding("conversation.task-list.close.v1");
+                return new ToolBinding("conversation.task-list.set.intent.v2");
             return null;
         }
 
@@ -70,29 +62,16 @@ namespace RNAssistant.Office.Tools
 
         private TaskListMutation Execute(ToolHandlerContext context)
         {
-            if (string.Equals(_toolId, TaskListToolCatalog.CreateToolId,
-                StringComparison.Ordinal))
+            var action = ToolArgumentReader.String(
+                context.Arguments, "action", string.Empty);
+            if (string.Equals(action, "save", StringComparison.Ordinal))
             {
-                return _service.Create(_session,
+                return _service.Set(_session,
                     ToolArgumentReader.String(context.Arguments, "goal", string.Empty),
                     ReadSteps(context.Arguments, "steps"),
                     context.MarkDispatchPossible);
             }
-            if (string.Equals(_toolId, TaskListToolCatalog.UpdateToolId,
-                StringComparison.Ordinal))
-            {
-                var hasGoal = context.Arguments.ContainsKey("goal");
-                var hasSteps = context.Arguments.ContainsKey("steps");
-                return _service.Update(_session,
-                    ToolArgumentReader.String(context.Arguments, "id", string.Empty),
-                    ToolArgumentReader.String(context.Arguments, "goal", string.Empty),
-                    hasGoal,
-                    hasSteps ? ReadSteps(context.Arguments, "steps") : null,
-                    hasSteps,
-                    context.MarkDispatchPossible);
-            }
-            return _service.Close(_session,
-                ToolArgumentReader.String(context.Arguments, "id", string.Empty),
+            return _service.CloseActive(_session,
                 ToolArgumentReader.String(context.Arguments, "outcome", string.Empty),
                 context.MarkDispatchPossible);
         }

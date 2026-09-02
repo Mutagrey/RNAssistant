@@ -100,6 +100,10 @@ namespace RNAssistant.Harness
             {
                 Messages = new List<ChatMessage> { semanticAccepted, semanticResult }
             });
+            AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                    new ToolCall("synthetic_alias", "rna_common_resources_read", "{}"),
+                    out error),
+                "synthetic rna alias is rejected even when accepted metadata agrees");
             semanticAccepted.ToolCalls[0].Name = "rna_common_resources_read";
             ExpectProtocolPreflightBlock(() => ConversationProtocolContext.EnsureCurrentHistory(
                 new ChatSession

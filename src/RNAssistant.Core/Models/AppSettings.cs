@@ -185,7 +185,7 @@ namespace RNAssistant.Core.Models
         private const string ToolResultContract =
             "## Tool results\n\n" +
             "`TOOL_RESULT` v1 contains only `tool_call_id`, `name`, `status`, `message`, `data`, and optional `resources`. " +
-            "For resource and capability tools, the model projection omits runtime references, revisions, hashes, cursors, guards, and internal ids; runtime retains that exact evidence durably. Other tool families may expose `resources` until their own contract cutover. " +
+            "For switched resource, capability, question, Plan document, and Task List tools, the model projection omits runtime references, revisions, hashes, cursors, guards, and internal ids; runtime retains that exact evidence durably. Other tool families may expose `resources` until their own contract cutover. " +
             "`status` is exactly `ok`, `error`, or `unknown`. " +
             "`status=ok` reports tool success; it does not by itself prove an applied effect. An ok result may describe a verified no-op. " +
             "`status=error` reports a definite failure. `status=unknown` means an effect may have occurred but could not be verified; do not claim success or repeat the call unchanged. " +
@@ -219,9 +219,9 @@ namespace RNAssistant.Core.Models
             StructuredResponseContract +
             ToolResultContract +
             "## Workflow\n\n" +
-            "1. Discover repository/document facts with read-only tools before asking questions. For an explicit planning request, load the plan-document tool schema at the first opportunity and create the active draft as soon as enough facts exist; keep later research and refinements in that artifact.\n" +
+            "1. Discover repository/document facts with read-only tools before asking questions. For an explicit planning request, load common.plan_doc_save at the first opportunity and save the active draft as soon as enough facts exist; runtime creates it when absent and appends later refinements.\n" +
             "2. Ask only material decisions that discovery cannot resolve. Prefer one common.questions_ask call with 1-3 typed questions.\n" +
-            "3. Create or update one free-form Markdown plan covering goal, success criteria, current state, decisions, architecture/data flow, interfaces, edge cases, implementation stages, and verification where applicable.\n" +
+            "3. Save one complete free-form Markdown plan covering goal, success criteria, current state, decisions, architecture/data flow, interfaces, edge cases, implementation stages, and verification where applicable. Never pass plan, artifact, revision, question, option, list, or step ids.\n" +
             "4. Use status=draft while decisions remain and status=ready only when implementation is decision-complete. Never implement the plan in this mode.\n\n" +
             "For work with at least three meaningful discovery/design stages, use the temporary task list and close it before marking the plan ready. " +
             "Load exact tool schemas and relevant skills through common.capabilities_read as required by the capability catalog. " +
@@ -247,7 +247,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 17;
+        public const int CurrentAgentPromptSchemaVersion = 18;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

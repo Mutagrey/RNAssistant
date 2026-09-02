@@ -20,12 +20,12 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                AssertTrue(tools.Any(tool => tool.Id == TaskListToolCatalog.CreateToolId), "task-list create exposed to Agent");
+                AssertTrue(tools.Any(tool => tool.Id == TaskListToolCatalog.SetToolId), "task-list semantic set exposed to Agent");
                 AssertTrue(NativeToolRuntimeAdapter.Owns(
-                    TaskListToolCatalog.CreateToolId),
+                    TaskListToolCatalog.SetToolId),
                     "task-list tools use the native ToolRuntime");
                 var taskPolicy = tools.Single(tool =>
-                    tool.Id == TaskListToolCatalog.CreateToolId).Policy;
+                    tool.Id == TaskListToolCatalog.SetToolId).Policy;
                 AssertTrue(taskPolicy != null &&
                     taskPolicy.Effect == ToolEffect.Write &&
                     taskPolicy.Verification == ToolVerification.Tool &&
@@ -35,25 +35,36 @@ namespace RNAssistant.Harness
                     "task-list carries exact source-owned mode policy");
                 var legacyPlanIds = new[] { "common.plan_create", "common.plan_update", "common.plan_delete", "common.plan_read" };
                 AssertTrue(tools.All(tool => !legacyPlanIds.Contains(tool.Id, StringComparer.OrdinalIgnoreCase)), "legacy plan tools are removed");
-                AssertTrue(tools.Any(tool => tool.Id == TaskListToolCatalog.UpdateToolId), "task-list update exposed to Agent");
-                AssertTrue(tools.Any(tool => tool.Id == TaskListToolCatalog.CloseToolId), "task-list close exposed to Agent");
+                AssertTrue(tools.All(tool => tool.Id != "common.task_list_create" &&
+                    tool.Id != "common.task_list_update" &&
+                    tool.Id != "common.task_list_close"),
+                    "replaced Task List lifecycle ids are absent");
                 var planningSkill = BuiltInSkillProvider.GetSkills(adapter).Single(skill => skill.Id == "common.task_tracking");
-                AssertContains(planningSkill.BodyMarkdown, TaskListToolCatalog.CreateToolId, "tracking skill explains create");
-                AssertContains(planningSkill.BodyMarkdown, TaskListToolCatalog.UpdateToolId, "tracking skill explains update");
+                AssertContains(planningSkill.BodyMarkdown, TaskListToolCatalog.SetToolId, "tracking skill explains semantic set");
+                string contractError;
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                    new ToolCall("old-task-list", "common.task_list_update", "{}"),
+                    out contractError),
+                    "pre-11O2 Task List calls require an explicit new chat/reset");
                 var create = Command(
-                    TaskListToolCatalog.CreateToolId,
+                    TaskListToolCatalog.SetToolId,
+                    "action", "save",
                     "goal", "Prepare workbook report",
                     "steps", new JArray(
-                        new JObject { ["id"] = "inspect", ["text"] = "Inspect source data", ["status"] = "in_progress" },
-                        new JObject { ["id"] = "write", ["text"] = "Write the report", ["status"] = "pending" },
-                        new JObject { ["id"] = "verify", ["text"] = "Verify the report", ["status"] = "pending" }));
+                        new JObject { ["text"] = "Inspect source data", ["status"] = "in_progress" },
+                        new JObject { ["text"] = "Write the report", ["status"] = "pending" },
+                        new JObject { ["text"] = "Verify the report", ["status"] = "pending" }));
 
                 var created = executor.ExecuteManual(create, tools, new AppSettings(), false, false, session);
                 AssertTrue(created.Success, "plan create succeeds");
                 var createdData = JObject.Parse(created.DataJson);
                 var planId = (string)createdData["taskList"]["id"];
                 var firstArtifactId = (string)createdData["artifactId"];
+                var firstStepIds = createdData["taskList"]["steps"]
+                    .Select(step => (string)step["id"]).ToArray();
                 AssertTrue(!string.IsNullOrWhiteSpace(planId), "stable plan id returned");
+                AssertTrue(firstStepIds.All(id => !string.IsNullOrWhiteSpace(id)),
+                    "runtime generates every stable step id");
                 AssertEqual(firstArtifactId, session.ActiveTaskListArtifactId, "created task list becomes active");
                 AssertEqual(1, session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.TaskList), "first task-list revision stored");
 
@@ -61,14 +72,34 @@ namespace RNAssistant.Harness
                 session.Messages.Add(createMessage);
                 ChatResourceReferenceService.LinkMessageResources(session, 0);
                 AssertTrue(ReferencesArtifact(session, createMessage, firstArtifactId), "created plan linked to tool result message");
+                var projectionCommand = Command(TaskListToolCatalog.SetToolId);
+                projectionCommand.ToolCallId = "task-list-projection";
+                var projectedCreate = ModelToolResultProjection.Project(
+                    AgentJsonProtocol.CreateToolResultMessage(
+                        projectionCommand,
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
+                            created.Message, created.DataJson)));
+                AssertTrue(projectedCreate.Content.IndexOf("artifactId", StringComparison.Ordinal) < 0 &&
+                    projectedCreate.Content.IndexOf(planId, StringComparison.Ordinal) < 0 &&
+                    firstStepIds.All(id => projectedCreate.Content.IndexOf(id, StringComparison.Ordinal) < 0) &&
+                    projectedCreate.Content.IndexOf("Prepare workbook report", StringComparison.Ordinal) >= 0,
+                    "model Task List result omits runtime list, artifact, revision, and step ids");
 
-                var update = Command(TaskListToolCatalog.UpdateToolId, "id", planId, "goal", "Prepare verified workbook report");
+                var update = Command(TaskListToolCatalog.SetToolId,
+                    "action", "save",
+                    "goal", "Prepare verified workbook report",
+                    "steps", new JArray(
+                        new JObject { ["text"] = "Inspect source data", ["status"] = "completed" },
+                        new JObject { ["text"] = "Write the report", ["status"] = "in_progress" },
+                        new JObject { ["text"] = "Verify the report", ["status"] = "pending" }));
                 var updated = executor.ExecuteManual(update, tools, new AppSettings(), false, false, session);
-                AssertTrue(updated.Success, "partial plan update succeeds");
+                AssertTrue(updated.Success, "complete semantic task-list save succeeds");
                 var updatedData = JObject.Parse(updated.DataJson);
                 var secondArtifactId = (string)updatedData["artifactId"];
                 AssertEqual(2L, (long)updatedData["revision"], "plan revision increments");
-                AssertEqual(3, updatedData["taskList"]["steps"].Count(), "omitted steps preserved");
+                AssertTrue(firstStepIds.SequenceEqual(updatedData["taskList"]["steps"]
+                    .Select(step => (string)step["id"])),
+                    "runtime preserves step identity across semantic saves");
                 AssertEqual(firstArtifactId, session.Artifacts.Single(item => item.Id == secondArtifactId).ParentArtifactId, "revision parent linked");
                 AssertEqual(secondArtifactId, session.ActiveTaskListArtifactId, "updated revision becomes active");
 
@@ -91,12 +122,15 @@ namespace RNAssistant.Harness
                 AssertTrue(session.Artifacts.All(item => item.Id != secondArtifactId), "future plan revision pruned");
 
                 var completedSteps = new JArray(
-                    new JObject { ["id"] = "inspect", ["text"] = "Inspect source data", ["status"] = "completed" },
-                    new JObject { ["id"] = "write", ["text"] = "Write the report", ["status"] = "completed" },
-                    new JObject { ["id"] = "verify", ["text"] = "Verify the report", ["status"] = "completed" });
-                var finalUpdate = executor.ExecuteManual(Command(TaskListToolCatalog.UpdateToolId, "id", planId, "steps", completedSteps), tools, new AppSettings(), false, false, session);
+                    new JObject { ["text"] = "Inspect source data", ["status"] = "completed" },
+                    new JObject { ["text"] = "Write the report", ["status"] = "completed" },
+                    new JObject { ["text"] = "Verify the report", ["status"] = "completed" });
+                var finalUpdate = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "save", "goal", "Prepare workbook report",
+                    "steps", completedSteps), tools, new AppSettings(), false, false, session);
                 AssertTrue(finalUpdate.Success, "final task-list update succeeds");
-                var closed = executor.ExecuteManual(Command(TaskListToolCatalog.CloseToolId, "id", planId, "outcome", "completed"), tools, new AppSettings(), false, false, session);
+                var closed = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "close", "outcome", "completed"), tools, new AppSettings(), false, false, session);
                 AssertTrue(closed.Success, "task-list close succeeds");
                 AssertTrue(string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId), "closed task list is hidden");
                 AssertTrue(session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.TaskList) >= 3, "closed task-list history remains stored");
@@ -110,20 +144,22 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var result = executor.ExecuteManual(
                     Command(
-                        TaskListToolCatalog.CreateToolId,
+                        TaskListToolCatalog.SetToolId,
+                        "action", "save",
                         "goal", "Invalid duplicate plan",
                         "steps", new JArray(
-                            new JObject { ["id"] = "same", ["text"] = "First" },
-                            new JObject { ["id"] = "same", ["text"] = "Second" },
-                            new JObject { ["id"] = "third", ["text"] = "Third" })),
+                            new JObject { ["id"] = "caller-owned", ["text"] = "First" },
+                            new JObject { ["text"] = "Second" },
+                            new JObject { ["text"] = "Third" })),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings(),
                     false,
                     false,
                     session);
 
-                AssertTrue(!result.Success, "duplicate plan step ids rejected");
-                AssertContains(result.Message, "Duplicate task-list step id", "duplicate task-list diagnostic");
+                AssertTrue(!result.Success, "caller-owned task step id rejected");
+                AssertEqual("invalid_arguments", result.ErrorCode,
+                    "task-list semantic schema rejects internal identity");
                 AssertEqual(0, session.Artifacts.Count, "invalid plan not stored");
             });
         }
@@ -140,57 +176,61 @@ namespace RNAssistant.Harness
                     TaskListToolCatalog.Owns(tool.Id)).ToArray();
                 var runtime = executor.CreateNativeRuntime(session,
                     definitions, new AppSettings(), ChatModes.Agent, false);
-                var call = new ToolCall("task-list-native-create",
-                    TaskListToolCatalog.CreateToolId,
-                    "{\"goal\":\"Native tracking\",\"steps\":[" +
-                    "{\"id\":\"one\",\"text\":\"First\",\"status\":\"in_progress\"}," +
-                    "{\"id\":\"two\",\"text\":\"Second\"}," +
-                    "{\"id\":\"three\",\"text\":\"Third\"}]}");
+                var call = new ToolCall("task-list-native-save",
+                    TaskListToolCatalog.SetToolId,
+                    "{\"action\":\"save\",\"goal\":\"Native tracking\",\"steps\":[" +
+                    "{\"text\":\"First\",\"status\":\"in_progress\"}," +
+                    "{\"text\":\"Second\"}," +
+                    "{\"text\":\"Third\"}]}");
                 var policy = runtime.Describe(call);
                 AssertTrue(policy != null && policy.MayHaveSideEffects &&
                     policy.Policy.Verification == ToolVerification.Tool,
-                    "Task List create has one exact verified-write registration");
+                    "Task List set has one exact verified-write registration");
 
                 var created = ExecuteNative(runtime, call, policy);
                 AssertEqual(ToolExecutionOutcome.Ok, created.Outcome,
-                    "native Task List create succeeds");
+                    "native Task List save creates the missing list");
                 AssertEqual(ToolDispatchEvidence.MayHaveDispatched,
                     created.Evidence.Dispatch,
-                    "native Task List create records its session mutation boundary");
+                    "native Task List save records its session mutation boundary");
                 AssertEqual(ToolEffectEvidence.VerifiedChange,
                     created.Evidence.Effect,
-                    "native Task List create verifies the exact active revision");
+                    "native Task List save verifies the exact active revision");
                 var createdData = JObject.Parse(created.Result.DataJson);
                 AssertEqual((string)createdData["artifactId"],
                     session.ActiveTaskListArtifactId,
                     "verified result identifies the exact active Task List artifact");
 
-                var duplicateCall = new ToolCall("task-list-native-duplicate",
-                    TaskListToolCatalog.CreateToolId, call.ArgumentsJson);
-                var duplicate = ExecuteNative(runtime, duplicateCall,
-                    runtime.Describe(duplicateCall));
-                AssertEqual(ToolExecutionOutcome.Error, duplicate.Outcome,
-                    "active-list rejection stays a known error");
+                var invalidCloseCall = new ToolCall("task-list-native-invalid-close",
+                    TaskListToolCatalog.SetToolId,
+                    "{\"action\":\"close\",\"outcome\":\"completed\"}");
+                var invalidClose = ExecuteNative(runtime, invalidCloseCall,
+                    runtime.Describe(invalidCloseCall));
+                AssertEqual(ToolExecutionOutcome.Error, invalidClose.Outcome,
+                    "non-terminal close stays a known error");
                 AssertEqual(ToolDispatchEvidence.NotDispatched,
-                    duplicate.Evidence.Dispatch,
-                    "active-list rejection occurs before the mutation boundary");
+                    invalidClose.Evidence.Dispatch,
+                    "terminal-state rejection occurs before the mutation boundary");
 
                 var artifactCount = session.Artifacts.Count;
                 var dryRun = executor.ExecuteManual(Command(
-                    TaskListToolCatalog.UpdateToolId,
-                    "id", (string)createdData["taskList"]["id"],
-                    "goal", "Preview"), tools, new AppSettings(),
+                    TaskListToolCatalog.SetToolId,
+                    "action", "save", "goal", "Preview",
+                    "steps", new JArray(
+                        new JObject { ["text"] = "First" },
+                        new JObject { ["text"] = "Second" },
+                        new JObject { ["text"] = "Third" })),
+                    tools, new AppSettings(),
                     true, true, session);
                 AssertTrue(dryRun.Success && session.Artifacts.Count == artifactCount,
                     "native Task List dry-run validates schema without mutation");
 
-                var taskListId = (string)createdData["taskList"]["id"];
                 var updateCall = new ToolCall("task-list-native-update",
-                    TaskListToolCatalog.UpdateToolId,
-                    "{\"id\":\"" + taskListId + "\",\"steps\":[" +
-                    "{\"id\":\"one\",\"text\":\"First\",\"status\":\"completed\"}," +
-                    "{\"id\":\"two\",\"text\":\"Second\",\"status\":\"completed\"}," +
-                    "{\"id\":\"three\",\"text\":\"Third\",\"status\":\"completed\"}]}");
+                    TaskListToolCatalog.SetToolId,
+                    "{\"action\":\"save\",\"goal\":\"Native tracking\",\"steps\":[" +
+                    "{\"text\":\"First\",\"status\":\"completed\"}," +
+                    "{\"text\":\"Second\",\"status\":\"completed\"}," +
+                    "{\"text\":\"Third\",\"status\":\"completed\"}]}");
                 var updated = ExecuteNative(runtime, updateCall,
                     runtime.Describe(updateCall));
                 AssertEqual(ToolEffectEvidence.VerifiedChange,
@@ -198,9 +238,8 @@ namespace RNAssistant.Harness
                     "native Task List update verifies its appended revision");
 
                 var closeCall = new ToolCall("task-list-native-close",
-                    TaskListToolCatalog.CloseToolId,
-                    "{\"id\":\"" + taskListId +
-                    "\",\"outcome\":\"completed\"}");
+                    TaskListToolCatalog.SetToolId,
+                    "{\"action\":\"close\",\"outcome\":\"completed\"}");
                 var closed = ExecuteNative(runtime, closeCall,
                     runtime.Describe(closeCall));
                 AssertEqual(ToolExecutionOutcome.Ok, closed.Outcome,
@@ -212,7 +251,7 @@ namespace RNAssistant.Harness
                     session.ActiveTaskListArtifactId),
                     "native close verifies the cleared active pointer");
                 AssertTrue(runtime.Describe(new ToolCall("wrong-case",
-                    "COMMON.TASK_LIST_CREATE", "{}")) == null,
+                    "COMMON.TASK_LIST_SET", "{}")) == null,
                     "native Task List ownership has no case alias");
             });
         }

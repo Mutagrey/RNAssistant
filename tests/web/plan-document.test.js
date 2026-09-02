@@ -63,22 +63,32 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const workspace = fs.readFileSync(path.join(root, "web/js/app-html-workspace.js"), "utf8");
   const detail = fs.readFileSync(path.join(root, "web/js/app-html-workspace-artifacts.js"), "utf8");
   const editor = fs.readFileSync(path.join(root, "web/js/app-html-workspace-editor.js"), "utf8");
+  const questions = fs.readFileSync(path.join(root, "web/js/app-agent-activity.js"), "utf8");
+  const taskList = fs.readFileSync(path.join(root, "web/js/app-task-list.js"), "utf8");
   assert.ok(index.includes("app-artifacts.js?v=plan-tombstone-20260831-1"), "removed message cards keep the tombstone cache key");
-  ["app-artifact-viewer-actions.js", "app-html-workspace-actions.js",
-    "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=artifact-text-20260831-1"), asset + " has the current HTML/Plan action cache key");
+  ["app-artifact-viewer-actions.js", "app-html-workspace-artifacts.js",
+    "app-html-workspace-editor.js"].forEach(asset => {
+    assert.ok(index.includes(asset + "?v=artifact-text-20260831-1"), asset + " has the current artifact cache key");
+  });
+  ["app-html-workspace-actions.js", "app-task-list.js", "app-agent-activity.js"].forEach(asset => {
+    assert.ok(index.includes(asset + "?v=planning-intents-20260902-1"), asset + " has the current planning-intent cache key");
   });
   assert.ok(index.includes("app-html-workspace.js?v=resource-intent-20260902-1"), "HTML workspace handoff has the resource-intent cache key");
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /switchChatMode:\s*function\s*\(mode\)/);
   assert.doesNotMatch(workspace, /switchChatMode:\s*saveChatMode/);
   assert.match(workspace, /result\.expectedRevisionArtifactId = artifactId\(selected\.item\)/);
-  assert.match(actions, /expectedRevisionArtifactId: selected\.expectedRevisionArtifactId/);
+  assert.match(actions, /toolId: "common\.plan_doc_save"/);
+  assert.doesNotMatch(actions, /arguments:\s*\{[^}]*expectedRevisionArtifactId/);
   assert.match(detail, /expectedRevisionArtifactId: headArtifactId/);
   assert.match(detail, /sourceRevisionArtifactId: revisionArtifactId/);
   assert.match(editor, /renderDetail\(detail, selected, selectedEditorValue\(selected\), options\.artifactActions\)/);
   assert.match(workspace, /Выполни утверждённый активный план/);
   assert.doesNotMatch(workspace, /input\.value\s*=.*revisionUri/);
+  assert.match(questions, /return \{ question: question\.prompt.*selections: selected/);
+  assert.doesNotMatch(questions, /questionId|optionIds|JSON\.stringify\(\{ questionSetId/);
+  assert.match(taskList, /toolId === "common\.task_list_set"/);
+  assert.doesNotMatch(taskList, /common\.task_list_(?:create|update|close)/);
   console.log("PASS plan document: removal projections and guarded UI calls are cache-busted together");
 }
 
@@ -147,14 +157,10 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     revision: 1
   }), true);
   assert.equal(calls[0].payload.toolId, "common.plan_doc_restore");
-  assert.deepEqual(calls[0].payload.arguments, {
-    id: "plan",
-    expectedRevisionArtifactId: "plan-r2",
-    sourceRevisionArtifactId: "plan-r1"
-  });
+  assert.deepEqual(calls[0].payload.arguments, { version: 1 });
   assert.equal(calls[0].payload.dryRun, false);
   assert.match(confirmations[0], /v1.*новую версию/);
-  console.log("PASS plan document: history restore sends exact current and source revision guards");
+  console.log("PASS plan document: history restore sends only the semantic version");
 
   calls.length = 0;
   confirmations.length = 0;
@@ -166,11 +172,12 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   }), true);
   assert.equal(calls[0].payload.dryRun, true);
   assert.equal(calls[1].payload.dryRun, false);
+  assert.deepEqual(calls[0].payload.arguments, {});
   assert.deepEqual(calls[1].payload.arguments, calls[0].payload.arguments);
   assert.match(confirmations[0], /ревизия удаления/);
   assert.match(confirmations[0], /message-a/);
   assert.match(confirmations[0], /message-b/);
-  console.log("PASS plan document: removal preflight lists every pinned message before exact guarded mutation");
+  console.log("PASS plan document: removal keeps runtime guards out of UI tool arguments");
 
   calls.length = 0;
   modes.length = 0;

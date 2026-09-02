@@ -23,6 +23,7 @@
       revision: Number(value(artifact, "Revision", "revision", 1) || 1),
       id: plan.id || plan.Id || "",
       goal: plan.goal || plan.Goal || "Текущая задача",
+      status: plan.status || plan.Status || "active",
       steps: plan.steps || plan.Steps || []
     };
   }
@@ -46,6 +47,7 @@
       revision: Number(data.revision || data.Revision || 1),
       id: plan.id || plan.Id || "",
       goal: plan.goal || plan.Goal || "Текущая задача",
+      status: plan.status || plan.Status || "active",
       steps: plan.steps || plan.Steps || []
     };
   }
@@ -54,10 +56,10 @@
     if (!activity) return current;
     var toolId = typeof activityToolId === "function" ? activityToolId(activity) : "";
     var status = typeof activityStatus === "function" ? activityStatus(activity) : "";
-    if (status === "completed" && (toolId === "common.task_list_create" || toolId === "common.task_list_update")) {
-      current = taskListFromToolActivity(activity) || current;
-    } else if (status === "completed" && toolId === "common.task_list_close") {
-      current = null;
+    if (status === "completed" && toolId === "common.task_list_set") {
+      var projected = taskListFromToolActivity(activity);
+      current = projected && String(value(projected, "Status", "status", "active")).toLowerCase() === "active"
+        ? projected : null;
     }
     var children = typeof activityChildren === "function" ? activityChildren(activity) : [];
     children.forEach(function (child) { current = applyLiveTaskListActivity(current, child); });

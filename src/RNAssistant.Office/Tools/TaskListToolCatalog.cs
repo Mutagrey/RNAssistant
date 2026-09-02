@@ -10,28 +10,18 @@ namespace RNAssistant.Office.Tools
 {
     internal static class TaskListToolCatalog
     {
-        internal const string CreateToolId = "common.task_list_create";
-        internal const string UpdateToolId = "common.task_list_update";
-        internal const string CloseToolId = "common.task_list_close";
+        internal const string SetToolId = "common.task_list_set";
 
         internal static bool Owns(string toolId)
         {
-            return string.Equals(toolId, CreateToolId, StringComparison.Ordinal) ||
-                string.Equals(toolId, UpdateToolId, StringComparison.Ordinal) ||
-                string.Equals(toolId, CloseToolId, StringComparison.Ordinal);
+            return string.Equals(toolId, SetToolId, StringComparison.Ordinal);
         }
 
         internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
-            yield return Projection(CreateToolId,
-                "Task list: Create the visible checklist for the current active chat task. Use for at least three meaningful stages, not individual tool calls.",
-                PlanPayloadSchema(false), "task_list_create");
-            yield return Projection(UpdateToolId,
-                "Task list: Replace the complete steps of the active checklist after material progress. Stable step ids must be preserved.",
-                PlanPayloadSchema(true), "task_list_update");
-            yield return Projection(CloseToolId,
-                "Task list: Close and hide the active checklist while preserving its final revision in chat history.",
-                CloseSchema(), "task_list_close");
+            yield return Projection(SetToolId,
+                "Task list: Save the complete visible checklist, or close the active checklist with a terminal outcome. Runtime owns list and stable step identity.",
+                Schema(), "task_list_set");
         }
 
         private static ToolCatalogEntry Projection(
@@ -44,46 +34,72 @@ namespace RNAssistant.Office.Tools
                 name: name, scope: "session", mutatesLocalState: true);
         }
 
-        private static string PlanPayloadSchema(bool update)
+        internal static string Schema()
         {
-            var properties = new JObject
+            var action = new JObject
             {
-                ["id"] = new JObject { ["type"] = "string", ["description"] = "Stable task-list id returned by task_list_create, or any revision artifact id." },
-                ["goal"] = new JObject { ["type"] = "string", ["description"] = "Concise user-visible goal for the current task.", ["minLength"] = 1, ["maxLength"] = TaskListService.MaxGoalCharacters },
-                ["steps"] = new JObject
+                ["type"] = "string",
+                ["description"] = "Use save to create or replace the active list; use close only after its steps are terminal.",
+                ["enum"] = new JArray("save", "close")
+            };
+            var steps = new JObject
+            {
+                ["type"] = "array",
+                ["description"] = "Complete ordered meaningful task stages; runtime generates and preserves their stable ids.",
+                ["minItems"] = 3,
+                ["maxItems"] = TaskListService.MaxSteps,
+                ["items"] = new JObject
                 {
-                    ["type"] = "array",
-                    ["description"] = update ? "Complete replacement list of task steps." : "Complete ordered meaningful task stages.",
-                    ["minItems"] = 3,
-                    ["maxItems"] = TaskListService.MaxSteps,
-                    ["items"] = new JObject
+                    ["type"] = "object",
+                    ["properties"] = new JObject
                     {
-                        ["type"] = "object",
-                        ["properties"] = new JObject
-                        {
-                            ["id"] = new JObject { ["type"] = "string", ["description"] = "Stable unique step id without whitespace." },
-                            ["text"] = new JObject { ["type"] = "string", ["description"] = "Concise user-visible step description.", ["minLength"] = 1, ["maxLength"] = TaskListService.MaxStepCharacters },
-                            ["status"] = new JObject { ["type"] = "string", ["description"] = "Explicit current step status.", ["enum"] = new JArray("pending", "in_progress", "completed", "blocked", "cancelled"), ["default"] = "pending" }
-                        },
-                        ["required"] = new JArray("id", "text"),
-                        ["additionalProperties"] = false
-                    }
+                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Concise user-visible step description.", ["minLength"] = 1, ["maxLength"] = TaskListService.MaxStepCharacters },
+                        ["status"] = new JObject { ["type"] = "string", ["description"] = "Explicit current step status.", ["enum"] = new JArray("pending", "in_progress", "completed", "blocked", "cancelled"), ["default"] = "pending" }
+                    },
+                    ["required"] = new JArray("text"),
+                    ["additionalProperties"] = false
                 }
             };
-            if (!update) properties.Remove("id");
+            var properties = new JObject
+            {
+                ["action"] = action,
+                ["goal"] = new JObject { ["type"] = "string", ["description"] = "Concise user-visible goal for the current task.", ["minLength"] = 1, ["maxLength"] = TaskListService.MaxGoalCharacters },
+                ["steps"] = steps,
+                ["outcome"] = new JObject { ["type"] = "string", ["enum"] = new JArray("completed", "cancelled", "superseded"), ["description"] = "Terminal outcome used only with action=close." }
+            };
+            var saveProperties = new JObject
+            {
+                ["action"] = new JObject { ["type"] = "string", ["const"] = "save", ["description"] = "Save the complete active checklist." },
+                ["goal"] = properties["goal"].DeepClone(),
+                ["steps"] = steps.DeepClone()
+            };
+            var closeProperties = new JObject
+            {
+                ["action"] = new JObject { ["type"] = "string", ["const"] = "close", ["description"] = "Close the active checklist." },
+                ["outcome"] = properties["outcome"].DeepClone()
+            };
             return new JObject
             {
                 ["type"] = "object",
                 ["properties"] = properties,
-                ["required"] = update
-                    ? new JArray("id") : new JArray("goal", "steps"),
-                ["additionalProperties"] = false
+                ["required"] = new JArray("action"),
+                ["additionalProperties"] = false,
+                ["anyOf"] = new JArray(
+                    new JObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = saveProperties,
+                        ["required"] = new JArray("action", "goal", "steps"),
+                        ["additionalProperties"] = false
+                    },
+                    new JObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = closeProperties,
+                        ["required"] = new JArray("action", "outcome"),
+                        ["additionalProperties"] = false
+                    })
             }.ToString(Formatting.None);
-        }
-
-        private static string CloseSchema()
-        {
-            return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Stable task-list id or any revision id.\",\"minLength\":1},\"outcome\":{\"type\":\"string\",\"enum\":[\"completed\",\"cancelled\",\"superseded\"],\"description\":\"Why the task list is being closed.\"}},\"required\":[\"id\",\"outcome\"],\"additionalProperties\":false}";
         }
     }
 }

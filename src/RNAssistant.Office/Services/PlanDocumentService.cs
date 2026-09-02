@@ -12,7 +12,80 @@ namespace RNAssistant.Office.Services
     {
         public const int MaximumMarkdownCharacters = 32000;
 
-        public PlanDocumentMutation Create(
+        internal PlanDocumentMutation Save(
+            ChatSession session,
+            string title,
+            string markdown,
+            string status,
+            Action beforeMutation)
+        {
+            RequireSession(session);
+            if (string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId))
+                return Create(session, title, markdown, status, beforeMutation);
+
+            var current = FindActive(session);
+            var planId = PlanId(current);
+            if (current == null || string.IsNullOrWhiteSpace(planId))
+            {
+                return PlanDocumentMutation.Fail(
+                    "The active Plan revision is unavailable or ambiguous; reset the chat before saving.",
+                    "plan_active_revision_invalid",
+                    false);
+            }
+            return Update(session, planId, current.Id, title, true,
+                markdown, status, beforeMutation);
+        }
+
+        internal PlanDocumentMutation RestoreVersion(
+            ChatSession session,
+            int version,
+            Action beforeMutation)
+        {
+            RequireSession(session);
+            var current = FindActive(session);
+            var planId = PlanId(current);
+            if (current == null || string.IsNullOrWhiteSpace(planId))
+            {
+                return PlanDocumentMutation.Fail(
+                    "This chat has no unambiguous active Plan to restore.",
+                    "plan_not_found",
+                    false);
+            }
+            var revisions = OrderedRevisions(session, planId);
+            if (!HasLinearCurrentHead(revisions, current)) return LineageConflict();
+            var sources = revisions.Where(item =>
+                    item.Revision == version && !IsTombstone(item))
+                .Take(2)
+                .ToList();
+            if (sources.Count != 1)
+            {
+                return PlanDocumentMutation.Fail(
+                    "Plan version not found: " + version,
+                    "plan_revision_not_found",
+                    false);
+            }
+            return Restore(session, planId, current.Id, sources[0].Id,
+                beforeMutation);
+        }
+
+        internal PlanDocumentMutation DeleteActive(
+            ChatSession session,
+            Action beforeMutation)
+        {
+            RequireSession(session);
+            var current = FindActive(session);
+            var planId = PlanId(current);
+            if (current == null || string.IsNullOrWhiteSpace(planId))
+            {
+                return PlanDocumentMutation.Fail(
+                    "This chat has no unambiguous active Plan to remove.",
+                    "plan_not_found",
+                    false);
+            }
+            return Delete(session, planId, current.Id, beforeMutation);
+        }
+
+        private PlanDocumentMutation Create(
             ChatSession session,
             string title,
             string markdown,
@@ -47,7 +120,7 @@ namespace RNAssistant.Office.Services
                 artifact);
         }
 
-        public PlanDocumentMutation Update(
+        private PlanDocumentMutation Update(
             ChatSession session,
             string planId,
             string expectedRevisionArtifactId,
@@ -117,7 +190,7 @@ namespace RNAssistant.Office.Services
                 artifact);
         }
 
-        public PlanDocumentMutation Restore(
+        private PlanDocumentMutation Restore(
             ChatSession session,
             string planId,
             string expectedRevisionArtifactId,
@@ -200,7 +273,7 @@ namespace RNAssistant.Office.Services
                 source.Id);
         }
 
-        public PlanDocumentMutation Delete(
+        private PlanDocumentMutation Delete(
             ChatSession session,
             string planId,
             string expectedRevisionArtifactId,
@@ -386,12 +459,17 @@ namespace RNAssistant.Office.Services
 
         private static ChatArtifact FindCurrent(ChatSession session, string planId)
         {
-            var current = UniqueArtifacts(session).FirstOrDefault(item =>
-                string.Equals(item.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase));
+            var current = FindActive(session);
             return current != null && string.Equals(PlanId(current), planId, StringComparison.OrdinalIgnoreCase)
                 ? current
                 : null;
+        }
+
+        private static ChatArtifact FindActive(ChatSession session)
+        {
+            return UniqueArtifacts(session).FirstOrDefault(item =>
+                string.Equals(item.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase));
         }
 
         private static IEnumerable<ChatArtifact> Revisions(ChatSession session, string planId)

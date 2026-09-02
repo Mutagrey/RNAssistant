@@ -74,18 +74,21 @@ function appendQuestionCards(node, activity, context) {
   form.addEventListener("submit", function (event) {
     event.preventDefault();
     var answers = data.questions.map(function (question) {
-      var selected = Array.prototype.slice.call(form.querySelectorAll("[name='q_" + question.id + "']:checked")).map(function (input) { return input.value; });
+      var selectedIds = Array.prototype.slice.call(form.querySelectorAll("[name='q_" + question.id + "']:checked")).map(function (input) { return input.value; });
+      var selected = (question.options || []).filter(function (option) {
+        return selectedIds.indexOf(option.id) >= 0;
+      }).map(function (option) { return option.label; });
       var free = form.querySelector("[name='free_" + question.id + "']");
-      return { questionId: question.id, optionIds: selected, freeText: free ? free.value.trim() : "" };
+      return { question: question.prompt || question.header || "Вопрос", selections: selected, freeText: free ? free.value.trim() : "" };
     });
-    if (answers.some(function (answer) { return !answer.optionIds.length && !answer.freeText; })) {
+    if (answers.some(function (answer) { return !answer.selections.length && !answer.freeText; })) {
       window.alert("Ответьте на каждый вопрос.");
       return;
     }
     var input = $("chatInput");
     var chatForm = $("chatForm");
     if (!input || !chatForm) return;
-    input.value = "PLAN_ANSWERS:\n" + JSON.stringify({ questionSetId: data.questionSetId, answers: answers });
+    input.value = "PLAN_ANSWERS:\n" + JSON.stringify({ answers: answers });
     updateComposerInputState();
     if (chatForm.requestSubmit) chatForm.requestSubmit();
     else chatForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));

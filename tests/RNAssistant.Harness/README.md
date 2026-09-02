@@ -364,7 +364,8 @@ cancel/failure/reset and Plan preservation; it does not verify WebView layout.
 R29 introduced v4/schema 13; Phase 4B introduced Tool Result v1/schema 14; Phase 8B
 uses schema 15 for atomic callable-pack admission and no-eviction guidance; Phase 8C
 uses schema 16 for durable turn-scoped reconstruction; R61/11O1 uses schema 17 for
-the semantic Resource/Capability boundary. Tests preserve, review, or reset saved
+the semantic Resource/Capability boundary; R61/11O2 uses schema 18 for semantic
+questions, Plan documents and Task Lists. Tests preserve, review, or reset saved
 older/future markers explicitly. JS review behavior is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
@@ -376,6 +377,13 @@ media/replay cases, and `harness: production projects include all source files` 
 cover the intent boundary, internal guards and old-style project inclusion. See
 [8D evidence](../../docs/stabilization/PHASE_8D_RESOURCE_DATA_PLANE.md) and the
 [R61 audit](../../docs/stabilization/R61_TOOL_CONTRACT_AUDIT.md).
+
+R61/11O2 replaces Plan create/update with `common.plan_doc_save`, replaces the
+three Task List lifecycle ids with `common.task_list_set`, and removes caller-owned
+question/option/plan/artifact/list/step/revision identity. Use `plan mode:`,
+`plan document:`, `task lists:`, the focused model-projection case and the R61
+property inventory. The services still bind exact active revisions and stable ids
+internally; incompatible retained calls require a new chat/reset.
 
 ## Full suite
 

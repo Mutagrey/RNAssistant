@@ -30,18 +30,15 @@ namespace RNAssistant.Office.Tools
 
         internal static ToolBinding BindingFor(string toolId)
         {
-            if (string.Equals(toolId, PlanDocumentToolCatalog.CreateToolId,
+            if (string.Equals(toolId, PlanDocumentToolCatalog.SaveToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("conversation.plan.document.create.v1");
-            if (string.Equals(toolId, PlanDocumentToolCatalog.UpdateToolId,
-                StringComparison.Ordinal))
-                return new ToolBinding("conversation.plan.document.update.v1");
+                return new ToolBinding("conversation.plan.document.save.intent.v2");
             if (string.Equals(toolId, PlanDocumentToolCatalog.RestoreToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("conversation.plan.document.restore.v1");
+                return new ToolBinding("conversation.plan.document.restore.intent.v2");
             if (string.Equals(toolId, PlanDocumentToolCatalog.DeleteToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("conversation.plan.document.delete.v1");
+                return new ToolBinding("conversation.plan.document.delete.intent.v2");
             return null;
         }
 
@@ -67,24 +64,11 @@ namespace RNAssistant.Office.Tools
 
         private PlanDocumentMutation Execute(ToolHandlerContext context)
         {
-            if (string.Equals(_toolId, PlanDocumentToolCatalog.CreateToolId,
+            if (string.Equals(_toolId, PlanDocumentToolCatalog.SaveToolId,
                 StringComparison.Ordinal))
             {
-                return _service.Create(_session,
+                return _service.Save(_session,
                     ToolArgumentReader.String(context.Arguments, "title", string.Empty),
-                    ToolArgumentReader.String(context.Arguments, "markdown", string.Empty),
-                    ToolArgumentReader.String(context.Arguments, "status", "draft"),
-                    context.MarkDispatchPossible);
-            }
-            if (string.Equals(_toolId, PlanDocumentToolCatalog.UpdateToolId,
-                StringComparison.Ordinal))
-            {
-                return _service.Update(_session,
-                    ToolArgumentReader.String(context.Arguments, "id", string.Empty),
-                    ToolArgumentReader.String(context.Arguments,
-                        "expectedRevisionArtifactId", string.Empty),
-                    ToolArgumentReader.String(context.Arguments, "title", string.Empty),
-                    context.Arguments.ContainsKey("title"),
                     ToolArgumentReader.String(context.Arguments, "markdown", string.Empty),
                     ToolArgumentReader.String(context.Arguments, "status", "draft"),
                     context.MarkDispatchPossible);
@@ -92,19 +76,11 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(_toolId, PlanDocumentToolCatalog.RestoreToolId,
                 StringComparison.Ordinal))
             {
-                return _service.Restore(_session,
-                    ToolArgumentReader.String(context.Arguments, "id", string.Empty),
-                    ToolArgumentReader.String(context.Arguments,
-                        "expectedRevisionArtifactId", string.Empty),
-                    ToolArgumentReader.String(context.Arguments,
-                        "sourceRevisionArtifactId", string.Empty),
+                return _service.RestoreVersion(_session,
+                    ToolArgumentReader.Int32(context.Arguments, "version"),
                     context.MarkDispatchPossible);
             }
-            return _service.Delete(_session,
-                ToolArgumentReader.String(context.Arguments, "id", string.Empty),
-                ToolArgumentReader.String(context.Arguments,
-                    "expectedRevisionArtifactId", string.Empty),
-                context.MarkDispatchPossible);
+            return _service.DeleteActive(_session, context.MarkDispatchPossible);
         }
 
         private ToolHandlerResult Project(

@@ -1,13 +1,13 @@
 # R61/11O — audit границы model-facing tools
 
-Дата фиксации: 2026-09-02. Статус: 11O1 Resources + Capabilities завершён
-host-neutral; остальные family cutovers, dynamic custom-package review и UI ещё
-не выполнены.
+Дата фиксации: 2026-09-02. Статус: 11O1 Resources + Capabilities и 11O2 Plan
+questions/doc/task-list завершены host-neutral; остальные family cutovers,
+dynamic custom-package review и UI ещё не выполнены.
 
-Для Resources + Capabilities этот документ теперь фиксирует реализованный
-контракт 11O1. Для остальных семейств до их атомарного переключения действует
-текущий канонический контракт. R61 не вводит второй executor, generic router,
-pipelines, aliases или dual schema.
+Для Resources + Capabilities и planning family этот документ фиксирует
+реализованные контракты 11O1–11O2. Для остальных семейств до их атомарного
+переключения действует текущий канонический контракт. R61 не вводит второй
+executor, generic router, pipelines, aliases или dual schema.
 
 ## 1. Диагностический вывод
 
@@ -80,9 +80,9 @@ delegate-ом. Это доказывает механическую исполн
 число calls, argument/format repairs, tool errors, continuation restarts и итоговую
 успешность задачи.
 
-11O0 добавил, а 11O1 обновил machine-checked
-[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 71 уникальный built-in id
-и 74 effective host-варианта фиксируют exact descriptor revision, host, mode,
+11O0 добавил, а 11O1–11O2 обновили machine-checked
+[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 68 уникальных built-in ids
+и 71 effective host-вариант фиксируют exact descriptor revision, host, mode,
 direct binding и все рекурсивные schema property paths. Четыре host-specific
 варианта принадлежат `common.html_data_bind`. Поле, похожее на
 runtime plumbing, не может появиться без явного решения; допустимые public
@@ -101,7 +101,7 @@ switch.
 
 ## 4. 11O0 baseline и current inventory `common.*`
 
-Source inventory содержит до 33 built-in `common.*` ids. Число условное:
+Source inventory содержит до 30 built-in `common.*` ids. Число условное:
 `common.html_data_bind` публикуется только при наличии допустимых Office data-source
 tools, Tool/Skill/Prompt authoring зависит от доступности stores/settings, а VBA —
 от host. Все 33 schemas одновременно модели не передаются:
@@ -115,8 +115,8 @@ tools, Tool/Skill/Prompt authoring зависит от доступности st
 
 Progressive loading уменьшает token cost, но не делает лишний tool полезным и не
 исправляет сложный schema после загрузки. Таблица сохраняет 11O0 baseline и
-default-направление R61; resource rows уже реализованы в 11O1, остальные ids
-действуют до своего cutover. `KEEP` означает сохранить самостоятельный model
+default-направление R61; resource/capability rows реализованы в 11O1, planning
+rows — в 11O2, остальные ids действуют до своего cutover. `KEEP` означает сохранить самостоятельный model
 intent, `ON-DEMAND` — не держать schema в default core, `MERGE`/`SPLIT` — сменить
 public responsibility атомарно, `INTERNAL/UI` — убрать из model-facing catalog без
 удаления функции.
@@ -133,16 +133,13 @@ public id также нельзя «вспоминать» приблизите�
 | `common.resources_resolve` | Самостоятельного пользовательского действия обычно нет | `DONE 11O1`: internal exact preparation; public id deleted |
 | `common.resources_search` | Нужен поиск по query/scope | `DONE 11O1`: merged as `common.resources_find`; old id deleted |
 | `common.resources_read` | Нужен | `DONE 11O1`: semantic target/action/representation only; id retained |
-| `common.capabilities_search` | Нужен bootstrap discovery | `KEEP`; query/kind, paging и limit внутренние |
-| `common.capabilities_read` | Нужен для exact tool admission и skill loading | `KEEP`; public tool/skill id и semantic reference path допустимы, offset/maxChars/revision/admission state внутренние |
-| `common.questions_ask` | Нужен только Plan mode | `KEEP` mode-specific; question/option ids генерирует runtime, модель задаёт prompt/options и meaningful selection semantics |
-| `common.plan_doc_create` | Нужен save plan, но не отдельный create lifecycle | `MERGE` с update в один active-plan save/upsert |
-| `common.plan_doc_update` | Нужен save plan | `MERGE`; active plan id и expected revision artifact id внутренние |
-| `common.plan_doc_restore` | Нужен только по явному запросу восстановить историю | `ON-DEMAND KEEP`; модель выбирает читаемый revision candidate, exact ids/guards связывает runtime |
-| `common.plan_doc_delete` | Нужен только по явному запросу удалить plan | `ON-DEMAND KEEP`; active identity/revision внутренние, explicit-request guard сохраняется |
-| `common.task_list_create` | Нужен visible task state, но active list один | `MERGE` с update в один task-list set/upsert; runtime создаёт list/step ids |
-| `common.task_list_update` | Нужен | `MERGE`; модель передаёт goal/ordered steps/status, не stable ids |
-| `common.task_list_close` | Нужен terminal outcome, отдельная active identity не нужна | `MERGE` в тот же task-list state tool с малой typed close-веткой; active list id внутренний |
+| `common.capabilities_search` | Нужен bootstrap discovery | `DONE 11O1`: query/kind only; paging и limit внутренние |
+| `common.capabilities_read` | Нужен для exact tool admission и skill loading | `DONE 11O1`: public tool/skill id и semantic reference path допустимы; offset/maxChars/revision/admission state внутренние |
+| `common.questions_ask` | Нужен только Plan mode | `DONE 11O2`: prompt/options only; runtime генерирует UI-only question/option ids, model replay их не содержит |
+| `common.plan_doc_save` | Нужен save active plan | `DONE 11O2`: create/update merged; модель передаёт complete title/Markdown/status, runtime связывает active id и exact guard |
+| `common.plan_doc_restore` | Нужен только по явному запросу восстановить историю | `DONE 11O2`: модель выбирает readable version, runtime связывает exact source/current guard |
+| `common.plan_doc_delete` | Нужен только по явному запросу удалить plan | `DONE 11O2`: empty arguments; active identity/revision и explicit-request guard внутренние |
+| `common.task_list_set` | Нужен visible task state и terminal close | `DONE 11O2`: small typed save/close branches; runtime создаёт list ids и генерирует/сохраняет stable step ids |
 | `common.html_workspace_inspect` | Static preflight нужен, отдельный model call обычно нет | `INTERNAL/UI`; запускать после write/patch/preview, оставить Library diagnostic только если independent troubleshooting eval это требует |
 | `common.html_workspace_upsert` | Whole-content authoring нужен, но file и JSON data имеют разные validation | `SPLIT` на file write и data write; resourceType не должен создавать большой union branch |
 | `common.html_workspace_apply_patch` | Exact source edit нужен | `KEEP`; сократить до exact operations, advanced regex/line variants не держать в основном schema, whole write остаётся выбором |
@@ -261,6 +258,21 @@ responsibility:
 - VBA discovery/read остаётся только через единый Resource Fabric. Вторые VBA read
   ids и host-prefixed aliases не возвращаются.
 
+### Plan questions, document и Task List
+
+- 11O2 сохраняет `common.questions_ask`, но модель задаёт только 1–3 уникальных
+  prompt/options; runtime создаёт question/option IDs для текущей UI-паузы. Ответ
+  пользователя возвращает semantic question text, selected labels и free text.
+- Create/update Plan объединены в `common.plan_doc_save`; restore принимает только
+  user-visible `version`, delete — пустой object. Exact active/source artifact,
+  linear-head guard и tombstone остаются внутри `PlanDocumentService`.
+- Create/update/close Task List объединены в `common.task_list_set` с отдельными
+  typed `save`/`close` branches. Модель передаёт complete goal/steps/status или
+  terminal outcome; runtime создаёт list id и сопоставляет stable step ids.
+- Старые пять lifecycle ids удалены без aliases. Prompt schema 18, UI actions,
+  task-tracking skill, accepted-history preflight и model Tool Result projection
+  переключены атомарно; старые вызовы требуют explicit new chat/reset.
+
 ### VBA mutations
 
 - Whole-source write и exact-hunk patch остаются двумя явными вариантами модели.
@@ -345,7 +357,9 @@ R61 не закрывается только schema snapshot-тестами. М�
    runtime-owned resolution/continuation/revision validation, durable exact
    evidence и semantic model projection переключены атомарно; старые resource ids
    и handlers удалены без aliases.
-3. Переключить Plan questions/doc/task-list lifecycle без caller-owned ids/guards.
+3. Plan questions/doc/task-list завершены host-neutral в 11O2: semantic schemas,
+   runtime-owned identities/guards, model projection, prompt/skill/UI consumers и
+   удаление пяти старых lifecycle ids переключены атомарно.
 4. Переключить HTML workspace/data binding и удалить model-facing diagnostics/UI
    selection paths.
 5. Переключить Prompt, Tool и Skill authoring, включая internal validation и
@@ -358,7 +372,7 @@ R61 не закрывается только schema snapshot-тестами. М�
 9. Собрать final live-provider, Windows WebView2/Office и WQ-PACK evidence только на
    post-cutover catalog.
 
-Ближайший шаг — 11O2 Plan questions/doc/task-list. Накопленные Windows rebuild,
+Ближайший шаг — 11O3 HTML workspace/data binding. Накопленные Windows rebuild,
 live-provider и WebView2 gates остаются обязательными для final WQ, но по §16.1 не
 блокируют следующий dependency-safe host-neutral подэтап. Phase 12 до полного R61
 и qualification не начинается.

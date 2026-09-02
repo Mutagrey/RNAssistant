@@ -65,8 +65,8 @@
     async function savePlan(selection, chatId) {
       var plan = options.validatePlanDraft(selection.item);
       var result = await options.send("runTool", {
-        toolId: "common.plan_doc_update",
-        arguments: { id: plan.id, expectedRevisionArtifactId: plan.expectedRevisionArtifactId, title: plan.title, markdown: plan.markdown, status: "draft" },
+        toolId: "common.plan_doc_save",
+        arguments: { title: plan.title, markdown: plan.markdown, status: "draft" },
         dryRun: false
       });
       if (!toolSucceeded(result)) throw new Error(toolMessage(result, "План не сохранён."));
@@ -114,10 +114,7 @@
       if (planMutationPending) return false;
       planMutationPending = true;
       try {
-        var args = {
-          id: selected.planId,
-          expectedRevisionArtifactId: selected.expectedRevisionArtifactId
-        };
+        var args = {};
         var preview = await options.send("runTool", {
           toolId: "common.plan_doc_delete",
           arguments: args,
@@ -176,8 +173,8 @@
 
     async function restorePlanRevision(request) {
       request = request || {};
-      if (state.bridgeUnavailable || !request.planId || !request.expectedRevisionArtifactId ||
-          !request.sourceRevisionArtifactId || planMutationPending) return false;
+      if (state.bridgeUnavailable || !request.planId || Number(request.revision || 0) < 1 ||
+          planMutationPending) return false;
       planMutationPending = true;
       try {
         var label = "v" + Number(request.revision || 1);
@@ -188,9 +185,7 @@
         var result = await options.send("runTool", {
           toolId: "common.plan_doc_restore",
           arguments: {
-            id: request.planId,
-            expectedRevisionArtifactId: request.expectedRevisionArtifactId,
-            sourceRevisionArtifactId: request.sourceRevisionArtifactId
+            version: Number(request.revision)
           },
           dryRun: false
         });
@@ -414,7 +409,7 @@
       var chatId = state.activeChatId;
       try {
         var result = await options.send("runTool", {
-          toolId: "common.plan_doc_create",
+          toolId: "common.plan_doc_save",
           arguments: {
             title: "Новый план",
             markdown: "# Новый план\n\nОпишите цель, решения, этапы и проверку.",

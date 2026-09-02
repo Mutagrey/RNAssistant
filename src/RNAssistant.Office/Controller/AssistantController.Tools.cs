@@ -430,11 +430,8 @@ namespace RNAssistant.Office
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.BindDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.RefreshDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.FreezeDataToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, TaskListToolCatalog.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, TaskListToolCatalog.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, TaskListToolCatalog.CloseToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, PlanDocumentToolCatalog.CreateToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, PlanDocumentToolCatalog.UpdateToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, TaskListToolCatalog.SetToolId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(toolId, PlanDocumentToolCatalog.SaveToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, PlanDocumentToolCatalog.RestoreToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, PlanDocumentToolCatalog.DeleteToolId, StringComparison.OrdinalIgnoreCase);
         }

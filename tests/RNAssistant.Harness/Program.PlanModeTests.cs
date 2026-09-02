@@ -33,20 +33,20 @@ namespace RNAssistant.Harness
             {
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var selected = ConversationRunPolicy.For(ChatModes.Plan).SelectTools(tools);
-                AssertTrue(selected.Any(item => item.Id == PlanDocumentToolCatalog.CreateToolId), "plan create available");
+                AssertTrue(selected.Any(item => item.Id == PlanDocumentToolCatalog.SaveToolId), "plan save available");
                 AssertTrue(selected.Any(item => item.Id == PlanDocumentToolCatalog.RestoreToolId), "plan restore available");
                 AssertTrue(NativeToolRuntimeAdapter.Owns(
-                    PlanDocumentToolCatalog.CreateToolId),
+                    PlanDocumentToolCatalog.SaveToolId),
                     "Plan document tools use the native ToolRuntime");
                 var planPolicy = selected.Single(item =>
-                    item.Id == PlanDocumentToolCatalog.CreateToolId).Policy;
+                    item.Id == PlanDocumentToolCatalog.SaveToolId).Policy;
                 AssertTrue(planPolicy != null &&
                     planPolicy.Effect == ToolEffect.Write &&
                     planPolicy.Verification == ToolVerification.Tool &&
                     !planPolicy.RequiresConfirmation &&
                     planPolicy.AllowedModes.SequenceEqual(new[] { "plan" }),
                     "Plan document carries exact source-owned verified-write policy");
-                AssertTrue(selected.Any(item => item.Id == TaskListToolCatalog.CreateToolId), "task list available");
+                AssertTrue(selected.Any(item => item.Id == TaskListToolCatalog.SetToolId), "task list available");
                 AssertTrue(selected.Any(item => item.Id == UserQuestionToolCatalog.AskToolId), "questions available");
                 AssertTrue(NativeToolRuntimeAdapter.Owns(
                     UserQuestionToolCatalog.AskToolId),
@@ -61,6 +61,11 @@ namespace RNAssistant.Harness
                 AssertTrue(selected.Any(item => item.Id == ResourceToolCatalog.ReadToolId), "resource read available");
                 AssertTrue(selected.All(item => !item.MutatesDocument), "document mutations excluded");
                 AssertTrue(!ConversationRunPolicy.For(ChatModes.Plan).AllowsConfirmation, "Plan cannot confirm mutations");
+                string contractError;
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                    new ToolCall("old-plan", "common.plan_doc_update", "{}"),
+                    out contractError),
+                    "pre-11O2 Plan calls require an explicit new chat/reset");
             });
         }
 
@@ -71,7 +76,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.Mode = ChatModes.Plan;
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var created = executor.ExecuteManual(Command(PlanDocumentToolCatalog.CreateToolId,
+                var created = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
                     "title", "Migration plan", "markdown", "# Goal\n\nShip safely.", "status", "draft"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(created.Success, "plan document created");
@@ -79,24 +84,39 @@ namespace RNAssistant.Harness
                 var planId = (string)data["planId"];
                 var revisionId = (string)data["artifactId"];
                 var createMessage = AgentTranscript.CreateLocalResultMessage(
-                    Command(PlanDocumentToolCatalog.CreateToolId), created);
+                    Command(PlanDocumentToolCatalog.SaveToolId,
+                        "title", "Migration plan", "markdown", "# Goal\n\nShip safely.", "status", "draft"), created);
                 session.Messages.Add(createMessage);
                 ChatResourceReferenceService.LinkMessageResources(session, 0);
-                var stale = executor.ExecuteManual(Command(PlanDocumentToolCatalog.UpdateToolId,
-                    "id", planId, "expectedRevisionArtifactId", "stale", "markdown", "# Changed", "status", "ready"),
+                var projectionCommand = Command(PlanDocumentToolCatalog.SaveToolId);
+                projectionCommand.ToolCallId = "plan-projection";
+                var projectedCreate = ModelToolResultProjection.Project(
+                    AgentJsonProtocol.CreateToolResultMessage(
+                        projectionCommand,
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
+                            created.Message, created.DataJson)));
+                AssertTrue(projectedCreate.Content.IndexOf("planId", StringComparison.Ordinal) < 0 &&
+                    projectedCreate.Content.IndexOf("artifactId", StringComparison.Ordinal) < 0 &&
+                    projectedCreate.Content.IndexOf("\"revision\"", StringComparison.Ordinal) < 0 &&
+                    projectedCreate.Content.IndexOf("\"version\":1", StringComparison.Ordinal) >= 0,
+                    "model Plan result keeps semantic version but omits exact runtime identity");
+                var leakedIdentity = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "id", planId, "title", "Migration plan", "markdown", "# Changed", "status", "ready"),
                     tools, new AppSettings(), false, false, session);
-                AssertEqual("stale_plan_revision", stale.ErrorCode, "stale revision rejected");
-                var updated = executor.ExecuteManual(Command(PlanDocumentToolCatalog.UpdateToolId,
-                    "id", planId, "expectedRevisionArtifactId", revisionId, "markdown", "# Ready\n\nExecute.", "status", "ready"),
+                AssertEqual("invalid_arguments", leakedIdentity.ErrorCode,
+                    "model-owned Plan identity is rejected by the semantic schema");
+                var updated = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Migration plan", "markdown", "# Ready\n\nExecute.", "status", "ready"),
                     tools, new AppSettings(), false, false, session);
-                AssertTrue(updated.Success, "guarded revision succeeds");
+                AssertTrue(updated.Success, "runtime-guarded revision succeeds");
                 var runtimeContext = ConversationPromptComposer.BuildRuntimeContext(
                     ChatModes.Plan, adapter, tools, null, null, session);
                 AssertTrue(runtimeContext.IndexOf("revision_uri", StringComparison.Ordinal) < 0 &&
                     runtimeContext.IndexOf("rna://", StringComparison.Ordinal) < 0,
                     "active plan runtime context hides exact resource identity");
                 var updateMessage = AgentTranscript.CreateLocalResultMessage(
-                    Command(PlanDocumentToolCatalog.UpdateToolId), updated);
+                    Command(PlanDocumentToolCatalog.SaveToolId,
+                        "title", "Migration plan", "markdown", "# Ready\n\nExecute.", "status", "ready"), updated);
                 session.Messages.Add(updateMessage);
                 ChatResourceReferenceService.LinkMessageResources(session, 1);
                 session.Messages.Remove(updateMessage);
@@ -107,12 +127,17 @@ namespace RNAssistant.Harness
                 var question = executor.ExecuteManual(Command(UserQuestionToolCatalog.AskToolId, "questions", new JArray(
                     new JObject
                     {
-                        ["id"] = "scope", ["header"] = "Scope", ["prompt"] = "Choose scope", ["selection"] = "multiple",
+                        ["header"] = "Scope", ["prompt"] = "Choose scope", ["selection"] = "multiple",
                         ["options"] = new JArray(
-                            new JObject { ["id"] = "core", ["label"] = "Core", ["description"] = "Core only" },
-                            new JObject { ["id"] = "ui", ["label"] = "UI", ["description"] = "Include UI" })
+                            new JObject { ["label"] = "Core", ["description"] = "Core only" },
+                            new JObject { ["label"] = "UI", ["description"] = "Include UI" })
                     })), tools, new AppSettings(), false, false, session);
                 AssertTrue(question.Status == "awaiting_user", "question pauses for user input: " + question.Message);
+                var questionData = JObject.Parse(question.DataJson);
+                AssertTrue(!string.IsNullOrWhiteSpace((string)questionData["questionSetId"]) &&
+                    !string.IsNullOrWhiteSpace((string)questionData["questions"][0]["id"]) &&
+                    !string.IsNullOrWhiteSpace((string)questionData["questions"][0]["options"][0]["id"]),
+                    "runtime assigns UI-only question and option identity");
             });
         }
 
@@ -134,20 +159,17 @@ namespace RNAssistant.Harness
                             {
                                 ["questions"] = new JArray(new JObject
                                 {
-                                    ["id"] = "scope",
                                     ["header"] = "Scope",
                                     ["prompt"] = "Choose scope",
                                     ["selection"] = "single",
                                     ["options"] = new JArray(
                                         new JObject
                                         {
-                                            ["id"] = "core",
                                             ["label"] = "Core",
                                             ["description"] = "Core only"
                                         },
                                         new JObject
                                         {
-                                            ["id"] = "ui",
                                             ["label"] = "UI",
                                             ["description"] = "Include UI"
                                         })
@@ -193,6 +215,12 @@ namespace RNAssistant.Harness
                         UserQuestionToolCatalog.AskToolId).Activity;
                 AssertContains(activity.DataJson, "rnassistant.questions",
                     "typed question payload reaches the existing UI projection");
+                var projected = ModelToolResultProjection.Project(
+                    session.Messages.Last(message =>
+                        message.ToolName == UserQuestionToolCatalog.AskToolId));
+                AssertTrue(projected.Content.IndexOf("questionSetId", StringComparison.Ordinal) < 0 &&
+                    projected.Content.IndexOf("\"id\"", StringComparison.Ordinal) < 0,
+                    "model replay omits runtime question and option ids");
             });
         }
 
@@ -206,52 +234,54 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
                 var definition = tools.Single(item =>
-                    item.Id == PlanDocumentToolCatalog.CreateToolId);
+                    item.Id == PlanDocumentToolCatalog.SaveToolId);
                 var runtime = executor.CreateNativeRuntime(session,
                     new[] { definition }, new AppSettings(), ChatModes.Plan, false);
-                var call = new ToolCall("plan-native-create",
-                    PlanDocumentToolCatalog.CreateToolId,
-                    "{\"title\":\"Native plan\",\"markdown\":\"# Native\\n\"}");
+                var call = new ToolCall("plan-native-save",
+                    PlanDocumentToolCatalog.SaveToolId,
+                    "{\"title\":\"Native plan\",\"markdown\":\"# Native\\n\",\"status\":\"draft\"}");
                 var policy = runtime.Describe(call);
                 AssertTrue(policy != null && policy.MayHaveSideEffects &&
                     policy.Policy.Verification == ToolVerification.Tool,
-                    "Plan create has one exact verified-write registration");
+                    "Plan save has one exact verified-write registration");
 
                 var created = ExecuteNative(runtime, call, policy);
                 AssertEqual(ToolExecutionOutcome.Ok, created.Outcome,
-                    "native Plan create succeeds");
+                    "native Plan save creates the missing plan");
                 AssertEqual(ToolDispatchEvidence.MayHaveDispatched,
                     created.Evidence.Dispatch,
-                    "native Plan create records its session mutation boundary");
+                    "native Plan save records its session mutation boundary");
                 AssertEqual(ToolEffectEvidence.VerifiedChange,
                     created.Evidence.Effect,
-                    "native Plan create verifies the exact active revision");
+                    "native Plan save verifies the exact active revision");
                 AssertEqual((string)JObject.Parse(created.Result.DataJson)["artifactId"],
                     session.ActivePlanDocumentArtifactId,
                     "verified result identifies the exact active Plan artifact");
 
-                var duplicateCall = new ToolCall("plan-native-duplicate",
-                    PlanDocumentToolCatalog.CreateToolId,
-                    "{\"title\":\"Duplicate\",\"markdown\":\"# Duplicate\"}");
-                var duplicate = ExecuteNative(runtime, duplicateCall,
-                    runtime.Describe(duplicateCall));
-                AssertEqual(ToolExecutionOutcome.Error, duplicate.Outcome,
-                    "semantic rejection stays a known error");
+                session.ActivePlanDocumentArtifactId = "missing";
+                var invalidCall = new ToolCall("plan-native-invalid-active",
+                    PlanDocumentToolCatalog.SaveToolId,
+                    "{\"title\":\"Native plan\",\"markdown\":\"# Changed\",\"status\":\"draft\"}");
+                var invalid = ExecuteNative(runtime, invalidCall,
+                    runtime.Describe(invalidCall));
+                AssertEqual(ToolExecutionOutcome.Error, invalid.Outcome,
+                    "ambiguous active state stays a known error");
                 AssertEqual(ToolDispatchEvidence.NotDispatched,
-                    duplicate.Evidence.Dispatch,
+                    invalid.Evidence.Dispatch,
                     "semantic rejection occurs before the mutation boundary");
+                session.ActivePlanDocumentArtifactId =
+                    (string)JObject.Parse(created.Result.DataJson)["artifactId"];
 
                 var artifactCount = session.Artifacts.Count;
                 var dryRun = executor.ExecuteManual(Command(
-                    PlanDocumentToolCatalog.UpdateToolId,
-                    "id", (string)JObject.Parse(created.Result.DataJson)["planId"],
-                    "expectedRevisionArtifactId", session.ActivePlanDocumentArtifactId,
-                    "markdown", "# Preview"), tools, new AppSettings(),
+                    PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Native plan", "markdown", "# Preview",
+                    "status", "draft"), tools, new AppSettings(),
                     true, true, session);
                 AssertTrue(dryRun.Success && session.Artifacts.Count == artifactCount,
                     "native Plan dry-run validates schema without mutating session");
                 AssertTrue(runtime.Describe(new ToolCall("wrong-case",
-                    "COMMON.PLAN_DOC_CREATE", "{}")) == null,
+                    "COMMON.PLAN_DOC_SAVE", "{}")) == null,
                     "native Plan ownership has no case alias");
             });
         }
@@ -264,7 +294,7 @@ namespace RNAssistant.Harness
                 session.Mode = ChatModes.Plan;
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var originalMarkdown = "\n# Exact plan\n\nKeep trailing Markdown spaces.  \n\n";
-                var created = executor.ExecuteManual(Command(PlanDocumentToolCatalog.CreateToolId,
+                var created = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
                     "title", "Exact plan", "markdown", originalMarkdown, "status", "draft"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(created.Success, "exact plan created");
@@ -275,9 +305,8 @@ namespace RNAssistant.Harness
                 AssertEqual(originalMarkdown, first.InlineText, "create preserves the complete Markdown payload");
 
                 var updatedMarkdown = "  \n# Exact ready plan\n\nDo not trim this revision.\n\n";
-                var updated = executor.ExecuteManual(Command(PlanDocumentToolCatalog.UpdateToolId,
-                    "id", planId,
-                    "expectedRevisionArtifactId", firstId,
+                var updated = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Exact plan",
                     "markdown", updatedMarkdown,
                     "status", "ready"),
                     tools, new AppSettings(), false, false, session);
@@ -288,12 +317,14 @@ namespace RNAssistant.Harness
                 AssertEqual(2, second.Revision, "revision is strictly monotonic");
                 AssertEqual(firstId, second.ParentArtifactId, "revision is a linear child of the exact current head");
 
-                var stale = executor.ExecuteManual(Command(PlanDocumentToolCatalog.UpdateToolId,
+                var stale = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
                     "id", planId,
-                    "expectedRevisionArtifactId", firstId,
-                    "markdown", "# stale"),
+                    "title", "Exact plan",
+                    "markdown", "# stale",
+                    "status", "draft"),
                     tools, new AppSettings(), false, false, session);
-                AssertEqual("stale_plan_revision", stale.ErrorCode, "old exact guard is rejected");
+                AssertEqual("invalid_arguments", stale.ErrorCode,
+                    "caller-owned Plan identity is rejected");
 
                 session.Artifacts.Add(new ChatArtifact
                 {
@@ -307,10 +338,10 @@ namespace RNAssistant.Harness
                     MetadataJson = second.MetadataJson
                 });
                 var artifactCount = session.Artifacts.Count;
-                var conflict = executor.ExecuteManual(Command(PlanDocumentToolCatalog.UpdateToolId,
-                    "id", planId,
-                    "expectedRevisionArtifactId", secondId,
-                    "markdown", "# must not append"),
+                var conflict = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Exact plan",
+                    "markdown", "# must not append",
+                    "status", "draft"),
                     tools, new AppSettings(), false, false, session);
                 AssertEqual("plan_lineage_conflict", conflict.ErrorCode, "non-linear lineage is rejected");
                 AssertEqual(artifactCount, session.Artifacts.Count, "lineage rejection does not append a revision");
@@ -325,7 +356,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.Mode = ChatModes.Plan;
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var createCommand = Command(PlanDocumentToolCatalog.CreateToolId,
+                var createCommand = Command(PlanDocumentToolCatalog.SaveToolId,
                     "title", "Release plan", "markdown", "# Original\n\nKeep this exact body.\n", "status", "draft");
                 var created = executor.ExecuteManual(createCommand, tools, new AppSettings(), false, false, session);
                 var createdData = JObject.Parse(created.DataJson);
@@ -335,9 +366,7 @@ namespace RNAssistant.Harness
                 session.Messages.Add(createMessage);
                 ChatResourceReferenceService.LinkMessageResources(session, 0);
 
-                var updateCommand = Command(PlanDocumentToolCatalog.UpdateToolId,
-                    "id", planId,
-                    "expectedRevisionArtifactId", firstId,
+                var updateCommand = Command(PlanDocumentToolCatalog.SaveToolId,
                     "title", "Release plan v2",
                     "markdown", "# Current\n\nThis will be replaced by restore.\n",
                     "status", "ready");
@@ -352,9 +381,7 @@ namespace RNAssistant.Harness
                 var first = session.Artifacts.Single(item => item.Id == firstId);
                 var firstUri = ChatResourceUri.CreateArtifactRevisionUri(session, first);
                 var restoreCommand = Command(PlanDocumentToolCatalog.RestoreToolId,
-                    "id", planId,
-                    "expectedRevisionArtifactId", secondId,
-                    "sourceRevisionArtifactId", firstId);
+                    "version", 1);
                 var restored = executor.ExecuteManual(restoreCommand, tools, new AppSettings(), false, false, session);
                 AssertTrue(restored.Success, "historical Plan revision restores as a new head");
                 var restoredData = JObject.Parse(restored.DataJson);
@@ -373,16 +400,16 @@ namespace RNAssistant.Harness
                 AssertAppendOnlyPlanCommit(store, session, "restore");
 
                 var staleDelete = executor.ExecuteManual(Command(PlanDocumentToolCatalog.DeleteToolId,
-                    "id", planId, "expectedRevisionArtifactId", secondId),
+                    "id", planId),
                     tools, new AppSettings(), false, false, session);
-                AssertEqual("stale_plan_revision", staleDelete.ErrorCode, "delete requires the exact current head");
+                AssertEqual("invalid_arguments", staleDelete.ErrorCode,
+                    "delete schema rejects caller-owned Plan identity");
                 var beforeDeleteArtifactCount = session.Artifacts.Count;
                 var pinnedBefore = session.Messages
                     .SelectMany(message => message.ResourceRefs)
                     .Select(reference => reference.Uri)
                     .ToArray();
-                var deleteCommand = Command(PlanDocumentToolCatalog.DeleteToolId,
-                    "id", planId, "expectedRevisionArtifactId", thirdId);
+                var deleteCommand = Command(PlanDocumentToolCatalog.DeleteToolId);
                 var removed = executor.ExecuteManual(deleteCommand,
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(removed.Success, "guarded Plan removal succeeds");
