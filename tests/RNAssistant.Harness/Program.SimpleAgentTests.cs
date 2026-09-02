@@ -206,6 +206,15 @@ namespace RNAssistant.Harness
             }
             var escaped = ParseV4("{\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\",\"tool_calls\":[]}");
             AssertTrue(escaped.Success, "standard Unicode and control escapes are accepted");
+            var exactSource = "line 1\nconst escaped = \"\\n\";\nconst regex = /\\d+\\\\path/;";
+            var exactWire = V4Envelope(V4Call(arguments: new JObject { ["query"] = exactSource }));
+            AssertContains(exactWire, "line 1\\nconst escaped", "real source line break has one outer JSON escape");
+            AssertContains(exactWire, "\\\"\\\\n\\\"", "literal source backslash survives as two outer JSON backslashes");
+            var exact = ParseV4(exactWire, V4ReadTool());
+            AssertTrue(exact.Success, "escaped source argument is accepted");
+            AssertEqual(exactSource,
+                exact.Response.ToolCalls.Single().Arguments["query"] as string,
+                "one JSON decode preserves real lines and literal source backslashes");
             var nested = V4Envelope(V4Call(arguments: new JObject { ["query"] = "A", ["deep"] = "NESTED" }))
                 .Replace("\"NESTED\"", new string('[', 70) + "0" + new string(']', 70));
             AssertTrue(!ParseV4(nested, V4ReadTool()).Success, "excessive nesting is a typed parse failure");

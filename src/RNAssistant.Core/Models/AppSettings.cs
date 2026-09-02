@@ -180,7 +180,8 @@ namespace RNAssistant.Core.Models
             "Empty `tool_calls` ends your loop but does not prove successful execution or verification. Explain a blocker, needed user input or refusal in `message`; do not add lifecycle fields. " +
             "Each call contains only `name` and `arguments`. Do not include `id`; runtime assigns call IDs after validation, before accepted history is persisted and before confirmation or dispatch. " +
             "Write, external, confirmation-required and unclassified calls must be the only call in the response. Batch only independent local read-only calls. " +
-            "Keep the envelope even when the request cannot be fulfilled and escape message content as valid JSON.\n\n";
+            "Every string in the raw response, including nested tool arguments, uses exactly one JSON escaping layer. Encode a real line break as `\\n` and one literal source backslash as `\\\\`; therefore source `\\n` or regex `\\d` appears as `\\\\n` or `\\\\d` in the response JSON. " +
+            "Runtime decodes the envelope once and preserves argument text exactly; never strip or pre-unescape a backslash. Keep the envelope even when the request cannot be fulfilled.\n\n";
 
         private const string ToolResultContract =
             "## Tool results\n\n" +
@@ -247,7 +248,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 18;
+        public const int CurrentAgentPromptSchemaVersion = 19;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

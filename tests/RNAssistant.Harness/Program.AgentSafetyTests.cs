@@ -761,6 +761,7 @@ namespace RNAssistant.Harness
                     AssertEqual(invalid.Length + 1, (int)repair["max_attempts"], "repair reports the configured total limit");
                     AssertContains((string)repair["instruction"], "conversation-response-v4", "repair uses the active ID-free contract");
                     AssertContains((string)repair["instruction"], "Do not include id", "repair never asks the model to allocate IDs");
+                    AssertContains((string)repair["instruction"], "nested arguments", "repair preserves the shared string escaping contract");
                 }
                 AssertTrue(prompt.All(message => string.IsNullOrEmpty(message.ReasoningContent)), "rejected reasoning never enters prompt");
                 AssertEqual(stepId, options.TraceStepId, "one logical step across repairs");
@@ -1184,6 +1185,8 @@ namespace RNAssistant.Harness
             AssertContains(settings.SystemPrompt, "## Response contract", "agent prompt structured section");
             AssertContains(settings.SystemPrompt, "conversation-response-v4", "agent prompt requires the active envelope");
             AssertContains(settings.SystemPrompt, "Do not return `status`", "model cannot own runtime status");
+            AssertContains(settings.SystemPrompt, "including nested tool arguments", "response contract covers exact source arguments");
+            AssertContains(settings.SystemPrompt, "Runtime decodes the envelope once", "response contract forbids a second source unescape");
             foreach (var prompt in new[] { settings.SystemPrompt, settings.ChatSystemPrompt, settings.PlanSystemPrompt })
                 AssertContains(prompt, "Do not include `id`; runtime assigns call IDs", "all modes reserve call identity for runtime");
             AssertTrue(settings.AgentToolsPrompt.StartsWith("# Agent tool policy", StringComparison.Ordinal), "tool prompt is separate Markdown");
