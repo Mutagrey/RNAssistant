@@ -1,8 +1,8 @@
 # RNAssistant Agent Rules
 
-Отвечай коротко и по делу. Сначала используй `rg`, читай только нужные диапазоны и
-запускай минимальные релевантные проверки. Не запускай VSTO/Office validation на
-этой машине.
+Отвечай коротко и по делу. Экономь токены и контекст: сначала используй `rg`, читай
+только нужные диапазоны и запускай минимальные релевантные проверки. Не запускай
+VSTO/Office validation на этой машине.
 
 RNAssistant — локальный Office/WebView2 assistant без server-side runtime. Чаты и
 контекст принадлежат документам; Office tools выполняются локально.
@@ -14,7 +14,8 @@ RNAssistant — локальный Office/WebView2 assistant без server-side 
 - Обязательный маршрут задаёт `docs/stabilization/STABILIZATION_MASTER_PLAN.md`,
   текущую задачу и gates — начало `docs/stabilization/PROGRESS.md`.
 - Новые product features заморожены. Работай только в текущей фазе/подэтапе и не
-  начинай следующую фазу тем же изменением.
+  начинай следующую фазу тем же изменением. Не вводи целевой контракт или migration
+  будущей фазы заранее.
 - 11T0–11T10 и WQ-A1–A5 завершены host-neutral. R61/11O all-tool
   contract/Library UX cutover уже начат host-neutral; накопленный Windows
   rebuild/R62 retest и post-cutover qualification обязательны до Phase 12.
@@ -78,6 +79,7 @@ RNAssistant — локальный Office/WebView2 assistant без server-side 
   model, generic Office abstraction или массовый namespace rename.
 - Сохраняй C# 7.3/.NET Framework 4.8. Новый `.cs` обязательно добавляй в old-style
   `.csproj`. Не меняй generated `*.Designer.cs`/VSTO metadata без необходимости.
+- Не храни secrets в репозитории; API key остаётся под DPAPI CurrentUser.
 - Выбирай проверки по риску через `tests/RNAssistant.Harness/README.md`. Existing
   подходящее coverage не требует новых тестов; процент покрытия не является целью.
 - Docs-only: diff и затронутые links/anchors, без build/harness. COM/VSTO/controller

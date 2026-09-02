@@ -3,16 +3,18 @@
 Этот файл — единственная точка входа в документацию. Не загружай весь `docs/`:
 сначала выбери владельца области по таблице ниже, затем читай только нужный раздел.
 
-## С чего начать
+## Минимальный контекст задачи
 
-1. [Правила разработки](development-rules.md) — постоянные инженерные правила.
-2. [Архитектура](architecture.md) — текущие слои, владельцы и основные потоки.
-3. Первые строки [PROGRESS](stabilization/PROGRESS.md) — только текущая работа,
-   следующий шаг и открытые gates.
+1. Прочитай только начало [PROGRESS](stabilization/PROGRESS.md): текущую работу,
+   следующий шаг, gates и required context.
+2. По таблице ниже выбери один canonical document области и нужный раздел в нём.
+3. Раздел [master plan](stabilization/STABILIZATION_MASTER_PLAN.md) открывай только
+   когда изменение затрагивает scope, порядок или gate текущей стабилизации.
 
-Во время стабилизации обязательный порядок работ задаёт
-[master plan](stabilization/STABILIZATION_MASTER_PLAN.md). Старые phase reports и
-ADR не являются текущим контрактом.
+[Правила разработки](development-rules.md) нужны для cross-cutting responsibility,
+testing или migration; [архитектура](architecture.md) — для изменения layers,
+owners или dependencies. Не читай оба документа автоматически для каждой задачи.
+Старые phase reports и ADR не являются текущим контрактом.
 
 ## Канонические документы
 

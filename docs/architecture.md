@@ -285,6 +285,9 @@ See [conversation-protocol.md](conversation-protocol.md).
 - `src/RNAssistant.Office/Tools/PlanDocumentToolHandler.cs`: exact native Plan mutation handler over `PlanDocumentService`; pre-dispatch validation remains a known error and successful revision/tombstone appends require exact post-state evidence.
 - `src/RNAssistant.Office/Tools/TaskListToolHandler.cs`: exact native Agent/Plan checklist handler over `TaskListService`; create/update/close return verified revision evidence rather than legacy success inference.
 - `src/RNAssistant.Office/Controller`: typed bridge-facing orchestration.
+  Chat/session bridge methods принадлежат `AssistantController.Chats.cs`, context
+  capture — `AssistantController.Context.cs`; reusable behavior остаётся в
+  тематических `Services`, а не переносится в controller partials.
 - `src/RNAssistant.OfficeHosts`: Excel/Word/PowerPoint/Outlook COM adapters.
 - `web/js/app-html-workspace.js`: HTML workspace view orchestration; normalized data/selection rules, editor state/rendering, sandbox assembly, artifact/plan presentation, resource-tree rendering, and mutation bridge calls live in the adjacent `app-html-workspace-model.js`, `app-html-workspace-editor.js`, `app-html-workspace-preview.js`, `app-html-workspace-artifacts.js`, `app-html-workspace-tree.js`, and `app-html-workspace-actions.js` modules.
 - `web/js/app-chat-session.js`: chat/document CRUD, bridge initialization, and navigation synchronization; composer rendering/input state lives in `app-chat-composer.js`, send/retry/cancel, run tracking, and Agent tool decisions in `app-chat-run.js`, while `app-chat.js` keeps chat-level actions and bindings.

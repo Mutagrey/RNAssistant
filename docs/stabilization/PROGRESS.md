@@ -34,9 +34,12 @@ duplicate completed-phase table. Completed 11T architecture follow-ups and tempo
 trajectory/runtime cleanup roadmaps were removed; their remaining decisions moved
 to backlog and canonical contracts. The desktop audit became the current
 [desktop runtime contract](../desktop-runtime.md). Historical master/progress/phase
-evidence remains intact but is excluded from default reading. Runtime, schemas, UI
-and release gates are unchanged. Pre-commit version format, `git diff --check` and
-all local Markdown links/anchors pass; build/harness were not run for docs-only work.
+evidence remains intact but is excluded from default reading. Follow-up review
+restored explicit token/context economy, future-phase and secret guards in
+`AGENTS.md`, clarified the one-domain-doc reading path and pinned current
+Chat/Context controller partial ownership in architecture. Runtime, schemas, UI and
+release gates are unchanged. Pre-commit version format, `git diff --check` and all
+local Markdown links/anchors pass; build/harness were not run for docs-only work.
 
 R62 stuck error-run correction (2026-09-02): the primary `SendChat` catch closed
 visible activities and wrote flat `LastRun.Status=failed`, but did not interrupt
