@@ -16,6 +16,7 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 | Current path / policy | Target | Owner | Consumers сейчас | Switch / removal gate | Статус |
 |---|---|---|---|---|---|
+| Public tool arguments carry provider/kind/URI/revision/cursor/guard plumbing | Minimal semantic intent schema + typed runtime preparation context over the same ToolRuntime | Tool family owner + Resource Fabric/ToolRuntime for resolved state | Model callable packs, Library Test, resource/VBA handlers | R61: inventory first, then atomic per-family switch; delete replaced public arguments and keep exact guard/evidence internally. [Audit](R61_TOOL_CONTRACT_AUDIT.md) | planned after current Windows rebuild; no adapter or dual schema admitted |
 | AGENTS/README: bump + tag после commit | Release-only versioning | Release process | Нет consumers старого правила | Phase 0: правила заменены | removed |
 | ValidateRNAssistantVersion | ValidateVersionFormat + отдельные release gates | Build | Нет callers старого target | Phase 0: callers обновлены, старый target удалён без alias | removed |
 | AssistantController orchestration, включая `.Agent` confirmation | Application Facade → общий kernel | Application | Bridge, chat lease, document/preflight guards | 3B2: direct confirmed execution/accounting удалены; actual controller компилируется в MockDemo, live Windows delivery остаётся gate | switched; no alternate execution path |

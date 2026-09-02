@@ -59,7 +59,9 @@ URI or copy a revision/cursor pair. A bounded semantic choice is resolved to the
 exact reference by code and ambiguity fails closed. This is a mandatory future
 per-family cutover; the preceding current contract remains in force until then.
 [Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61) owns the
-inventory and acceptance gates.
+inventory and acceptance gates; the observed empty-list/kind/revision/cursor cluster
+and target ownership boundary are classified in the
+[R61 tool contract audit](stabilization/R61_TOOL_CONTRACT_AUDIT.md).
 
 HTML workspace mutations return the exact artifact `ResourceRef` plus the current
 member paths and opaque member URIs. `common.resources_resolve` accepts either one

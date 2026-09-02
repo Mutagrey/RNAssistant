@@ -6,26 +6,26 @@ Current task: reported Windows `RNAssistant.OfficeHosts` compile blockers and st
 Execution mode: mandatory host-neutral route 0–11T10 и WQ-A1–A5 implementation завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. After the current Windows rebuild, R61 switches the final model-facing schemas before final catalog/live-provider WQ evidence; Phase 12 remains blocked.
 
 Next step for tools: finish the exact Windows x64 + Office + VS 2022 rebuild already in progress. Then execute R61 as a separate host-neutral inventory and per-family contract cutover before collecting final WQ-PACK/live-provider evidence; any changed schema invalidates earlier catalog evidence. Phase 12 starts only after R61 and the accumulated qualification gates are satisfied.
-Required context: [R61 Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [conversation protocol](../conversation-protocol.md), [Resource Fabric](../resource-fabric.md), [11T10 evidence](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md), [qualification contract](../qualification.md) and exact current catalog/schema sources.
+Required context: [R61 Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [failure/ownership audit](R61_TOOL_CONTRACT_AUDIT.md), [conversation protocol](../conversation-protocol.md), [Resource Fabric](../resource-fabric.md), [11T10 evidence](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md), [qualification contract](../qualification.md) and exact current catalog/schema sources.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 is open for all-tool argument ownership, cursor/revision removal from caller intent, UI-only system documentation and typed Library Test/Implementation layout. R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
 R61 all-tool contract and Library UX target (2026-09-02, user-requested docs-only):
-the initial source audit confirms that current public schemas expose resource
-`uri/revision/cursor`, capability pagination state and Plan artifact revision IDs,
-while the Library Test form renders all JSON Schema types as plain text inputs.
-The target now requires a per-tool semantic/runtime ownership inventory, minimal
-model/UI intent schemas, runtime-owned exact references/guards/continuations, no
-fabricated UUID/URI/revision/cursor, and atomic family cutovers over the same typed
-ToolRuntime. Every built-in receives human documentation only after tests prove it
-does not enter model descriptors, capability context/results, token accounting or
-executable revisions; full documentation is a selected-tool UI detail. Test forms
-use type-native enum/boolean/integer/number/array/object controls, visible wrapping
-descriptions and auto-resolved system context. Reported Implementation overflow and
-Test spacing/truncation/narrow-pane defects are explicit real-WebView acceptance
-cases. Runtime, schemas and UI are unchanged by this record; R61 is open and final
-WQ evidence must use its post-cutover catalog. `git diff --check` and 402 local
-Markdown links/anchors in nine changed files pass; no build/harness/Office
-validation is run for this docs-only contract update.
+the source and reported live-run audit classifies `resource_kind_unknown`,
+`resource_revision_changed`, `resource_cursor_invalid`, `vba_patch_stale_source`
+and successful provider-discovery `items: []`. Cursor/revision/stale-patch guards
+are necessary fail-closed behavior; the primary design defect is that provider
+vocabulary, URI/revision pairing and continuation state are caller/model-owned.
+The accepted target uses minimal semantic intent plus runtime-owned typed
+preparation over the same ToolRuntime. It preserves the model's explicit choice
+between exact patch and whole-source write, forbids automatic patch-to-write/fuzzy
+fallback, and audits merge/split by effect, confirmation, retry and result shape
+instead of creating a mega-tool. The dedicated audit records current surface,
+ownership table, Resource/VBA decisions and model eval scenarios. UI-only built-in
+documentation, typed Library Test controls and reported Implementation/Test layout
+defects remain in the same R61 gate. Runtime, schemas and UI are unchanged; final
+WQ evidence must use the post-cutover catalog. `git diff --check` and targeted R61
+link resolution pass; no build/harness/Office validation is required for this
+docs-only clarification.
 
 Windows OfficeHosts compile correction (2026-09-02): the reported 13-error build
 contained seven primary C# errors and six downstream `CS0006` failures. Excel now

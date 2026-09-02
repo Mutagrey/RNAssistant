@@ -72,7 +72,8 @@ caller ownership. Mandatory R61/11O keeps exact revision-pinned resource evidenc
 but moves URI assembly, revision pairing and continuation state out of model and
 Library-test arguments during atomic per-family cutovers. Until each cutover the
 current schema remains authoritative; no guessed alias or latest-resource fallback
-is permitted. See [Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61).
+is permitted. See [Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61)
+and the [concrete failure/ownership audit](stabilization/R61_TOOL_CONTRACT_AUDIT.md).
 
 Paste, drop, and paperclip use one chat-scoped staging action. `sendChat` accepts only the resulting `resourceDraftIds`; before any model request, runtime promotes their bytes into CAS, creates immutable artifact revisions, links them to the user message, and persists that state. Existing resources are never eagerly injected through a separate selection field: their canonical URIs remain in the bounded working set and the model reads the needed representation through `common.resources_*`.
 

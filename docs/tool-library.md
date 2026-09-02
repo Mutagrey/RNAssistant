@@ -68,6 +68,12 @@ mutations expose internal artifact revision IDs. The Library test form currently
 renders every argument as a plain text field regardless of JSON Schema type. These
 are audit findings, not proof that the affected tools have been corrected.
 
+The concrete failure attribution, current state-ownership leak, merge/split rules
+and required model evals are recorded in
+[R61 tool contract audit](stabilization/R61_TOOL_CONTRACT_AUDIT.md). That audit is
+planning evidence: it neither pre-approves final public IDs nor changes the current
+resource/VBA contracts before their atomic cutover.
+
 Every published tool must be reviewed individually, including Office, VBA/macro,
 resources, capabilities, questions, Plan, Task List, HTML, prompts, Tool/Skill
 authoring and custom-package execution. The review classifies every input as either

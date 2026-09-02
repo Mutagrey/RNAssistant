@@ -2578,7 +2578,8 @@ endpoint.
     deletes its replaced argument path; no alias, dual schema or hidden latest
     fallback. This user-requested stabilization contour is mandatory before final
     Milestone WQ/Phase 12, unlike optional Phase 11 product expansions. Exact scope
-    and gates: [Tool Library R61](../tool-library.md#mandatory-all-tool-contract-audit-r61).
+    and gates: [Tool Library R61](../tool-library.md#mandatory-all-tool-contract-audit-r61)
+    and [failure/ownership audit](R61_TOOL_CONTRACT_AUDIT.md).
 
 ### Правило допуска
 
