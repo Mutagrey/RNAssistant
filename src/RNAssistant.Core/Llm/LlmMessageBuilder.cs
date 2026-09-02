@@ -90,7 +90,6 @@ namespace RNAssistant.Core.Llm
                         ["tool_call_id"] = message.ToolCallId,
                         ["content"] = message.Content ?? string.Empty
                     };
-                    if (!string.IsNullOrWhiteSpace(message.ToolName)) toolMessage["name"] = message.ToolName;
                     build.Messages.Add(toolMessage);
                     build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
                     build.BaseEstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);

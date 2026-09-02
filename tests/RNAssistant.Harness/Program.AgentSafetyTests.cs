@@ -1464,7 +1464,10 @@ namespace RNAssistant.Harness
             AssertEqual("call_1", (string)assistant.SelectToken("tool_calls[0].id"), "native call id");
             AssertEqual("tool", (string)toolMessage["role"], "native result role");
             AssertEqual("call_1", (string)toolMessage["tool_call_id"], "native result matches call");
-            AssertTrue(string.IsNullOrWhiteSpace((string)toolMessage["name"]) == false, "native tool name is API-safe");
+            AssertTrue(toolMessage["name"] == null, "native result omits unsupported message-level name");
+            AssertEqual(3, toolMessage.Properties().Count(), "native result uses exact Chat Completions tool-message fields");
+            AssertEqual("excel.read_range", (string)JObject.Parse((string)toolMessage["content"])["name"],
+                "canonical tool name remains inside Tool Result v1 content");
 
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
             {

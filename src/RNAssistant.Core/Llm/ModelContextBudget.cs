@@ -316,7 +316,7 @@ namespace RNAssistant.Core.Llm
             }
             if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase))
             {
-                total += 2 + EstimateTextTokens(message.ToolCallId, settings, model) + EstimateTextTokens(message.ToolName, settings, model);
+                total += 2 + EstimateTextTokens(message.ToolCallId, settings, model);
             }
             foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
             {

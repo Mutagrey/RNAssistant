@@ -291,7 +291,10 @@ See [ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate
 
 - `user` (default) / `developer`: result JSON follows the `TOOL_RESULT:` prefix;
 - `tool`: the same raw JSON follows a matching `assistant.tool_calls` entry;
-  provider-safe names and `tool_call_id` retain the persisted runtime identity.
+  its provider-safe function name remains only in that assistant call, while the
+  result message contains exactly `role`, `tool_call_id` and `content`. It has no
+  message-level `name`; the canonical public tool id remains inside Tool Result v1
+  content and local replay metadata.
 
 ```text
 TOOL_RESULT:
