@@ -23,18 +23,20 @@ The new targeted filter passes 1/1 with four existing CA1416 warnings. Runtime,
 public ids/schemas, skill bodies and UI are unchanged; next is 11O1 Resources +
 Capabilities characterization and atomic cutover. Windows/Office was not run.
 
-Engineering rules consolidation (2026-09-02, user-requested docs-only):
-[development rules](../development-rules.md) are now the permanent canonical owner
-for cross-cutting responsibility, typed contracts, file placement, risk-based
-testing and Definition of Done. `AGENTS.md` is explicitly the current
-agent/stabilization overlay; [architecture](../architecture.md), README and the
-harness guide link to the new owner instead of competing with it. The obsolete
-normative v3 target file/document trees were removed from §§11–12 of the master
-plan, and README's model-owned `status`, `completed` wording and stale effect anchor
-were corrected while its Tool Protocol section was reduced to a user-facing
-overview. Runtime, schemas, UI and release gates are unchanged. Pre-commit version
-format, `git diff --check` and affected local Markdown links/anchors pass; build
-and harness were not run for this docs-only change.
+Engineering rules and documentation consolidation (2026-09-02, user-requested
+docs-only): [development rules](../development-rules.md) are the permanent owner
+for cross-cutting responsibilities, typed contracts, file placement, risk-based
+testing and Definition of Done. The new [documentation map](../README.md) is the
+single routing/placement entry point; `AGENTS.md` is reduced to the active
+stabilization/environment overlay. `BACKLOG.md` now contains only open bounded debt
+and deferred decisions, with owner/trigger/removal/check requirements instead of a
+duplicate completed-phase table. Completed 11T architecture follow-ups and temporary
+trajectory/runtime cleanup roadmaps were removed; their remaining decisions moved
+to backlog and canonical contracts. The desktop audit became the current
+[desktop runtime contract](../desktop-runtime.md). Historical master/progress/phase
+evidence remains intact but is excluded from default reading. Runtime, schemas, UI
+and release gates are unchanged. Pre-commit version format, `git diff --check` and
+all local Markdown links/anchors pass; build/harness were not run for docs-only work.
 
 R62 stuck error-run correction (2026-09-02): the primary `SendChat` catch closed
 visible activities and wrote flat `LastRun.Status=failed`, but did not interrupt

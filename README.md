@@ -25,8 +25,10 @@ Local AI assistant for Excel, Word, PowerPoint and Outlook.
 - `vendor/pdf-rendering` - vendored PDFtoImage/PDFium/SkiaSharp binaries for Windows x64.
 - `vendor/webview2-runtime` - optional fixed WebView2 x64 runtime folder.
 
-Canonical engineering rules are in [`docs/development-rules.md`](docs/development-rules.md).
-Current architecture and ownership are in [`docs/architecture.md`](docs/architecture.md).
+The documentation entry point and placement rules are in
+[`docs/README.md`](docs/README.md). Canonical engineering rules are in
+[`docs/development-rules.md`](docs/development-rules.md); current architecture and
+ownership are in [`docs/architecture.md`](docs/architecture.md).
 `AGENTS.md` adds the active stabilization and environment-specific instructions;
 current phase and gates are tracked in
 [`docs/stabilization/PROGRESS.md`](docs/stabilization/PROGRESS.md).
@@ -110,7 +112,7 @@ working document locked even if the user switches Office windows. `Auto follow`
 switches the working target from launcher activation. The picker stores only
 lightweight target descriptors and resolves live COM objects on demand.
 
-Current architecture audit: `docs/desktop-architecture-audit.md`.
+Desktop runtime and target-selection contract: [`docs/desktop-runtime.md`](docs/desktop-runtime.md).
 
 ## VSTO Quick Start
 

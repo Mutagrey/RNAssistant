@@ -58,7 +58,8 @@ still fails visibly if the complete rematerialized request cannot fit.
 Prompt schema 16 replaces the temporary instruction to re-read every optional schema
 after reconstruction. Saved schema 15/custom text is preserved until explicit
 review/reset. Stale LRU/touch wording was removed from canonical architecture,
-resource-fabric, review-roadmap, and harness docs.
+Resource Fabric and harness docs; the temporary cleanup baseline updated at that
+time was later retired as duplicate documentation.
 
 `ConversationModelSession` remains the model-context and admission-boundary owner;
 `ToolPackAdmissionJournal` owns only typed stream append/lookup;

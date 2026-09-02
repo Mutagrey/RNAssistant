@@ -2344,8 +2344,8 @@ endpoint.
      authoring получает versioned typed contracts в
      соответствующих 11J/11K slices. Ни один adapter/alias/dual dispatch не остаётся.
      [Evidence](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md).
-   Кандидаты и checklist закреплены в
-   [Architecture follow-ups §B](ARCHITECTURE_FOLLOWUPS.md).
+   Завершённый checklist сохранён в phase evidence; оставшийся ограниченный
+   structural debt находится в [backlog](BACKLOG.md#structural-debt).
    11T и final active-legacy cleanup являются Phase 12 prerequisite по явному решению
    пользователя 2026-08-31; новые optional product contours ими не становятся.
 6. **11E — coherent product UI and Issue Center:** one Library shell may expose

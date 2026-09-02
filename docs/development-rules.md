@@ -6,6 +6,9 @@
 кода, изменений и проверок. Он не копирует точные domain/protocol contracts и не
 задаёт временный порядок стабилизации.
 
+Краткая карта владельцев и правило выбора документа находятся в
+[docs/README.md](README.md).
+
 ## 1. Владение документацией
 
 | Документ | За что отвечает | За что не отвечает |
@@ -229,6 +232,10 @@ Full harness не заменяет Windows/COM проверку. Число фа
 - При смене canonical document старый явно отмечается superseded и удаляется после
   обновления consumers/links. Массовое перемещение документов не смешивается с
   изменением runtime.
+- Не создавать новый `roadmap`, `audit`, `followups`, `notes` или `cleanup` файл,
+  если информация помещается в canonical doc, `PROGRESS`, `RISK_REGISTER`,
+  `MIGRATION_MAP`, `BACKLOG` или ADR. У нового долгоживущего документа заранее есть
+  owner, ссылка из `docs/README.md` и retirement condition.
 
 ## 11. Definition of Done
 

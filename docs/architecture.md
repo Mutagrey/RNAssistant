@@ -1,6 +1,7 @@
 # RNAssistant architecture
 
-This document is the current detailed architecture and ownership map. Permanent
+This document is the current detailed architecture and ownership map. The compact
+documentation index is [docs/README.md](README.md). Permanent
 cross-cutting engineering rules live in
 [development-rules.md](development-rules.md); temporary execution order and gates
 live in the [stabilization progress](stabilization/PROGRESS.md). Historical phase
@@ -16,6 +17,7 @@ Canonical domain documents:
 - [Session events](session-events.md): durable stream, replay and recovery.
 - [Qualification](qualification.md): typed qualification and issue evidence.
 - [Host Fabric](host-fabric.md) and [Local Automation](local-automation-agent.md): deferred contours that do not expand the current stable-core route.
+- [Desktop runtime](desktop-runtime.md): standalone shell, activation and Office target selection.
 
 ## Product
 
