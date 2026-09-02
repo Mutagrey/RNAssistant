@@ -944,192 +944,52 @@ compile_validation = error
 
 ---
 
-# 11. Целевая структура файлов
+# 11. Физическое размещение кода
 
-На первом этапе не создавать много новых `.csproj`. Сначала вводятся папки и namespaces внутри существующих assemblies.
+Ранний target-tree этого плана удалён из нормативной части: он содержал
+исторические имена v3 и предполагаемые файлы, которые больше не отражали текущую
+реализацию. Актуальная карта владельцев и code zones находится в
+[architecture.md](../architecture.md), а постоянные правила размещения — в
+[development-rules.md §7](../development-rules.md#7-файлы-и-физическая-структура).
 
-```text
-src/
+Для стабилизации дополнительно обязательны следующие ограничения:
 
-RNAssistant.Core/
-    Agent/
-        AgentKernel.cs
-        AgentRunContext.cs
-        RunSummary.cs
-        ExecutionHealth.cs
+- не создавать новые `.csproj` без реальной dependency/platform boundary;
+- не выполнять массовый folder/namespace rename вместе с behavior change;
+- новый самостоятельный behavior размещать у его domain/application owner;
+- новый `.cs` явно включать в old-style `.csproj`;
+- replaced path удалять в том же проверенном slice, а оставшийся adapter учитывать
+  в `MIGRATION_MAP.md`.
 
-    ModelProtocol/
-        IModelProtocol.cs
-        AgentResponseV3.cs
-        AgentResponseV3Parser.cs
-        AgentResponseV3SchemaBuilder.cs
-        ModelProtocolClient.cs
-        ModelProtocolDiagnostics.cs
-        ProtocolRetryPolicy.cs
-        Providers/
-
-    Tools/
-        ToolDescriptor.cs
-        ToolPolicy.cs
-        ToolBinding.cs
-        ToolResult.cs
-        ToolExecutionRecord.cs
-        ToolPackSnapshot.cs
-        ToolRegistry.cs
-
-    Resources/
-        ResourceRef.cs
-        ResourceDescriptor.cs
-        ResourceRevision.cs
-
-    Persistence/
-        IRunStore.cs
-        IConversationStore.cs
-        IEventStore.cs
-
-RNAssistant.Office/
-    Application/
-        AgentFacade.cs
-        RunController.cs
-        ConfirmationCoordinator.cs
-
-    Runtime/
-        ToolRuntime.cs
-        ToolHandlerRegistry.cs
-        LegacyToolAdapter.cs
-
-    Domains/
-        Vba/
-            VbaReader.cs
-            VbaMutationService.cs
-            VbaPatchEngine.cs
-            VbaTextCanonicalizer.cs
-            VbaVerifier.cs
-            VbaJournal.cs
-
-        Excel/
-            ExcelInspector.cs
-            ExcelRangeReader.cs
-            ExcelRangeWriter.cs
-
-        Html/
-        Plan/
-        Skills/
-
-    Tools/
-        Common/
-        Resources/
-        Vba/
-        Excel/
-        Html/
-        Plan/
-
-    Resources/
-        ResourceService.cs
-        Providers/
-
-RNAssistant.OfficeHosts/
-    Runtime/
-        OfficeDocumentSession.cs
-        OfficeStaDispatcher.cs
-        OfficeDocumentIdentity.cs
-
-    Excel/
-        ExcelDocumentSession.cs
-        ExcelInteropBackend.cs
-        ExcelVbaBackend.cs
-
-    Word/
-    PowerPoint/
-    Outlook/
-
-web/
-    app.js
-    app-chat.js
-    app-diagnostics.js
-    ...
-```
-
-Отдельный `.csproj` создаётся только при наличии реальной dependency/platform boundary.
-
-Не создавать проекты вида `RNAssistant.Agent.Abstractions.Common.Runtime` или `RNAssistant.Tools.Shared.Core.Engine` только ради формальной чистоты.
+Конкретные имена файлов в историческом плане не являются контрактом и не должны
+возвращаться ради соответствия старому tree.
 
 ---
 
-# 12. Целевая документация
+# 12. Владение документацией
 
-```text
-ARCHITECTURE.md
+Постоянная иерархия документов определена в
+[development-rules.md §1](../development-rules.md#1-владение-документацией):
 
-docs/
-    architecture/
-        OVERVIEW.md
-        BOUNDARIES.md
-        DEPENDENCIES.md
-        INVARIANTS.md
-        STATE_MODEL.md
-        CURRENT_TO_TARGET_MAP.md
+- `docs/development-rules.md` — общие инженерные правила и Definition of Done;
+- `docs/architecture.md` — текущие слои, зависимости, owners и code zones;
+- domain/protocol docs — точное текущее поведение соответствующей области;
+- `docs/operations/*` — versioning, build evidence и release process;
+- ADR — rationale принятого решения;
+- этот master plan — временный порядок стабилизации;
+- `PROGRESS.md` — текущий подэтап, следующий шаг и открытые gates;
+- phase/evidence reports — исторические результаты проверки.
 
-    protocols/
-        CONVERSATION_RESPONSE_V3.md
-        TOOL_DESCRIPTOR_V1.md
-        TOOL_POLICY_V1.md
-        TOOL_RESULT_V1.md
-        TOOL_PACK_V1.md
-        RESOURCE_V1.md
-        DOCUMENT_SESSION_V1.md
-        EVENT_MODEL.md
+README и исторические отчёты не являются вторым runtime contract. Текущее правило
+не копируется во все документы: обновляется владеющий canonical doc, а остальные
+получают ссылку.
 
-    domains/
-        VBA.md
-        EXCEL.md
-        RESOURCES.md
-        HTML.md
-        PLAN.md
-        SKILLS.md
-        DYNAMIC_TOOLS.md
+Существующие документы не переносить массово в одном commit. При смене владельца:
 
-    operations/
-        MODEL_RETRY.md
-        ERROR_HANDLING.md
-        CONCURRENCY.md
-        RECOVERY.md
-        VERSIONING.md
-        RELEASE_PROCESS.md
-
-    testing/
-        TEST_STRATEGY.md
-        VBA_FAULT_MATRIX.md
-        OFFICE_INTEGRATION.md
-        RELEASE_GATES.md
-
-    stabilization/
-        STABILIZATION_MASTER_PLAN.md
-        PROGRESS.md
-        RISK_REGISTER.md
-        BACKLOG.md
-        MIGRATION_MAP.md
-
-    decisions/
-        ADR-0001-model-does-not-own-completion.md
-        ADR-0002-model-protocol-boundary.md
-        ADR-0003-tool-result-three-states.md
-        ADR-0004-resource-data-plane.md
-        ADR-0005-bound-document-session.md
-        ADR-0006-tool-pack-snapshot.md
-        ADR-0007-release-only-versioning.md
-        ADR-0008-unknown-effects-are-not-retried.md
-```
-
-`ARCHITECTURE.md` в корне должен быть коротким индексом, а не копией всех документов.
-
-Существующие документы не переносить массово в одном commit. Для каждого контура:
-
-1. создать новый canonical document;
-2. перенести актуальные правила;
+1. зафиксировать новый canonical document;
+2. обновить действующих consumers и ссылки;
 3. отметить старый документ superseded;
-4. обновить ссылки;
-5. удалить старый документ после завершения соответствующей миграции.
+4. удалить дубликат после проверки ссылок и обязательного historical evidence.
 
 ---
 
@@ -2890,6 +2750,10 @@ Stable release запрещён, пока не выполнены все усл�
 - [ ] Для commit/release: выполнены применимые versioning gates; обычный commit не повышает version и не создаёт tag.
 
 ## 22.1. Минимальная достаточная проверка
+
+Постоянная политика тестирования определена в
+[development-rules.md §9](../development-rules.md#9-тестирование-по-риску).
+Матрица ниже — её обязательное применение во время текущей стабилизации.
 
 | Изменение | Проверка |
 |---|---|

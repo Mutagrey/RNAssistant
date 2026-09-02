@@ -4,6 +4,11 @@
 
 RNAssistant — локальный VSTO/WebView2-ассистент для Office без серверной части. Чаты и контекст принадлежат документам; Office tools выполняются локально.
 
+Постоянные общие правила разработки находятся в `docs/development-rules.md`.
+Этот файл — обязательный agent/stabilization overlay: он фиксирует текущий scope,
+точные runtime-инварианты и ограничения среды, но не является вторым общим
+engineering handbook.
+
 ## Stabilization freeze
 
 - Обязательные требования: `docs/stabilization/STABILIZATION_MASTER_PLAN.md`. Текущая фаза и результаты — в `docs/stabilization/PROGRESS.md`.
@@ -30,6 +35,7 @@ RNAssistant — локальный VSTO/WebView2-ассистент для Offic
 
 Читай только документ области, которую меняешь:
 
+- общие правила разработки и тестирования: `docs/development-rules.md`;
 - общая карта и зависимости: `docs/architecture.md`;
 - resources, URI, providers, ingestion: `docs/resource-fabric.md`;
 - Chat/Agent loop, progressive tools, JSON contract: `docs/conversation-protocol.md`;

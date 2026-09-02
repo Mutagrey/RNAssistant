@@ -28,7 +28,14 @@ dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.cs
 
 Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
 
-Verification scope and evidence reuse follow [master plan §22.1](../../docs/stabilization/STABILIZATION_MASTER_PLAN.md#221-минимальная-достаточная-проверка). Docs-only changes need diff/affected-link checks, not a harness build. A recorded pass is reusable only when its relevant sources/tests, dependencies, build settings and environment are unchanged. Explicit phase/release gates and the pre-commit version check still apply.
+Permanent test policy is defined in
+[development rules §9](../../docs/development-rules.md#9-тестирование-по-риску);
+the active stabilization application remains
+[master plan §22.1](../../docs/stabilization/STABILIZATION_MASTER_PLAN.md#221-минимальная-достаточная-проверка).
+Docs-only changes need diff/affected-link checks, not a harness build. A recorded
+pass is reusable only when its relevant sources/tests, dependencies, build settings
+and environment are unchanged. Explicit phase/release gates and the pre-commit
+version check still apply.
 
 ## Test map
 

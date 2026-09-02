@@ -1,6 +1,21 @@
 # RNAssistant architecture
 
-> [Resource Fabric](resource-fabric.md) is the shipped and re-audited architecture for artifact access and conversation execution. Resource access is unified at the runtime boundary while domain editors remain intentionally specialized. [Artifact Library and Viewers](artifact-library.md) defines the user-visible draft/commit lifecycle, immutable versus versioned resources, viewers and Phase 11 mutation UX without adding a second transport or store; its 11A commit/Library foundation, complete 11B Plan and 11C HTML contours, and 11D1 text/Markdown viewers are implemented host-neutral. [Tool Library](tool-library.md) separates read-only selected-endpoint capability truth from deferred custom authoring, while [Skill Library](skills.md) keeps installed trusted instruction packages outside chat artifacts. [Qualification Center and Issue Center](qualification.md) share typed causal evidence without a second log. [Host Fabric](host-fabric.md) and the [Local Automation Agent](local-automation-agent.md) define deferred cross-host and local-computer contours; none expands the current stable-core route.
+This document is the current detailed architecture and ownership map. Permanent
+cross-cutting engineering rules live in
+[development-rules.md](development-rules.md); temporary execution order and gates
+live in the [stabilization progress](stabilization/PROGRESS.md). Historical phase
+reports and ADRs are evidence/rationale, not a second current architecture.
+
+Canonical domain documents:
+
+- [Resource Fabric](resource-fabric.md): artifact/document identity and read data plane.
+- [Artifact Library and Viewers](artifact-library.md): user-visible artifact lifecycle.
+- [Tool Library](tool-library.md): capability truth, model-facing contracts and authoring.
+- [Skill Library](skills.md): trusted instruction packages and references.
+- [Conversation protocol](conversation-protocol.md): model loop and result/effect contracts.
+- [Session events](session-events.md): durable stream, replay and recovery.
+- [Qualification](qualification.md): typed qualification and issue evidence.
+- [Host Fabric](host-fabric.md) and [Local Automation](local-automation-agent.md): deferred contours that do not expand the current stable-core route.
 
 ## Product
 

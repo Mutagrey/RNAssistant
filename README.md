@@ -25,7 +25,11 @@ Local AI assistant for Excel, Word, PowerPoint and Outlook.
 - `vendor/pdf-rendering` - vendored PDFtoImage/PDFium/SkiaSharp binaries for Windows x64.
 - `vendor/webview2-runtime` - optional fixed WebView2 x64 runtime folder.
 
-Development rules are in `AGENTS.md`. Architecture boundaries and refactoring targets are in `docs/architecture.md`; review findings and roadmap are in `docs/review-roadmap.md`.
+Canonical engineering rules are in [`docs/development-rules.md`](docs/development-rules.md).
+Current architecture and ownership are in [`docs/architecture.md`](docs/architecture.md).
+`AGENTS.md` adds the active stabilization and environment-specific instructions;
+current phase and gates are tracked in
+[`docs/stabilization/PROGRESS.md`](docs/stabilization/PROGRESS.md).
 
 ## In-process VBA Quick Start
 
@@ -226,23 +230,30 @@ Word, Excel and PowerPoint use an existing `RNAssistantDocumentId` property when
 
 ## Tool Protocol
 
-The API is OpenAI-compatible chat completions: `/v1/chat/completions`.
-Endpoint compatibility details are in `docs/model-endpoint-compatibility.md`; the shared flow is in `docs/conversation-protocol.md`.
+This section is a user-facing overview, not a second normative protocol. The exact
+current contracts are in
+[`docs/conversation-protocol.md`](docs/conversation-protocol.md),
+[`docs/resource-fabric.md`](docs/resource-fabric.md) and
+[`docs/tool-library.md`](docs/tool-library.md).
+
+The API uses OpenAI-compatible chat completions at `/v1/chat/completions`.
+Endpoint-specific behavior is documented in
+[`docs/model-endpoint-compatibility.md`](docs/model-endpoint-compatibility.md).
 
 Each chat stores an explicit execution mode:
 
-- `Chat` uses the structured model loop with only read-only `common.resources_list/resolve/search/read`; it has no skills, confirmation, Office tools, or mutations.
-- `Agent` is the default and uses the same loop with all runnable tools and enabled skill metadata. It can also answer ordinary questions without tools.
+- `Chat` can answer and read resources but cannot mutate Office or shared state.
+- `Plan` performs read-only discovery and maintains a revisioned Markdown plan.
+- `Agent` is the default and may run policy-approved local tools with confirmation.
 
-Paste, drag-and-drop, and the paperclip use one chat-scoped resource staging path. Sending the message commits bytes to CAS and records the canonical `rna://` revision reference before the model request. Existing artifacts stay reference-only and are reopened through `common.resources_*`; there is no separate “В запрос” action or eager body injection.
+Paste, drag-and-drop and the paperclip use one chat-scoped staging path. Sending a
+message commits the bytes and exact resource reference before the model request.
+Existing artifacts remain reference-first and are read explicitly when needed.
 
-Editable Agent instructions use `developer` by default and may use `system` or `user`. The stable Agent instruction is composed from separately editable general, tool-use, and skill-use Markdown; `RUNTIME_CONTEXT` is appended after it. The Prompts page also edits the Chat, context-compaction, title, and attachment-analysis prompts. Agent-side prompt changes use `common.prompts_read` with `includeDefaults:true` and confirmed `common.prompts_save`. Wire-format repair and endpoint compatibility probes remain runtime protocol and are intentionally not user prompts.
-
-In Agent mode the prompt contains the complete finite mode/host core pack plus one complete compact `RUNTIME_CONTEXT.capabilities.items` catalog of exact tool and skill ids with an explicit `kind`; the full dynamic runnable catalog remains local. On Excel the core contains every built-in Excel and public VBA schema. `common.capabilities_search` optionally filters schema-free metadata, while `common.capabilities_read` returns one exact tool schema or complete skill body. Optional tool reads are admitted atomically at the next model-step boundary only when the complete request fits; successful extensions get a new revision and no admitted schema is evicted inside the live model session. A skill catalog entry is metadata only and counts as loaded only while active context contains matching complete evidence with top-level `data.loaded=true`, `data.complete=true`, and `data.truncated=false`. In strict response-schema mode, optional tool arguments are nullable; runtime treats synthetic `null` as omitted and applies code-owned schema defaults instead of forcing the model to invent values, while preserving `null` explicitly allowed by the original tool schema. The model returns one raw JSON object. A tool turn contains one or more calls:
+The model returns conversation-response v4. A tool turn contains one or more calls:
 
 ```json
 {
-  "status": "in_progress",
   "message": "Read the table before editing.",
   "tool_calls": [
     {
@@ -253,19 +264,21 @@ In Agent mode the prompt contains the complete finite mode/host core pack plus o
 }
 ```
 
-Independent local read-only calls may share an array and execute sequentially. Write, external, confirmation-required and unclassified calls must be singleton. The model supplies only `name` and `arguments`; runtime assigns unique call IDs before acceptance and preserves them through confirmation, results and replay. Rejected attempts execute no calls. ID allocation never triggers model repair or semantic deduplication.
+Independent local read-only calls may share an array. Writes, external effects and
+confirmation-required calls are singleton. The model supplies only `name` and
+`arguments`; runtime owns call IDs, document binding, revisions, cursors, guards,
+confirmation and effect evidence.
 
-All modes use conversation-response v4 with only `message` and `tool_calls`, for example `{"message":"...","tool_calls":[]}`. Empty calls end the model loop; execution health still comes from actual tool results. Provider-native refusal is separate from the model envelope. Unknown root fields (including `status`) and call fields (including model-owned `id`) are rejected in both `json_object` and `json_schema`. V3/unmarked chats require an explicit new chat or reset; history is never silently converted, truncated or deleted. Saved prompt text is preserved, but any marker other than current schema 16 requires explicit review/reset.
+An empty `tool_calls` array ends the model loop but does not prove that a document
+changed. Tool results use `ok`, `error` or `unknown`; a possible unverified external
+effect is never retried automatically. Office tools execute locally and remain
+subject to exact schemas, policy, confirmation, bounds and read-back.
 
-The configured transport remains `json_object` (default) or a strict schema generated from the current callable tools. Explicit schema rejection permits one enabled, request-local fallback. Native tool-result history uses the same runtime IDs as accepted metadata; raw responses remain unchanged. ModelProtocol permits 1–20 total protocol responses per step, two separate transient provider retries and at most one schema fallback; rejected output/repair instructions never enter accepted history. No planner/router, automatic tool retry or separate verification phase is introduced. See the [v4 contract](docs/protocols/CONVERSATION_RESPONSE_V4.md) and [retry policy](docs/conversation-protocol.md#retry-policy-phase-2b).
-
-Office tools execute locally. The next model turn receives a string protocol message such as `TOOL_RESULT:\n{"tool_call_id":"call_1","name":"excel.read_range","status":"ok","message":"Range read.","data":{"values":[[1,2]]}}`. Tool Result v1 permits only `ok/error/unknown`; `ok` alone does not prove a changed document. Older result history requires an explicit new chat/reset, and prompt schema 16 requires explicit review without overwriting older custom text. The model decides what to do next. Tool-result data is bounded and oversized data is replaced by a structured preview; the prompt budget is checked before every model request. Excel value/formula/profile reads reject ranges above 100000 cells before loading COM `Value2`. The runtime also enforces exact tool ids, formal argument schemas, safety/confirmation metadata, and iteration/tool-step limits.
-
-The model-facing catalog groups uniform intents behind selectors: Excel inspect/read/write/chart-upsert/format, Word read/inspect/write/format, PowerPoint read/list/set-text/add-object, and Outlook read/draft/update/collect. Superseded public ids are removed completely: they are neither shown to the model nor compatibility-rewritten.
-
-Complex work has two distinct artifacts. A temporary Task List (`common.task_list_create/update/close`) tracks the current execution stages and is normally used for work with at least three meaningful steps. Plan mode performs read-only discovery, asks up to three typed material questions, and maintains one broad Markdown plan through `common.plan_doc_create/update/delete`. Each plan update is an immutable chat-artifact revision; handoff to Agent cites its exact canonical `rna://` URI. Runtime never infers progress or maps tool calls to steps.
-
-Context compaction preserves the full stored transcript and replays a checkpoint plus an exact tail. The current request and `LastRun` are persisted before the endpoint call, and each tool-start/result boundary is checkpointed. Confirmation state and cumulative limits survive restart; the runtime and UI block new input until the pending action is confirmed or cancelled. Stale chat revisions are rejected instead of overwriting another window. Interrupted in-flight actions are recovered as unknown-effect diagnostics without automatic retry, while already persisted tool results remain replayable. Pipelines are unavailable; supported tools retain metadata-based mutation, risk and confirmation checks.
+Accepted history, confirmation and cumulative limits survive restart. Interrupted
+effects recover conservatively without replay. The exact v4 envelope and retry
+rules are documented in the
+[v4 contract](docs/protocols/CONVERSATION_RESPONSE_V4.md) and
+[conversation protocol](docs/conversation-protocol.md).
 
 ## HTML Workspace
 
@@ -381,11 +394,11 @@ In chat, ask for the desired Office action in normal language. For example:
 
 The model returns one JSON response per turn. Independent tools such as separate reads may be returned together and execute sequentially after schema, safety, and confirmation checks. Result-dependent operations remain separate model turns. Every result is returned to the model as JSON so it can choose the next action.
 
-Model `completed` ends the loop; it does not certify applied changes. The runtime
-separately projects `clean/errors/unknown` from actual tool results. Errors and
-uncertain effects remain visible above the model answer even with a collapsed
-trace; a no-write answer does not claim confirmed changes. See the
-[runtime completion and effect projections](docs/conversation-protocol.md#legacy-effect-mapping-and-ui-projections).
+An empty `tool_calls` array ends the model loop; it does not certify applied
+changes. The runtime separately projects lifecycle and effect health from actual
+tool evidence. Errors and uncertain effects remain visible above the model answer
+even with a collapsed trace; a no-write answer does not claim confirmed changes.
+See the [runtime completion and effect projection](docs/conversation-protocol.md#effect-mapping-and-ui-projection).
 
 Use the Tools tab to create or edit reusable tools:
 

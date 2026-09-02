@@ -9,6 +9,19 @@ Next step for tools: finish the exact Windows x64 + Office + VS 2022 rebuild alr
 Required context: [R61 Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [failure/ownership audit](R61_TOOL_CONTRACT_AUDIT.md), [conversation protocol](../conversation-protocol.md), [Resource Fabric](../resource-fabric.md), [11T10 evidence](PHASE_11T10_ACTIVE_LEGACY_REMOVAL.md), [qualification contract](../qualification.md) and exact current catalog/schema sources.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 is open for all-tool argument ownership, cursor/revision removal from caller intent, UI-only system documentation and typed Library Test/Implementation layout. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R51 remains open for image/PDF/audio viewers, other committed-resource removal and Windows WebView lifecycle. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
+Engineering rules consolidation (2026-09-02, user-requested docs-only):
+[development rules](../development-rules.md) are now the permanent canonical owner
+for cross-cutting responsibility, typed contracts, file placement, risk-based
+testing and Definition of Done. `AGENTS.md` is explicitly the current
+agent/stabilization overlay; [architecture](../architecture.md), README and the
+harness guide link to the new owner instead of competing with it. The obsolete
+normative v3 target file/document trees were removed from §§11–12 of the master
+plan, and README's model-owned `status`, `completed` wording and stale effect anchor
+were corrected while its Tool Protocol section was reduced to a user-facing
+overview. Runtime, schemas, UI and release gates are unchanged. Pre-commit version
+format, `git diff --check` and affected local Markdown links/anchors pass; build
+and harness were not run for this docs-only change.
+
 R62 stuck error-run correction (2026-09-02): the primary `SendChat` catch closed
 visible activities and wrote flat `LastRun.Status=failed`, but did not interrupt
 the already persisted authoritative `KernelState`. A bridge error followed by
