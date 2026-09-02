@@ -2,7 +2,7 @@
 
 Current target: 16.1.0
 Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
-Current task: reported Windows `RNAssistant.OfficeHosts` compile blockers after the physical host moves are corrected in the direct path; the exact Windows rebuild and remaining live-provider gates are still open.
+Current task: reported Windows `RNAssistant.OfficeHosts` compile blockers and stale local portable publishing are corrected in the direct path; the exact Windows rebuild and remaining live-provider gates are still open.
 Execution mode: mandatory host-neutral route 0–11T10 и WQ-A1–A5 implementation завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption; накопленная Windows qualification обязательна до Phase 12.
 
 Next step for tools: execute the mandatory Windows x64 + Office + VS 2022 Milestone WQ matrix against the exact candidate; any failure is fixed only in the typed direct path. Phase 12 starts only after the accumulated qualification gates are satisfied.
@@ -26,6 +26,17 @@ is unchanged. A Roslyn source audit of all 438 production C# files found no synt
 member-name or lambda/local-scope collisions. Excel chart 4/4, architecture 4/4,
 production source inclusion 1/1, diff and version-format checks pass. The exact
 Windows OfficeHosts/VSTO rebuild remains the required gate.
+
+Local portable exact-publish correction (2026-09-02): `build-local.cmd` previously
+copied with `SkipUnchangedFiles` into existing `artifacts\portable` and `C:\Temp`
+directories, so a removed or renamed file could survive from an older build. The
+publisher now validates configuration, architecture and every required input before
+replacing the known x64/x86 output directory. Custom destinations are replaced only
+when absent or carrying the publisher ownership marker; an existing unmarked custom
+directory fails closed. Every current file is copied into the clean destination, so
+locked old DLLs fail the build instead of leaving a mixed package. Targeted build
+contract 1/1, XML, diff and version checks pass; actual Windows MSBuild/C++/CLI and
+locked-Office behavior remain part of Milestone WQ.
 
 Phase 11T10 final active-legacy cleanup (2026-09-01):
 `IOfficeApplicationAdapter.GetBuiltInTools/ExecuteTool`, dispatched/UI-thread

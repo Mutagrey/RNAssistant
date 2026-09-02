@@ -28,10 +28,18 @@ is written under `artifacts\portable\Release` and also published directly to
 `C:\Temp\RNAssistant` (x64) or `C:\Temp\RNAssistant-x86` (x86). The x86 package
 does not contain the x64-only native PDF rendering binaries.
 
+Each publish replaces its known output directory as one exact package, so files
+removed or renamed since an older build cannot remain in `artifacts\portable` or
+`C:\Temp`. Custom destinations are cleaned only after the publisher has created
+its `.rnassistant-portable-output` ownership marker; an existing unmarked custom
+directory is rejected. Close Office before rebuilding because loaded DLLs can
+prevent the old package from being removed.
+
 Expected layout:
 
 ```text
 artifacts\portable\Release\x64\
+  .rnassistant-portable-output
   RNAssistant.NativeHostCli.dll
   RNAssistant.Core.dll
   RNAssistant.Office.dll

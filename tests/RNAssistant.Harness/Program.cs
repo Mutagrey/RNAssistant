@@ -40,6 +40,7 @@ namespace RNAssistant.Harness
             {
                 Test("harness: native async execution", HarnessRunsNativeAsync),
                 Test("harness: production projects include all source files", ProductionProjectsIncludeAllSourceFiles),
+                Test("build: portable publish replaces owned destination", PortablePublishReplacesOwnedDestination),
                 Test("architecture: Office event consumers use typed port", OfficeEventConsumersUseTypedPort),
                 Test("architecture: Office conversation consumers use typed port", OfficeConversationConsumersUseTypedPort),
                 Test("architecture: run view consumers use typed projection", RunViewConsumersUseTypedProjection),

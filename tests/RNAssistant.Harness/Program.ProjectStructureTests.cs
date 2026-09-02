@@ -95,6 +95,59 @@ namespace RNAssistant.Harness
                 include.Replace('\\', Path.DirectorySeparatorChar)));
         }
 
+        private static void PortablePublishReplacesOwnedDestination()
+        {
+            var root = FindHarnessRepositoryRoot();
+            var projectPath = Path.Combine(root, "build", "RNAssistant.NativePortable.proj");
+            var document = XDocument.Load(projectPath);
+            var prepare = document.Descendants()
+                .FirstOrDefault(element => element.Name.LocalName == "Target" &&
+                    string.Equals((string)element.Attribute("Name"),
+                        "PrepareDestination", StringComparison.Ordinal));
+            var publish = document.Descendants()
+                .FirstOrDefault(element => element.Name.LocalName == "Target" &&
+                    string.Equals((string)element.Attribute("Name"),
+                        "Publish", StringComparison.Ordinal));
+
+            AssertTrue(prepare != null && publish != null,
+                "portable publishing requires explicit prepare and publish targets");
+            AssertTrue(prepare.Elements().Any(element =>
+                    element.Name.LocalName == "RemoveDir" &&
+                    ((string)element.Attribute("Condition") ?? string.Empty)
+                        .IndexOf("DestinationIsKnown", StringComparison.Ordinal) >= 0 &&
+                    ((string)element.Attribute("Condition") ?? string.Empty)
+                        .IndexOf("DestinationMarker", StringComparison.Ordinal) >= 0),
+                "portable publishing must clean only known or previously owned destinations");
+            AssertTrue(prepare.Elements().Any(element =>
+                    element.Name.LocalName == "Error" &&
+                    ((string)element.Attribute("Text") ?? string.Empty)
+                        .IndexOf("unowned portable destination", StringComparison.Ordinal) >= 0),
+                "portable publishing must reject an existing unowned custom destination");
+            AssertTrue(prepare.Elements().Any(element =>
+                    element.Name.LocalName == "Error" &&
+                    string.Equals((string)element.Attribute("Condition"),
+                        "!Exists('%(RequiredFile.Identity)')", StringComparison.Ordinal)),
+                "portable publishing must validate every required input before cleanup");
+            AssertTrue(prepare.Elements().Any(element =>
+                    element.Name.LocalName == "WriteLinesToFile" &&
+                    string.Equals((string)element.Attribute("File"),
+                        "$(DestinationMarker)", StringComparison.Ordinal)),
+                "portable publishing must mark destination ownership after cleanup");
+            AssertTrue(((string)publish.Attribute("DependsOnTargets") ?? string.Empty)
+                    .Split(';').Contains("PrepareDestination", StringComparer.Ordinal),
+                "publish must prepare an exact destination before copying files");
+            AssertTrue(!publish.Descendants().Where(element =>
+                    element.Name.LocalName == "Copy").Any(element =>
+                    element.Attribute("SkipUnchangedFiles") != null),
+                "exact portable publishing must copy every current file after cleanup");
+
+            var source = File.ReadAllText(projectPath);
+            AssertContains(source, "C:\\Temp\\RNAssistant\\",
+                "x64 local temp output is an explicitly known clean destination");
+            AssertContains(source, "C:\\Temp\\RNAssistant-x86\\",
+                "x86 local temp output is an explicitly known clean destination");
+        }
+
         private static string FindHarnessRepositoryRoot()
         {
             foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
