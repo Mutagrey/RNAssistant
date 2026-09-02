@@ -258,6 +258,65 @@ namespace RNAssistant.Harness
                     operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                     "bind and refresh share one backend route");
             });
+
+            WithTempPaths(paths =>
+            {
+                using (var dispatcher = new OfficeStaDispatcher())
+                {
+                    var document = new BoundTestDocument
+                    {
+                        StableId = "bound-html-excel",
+                        IsAlive = true
+                    };
+                    var documentSession = new BoundTestOfficeSession(
+                        dispatcher, document, "bound-html-runtime", new object());
+                    var inner = FakeOfficeAdapter.ForHost("Excel");
+                    var host = new BoundTestOfficeAdapter(documentSession, inner);
+                    var ownerStaReads = 0;
+                    host.BeforeRead = operation =>
+                    {
+                        if (operation != FakeOfficeAdapter.ExcelRangeReadOperation)
+                            return;
+                        AssertTrue(dispatcher.CheckAccess,
+                            "HTML data source read runs on the bound document owner STA");
+                        ownerStaReads += 1;
+                    };
+                    var executor = new OfficeToolExecutor(
+                        host, new VbaJournalStore(paths), new SkillStore(paths),
+                        new ToolStore(paths), paths: paths);
+                    var session = new ChatSession
+                    {
+                        Host = "Excel",
+                        DocumentKey = "bound-html-excel",
+                        DocumentTitle = "Bound HTML.xlsx"
+                    };
+                    var tools = OfficeToolCatalog.ForHost(host.HostName)
+                        .Concat(executor.GetControllerTools()).ToList();
+                    var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId,
+                        "dataName", "sales",
+                        "sourceTool", ExcelReadToolIds.ReadRange,
+                        "sourceArguments", new JObject
+                        {
+                            ["sheet"] = "Data",
+                            ["address"] = "A1:B4",
+                            ["content"] = "values"
+                        },
+                        "transform", "table", "headers", "firstRow");
+
+                    var bound = executor.ExecuteManual(
+                        bind, tools, new AppSettings(), false, false, session);
+                    AssertTrue(bound.Success,
+                        "bound HTML bind succeeds through owner STA dispatch");
+                    var refreshed = executor.ExecuteManual(
+                        Command(HtmlWorkspaceToolCatalog.RefreshDataToolId,
+                            "name", "sales"),
+                        tools, new AppSettings(), false, false, session);
+                    AssertTrue(refreshed.Success,
+                        "bound HTML refresh succeeds through owner STA dispatch");
+                    AssertEqual(2, ownerStaReads,
+                        "bind and refresh each dispatch one read to the owner STA");
+                }
+            });
         }
 
         private static List<List<object>> Matrix(int rows, int columns)

@@ -45,6 +45,9 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   использует ROT fallback. Multi-instance enumeration остаётся best-effort;
   launcher/foreground `hwnd` является наиболее точным источником.
 - COM calls проходят через `DispatchedOfficeApplicationAdapter` и выделенный STA.
+- HTML bind/refresh выполняют вложенный Office source-read через exact bound
+  `HostRuntime.ReadDocument`; document gate и owner STA не охватывают последующую
+  HTML/CAS работу.
 - Mutations используют общий confirmation и ToolRuntime policy; успешный COM return
   сам по себе не доказывает effect.
 - Outlook выбирает Inspector раньше Explorer selection.

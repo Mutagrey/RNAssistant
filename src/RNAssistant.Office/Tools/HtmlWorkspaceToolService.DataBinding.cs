@@ -396,16 +396,17 @@ namespace RNAssistant.Office.Tools
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
+                if (_executeOfficeDataSource != null)
+                    return _executeOfficeDataSource(
+                        session, sourceToolId, sourceArguments,
+                        cancellationToken) ??
+                        HtmlDataSourceReadOutcome.Error(
+                            "Office data source returned no result.",
+                            null, "html_data_source_result_missing", false);
+
                 using (_beginLiveOfficeRead == null ? null : _beginLiveOfficeRead(session))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (_executeOfficeDataSource != null)
-                        return _executeOfficeDataSource(
-                            sourceToolId, sourceArguments,
-                            cancellationToken) ??
-                            HtmlDataSourceReadOutcome.Error(
-                                "Office data source returned no result.",
-                                null, "html_data_source_result_missing", false);
                     if (ExcelReadToolIds.Owns(sourceToolId))
                     {
                         if (_standaloneExcelRead == null)

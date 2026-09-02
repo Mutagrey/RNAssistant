@@ -25,7 +25,7 @@ namespace RNAssistant.Office.Tools
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly Dictionary<string, ToolCatalogEntry> _dataSourceTools;
         private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
-        private readonly Func<string, IDictionary<string, object>,
+        private readonly Func<ChatSession, string, IDictionary<string, object>,
             CancellationToken, HtmlDataSourceReadOutcome> _executeOfficeDataSource;
         private readonly ExcelReadToolAdapter _standaloneExcelRead;
         private readonly WordToolAdapter _standaloneWordRead;
@@ -56,7 +56,7 @@ namespace RNAssistant.Office.Tools
             IOfficeApplicationAdapter adapter,
             IEnumerable<ToolCatalogEntry> adapterTools,
             Func<ChatSession, IDisposable> beginLiveOfficeRead,
-            Func<string, IDictionary<string, object>, CancellationToken,
+            Func<ChatSession, string, IDictionary<string, object>, CancellationToken,
                 HtmlDataSourceReadOutcome> executeOfficeDataSource)
         {
             _adapter = adapter;

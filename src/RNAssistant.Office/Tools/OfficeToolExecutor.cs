@@ -115,8 +115,7 @@ namespace RNAssistant.Office.Tools
                 outlookBackend.OutlookBackend == null
                 ? null : new OutlookToolAdapter(outlookBackend.OutlookBackend);
             _htmlWorkspaceService = new HtmlWorkspaceToolService(
-                _adapter, _adapterTools, BeginLiveOfficeRead,
-                ExecuteHtmlDataSourceUnderCurrentAccess);
+                _adapter, _adapterTools, null, ExecuteHtmlDataSource);
             var controllerTools = new List<ToolCatalogEntry>();
             if (_vbaExecutor.HostSupportsVba())
                 RegisterControllerTools(controllerTools,
@@ -629,6 +628,34 @@ namespace RNAssistant.Office.Tools
                 throw new ResourceRequestException(
                     ex.Message,
                     ex.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable",
+                    ex.Retryable);
+            }
+        }
+
+        private HtmlDataSourceReadOutcome ExecuteHtmlDataSource(
+            ChatSession session,
+            string toolId,
+            IDictionary<string, object> arguments,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                return _hostRuntime.ReadDocument(
+                    DocumentTarget(session), cancellationToken,
+                    () => ExecuteHtmlDataSourceUnderCurrentAccess(
+                        toolId, arguments, cancellationToken));
+            }
+            catch (OfficeDocumentGuardException ex)
+            {
+                throw new ResourceRequestException(
+                    ex.Message, ex.ErrorCode, ex.Retryable);
+            }
+            catch (HostRuntime.MutationLockException ex)
+            {
+                throw new ResourceRequestException(
+                    ex.Message,
+                    ex.Retryable ? "tool_mutation_busy" :
+                        "tool_mutation_lock_unavailable",
                     ex.Retryable);
             }
         }

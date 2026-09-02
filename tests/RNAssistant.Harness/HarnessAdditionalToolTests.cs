@@ -332,7 +332,8 @@ namespace RNAssistant.Harness
                     adapter,
                     new[] { truncatedSource },
                     null,
-                    (ignoredTool, ignoredArguments, ignoredCancellation) =>
+                    (ignoredSession, ignoredTool, ignoredArguments,
+                        ignoredCancellation) =>
                         HtmlDataSourceReadOutcome.Ok(
                         "Bounded source.",
                         "{\"kind\":\"sheets\",\"returnedCount\":200,\"truncated\":true,\"items\":[]}"));
