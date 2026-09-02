@@ -53,7 +53,7 @@ function createContext(stageFails) {
   for (const file of ["app-attachments.js", "app-chat-run.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
   }
-  context.sendChat = (text, attachments) => sent.push({ text, attachments });
+  context.sendChat = (text, attachments, chatId) => sent.push({ text, attachments, chatId });
 
   return {
     context,
@@ -81,13 +81,14 @@ async function settle() {
     await settle();
 
     assert.equal(fixture.sent.length, 0, "model dispatch waits while the PDF draft is staging");
-    assert.equal(fixture.context.state.pendingChatSubmitId, "chat-a");
+    assert.equal(fixture.context.isPendingChatSubmit("chat-a"), true);
     fixture.finishStage();
     assert.equal(await ingestion, true);
     await submission;
 
     assert.equal(fixture.sent.length, 1);
     assert.equal(fixture.sent[0].text, "");
+    assert.equal(fixture.sent[0].chatId, "chat-a");
     assert.deepEqual(fixture.sent[0].attachments.map(item => item.Id), ["draft-pdf"]);
     console.log("PASS attachment staging: immediate send waits and includes the committed draft id");
   }
@@ -110,12 +111,24 @@ async function settle() {
     console.log("PASS attachment staging: failure preserves the composer and prevents partial dispatch");
   }
 
+  {
+    const fixture = createContext(false);
+    fixture.context.setPendingChatSubmit("chat-a", true);
+    fixture.context.state.activeChatId = "chat-b";
+    fixture.input.value = "Второй чат";
+    await fixture.context.submitChatInput();
+    assert.equal(fixture.sent.length, 1, "preparation in another chat does not block this chat");
+    assert.equal(fixture.sent[0].chatId, "chat-b");
+    assert.equal(fixture.context.isPendingChatSubmit("chat-a"), true, "the first chat keeps its own barrier");
+    console.log("PASS attachment staging: submit barriers are isolated per chat");
+  }
+
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   ["app-attachments.js", "app-chat-composer.js", "app-chat-run.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=attachment-stage-20260902-1"), asset + " has the staging barrier cache key");
+    assert.ok(index.includes(asset + "?v=multi-chat-20260902-1"), asset + " has the multi-chat cache key");
   });
   console.log("PASS attachment staging: changed UI modules use one cache key");
-  console.log("OK 3/3");
+  console.log("OK 4/4");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

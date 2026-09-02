@@ -16,7 +16,7 @@ function renderChatModePicker() {
   label.textContent = active.title;
   icon.textContent = active.icon;
   icon.dataset.mode = active.value;
-  var disabled = !!currentActiveSend() || state.pendingChatSubmitId === state.activeChatId ||
+  var disabled = !!currentActiveSend() || isPendingChatSubmit(state.activeChatId) ||
     hasActiveMessageEdit() || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   if (typeof setComposerPickerDisabled === "function") setComposerPickerDisabled(picker, disabled);
 
@@ -65,7 +65,7 @@ function renderSendControls() {
   var activeSend = currentActiveSend();
   var isEditing = hasActiveMessageEdit();
   var isSending = !!activeSend;
-  var isPreparingAttachments = !isSending && state.pendingChatSubmitId === state.activeChatId;
+  var isPreparingAttachments = !isSending && isPendingChatSubmit(state.activeChatId);
   var isCanceling = isSending && !!activeSend.canceling;
   var approvalPending = !isEditing && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
   var sendButton = $("sendButton");
@@ -185,7 +185,7 @@ function updateSendButtonAvailability(hasContent) {
   var canSaveEdit = !!editingTarget && canSaveMessageEdit(editingTarget.message, editingTarget.index);
   sendButton.disabled =
     !!currentActiveSend() ||
-    state.pendingChatSubmitId === state.activeChatId ||
+    isPendingChatSubmit(state.activeChatId) ||
     (!hasActiveMessageEdit() && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity()) ||
     state.modelSaving ||
     state.modeSaving ||

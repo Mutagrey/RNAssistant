@@ -8,20 +8,37 @@ function removeLocalMessage(text) {
   return false;
 }
 
-async function sendChat(text, attachments) {
+function pendingChatSubmitMap() {
+  state.pendingChatSubmits = state.pendingChatSubmits || {};
+  return state.pendingChatSubmits;
+}
+
+function isPendingChatSubmit(chatId) {
+  return !!(chatId && pendingChatSubmitMap()[chatId]);
+}
+
+function setPendingChatSubmit(chatId, pending) {
+  if (!chatId) return;
+  if (pending) pendingChatSubmitMap()[chatId] = true;
+  else delete pendingChatSubmitMap()[chatId];
+}
+
+async function sendChat(text, attachments, targetChatId) {
   attachments = attachments || [];
-  var sentChatId = state.activeChatId;
+  var sentChatId = targetChatId || state.activeChatId;
+  if (!sentChatId || state.activeSends[sentChatId]) return;
   var knownMessageIds = {};
   (state.messages || []).forEach(function (message) {
     var id = message && !message.Local ? (message.Id || message.id || "") : "";
     if (id) knownMessageIds[id] = true;
   });
   var request = send("sendChat", {
-    chatId: state.activeChatId,
+    chatId: sentChatId,
     text: text,
     resourceDraftIds: attachments.map(attachmentId)
   });
-  state.activeSends[sentChatId] = { requestId: request.requestId, text: text, attachments: attachments, canceling: false };
+  var activeSend = { requestId: request.requestId, text: text, attachments: attachments, canceling: false };
+  state.activeSends[sentChatId] = activeSend;
   beginChatRunTracking(sentChatId);
   renderSendControls();
   renderChatSessions();
@@ -79,7 +96,7 @@ async function sendChat(text, attachments) {
       }
     }
   } finally {
-    delete state.activeSends[sentChatId];
+    if (state.activeSends[sentChatId] === activeSend) delete state.activeSends[sentChatId];
     endChatRunTracking(sentChatId);
     renderSendControls();
     if (state.activeChatId === sentChatId) renderMessages();
@@ -131,7 +148,7 @@ async function submitChatInput() {
   if (currentActiveSend() || state.modelSaving || state.modeSaving || state.reasoningSaving) {
     return;
   }
-  if (state.pendingChatSubmitId) {
+  if (isPendingChatSubmit(state.activeChatId)) {
     return;
   }
   if (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) {
@@ -149,7 +166,7 @@ async function submitChatInput() {
   }
 
   if (ingestion) {
-    state.pendingChatSubmitId = targetChatId;
+    setPendingChatSubmit(targetChatId, true);
     renderSendControls();
     var ingestionSucceeded = false;
     try {
@@ -157,7 +174,7 @@ async function submitChatInput() {
     } catch (error) {
       log(error.detail || error.message, "error");
     } finally {
-      if (state.pendingChatSubmitId === targetChatId) state.pendingChatSubmitId = "";
+      setPendingChatSubmit(targetChatId, false);
       renderSendControls();
     }
     if (!ingestionSucceeded || state.activeChatId !== targetChatId || currentActiveSend() ||
@@ -180,11 +197,11 @@ async function submitChatInput() {
   renderMessages({ forceScroll: true });
   renderChatSessions();
   renderContextMeter();
-  sendChat(text, attachments);
+  sendChat(text, attachments, targetChatId);
 }
 
 function retryFailedSend() {
-  if (currentActiveSend() || state.pendingChatSubmitId || hasActiveMessageEdit() ||
+  if (currentActiveSend() || isPendingChatSubmit(state.activeChatId) || hasActiveMessageEdit() ||
     (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) ||
     !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length)) {
     return;
@@ -198,7 +215,7 @@ function retryFailedSend() {
   var text = state.failedSend.text;
   var attachments = state.failedSend.attachments || [];
   clearSendError();
-  sendChat(text, attachments);
+  sendChat(text, attachments, state.activeChatId);
 }
 
 function stopActiveSend() {
