@@ -155,9 +155,11 @@ placeholder rather than falling forward to another revision.
   renderer is a separately admitted local asset/runtime with bounded pages, worker
   lifecycle, manifest/license/CSP and Windows WebView qualification. The currently
   vendored PDFtoImage/PDFium/Skia visual path has only x64 native binaries, so it is
-  unavailable in x86 even though its managed facade is AnyCPU. Exact Windows x86
-  text extraction remains an open qualification gate; 11D3 is not admitted by this
-  clarification.
+  unavailable in x86 even though its managed facade is AnyCPU. A model with image
+  support may currently request visual pages after successful text extraction, so
+  x86 ingestion compatibility is not end-to-end send compatibility. Exact Windows
+  x86 text extraction and explicit visual-capability refusal remain open gates; 11D3
+  is not admitted by this clarification.
 - Audio: local bounded player and optional transcript relation; no autoplay.
 - JSON/chart/tool result: existing lossless bounded JSON/domain viewers remain
   owners of their formats.

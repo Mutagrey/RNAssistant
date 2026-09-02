@@ -77,9 +77,10 @@ compatible, although the exact Windows x86 runtime check remains open. The packa
 intentionally omits the x64-only native `pdfium.dll` and `libSkiaSharp.dll`, so PDF
 page-to-image rendering, including scanned-page input for a vision model, is not
 available in x86. The managed `PDFtoImage.dll`/`SkiaSharp.dll` facades do not remove
-that native bitness requirement. The complete supported target remains Office x64.
-Package/import the VBA and Ribbon sources from `wrappers\native`; see
-`wrappers\native\README.md`.
+that native bitness requirement. An image-capable model can request this visual path
+even after text extraction succeeded, so end-to-end PDF sending is not yet x86-
+qualified. The complete supported target remains Office x64. Package/import the VBA
+and Ribbon sources from `wrappers\native`; see `wrappers\native\README.md`.
 
 ## Windows Desktop Quick Start
 

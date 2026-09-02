@@ -34,12 +34,15 @@ machine type must match the Office process. The managed PDFtoImage and SkiaSharp
 facades are also AnyCPU, but rendering still requires same-bitness native PDFium
 and Skia.
 
-Consequently an x86 build may ingest a text-readable PDF without an x86 PDFium.
-A scanned/image-only PDF needs the visual path and is not currently x86-qualified.
-Copying the shipped x64 native DLLs into the x86 package is invalid; either matching
-reviewed/licensed x86 binaries or an explicit runtime capability refusal is required
-before visual PDF support can be claimed for x86. This open behavior is tracked in
-the [risk register](stabilization/RISK_REGISTER.md).
+Consequently an x86 build may ingest and extract text from a text-readable PDF
+without an x86 PDFium. This does not yet qualify the complete send path: when the
+selected model supports images, the current model-image provider may still invoke
+PDFtoImage for the PDF after extraction. A scanned/image-only PDF necessarily needs
+that visual path. Copying the shipped x64 native DLLs into the x86 package is
+invalid; either matching reviewed/licensed x86 binaries or an explicit runtime
+capability refusal is required before visual PDF support can be claimed for x86.
+This open behavior is tracked in the
+[risk register](stabilization/RISK_REGISTER.md).
 
 Task pane JS/CSS is committed in `web/`:
 

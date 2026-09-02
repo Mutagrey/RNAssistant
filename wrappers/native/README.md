@@ -28,9 +28,11 @@ is written under `artifacts\portable\Release` and also published directly to
 `C:\Temp\RNAssistant` (x64) or `C:\Temp\RNAssistant-x86` (x86). The x86 package
 contains the managed AnyCPU PdfPig text reader, but not the x64-only native PDF
 page-rendering binaries. Thus text extraction/page metadata are the intended x86
-path; scanned or visual PDF pages cannot be converted to images in x86. Presence of
-the managed `PDFtoImage.dll` and `SkiaSharp.dll` facades does not provide a matching
-native runtime. See the exact
+ingestion path; scanned or visual PDF pages cannot be converted to images in x86.
+The current request builder may enter that visual path when the selected model
+supports images, even for a PDF whose text was extracted, so complete PDF sending is
+not x86-qualified. Presence of the managed `PDFtoImage.dll` and `SkiaSharp.dll`
+facades does not provide a matching native runtime. See the exact
 [PDF bitness boundary](../../docs/dependencies.md#pdf-bitness-boundary).
 
 Each publish replaces its known output directory as one exact package, so files

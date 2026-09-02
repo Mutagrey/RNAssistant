@@ -19,7 +19,8 @@ a one-page create/open/text-extract smoke under Mono x64. The only vendored
 PDFium/Skia native files are PE32+ x86-64 and the x86 publisher omits them. Thus
 project or managed facade bitness is not the text-reader limitation: x86 text
 extraction is structurally compatible, while visual/scanned-page rendering is
-unsupported and not qualified.
+unsupported and not qualified. Because an image-capable model may invoke visual
+rendering even after extraction, complete PDF sending is also not x86-qualified.
 This ARM/macOS host cannot execute a Windows x86 process, so exact 32-bit Office
 import and explicit visual-capability failure remain R64/open. Runtime/packages and
 11D3 were not changed.
