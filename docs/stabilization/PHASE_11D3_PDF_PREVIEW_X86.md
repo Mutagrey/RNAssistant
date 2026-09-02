@@ -7,7 +7,9 @@ Scope: host-neutral PDF viewer/runtime packaging only
 
 - PDF info and page rendering use separate typed bridge operations bound to one
   canonical revision-pinned attachment URI. Exact source message/attachment identity,
-  PDF MIME, original SHA-256, byte length and PdfPig page count must agree.
+  PDF MIME, original SHA-256, byte length and PdfPig page count must agree. Dedicated
+  `ArtifactPdfViewerService` owns PDF admission/native rendering; the generic artifact
+  viewer only delegates it and retains the shared exact text-page boundary.
 - The info response verifies the stored extracted-text SHA-256/character count and
   returns only that evidence, page text lengths, explicit truncation and scan/little-
   text warning. Extracted text stays on the existing exact viewer-page operation:

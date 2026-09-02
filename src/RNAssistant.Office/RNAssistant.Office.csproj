@@ -198,6 +198,7 @@
     <Compile Include="Vba\VbaVerifier.cs" />
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ArtifactLibraryProjectionService.cs" />
+    <Compile Include="Services\ArtifactPdfViewerService.cs" />
     <Compile Include="Services\ArtifactViewerService.cs" />
     <Compile Include="Services\PlanDocumentService.cs" />
     <Compile Include="Services\TaskListService.cs" />

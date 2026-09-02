@@ -21,7 +21,9 @@ picker/drop/paste timing remains open.
 Phase 11D3 PDF preview + x86 native runtime (2026-09-02, user-requested
 host-neutral): typed exact PDF info and one-page JPEG render calls now compose with
 the existing 32,000 / 512,000-character exact text paging path; metadata no longer
-returns the whole extracted body. UI defaults to page preview with navigation,
+returns the whole extracted body. PDF admission/PDFtoImage rendering is isolated in
+`ArtifactPdfViewerService`; the generic viewer only delegates it. UI defaults to
+page preview with navigation,
 fit/zoom/download and a secondary bounded text tab, while outer metadata/JSON stays
 under `Детали`. Matching PE32 x86 PDFium/Skia files from the exact reviewed x64
 package versions are vendored and wired to Office and portable outputs; x64 native

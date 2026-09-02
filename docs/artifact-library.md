@@ -215,6 +215,8 @@ three responses before admitting the preview. The render call accepts only a zer
 based index inside the PdfPig count and returns a JPEG whose signature, size and
 dimensions are checked before WebView. Native load or machine-type failure is
 surfaced as an explicit renderer-unavailable error and is never retried automatically.
+`ArtifactPdfViewerService` owns PDF admission and PDFtoImage rendering; the generic
+`ArtifactViewerService` only delegates that format and keeps shared exact text paging.
 
 ## Edit and delete semantics
 
