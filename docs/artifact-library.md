@@ -184,7 +184,11 @@ placeholder rather than falling forward to another revision.
   DOM or granted network access.
 - HTML workspace: sandboxed rendered preview, exact HTML/CSS/JS/JSON editors,
   binding status, revision/branch history and export. Network origins retain the
-  existing explicit allowlist and last-good binding behavior.
+  existing explicit allowlist and last-good binding behavior. A workspace whose
+  HTML/JavaScript references `echarts` receives the exact local ECharts 5.6.0 bundle
+  as classic JavaScript before workspace scripts in its sandbox and standalone
+  export; ordinary workspaces do not carry it, and Chart.js/CDN loading is
+  unsupported.
 
 ViewerRegistry remains UI-only dispatch. Fetching bounded text/media and checking
 the exact revision belong to the Artifact Library owner and the shared resource

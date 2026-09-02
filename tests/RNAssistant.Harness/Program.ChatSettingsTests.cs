@@ -384,6 +384,11 @@ namespace RNAssistant.Harness
                 "prompt authoring assigns identity to runtime before durable acceptance");
             AssertTrue(authoring.IndexOf("Each call needs a unique id", StringComparison.OrdinalIgnoreCase) < 0,
                 "R31 model-owned identity guidance cannot return");
+            var htmlAuthoring = skills.Single(skill => skill.Id == "common.html_workspace_authoring").BodyMarkdown;
+            AssertContains(htmlAuthoring, "echarts.init(node); chart.setOption(option)",
+                "HTML authoring teaches the concise bundled chart runtime");
+            AssertContains(htmlAuthoring, "Do not add Chart.js or CDN loaders",
+                "HTML authoring rejects remote or duplicate chart runtimes");
             foreach (var skill in skills)
                 AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
                     skill.Id + " does not teach the removed result success flag");

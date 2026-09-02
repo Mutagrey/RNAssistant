@@ -167,7 +167,7 @@
         "zrender": "5.6.1"
       },
       "browserRuntimeDependencies": [],
-      "dependencyNotes": "The selected dist bundle embeds tslib/zrender; no separate runtime files are loaded. Bundled d3-derived code is covered by licenses/echarts-5.6.0/licenses/LICENSE-d3.",
+      "dependencyNotes": "The selected dist bundle embeds tslib/zrender; no separate runtime files are loaded. The same exact bundle is injected into charting HTML workspace sandboxes and standalone exports. Bundled d3-derived code is covered by licenses/echarts-5.6.0/licenses/LICENSE-d3.",
       "licenseFiles": [
         {
           "path": "licenses/echarts-5.6.0/LICENSE",

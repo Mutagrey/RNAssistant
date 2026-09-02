@@ -9,6 +9,16 @@ Next step for tools: 11O3 atomically switches HTML workspace/data-binding contra
 Required context: [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), [conversation protocol](../conversation-protocol.md), [Artifact Library](../artifact-library.md), [migration map](MIGRATION_MAP.md), exact HTML catalog/service/handlers and the 11C/11T9C4 evidence only.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O2 are complete host-neutral; HTML, authoring, VBA/macro, final core-pack, dynamic-package and Library UI slices remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63 is fixed host-neutral; exact real Excel bind/refresh on Windows remains open. R51 remains open for audio, other committed-resource removal and Windows WebView image/PDF/lifecycle qualification; 11D2 image and 11D3 PDF behavior are complete host-neutral. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
+HTML workspace ECharts authoring correction (2026-09-02, user-requested
+host-neutral): the built-in skill now gives only the standard `echarts.init` /
+`setOption` pattern and rejects Chart.js/CDN loaders. Workspace HTML/JavaScript that
+references `echarts` receives the exact existing local ECharts 5.6.0 bundle inside
+the unchanged sandbox and standalone export; ordinary workspaces do not embed it.
+Focused web checks pass 15/15 and the built-in guidance harness passes 1/1 with six
+known CA1416 warnings. A local headless Chrome `file://` smoke loaded the assembled
+artifact, reported ECharts 5.6.0, created one 400×240 canvas and accepted a bar
+series. Windows WebView rendering remains open.
+
 Attachment immediate-send correction (2026-09-02, user-reported host-neutral):
 picker/drop/paste staging had no composer send barrier, so an immediate submit could
 snapshot empty `resourceDraftIds` and start a text-only model request while the PDF

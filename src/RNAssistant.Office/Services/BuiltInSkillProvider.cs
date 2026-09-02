@@ -99,6 +99,7 @@ namespace RNAssistant.Office.Services
                     "## Runtime model\n\n" +
                     "- The active HTML file is the entry page. RNAssistant injects every workspace CSS file into its head and every classic JavaScript file before its closing body in workspace order. Do not add local link/script references and do not use ES module import/export.\n" +
                     "- Every script runs on every active entry page. Use an IIFE or one stable namespace, avoid global collisions, and guard DOM lookups. Keep the main DOM in the entry HTML; split substantial styling and behavior into focused CSS and JavaScript files.\n" +
+                    "- For charts use bundled ECharts: `var chart = echarts.init(node); chart.setOption(option);`. Do not add Chart.js or CDN loaders.\n" +
                     "- Default to a responsive accessible full-page layout with body margin 0; do not force a narrow centered card unless requested.\n\n" +
                     "## Data and safety\n\n" +
                     "- For Office-backed data that should stay current, use common.html_data_bind with an approved read-only source. Choose sourceTool first and pass only fields from that tool's exact schema in sourceArguments. For excel.read_range these are sheet, address and content; never pass kind. Prefer transform=table for grids/charts and raw when the source already suits the page. Read it through window.RNAssistantData and handle missing, empty, and binding-error states.\n" +

@@ -113,6 +113,24 @@
     }).join("\n");
   }
 
+  function usesECharts(files) {
+    return files.some(function (file) {
+      return (fileKind(file) === "html" || isScriptFile(file)) && /\becharts\b/.test(fileContent(file));
+    });
+  }
+
+  function echartsScript(files) {
+    if (!usesECharts(files) || typeof window.RNAssistantEChartsFactory !== "function" ||
+        !window.echarts || window.echarts.version !== "5.6.0") {
+      return "";
+    }
+    return "<script data-rn-vendor=\"echarts-5.6.0\">" +
+      "/* Licensed to the Apache Software Foundation under the Apache License, Version 2.0. " +
+      "https://www.apache.org/licenses/LICENSE-2.0 */\n(" +
+      safeScript(window.RNAssistantEChartsFactory.toString()) +
+      ")(window.echarts={});<\/script>";
+  }
+
   function previewViewportReset() {
     return "<style data-rn-preview-reset>html,body{min-height:100%;margin:0;}*,*::before,*::after{box-sizing:border-box;}</style>";
   }
@@ -136,7 +154,9 @@
     var file = activeHtmlFile(files, options.activeFileId || "");
     var html = file ? fileContent(file) : "";
     var hostBridge = options.hostBridge === false ? "" : networkBridgeScript() + "\n";
-    var headInject = previewContentSecurityPolicy() + "\n" + previewViewportReset() + "\n" + hostBridge + dataScript(dataSources) + "\n" + cssBlock(files);
+    var chartRuntime = echartsScript(files);
+    var headInject = previewContentSecurityPolicy() + "\n" + previewViewportReset() + "\n" +
+      chartRuntime + (chartRuntime ? "\n" : "") + hostBridge + dataScript(dataSources) + "\n" + cssBlock(files);
     var bodyInject = scriptBlock(files);
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";

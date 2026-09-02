@@ -22,7 +22,9 @@ KaTeX ships only the 20 WOFF2 files used by current WebView2. Its local CSS is a
 documented derivative of the exact 0.16.11 distribution: unused `.woff`/`.ttf`
 fallback URLs were removed so every URL resolves to a manifested local file.
 ECharts uses its prebuilt browser bundle; `zrender`/`tslib` are embedded and no
-separate dependency is loaded.
+separate dependency is loaded. HTML workspaces that reference the `echarts` global
+receive that exact local bundle inside their sandbox and standalone export; no CDN
+or second chart runtime is loaded.
 
 Wunderbaum ships its pinned UMD and CSS only. RNAssistant's `TreeAdapter` accepts
 bounded local arrays and does not expose URL/lazy loading, edit, DnD, grid or
