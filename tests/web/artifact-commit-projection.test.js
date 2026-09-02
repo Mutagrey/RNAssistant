@@ -86,9 +86,9 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=bridge-bootstrap-20260831-1"), "core bridge bootstrap has the bridge cache key");
   assert.ok(index.includes("app-chat-state.js?v=tool-contract-20260901-1"), "chat state has the typed Tool contract cache key");
-  ["app-messages.js", "app-attachments.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=artifact-commit-20260831-1"), asset + " retains the commit-boundary cache key");
-  });
+  assert.ok(index.includes("app-messages.js?v=artifact-commit-20260831-1"), "messages retain the commit-boundary cache key");
+  assert.ok(index.includes("app-attachments.js?v=attachment-stage-20260902-1"),
+    "attachment staging has the current pre-dispatch barrier cache key");
   console.log("PASS artifact commit: production boundary and lifecycle labels are wired atomically");
 }
 

@@ -131,12 +131,43 @@ async function submitChatInput() {
   if (currentActiveSend() || state.modelSaving || state.modeSaving || state.reasoningSaving) {
     return;
   }
+  if (state.pendingChatSubmitId) {
+    return;
+  }
   if (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) {
     return;
   }
 
+  var targetChatId = state.activeChatId;
   var text = $("chatInput").value.trim();
+  var ingestion = typeof pendingChatResourceIngestion === "function"
+    ? pendingChatResourceIngestion(targetChatId)
+    : null;
   var attachments = (state.draftAttachments || []).slice();
+  if (!text && !attachments.length && !ingestion) {
+    return;
+  }
+
+  if (ingestion) {
+    state.pendingChatSubmitId = targetChatId;
+    renderSendControls();
+    var ingestionSucceeded = false;
+    try {
+      ingestionSucceeded = await ingestion !== false;
+    } catch (error) {
+      log(error.detail || error.message, "error");
+    } finally {
+      if (state.pendingChatSubmitId === targetChatId) state.pendingChatSubmitId = "";
+      renderSendControls();
+    }
+    if (!ingestionSucceeded || state.activeChatId !== targetChatId || currentActiveSend() ||
+        state.modelSaving || state.modeSaving || state.reasoningSaving ||
+        (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity())) {
+      return;
+    }
+    attachments = (state.draftAttachments || []).slice();
+  }
+
   if (!text && !attachments.length) {
     return;
   }
@@ -153,7 +184,7 @@ async function submitChatInput() {
 }
 
 function retryFailedSend() {
-  if (currentActiveSend() || hasActiveMessageEdit() ||
+  if (currentActiveSend() || state.pendingChatSubmitId || hasActiveMessageEdit() ||
     (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) ||
     !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length)) {
     return;

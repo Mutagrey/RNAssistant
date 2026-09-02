@@ -9,6 +9,15 @@ Next step for tools: 11O3 atomically switches HTML workspace/data-binding contra
 Required context: [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), [conversation protocol](../conversation-protocol.md), [Artifact Library](../artifact-library.md), [migration map](MIGRATION_MAP.md), exact HTML catalog/service/handlers and the 11C/11T9C4 evidence only.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package, controller-owned tools and Tool/Skill model/UI authoring use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O2 are complete host-neutral; HTML, authoring, VBA/macro, final core-pack, dynamic-package and Library UI slices remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63 is fixed host-neutral; exact real Excel bind/refresh on Windows remains open. R51 remains open for audio, other committed-resource removal and Windows WebView image/PDF/lifecycle qualification; 11D2 image and 11D3 PDF behavior are complete host-neutral. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
+Attachment immediate-send correction (2026-09-02, user-reported host-neutral):
+picker/drop/paste staging had no composer send barrier, so an immediate submit could
+snapshot empty `resourceDraftIds` and start a text-only model request while the PDF
+draft finished in the background. Staging is now serialized per chat and an already
+requested send waits for that queue before snapshotting draft IDs; failure preserves
+the composer and starts no partial request. Focused UI regression covers successful
+PDF ordering, fail-closed staging and current asset keys. Real Windows WebView2
+picker/drop/paste timing remains open.
+
 Phase 11D3 PDF preview + x86 native runtime (2026-09-02, user-requested
 host-neutral): typed exact PDF info and one-page JPEG render calls now compose with
 the existing 32,000 / 512,000-character exact text paging path; metadata no longer

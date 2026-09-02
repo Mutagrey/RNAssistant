@@ -30,21 +30,32 @@ function fileToBase64(file) {
   });
 }
 
-async function ingestChatResourceFiles(files) {
-  files = Array.prototype.slice.call(files || []);
-  if (!files.length) return;
-  if (currentActiveSend() || state.bridgeUnavailable) return;
-  var targetChatId = state.activeChatId;
+function chatResourceIngestionQueue() {
+  state.chatResourceIngestions = state.chatResourceIngestions || {};
+  return state.chatResourceIngestions;
+}
 
-  var existingBytes = state.draftAttachments.reduce(function (sum, item) { return sum + attachmentSize(item); }, 0);
-  if (state.draftAttachments.length + files.length > ATTACHMENT_MAX_FILES) {
+function pendingChatResourceIngestion(chatId) {
+  return chatId ? (chatResourceIngestionQueue()[chatId] || null) : null;
+}
+
+function draftAttachmentsForChat(chatId) {
+  if (state.activeChatId === chatId) return state.draftAttachments || [];
+  var draft = chatDraftStore()[chatId];
+  return draft && draft.attachments ? draft.attachments : [];
+}
+
+async function stageChatResourceFiles(targetChatId, files) {
+  var existingAttachments = draftAttachmentsForChat(targetChatId);
+  var existingBytes = existingAttachments.reduce(function (sum, item) { return sum + attachmentSize(item); }, 0);
+  if (existingAttachments.length + files.length > ATTACHMENT_MAX_FILES) {
     log("Можно добавить не более 10 файлов.", "warning");
-    return;
+    return false;
   }
   if (files.some(function (file) { return file.size <= 0 || file.size > ATTACHMENT_MAX_FILE_BYTES; }) ||
       existingBytes + files.reduce(function (sum, file) { return sum + file.size; }, 0) > ATTACHMENT_MAX_TOTAL_BYTES) {
     log("Лимит: 20 МБ на файл и 50 МБ на сообщение.", "warning");
-    return;
+    return false;
   }
   try {
     for (var index = 0; index < files.length; index += 1) {
@@ -68,14 +79,45 @@ async function ingestChatResourceFiles(files) {
         drafts[targetChatId] = draft;
       }
     }
+    return true;
   } catch (error) {
     log(error.detail || error.message, "error");
-    return;
+    return false;
   }
+}
+
+function ingestChatResourceFiles(files) {
+  files = Array.prototype.slice.call(files || []);
+  if (!files.length) return Promise.resolve(true);
+  var targetChatId = state.activeChatId;
+  if (!targetChatId || currentActiveSend() || state.bridgeUnavailable || state.pendingChatSubmitId === targetChatId) {
+    return Promise.resolve(false);
+  }
+
+  var queue = chatResourceIngestionQueue();
+  var previous = queue[targetChatId] || Promise.resolve(true);
+  var operation = previous.then(async function (previousSucceeded) {
+    var currentSucceeded = await stageChatResourceFiles(targetChatId, files);
+    return previousSucceeded !== false && currentSucceeded;
+  });
+  queue[targetChatId] = operation;
+  updateComposerInputState();
+
+  return operation.then(function (succeeded) {
+    if (queue[targetChatId] === operation) delete queue[targetChatId];
+    if (state.activeChatId === targetChatId) updateComposerInputState();
+    return succeeded;
+  }, function (error) {
+    if (queue[targetChatId] === operation) delete queue[targetChatId];
+    if (state.activeChatId === targetChatId) updateComposerInputState();
+    log(error.detail || error.message, "error");
+    return false;
+  });
 }
 
 async function removeDraftAttachment(item) {
   var targetChatId = state.activeChatId;
+  if (!targetChatId || currentActiveSend() || state.pendingChatSubmitId === targetChatId) return;
   try {
     await send("discardChatResourceDraft", { chatId: targetChatId, id: attachmentId(item) });
   } catch (error) {

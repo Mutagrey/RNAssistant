@@ -16,7 +16,8 @@ function renderChatModePicker() {
   label.textContent = active.title;
   icon.textContent = active.icon;
   icon.dataset.mode = active.value;
-  var disabled = !!currentActiveSend() || hasActiveMessageEdit() || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+  var disabled = !!currentActiveSend() || state.pendingChatSubmitId === state.activeChatId ||
+    hasActiveMessageEdit() || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   if (typeof setComposerPickerDisabled === "function") setComposerPickerDisabled(picker, disabled);
 
   menu.replaceChildren();
@@ -64,6 +65,7 @@ function renderSendControls() {
   var activeSend = currentActiveSend();
   var isEditing = hasActiveMessageEdit();
   var isSending = !!activeSend;
+  var isPreparingAttachments = !isSending && state.pendingChatSubmitId === state.activeChatId;
   var isCanceling = isSending && !!activeSend.canceling;
   var approvalPending = !isEditing && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
   var sendButton = $("sendButton");
@@ -81,6 +83,7 @@ function renderSendControls() {
 
   if (form) {
     form.classList.toggle("is-message-editing", isEditing);
+    form.classList.toggle("is-preparing-attachments", isPreparingAttachments);
   }
   if (editBar) {
     editBar.classList.toggle("hidden", !isEditing);
@@ -92,7 +95,7 @@ function renderSendControls() {
 
   if (sendButton) {
     sendButton.classList.toggle("hidden", isSending);
-    sendButton.title = isEditing ? "Отправить заново" : "Отправить";
+    sendButton.title = isPreparingAttachments ? "Подготовка вложения" : (isEditing ? "Отправить заново" : "Отправить");
     sendButton.setAttribute("aria-label", sendButton.title);
   }
   if (stopButton) {
@@ -102,7 +105,7 @@ function renderSendControls() {
     stopButton.setAttribute("aria-label", stopButton.title);
   }
   if (input) {
-    input.readOnly = isSending || approvalPending || state.modeSaving || state.reasoningSaving ||
+    input.readOnly = isSending || isPreparingAttachments || approvalPending || state.modeSaving || state.reasoningSaving ||
       state.bridgeUnavailable || qualificationChat;
     input.placeholder = qualificationChat
       ? "Продолжите проверку через Qualification Center..."
@@ -115,13 +118,13 @@ function renderSendControls() {
           : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст..."))));
   }
   if (clearButton) {
-    clearButton.disabled = isSending || state.editingBusy || qualificationChat;
+    clearButton.disabled = isSending || isPreparingAttachments || state.editingBusy || qualificationChat;
   }
   if (modelSelect) {
-    modelSelect.disabled = isSending || isEditing || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || qualificationChat || !state.activeChatId;
+    modelSelect.disabled = isSending || isPreparingAttachments || isEditing || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || qualificationChat || !state.activeChatId;
   }
   if (modeSelect) {
-    modeSelect.disabled = isSending || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || qualificationChat || !state.activeChatId;
+    modeSelect.disabled = isSending || isPreparingAttachments || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || qualificationChat || !state.activeChatId;
   }
   renderChatModePicker();
   if (typeof renderChatModelPicker === "function") {
@@ -130,11 +133,18 @@ function renderSendControls() {
   if (typeof renderReasoningToggle === "function") {
     renderReasoningToggle();
   }
+  if (isPreparingAttachments) {
+    if (typeof setComposerPickerDisabled === "function") {
+      setComposerPickerDisabled($("chatModePicker"), true);
+      setComposerPickerDisabled($("chatModelPicker"), true);
+    }
+    if ($("chatReasoningToggle")) $("chatReasoningToggle").disabled = true;
+  }
   if ($("addSelectionContextButton")) {
-    $("addSelectionContextButton").disabled = isSending || isEditing || state.bridgeUnavailable || qualificationChat || !currentDocumentAvailable;
+    $("addSelectionContextButton").disabled = isSending || isPreparingAttachments || isEditing || state.bridgeUnavailable || qualificationChat || !currentDocumentAvailable;
   }
   if ($("attachFileButton")) {
-    $("attachFileButton").disabled = isSending || approvalPending || isEditing || state.bridgeUnavailable || qualificationChat || !state.activeChatId;
+    $("attachFileButton").disabled = isSending || isPreparingAttachments || approvalPending || isEditing || state.bridgeUnavailable || qualificationChat || !state.activeChatId;
   }
   if (typeof renderPromptContextInspectorAvailability === "function") {
     renderPromptContextInspectorAvailability();
@@ -148,18 +158,20 @@ function updateComposerInputState() {
   var clearButton = $("clearInputButton");
   var hasText = !!(input && input.value.trim());
   var hasAttachments = !!(state.draftAttachments && state.draftAttachments.length);
+  var hasPendingAttachments = !!(state.chatResourceIngestions && state.activeChatId &&
+    state.chatResourceIngestions[state.activeChatId]);
 
   if (hasActiveMessageEdit() && input) {
     state.editingText = input.value;
   }
 
   if (form) {
-    form.classList.toggle("has-input", hasText || hasAttachments);
+    form.classList.toggle("has-input", hasText || hasAttachments || hasPendingAttachments);
   }
   if (clearButton) {
     clearButton.hidden = !hasText;
   }
-  updateSendButtonAvailability(hasText || hasAttachments);
+  updateSendButtonAvailability(hasText || hasAttachments || hasPendingAttachments);
   resizeChatInput();
 }
 
@@ -173,6 +185,7 @@ function updateSendButtonAvailability(hasContent) {
   var canSaveEdit = !!editingTarget && canSaveMessageEdit(editingTarget.message, editingTarget.index);
   sendButton.disabled =
     !!currentActiveSend() ||
+    state.pendingChatSubmitId === state.activeChatId ||
     (!hasActiveMessageEdit() && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity()) ||
     state.modelSaving ||
     state.modeSaving ||

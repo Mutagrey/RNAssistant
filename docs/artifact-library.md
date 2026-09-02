@@ -47,6 +47,11 @@ Paste, drag-and-drop and the paperclip use the same staging action. Pasting
 ordinary text remains composer text; only clipboard file/media items create
 resource drafts.
 
+If Send is requested while picker, drop or paste staging is still in flight, the
+composer waits for that chat's serialized staging queue before it snapshots the
+draft IDs. A staging failure keeps the text and successful drafts available for
+retry and starts no partial text-only model request.
+
 The current limits remain 10 files per message, 20 MiB per file and 50 MiB total
 unless a later bounded contract changes them explicitly. Supported uploads are
 signature-validated images, PDF, MP3/WAV and safely decoded text-based files;
