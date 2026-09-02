@@ -1,7 +1,6 @@
 using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
@@ -93,7 +92,7 @@ namespace RNAssistant.Office.Services
             {
                 Role = normalizedRole,
                 ToolCallId = command.ToolCallId,
-                ToolName = native ? ApiToolName(command.ToolId) : command.ToolId,
+                ToolName = command.ToolId,
                 ToolResultRole = normalizedRole,
                 ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
                 Content = native ? resultJson : "TOOL_RESULT:\n" + resultJson,
@@ -120,7 +119,9 @@ namespace RNAssistant.Office.Services
                 nativeMessage.ToolResultRole = normalizedRole;
                 nativeMessage.ToolCallId = call.Id;
                 nativeMessage.AcceptedCallOrigin = origin;
-                // ToolCalls keeps the provider-safe name; ToolName is local replay metadata and preserves the canonical id.
+                // Native history is only the matching call/result transport shape;
+                // RNAssistant does not advertise a second provider function catalog.
+                // Keep the exact public id visible on both the API message and local metadata.
                 nativeMessage.ToolName = call.Name;
                 nativeMessage.ToolCalls = new List<LlmToolCall>
                 {
@@ -128,7 +129,7 @@ namespace RNAssistant.Office.Services
                     {
                         Id = call.Id,
                         Type = "function",
-                        Name = ApiToolName(call.Name),
+                        Name = call.Name,
                         ArgumentsJson = JsonConvert.SerializeObject(
                             call.Arguments == null
                                 ? new Dictionary<string, object>()
@@ -150,20 +151,6 @@ namespace RNAssistant.Office.Services
             protocolMessage.AcceptedCallOrigin = origin;
             protocolMessage.ToolName = call.Name;
             return protocolMessage;
-        }
-
-        internal static string ApiToolName(string toolId)
-        {
-            var source = string.IsNullOrWhiteSpace(toolId) ? "tool" : toolId;
-            var chars = source.Select(character =>
-                (character >= 'a' && character <= 'z' ||
-                 character >= 'A' && character <= 'Z' ||
-                 character >= '0' && character <= '9' ||
-                 character == '_' || character == '-')
-                    ? character
-                    : '_').ToArray();
-            var value = "rna_" + new string(chars);
-            return value.Length <= 64 ? value : value.Substring(0, 64);
         }
 
         private static JToken BoundData(JToken parsed, int maxDataTokens, AppSettings settings)

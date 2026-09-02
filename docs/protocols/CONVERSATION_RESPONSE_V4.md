@@ -154,14 +154,14 @@ chat, including pending calls; no hidden result conversion is permitted.
 | Tool-result role | Accepted call and matching result |
 |---|---|
 | `user` / `developer` | Assistant content is the canonical v4 envelope without IDs. Separate `ToolCallId`, canonical `ToolName` and `AcceptedCallOrigin` metadata retain the runtime mapping. The following `TOOL_RESULT` carries the same `tool_call_id`. |
-| `tool` | Native `assistant.tool_calls` carries the persisted runtime ID and provider-safe name. Canonical `ToolName`, matching `ToolCallId` and origin remain local metadata; the following native tool result uses that same ID. |
+| `tool` | Native `assistant.tool_calls` carries the persisted runtime ID, exact public tool name and accepted semantic arguments. Matching canonical `ToolName`, `ToolCallId` and origin remain local metadata; the following native tool result uses that same ID. |
 
 `ConversationResponseHistoryReader` reads only identified current-v4 records. It
 returns accepted `Core.Agent.AgentResponse` / `ToolCall` values, including
 `ArgumentsJson`, without creating IDs or granting execution authority. Per-call
 records require complete consistent metadata and origin. Native calls require a
-matching runtime ID and canonical tool name; provider-safe names are not reversed
-to infer authority. A plain final assistant message has no call metadata and is
+matching runtime ID and the same exact public tool name; transport aliases are not
+reversed to infer authority. A plain final assistant message has no call metadata and is
 not sniffed for embedded JSON instructions. Diagnostics and result records are
 not accepted assistant responses.
 

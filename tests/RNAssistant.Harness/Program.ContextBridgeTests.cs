@@ -101,11 +101,11 @@ namespace RNAssistant.Harness
                 ResponseStatus = AgentResponseStatuses.Completed,
                 ToolCallId = "call-1",
                 AcceptedCallOrigin = FixtureCallOrigin("accepted-step", "accepted-attempt", 2),
-                ToolName = "rna_excel_read_range",
+                ToolName = "excel.read_range",
                 ToolResultRole = ToolResultRoles.Tool,
                 ToolCalls = new List<LlmToolCall>
                 {
-                    new LlmToolCall { Id = "call-1", Type = "function", Name = "rna_excel_read_range", ArgumentsJson = sourceArgumentsJson }
+                    new LlmToolCall { Id = "call-1", Type = "function", Name = "excel.read_range", ArgumentsJson = sourceArgumentsJson }
                 },
                 ResourceRefs = new List<ResourceRef> { new ResourceRef(sourcePlanUri, "1") },
                 HtmlWorkspaceCheckpoint = new ResourceRef(ResourceUri.Create("chat", "source", "artifact", "html-2", "revision", "2"), "2"),

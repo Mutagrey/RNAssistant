@@ -288,10 +288,13 @@ See [ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate
 
 - `user` (default) / `developer`: result JSON follows the `TOOL_RESULT:` prefix;
 - `tool`: the same raw JSON follows a matching `assistant.tool_calls` entry;
-  its provider-safe function name remains only in that assistant call, while the
-  result message contains exactly `role`, `tool_call_id` and `content`. It has no
-  message-level `name`; the canonical public tool id remains inside Tool Result v1
-  content and local replay metadata.
+  that accepted-history entry carries the exact public tool id and only the
+  schema-valid semantic arguments accepted from conversation-response v4. RNAssistant
+  does not advertise a second native function catalog. The result message contains
+  exactly `role`, `tool_call_id` and `content`, with no message-level `name`; the
+  same public id remains inside Tool Result v1 and local replay metadata. Stored
+  pre-cutover resource/capability calls that no longer satisfy the current schema
+  require an explicit new chat/reset before another model request.
 
 ```text
 TOOL_RESULT:

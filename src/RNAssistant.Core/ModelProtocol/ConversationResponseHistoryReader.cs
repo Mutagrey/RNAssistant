@@ -52,7 +52,7 @@ namespace RNAssistant.Core.ModelProtocol
                 var parsed = ConversationResponseJson.Read(envelope);
                 if (!parsed.Success) return ConversationHistoryReadResult.Fail(parsed.Error);
                 // A raw arguments string must not inject another call or change
-                // the accepted envelope. Provider-safe names are never reversed.
+                // the accepted envelope. Native history keeps the exact public id.
                 if (parsed.Response.ToolCalls.Count != 1 || parsed.Response.ToolCalls[0].Name != message.ToolName ||
                     parsed.Response.Message != (message.Content ?? string.Empty))
                     return ConversationHistoryReadResult.Fail("Native argument JSON changed the response envelope.");

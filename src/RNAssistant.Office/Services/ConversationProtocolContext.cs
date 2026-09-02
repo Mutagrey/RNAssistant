@@ -67,6 +67,13 @@ namespace RNAssistant.Office.Services
                     throw HistoryFailure("История содержит ответ другой или неизвестной версии протокола.");
                 var parsed = ConversationResponseHistoryReader.Read(message);
                 if (!parsed.Success) throw HistoryFailure("Неполная запись принятого ответа: " + parsed.Error);
+                foreach (var call in parsed.Response.ToolCalls)
+                {
+                    string contractError;
+                    if (!ModelToolResultProjection.ValidateAcceptedCall(call, out contractError))
+                        throw HistoryFailure("История содержит вызов из заменённого model-facing контракта: " +
+                            contractError + " Создайте новый чат или выполните явный reset.");
+                }
                 if (parsed.Response.ToolCalls.Count > 0)
                 {
                     if (!message.ProtocolMessage || message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
@@ -75,7 +82,7 @@ namespace RNAssistant.Office.Services
                         throw HistoryFailure("Принятый вызов относится к другой версии результатов или имеет повторный id.");
                     var native = message.ToolResultRole == ToolResultRoles.Tool;
                     if (native != (message.ToolCalls != null && message.ToolCalls.Count == 1) ||
-                        native && (message.ToolCalls[0].Name != AgentJsonProtocol.ApiToolName(message.ToolName) ||
+                        native && (message.ToolCalls[0].Name != message.ToolName ||
                             message.ToolCalls[0].Type != "function"))
                         throw HistoryFailure("Форма принятого вызова не соответствует сохранённой роли результатов.");
                     calls.Add(message.ToolCallId, message);

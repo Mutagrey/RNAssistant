@@ -628,7 +628,7 @@ namespace RNAssistant.Harness
                     CreatedUtc = session.LastRun.StartedUtc.AddMilliseconds(1),
                     ToolCalls = new List<LlmToolCall>
                     {
-                        new LlmToolCall { Id = "call-without-result", Name = "rna_excel_read_range" }
+                        new LlmToolCall { Id = "call-without-result", Name = "excel.read_range" }
                     }
                 });
                 store.Save(session);

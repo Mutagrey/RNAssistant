@@ -2,7 +2,7 @@
 
 Current target: 16.1.0
 Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
-Current task: R61/11O1 Resources + Capabilities is complete host-neutral. Four public resource ids are replaced atomically by semantic `common.resources_find/read`; capability schemas are minimal, exact runtime state remains durable but is removed from model arguments/results/context/replay, and the refreshed inventory pins 71 unique built-in ids / 74 effective host variants. Remaining family cutovers, dynamic custom-package review and Library UI stay open. The exact Windows rebuild/error-path retest and remaining live-provider gates are also open.
+Current task: R61/11O1 Resources + Capabilities is complete host-neutral, including exact native replay identity. Four public resource ids are replaced atomically by semantic `common.resources_find/read`; capability schemas are minimal, exact runtime state remains durable but is removed from model arguments/results/context/replay, and `assistant.tool_calls` no longer invents `rna_*` names or replays pre-cutover resource/capability arguments. The refreshed inventory pins 71 unique built-in ids / 74 effective host variants. Remaining family cutovers, dynamic custom-package review and Library UI stay open. The exact Windows rebuild/error-path retest and remaining live-provider gates are also open.
 Execution mode: mandatory host-neutral route 0–11T10 и WQ-A1–A5 implementation завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. По явному запросу пользователя host-neutral 11O продолжается с накопленными Windows gates по §16.1; final catalog/live-provider WQ evidence собирается только после всех R61 schema/UI switches. Phase 12 remains blocked.
 
 Next step for tools: 11O2 atomically switches Plan questions/doc/task-list lifecycle to semantic intent without caller-owned question, option, plan, artifact, list, step or revision IDs. It must preserve typed `AwaitingUser`, exact internal revision guards, verified writes and current UI behavior, then delete replaced public paths without aliases. The accumulated Windows rebuild/R62 retest remains mandatory before final WQ evidence.
@@ -28,14 +28,19 @@ artifact projection pass 22/22; changed VBA JavaScript syntax passes. No full
 harness or Office/VSTO validation was run. Windows live-provider/WebView2/WQ-PACK
 evidence remains open.
 
-Native Chat Completions tool-result shape correction (2026-09-02,
-user-requested host-neutral): `role=tool` request messages now contain exactly
-`role`, `tool_call_id` and `content`; the unsupported duplicate message-level
-`name` is no longer emitted or counted in the request estimate. The provider-safe
-function name remains on the preceding `assistant.tool_calls` entry, while the
-canonical public id remains in Tool Result v1 content and local replay metadata.
-Targeted request-shape coverage passes 1/1 with four existing CA1416 warnings and
-protects both boundaries; live-provider/Windows qualification remains open.
+Native Chat Completions tool-result/replay correction (2026-09-02,
+user-requested host-neutral): `role=tool` request messages contain exactly `role`,
+`tool_call_id` and `content`; the unsupported duplicate message-level `name` is not
+emitted or counted. The preceding `assistant.tool_calls` entry now carries the exact
+public dotted tool id and its accepted schema arguments instead of a synthetic
+`rna_*` alias. Resource/capability and retired resource-call history is validated
+against the post-11O1 schemas before dispatch; URI/cursor/page-size replay or an old
+native alias requires explicit new chat/reset and cannot reach a model request.
+Twenty-eight focused current-binary cases cover native request shape, model
+projection, v4 history, protocol preflight, compatibility, compaction, trajectory,
+interrupted-run and clone paths; all pass, with four existing CA1416 warnings on the
+single compiling run. No full harness or Office/VSTO validation was run. Exact
+live-provider/Windows qualification remains open.
 
 Settings build identity visibility (2026-09-02, user-requested host-neutral UI):
 the existing informational version is now rendered as an explicit product version

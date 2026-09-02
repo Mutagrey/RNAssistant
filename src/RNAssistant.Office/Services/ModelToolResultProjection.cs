@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -101,15 +102,54 @@ namespace RNAssistant.Office.Services
         private static string CanonicalSwitchedName(string name)
         {
             if (IsResourceResult(name) || IsCapabilityResult(name)) return name;
-            if (string.Equals(name, AgentJsonProtocol.ApiToolName(ResourceToolCatalog.FindToolId),
-                StringComparison.Ordinal)) return ResourceToolCatalog.FindToolId;
-            if (string.Equals(name, AgentJsonProtocol.ApiToolName(ResourceToolCatalog.ReadToolId),
-                StringComparison.Ordinal)) return ResourceToolCatalog.ReadToolId;
-            if (string.Equals(name, AgentJsonProtocol.ApiToolName(CapabilityToolCatalog.SearchToolId),
-                StringComparison.Ordinal)) return CapabilityToolCatalog.SearchToolId;
-            if (string.Equals(name, AgentJsonProtocol.ApiToolName(CapabilityToolCatalog.ReadToolId),
-                StringComparison.Ordinal)) return CapabilityToolCatalog.ReadToolId;
             return null;
+        }
+
+        internal static bool ValidateAcceptedCall(ToolCall call, out string error)
+        {
+            error = null;
+            if (call == null || string.IsNullOrWhiteSpace(call.Name)) return true;
+            string schema;
+            switch (call.Name)
+            {
+                case "common.resources_list":
+                case "common.resources_resolve":
+                case "common.resources_search":
+                    error = "Public resource list/resolve/search calls were retired by 11O1.";
+                    return false;
+                case ResourceToolCatalog.FindToolId:
+                    schema = ResourceFindToolHandler.Descriptor.ParametersJson;
+                    break;
+                case ResourceToolCatalog.ReadToolId:
+                    schema = ResourceReadToolHandler.Descriptor.ParametersJson;
+                    break;
+                case CapabilityToolCatalog.SearchToolId:
+                    schema = CapabilityCatalogService.SearchSchema();
+                    break;
+                case CapabilityToolCatalog.ReadToolId:
+                    schema = CapabilityCatalogService.ReadSchema(null, null);
+                    break;
+                default:
+                    return true;
+            }
+
+            try
+            {
+                var arguments = JsonConvert.DeserializeObject<JObject>(
+                    call.ArgumentsJson ?? "{}",
+                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
+                var parsedSchema = JObject.Parse(schema);
+                string validationError;
+                if (arguments != null && ToolSchemaSupport.ValidateArguments(
+                    arguments, parsedSchema, false, out validationError)) return true;
+                error = "Stored " + call.Name + " arguments do not match the current semantic schema.";
+                return false;
+            }
+            catch (JsonException)
+            {
+                error = "Stored " + call.Name + " arguments are not a JSON object for the current semantic schema.";
+                return false;
+            }
         }
 
         private static bool IsSwitchedResult(ChatMessage message)

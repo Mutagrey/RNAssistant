@@ -188,7 +188,7 @@ namespace RNAssistant.Harness
                     session =>
                     {
                         session.Messages[2].Content = session.Messages[2].Content.Replace("excel.inspect", "excel.other");
-                        session.Messages[2].ToolName = role == ToolResultRoles.Tool ? AgentJsonProtocol.ApiToolName("excel.other") : "excel.other";
+                        session.Messages[2].ToolName = "excel.other";
                     },
                     session => session.Messages[2].ToolResultRole = "system",
                     session => session.Messages[2].Role = "system",
@@ -1467,6 +1467,13 @@ namespace RNAssistant.Harness
             AssertEqual(AgentResponseStatuses.InProgress, nativeCall.ResponseStatus,
                 "native call stores response status");
             AssertEqual("call_1", (string)assistant.SelectToken("tool_calls[0].id"), "native call id");
+            AssertEqual("excel.read_range", (string)assistant.SelectToken("tool_calls[0].function.name"),
+                "native replay keeps the exact public tool id");
+            AssertEqual("A1", (string)JObject.Parse(
+                (string)assistant.SelectToken("tool_calls[0].function.arguments"))["range"],
+                "native replay keeps only accepted schema arguments");
+            AssertTrue(api.Messages.ToString().IndexOf("rna_", StringComparison.Ordinal) < 0,
+                "native replay never invents an rna-prefixed function name");
             AssertEqual("tool", (string)toolMessage["role"], "native result role");
             AssertEqual("call_1", (string)toolMessage["tool_call_id"], "native result matches call");
             AssertTrue(toolMessage["name"] == null, "native result omits unsupported message-level name");
@@ -1854,7 +1861,7 @@ namespace RNAssistant.Harness
                 {
                     AssertEqual(accepted.ToolCallId, accepted.ToolCalls.Single().Id, "native call id");
                     AssertEqual(accepted.ToolCallId, resultMessage.ToolCallId, "matched native result id");
-                    AssertEqual(AgentJsonProtocol.ApiToolName("compat.echo"), accepted.ToolCalls[0].Name, "native wire name stays provider-safe");
+                    AssertEqual("compat.echo", accepted.ToolCalls[0].Name, "native wire keeps the exact public id");
                 }
                 else AssertEqual(toolJson, accepted.Content, "shared transcript writer preserves JSON envelope");
             }

@@ -32,7 +32,7 @@ namespace RNAssistant.Harness
                 var parsed = ConversationResponseHistoryReader.Read(message);
                 AssertTrue(parsed.Success, "current accepted history form reads: " + role);
                 AssertEqual(call.Id, parsed.Response.ToolCalls.Single().Id, "runtime metadata preserves the exact accepted id");
-                AssertEqual(call.Name, parsed.Response.ToolCalls.Single().Name, "canonical name is never reconstructed from an API alias");
+                AssertEqual(call.Name, parsed.Response.ToolCalls.Single().Name, "native history preserves the exact canonical name");
                 var arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(parsed.Response.ToolCalls[0].ArgumentsJson,
                     new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
                 AssertEqual("2026-08-28T12:34:56Z", arguments["at"] as string, "accepted ISO argument remains exact text");
@@ -80,9 +80,9 @@ namespace RNAssistant.Harness
             AssertTrue(!ConversationResponseHistoryReader.Read(legacy).Success, "v4 marker cannot silently use a v3 body");
             var noCanonicalName = nativeMessage();
             noCanonicalName.ToolName = null;
-            AssertTrue(!ConversationResponseHistoryReader.Read(noCanonicalName).Success, "provider-safe name cannot reconstruct a canonical id");
+            AssertTrue(!ConversationResponseHistoryReader.Read(noCanonicalName).Success, "native name cannot replace missing canonical metadata");
             var batch = nativeMessage();
-            batch.ToolCalls.Add(new LlmToolCall { Id = "second", Name = "rna_test_read", ArgumentsJson = "{}" });
+            batch.ToolCalls.Add(new LlmToolCall { Id = "second", Name = "test.read", ArgumentsJson = "{}" });
             AssertTrue(!ConversationResponseHistoryReader.Read(batch).Success, "ambiguous native batch is not partially adapted");
             foreach (var arguments in new[] { "{", "[]", "{\"at\":01}", "{}},{\"name\":\"test.read\",\"arguments\":{}" })
             {
@@ -2356,14 +2356,14 @@ namespace RNAssistant.Harness
                     {
                         Id = "call_1",
                         Type = "function",
-                        Name = "rna_excel_read_range",
+                        Name = "excel.read_range",
                         ArgumentsJson = "{\"range\":\"COMPACTION_TOOL_ARGUMENT\"}"
                     },
                     new LlmToolCall
                     {
                         Id = "call_2",
                         Type = "function",
-                        Name = "rna_excel_read_range",
+                        Name = "excel.read_range",
                         ArgumentsJson = "{\"range\":\"COMPACTION_TOOL_ARGUMENT_2\"}"
                     }
                 }
@@ -2428,14 +2428,14 @@ namespace RNAssistant.Harness
                     {
                         Id = "call_pair",
                         Type = "function",
-                        Name = "rna_excel_read_range",
+                        Name = "excel.read_range",
                         ArgumentsJson = "{\"marker\":\"PAIR_ARGUMENT\"}"
                     },
                     new LlmToolCall
                     {
                         Id = "call_pair_missing",
                         Type = "function",
-                        Name = "rna_excel_read_range",
+                        Name = "excel.read_range",
                         ArgumentsJson = "{\"marker\":\"PAIR_MISSING_ARGUMENT\"}"
                     }
                 }
@@ -2488,7 +2488,7 @@ namespace RNAssistant.Harness
                     {
                         Id = "dangling-call",
                         Type = "function",
-                        Name = "rna_excel_read_range",
+                        Name = "excel.read_range",
                         ArgumentsJson = "{\"marker\":\"DANGLING_ARGUMENT\"}"
                     }
                 }

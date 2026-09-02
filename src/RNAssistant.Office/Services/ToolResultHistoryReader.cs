@@ -45,7 +45,7 @@ namespace RNAssistant.Office.Services
                 return false;
             }
             if (parsed.ToolCallId != message.ToolCallId ||
-                message.ToolName != (native ? AgentJsonProtocol.ApiToolName(parsed.Name) : parsed.Name))
+                message.ToolName != parsed.Name)
             {
                 error = "Result body disagrees with its runtime call id or canonical tool name.";
                 return false;

@@ -60,6 +60,10 @@ domain data. Нельзя замаскировать ту же обязанно�
 Допустимы только exact public tool/skill id как реальная semantic identity и
 runtime-generated `tool_call_id` для сопоставления принятого вызова с результатом;
 последний не является argument и никогда не создаётся моделью.
+Native `assistant.tool_calls` replay не вводит второй function id: он сохраняет тот
+же exact public tool id и только аргументы текущей схемы. Синтетические transport
+aliases вроде `rna_*` и replay старых URI/cursor arguments запрещены; несовместимая
+сохранённая история требует явного new chat/reset до следующего model request.
 
 ## 3. Текущая поверхность и почему имеющихся тестов недостаточно
 

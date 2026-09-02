@@ -62,6 +62,79 @@ namespace RNAssistant.Harness
             AssertEqual(1, resourceMessage.ResourceRefs.Count,
                 "durable resource message retains exact evidence");
 
+            var semanticCall = new AgentToolCall
+            {
+                Id = "semantic_resource_call",
+                Name = ResourceToolCatalog.ReadToolId,
+                Arguments = new Dictionary<string, object>
+                {
+                    ["target"] = "VBA module: MOD_CTX_CodingStandards",
+                    ["representation"] = "source"
+                }
+            };
+            var semanticAccepted = AgentJsonProtocol.CreateToolCallMessage(
+                semanticCall, "Reading source.", null, ToolResultRoles.Tool,
+                FixtureCallOrigin("semantic-resource-step"));
+            var semanticResult = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolInvocation
+                {
+                    ToolCallId = semanticCall.Id,
+                    ToolId = semanticCall.Name
+                },
+                TerminalToolResult.Ok("Read.", "{}"),
+                ToolResultRoles.Tool);
+            var semanticApi = new LlmMessageBuilder().Build(
+                new[] { semanticAccepted, semanticResult }, new AppSettings());
+            var semanticAssistant = (JObject)semanticApi.Messages[0];
+            var semanticFunction = (JObject)semanticAssistant
+                .SelectToken("tool_calls[0].function");
+            AssertEqual(ResourceToolCatalog.ReadToolId, (string)semanticFunction["name"],
+                "native resource replay uses the exact public id without an rna prefix");
+            var semanticArguments = JObject.Parse((string)semanticFunction["arguments"]);
+            AssertEqual("VBA module: MOD_CTX_CodingStandards", (string)semanticArguments["target"],
+                "native resource replay preserves the semantic target");
+            AssertTrue(semanticArguments["uri"] == null && semanticArguments["cursor"] == null &&
+                semanticArguments["maxChars"] == null,
+                "native resource replay cannot expose retired runtime arguments");
+            ConversationProtocolContext.EnsureCurrentHistory(new ChatSession
+            {
+                Messages = new List<ChatMessage> { semanticAccepted, semanticResult }
+            });
+            semanticAccepted.ToolCalls[0].Name = "rna_common_resources_read";
+            ExpectProtocolPreflightBlock(() => ConversationProtocolContext.EnsureCurrentHistory(
+                new ChatSession
+                {
+                    Messages = new List<ChatMessage> { semanticAccepted, semanticResult }
+                }));
+
+            var obsoleteCall = new AgentToolCall
+            {
+                Id = "obsolete_resource_call",
+                Name = ResourceToolCatalog.ReadToolId,
+                Arguments = new Dictionary<string, object>
+                {
+                    ["uri"] = reference.Uri,
+                    ["cursor"] = "opaque",
+                    ["representation"] = "source"
+                }
+            };
+            var obsoleteAccepted = AgentJsonProtocol.CreateToolCallMessage(
+                obsoleteCall, "Reading old state.", null, ToolResultRoles.Tool,
+                FixtureCallOrigin("obsolete-resource-step"));
+            var obsoleteResult = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolInvocation
+                {
+                    ToolCallId = obsoleteCall.Id,
+                    ToolId = obsoleteCall.Name
+                },
+                TerminalToolResult.Ok("Read.", "{}"),
+                ToolResultRoles.Tool);
+            ExpectProtocolPreflightBlock(() => ConversationProtocolContext.EnsureCurrentHistory(
+                new ChatSession
+                {
+                    Messages = new List<ChatMessage> { obsoleteAccepted, obsoleteResult }
+                }));
+
             var nativeResource = AgentJsonProtocol.CreateToolResultMessage(
                 resourceCommand,
                 TerminalToolResult.Ok("Read.", new JObject

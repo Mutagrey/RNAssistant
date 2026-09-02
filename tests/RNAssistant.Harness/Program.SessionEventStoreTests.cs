@@ -1598,7 +1598,7 @@ namespace RNAssistant.Harness
                                 ["ToolCallId"] = "call-1",
                                 ["ToolName"] = "common.html_workspace_upsert",
                                 ["AcceptedCallOrigin"] = new JObject { ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-2", ["CallIndex"] = 0 },
-                                ["ToolCalls"] = new JArray(new JObject { ["Id"] = "call-1", ["Name"] = "rna_common_html_workspace_upsert", ["Arguments"] = "{\"html\":\"<main>ok</main>\"}" })
+                                ["ToolCalls"] = new JArray(new JObject { ["Id"] = "call-1", ["Name"] = "common.html_workspace_upsert", ["Arguments"] = "{\"html\":\"<main>ok</main>\"}" })
                             } }
                         })
                     }),
