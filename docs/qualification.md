@@ -274,7 +274,7 @@ switch. Он проверяет bound-lifetime допущение перед rel
 | `excel.wq0.identity` | post-cutover проверка принятого live workbook identity/lifetime допущения до release |
 | `excel.read-write` | inspect/read, scalar/formula/table write, no-op/error/unknown и exact read-back |
 | `excel.complex-task` | resources -> analysis -> multi-step edits -> confirmation -> verified workbook result |
-| `vba.lifecycle` | list/read/patch/write/rename/delete/restore/package, recovery и Trust Access failures |
+| `vba.lifecycle` | Excel/Word/PowerPoint list/read/patch/write/rename/delete/restore/package, recovery и Trust Access failures; Outlook = N/A |
 | `ui.webview` | new-chat runner, keyboard/focus/DPI, confirmation, JSON/raw copy, reload/live append |
 | `cross.full-run` | одна сложная задача через model, ToolPack, document effect, events, trajectory и restart |
 | `<host>.capabilities` | только реально зарегистрированные Word/PowerPoint/Outlook families; absent capability = N/A, не pass |

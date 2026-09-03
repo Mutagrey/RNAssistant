@@ -445,10 +445,16 @@ namespace RNAssistant.Harness
                     new[] { QualificationApplicationService.ShellCapability }))
                 .Where(item => expected.ContainsKey(item.Pack.Id))
                 .ToArray();
+            AssertTrue(!QualificationReleaseMatrix.RequiredRuns.Any(item =>
+                string.Equals(item.PackId, "vba.lifecycle", StringComparison.Ordinal) &&
+                string.Equals(item.Host, "Outlook", StringComparison.Ordinal)),
+                "Outlook does not require the unsupported VBA lifecycle pack");
             AssertEqual(expected.Count, packs.Length, "every canonical WQ-A4 family is embedded for Excel");
             foreach (var item in packs)
             {
-                AssertEqual("1", item.Pack.Revision, item.Pack.Id + " pins manifest revision");
+                AssertEqual(item.Pack.Id == "vba.lifecycle" ? "2" : "1",
+                    item.Pack.Revision,
+                    item.Pack.Id + " pins manifest revision");
                 AssertEqual(64, item.Pack.ContentSha256.Length, item.Pack.Id + " pins manifest content hash");
                 AssertTrue(item.Pack.Requirements.Contains(expected[item.Pack.Id]),
                     item.Pack.Id + " requires its exact all-or-nothing adapter capability");

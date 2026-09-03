@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "vba.lifecycle",
-  "revision": "1",
+  "revision": "2",
   "title": "VBA · lifecycle and recovery",
   "description": "Runner-owned macro-enabled fixture проверяет resource list/read, exact patch, whole-source write, rename/delete/restore/package, journal recovery и Trust Access failure. Designer/FRX и automatic replay не используются.",
-  "hosts": ["Excel", "Word", "PowerPoint", "Outlook"],
+  "hosts": ["Excel", "Word", "PowerPoint"],
   "suite": "release",
   "workspacePolicy": "runner-owned",
   "requirements": ["qualification.pack.vba.lifecycle.v1", "windows-x64", "office-x64"],

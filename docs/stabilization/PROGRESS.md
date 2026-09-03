@@ -2,12 +2,31 @@
 
 Current target: 16.1.0
 Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
-Current task: user-reported R76 cross-surface WebView performance regression is complete host-neutral. Heavy vendor/editor initialization and hidden transcript/artifact/Library rendering are lazy; artifact selection no longer rebuilds its tree or refreshes unrelated bound HTML data.
+Current task: user-reported R77 VBA write-integrity regression is complete host-neutral. Internal read-back no longer refreshes model-visible source authority; a complete current resource read is required before a second same-module source mutation, replacement failures retain rollback diagnostics, macro dispatch is bound-document qualified, unsafe VBA syntax is rejected before COM, failed verified-no-change no longer projects as unknown, and unsupported Outlook VBA qualification is N/A.
 Execution mode: mandatory host-neutral route 0–11T10, WQ-A1–A5, R61/11O0–11O7, the separately approved D05.1–D05.6 slices and R65–R70 corrections завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. Накопленные Windows gates по §16.1 теперь квалифицируют только итоговый post-cutover catalog/UI; до их evidence Phase 12 remains blocked.
 
-Next step for tools: final post-cutover Windows rebuild/live-provider/WebView2 qualification, including R61 Library UX plus the accumulated R62/R63, R65–R76 complex-dashboard/completion/VBA-write/chat/artifact/startup-responsiveness retests; then collect final Milestone WQ evidence. Phase 12 remains blocked until those gates close.
+Next step for tools: final post-cutover Windows rebuild/live-provider/WebView2 qualification, including R61 Library UX plus the accumulated R62/R63, R65–R77 complex-dashboard/completion/VBA-write/chat/artifact/startup-responsiveness retests; then collect final Milestone WQ evidence. Phase 12 remains blocked until those gates close.
 Required context: [11O7 evidence](PHASE_11O7_TOOL_LIBRARY_UX.md), [Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), [Qualification](../qualification.md) and the exact Windows gate instructions only.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O7 are complete host-neutral; final post-cutover live-provider/WQ-PACK and real WebView2 evidence remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63/R68/R69/R70/R71/R72/R73/R74/R75/R76 are fixed host-neutral. Exact real Excel bind, edited-cell toolbar refresh, WebView rerender, Artifact Library chart preview, run resource-card count, downloaded ECharts export, target-model v5 final/checkpoint behavior, schema 27 final-quality behavior, real VBE duplicate-source rejection and real chat/artifact/tab/startup responsiveness remain open on Windows. R65/R67/R70/R71/R72/R73/R74 are contained in prompt/schema/skill/tool guidance; explicit saved-prompt review/reset and a real complex Excel/VBA → HTML bind run on the target model remain open. R66 passes local Chromium but still requires the exact Windows WebView2 dashboard preview/export retest. R51 remains open for audio, other committed-resource removal and Windows WebView image-gallery/thumbnail/PDF/lifecycle qualification; 11D2 image, 11D3 PDF and their thumbnail/sequence navigation remain complete host-neutral and are not removed. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+
+R77 VBA write-integrity correction (2026-09-04, user-reported host-neutral):
+complete model-visible source observation is separated from runtime guard/read-back.
+After a verified source mutation the same module requires a complete
+`common.resources_read` before another patch or whole-source write; partial chunks
+cannot clear the gate, while multiple same-snapshot hunks remain one atomic patch.
+Live validation now rejects export headers, unclosed/C-escaped strings, common
+non-VBA operators/braces and unbalanced `#If`, in addition to R73 duplicate and
+hidden/control checks. Host replacement returns structured stage/root HRESULT and
+verified rollback disposition; unverified rollback is unknown. Completed responses
+with write error/unknown receive a durable runtime warning, and failed
+`VerifiedNoChange` is no longer misprojected as an extra unknown. Qualification pack
+revision 2 correctly targets Excel/Word/PowerPoint, not unsupported Outlook.
+Macro dispatch in those hosts replaces any incoming document qualifier with the
+exact bound document name before `Application.Run`.
+Focused host-neutral checks: Harness `vba:` 98/98, `run view` 4/4,
+`agent: characterization completed` 3/3 and qualification built-in suite catalog
+1/1. Real Excel/Word/PowerPoint VBE replacement/failure/read-back and WebView2
+rendering remain open Windows evidence; Outlook VBA remains unsupported by design.
 
 R76 cross-surface WebView startup/render regression (2026-09-03,
 user-reported host-neutral): the main document synchronously parsed the 1 MiB

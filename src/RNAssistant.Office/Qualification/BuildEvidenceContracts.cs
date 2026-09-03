@@ -398,7 +398,7 @@ namespace RNAssistant.Office.Qualification
             result.Add(new BuildEvidenceRunRequirement("excel.wq0.identity", "Excel", "desktop-native"));
             result.Add(new BuildEvidenceRunRequirement("excel.read-write", "Excel", "default"));
             result.Add(new BuildEvidenceRunRequirement("excel.complex-task", "Excel", "default"));
-            foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
+            foreach (var host in new[] { "Excel", "Word", "PowerPoint" })
                 result.Add(new BuildEvidenceRunRequirement("vba.lifecycle", host, "default"));
             foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
                 result.Add(new BuildEvidenceRunRequirement("cross.full-run", host, "default"));
