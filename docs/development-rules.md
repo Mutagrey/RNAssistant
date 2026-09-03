@@ -161,6 +161,13 @@ ModelProtocol.
 Обычный change затрагивает один domain, его релевантные tests и только необходимые
 docs/UI projections.
 
+- Source-generating tools и patches проверяют итоговый owner/module после правок,
+  а не только отдельные hunks. Изменённый source не должен оставлять duplicate
+  top-level procedures, declarations или заменённые legacy copies, если сам язык
+  явно не разрешает такую форму. Модель может удалить superseded duplicate только
+  когда intended final implementation однозначен; иначе tool завершается
+  fail-closed вместо угадывания, какая копия должна победить.
+
 Предпочтительная последовательность для смены контракта:
 
 1. Зафиксировать рискованное текущее поведение, если без этого оно неочевидно.

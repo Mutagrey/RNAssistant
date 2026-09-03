@@ -1866,6 +1866,76 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaWriteRejectsDuplicateProcedures()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                adapter.VbaModuleCode = "Sub Original()\nEnd Sub";
+                var backupStore = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Concat(executor.GetControllerTools()).ToList();
+                var settings = new AppSettings { AutoConfirmToolActions = true };
+                var session = NewSession(adapter);
+                var duplicateCode =
+                    "Option Explicit\n" +
+                    "Public Sub RenderReport()\n" +
+                    "End Sub\n\n" +
+                    "Private Sub RenderReport()\n" +
+                    "End Sub";
+
+                var rejected = executor.ExecuteManual(
+                    Command(
+                        "common.vba_write_module",
+                        "moduleName", "Module1",
+                        "code", duplicateCode,
+                        "mode", "updateOnly"),
+                    tools,
+                    settings,
+                    false,
+                    false,
+                    session);
+
+                AssertTrue(!rejected.Success, "duplicate whole-source write rejected");
+                AssertEqual("vba_code_invalid", rejected.ErrorCode,
+                    "duplicate write uses stable source validation code");
+                AssertContains(rejected.Message, "duplicate procedure/property declaration",
+                    "duplicate diagnostic tells the model to reconcile source");
+                AssertEqual("Sub Original()\nEnd Sub", adapter.VbaModuleCode,
+                    "duplicate write leaves module unchanged");
+                AssertEqual(0, backupStore.List(adapter.HostName, adapter.DocumentKey).Count,
+                    "duplicate write creates no backup");
+                AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                    "duplicate write does not dispatch replacement");
+
+                var propertyCode =
+                    "Option Explicit\n" +
+                    "Private mValue As Long\n\n" +
+                    "Public Property Get Value() As Long\n" +
+                    "    Value = mValue\n" +
+                    "End Property\n\n" +
+                    "Public Property Let Value(ByVal input As Long)\n" +
+                    "    mValue = input\n" +
+                    "End Property";
+                var accepted = executor.ExecuteManual(
+                    Command(
+                        "common.vba_write_module",
+                        "moduleName", "Module1",
+                        "code", propertyCode,
+                        "mode", "updateOnly"),
+                    tools,
+                    settings,
+                    false,
+                    false,
+                    session);
+                AssertTrue(accepted.Success,
+                    "matching Get/Let property accessors are not false duplicates");
+                AssertContains(adapter.VbaModuleCode, "Property Let Value",
+                    "valid property source is written");
+            });
+        }
+
         private static void VbaPatchRejectsStaleExactSource()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -1913,6 +1983,61 @@ namespace RNAssistant.Harness
                 AssertEqual("A\nX\nB\nC", adapter.VbaModuleCode, "stale exact patch leaves current module intact");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
                     "stale exact hunk never reaches the backend writer");
+            });
+        }
+
+        private static void VbaPatchRejectsDuplicateProcedures()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                const string original =
+                    "Option Explicit\n" +
+                    "Public Sub RenderReport()\n" +
+                    "    Debug.Print \"current\"\n" +
+                    "End Sub";
+                adapter.VbaModuleCode = original;
+                var backupStore = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Concat(executor.GetControllerTools()).ToList();
+                var settings = new AppSettings { AutoConfirmToolActions = true };
+                var session = NewSession(adapter);
+                var find =
+                    "Public Sub RenderReport()\n" +
+                    "    Debug.Print \"current\"\n" +
+                    "End Sub";
+                var text = find + "\n\n" +
+                    "Private Sub RenderReport()\n" +
+                    "    Debug.Print \"duplicate\"\n" +
+                    "End Sub";
+
+                var rejected = executor.ExecuteManual(
+                    Command(
+                        "common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["find"] = find,
+                            ["text"] = text
+                        })),
+                    tools,
+                    settings,
+                    false,
+                    false,
+                    session);
+
+                AssertTrue(!rejected.Success, "duplicate-producing patch rejected");
+                AssertEqual("vba_code_invalid", rejected.ErrorCode,
+                    "duplicate patch uses stable source validation code");
+                AssertContains(rejected.Message, "duplicate procedure/property declaration",
+                    "duplicate patch reports source-level duplicate");
+                AssertEqual(original, adapter.VbaModuleCode,
+                    "duplicate patch leaves module unchanged");
+                AssertEqual(0, backupStore.List(adapter.HostName, adapter.DocumentKey).Count,
+                    "duplicate patch creates no backup");
+                AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                    "duplicate patch does not dispatch replacement");
             });
         }
 
@@ -2232,6 +2357,8 @@ namespace RNAssistant.Harness
             AssertContains(editing.BodyMarkdown, "does not rewrite explicit references", "skill warns about qualified VBA references");
             AssertContains(editing.BodyMarkdown, "Option Explicit", "skill includes baseline VBA code quality");
             AssertContains(editing.BodyMarkdown, "complete Option block", "skill preserves all leading Option directives");
+            AssertContains(editing.BodyMarkdown, "duplicate procedure/property declarations",
+                "skill requires final-source duplicate self-checks before VBA write tools");
             AssertContains(editing.BodyMarkdown, "PtrSafe", "skill covers Office x64 declarations");
             AssertContains(editing.BodyMarkdown, "VBE-equivalent source read-back", "skill describes normalized verification precisely");
             AssertContains(editing.BodyMarkdown, "does not prove VBA compilation or runtime behavior", "read-back is not overstated as functional validation");

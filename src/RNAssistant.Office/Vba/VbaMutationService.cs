@@ -159,5 +159,28 @@ namespace RNAssistant.Office.Vba
         {
             return VbaTextCanonicalizer.LiveCodeSha256(code);
         }
+
+        private static VbaMutationOutcome ValidateLiveCodeForWrite(
+            string moduleName,
+            string code)
+        {
+            string validationError;
+            if (VbaSourceValidator.TryValidateLiveCode(code ?? string.Empty, out validationError))
+            {
+                return null;
+            }
+
+            return VbaMutationOutcome.Error(
+                validationError,
+                new Newtonsoft.Json.Linq.JObject
+                {
+                    ["moduleName"] = moduleName ?? string.Empty,
+                    ["retrySameTool"] = false,
+                    ["inspectTool"] = "common.resources_read",
+                    ["discoveryScope"] = "vba"
+                },
+                "vba_code_invalid",
+                true);
+        }
     }
 }

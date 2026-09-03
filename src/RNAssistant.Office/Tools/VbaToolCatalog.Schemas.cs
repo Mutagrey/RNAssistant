@@ -39,7 +39,7 @@ namespace RNAssistant.Office.Tools
                     ["code"] = new JObject
                     {
                         ["type"] = "string",
-                        ["description"] = "Complete VBA source or MSForm code-behind, never source reconstructed from a truncated read or partial context. Empty text intentionally clears or creates an empty component."
+                        ["description"] = "Complete VBA source or MSForm code-behind, never source reconstructed from a truncated read or partial context. Empty text intentionally clears or creates an empty component. Final source must not contain duplicate Sub/Function or duplicate same Property accessor declarations."
                     },
                     ["componentType"] = new JObject
                     {
@@ -175,7 +175,7 @@ namespace RNAssistant.Office.Tools
                     ["patch"] = new JObject
                     {
                         ["type"] = "array",
-                        ["description"] = "Native JSON array of ordered exact replacements applied in memory to one current module snapshot. Each later find sees earlier replacements. Never encode this array as a string.",
+                        ["description"] = "Native JSON array of ordered exact replacements applied in memory to one current module snapshot. Each later find sees earlier replacements. The final source must not contain duplicate procedure/property declarations. Never encode this array as a string.",
                         ["minItems"] = 1,
                         ["maxItems"] = 100,
                         ["items"] = exactReplace

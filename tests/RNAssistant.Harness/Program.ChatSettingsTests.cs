@@ -415,7 +415,7 @@ namespace RNAssistant.Harness
                 "HTML authoring keeps ECharts workspace and chat-chart artifacts from duplicating one visual");
             AssertContains(htmlAuthoring, "root `arguments` contains exactly `path` and `content`",
                 "HTML writes put semantic properties directly at the schema root");
-            foreach (var file in new[] { "`index.html`", "`styles.css`", "`dashboard.js`" })
+            foreach (var file in new[] { "`index.html`", "`styles.css`", "`app.js`" })
                 AssertContains(htmlAuthoring, file, "substantial HTML workspaces split responsibilities");
             AssertContains(htmlAuthoring, "Dependencies/echarts.min.js",
                 "HTML authoring exposes the runtime-owned chart dependency");
@@ -426,12 +426,12 @@ namespace RNAssistant.Harness
             AssertContains(htmlAuthoring, "native buttons/selects/inputs",
                 "HTML authoring requires accessible controls");
             AssertContains(htmlAuthoring, "inspect those sources first",
-                "source-backed dashboards inspect workbook and VBA prerequisites first");
-            AssertContains(htmlAuthoring, "Never replace a rich dashboard with a simplified placeholder",
+                "source-backed HTML inspects workbook and VBA prerequisites first");
+            AssertContains(htmlAuthoring, "Never replace a rich implementation with a simplified placeholder",
                 "HTML validation repair preserves the requested implementation");
             AssertContains(htmlAuthoring, "both the Office read and bind return `status=ok`",
                 "HTML guidance cannot claim live data before binding evidence");
-            AssertContains(htmlAuthoring, "finish the source read and binding before writing the data adapter or charts",
+            AssertContains(htmlAuthoring, "finish the source read and binding before writing the data adapter or rendering code",
                 "source-backed HTML establishes its live data contract before construction");
             AssertContains(htmlAuthoring, "columns:[{key,label,type}], rows:[{...}], rowCount",
                 "HTML guidance defines the bound table envelope used by page code");
@@ -449,6 +449,14 @@ namespace RNAssistant.Harness
                 "HTML definition of done includes static validation");
             AssertContains(htmlAuthoring, "Static preflight does not prove browser execution",
                 "HTML guidance distinguishes static and runtime evidence");
+            AssertContains(htmlAuthoring, "do not invent unrelated widgets or decorative filler",
+                "HTML guidance rejects invented template filler");
+            AssertTrue(htmlAuthoring.IndexOf("KPI", StringComparison.OrdinalIgnoreCase) < 0,
+                "HTML guidance does not prescribe a KPI dashboard layout");
+            AssertTrue(htmlAuthoring.IndexOf("card", StringComparison.OrdinalIgnoreCase) < 0,
+                "HTML guidance does not prescribe card-based layouts");
+            AssertTrue(htmlAuthoring.IndexOf("dashboard.js", StringComparison.OrdinalIgnoreCase) < 0,
+                "HTML guidance does not prescribe dashboard-specific file names");
             var skillAuthoring = skills.Single(skill => skill.Id == "common.skill_authoring").BodyMarkdown;
             AssertContains(skillAuthoring, "author the skill last",
                 "a requested reusable skill follows the verified primary solution");
@@ -488,6 +496,14 @@ namespace RNAssistant.Harness
                 "Agent inspects requested sources before construction");
             AssertContains(defaults.SystemPrompt, "only after the primary solution is implemented and verified",
                 "Agent follows source, deliverable, verification and reuse dependency order");
+            AssertContains(defaults.SystemPrompt, "latest read-back of the user-visible result",
+                "Agent completion gate requires final read-back before handoff");
+            AssertContains(defaults.SystemPrompt, "obvious bugs, dropped requirements, broken interactions, stale data, layout breakage, or regressions",
+                "Agent completion gate checks likely defects and regressions before final");
+            AssertContains(defaults.SystemPrompt, "fix them and verify again instead of finishing",
+                "Agent completion gate requires repair loops for in-scope defects");
+            AssertContains(defaults.SystemPrompt, "result is fit to hand off",
+                "Agent completion gate requires a quality decision before ending");
             AssertContains(defaults.SystemPrompt, "compare every explicit deliverable and every active task-list step",
                 "Agent verifies requested outcomes before ending the loop");
             AssertContains(defaults.SystemPrompt, "An open active Task List is an unfinished requested deliverable",

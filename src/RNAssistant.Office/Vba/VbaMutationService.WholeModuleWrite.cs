@@ -121,6 +121,9 @@ namespace RNAssistant.Office.Vba
             }
 
             var code = request.Code ?? string.Empty;
+            var codeValidationError = ValidateLiveCodeForWrite(moduleName, code);
+            if (codeValidationError != null) return codeValidationError;
+
             var componentType = string.IsNullOrWhiteSpace(request.ComponentType)
                 ? "StdModule"
                 : request.ComponentType;

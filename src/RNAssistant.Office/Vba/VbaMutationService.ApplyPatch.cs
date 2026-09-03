@@ -59,6 +59,9 @@ namespace RNAssistant.Office.Vba
             }
 
             var summaryData = VbaMutationData.Operations(summary);
+            var codeValidationError = ValidateLiveCodeForWrite(moduleName, updated);
+            if (codeValidationError != null) return codeValidationError;
+
             if (string.Equals(updated, code, StringComparison.Ordinal))
             {
                 return VbaMutationOutcome.Ok(
