@@ -222,13 +222,22 @@ are preview frames, never child artifacts or independently durable revisions.
   open.
 - Audio: local bounded player and optional transcript relation; no autoplay.
 - JSON/chart/tool result: existing lossless bounded JSON/domain viewers remain
-  owners of their formats.
+  owners of their formats. `application/vnd.rnassistant.chart+json` artifacts
+  render the ECharts chart viewer in Preview and keep the exact JSON payload in
+  Details; if the domain viewer is unavailable, the safe JSON fallback remains.
 - Uploaded HTML: escaped source only by default. Preview requires explicit import
   into the HTML workspace; untrusted upload source is never inserted into the main
   DOM or granted network access.
 - HTML workspace: sandboxed rendered preview, exact HTML/CSS/JS/JSON editors,
   binding status, revision/branch history and export. Network origins retain the
-  existing explicit allowlist and last-good binding behavior. A workspace whose
+  existing explicit allowlist and last-good binding behavior. `transform=table`
+  exposes one stable `rnassistant.table.v1` envelope (`columns`, object `rows`,
+  `rowCount`, scalar `source` metadata), available to page code through
+  `RNAssistant.data.get(name)`. Refresh rereads the stored exact Office source,
+  captures a replacement authoritative workspace head when JSON or binding status
+  changes without adding an Undo step, and creates no artifact for verified
+  no-change. The UI reloads that head before rebuilding the preview. A
+  workspace whose
   HTML/JavaScript references `echarts` receives the exact local ECharts 5.6.0 bundle
   as classic JavaScript before workspace scripts in its sandbox and standalone
   export. The tree projects that runtime as the read-only
@@ -237,7 +246,9 @@ are preview frames, never child artifacts or independently durable revisions.
   loading is unsupported. Full-document assembly inserts workspace scripts against
   the original document's last closing body/html tag before adding the vendor head
   block, so tag-shaped strings inside the bundled source cannot capture the
-  insertion.
+  insertion. Standalone export contains the exact current JSON snapshot and no live
+  Office bridge; it fails closed instead of downloading a chart page when the pinned
+  ECharts runtime is unavailable.
 
 ViewerRegistry remains UI-only dispatch. Fetching bounded text/media and checking
 the exact revision belong to the Artifact Library owner and the shared resource

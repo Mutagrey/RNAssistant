@@ -116,7 +116,8 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.ok(index.includes("app-html-workspace.js?v=html-echarts-20260903-1"), "artifact actions have the ECharts dependency cache key");
   assert.ok(index.includes("app-html-workspace-actions.js?v=artifact-gallery-20260902-1"), "artifact tool calls have the gallery cache key");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-gallery-20260902-1"), "artifact paging owner has the gallery cache key");
-  assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-gallery-20260902-1"), "artifact detail has the gallery cache key");
+  assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-chart-preview-20260903-1"), "artifact detail has the chart preview cache key");
+  assert.ok(index.includes("app-chart-artifacts.js?v=artifact-chart-preview-20260903-1"), "chart artifact renderer has the chart preview cache key");
   assert.ok(index.includes("app-html-workspace-editor.js?v=artifact-gallery-20260902-1"), "artifact action bridge has the gallery cache key");
   console.log("PASS artifact library: client lineage inference and Plan JSON label are removed");
 }

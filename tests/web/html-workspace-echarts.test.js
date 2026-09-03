@@ -58,9 +58,14 @@ const documentChart = context.RNAssistantHtmlWorkspacePreview.build({
     },
     {
       id: "dashboard.js", path: "dashboard.js", kind: "script",
-      content: "window.__workspaceScriptRan = echarts.version;"
+      content: "var table=RNAssistant.data.get('sales'); window.__workspaceScriptRan={version:echarts.version,value:table.rows[0].amount,columns:table.columns.length};"
     }
   ],
+  dataSources: [{
+    id: "sales", name: "sales",
+    json: "{\"schema\":\"rnassistant.table.v1\",\"source\":{\"sheet\":\"Data\"},\"columns\":[{\"key\":\"amount\",\"label\":\"Amount\",\"type\":\"number\"}],\"rows\":[{\"amount\":42}],\"rowCount\":1}",
+    binding: { status: "ready", transform: "table", payloadCompleteness: "complete" }
+  }],
   hostBridge: false
 });
 const vendorClose = documentChart.indexOf("</script>", documentChart.indexOf('data-rn-vendor="echarts-5.6.0"'));
@@ -73,8 +78,24 @@ const documentRuntime = vm.createContext({ Deno: {} });
 documentRuntime.window = documentRuntime;
 for (const source of documentScripts) vm.runInContext(source, documentRuntime, { timeout: 5000 });
 assert.equal(documentRuntime.echarts.version, "5.6.0");
-assert.equal(documentRuntime.__workspaceScriptRan, "5.6.0");
-console.log("PASS HTML ECharts: full-document assembly cannot inject workspace JS into a vendor string literal");
+assert.deepEqual(JSON.parse(JSON.stringify(documentRuntime.__workspaceScriptRan)),
+  { version: "5.6.0", value: 42, columns: 1 });
+assert.doesNotMatch(documentChart, /rnassistant-html-fetch/);
+console.log("PASS HTML ECharts: standalone assembly executes the local runtime and bound table before workspace code");
+
+const missingRuntime = vm.createContext({});
+missingRuntime.window = missingRuntime;
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-preview.js"), "utf8"), missingRuntime,
+  { filename: "app-html-workspace-preview.js" });
+assert.throws(() => missingRuntime.RNAssistantHtmlWorkspacePreview.build({
+  activeFileId: "index.html",
+  files: [
+    { id: "index.html", path: "index.html", kind: "html", content: "<main id=\"chart\"></main>" },
+    { id: "app.js", path: "app.js", kind: "script", content: "echarts.init(document.getElementById('chart'));" }
+  ],
+  hostBridge: false
+}), /requires the loaded bundled ECharts 5\.6\.0 dependency/);
+console.log("PASS HTML ECharts: standalone export fails closed when the pinned dependency is unavailable");
 
 assert.deepEqual(Array.from(context.RNAssistantHtmlWorkspacePreview.dependencies([
   { id: "dashboard.js", path: "dashboard.js", kind: "script", content: "echarts.init(node);" }
@@ -90,8 +111,8 @@ const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
 const captureIndex = index.indexOf("app-echarts-sandbox-runtime.js?v=html-echarts-20260902-2");
 const vendorIndex = index.indexOf("js/vendor/echarts.min.js");
 const finishIndex = index.indexOf("RNAssistantEChartsSandboxRuntime.finish()");
-const previewIndex = index.indexOf("app-html-workspace-preview.js?v=html-echarts-20260903-1");
+const previewIndex = index.indexOf("app-html-workspace-preview.js?v=html-echarts-20260903-2");
 assert.ok(captureIndex >= 0 && captureIndex < vendorIndex && vendorIndex < finishIndex && finishIndex < previewIndex);
 console.log("PASS HTML ECharts: trusted capture spans vendor load and finalizes before preview assembly");
 
-console.log("OK 5/5");
+console.log("OK 6/6");

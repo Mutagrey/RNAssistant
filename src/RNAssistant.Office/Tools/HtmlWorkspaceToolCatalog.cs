@@ -74,7 +74,7 @@ namespace RNAssistant.Office.Tools
                     "html_data_bind", true, 0);
             }
             yield return Projection(RefreshDataToolId,
-                "Workspace: Re-run a bound read-only Office source and replace its JSON without another model request. Omit name to refresh all bound sources; refresh policy is runtime-owned.",
+                "Workspace: Re-run a bound read-only Office source, replace its JSON, and capture an authoritative workspace head for preview/read-back (a new revision only when payload or binding status changed). Omit name to refresh all bound sources; refresh policy is runtime-owned.",
                 RefreshSchema(),
                 "html_data_refresh", true, 0);
             yield return Projection(FreezeDataToolId,

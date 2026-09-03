@@ -34,7 +34,8 @@ namespace RNAssistant.Office.Tools
         {
             return "Workspace: Bind the most recent successful approved Office read from this Agent run as a refreshable HTML data source. " +
                 "Run the intended source read first; its exact tool and arguments are reused from accepted runtime evidence. " +
-                "Use transform=table only when that result contains row arrays. Eligible reads: " +
+                "Use transform=table only when that result contains row arrays; it returns an rnassistant.table.v1 envelope with columns, object rows, rowCount, and scalar source metadata. " +
+                "Page code reads the saved value through RNAssistant.data.get(name). Eligible reads: " +
                 string.Join(", ", _dataSourceTools.Keys.ToArray()) + ".";
         }
 
@@ -56,7 +57,7 @@ namespace RNAssistant.Office.Tools
                     {
                         ["type"] = "string",
                         ["enum"] = new JArray("raw", "table"),
-                        ["description"] = "raw preserves source JSON; table converts a returned row array to columns plus object rows.",
+                        ["description"] = "raw preserves source JSON; table returns {schema:'rnassistant.table.v1',source,columns:[{key,label,type}],rows:[{...}],rowCount}.",
                         ["default"] = "raw"
                     },
                     ["headers"] = new JObject
@@ -173,7 +174,7 @@ namespace RNAssistant.Office.Tools
             {
                 return HtmlWorkspaceToolOutcome.Ok(
                     "No matching bound HTML data sources to refresh.",
-                    RefreshResultJson(new JArray(), 0, 0, false),
+                    RefreshResultJson(null, new JArray(), 0, 0, false),
                     HtmlWorkspaceEffect.VerifiedNoChange);
             }
 
@@ -197,7 +198,18 @@ namespace RNAssistant.Office.Tools
                 summaries.Add(ResultSummary(target, refreshed));
             }
 
-            var dataJson = RefreshResultJson(summaries, succeeded, failed, false);
+            var previousArtifactId = session.ActiveHtmlArtifactId;
+            var refreshedArtifactId = HtmlWorkspaceArtifactService.CaptureRefresh(
+                session,
+                targetNames.Length == 1
+                    ? "HTML refreshed data: " + targetNames[0]
+                    : "HTML refreshed data");
+            var revisionChanged = !string.Equals(
+                previousArtifactId,
+                refreshedArtifactId,
+                StringComparison.OrdinalIgnoreCase);
+            var dataJson = RefreshResultJson(
+                session, summaries, succeeded, failed, false);
             if (failed > 0)
             {
                 return HtmlWorkspaceToolOutcome.Unknown(
@@ -207,7 +219,9 @@ namespace RNAssistant.Office.Tools
             }
             return HtmlWorkspaceToolOutcome.Ok(
                 "Refreshed " + succeeded + " HTML data source(s).", dataJson,
-                HtmlWorkspaceEffect.VerifiedChange);
+                revisionChanged
+                    ? HtmlWorkspaceEffect.VerifiedChange
+                    : HtmlWorkspaceEffect.VerifiedNoChange);
         }
 
         private HtmlWorkspaceToolOutcome RefreshDataSource(
@@ -691,17 +705,24 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static string RefreshResultJson(JArray results, int succeeded, int failed, bool dryRun)
+        private static string RefreshResultJson(
+            ChatSession session,
+            JArray results,
+            int succeeded,
+            int failed,
+            bool dryRun)
         {
-            return new JObject
+            return AddWorkspaceResourceRefs(session, new JObject
             {
                 ["type"] = "rnassistant.htmlDataRefresh",
                 ["version"] = 1,
                 ["dryRun"] = dryRun,
                 ["succeeded"] = succeeded,
                 ["failed"] = failed,
-                ["results"] = results ?? new JArray()
-            }.ToString(Formatting.None);
+                ["results"] = results ?? new JArray(),
+                ["revisionArtifactId"] = session == null
+                    ? null : session.ActiveHtmlArtifactId
+            }).ToString(Formatting.None);
         }
 
         private static string DataBindingResultJson(ChatSession session, string name, string sourceTool, string transform, string refreshPolicy, string status, bool saved, int jsonCharacters)

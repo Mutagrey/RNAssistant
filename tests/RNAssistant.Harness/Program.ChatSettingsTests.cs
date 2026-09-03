@@ -429,6 +429,14 @@ namespace RNAssistant.Harness
                 "HTML validation repair preserves the requested implementation");
             AssertContains(htmlAuthoring, "both the Office read and bind return `status=ok`",
                 "HTML guidance cannot claim live data before binding evidence");
+            AssertContains(htmlAuthoring, "finish the source read and binding before writing the data adapter or charts",
+                "source-backed HTML establishes its live data contract before construction");
+            AssertContains(htmlAuthoring, "columns:[{key,label,type}], rows:[{...}], rowCount",
+                "HTML guidance defines the bound table envelope used by page code");
+            AssertContains(htmlAuthoring, "A host refresh with changed values/status creates a new workspace head without adding an Undo step",
+                "HTML guidance requires durable refresh read-back");
+            AssertContains(htmlAuthoring, "Standalone export embeds the exact current JSON snapshot plus the local ECharts runtime",
+                "HTML guidance distinguishes a self-contained export from live Office refresh");
             AssertContains(htmlAuthoring, "preflight has zero errors",
                 "HTML definition of done includes static validation");
             AssertContains(htmlAuthoring, "Static preflight does not prove browser execution",

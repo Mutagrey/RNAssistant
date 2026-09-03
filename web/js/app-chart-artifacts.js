@@ -8,13 +8,17 @@
     catch (error) { return { ok: false, value: null }; }
   }
 
-  function chartArtifactFromActivity(activity) {
-    var parsed = tryParseChartJson(activityDataJson(activity));
+  function chartArtifactFromJson(text) {
+    var parsed = tryParseChartJson(text);
     if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") {
       return null;
     }
     var type = parsed.value.Type || parsed.value.type;
     return type === "rnassistant.chart" ? parsed.value : null;
+  }
+
+  function chartArtifactFromActivity(activity) {
+    return chartArtifactFromJson(typeof activityDataJson === "function" ? activityDataJson(activity) : "");
   }
 
   function artifactValue(source, pascal, camel, fallback) {
@@ -227,8 +231,8 @@
     return select;
   }
 
-  function renderChartArtifact(activity, context) {
-    var artifact = chartArtifactFromActivity(activity);
+  function renderChartArtifactData(dataJson, context) {
+    var artifact = chartArtifactFromJson(dataJson);
     if (!artifact) {
       return null;
     }
@@ -270,6 +274,10 @@
       drawChart(node, artifact);
     }, 0);
     return node;
+  }
+
+  function renderChartArtifact(activity, context) {
+    return renderChartArtifactData(typeof activityDataJson === "function" ? activityDataJson(activity) : "", context);
   }
 
   function appendChartControls(toolbar, artifact, config, context, changed) {
@@ -534,5 +542,6 @@
     }
   }
 
+  window.tryRenderChartArtifactJson = renderChartArtifactData;
   window.tryRenderChartArtifact = renderChartArtifact;
 }());

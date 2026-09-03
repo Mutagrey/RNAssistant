@@ -45,14 +45,39 @@ class Element {
 const body = new Element("body");
 const copied = [];
 const context = vm.createContext({
-  document: { body, createElement: tag => new Element(tag), execCommand: () => true },
+  document: {
+    body,
+    createElement: tag => new Element(tag),
+    createTextNode(text) {
+      const node = new Element("#text");
+      node.textContent = text;
+      return node;
+    },
+    execCommand: () => true
+  },
   navigator: { clipboard: { writeText(text) { copied.push(String(text)); return Promise.resolve(); } } },
-  state: { activePlanDocumentArtifactId: "" }
+  state: { activePlanDocumentArtifactId: "" },
+  setTimeout(fn) { fn(); return 0; },
+  clearTimeout() {}
 });
 context.window = context;
 context.markdown = text => String(text);
 context.clearMarkdownEnhancements = () => {};
-for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-text-viewer.js", "app-resource-viewer.js", "app-html-workspace-artifacts.js"]) {
+const chartInits = [];
+context.echarts = {
+  getInstanceByDom() { return null; },
+  init(node) {
+    chartInits.push(node);
+    return {
+      clear() {},
+      setOption(option) { node.option = option; },
+      off() {},
+      on() {},
+      resize() { node.resized = true; }
+    };
+  }
+};
+for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-text-viewer.js", "app-resource-viewer.js", "app-html-workspace-artifacts.js", "app-chart-artifacts.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 
@@ -127,6 +152,30 @@ function render(item, actions) {
   assert.ok(task.querySelector(".artifact-json-viewer"));
   console.log("PASS artifact detail: task preview is primary and raw JSON stays on Details");
 
+  const chartPayload = JSON.stringify({
+    type: "rnassistant.chart",
+    title: "Sales",
+    source: { workbook: "Book.xlsx", sheet: "Data", address: "A1:B2" },
+    columns: [{ name: "Month", kind: "category" }, { name: "Sales", kind: "number" }],
+    rows: [{ Month: "Jan", Sales: 10 }],
+    config: { chartType: "line", x: "Month", series: ["Sales"] }
+  });
+  const chart = render({
+    Kind: "chart",
+    MimeType: "application/vnd.rnassistant.chart+json",
+    InlineText: chartPayload,
+    InlineTruncated: false,
+    Revision: 1
+  });
+  const chartPreview = chart.querySelector(".artifact-detail-pane-preview");
+  assert.ok(chartPreview.querySelector(".chart-artifact"));
+  assert.equal(chartPreview.querySelector(".artifact-json-viewer"), null);
+  assert.equal(chartInits.at(-1).option.series[0].type, "line");
+  assert.equal(chartInits.at(-1).resized, true);
+  button(chart, "Детали").click();
+  assert.ok(chart.querySelector(".artifact-detail-pane-details").querySelector(".artifact-json-viewer"));
+  console.log("PASS artifact detail: chart preview renders ECharts while exact JSON stays on Details");
+
   const htmlUri = "rna://chat/c/artifact/upload-html/revision/1";
   const hostileHtml = "<script>window.parent.postMessage('run')</script><img onerror=alert(1)>";
   const imported = [];
@@ -173,5 +222,5 @@ function render(item, actions) {
   assert.equal(/JSON\.stringify\(JSON\.parse\(content\)/.test(source), false);
   assert.equal(/createElement\("pre"\)[\s\S]{0,120}JSON\.parse\(content\)/.test(source), false);
   console.log("PASS artifact JSON viewer: re-render unmounts viewer and old pretty/pre path is removed");
-  console.log("OK 7/7");
+  console.log("OK 8/8");
 })().catch(error => { console.error(error); process.exitCode = 1; });

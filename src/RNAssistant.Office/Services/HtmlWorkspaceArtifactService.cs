@@ -13,6 +13,19 @@ namespace RNAssistant.Office.Services
     {
         public static string CaptureCurrent(ChatSession session, string title)
         {
+            return Capture(session, title, false);
+        }
+
+        public static string CaptureRefresh(ChatSession session, string title)
+        {
+            return Capture(session, title, true);
+        }
+
+        private static string Capture(
+            ChatSession session,
+            string title,
+            bool replaceActiveHead)
+        {
             if (session == null) return string.Empty;
             if (session.HtmlWorkspaceRecovery != null && !session.HtmlWorkspaceRecovery.CanMutate)
             {
@@ -30,7 +43,10 @@ namespace RNAssistant.Office.Services
                 string.IsNullOrWhiteSpace(title) ? "HTML workspace" : title);
             var stateJson = SerializeState(snapshot);
             var current = FindArtifact(session, session.ActiveHtmlArtifactId);
-            if (current != null && SameState(current.InlineText, snapshot))
+            if (current != null &&
+                (SameState(current.InlineText, snapshot) ||
+                 replaceActiveHead && SameRefreshState(
+                     current.InlineText, snapshot)))
             {
                 RebuildNavigation(session);
                 return current.Id;
@@ -47,7 +63,11 @@ namespace RNAssistant.Office.Services
                 Kind = ChatArtifactKinds.HtmlWorkspace,
                 Title = snapshot.Label,
                 MimeType = "application/vnd.rnassistant.html-workspace+json",
-                ParentArtifactId = current == null ? null : current.Id,
+                ParentArtifactId = current == null
+                    ? null
+                    : replaceActiveHead
+                        ? current.ParentArtifactId
+                        : current.Id,
                 Revision = NextRevision(session),
                 InlineText = stateJson,
                 MetadataJson = Metadata(snapshot, current)
@@ -245,6 +265,41 @@ namespace RNAssistant.Office.Services
             catch (JsonException)
             {
                 return false;
+            }
+        }
+
+        private static bool SameRefreshState(
+            string existingJson,
+            HtmlWorkspaceSnapshot candidate)
+        {
+            if (string.IsNullOrWhiteSpace(existingJson) || candidate == null)
+                return false;
+            try
+            {
+                var existing = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(
+                    existingJson);
+                if (existing == null) return false;
+                ClearRefreshTimes(existing.DataSources);
+                var comparable = HtmlWorkspaceCopyService.CaptureSnapshot(
+                    HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(candidate),
+                    candidate.Label);
+                ClearRefreshTimes(comparable.DataSources);
+                return SameState(SerializeState(existing), comparable);
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        private static void ClearRefreshTimes(
+            IEnumerable<HtmlWorkspaceDataSource> dataSources)
+        {
+            foreach (var data in dataSources ?? new HtmlWorkspaceDataSource[0])
+            {
+                if (data == null || data.Binding == null) continue;
+                data.Binding.UpdatedUtc = default(DateTime);
+                data.Binding.LastRefreshUtc = null;
             }
         }
 

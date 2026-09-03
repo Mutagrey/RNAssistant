@@ -60,6 +60,16 @@ namespace RNAssistant.Harness
                     AssertContains(nestedArgumentsError,
                         "$ contains unsupported property arguments",
                         "HTML write reports the exact repairable wrapper error");
+                    var bindDefinition = definitions.Single(definition =>
+                        definition.Id == HtmlWorkspaceToolCatalog.BindDataToolId);
+                    AssertContains(bindDefinition.Description,
+                        "rnassistant.table.v1 envelope",
+                        "HTML bind describes its page-facing table result");
+                    AssertContains((string)JObject.Parse(
+                            bindDefinition.ArgumentSchemaJson)
+                            ["properties"]["transform"]["description"],
+                        "rows:[{...}]",
+                        "HTML bind schema defines the table envelope instead of implying an array");
 
                     var allTools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
@@ -210,6 +220,65 @@ namespace RNAssistant.Harness
                     AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                         "HTML bind reuses accepted data without a nested read");
+
+                    var boundArtifactId = session.ActiveHtmlArtifactId;
+                    var boundArtifact = session.Artifacts.Single(item =>
+                        string.Equals(item.Id, boundArtifactId,
+                            StringComparison.OrdinalIgnoreCase));
+                    var historyCount = session.HtmlWorkspace.History.Count;
+                    adapter.SetExcelCellForTest("Data", "B2", 999);
+                    var refresh = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.RefreshDataToolId,
+                        new JObject { ["name"] = "sales" });
+                    AssertEqual(ToolExecutionOutcome.Ok, refresh.Outcome,
+                        "native HTML refresh succeeds after the Office value changes");
+                    AssertEqual(ToolEffectEvidence.VerifiedChange,
+                        refresh.Evidence.Effect,
+                        "changed HTML refresh reports a verified revision change");
+                    AssertTrue(refresh.Result.Resources.Any(reference =>
+                            reference.Uri.IndexOf("/artifact/",
+                                StringComparison.Ordinal) >= 0),
+                        "HTML refresh exposes its authoritative revision resource");
+                    AssertContains(session.HtmlWorkspace.DataSources.Single(item =>
+                            string.Equals(item.Name, "sales",
+                                StringComparison.OrdinalIgnoreCase)).Json,
+                        "999",
+                        "HTML refresh replaces the live workspace JSON");
+                    AssertTrue(!string.Equals(boundArtifactId,
+                            session.ActiveHtmlArtifactId,
+                            StringComparison.OrdinalIgnoreCase),
+                        "HTML refresh captures a new authoritative workspace revision");
+                    var refreshedArtifact = session.Artifacts.Single(item =>
+                        string.Equals(item.Id, session.ActiveHtmlArtifactId,
+                            StringComparison.OrdinalIgnoreCase));
+                    AssertEqual(boundArtifact.ParentArtifactId,
+                        refreshedArtifact.ParentArtifactId,
+                        "HTML refresh replaces the active data head without adding an undo step");
+                    AssertEqual(historyCount, session.HtmlWorkspace.History.Count,
+                        "HTML refresh keeps user-authored undo history stable");
+                    var refreshedSnapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(
+                        refreshedArtifact.InlineText);
+                    AssertContains(refreshedSnapshot.DataSources.Single(item =>
+                            string.Equals(item.Name, "sales",
+                                StringComparison.OrdinalIgnoreCase)).Json,
+                        "999",
+                        "the refreshed value survives artifact-backed workspace reload");
+                    var refreshedArtifactCount = session.Artifacts.Count;
+                    var unchangedRefresh = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.RefreshDataToolId,
+                        new JObject { ["name"] = "sales" });
+                    AssertEqual(ToolExecutionOutcome.Ok,
+                        unchangedRefresh.Outcome,
+                        "unchanged HTML refresh still succeeds");
+                    AssertEqual(ToolEffectEvidence.VerifiedNoChange,
+                        unchangedRefresh.Evidence.Effect,
+                        "unchanged HTML refresh reports verified no-change");
+                    AssertEqual(refreshedArtifact.Id,
+                        session.ActiveHtmlArtifactId,
+                        "unchanged HTML refresh keeps the current head");
+                    AssertEqual(refreshedArtifactCount,
+                        session.Artifacts.Count,
+                        "unchanged HTML refresh creates no artifact spam");
                 });
         }
 

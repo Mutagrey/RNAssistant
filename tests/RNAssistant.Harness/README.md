@@ -53,8 +53,8 @@ version check still apply.
 | Exact bounded artifact text/source and Markdown viewer projection | `Program.ResourceGatewayTests.cs`, `Program.ContextBridgeTests.cs`; UI contracts in `tests/web/artifact-text-viewer.test.js` and `tests/web/artifact-json-viewer.test.js` | `artifact viewer:`, `bridge: typed artifact viewer`, `resources: gateway reads searches resolves and pages`, `resources: duplicate artifact ids fail closed`, `resources: empty text remains exact` |
 | HTML whole-workspace revision lineage and branch recovery | `Program.HtmlArtifactStorageTests.cs`; replay/recovery in `Program.SessionEventStoreTests.cs` | `html lineage:`, `storage: html navigation`, `storage: html redo branches`, `storage: html recovery` |
 | Inert uploaded-HTML preview/import and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `Program.ContextBridgeTests.cs`; UI contract in `tests/web/html-upload-import.test.js` | `html import:`, `bridge: typed html import` |
-| Exact HTML binding checkpoint/recovery/export and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ContextBridgeTests.cs`; UI contract in `tests/web/html-workspace-export.test.js` | `html export:`, `tools: html workspace updates session`, `bridge: typed html export` |
-| R61 HTML semantic schemas, accepted-read binding, automatic preflight and model-result/history isolation | `Program.HtmlWorkspaceToolTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs`; UI policy check in `tests/web/html-workspace-export.test.js` | `html tools:`, `tools: html workspace updates session`, `tools: html source`, `tools: R61 built-in contract inventory` |
+| Exact HTML binding checkpoint/recovery/refresh/export and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `Program.HtmlWorkspaceToolTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ContextBridgeTests.cs`; UI/export contracts in `tests/web/html-workspace-export.test.js` and `tests/web/html-workspace-echarts.test.js` | `html export:`, `html tools: native ownership and typed binding`, `tools: html workspace updates session`, `bridge: typed html export` |
+| R61 HTML semantic schemas, accepted-read binding, automatic preflight and model-result/history isolation | `Program.HtmlWorkspaceToolTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs`; UI policy and standalone runtime checks in `tests/web/html-workspace-export.test.js` and `tests/web/html-workspace-echarts.test.js` | `html tools:`, `tools: html workspace updates session`, `tools: html source`, `tools: R61 built-in contract inventory` |
 | R61 Prompt/Tool/Skill semantic authoring, installed-package review and replay isolation | `Program.ChatSettingsTests.cs`, `Program.ToolStoreTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs` | `tools: authoring intents are semantic`, `tools: validate payload without saving`, `chat: prompt save preserves global model`, `tools: agent CRUD preserves omitted fields`, `skills: CRUD preserves omitted fields`, `tools: R61 built-in contract inventory` |
 | R61 VBA/macro semantic intents, runtime-owned patch/backup state and replay/result isolation | `Program.VbaPromptTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.ToolStoreTests.cs`, `Program.ToolContractAuditTests.cs` | `vba: semantic intent contracts isolate runtime state`, `vba:`, `agent: exposes safe VBA editing tools`, `resources: live Office and VBA are bounded and guarded`, `tools: VBA facade is common across hosts`, `tools: R61 built-in contract inventory` |
 | R61 Tool Library UI-only documentation, typed Test controls and internal semantic continuation | `Program.ToolLibraryUxTests.cs`, `Program.ContextBridgeTests.cs`; browser contracts in `tests/web/tool-library-ux.test.js`, `tests/web/tools-contract.test.js` and `tests/web/tools-editor.test.js` | `tools: built-in documentation`, `tools: Library continuation`, `bridge: typed tools and skills` |
@@ -411,8 +411,12 @@ selection and separate semantic file/data writes. Patch is exact-only; delete ta
 one readable target; bind reuses the latest successful eligible accepted Office read
 from the current run without nested source arguments; refresh takes only an optional
 name. Use `html`, `tools: R61 built-in contract inventory` and
-`node tests/web/html-workspace-export.test.js`. Prompt schema 19 and accepted-history
-validation introduced the HTML switch; schema 20 added whole-resource correction.
+`node tests/web/html-workspace-export.test.js` plus
+`node tests/web/html-workspace-echarts.test.js`. A refresh must capture the reread
+JSON in a new active HTML revision; standalone export embeds that exact snapshot and
+the pinned local ECharts runtime, with no live Office bridge. Prompt schema 19 and
+accepted-history validation introduced the HTML switch; schema 20 added
+whole-resource correction.
 
 R61/11O4 makes prompt save one exact key/value mutation, removes model-facing
 `common.tools_validate` and Tool read list mode, reduces Tool upsert to semantic

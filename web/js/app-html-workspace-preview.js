@@ -183,6 +183,11 @@
     var dataSources = options.dataSources || [];
     var file = activeHtmlFile(files, options.activeFileId || "");
     var html = file ? fileContent(file) : "";
+    if (options.hostBridge === false && usesECharts(files) &&
+        (typeof window.RNAssistantEChartsFactory !== "function" ||
+          !window.echarts || window.echarts.version !== ECHARTS_VERSION)) {
+      throw new Error("Standalone HTML export requires the loaded bundled ECharts " + ECHARTS_VERSION + " dependency.");
+    }
     var hostBridge = options.hostBridge === false ? "" : networkBridgeScript() + "\n";
     var chartRuntime = echartsScript(files);
     var headInject = previewContentSecurityPolicy() + "\n" + previewViewportReset() + "\n" +

@@ -33,6 +33,11 @@
     return mediaType === "application/json" || /\+json$/.test(mediaType) || kind === "json" || kind === "data";
   }
 
+  function isChartArtifact(artifact) {
+    return artifactKind(artifact) === "chart" ||
+      artifactMimeType(artifact).split(";", 1)[0].trim() === "application/vnd.rnassistant.chart+json";
+  }
+
   function clearDetail(root) {
     if (typeof root.__rnArtifactDetailCleanup === "function") root.__rnArtifactDetailCleanup();
     root.__rnArtifactDetailCleanup = null;
@@ -345,6 +350,14 @@
 
   function appendArtifactContent(root, artifact, actions) {
     var inline = artifactInlineText(artifact);
+    if (inline && isChartArtifact(artifact) &&
+        typeof window.tryRenderChartArtifactJson === "function") {
+      var chart = window.tryRenderChartArtifactJson(inline, {});
+      if (chart) {
+        root.appendChild(chart);
+        return;
+      }
+    }
     if (appendTypedArtifactViewer(root, artifact, actions)) return;
     if (inline) {
       if (isJsonArtifact(artifact)) {

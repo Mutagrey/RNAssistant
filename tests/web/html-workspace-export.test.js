@@ -137,12 +137,14 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   console.log("PASS HTML refresh: UI keeps policy internal and sends semantic names only");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-html-workspace-preview.js?v=html-echarts-20260902-1"));
+  assert.ok(index.includes("app-html-workspace-preview.js?v=html-echarts-20260903-2"));
   ["app-artifact-viewer-actions.js", "app-html-workspace-actions.js",
-    "app-html-workspace-artifacts.js", "app-html-workspace-editor.js"]
+    "app-html-workspace-editor.js"]
     .forEach(asset => assert.ok(index.includes(
       asset + "?v=artifact-gallery-20260902-1"), asset));
-  assert.ok(index.includes("app-html-workspace.js?v=artifact-gallery-20260902-1"));
+  assert.ok(index.includes(
+    "app-html-workspace-artifacts.js?v=artifact-chart-preview-20260903-1"));
+  assert.ok(index.includes("app-html-workspace.js?v=html-echarts-20260903-1"));
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"));
   console.log("PASS HTML export: changed UI graph uses one cache key");
 
