@@ -147,6 +147,12 @@ All modes always return the same raw JSON envelope with no Markdown or surroundi
 
 Every string in the raw conversation object, including nested tool arguments, uses one JSON escaping layer. A real line break is `\n`; one literal source backslash is `\\`, so source `\n` or regex `\d` is represented as `\\n` or `\\d`. The local parser decodes the envelope once, then argument, runtime, storage and replay paths preserve the resulting text exactly. There is no source auto-unescape or repair because it would corrupt valid JavaScript, CSS, regular expressions and paths.
 
+Inside ModelProtocol each decoded argument object remains one detached `JObject`
+through optional-null removal and schema validation; canonical `ArgumentsJson` is
+created directly from that tree. For handler dispatch, `ToolRuntime` remains the
+single JSON-to-typed-arguments handoff. No intermediate dictionary normalization
+or object re-materialization is part of response acceptance.
+
 With SSE enabled, transport chunks still contain that raw JSON envelope. The live UI projection incrementally decodes only the root `message` string and never exposes `tool_calls` or other raw JSON. A new model attempt marks the previous provisional projection for replacement, but UI applies that reset only with the first new content/reasoning delta so a format repair cannot create an empty blink. Provider reasoning and one leading `<think>` block use the separate reasoning projection; its terminal update is emitted before visible message content starts or when the stream ends. `[DONE]` and EOF remain normal transport terminals; a non-empty `choices[0].finish_reason` also starts a one-second bounded drain for an optional final usage chunk, after which an OpenAI-compatible endpoint cannot hold the completed response open until the request timeout.
 
 Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; ModelProtocol removes those optional nulls before schema validation; the executor later applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.

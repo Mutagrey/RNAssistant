@@ -33,9 +33,9 @@ namespace RNAssistant.Harness
                 AssertTrue(parsed.Success, "current accepted history form reads: " + role);
                 AssertEqual(call.Id, parsed.Response.ToolCalls.Single().Id, "runtime metadata preserves the exact accepted id");
                 AssertEqual(call.Name, parsed.Response.ToolCalls.Single().Name, "native history preserves the exact canonical name");
-                var arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(parsed.Response.ToolCalls[0].ArgumentsJson,
+                var arguments = JsonConvert.DeserializeObject<JObject>(parsed.Response.ToolCalls[0].ArgumentsJson,
                     new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
-                AssertEqual("2026-08-28T12:34:56Z", arguments["at"] as string, "accepted ISO argument remains exact text");
+                AssertEqual("2026-08-28T12:34:56Z", (string)arguments["at"], "accepted ISO argument remains exact text");
                 var wire = ModelProtocolWire.Write(parsed.Response.Message,
                     new[] { new ConversationToolCall { Name = call.Name, Arguments = arguments } });
                 AssertTrue(JObject.Parse(wire)["tool_calls"][0]["id"] == null, "history identity never becomes a model-generated wire field");
@@ -122,6 +122,19 @@ namespace RNAssistant.Harness
             };
         }
 
+        private static ToolCatalogEntry V4StructuredReadTool()
+        {
+            var tool = V4ReadTool();
+            tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{" +
+                "\"query\":{\"type\":\"string\",\"description\":\"Query.\",\"minLength\":1}," +
+                "\"at\":{\"type\":\"string\",\"description\":\"Optional timestamp.\"}," +
+                "\"items\":{\"type\":\"array\",\"description\":\"Optional structured values.\",\"items\":{" +
+                    "\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name.\"}}," +
+                    "\"required\":[\"name\"],\"additionalProperties\":false}}" +
+                "},\"required\":[\"query\"],\"additionalProperties\":false}";
+            return tool;
+        }
+
         private static JObject V4Call(string name = "test.read", JObject arguments = null)
         {
             return new JObject { ["name"] = name,
@@ -149,14 +162,23 @@ namespace RNAssistant.Harness
                 AssertEqual(message, parsed.Response.Message, "message remains exact");
                 AssertTrue(JToken.DeepEquals(JObject.Parse(json), JObject.Parse(parsed.Response.ToJson())), "status-free final round trip");
             }
-            var tool = V4ReadTool();
+            var tool = V4StructuredReadTool();
             var callJson = V4Envelope(V4Call(arguments: new JObject
             {
-                ["query"] = "\\u0061", ["at"] = "2026-08-28T12:34:56Z"
+                ["query"] = "\\u0061", ["at"] = "2026-08-28T12:34:56Z",
+                ["items"] = new JArray(new JObject { ["name"] = "nested" })
             }));
             var call = ParseV4(callJson, tool);
             AssertTrue(call.Success, "v4 tool parses");
-            AssertTrue(call.Response.ToolCalls[0].Arguments["at"] is string, "ISO text is not silently converted to DateTime");
+            AssertEqual(typeof(JObject), typeof(ConversationToolCall).GetProperty("Arguments").PropertyType,
+                "validated arguments remain one JSON tree until canonical ArgumentsJson");
+            AssertTrue(call.Response.ToolCalls[0].Arguments.Parent == null,
+                "the retained argument tree does not keep the discarded response DOM alive");
+            AssertTrue(call.Response.ToolCalls[0].Arguments["at"].Type == JTokenType.String,
+                "ISO text is not silently converted to DateTime");
+            AssertTrue(call.Response.ToolCalls[0].Arguments["items"] is JArray &&
+                call.Response.ToolCalls[0].Arguments["items"][0] is JObject,
+                "nested arrays and objects remain native JSON tokens");
             AssertTrue(JToken.DeepEquals(JObject.Parse(callJson), JObject.Parse(call.Response.ToJson())), "call round trip preserves arguments without assigning ids");
             AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v4 DTO has no model or universal status");
         }
@@ -213,7 +235,7 @@ namespace RNAssistant.Harness
             var exact = ParseV4(exactWire, V4ReadTool());
             AssertTrue(exact.Success, "escaped source argument is accepted");
             AssertEqual(exactSource,
-                exact.Response.ToolCalls.Single().Arguments["query"] as string,
+                (string)exact.Response.ToolCalls.Single().Arguments["query"],
                 "one JSON decode preserves real lines and literal source backslashes");
             var nested = V4Envelope(V4Call(arguments: new JObject { ["query"] = "A", ["deep"] = "NESTED" }))
                 .Replace("\"NESTED\"", new string('[', 70) + "0" + new string(']', 70));
@@ -243,6 +265,12 @@ namespace RNAssistant.Harness
             AssertTrue(!ParseV4(V4Envelope(V4Call(name: "")), V4ReadTool()).Success, "blank name rejected");
             AssertTrue(!ParseV4(V4Envelope(V4Call(arguments: new JObject { ["query"] = "A", ["Query"] = "B" })), V4ReadTool()).Success,
                 "ambiguous argument names rejected before normalization");
+            AssertTrue(!ParseV4(V4Envelope(V4Call(arguments: new JObject
+                {
+                    ["query"] = "A",
+                    ["items"] = new JArray(new JObject { ["name"] = "A", ["Name"] = "B" })
+                })), V4StructuredReadTool()).Success,
+                "nested names that differ only by case fail schema validation");
             AssertTrue(!ParseV4(V4Envelope(V4Call()).Replace("\"query\":\"A\"", "\"query\":\"A\",\"query\":\"B\""), V4ReadTool()).Success,
                 "duplicate nested JSON property rejected");
         }
@@ -1538,7 +1566,7 @@ namespace RNAssistant.Harness
                         new ConversationToolCall
                         {
                             Name = ResourceToolCatalog.ReadToolId,
-                            Arguments = new Dictionary<string, object>
+                            Arguments = new JObject
                             {
                                 ["uri"] = "rna://vba/guessed/module",
                                 ["cursor"] = "guessed",
@@ -1600,7 +1628,7 @@ namespace RNAssistant.Harness
                                 new ConversationToolCall
                                 {
                                     Name = ResourceToolCatalog.FindToolId,
-                                    Arguments = new Dictionary<string, object> { ["scope"] = "vba", ["query"] = moduleName }
+                                    Arguments = new JObject { ["scope"] = "vba", ["query"] = moduleName }
                                 }
                             }) });
                     }
@@ -1627,7 +1655,7 @@ namespace RNAssistant.Harness
                                 new ConversationToolCall
                                 {
                                     Name = ResourceToolCatalog.ReadToolId,
-                                    Arguments = new Dictionary<string, object>
+                                    Arguments = new JObject
                                     {
                                         ["target"] = semanticTarget,
                                         ["representation"] = ResourceRepresentations.Source
@@ -2170,7 +2198,7 @@ namespace RNAssistant.Harness
                     new ConversationToolCall
                     {
                         Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
-                        Arguments = new Dictionary<string, object>
+                        Arguments = new JObject
                         {
                             ["path"] = "report.html", ["content"] = html
                         }

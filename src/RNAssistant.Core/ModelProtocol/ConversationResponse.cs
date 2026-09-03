@@ -29,7 +29,7 @@ namespace RNAssistant.Core.ModelProtocol
                 ["tool_calls"] = new JArray(ToolCalls.Select(call => new JObject
                 {
                     ["name"] = call.Name,
-                    ["arguments"] = JObject.FromObject(call.Arguments)
+                    ["arguments"] = call.Arguments.DeepClone()
                 }))
             }.ToString(Formatting.None);
         }
@@ -40,11 +40,11 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ConversationToolCall
     {
         public string Name { get; set; }
-        public Dictionary<string, object> Arguments { get; set; }
+        public JObject Arguments { get; set; }
 
         public ConversationToolCall()
         {
-            Arguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            Arguments = new JObject();
         }
     }
 

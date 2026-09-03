@@ -131,7 +131,7 @@ namespace RNAssistant.Office.Services
         {
             return new ConversationToolCall
             {
-                Name = "compat.echo", Arguments = new Dictionary<string, object> { ["value"] = "A" }
+                Name = "compat.echo", Arguments = new JObject { ["value"] = "A" }
             };
         }
 
@@ -153,7 +153,8 @@ namespace RNAssistant.Office.Services
             var draft = ProbeCall();
             // Synthetic probe history has a local ID; it never authorizes a
             // real tool execution or asks the provider to allocate identity.
-            var call = new AgentToolCall { Id = "call_1", Name = draft.Name, Arguments = draft.Arguments };
+            var call = new AgentToolCall { Id = "call_1", Name = draft.Name };
+            ToolArgumentNormalizer.AddProperties(draft.Arguments, call.Arguments);
             return new[]
             {
                 AgentJsonProtocol.CreateToolCallMessage(call, "TOOL_OK", null, role,

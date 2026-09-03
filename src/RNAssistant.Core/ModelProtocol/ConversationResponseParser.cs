@@ -47,12 +47,10 @@ namespace RNAssistant.Core.ModelProtocol
                 string error;
                 if (!ToolSchemaSupport.TryParse(tool, out schema, out error))
                     return ConversationResponseParseResult.Fail("Invalid callable tool schema for " + tool.Id + ": " + error);
-                var arguments = JObject.FromObject(call.Arguments);
+                var arguments = call.Arguments;
                 ToolSchemaSupport.RemoveOptionalNulls(arguments, schema);
                 if (!ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error))
                     return ConversationResponseParseResult.Fail("Invalid arguments for " + tool.Id + ": " + error);
-                call.Arguments.Clear();
-                ToolArgumentNormalizer.AddProperties(arguments, call.Arguments);
             }
             return parsed;
         }

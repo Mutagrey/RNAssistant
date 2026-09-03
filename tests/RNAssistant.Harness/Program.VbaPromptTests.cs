@@ -2447,9 +2447,14 @@ namespace RNAssistant.Harness
                     "{\"message\":\"patch\",\"tool_calls\":[{\"name\":\"common.vba_apply_patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"find\":\"A\\nB\",\"text\":\"\\nA\\n\\nB\\n\"}]}}]}",
                     tools.ToArray());
                 AssertTrue(parsed.Success, "raw model JSON with escaped newlines parses");
+                var invocation = new ToolInvocation
+                {
+                    ToolCallId = "fixture_vba",
+                    ToolId = parsed.Response.ToolCalls[0].Name
+                };
+                ToolArgumentNormalizer.AddProperties(parsed.Response.ToolCalls[0].Arguments, invocation.Arguments);
                 var result = executor.ExecuteManual(
-                    new ToolInvocation { ToolCallId = "fixture_vba", ToolId = parsed.Response.ToolCalls[0].Name,
-                        Arguments = parsed.Response.ToolCalls[0].Arguments },
+                    invocation,
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,

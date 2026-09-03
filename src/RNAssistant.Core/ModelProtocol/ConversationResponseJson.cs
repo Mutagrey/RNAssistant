@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.ModelProtocol
 {
@@ -70,16 +69,8 @@ namespace RNAssistant.Core.ModelProtocol
                     return ConversationResponseParseResult.Fail("Each tool call requires a non-empty string name and object arguments.");
                 if (arguments.Properties().GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
                     return ConversationResponseParseResult.Fail("Tool arguments must not contain duplicate names that differ only by case.");
-                try
-                {
-                    var parsedArguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-                    ToolArgumentNormalizer.AddProperties(arguments, parsedArguments);
-                    parsedCalls.Add(new ConversationToolCall { Name = name, Arguments = parsedArguments });
-                }
-                catch (Exception ex) when (ex is FormatException || ex is OverflowException || ex is ArgumentException || ex is InvalidCastException)
-                {
-                    return ConversationResponseParseResult.Fail("Tool arguments could not be normalized: " + ex.Message);
-                }
+                call.Property("arguments").Value = JValue.CreateNull();
+                parsedCalls.Add(new ConversationToolCall { Name = name, Arguments = arguments });
             }
             return ConversationResponseParseResult.Ok(new ConversationResponse((string)root["message"], parsedCalls));
         }

@@ -85,7 +85,7 @@ namespace RNAssistant.Core.ModelProtocol
                 return ConversationHistoryReadResult.Fail("History tool-call metadata disagrees with the accepted envelope.");
             return ConversationHistoryReadResult.Ok(new AgentResponse(response.Message, new[]
             {
-                new ToolCall(message.ToolCallId, call.Name, JsonConvert.SerializeObject(call.Arguments, Formatting.None))
+                new ToolCall(message.ToolCallId, call.Name, call.Arguments.ToString(Formatting.None))
             }));
         }
     }

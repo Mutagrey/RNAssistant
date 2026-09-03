@@ -155,7 +155,7 @@ namespace RNAssistant.Harness
                         new ConversationToolCall
                         {
                             Name = UserQuestionToolCatalog.AskToolId,
-                            Arguments = new Dictionary<string, object>
+                            Arguments = new JObject
                             {
                                 ["questions"] = new JArray(new JObject
                                 {

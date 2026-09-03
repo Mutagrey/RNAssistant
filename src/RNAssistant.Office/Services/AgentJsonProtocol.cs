@@ -140,7 +140,10 @@ namespace RNAssistant.Office.Services
                 return nativeMessage;
             }
             var content = ModelProtocolWire.Write(message, new[] { new ConversationToolCall
-                { Name = call.Name, Arguments = call.Arguments } });
+                {
+                    Name = call.Name,
+                    Arguments = JObject.FromObject(call.Arguments ?? new Dictionary<string, object>())
+                } });
             var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
             protocolMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             protocolMessage.ToolResultProtocolVersion = ToolResultWire.CurrentVersion;
