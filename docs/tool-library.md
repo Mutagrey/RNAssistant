@@ -208,15 +208,17 @@ WebView2, not inferred from a desktop browser screenshot.
 
 ## R61 delivery and gates
 
-1. **Done host-neutral (11O0, refreshed through 11O5):** freeze every effective built-in tool ID/schema by mode and host. For each
+1. **Done host-neutral (11O0, refreshed through 11O6):** freeze every effective built-in tool ID/schema by mode and host. For each
    property record semantic owner, source/default, validation, internal resolver,
    result dependency, test fixture and keep/remove decision.
 2. **Done for Resources + Capabilities, planning, HTML, authoring and VBA/macro:** contract checks fail on unreviewed or unexplained plumbing-shaped
    arguments (`*Id`, UUID, URI, revision/hash/etag, cursor/offset/page token). Names
    are a review trigger, not an unsafe automatic stripping rule.
-3. **Semantic family switches through VBA/macro are done host-neutral:** deleted
-   argument paths have no aliases or dual schemas. Recompute the minimal mode/host
-   core pack next; optional exact schemas remain available through admission.
+3. **Semantic family switches and final core-pack selection through 11O6 are done
+   host-neutral:** deleted argument paths have no aliases or dual schemas. Excel
+   Agent keeps four bootstrap, 15 Excel and two routine VBA editing schemas;
+   rename/restore/delete/macro remain exact optional schemas available through
+   admission.
 4. Run deterministic model scenarios proving that calls complete without invented
    opaque values and that cursor/revision confusion is structurally impossible,
    not merely discouraged by descriptions.

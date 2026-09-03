@@ -3,6 +3,13 @@
 Date: 2026-08-30
 Baseline: `33dc1bb30ae5d05352747a1e5bc148c21610a62b`
 
+Current note: this file records the Phase 8B historical profile. R61/11O6
+supersedes only its initial core membership: Excel Agent now has four bootstrap,
+15 Excel and two VBA editing schemas; Word/PowerPoint have bootstrap plus those two
+VBA editing schemas. Rename, restore, delete and arbitrary macro execution remain
+in the runnable catalog and require exact capability admission. Admission,
+snapshot, budget and reconstruction rules below are unchanged.
+
 ## Scope
 
 This host-neutral slice replaces the model-visible LRU lifecycle while preserving

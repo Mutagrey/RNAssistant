@@ -1,13 +1,14 @@
 # R61/11O — audit границы model-facing tools
 
 Дата фиксации: 2026-09-03. Статус: 11O1 Resources + Capabilities, 11O2 Plan
-questions/doc/task-list, 11O3 HTML, 11O4 Prompt/Tool/Skill authoring и 11O5
-VBA/macro завершены host-neutral; core-pack и UI ещё не выполнены.
+questions/doc/task-list, 11O3 HTML, 11O4 Prompt/Tool/Skill authoring, 11O5
+VBA/macro и 11O6 final core-pack завершены host-neutral; UI ещё не выполнен.
 
 Для Resources + Capabilities, planning, HTML, authoring и VBA/macro families этот
-документ фиксирует реализованные контракты 11O1–11O5. Для остальных семейств до их атомарного
-переключения действует текущий канонический контракт. R61 не вводит второй
-executor, generic router, pipelines, aliases или dual schema.
+документ фиксирует реализованные контракты 11O1–11O6, включая финальный
+mode/host core-pack. Для оставшегося UI-среза до его атомарного переключения
+действует текущий канонический контракт. R61 не вводит второй executor, generic
+router, pipelines, aliases или dual schema.
 
 ## 1. Диагностический вывод
 
@@ -67,8 +68,11 @@ aliases вроде `rna_*` и replay старых URI/cursor arguments запр�
 
 ## 3. Текущая поверхность и почему имеющихся тестов недостаточно
 
-После 11O5 Excel Agent core/bootstrap pack временно публикует 25 schemas: четыре
-bootstrap, пятнадцать Excel и шесть VBA/macro. Публичная resource-пара принимает только
+После 11O6 Excel Agent core/bootstrap pack публикует 21 schema: четыре bootstrap,
+пятнадцать Excel и два routine VBA editing intent — whole-source write и exact
+patch. Rename, restore, delete и arbitrary macro остаются точными runnable ids, но
+их schemas загружаются только по semantic need через capability admission.
+Публичная resource-пара принимает только
 `query`/semantic `scope` и readable `target`/`representation`. Find остаётся
 fixed top-20, но unfiltered VBA browse закрепляет project target первым, а exact
 bound runtime публикует тот же target напрямую. Read собирает bounded provider
@@ -109,9 +113,11 @@ tools, Tool/Skill/Prompt authoring зависит от доступности st
 
 - Chat получает две resource schemas;
 - Plan начинает с четырёх bootstrap schemas — resources и capabilities;
-- Excel Agent core временно содержит десять `common.*` schemas: те же четыре
-  bootstrap плюс шесть VBA/macro; вместе с 15 Excel schemas это 25 schemas до
-  отдельного 11O6 core-pack reassessment;
+- Excel Agent core содержит шесть `common.*` schemas: те же четыре bootstrap плюс
+  `common.vba_write_module` и `common.vba_apply_patch`; вместе с 15 Excel schemas
+  это 21 schema;
+- Word/PowerPoint Agent core содержит четыре bootstrap и те же два VBA editing
+  schema; Outlook Agent содержит только четыре bootstrap;
 - остальные exact ids видны в compact capability catalog, а полный schema
   загружается только через `common.capabilities_read`.
 
@@ -159,12 +165,12 @@ public id также нельзя «вспоминать» приблизите�
 | `common.tools_delete` | Нужен по явному запросу | `DONE 11O4`: exact custom tool id semantic, confirmation сохранена |
 | `common.skills_upsert/delete` | Skill core authoring нужен отдельно | `DONE 11O4`: exact core intents без reference branch |
 | `common.skills_reference_upsert/delete` | One-reference authoring имеет отдельный scope | `DONE 11O4`: отдельные narrow intents; mixed anyOf удалён |
-| `common.vba_restore_backup` | Нужен только для явного rollback | `DONE 11O5 ON-DEMAND KEEP`: exact readable target либо latest-for-module; raw backup id внутренний |
-| `common.vba_write_module` | Whole-source write нужен | `DONE 11O5 KEEP`: только module/full source и meaningful creation policy/type |
-| `common.vba_rename_module` | Identity-preserving rename отличается от write | `DONE 11O5 SPLIT`: source/destination names only; guards и journal identity внутренние |
-| `common.vba_apply_patch` | Exact minimal edit нужен | `DONE 11O5 KEEP`: hunks `find/text`, constant `op=replace` и guards внутренние |
-| `common.vba_delete_module` | Нужен только по явному запросу | `DONE 11O5 ON-DEMAND KEEP`: module name semantic, guard/backup lifecycle внутренние |
-| `common.office_run_macro` | Нужен только когда пользователь просит execution | `DONE 11O5 ON-DEMAND KEEP`: high-risk самостоятельный effect; arguments semantic, runtime identity/evidence внутренние |
+| `common.vba_restore_backup` | Нужен только для явного rollback | `DONE 11O5 + 11O6 ON-DEMAND KEEP`: exact readable target либо latest-for-module; raw backup id внутренний |
+| `common.vba_write_module` | Whole-source write нужен | `DONE 11O5 + 11O6 CORE KEEP`: только module/full source и meaningful creation policy/type |
+| `common.vba_rename_module` | Identity-preserving rename отличается от write | `DONE 11O5 SPLIT + 11O6 ON-DEMAND`: source/destination names only; guards и journal identity внутренние |
+| `common.vba_apply_patch` | Exact minimal edit нужен | `DONE 11O5 + 11O6 CORE KEEP`: hunks `find/text`, constant `op=replace` и guards внутренние |
+| `common.vba_delete_module` | Нужен только по явному запросу | `DONE 11O5 + 11O6 ON-DEMAND KEEP`: module name semantic, guard/backup lifecycle внутренние |
+| `common.office_run_macro` | Нужен только когда пользователь просит execution | `DONE 11O5 + 11O6 ON-DEMAND KEEP`: high-risk самостоятельный effect; arguments semantic, runtime identity/evidence внутренние |
 
 ### `common.*` skill ids, которые не являются tools
 
@@ -198,10 +204,13 @@ registry count может уменьшиться незначительно ил
 главный результат — меньший default callable pack и узкие schemas, а не искусственно
 минимальное число названий.
 
-11O5 намеренно сохранил текущий инвариант «все Excel/VBA core schemas сразу» и лишь
-добавил отдельный rename schema. 11O6 обязан сравнить этот временный pack с on-demand
-admission на VBA и обычных Excel tasks; изменение core membership требует явного
-atomic contract switch, а не скрытого удаления tool.
+11O5 намеренно сохранил временный инвариант «все Excel/VBA core schemas сразу» и
+добавил отдельный rename schema. 11O6 сравнил его с on-demand admission: routine
+Excel сохранил прямой двухшаговый read без schema load/repair, initial request
+estimate уменьшился на 1 034 tokens, а explicit macro добавляет ровно один
+capability-read step и сохраняет confirmation/unknown-effect contract. Поэтому
+четыре explicit VBA intents удалены только из core membership, не из runnable
+catalog или execution authority.
 
 ## 5. Целевая граница
 
@@ -414,14 +423,16 @@ R61 не закрывается только schema snapshot-тестами. М�
 6. **Done host-neutral 11O5:** VBA/macro family переключена на шесть exact intents;
    rename отделён от write, patch operation и backup identity принадлежат runtime,
    incompatible retained calls требуют reset/new chat.
-7. Повторно вычислить минимальный mode/host core pack по eval evidence; optional
-   exact schemas остаются доступны через capability admission.
+7. **Done host-neutral 11O6:** минимальный mode/host core пересчитан по
+   deterministic eval evidence; optional exact schemas остаются доступны через
+   capability admission, policy/binding/effect не меняются.
 8. Добавить UI-only built-in documentation, typed Library Test и исправить
    Implementation/Test layout.
 9. Собрать final live-provider, Windows WebView2/Office и WQ-PACK evidence только на
    post-cutover catalog.
 
-Ближайший шаг — 11O6 minimal mode/host core-pack reassessment. Накопленные Windows rebuild,
-live-provider и WebView2 gates остаются обязательными для final WQ, но по §16.1 не
-блокируют следующий dependency-safe host-neutral подэтап. Phase 12 до полного R61
-и qualification не начинается.
+Ближайший шаг — 11O7 UI-only built-in documentation, typed Library Test и
+Implementation/Test layout. Накопленные Windows rebuild, live-provider и WebView2
+gates остаются обязательными для final WQ, но по §16.1 не блокируют следующий
+dependency-safe host-neutral подэтап. Phase 12 до полного R61 и qualification не
+начинается.

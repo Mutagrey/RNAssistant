@@ -1361,7 +1361,7 @@ namespace RNAssistant.Harness
                     ModelProtocolClient.EstimateFormatRepairOverheadTokens(promptSettings);
                 AssertTrue(ModelContextBudget.InputBudgetTokens(promptSettings) - estimated >=
                     ModelContextBudget.ContinuationReserveTokens(promptSettings),
-                    "mandatory Excel/VBA core keeps the shared continuation reserve");
+                    "minimal Excel/VBA editing core keeps the shared continuation reserve");
                 var prompt = FlattenSimple(request);
                 AssertContains(prompt, "\"name\":\"common.resources_find\"", "semantic resource discovery exposed");
                 AssertContains(prompt, "\"name\":\"common.resources_read\"", "resource reads exposed");
@@ -1380,10 +1380,19 @@ namespace RNAssistant.Harness
                     .Select(token => (string)token)
                     .ToList();
                 AssertTrue(callableNames.Contains("common.vba_apply_patch", StringComparer.OrdinalIgnoreCase) &&
-                    callableNames.Contains("common.vba_write_module", StringComparer.OrdinalIgnoreCase) &&
-                    callableNames.Contains("common.vba_rename_module", StringComparer.OrdinalIgnoreCase) &&
-                    callableNames.Contains("common.vba_delete_module", StringComparer.OrdinalIgnoreCase),
-                    "public VBA mutation schemas are complete in the VBA core");
+                    callableNames.Contains("common.vba_write_module", StringComparer.OrdinalIgnoreCase),
+                    "routine exact patch and intentional whole-source write stay in the VBA editing core");
+                foreach (var optionalId in new[]
+                {
+                    "common.vba_restore_backup", "common.vba_rename_module",
+                    "common.vba_delete_module", "common.office_run_macro"
+                })
+                {
+                    AssertTrue(!callableNames.Contains(optionalId, StringComparer.OrdinalIgnoreCase),
+                        "explicit VBA intent is not callable before exact admission: " + optionalId);
+                    AssertContains(prompt, "\"id\":\"" + optionalId + "\"",
+                        "compact catalog keeps the exact optional VBA intent discoverable");
+                }
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_create_module\"", StringComparison.Ordinal) < 0,
                     "redundant create alias is hidden from the model");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_replace_text\"", StringComparison.Ordinal) < 0,
@@ -1403,14 +1412,108 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "\"id\":\"common.office_run_macro\"", "host-neutral arbitrary macro execution is discoverable by exact id");
                 AssertTrue(prompt.IndexOf("\"id\":\"excel.run_macro\"", StringComparison.Ordinal) < 0,
                     "host macro backend is hidden from the compact catalog");
-                AssertTrue(callableNames.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase),
-                    "public macro schema is complete in the VBA core");
             });
         }
 
         private static void AgentPreservesVbaResourceEvidenceWithinBudget()
         {
             RunVbaResourceIntentScenario(6000);
+        }
+
+        private static void SimpleAgentR61RoutineExcelAvoidsSchemaDiscovery()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(
+                OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                const string userText = "List workbook sheets.";
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"message\":\"Читаю листы.\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"message\":\"Листы прочитаны.\",\"tool_calls\":[]}"
+                });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                var requestOptions = new List<LlmRequestOptions>();
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
+                {
+                    requests.Add(messages.ToList());
+                    requestOptions.Add(options);
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var settings = new AppSettings
+                {
+                    AgentResponseMode = AgentResponseModes.JsonSchema,
+                    ContextWindowOverrideTokens = 65536,
+                    MaxTokens = 1024
+                };
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Concat(executor.GetControllerTools()).ToList();
+                var session = NewSession(adapter);
+                var context = NewContext(adapter);
+
+                var runnable = ConversationRunService.PrepareToolsForMode(ChatModes.Agent, tools);
+                CapabilityCatalogService.BindReadSchema(runnable, null);
+                var currentPack = CallableToolPack.Create(
+                    ChatModes.Agent, adapter.HostName, "r61-eval", runnable);
+                var legacyVbaIds = new HashSet<string>(new[]
+                {
+                    "common.vba_restore_backup", "common.vba_rename_module",
+                    "common.vba_delete_module", "common.office_run_macro"
+                }, StringComparer.Ordinal);
+                var legacyCoreIds = new HashSet<string>(
+                    currentPack.Tools.Select(tool => tool.Id), StringComparer.Ordinal);
+                legacyCoreIds.UnionWith(legacyVbaIds);
+                var legacyCore = runnable.Where(tool => legacyCoreIds.Contains(tool.Id)).ToArray();
+                var composer = new ConversationPromptComposer();
+                var currentMessages = composer.BuildMessages(
+                    ChatModes.Agent, userText, adapter, currentPack.Tools, null, context,
+                    settings, session, null, false, 60000,
+                    currentPack.CapabilityContext(null));
+                var legacyMessages = composer.BuildMessages(
+                    ChatModes.Agent, userText, adapter, legacyCore, null, context,
+                    settings, session, null, false, 60000,
+                    CapabilityCatalogService.BuildPromptCatalog(runnable, null, legacyCore));
+                var currentOptions = ConversationModelSession.BuildRequestOptions(
+                    ChatModes.Agent, settings.AgentResponseMode, currentPack.Tools, session, null);
+                var legacyOptions = ConversationModelSession.BuildRequestOptions(
+                    ChatModes.Agent, settings.AgentResponseMode, legacyCore, session, null);
+                var repairReserve = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
+                var continuationReserve = ModelContextBudget.ContinuationReserveTokens(settings);
+                var currentTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
+                    currentMessages, currentOptions, settings, repairReserve, continuationReserve);
+                var legacyTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
+                    legacyMessages, legacyOptions, settings, repairReserve, continuationReserve);
+                AssertEqual(21, currentPack.Tools.Count,
+                    "R61 Excel Agent core contains four bootstrap, fifteen Excel, and two VBA editing schemas");
+                AssertEqual(25, legacyCore.Length,
+                    "counterfactual post-11O5 Excel Agent core contains all six VBA/macro schemas");
+                AssertTrue(currentTokens < legacyTokens,
+                    "R61 core lowers deterministic initial input estimate; before=" +
+                    legacyTokens + ", after=" + currentTokens);
+
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent, userText, session, context, settings, tools, null)
+                    .GetAwaiter().GetResult();
+
+                AssertEqual("Листы прочитаны.", result.AssistantText,
+                    "routine Excel task completes with the reduced core");
+                AssertEqual(2, requests.Count,
+                    "routine Excel read uses one execution step and one final response");
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelInspectOperation),
+                    "routine Excel read dispatches once");
+                AssertEqual(1, result.RunViewState.SuccessfulReads,
+                    "routine Excel read retains typed effect evidence");
+                AssertTrue(requests.SelectMany(items => items).All(message =>
+                    !string.Equals(message.ToolName, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal)),
+                    "routine Excel task adds no capability-schema call");
+                AssertTrue(requests.SelectMany(items => items).All(message =>
+                    !(message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal)),
+                    "routine Excel task needs no format repair");
+                AssertTrue(JObject.Parse(requestOptions[0].ResponseSchemaJson)
+                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
+                    .Any(token => (string)token == "excel.inspect"),
+                    "routine Excel intent remains callable on the initial step");
+            });
         }
 
         private static void AgentReadsLargeVbaResourceWholeWithinBudget()
@@ -1619,19 +1722,35 @@ namespace RNAssistant.Harness
                     "{\"message\":\"Макрос выполнен.\",\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
+                var requestOptions = new List<LlmRequestOptions>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
+                    requestOptions.Add(options);
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var session = NewSession(adapter);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Agent,
-                    "Run Module1.MigrateApiKey with arguments.", NewSession(adapter), NewContext(adapter),
-                    new AppSettings { AutoConfirmToolActions = true, MaxAgentIterations = 4 }, tools, null)
+                    ChatModes.Agent, "Run Module1.MigrateApiKey with arguments.", session, NewContext(adapter),
+                    new AppSettings
+                    {
+                        AgentResponseMode = AgentResponseModes.JsonSchema,
+                        AutoConfirmToolActions = true,
+                        MaxAgentIterations = 4
+                    }, tools, null)
                     .GetAwaiter().GetResult();
 
                 AssertEqual(3, calls.Count, "schema load, macro execution, and final response");
+                var initialCallable = JObject.Parse(requestOptions[0].ResponseSchemaJson)
+                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
+                    .Select(token => (string)token).ToArray();
+                var admittedCallable = JObject.Parse(requestOptions[1].ResponseSchemaJson)
+                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
+                    .Select(token => (string)token).ToArray();
+                AssertTrue(!initialCallable.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase) &&
+                    admittedCallable.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase),
+                    "arbitrary macro becomes callable only on the model step after exact schema admission");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.RunMacro), "macro executes once");
                 AssertEqual("Module1.MigrateApiKey", adapter.RanMacros.Single(), "arbitrary exact macro name reaches the adapter");
                 AssertEqual("[\"value\",2,true]", JsonConvert.SerializeObject(
@@ -1639,6 +1758,7 @@ namespace RNAssistant.Harness
                         FakeVbaOperation.RunMacro).Request).Arguments),
                     "public native arguments are serialized only at the hidden backend boundary");
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "macro schema evidence reaches execution step");
+                AssertRunViewState(result, session, "unknown", 0, 0, 1);
                 AssertEqual("Макрос выполнен.", result.AssistantText, "macro result returns to the model");
             });
         }
@@ -1823,8 +1943,10 @@ namespace RNAssistant.Harness
                 AssertEqual(2, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
                 var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "RUNTIME_CONTEXT", "user-role continuation keeps runtime context");
-                AssertEqual(2, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1,
-                    "schema evidence and confirmed result replayed");
+                AssertEqual(2, calls[2].Count(message =>
+                    message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
+                    !string.Equals(message.Role, "assistant", StringComparison.Ordinal)),
+                    "schema evidence and confirmed result replay as two typed result messages");
                 AssertContains(replay, "\"status\":\"ok\"", "confirmed result replayed");
                 const string runtimeMarker = "RUNTIME_CONTEXT:\n";
                 var runtimeMessage = calls[2].First(message => (message.Content ?? string.Empty)

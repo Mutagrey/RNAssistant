@@ -2447,10 +2447,10 @@ endpoint.
     Milestone WQ/Phase 12, unlike optional Phase 11 product expansions. Exact scope
     and gates: [Tool Library R61](../tool-library.md#mandatory-all-tool-contract-audit-r61)
     and [failure/ownership audit](R61_TOOL_CONTRACT_AUDIT.md).
-    Host-neutral 11O1–11O5 completed Resources/Capabilities, planning, HTML,
-    Prompt/Tool/Skill authoring and VBA/macro. Final core-pack, UI-only
-    documentation/typed Library Test and final Windows/live-provider WQ remain
-    before Phase 12.
+    Host-neutral 11O1–11O6 completed Resources/Capabilities, planning, HTML,
+    Prompt/Tool/Skill authoring, VBA/macro and the final minimal mode/host core.
+    UI-only documentation/typed Library Test and final Windows/live-provider WQ
+    remain before Phase 12.
 
 ### Правило допуска
 

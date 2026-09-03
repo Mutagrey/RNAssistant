@@ -1379,10 +1379,14 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var tool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.tools_upsert");
+                var tool = new ToolCatalogEntry
+                {
+                    Id = "fixture.type_named_argument",
+                    ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"description\":\"Domain type.\"}},\"required\":[\"type\"],\"additionalProperties\":false}"
+                };
                 var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }));
                 AssertEqual("string",
-                    (string)schema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.parameters.properties.type.type"),
+                    (string)schema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.type.type"),
                     "schema property named type");
 
                 var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_apply_patch");
@@ -1405,7 +1409,7 @@ namespace RNAssistant.Harness
                 AssertEqual(2, restoreVariants == null ? 0 : restoreVariants.Count,
                     "restore schema requires either readable target or module name");
                 var targetVariant = restoreVariants.OfType<JObject>().Single(item =>
-                    item.SelectToken("properties.target.type").Type == JTokenType.String);
+                    (string)item.SelectToken("properties.target.type") == "string");
                 AssertTrue(targetVariant.SelectToken("properties.moduleName") == null,
                     "readable-target branch cannot mix the latest-module selector");
                 AssertTrue(restoreSchema.SelectToken(
@@ -1610,8 +1614,10 @@ namespace RNAssistant.Harness
                 "bounded envelope exposes the exact durable result reference");
             AssertEqual("result", (string)resourceEnvelope.SelectToken("resources[0].relation"),
                 "externalized full result is distinguished from other produced resources");
-            AssertContains((string)resourceEnvelope.SelectToken("data.hint"), "common.resources_read",
-                "bounded envelope tells the model how to read the externalized result");
+            AssertContains((string)resourceEnvelope.SelectToken("data.hint"), "common.resources_find",
+                "bounded envelope names semantic discovery for the externalized result");
+            AssertContains((string)resourceEnvelope.SelectToken("data.hint"), "read that target",
+                "bounded envelope tells the model to read the discovered semantic target");
             var firstPage = ReadResource(
                 new ResourceGatewayService(), resourceSession, resourceUri, ResourceRepresentations.Text, null, 32000).Result;
             var secondPage = ReadResource(
