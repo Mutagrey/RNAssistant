@@ -45,6 +45,21 @@ namespace RNAssistant.Harness
                     AssertContains((string)writeFileSchema["properties"]["content"]["description"],
                         "one literal source backslash",
                         "HTML write schema defines the outer JSON escaping boundary");
+                    string nestedArgumentsError;
+                    AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject
+                        {
+                            ["path"] = "index.html",
+                            ["content"] = "<main>root</main>",
+                            ["arguments"] = new JObject
+                            {
+                                ["path"] = "index.html",
+                                ["content"] = "<main>nested</main>"
+                            }
+                        }, writeFileSchema, false, out nestedArgumentsError),
+                        "HTML write rejects a second arguments wrapper");
+                    AssertContains(nestedArgumentsError,
+                        "$ contains unsupported property arguments",
+                        "HTML write reports the exact repairable wrapper error");
 
                     var allTools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();

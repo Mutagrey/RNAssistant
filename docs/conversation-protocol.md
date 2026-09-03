@@ -8,6 +8,16 @@ RNAssistant has three explicit modes and one `Core/Agent/AgentKernel` loop, invo
 
 All modes return conversation-response v4: only `message` (string) and `tool_calls` (array); calls contain `name` and `arguments`, never a model-owned ID. The shared ModelProtocol boundary owns strict parsing/schema, bounded repair and provider compatibility; the kernel receives one validated draft, separate provider-native refusal, or typed failure. Model wording is never execution evidence.
 
+Agent readiness precedes any domain read or mutation. The model first maps explicit deliverables,
+required source/current-artifact inspection, dependency order, applicable catalog skills
+and tool schemas, and completion evidence. Three or more meaningful stages, or a real
+discovery → construction → verification workflow, require a Task List before the first
+domain operation. Source inspection precedes the primary deliverable; binding/testing
+precedes any requested reusable Skill/Tool documentation. A terminal response must
+reconcile every deliverable and Task List step with result evidence. Validation/tool
+errors cannot be converted into success prose or justify silently replacing a richer
+artifact with a simplified placeholder.
+
 R29 switches client, prompts, schema, probes and accepted history together from v3 to v4. The model-ID parser/context path is removed; only the kernel creates accepted IDs. Full-history/context preflight rejects incompatible chats before preparation or confirmation; no historical migration or dual-write is performed. See the [canonical v4 contract](protocols/CONVERSATION_RESPONSE_V4.md).
 
 ## Conversation context
@@ -61,7 +71,13 @@ No callable schema is touched by execution or removed by LRU. Before publication
 
 When JSON names an exact runnable-catalog tool whose schema is not in the current callable set, the parser reports `Tool schema is not loaded` and the format-repair instruction requires a separate `common.capabilities_read` call for that exact id. It reports `Unknown tool` only for an id absent from the runnable catalog. This distinction prevents a known unloaded tool from entering a repeated unknown-id repair loop without silently auto-loading or retrying it.
 
-A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Successful resource/capability evidence is never replaced by a successful transport preview: the complete resource representation or capability body/chunk must fit together with request options and both reserves. Otherwise the projection returns explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 22 records the semantic VBA/macro boundary together with the earlier R61 resource/capability, planning, HTML, whole-resource and Prompt/Tool/Skill authoring contracts; schema 21 and any other older marker preserve stored text and require explicit review/reset before Agent/Plan execution.
+The call's `arguments` value is itself the root object validated against the selected
+tool schema. A nested `arguments`, `parameters`, schema or other wrapper is invalid.
+Format repair explicitly maps `$ contains unsupported property arguments` to a
+removed wrapper, moving declared fields up first only when necessary, and forbids
+repeating the rejected object unchanged.
+
+A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Successful resource/capability evidence is never replaced by a successful transport preview: the complete resource representation or capability body/chunk must fit together with request options and both reserves. Otherwise the projection returns explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 adds readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion to the schema-22 semantic VBA/macro boundary and earlier R61 contracts. Schema 22 and any other older marker preserve stored text and require explicit review/reset before Agent/Plan execution.
 
 Planning and execution tracking are separate. Exact native `common.plan_doc_save` accepts only the complete title/Markdown/status intent; runtime creates the active plan when absent or binds the exact active head and appends a guarded linear revision. `common.plan_doc_restore` accepts one user-visible version, while runtime resolves its exact source and current guard. `common.plan_doc_delete` has no arguments and retains the explicit-request guard plus removal tombstone semantics. `RUNTIME_CONTEXT.active_plan` exposes only current readable metadata, while the body is found and read through the semantic resource pair. `common.questions_ask` accepts prompt/options without question or option ids; runtime generates UI-only ids, and submitted answers return question text plus selected labels/free text. `common.task_list_set` has small typed `save` and `close` branches; runtime owns active-list and stable step ids while the model supplies the complete goal/ordered step state or terminal outcome. Model Tool Results omit all these internal identities and guards. A ready-plan handoff revalidates the exact selected revision internally, switches to Agent, and submits a semantic instruction to find/read the active plan; no URI enters the model request.
 
@@ -366,8 +382,9 @@ optional projection; projection failure cannot erase a known effect or authorize
 
 R61/11O4 splits that family into exact core `common.skills_upsert/delete` and
 reference `common.skills_reference_upsert/delete` intents; mixed core/reference
-arguments are not replayable. Current prompt schema is 21. Existing custom text and older markers are preserved
-until explicit review/reset. Built-in prompt authoring requires only model call
+arguments are not replayable. Prompt schema 21 was that authoring boundary; current
+prompt schema is 23. Existing custom text and older markers are preserved until
+explicit review/reset. Built-in prompt authoring requires only model call
 name/arguments and assigns IDs to runtime (R31); matching `status=ok` alone does not
 prove that a document changed.
 

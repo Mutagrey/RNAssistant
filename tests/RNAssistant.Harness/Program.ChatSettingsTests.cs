@@ -405,6 +405,24 @@ namespace RNAssistant.Harness
                 "HTML authoring teaches the concise bundled chart runtime");
             AssertContains(htmlAuthoring, "Do not add Chart.js or CDN loaders",
                 "HTML authoring rejects remote or duplicate chart runtimes");
+            AssertContains(htmlAuthoring, "exactly the root arguments path and content",
+                "HTML writes put semantic properties directly at the schema root");
+            AssertContains(htmlAuthoring, "inspect those sources before choosing its data contract",
+                "source-backed dashboards inspect workbook and VBA prerequisites first");
+            AssertContains(htmlAuthoring, "never overwrite a rich dashboard with a simplified placeholder",
+                "HTML validation repair preserves the requested implementation");
+            AssertContains(htmlAuthoring, "both that Office read and common.html_data_bind return status=ok",
+                "HTML guidance cannot claim live data before binding evidence");
+            var skillAuthoring = skills.Single(skill => skill.Id == "common.skill_authoring").BodyMarkdown;
+            AssertContains(skillAuthoring, "author the skill last",
+                "a requested reusable skill follows the verified primary solution");
+            AssertContains(skillAuthoring, "Do not invent a skill",
+                "skill authoring is not an unsolicited substitute for execution");
+            var taskTracking = skills.Single(skill => skill.Id == "common.task_tracking").BodyMarkdown;
+            AssertContains(taskTracking, "three explicit deliverables or meaningful user-level stages",
+                "task tracking uses the complex-request threshold");
+            AssertContains(taskTracking, "Before the first domain read or mutation",
+                "the execution checklist precedes domain work");
             foreach (var skill in skills)
                 AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
                     skill.Id + " does not teach the removed result success flag");
@@ -422,10 +440,28 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "`status` is exactly `ok`, `error`, or `unknown`", "no extra model-facing result states");
                 AssertContains(prompt, "does not by itself prove an applied effect", "defaults require actual effect evidence");
                 AssertContains(prompt,
-                    "HTML, and Prompt/Tool/Skill authoring tools",
+                    "HTML, Prompt/Tool/Skill authoring, and VBA/macro tools",
                     "current prompt schema includes authoring in runtime-only result projection guidance");
                 AssertTrue(prompt.IndexOf("ok=true", StringComparison.OrdinalIgnoreCase) < 0, "defaults do not teach the legacy success flag");
             }
+            AssertContains(defaults.SystemPrompt, "before any domain read or mutation, establish the explicit deliverables",
+                "Agent establishes readiness before changing domain state");
+            AssertContains(defaults.SystemPrompt, "only then create any requested reusable Skill, Tool, or documentation",
+                "Agent follows source, deliverable, verification and reuse dependency order");
+            AssertContains(defaults.SystemPrompt, "reconcile every explicit deliverable and every active task-list step",
+                "Agent verifies requested outcomes before ending the loop");
+            AssertContains(defaults.SystemPrompt, "cannot become success prose",
+                "tool and protocol errors cannot be reported as completed work");
+            AssertContains(defaults.SystemPrompt, "simplified placeholder",
+                "Agent does not degrade an artifact to bypass validation");
+            AssertContains(defaults.AgentToolsPrompt, "discovery -> construction -> verification",
+                "complex Agent work creates a task list before execution");
+            AssertContains(defaults.AgentToolsPrompt, "common.task_tracking` and `common.task_list_set",
+                "task tracking explains separate skill and tool-schema loading");
+            AssertContains(defaults.AgentToolsPrompt, "never add an inner `arguments`",
+                "tool arguments are supplied at the schema root");
+            AssertContains(defaults.AgentSkillsPrompt, "select every clearly applicable skill",
+                "Agent selects and loads applicable skills before domain mutation");
         }
 
         private static void SettingsNormalizeInvalidNumericValues()

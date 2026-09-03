@@ -762,6 +762,14 @@ namespace RNAssistant.Harness
                     AssertContains((string)repair["instruction"], "conversation-response-v4", "repair uses the active ID-free contract");
                     AssertContains((string)repair["instruction"], "Do not include id", "repair never asks the model to allocate IDs");
                     AssertContains((string)repair["instruction"], "nested arguments", "repair preserves the shared string escaping contract");
+                    AssertContains((string)repair["instruction"], "arguments is already the root object",
+                        "repair explains that tool arguments have no second wrapper");
+                    AssertContains((string)repair["instruction"], "remove that undeclared property",
+                        "repair removes the exact property rejected by the schema");
+                    AssertContains((string)repair["instruction"], "move those fields up one level",
+                        "repair preserves declared fields that were placed inside the wrapper");
+                    AssertContains((string)repair["instruction"], "instead of repeating the rejected object unchanged",
+                        "repair forbids identical retries after schema rejection");
                 }
                 AssertTrue(prompt.All(message => string.IsNullOrEmpty(message.ReasoningContent)), "rejected reasoning never enters prompt");
                 AssertEqual(stepId, options.TraceStepId, "one logical step across repairs");

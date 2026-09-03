@@ -208,6 +208,7 @@ namespace RNAssistant.Core.ModelProtocol
                     "containing only message (string) and tool_calls (array). Never return status or any other root field. " +
                     "Do not use Markdown, fences, or surrounding prose. Empty tool_calls ends the loop: use it only when every requested deliverable is complete or blocked. Intermediate success and wording prove no effect. " +
                     "Every call contains only an exact name and object arguments. Do not include id; runtime assigns call IDs. " +
+                    "Inside a call, arguments is already the root object described by the tool schema; never nest another arguments, parameters, schema, or wrapper inside it. If the error says $ contains unsupported property arguments, remove that undeclared property; only when declared fields exist inside it, move those fields up one level first. For any unsupported property, remove it instead of repeating the rejected object unchanged. " +
                     "Every string, including nested arguments, uses one JSON escaping layer: use \\n for a real line break and \\\\ for one literal source backslash; never drop or pre-decode a backslash. " +
                     "Write, external, confirmation-required and unclassified calls must be singleton; batch only independent local reads. " +
                     "Follow the error action exactly. " +
