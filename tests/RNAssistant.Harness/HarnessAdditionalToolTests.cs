@@ -575,7 +575,7 @@ namespace RNAssistant.Harness
                     DocumentTitle = adapter.DocumentTitle,
                     Title = "HTML inspection"
                 };
-                HtmlWorkspaceToolService.UpsertFile(inspectSession, "index.html", "html", "<main id=\"total\"></main><div id='total'></div><script src=\"local.js\"></script>", true);
+                HtmlWorkspaceToolService.UpsertFile(inspectSession, "index.html", "html", "<main id=\"total\"></main><div id='total'></div><script src=\"echarts.min.js\"></script>", true);
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "styles.css", "css", "@import url('theme.css');", false);
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "app.js", "script", "import thing from 'pkg';\ndocument.getElementById('missing');\nRNAssistantData.missingData;", false);
                 var inspectResult = HtmlWorkspaceToolService.InspectForPreview(
@@ -589,6 +589,10 @@ namespace RNAssistant.Harness
                 AssertTrue((int)inspection["warningCount"] >= 2, "HTML inspection reports likely missing references");
                 AssertTrue(inspection["issues"].Any(item => (string)item["code"] == "html.duplicate_id"), "HTML inspection finds duplicate ids");
                 AssertTrue(inspection["issues"].Any(item => (string)item["code"] == "script.module_syntax_unsupported"), "HTML inspection finds module syntax");
+                AssertTrue(inspection["issues"].Any(item =>
+                        (string)item["code"] == "html.script_src_unsupported" &&
+                        ((string)item["message"] ?? string.Empty).IndexOf("bundled ECharts automatically", StringComparison.OrdinalIgnoreCase) >= 0),
+                    "HTML inspection explains the bundled ECharts dependency");
             });
         }
 

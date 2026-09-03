@@ -56,6 +56,25 @@ UI. A mutation becomes available through a freshly built catalog on the next run
 boundary; it does not rewrite the immutable catalog of an already accepted model
 step.
 
+## Built-in guidance contract
+
+Built-in skill metadata is selection guidance; the complete Markdown body is loaded
+before skill-governed work. A built-in body owns its domain prerequisites, ordered
+workflow, quality constraints, failure/recovery behavior and evidence-based
+definition of done. It does not copy JSON schemas or gain execution authority.
+
+The system prompt owns only the universal Understand → Prepare → Inspect → Execute
+→ Verify → Finish lifecycle. The tool prompt owns catalog discovery/admission and
+call-envelope rules. The current loaded tool description and strict schema remain
+authoritative for the exact operation, root arguments and returned evidence. If a
+skill and schema disagree, the model follows the higher-priority runtime prompt and
+schema and reports the inconsistency rather than inventing compatibility fields.
+
+Every exact `common.*`, `excel.*`, `word.*`, `powerpoint.*` or `outlook.*`
+capability named by built-in guidance must resolve to the current tool/skill
+catalog. Harness checks that invariant across all four hosts, rejects duplicate or
+empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returning.
+
 ## Model context
 
 - Chat has an empty capability catalog and cannot load skills.

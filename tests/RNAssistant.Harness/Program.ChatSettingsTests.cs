@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -390,10 +392,14 @@ namespace RNAssistant.Harness
         {
             var skills = BuiltInSkillProvider.GetSkills(FakeOfficeAdapter.ForHost("Excel"));
             var authoring = skills.Single(skill => skill.Id == "common.prompt_authoring").BodyMarkdown;
-            AssertContains(authoring, "Each model call contains only an exact name and object arguments; never include id",
+            AssertContains(authoring, "Each call contains only exact `name` and root object `arguments`",
                 "prompt authoring keeps the model call wire free of runtime IDs");
-            AssertContains(authoring, "Runtime assigns call IDs after validation, before accepted history is persisted",
-                "prompt authoring assigns identity to runtime before durable acceptance");
+            AssertContains(authoring, "Runtime assigns call IDs after validation and owns execution outcomes",
+                "prompt authoring assigns identity and outcomes to runtime");
+            AssertContains(authoring, "SystemPrompt` owns universal operating order",
+                "prompt authoring separates universal lifecycle from domain guidance");
+            AssertContains(authoring, "exact input/output details in tool descriptions",
+                "prompt authoring keeps schemas and tool semantics authoritative");
             AssertTrue(authoring.IndexOf("Each call needs a unique id", StringComparison.OrdinalIgnoreCase) < 0,
                 "R31 model-owned identity guidance cannot return");
             var htmlAuthoring = skills.Single(skill => skill.Id == "common.html_workspace_authoring").BodyMarkdown;
@@ -401,18 +407,32 @@ namespace RNAssistant.Harness
                 "HTML authoring preserves model-provided source text exactly");
             AssertContains(htmlAuthoring, "Runtime stores decoded text unchanged",
                 "HTML authoring forbids a second source unescape");
-            AssertContains(htmlAuthoring, "echarts.init(node); chart.setOption(option)",
-                "HTML authoring teaches the concise bundled chart runtime");
-            AssertContains(htmlAuthoring, "Do not add Chart.js or CDN loaders",
+            AssertContains(htmlAuthoring, "echarts.getInstanceByDom(node) || echarts.init(node)",
+                "HTML authoring avoids duplicate bundled chart instances");
+            AssertContains(htmlAuthoring, "Do not create `echarts.js`",
                 "HTML authoring rejects remote or duplicate chart runtimes");
-            AssertContains(htmlAuthoring, "exactly the root arguments path and content",
+            AssertContains(htmlAuthoring, "root `arguments` contains exactly `path` and `content`",
                 "HTML writes put semantic properties directly at the schema root");
-            AssertContains(htmlAuthoring, "inspect those sources before choosing its data contract",
+            foreach (var file in new[] { "`index.html`", "`styles.css`", "`dashboard.js`" })
+                AssertContains(htmlAuthoring, file, "substantial HTML workspaces split responsibilities");
+            AssertContains(htmlAuthoring, "Dependencies/echarts.min.js",
+                "HTML authoring exposes the runtime-owned chart dependency");
+            AssertContains(htmlAuthoring, "ResizeObserver",
+                "HTML authoring resizes charts with their containers");
+            AssertContains(htmlAuthoring, "CSS custom properties",
+                "HTML authoring defines a coherent interface system");
+            AssertContains(htmlAuthoring, "native buttons/selects/inputs",
+                "HTML authoring requires accessible controls");
+            AssertContains(htmlAuthoring, "inspect those sources first",
                 "source-backed dashboards inspect workbook and VBA prerequisites first");
-            AssertContains(htmlAuthoring, "never overwrite a rich dashboard with a simplified placeholder",
+            AssertContains(htmlAuthoring, "Never replace a rich dashboard with a simplified placeholder",
                 "HTML validation repair preserves the requested implementation");
-            AssertContains(htmlAuthoring, "both that Office read and common.html_data_bind return status=ok",
+            AssertContains(htmlAuthoring, "both the Office read and bind return `status=ok`",
                 "HTML guidance cannot claim live data before binding evidence");
+            AssertContains(htmlAuthoring, "preflight has zero errors",
+                "HTML definition of done includes static validation");
+            AssertContains(htmlAuthoring, "Static preflight does not prove browser execution",
+                "HTML guidance distinguishes static and runtime evidence");
             var skillAuthoring = skills.Single(skill => skill.Id == "common.skill_authoring").BodyMarkdown;
             AssertContains(skillAuthoring, "author the skill last",
                 "a requested reusable skill follows the verified primary solution");
@@ -421,7 +441,7 @@ namespace RNAssistant.Harness
             var taskTracking = skills.Single(skill => skill.Id == "common.task_tracking").BodyMarkdown;
             AssertContains(taskTracking, "three explicit deliverables or meaningful user-level stages",
                 "task tracking uses the complex-request threshold");
-            AssertContains(taskTracking, "Before the first domain read or mutation",
+            AssertContains(taskTracking, "Before the first Office/source read or mutation",
                 "the execution checklist precedes domain work");
             foreach (var skill in skills)
                 AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
@@ -444,11 +464,13 @@ namespace RNAssistant.Harness
                     "current prompt schema includes authoring in runtime-only result projection guidance");
                 AssertTrue(prompt.IndexOf("ok=true", StringComparison.OrdinalIgnoreCase) < 0, "defaults do not teach the legacy success flag");
             }
-            AssertContains(defaults.SystemPrompt, "before any domain read or mutation, establish the explicit deliverables",
-                "Agent establishes readiness before changing domain state");
-            AssertContains(defaults.SystemPrompt, "only then create any requested reusable Skill, Tool, or documentation",
+            AssertContains(defaults.SystemPrompt, "1. **Understand.** Translate the request into explicit deliverables",
+                "Agent begins by establishing deliverables and evidence");
+            AssertContains(defaults.SystemPrompt, "3. **Inspect.** Read enough of every requested Office/VBA/source",
+                "Agent inspects requested sources before construction");
+            AssertContains(defaults.SystemPrompt, "only after the primary solution is implemented and verified",
                 "Agent follows source, deliverable, verification and reuse dependency order");
-            AssertContains(defaults.SystemPrompt, "reconcile every explicit deliverable and every active task-list step",
+            AssertContains(defaults.SystemPrompt, "compare every explicit deliverable and every active task-list step",
                 "Agent verifies requested outcomes before ending the loop");
             AssertContains(defaults.SystemPrompt, "cannot become success prose",
                 "tool and protocol errors cannot be reported as completed work");
@@ -460,8 +482,83 @@ namespace RNAssistant.Harness
                 "task tracking explains separate skill and tool-schema loading");
             AssertContains(defaults.AgentToolsPrompt, "never add an inner `arguments`",
                 "tool arguments are supplied at the schema root");
-            AssertContains(defaults.AgentSkillsPrompt, "select every clearly applicable skill",
+            AssertContains(defaults.AgentToolsPrompt, "Skills define domain workflow and quality criteria",
+                "tool policy defines authority between skill guidance and schemas");
+            AssertContains(defaults.AgentSkillsPrompt, "smallest complete set of clearly applicable skills",
                 "Agent selects and loads applicable skills before domain mutation");
+        }
+
+        private static void BuiltInSkillReferencesResolveToCatalogs()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var toolIds = new HashSet<string>(StringComparer.Ordinal);
+                var skillIds = new HashSet<string>(StringComparer.Ordinal);
+                IReadOnlyList<SkillDefinition> commonSkills = null;
+                foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
+                {
+                    var adapter = FakeOfficeAdapter.ForHost(host);
+                    var settings = new AppSettings();
+                    var executor = new OfficeToolExecutor(
+                        adapter,
+                        new VbaJournalStore(paths),
+                        new SkillStore(paths),
+                        new ToolStore(paths),
+                        () => settings,
+                        value => settings = value,
+                        paths);
+                    toolIds.UnionWith(OfficeToolCatalog.ForHost(host).Select(tool => tool.Id));
+                    toolIds.UnionWith(executor.GetControllerTools().Select(tool => tool.Id));
+
+                    var skills = BuiltInSkillProvider.GetSkills(adapter);
+                    AssertEqual(skills.Count, skills.Select(skill => skill.Id).Distinct(StringComparer.Ordinal).Count(),
+                        host + " built-in skill ids are unique");
+                    foreach (var skill in skills)
+                    {
+                        AssertTrue(!string.IsNullOrWhiteSpace(skill.Description), skill.Id + " has a description");
+                        AssertTrue(!string.IsNullOrWhiteSpace(skill.BodyMarkdown), skill.Id + " has a body");
+                        AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
+                            skill.Id + " does not teach the retired result flag");
+                        skillIds.Add(skill.Id);
+                    }
+                    if (commonSkills == null)
+                        commonSkills = skills.Where(skill => string.Equals(skill.Host, "Common", StringComparison.Ordinal)).ToArray();
+                }
+
+                Action<string, string> assertReferences = (owner, text) =>
+                {
+                    foreach (Match match in Regex.Matches(text ?? string.Empty,
+                        @"\b(?:common|excel|word|powerpoint|outlook)\.[a-z0-9_]+\b",
+                        RegexOptions.CultureInvariant))
+                    {
+                        if (match.Index + match.Length < text.Length && text[match.Index + match.Length] == '*')
+                            continue;
+                        AssertTrue(toolIds.Contains(match.Value) || skillIds.Contains(match.Value),
+                            owner + " references cataloged capability " + match.Value);
+                    }
+                };
+
+                foreach (var skill in commonSkills ?? new SkillDefinition[0])
+                    assertReferences(skill.Id, skill.BodyMarkdown);
+
+                var root = FindHarnessRepositoryRoot();
+                foreach (var relativePath in new[]
+                {
+                    "src/RNAssistant.OfficeHosts/ExcelAdapter.cs",
+                    "src/RNAssistant.OfficeHosts/WordAdapter.cs",
+                    "src/RNAssistant.OfficeHosts/PowerPointAdapter.cs",
+                    "src/RNAssistant.OfficeHosts/OutlookAdapter.cs"
+                })
+                {
+                    var source = File.ReadAllText(Path.Combine(root,
+                        relativePath.Replace('/', Path.DirectorySeparatorChar)));
+                    assertReferences(relativePath, source);
+                    AssertContains(source, "## Definition of done",
+                        relativePath + " defines evidence-based completion");
+                    AssertContains(source, "Exact loaded tool schemas remain authoritative",
+                        relativePath + " keeps argument authority in current schemas");
+                }
+            });
         }
 
         private static void SettingsNormalizeInvalidNumericValues()

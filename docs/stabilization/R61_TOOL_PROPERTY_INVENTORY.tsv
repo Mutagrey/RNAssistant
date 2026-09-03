@@ -13,7 +13,7 @@ common.html_data_refresh	Excel,Outlook,PowerPoint,Word	agent	html.data.refresh.v
 common.html_data_write	Excel,Outlook,PowerPoint,Word	agent	html.data.write.v1	7780f4587ea35717d58bf62dd341c3a47218eaa640e7fd2cd56a681bd5e3d76a	json,name	-
 common.html_workspace_apply_patch	Excel,Outlook,PowerPoint,Word	agent	html.workspace.apply.patch.v1	61fbb8be7006efd11728272be60d0c70a43f6cc030ed1d960c31d577a6c82320	patch,patch[].find,patch[].op,patch[].text,path	-
 common.html_workspace_delete	Excel,Outlook,PowerPoint,Word	agent	html.workspace.delete.v1	940955ecdfe292487031f5d8dcf248567399df6855aee77d3b794ed90d154235	target	-
-common.html_workspace_write_file	Excel,Outlook,PowerPoint,Word	agent	html.workspace.write.file.v1	7c6e00fa99c737f1e5d9da838903fc6a2e9b7f6e24049db688b6dcec296ab9a4	content,path	-
+common.html_workspace_write_file	Excel,Outlook,PowerPoint,Word	agent	html.workspace.write.file.v1	dc06d8014a2a811028d9d063598c7ce56c3ac27147efea56c1827e4ba382a940	content,path	-
 common.office_run_macro	Excel,PowerPoint,Word	agent	vba.public.office.run.macro.intent.v2	7f298d822bbe1223838c4370e1a4f974c8c3ff5691a9bf436c946d5fc80b49b6	arguments,macroName	-
 common.plan_doc_delete	Excel,Outlook,PowerPoint,Word	plan	conversation.plan.document.delete.intent.v2	ef754f8f3ffdaba9aaf78a8d5e83cf272f0cdeabb2b35d4b34a42d3c21802209		-
 common.plan_doc_restore	Excel,Outlook,PowerPoint,Word	plan	conversation.plan.document.restore.intent.v2	130065387f93614a5b8edc51ab62cb112ba7583ba4597e87557b9db3fd61a7aa	version	-

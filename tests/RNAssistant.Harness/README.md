@@ -376,8 +376,11 @@ authoring and accepted-read binding; the user-requested R61/11O1 correction uses
 schema 20 for whole resource reads and the direct bound VBA-project target;
 R61/11O4 uses schema 21 for semantic Prompt/Tool/Skill authoring; R61/11O5 uses
 schema 22 for semantic VBA/macro intents; the user-reported readiness/completion
-correction uses schema 23 for prerequisite skill/tool selection, Task List lifecycle,
-root tool arguments, dependency order and evidence-reconciled completion. Tests
+correction used schema 23 for prerequisite skill/tool selection, Task List lifecycle,
+root tool arguments, dependency order and evidence-reconciled completion. Current
+schema 24 makes the six-stage operating workflow and prompt/skill/tool authority
+split explicit, strengthens all built-in skill completion criteria, and adds exact
+skill-reference-to-catalog validation. Tests
 preserve, review, or reset saved older/future markers explicitly. JS review behavior
 is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
@@ -425,7 +428,7 @@ the fixed patch operation and raw backup identity from model arguments, resolves
 restore by readable target or latest-for-module inside runtime, and hides mutation/
 backup ids, hashes and guards from model results. Use `vba:`, the focused semantic
 contract case, the VBA Agent/resource/facade cases and the R61 inventory. Prompt
-schema 22 was the 11O5 boundary. Current schema 23 requires explicit prompt
+schema 22 was the 11O5 boundary. Current schema 24 requires explicit prompt
 review/reset before Agent/Plan execution; retained pre-switch calls still require a
 new chat/reset.
 

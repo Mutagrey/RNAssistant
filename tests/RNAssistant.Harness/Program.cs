@@ -268,6 +268,7 @@ namespace RNAssistant.Harness
                 Test("chat: prompt save preserves global model", PromptSavePreservesGlobalModel),
                 Test("settings: prompt schema requires explicit review", SettingsRequireExplicitPromptReview),
                 Test("settings: built-in guidance uses runtime IDs and result v1", BuiltInPromptGuidanceUsesRuntimeIdsAndToolResultV1),
+                Test("settings: built-in skill references resolve to catalogs", BuiltInSkillReferencesResolveToCatalogs),
                 Test("settings: prompt review preserves stored text", SettingsPromptReviewPreservesStoredText),
                 Test("settings: prompt review gates conversation dispatch", SettingsPromptReviewGatesConversationDispatch),
                 Test("settings: invalid numeric values are normalized", SettingsNormalizeInvalidNumericValues),
