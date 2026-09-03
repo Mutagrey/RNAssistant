@@ -305,9 +305,9 @@
       if ($("saveHtmlWorkspaceButton")) $("saveHtmlWorkspaceButton").classList.toggle("hidden", isArtifact || isCollection);
       if ($("deleteHtmlWorkspaceButton")) $("deleteHtmlWorkspaceButton").classList.toggle("hidden", isArtifact || isCollection);
       if (typeof setCodeEditorValue === "function") {
-        setCodeEditorValue("htmlWorkspaceEditorInput", selectedEditorValue(selected));
+        setCodeEditorValue("htmlWorkspaceEditorInput", isArtifact || isCollection ? "" : selectedEditorValue(selected));
       } else if ($("htmlWorkspaceEditorInput")) {
-        $("htmlWorkspaceEditorInput").value = selectedEditorValue(selected);
+        $("htmlWorkspaceEditorInput").value = isArtifact || isCollection ? "" : selectedEditorValue(selected);
       }
       if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("htmlWorkspaceEditorInput",
         isArtifact || isCollection || (blocked && !isPlan));
@@ -332,10 +332,25 @@
       }
       detail.replaceChildren();
       frame.removeAttribute("src");
+      var workspaceFiles = files();
+      if (typeof htmlPreview.usesECharts === "function" && htmlPreview.usesECharts(workspaceFiles) &&
+          typeof htmlPreview.echartsReady === "function" && !htmlPreview.echartsReady()) {
+        frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">Загрузка диаграммы...</body></html>";
+        htmlPreview.ensureECharts().then(function () {
+          if (typeof window.renderHtmlWorkspace === "function") window.renderHtmlWorkspace();
+          else renderHtmlWorkspacePreview();
+        }).catch(function (error) {
+          frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#b42318\">" +
+            String(error && error.message || "ECharts не загружен.").replace(/[&<>]/g, function (character) {
+              return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[character];
+            }) + "</body></html>";
+        });
+        return;
+      }
       frame.srcdoc = htmlPreview.build({
         activeFileId: workspace().activeFileId,
         dataSources: dataSources(),
-        files: files()
+        files: workspaceFiles
       });
     }
 

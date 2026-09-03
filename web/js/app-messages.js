@@ -456,6 +456,7 @@ function scheduleLiveStreamRender() {
 }
 
 function renderMessages(options) {
+  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   options = options || {};
   if (typeof resetMessageMediaThumbnails === "function") resetMessageMediaThumbnails();
   if (typeof renderChatResourceNavigation === "function") renderChatResourceNavigation();

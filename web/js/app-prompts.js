@@ -184,6 +184,7 @@
   }
 
   function renderInstructions() {
+    if (typeof isPanelActive === "function" && !isPanelActive("instructions")) return;
     var list = $("instructionsList");
     if (!list) return;
     var rows = instructionRows();

@@ -85,8 +85,8 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   assert.match(attachments, /committed:\s*"Оригинал"/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core has the chat sync cache key");
-  assert.ok(index.includes("app-chat-state.js?v=artifact-gallery-20260902-1"), "chat state has the artifact gallery cache key");
-  assert.ok(index.includes("app-messages.js?v=artifact-gallery-20260902-1"), "messages have the artifact gallery cache key");
+  assert.ok(index.includes("app-chat-state.js?v=ui-lazy-20260903-1"), "chat state has the lazy UI cache key");
+  assert.ok(index.includes("app-messages.js?v=ui-lazy-20260903-1"), "messages have the lazy UI cache key");
   assert.ok(index.includes("app-attachments.js?v=multi-chat-20260902-1"),
     "attachment staging has the current pre-dispatch barrier cache key");
   console.log("PASS artifact commit: production boundary and lifecycle labels are wired atomically");

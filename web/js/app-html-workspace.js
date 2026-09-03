@@ -245,7 +245,9 @@
     }
     state.artifactImageGalleryContext = null;
     state.htmlWorkspaceSelection = { type: type, id: id };
-    renderHtmlWorkspace();
+    renderHtmlWorkspaceEditor();
+    applyHtmlWorkspaceMode();
+    updateHtmlWorkspaceStatus();
     return true;
   }
 
@@ -435,6 +437,7 @@
   }
 
   function renderHtmlWorkspace() {
+    if (typeof isPanelActive === "function" && !isPanelActive("artifacts")) return;
     workspace();
     ensureSelection();
     var layout = $("htmlWorkspaceLayout");
@@ -459,8 +462,11 @@
       ? synchronizeChatState(true)
       : null;
     return Promise.resolve(synchronization).then(function () {
-      refreshArtifactsTabProjection();
-      return workspaceActions.refreshAuto();
+      if (refreshLibraryHeadSelection()) renderHtmlWorkspace();
+      var selected = selectedItem();
+      return selected && (selected.type === "file" || selected.type === "data")
+        ? workspaceActions.refreshAuto()
+        : null;
     });
   }
 

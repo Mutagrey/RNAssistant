@@ -124,9 +124,10 @@ async function settle() {
   }
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  ["app-attachments.js", "app-chat-composer.js", "app-chat-run.js"].forEach(asset => {
+  ["app-attachments.js", "app-chat-composer.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=multi-chat-20260902-1"), asset + " has the multi-chat cache key");
   });
+  assert.ok(index.includes("app-chat-run.js?v=chat-sync-20260903-1"), "app-chat-run.js has the chat sync cache key");
   console.log("PASS attachment staging: changed UI modules use one cache key");
   console.log("OK 4/4");
 }()).catch(error => {

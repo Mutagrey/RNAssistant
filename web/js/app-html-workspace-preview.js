@@ -124,10 +124,23 @@
     });
   }
 
+  function echartsReady() {
+    return typeof window.RNAssistantEChartsFactory === "function" &&
+      !!window.echarts && window.echarts.version === ECHARTS_VERSION;
+  }
+
+  function ensureECharts() {
+    if (echartsReady()) return Promise.resolve(window.echarts);
+    var runtime = window.RNAssistantEChartsSandboxRuntime;
+    if (!runtime || typeof runtime.load !== "function") {
+      return Promise.reject(new Error("Bundled ECharts " + ECHARTS_VERSION + " loader is unavailable."));
+    }
+    return runtime.load();
+  }
+
   function dependencies(files) {
     if (!usesECharts(files || [])) return [];
-    var loaded = typeof window.RNAssistantEChartsFactory === "function" &&
-      !!window.echarts && window.echarts.version === ECHARTS_VERSION;
+    var loaded = echartsReady();
     return [{
       id: ECHARTS_DEPENDENCY_ID,
       path: ECHARTS_DEPENDENCY_ID,
@@ -214,5 +227,11 @@
     return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" + headInject + "</head><body>" + html + "\n" + bodyInject + "</body></html>";
   }
 
-  window.RNAssistantHtmlWorkspacePreview = { build: build, dependencies: dependencies };
+  window.RNAssistantHtmlWorkspacePreview = {
+    build: build,
+    dependencies: dependencies,
+    echartsReady: echartsReady,
+    ensureECharts: ensureECharts,
+    usesECharts: usesECharts
+  };
 }());

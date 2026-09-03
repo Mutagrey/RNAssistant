@@ -50,6 +50,13 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   context, artifacts и HTML workspace загружаются только через `init`, явный выбор
   или действие чата, либо через `getChatState`, когда требуется обновить более
   новую revision активного чата.
+- WebView не рендерит скрытые transcript, Artifact Library/HTML workspace и
+  Library surfaces при применении состояния. CodeMirror создаётся только при
+  первом открытии владеющей вкладки; ECharts загружается только для фактической
+  диаграммы/HTML preview, а каталог моделей — при первом открытии model picker или
+  явном запросе из настроек. Выбор артефакта обновляет detail surface без
+  пересоздания дерева; `on_preview` data refresh запускается только для выбранного
+  HTML file/data surface.
 - HTML bind/refresh выполняют вложенный Office source-read через exact bound
   `HostRuntime.ReadDocument`; document gate и owner STA не охватывают последующую
   HTML/CAS работу.

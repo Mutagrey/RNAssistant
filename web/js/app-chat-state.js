@@ -1,4 +1,5 @@
 function renderChatSessions() {
+  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   var select = $("chatSessionSelect");
   if (!select) {
     return;
@@ -276,7 +277,7 @@ function applyChatState(response) {
   if (chatChanged && typeof restoreActiveChatRun === "function") {
     restoreActiveChatRun();
   }
-  if (chatChanged && typeof refreshActiveQualificationState === "function") {
+  if (chatChanged && !state.messages.length && typeof refreshActiveQualificationState === "function") {
     refreshActiveQualificationState();
   }
   return true;
@@ -633,6 +634,7 @@ function formatCompactTokenCount(value) {
 }
 
 function renderContextMeter() {
+  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   var usage = state.contextUsage || {};
   var used = Number(usage.usedTokens || usage.UsedTokens || 0);
   var limit = Number(usage.limitTokens || usage.LimitTokens || 0);

@@ -189,6 +189,7 @@ function renderContextList(notes) {
 }
 
 function renderContext(skipUsageEstimate) {
+  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   var notes = contextNotes();
   renderContextChips(notes);
   renderContextList(notes);

@@ -97,4 +97,9 @@ function bindModelActions() {
   $("loadModelsButton").addEventListener("click", function () {
     loadModelCatalog(true);
   });
+  $("chatModelPicker").addEventListener("toggle", function () {
+    if ($("chatModelPicker").open && !state.modelCatalog.loaded && !state.modelCatalog.loading) {
+      loadModelCatalog(false);
+    }
+  });
 }

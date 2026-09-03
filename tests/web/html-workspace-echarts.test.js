@@ -11,6 +11,8 @@ context.window = context;
 
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-echarts-sandbox-runtime.js"), "utf8"), context,
   { filename: "app-echarts-sandbox-runtime.js" });
+assert.equal(context.define, undefined, "capture is not installed during ordinary startup");
+context.RNAssistantEChartsSandboxRuntime.begin();
 assert.equal(typeof context.define, "function", "capture remains installed until the vendor executes");
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/vendor/echarts.min.js"), "utf8"), context,
   { filename: "echarts.min.js", timeout: 5000 });
@@ -128,11 +130,13 @@ assert.equal(context.RNAssistantHtmlWorkspacePreview.dependencies([
 console.log("PASS HTML ECharts: used runtime is projected as one read-only workspace dependency");
 
 const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-const captureIndex = index.indexOf("app-echarts-sandbox-runtime.js?v=html-echarts-20260902-2");
+const captureIndex = index.indexOf("app-echarts-sandbox-runtime.js?v=ui-lazy-20260903-1");
 const vendorIndex = index.indexOf("js/vendor/echarts.min.js");
 const finishIndex = index.indexOf("RNAssistantEChartsSandboxRuntime.finish()");
-const previewIndex = index.indexOf("app-html-workspace-preview.js?v=html-bind-refresh-20260903-1");
-assert.ok(captureIndex >= 0 && captureIndex < vendorIndex && vendorIndex < finishIndex && finishIndex < previewIndex);
-console.log("PASS HTML ECharts: trusted capture spans vendor load and finalizes before preview assembly");
+const previewIndex = index.indexOf("app-html-workspace-preview.js?v=ui-lazy-20260903-1");
+assert.ok(captureIndex >= 0 && captureIndex < previewIndex);
+assert.equal(vendorIndex, -1, "ECharts vendor is not parsed during main WebView startup");
+assert.equal(finishIndex, -1, "ECharts capture is finalized by the on-demand loader");
+console.log("PASS HTML ECharts: main WebView startup defers the chart vendor until first use");
 
 console.log("OK 7/7");

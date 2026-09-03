@@ -109,9 +109,24 @@
   }
 
   window.initializeCodeEditors = function () {
-    Object.keys(configs).forEach(function (id) {
+    var ids = arguments.length && Array.isArray(arguments[0]) ? arguments[0] : Object.keys(configs);
+    ids.forEach(function (id) {
+      if (!configs[id]) return;
       createEditor(id, configs[id]);
     });
+  };
+
+  window.activateCodeEditorsForTab = function (name) {
+    var ids = {
+      artifacts: ["htmlWorkspaceEditorInput"],
+      vba: ["vbaCodeInput"],
+      instructions: [
+        "toolSchemaInput", "toolRunArgsInput", "toolCodeInput", "toolReadmeInput",
+        "skillBodyInput", "promptEditInput"
+      ]
+    }[name] || [];
+    window.initializeCodeEditors(ids);
+    window.refreshCodeEditors(ids);
   };
 
   window.syncCodeEditors = function (ids) {
@@ -146,7 +161,8 @@
   window.setCodeEditorValue = function (id, value) {
     value = value || "";
     if (editors[id]) {
-      if (editors[id].getValue() !== value) {
+      var changed = editors[id].getValue() !== value;
+      if (changed) {
         editors[id]._rnSettingValue = true;
         try {
           editors[id].setValue(value);
@@ -155,7 +171,7 @@
         }
       }
       editors[id].save();
-      editors[id].refresh();
+      if (changed) editors[id].refresh();
       return;
     }
     var node = textarea(id);

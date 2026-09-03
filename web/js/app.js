@@ -5,17 +5,33 @@ function switchTab(name) {
   if (name === "tools") name = "instructions";
   if (name === "html") name = "artifacts";
   var section = name === "instructions" ? "library" : name;
+  var active = document.querySelector(".panel.active");
+  var changed = !active || active.id !== "tab-" + name;
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
     tab.classList.toggle("active", tab.dataset.section === section);
   });
   Array.prototype.slice.call(document.querySelectorAll(".panel")).forEach(function (panel) {
     panel.classList.toggle("active", panel.id === "tab-" + name);
   });
-  if (typeof refreshCodeEditors === "function") {
-    refreshCodeEditors();
+  if (typeof activateCodeEditorsForTab === "function") {
+    activateCodeEditorsForTab(name);
   }
   if (typeof refreshSplitPanes === "function") {
     refreshSplitPanes();
+  }
+  if (!changed) return;
+  if (name === "chat") {
+    renderChatSessions();
+    renderMessages();
+    renderContext(true);
+    renderContextMeter();
+    renderModelControls();
+  } else if (name === "instructions" && typeof renderInstructions === "function") {
+    renderInstructions();
+  } else if (name === "settings") {
+    renderSettings();
+  } else if (name === "vba" && typeof renderVbaProject === "function") {
+    renderVbaProject();
   }
 }
 
@@ -61,10 +77,6 @@ document.addEventListener("DOMContentLoaded", function () {
   if (typeof initializeSplitPanes === "function") {
     initializeSplitPanes();
   }
-  if (typeof initializeCodeEditors === "function") {
-    initializeCodeEditors();
-  }
-
   window.addEventListener("load", function () {
     if (window.hljs) {
       highlightAllCode();

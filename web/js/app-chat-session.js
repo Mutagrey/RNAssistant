@@ -315,7 +315,7 @@ function applyInitState(init) {
   renderContext(true);
   renderChatSessions();
   renderMessages();
-  if (typeof refreshActiveQualificationState === "function") {
+  if (!state.messages.length && typeof refreshActiveQualificationState === "function") {
     refreshActiveQualificationState();
   }
   renderContextMeter();
@@ -326,9 +326,6 @@ function applyInitState(init) {
     updateVbaMacroRunState();
   }
   log("Initialized " + init.host);
-  if (!state.modelCatalog.loaded && !state.modelCatalog.loading) {
-    loadModelCatalog(false);
-  }
   if (init.quickAction) {
     runQuickAction(init.quickAction);
   }

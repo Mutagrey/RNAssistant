@@ -118,6 +118,7 @@ function renderModelStatus() {
 }
 
 function renderModelControls() {
+  if (typeof isPanelActive === "function" && !isPanelActive("chat") && !isPanelActive("settings")) return;
   populateModelSelect($("modelSelect"), formModel());
   populateChatModelSelect($("chatModelSelect"));
   renderModelInfo(formModel());

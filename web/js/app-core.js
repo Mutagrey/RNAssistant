@@ -110,6 +110,11 @@ function $(id) {
   return document.getElementById(id);
 }
 
+function isPanelActive(name) {
+  var panel = $("tab-" + name);
+  return !panel || panel.classList.contains("active");
+}
+
 window.RNAssistantHost = {
   blurComposer: function () {
     var active = document.activeElement;

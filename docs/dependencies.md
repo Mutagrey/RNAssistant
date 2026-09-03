@@ -70,6 +70,12 @@ local arrays and does not expose the vendor's optional URL/lazy, edit, DnD, grid
 persistence capabilities. It currently owns one HTML workspace/artifact navigation
 consumer; other trees do not inherit it automatically.
 
+The main WebView does not parse the 1 MiB ECharts bundle during startup. Its local
+loader captures the pinned factory on first chart/HTML-preview use, then reuses that
+factory for sandbox and standalone-export assembly. CodeMirror scripts remain local,
+but editor instances are created only when their Artifact, VBA or Library surface is
+opened; hidden panels never receive eager editor instances.
+
 The fixed WebView2 runtime is intentionally not expanded here because it is over 250 MB. The code supports it from `vendor/webview2-runtime/<version>/` and falls back to Evergreen runtime when absent.
 
 The in-process VBA host additionally requires these Visual Studio 2022

@@ -452,7 +452,17 @@
       return;
     }
     if (!window.echarts) {
-      canvas.textContent = "ECharts не загружен.";
+      var runtime = window.RNAssistantEChartsSandboxRuntime;
+      if (runtime && typeof runtime.load === "function") {
+        canvas.textContent = "Загрузка диаграммы...";
+        runtime.load().then(function () {
+          if (canvas.isConnected) drawChart(root, artifact);
+        }).catch(function () {
+          canvas.textContent = "ECharts не загружен.";
+        });
+      } else {
+        canvas.textContent = "ECharts не загружен.";
+      }
       return;
     }
     var chart = window.echarts.getInstanceByDom(canvas) || window.echarts.init(canvas, null, { renderer: "canvas" });
