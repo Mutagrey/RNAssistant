@@ -35,18 +35,11 @@ namespace RNAssistant.Office
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
             var sessionId = session.Id;
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
-            var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            ChatRunLease runLease;
+            CancellationTokenSource runCancellation;
+            var runLease = StartControllerRun(
+                session, runId, cancellationToken, out runCancellation);
             RunCausalTrace causalTrace = null;
-            try
-            {
-                runLease = _chatRuns.Start(sessionId, runId, session, runCancellation);
-            }
-            catch
-            {
-                runCancellation.Dispose();
-                throw;
-            }
+            ChatStateResponse response = null;
 
             try
             {
@@ -96,30 +89,9 @@ namespace RNAssistant.Office
                 _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
 
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
-                Action<string, string, ChatActivity> runProgress = (phase, message, activity) =>
-                {
-                    _chatRuns.Update(sessionId, runId, phase, message);
-                    if (session.LastRun != null && string.Equals(session.LastRun.RunId, runId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        session.LastRun.Phase = string.IsNullOrWhiteSpace(phase) ? session.LastRun.Phase : phase;
-                        session.LastRun.CurrentAction = string.IsNullOrWhiteSpace(message) ? session.LastRun.CurrentAction : message;
-                    }
-                    if (activity != null)
-                    {
-                        AnnotateActivity(activity, runId, null);
-                    }
-                    if (string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
-                    {
-                        AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                    }
-                    PersistRunCheckpoint(session, runId, phase);
-                    if (string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ReportExternalChatState(chatStateChanged, session);
-                    }
-                    ReportExternalProgress(progress, phase, message, activity);
-                };
+                var runProgress = CreateControllerRunProgress(
+                    session, runId, firstRunMessageIndex,
+                    progress, chatStateChanged);
 
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
                 var continuationAttachments = pending.Attachments ?? LatestUserAttachments(session);
@@ -161,26 +133,15 @@ namespace RNAssistant.Office
                             return new ConversationRunInput(settings, context, tools, skills, continuationAttachments);
                         }, runCancellation.Token).ConfigureAwait(false);
 
-                    AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                    HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
-                    ChatResourceReferenceService.LinkMessageResources(session, 0);
-                    if (completion == null || !completion.WaitingForConfirmation)
-                    {
-                        ApplyTerminalRunResult(session);
-                    }
-                    SaveSessionChanges(session);
-                    RunCausalTrace.Summary(session);
-                    _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                    FinalizeControllerRun(
+                        session, firstRunMessageIndex, 0,
+                        runId, completion, null);
                 }
                 catch (RunStoreException)
                 {
                     _toolCatalog.InvalidateDocumentVbaTools();
-                    if (causalTrace != null)
-                    {
-                        causalTrace.Dispose();
-                        causalTrace = null;
-                    }
-                    RecoverAfterRunStoreFailure(runLease, session, sessionId);
+                    RecoverAfterRunStoreFailure(
+                        runLease, session, sessionId, ref causalTrace);
                     throw;
                 }
                 catch (Exception ex)
@@ -195,35 +156,20 @@ namespace RNAssistant.Office
                     var pendingMessage = session.Messages.LastOrDefault(message => message.Activity != null &&
                         message.Activity.ToolCallId == pending.Command.ToolCallId);
                     if (pendingMessage != null) CloseRunningActivity(pendingMessage.Activity, ex is OperationCanceledException);
-                    CloseRunningActivities(session, firstRunMessageIndex, ex is OperationCanceledException);
-                    if (session.LastRun.KernelState != null)
-                        session.LastRun.KernelState = session.LastRun.KernelState.Interrupt(ex is OperationCanceledException, ex.Message, runId);
-                    RecordFailedTurn(session, ex);
-                    if (session.LastRun != null)
-                    {
-                        session.LastRun.Status = ex is OperationCanceledException ? "cancelled" : "failed";
-                        session.LastRun.Phase = session.LastRun.Status;
-                        session.LastRun.CurrentAction = ex.Message;
-                    }
-                    AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                    HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
-                    ChatResourceReferenceService.LinkMessageResources(session, 0);
-                    SaveSessionChanges(session);
-                    RunCausalTrace.Summary(session);
-                    _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                    FinalizeControllerRun(
+                        session, firstRunMessageIndex, 0,
+                        runId, null, ex);
                     throw;
                 }
 
-                runLease.Dispose();
-                var response = ChatState(session);
+                response = ChatState(session);
                 RunCausalTrace.Projected("ChatStateResponse");
-                return response;
             }
             finally
             {
-                if (causalTrace != null) causalTrace.Dispose();
-                runLease.Dispose();
+                ReleaseControllerRun(runLease, ref causalTrace);
             }
+            return response;
         }
 
         private static IReadOnlyList<ChatAttachment> LatestUserAttachments(ChatSession session)

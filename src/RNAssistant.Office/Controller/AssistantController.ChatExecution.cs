@@ -101,6 +101,107 @@ namespace RNAssistant.Office
             _chatRuns.UpdateSessionSnapshot(session.Id, runId, session);
         }
 
+        private ChatRunLease StartControllerRun(
+            ChatSession session,
+            string runId,
+            CancellationToken cancellationToken,
+            out CancellationTokenSource runCancellation)
+        {
+            runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            try
+            {
+                return _chatRuns.Start(session.Id, runId, session, runCancellation);
+            }
+            catch
+            {
+                runCancellation.Dispose();
+                throw;
+            }
+        }
+
+        private static void ReleaseControllerRun(
+            ChatRunLease runLease,
+            ref RunCausalTrace causalTrace)
+        {
+            try
+            {
+                if (causalTrace != null) causalTrace.Dispose();
+            }
+            finally
+            {
+                causalTrace = null;
+                runLease.Dispose();
+            }
+        }
+
+        private Action<string, string, ChatActivity> CreateControllerRunProgress(
+            ChatSession session,
+            string runId,
+            int firstMessageIndex,
+            Action<string, string, ChatActivity> progress,
+            Action<ChatStateResponse> chatStateChanged)
+        {
+            return (phase, message, activity) =>
+            {
+                _chatRuns.Update(session.Id, runId, phase, message);
+                if (session.LastRun != null && string.Equals(
+                    session.LastRun.RunId, runId, StringComparison.OrdinalIgnoreCase))
+                {
+                    session.LastRun.Phase = string.IsNullOrWhiteSpace(phase)
+                        ? session.LastRun.Phase : phase;
+                    session.LastRun.CurrentAction = string.IsNullOrWhiteSpace(message)
+                        ? session.LastRun.CurrentAction : message;
+                }
+                if (activity != null) AnnotateActivity(activity, runId, null);
+                if (string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
+                {
+                    AnnotateRunMessages(session, firstMessageIndex, runId);
+                }
+                PersistRunCheckpoint(session, runId, phase);
+                if (string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Kernel persistence precedes this callback. Publish the complete
+                    // revisioned projection before the next model step.
+                    ReportExternalChatState(chatStateChanged, session);
+                }
+                ReportExternalProgress(progress, phase, message, activity);
+            };
+        }
+
+        private void FinalizeControllerRun(
+            ChatSession session,
+            int firstMessageIndex,
+            int resourceStartIndex,
+            string runId,
+            ChatTurnResult completion,
+            Exception ex)
+        {
+            if (ex != null)
+            {
+                var cancelled = ex is OperationCanceledException;
+                CloseRunningActivities(session, firstMessageIndex, cancelled);
+                if (session.LastRun != null && session.LastRun.KernelState != null)
+                    session.LastRun.KernelState = session.LastRun.KernelState.Interrupt(ex is OperationCanceledException, ex.Message, runId);
+                RecordFailedTurn(session, ex);
+                if (session.LastRun != null)
+                {
+                    session.LastRun.Status = cancelled ? "cancelled" : "failed";
+                    session.LastRun.Phase = session.LastRun.Status;
+                    session.LastRun.CurrentAction = ex.Message;
+                }
+            }
+            AnnotateRunMessages(session, firstMessageIndex, runId);
+            HtmlWorkspaceArtifactService.StampUncheckpointed(
+                session, firstMessageIndex, session.ActiveHtmlArtifactId);
+            ChatResourceReferenceService.LinkMessageResources(session, resourceStartIndex);
+            if (ex == null && (completion == null || !completion.WaitingForConfirmation))
+                ApplyTerminalRunResult(session);
+            SaveSessionChanges(session);
+            RunCausalTrace.Summary(session);
+            _chatRuns.UpdateSessionSnapshot(session.Id, runId, session);
+        }
+
         private static void CloseRunningActivities(ChatSession session, int firstMessageIndex, bool cancelled)
         {
             if (session == null || session.Messages == null) return;
@@ -291,18 +392,15 @@ namespace RNAssistant.Office
             var sessionId = session.Id;
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
 
-            var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            ChatRunLease runLease;
+            CancellationTokenSource runCancellation;
+            var runLease = StartControllerRun(
+                session, runId, cancellationToken, out runCancellation);
             RunCausalTrace causalTrace = null;
-            try
-            {
-                runLease = _chatRuns.Start(sessionId, runId, session, runCancellation);
-            }
-            catch
-            {
-                runCancellation.Dispose();
-                throw;
-            }
+            SendChatResponse response = null;
+            string titleUserSeed = null;
+            string provisionalTitle = null;
+            string assistantTitleSeed = null;
+            var shouldGenerateLlmTitle = false;
 
             try
             {
@@ -350,9 +448,9 @@ namespace RNAssistant.Office
                     appendedUserMessage = userMessage;
                 }
                 var documentContext = LoadContext(session);
-                var titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
-                var shouldGenerateLlmTitle = settings.SmartChatTitles && ChatTitleBuilder.ShouldAssign(session);
-                var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
+                titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
+                shouldGenerateLlmTitle = settings.SmartChatTitles && ChatTitleBuilder.ShouldAssign(session);
+                provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
                     ? ChatTitleBuilder.BuildDraftTitle(titleUserSeed)
                     : string.Empty;
                 if (!string.IsNullOrWhiteSpace(provisionalTitle))
@@ -434,32 +532,9 @@ namespace RNAssistant.Office
                     throw;
                 }
 
-                Action<string, string, ChatActivity> runProgress = (phase, message, activity) =>
-                {
-                    _chatRuns.Update(sessionId, runId, phase, message);
-                    if (session.LastRun != null && string.Equals(session.LastRun.RunId, runId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        session.LastRun.Phase = string.IsNullOrWhiteSpace(phase) ? session.LastRun.Phase : phase;
-                        session.LastRun.CurrentAction = string.IsNullOrWhiteSpace(message) ? session.LastRun.CurrentAction : message;
-                    }
-                    if (activity != null)
-                    {
-                        AnnotateActivity(activity, runId, null);
-                    }
-                    if (string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
-                    {
-                        AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                    }
-                    PersistRunCheckpoint(session, runId, phase);
-                    if (string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Kernel persistence precedes this callback. Publish the complete
-                        // revisioned projection now so artifacts do not wait for run completion.
-                        ReportExternalChatState(chatStateChanged, session);
-                    }
-                    ReportExternalProgress(progress, phase, message, activity);
-                };
+                var runProgress = CreateControllerRunProgress(
+                    session, runId, firstRunMessageIndex,
+                    progress, chatStateChanged);
 
                 ChatTurnResult completion;
                 try
@@ -545,33 +620,16 @@ namespace RNAssistant.Office
                 }
                 catch (RunStoreException)
                 {
-                    if (causalTrace != null)
-                    {
-                        causalTrace.Dispose();
-                        causalTrace = null;
-                    }
-                    RecoverAfterRunStoreFailure(runLease, session, sessionId);
+                    RecoverAfterRunStoreFailure(
+                        runLease, session, sessionId, ref causalTrace);
                     throw;
                 }
                 catch (Exception ex)
                 {
                     PersistTokenEstimateCalibration(settings);
-                    CloseRunningActivities(session, firstRunMessageIndex, ex is OperationCanceledException);
-                    if (session.LastRun != null && session.LastRun.KernelState != null)
-                        session.LastRun.KernelState = session.LastRun.KernelState.Interrupt(ex is OperationCanceledException, ex.Message, runId);
-                    RecordFailedTurn(session, ex);
-                    if (session.LastRun != null)
-                    {
-                        session.LastRun.Status = ex is OperationCanceledException ? "cancelled" : "failed";
-                        session.LastRun.Phase = session.LastRun.Status;
-                        session.LastRun.CurrentAction = ex.Message;
-                    }
-                    AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                    HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
-                    ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
-                    SaveSessionChanges(session);
-                    RunCausalTrace.Summary(session);
-                    _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                    FinalizeControllerRun(
+                        session, firstRunMessageIndex, firstRunMessageIndex,
+                        runId, null, ex);
                     throw;
                 }
 
@@ -581,38 +639,23 @@ namespace RNAssistant.Office
                     ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
                 }
                 ReportProgress(runProgress, "saving", "Сохраняю историю чата...");
-                HtmlWorkspaceArtifactService.StampUncheckpointed(session, firstRunMessageIndex, session.ActiveHtmlArtifactId);
-                AnnotateRunMessages(session, firstRunMessageIndex, runId);
-                ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
-                if (completion == null || !completion.WaitingForConfirmation)
-                {
-                    ApplyTerminalRunResult(session);
-                }
-                SaveSessionChanges(session);
-                RunCausalTrace.Summary(session);
-                _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
-                runLease.Dispose();
-                var response = CreateSendChatResponse(session, settings, completion);
+                FinalizeControllerRun(
+                    session, firstRunMessageIndex, firstRunMessageIndex,
+                    runId, completion, null);
+                response = CreateSendChatResponse(session, settings, completion);
                 RunCausalTrace.Projected("SendChatResponse");
-                causalTrace.Dispose();
                 if (shouldGenerateLlmTitle)
-                {
-                    StartChatTitleGeneration(
-                        session,
-                        titleUserSeed,
-                        ChatTitleBuilder.ResolveAssistantSeed(session, completion.AssistantText),
-                        settings,
-                        provisionalTitle,
-                        chatStateChanged);
-                }
-
-                return response;
+                    assistantTitleSeed = ChatTitleBuilder.ResolveAssistantSeed(
+                        session, completion.AssistantText);
             }
             finally
             {
-                if (causalTrace != null) causalTrace.Dispose();
-                runLease.Dispose();
+                ReleaseControllerRun(runLease, ref causalTrace);
             }
+            if (shouldGenerateLlmTitle)
+                StartChatTitleGeneration(session, titleUserSeed, assistantTitleSeed,
+                    settings, provisionalTitle, chatStateChanged);
+            return response;
         }
 
         private SendChatResponse CreateSendChatResponse(ChatSession session, AppSettings settings, ChatTurnResult completion)

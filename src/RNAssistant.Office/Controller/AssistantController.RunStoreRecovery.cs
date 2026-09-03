@@ -10,13 +10,14 @@ namespace RNAssistant.Office
         private void RecoverAfterRunStoreFailure(
             ChatRunLease runLease,
             ChatSession failedProjection,
-            string sessionId)
+            string sessionId,
+            ref RunCausalTrace causalTrace)
         {
             try
             {
                 // Recovery must observe canonical storage after this invocation no
                 // longer owns either the in-process registry entry or run file lock.
-                runLease.Dispose();
+                ReleaseControllerRun(runLease, ref causalTrace);
             }
             catch (Exception releaseError)
             {
