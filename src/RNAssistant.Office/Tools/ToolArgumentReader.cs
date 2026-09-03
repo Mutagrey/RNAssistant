@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -46,6 +49,51 @@ namespace RNAssistant.Office.Tools
             var raw = String(args, name, null);
             bool parsed;
             return bool.TryParse(raw, out parsed) ? parsed : fallback;
+        }
+
+        internal static string CanonicalArgumentsSha256(
+            IDictionary<string, object> arguments)
+        {
+            var payload = new JObject();
+            foreach (var pair in arguments ?? new Dictionary<string, object>())
+            {
+                payload[pair.Key] = pair.Value == null
+                    ? JValue.CreateNull()
+                    : JToken.FromObject(pair.Value);
+            }
+            return CanonicalSha256(payload);
+        }
+
+        internal static string CanonicalSha256(JToken value)
+        {
+            var canonical = Canonicalize(value ?? JValue.CreateNull())
+                .ToString(Formatting.None);
+            using (var sha = SHA256.Create())
+            {
+                return BitConverter.ToString(sha.ComputeHash(
+                        Encoding.UTF8.GetBytes(canonical)))
+                    .Replace("-", string.Empty)
+                    .ToLowerInvariant();
+            }
+        }
+
+        private static JToken Canonicalize(JToken token)
+        {
+            var obj = token as JObject;
+            if (obj != null)
+            {
+                var result = new JObject();
+                foreach (var property in obj.Properties()
+                    .OrderBy(item => item.Name, StringComparer.Ordinal))
+                {
+                    result[property.Name] = Canonicalize(property.Value);
+                }
+                return result;
+            }
+            var array = token as JArray;
+            return array == null
+                ? token.DeepClone()
+                : new JArray(array.Select(Canonicalize));
         }
     }
 }

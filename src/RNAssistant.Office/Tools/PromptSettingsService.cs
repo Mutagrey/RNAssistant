@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -75,13 +73,16 @@ namespace RNAssistant.Office.Tools
             var source = _loadSettings() ?? new AppSettings();
             var fields = SuppliedFields(arguments);
             var intended = Apply(source, arguments);
-            var beforeHash = Hash(TargetPayload(source, fields));
-            var intendedHash = Hash(TargetPayload(intended, fields));
+            var beforeHash = ToolArgumentReader.CanonicalSha256(
+                TargetPayload(source, fields));
+            var intendedHash = ToolArgumentReader.CanonicalSha256(
+                TargetPayload(intended, fields));
             var prepared = new JObject
             {
                 ["version"] = PreparedContractVersion,
                 ["fields"] = new JArray(fields),
-                ["argumentsSha256"] = Hash(ArgumentPayload(arguments)),
+                ["argumentsSha256"] = ToolArgumentReader.CanonicalSha256(
+                    ArgumentPayload(arguments)),
                 ["beforeSha256"] = beforeHash
             }.ToString(Formatting.None);
             var preview = new JObject
@@ -121,7 +122,8 @@ namespace RNAssistant.Office.Tools
             if (prepared.Value<int?>("version") != PreparedContractVersion ||
                 !JToken.DeepEquals(prepared["fields"], new JArray(fields)) ||
                 !string.Equals((string)prepared["argumentsSha256"],
-                    Hash(ArgumentPayload(arguments)), StringComparison.Ordinal))
+                    ToolArgumentReader.CanonicalSha256(
+                        ArgumentPayload(arguments)), StringComparison.Ordinal))
             {
                 return PromptToolOutcome.Error(
                     "Prompt save preparation does not match the accepted call.",
@@ -130,14 +132,16 @@ namespace RNAssistant.Office.Tools
 
             var source = _loadSettings() ?? new AppSettings();
             if (!string.Equals((string)prepared["beforeSha256"],
-                Hash(TargetPayload(source, fields)), StringComparison.Ordinal))
+                ToolArgumentReader.CanonicalSha256(
+                    TargetPayload(source, fields)), StringComparison.Ordinal))
             {
                 return PromptToolOutcome.Error(
                     "Prompt settings changed after confirmation was requested. Read them again before retrying.",
                     null, "prompt_settings_changed", true);
             }
             var intended = Apply(source, arguments);
-            var intendedHash = Hash(TargetPayload(intended, fields));
+            var intendedHash = ToolArgumentReader.CanonicalSha256(
+                TargetPayload(intended, fields));
             if (string.Equals((string)prepared["beforeSha256"],
                 intendedHash, StringComparison.Ordinal))
             {
@@ -151,7 +155,8 @@ namespace RNAssistant.Office.Tools
             _saveSettings(intended);
             var saved = _loadSettings() ?? new AppSettings();
             if (!string.Equals(intendedHash,
-                Hash(TargetPayload(saved, fields)), StringComparison.Ordinal))
+                ToolArgumentReader.CanonicalSha256(
+                    TargetPayload(saved, fields)), StringComparison.Ordinal))
             {
                 return PromptToolOutcome.Unknown(
                     "Prompt settings did not verify after save. Inspect current settings before retrying.",
@@ -159,7 +164,8 @@ namespace RNAssistant.Office.Tools
                     {
                         fields = fields,
                         expectedSha256 = intendedHash,
-                        actualSha256 = Hash(TargetPayload(saved, fields))
+                        actualSha256 = ToolArgumentReader.CanonicalSha256(
+                            TargetPayload(saved, fields))
                     }),
                     "prompt_settings_verification_failed");
             }
@@ -318,16 +324,5 @@ namespace RNAssistant.Office.Tools
                     ? key : string.Empty;
         }
 
-        private static string Hash(JToken value)
-        {
-            using (var sha = SHA256.Create())
-            {
-                return BitConverter.ToString(sha.ComputeHash(
-                        Encoding.UTF8.GetBytes((value ?? JValue.CreateNull())
-                            .ToString(Formatting.None))))
-                    .Replace("-", string.Empty)
-                    .ToLowerInvariant();
-            }
-        }
     }
 }

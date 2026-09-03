@@ -2,8 +2,6 @@ using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -60,7 +58,8 @@ namespace RNAssistant.Office.Tools
                 ["toolId"] = toolId,
                 ["id"] = id,
                 ["operation"] = operation,
-                ["argumentsSha256"] = Hash(ArgumentPayload(arguments)),
+                ["argumentsSha256"] =
+                    ToolArgumentReader.CanonicalArgumentsSha256(arguments),
                 ["beforeSha256"] = beforeHash,
                 ["intendedSha256"] = intendedHash
             }.ToString(Formatting.None);
@@ -116,7 +115,8 @@ namespace RNAssistant.Office.Tools
                 !string.Equals((string)prepared["id"], id,
                     StringComparison.Ordinal) ||
                 !string.Equals((string)prepared["argumentsSha256"],
-                    Hash(ArgumentPayload(arguments)), StringComparison.Ordinal))
+                    ToolArgumentReader.CanonicalArgumentsSha256(arguments),
+                    StringComparison.Ordinal))
             {
                 return ToolAuthoringOutcome.Error(
                     "Tool authoring preparation does not match the accepted call.",
@@ -301,21 +301,6 @@ namespace RNAssistant.Office.Tools
                 : null;
         }
 
-        private static JObject ArgumentPayload(
-            IDictionary<string, object> arguments)
-        {
-            var result = new JObject();
-            foreach (var pair in (arguments ??
-                new Dictionary<string, object>())
-                .OrderBy(item => item.Key, StringComparer.Ordinal))
-            {
-                result[pair.Key] = pair.Value == null
-                    ? JValue.CreateNull()
-                    : JToken.FromObject(pair.Value);
-            }
-            return (JObject)Canonicalize(result);
-        }
-
         private static string StateHash(ToolCatalogEntry tool)
         {
             var state = new JObject { ["exists"] = tool != null };
@@ -330,38 +315,7 @@ namespace RNAssistant.Office.Tools
                 }
                 state["definition"] = payload;
             }
-            return Hash(Canonicalize(state));
-        }
-
-        private static JToken Canonicalize(JToken token)
-        {
-            var obj = token as JObject;
-            if (obj != null)
-            {
-                var result = new JObject();
-                foreach (var property in obj.Properties()
-                    .OrderBy(item => item.Name, StringComparer.Ordinal))
-                {
-                    result[property.Name] = Canonicalize(property.Value);
-                }
-                return result;
-            }
-            var array = token as JArray;
-            if (array != null)
-                return new JArray(array.Select(Canonicalize));
-            return token == null ? JValue.CreateNull() : token.DeepClone();
-        }
-
-        private static string Hash(JToken value)
-        {
-            using (var sha = SHA256.Create())
-            {
-                return BitConverter.ToString(sha.ComputeHash(
-                        Encoding.UTF8.GetBytes((value ?? JValue.CreateNull())
-                            .ToString(Formatting.None))))
-                    .Replace("-", string.Empty)
-                    .ToLowerInvariant();
-            }
+            return ToolArgumentReader.CanonicalSha256(state);
         }
     }
 }

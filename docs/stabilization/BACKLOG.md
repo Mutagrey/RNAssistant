@@ -22,27 +22,9 @@
 | D02 — single composition path | Application. `AssistantController` одновременно orchestrates и конструирует concrete storage/runtime/model/catalog/session/diagnostics graph | Следующее изменение production lifecycle/dependency graph после текущих R61/WQ gates | Один существующий application-owned path владеет construction и dispose order. Не добавлять factory/interface только ради DI; новый composition type допустим лишь при удалении нескольких concrete construction paths и отрицательном production LOC. Targeted lifecycle + architecture checks |
 | D03 — versioned bridge operation catalog | Bridge. Большой string switch не гарантирует C#/JS parity и единый JSON casing | Следующее versioned bridge изменение после qualification текущего WebView path | Typed catalog/handlers, handshake version и один canonical casing; удалены ad-hoc operation routing и dual Pascal/camel reads. C#/JS parity, serialization/error-envelope и Windows WebView checks |
 | D04 — change-driven hotspot extraction | Владельцы Controller, ToolRuntime, prompts, storage и UI. Крупные файлы затрудняют локальные изменения, но не доказывают смешение ответственности | Только когда ближайший approved change требует чтения несвязанного behavior | Извлекается один тематический owner из `AssistantController*`, `OfficeToolExecutor`, `PromptContextInspectorService`, `ChatStore*` или крупного `app-*.js`; старый path удаляется, targeted tests сохраняют контракт |
-| D05 — agent-loop contraction | Tool and Skill authoring. Authoring canonicalization дублируется | После текущей regression-коррекции и обязательной Windows репродукции/квалификации либо как отдельно одобренные host-neutral slices; не смешивать slices | Ниже: один owner и один удаляемый path на slice, без второго loop/store/router/base service. Каждый slice уменьшает production LOC/representation hops и проходит точные protocol/resource/tool/run gates |
 
 Не проводить общий предварительный split/rename, массовый namespace move, новый
 service locator, второй store/read model или универсальный Office abstraction.
-
-### D05 — последовательность очистки основного цикла
-
-Сохраняются как необходимые инварианты: один `AgentKernel`, exact captured
-tool policy/binding, bound `RuntimeKey`, per-chat run lease, VBA guard/journal и
-read-back, append-only event evidence и запрет автоматического повтора после
-possible effect. Их количество не является redundancy: они предотвращают неверный
-target, двойной dispatch и ложный success.
-
-| Slice | Удаляемая сложность и owner | Gate завершения |
-|---|---|---|
-| D05.6 — authoring duplicate deletion | Tool/Skill authoring удаляет дубли `ArgumentPayload/Canonicalize/Hash` через один уже существующий canonical representation owner. Не вводить общий authoring base/service: Tool, Skill и Prompt сохраняют отдельную domain validation | prepare/confirm state hash и read-back для Tool/Skill/Prompt; net deletion обязательна |
-
-Каждый slice — отдельный commit. Перед реализацией фиксируются baseline сценарий,
-удаляемые методы/переходы и ожидаемое сокращение; новый interface/class допускается
-только если в том же slice удаляются более крупные production paths. Общий rewrite,
-массовый rename и “унификация” без воспроизводимого дефекта не входят в план.
 
 ## Deferred product decisions
 

@@ -59,6 +59,12 @@ Model and Library upsert paths both carry `components` as one native `JArray` of
 component `JObject` values into `ToolAuthoringService`; they never serialize and
 reparse that argument. A quoted/stringified array is an `invalid_arguments` failure
 before preparation or storage.
+
+Tool, Skill and Prompt mutation guards use `ToolArgumentReader` as the single owner
+for recursive ordinal JSON-object canonicalization and SHA256. Each domain still
+builds and validates its own accepted argument/target payload, stale-state contract,
+write boundary and read-back; this is representation reuse, not a shared authoring
+service or validation policy.
 Since 11T10 the existing Tools editor also uses lowercase
 `rnassistant.toolLibrary` v1 and explicit revision-guarded create/update/rename/
 delete mutation DTOs through the same `ToolAuthoringService` as model authoring.

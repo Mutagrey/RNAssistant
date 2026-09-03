@@ -714,6 +714,25 @@ namespace RNAssistant.Harness
         }
         private static void AgentToolCrudPreservesOmittedFields()
         {
+            var firstArguments = new Dictionary<string, object>
+            {
+                ["z"] = new JObject { ["b"] = 2, ["a"] = 1 },
+                ["a"] = new JArray(3, 2, 1)
+            };
+            var reorderedArguments = new Dictionary<string, object>
+            {
+                ["a"] = new JArray(3, 2, 1),
+                ["z"] = new JObject { ["a"] = 1, ["b"] = 2 }
+            };
+            AssertEqual(
+                ToolArgumentReader.CanonicalArgumentsSha256(firstArguments),
+                ToolArgumentReader.CanonicalArgumentsSha256(reorderedArguments),
+                "authoring argument hash ignores object insertion order");
+            ((JObject)reorderedArguments["z"])["b"] = 3;
+            AssertTrue(ToolArgumentReader.CanonicalArgumentsSha256(firstArguments) !=
+                ToolArgumentReader.CanonicalArgumentsSha256(reorderedArguments),
+                "authoring argument hash binds nested values");
+
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var definitions = executor.GetControllerTools()
