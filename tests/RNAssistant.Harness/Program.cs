@@ -630,6 +630,7 @@ namespace RNAssistant.Harness
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
 
                 Test("bridge: init returns token", BridgeInitReturnsToken),
+                Test("bridge: chat list is catalog-only", BridgeListChatsIsCatalogOnly),
                 Test("webview: restricts messages and navigation", WebViewSecurityRestrictsMessagesAndNavigation),
                 Test("bridge: rejects missing token", BridgeRejectsMissingToken),
                 Test("bridge: typed runTool", BridgeUsesTypedRunToolPayload),

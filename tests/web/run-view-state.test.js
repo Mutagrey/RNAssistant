@@ -129,8 +129,8 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   });
   assert.ok(index.includes("app-agent.js?v=runtime-diagnostics-20260831-1"),
     "agent outcome uses the diagnostics cache key");
-  assert.ok(index.includes("app-chat-session.js?v=tool-contract-20260901-1"), "chat session uses the typed Tool contract cache key");
-  assert.ok(index.includes("app-core.js?v=artifact-gallery-20260902-1"), "core uses the artifact gallery cache key");
+  assert.ok(index.includes("app-chat-session.js?v=chat-sync-20260903-1"), "chat session uses the chat sync cache key");
+  assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core uses the chat sync cache key");
   assert.ok(index.includes("app-chat-state.js?v=artifact-gallery-20260902-1"), "chat state uses the artifact gallery cache key");
   assert.ok(index.includes("app-messages.js?v=artifact-gallery-20260902-1"), "messages uses the artifact gallery cache key");
   ["app-chat.css", "app-agent.css"].forEach(asset => {

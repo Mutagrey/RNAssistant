@@ -473,6 +473,32 @@ namespace RNAssistant.Harness
             AssertTrue(!string.IsNullOrWhiteSpace(token), "bridge token returned");
         }
 
+        private static void BridgeListChatsIsCatalogOnly()
+        {
+            var controller = new AssistantController();
+            var bridge = new AssistantWebBridge(controller, null);
+            var token = BridgeToken(bridge);
+            var listJson = bridge.HandleMessageAsync(
+                "{\"id\":\"list\",\"type\":\"listChats\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                .GetAwaiter()
+                .GetResult();
+            var list = JObject.Parse(listJson);
+
+            AssertTrue(list["ok"].Value<bool>(), "list response ok");
+            AssertTrue(list["payload"]["chats"] != null, "catalog includes chat summaries");
+            AssertTrue(list["payload"]["messages"] == null, "catalog omits transcript");
+            AssertTrue(list["payload"]["context"] == null, "catalog omits prompt context");
+            AssertTrue(list["payload"]["htmlWorkspace"] == null, "catalog omits html workspace");
+
+            var fullJson = bridge.HandleMessageAsync(
+                "{\"id\":\"full\",\"type\":\"getChatState\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\"}}")
+                .GetAwaiter()
+                .GetResult();
+            var full = JObject.Parse(fullJson);
+            AssertTrue(full["payload"]["messages"] != null, "explicit full state includes transcript");
+            AssertEqual("chat-1", controller.LastChatId, "full state chat id");
+        }
+
         private static void BridgeUsesTypedSendChatPayloadAndProgress()
         {
             var controller = new AssistantController();

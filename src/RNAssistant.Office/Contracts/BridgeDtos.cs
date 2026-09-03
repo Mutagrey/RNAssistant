@@ -602,16 +602,16 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("documents")]
         public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }
 
-        [JsonProperty("context")]
+        [JsonProperty("context", NullValueHandling = NullValueHandling.Ignore)]
         public DocumentContext Context { get; set; }
 
-        [JsonProperty("messages")]
+        [JsonProperty("messages", NullValueHandling = NullValueHandling.Ignore)]
         public IReadOnlyList<ChatMessage> Messages { get; set; }
 
-        [JsonProperty("artifacts")]
+        [JsonProperty("artifacts", NullValueHandling = NullValueHandling.Ignore)]
         public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
 
-        [JsonProperty("artifactLibrary")]
+        [JsonProperty("artifactLibrary", NullValueHandling = NullValueHandling.Ignore)]
         public ArtifactLibraryProjectionDto ArtifactLibrary { get; set; }
 
         [JsonProperty("activeContextCheckpointId")]
@@ -626,10 +626,10 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("activePlanDocumentArtifactId")]
         public string ActivePlanDocumentArtifactId { get; set; }
 
-        [JsonProperty("contextUsage")]
+        [JsonProperty("contextUsage", NullValueHandling = NullValueHandling.Ignore)]
         public object ContextUsage { get; set; }
 
-        [JsonProperty("htmlWorkspace")]
+        [JsonProperty("htmlWorkspace", NullValueHandling = NullValueHandling.Ignore)]
         public HtmlWorkspaceDto HtmlWorkspace { get; set; }
     }
 

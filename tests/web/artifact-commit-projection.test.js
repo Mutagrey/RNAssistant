@@ -84,7 +84,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   assert.match(attachments, /preparing:\s*"Подготовка"/);
   assert.match(attachments, /committed:\s*"Оригинал"/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-core.js?v=artifact-gallery-20260902-1"), "core has the artifact gallery cache key");
+  assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core has the chat sync cache key");
   assert.ok(index.includes("app-chat-state.js?v=artifact-gallery-20260902-1"), "chat state has the artifact gallery cache key");
   assert.ok(index.includes("app-messages.js?v=artifact-gallery-20260902-1"), "messages have the artifact gallery cache key");
   assert.ok(index.includes("app-attachments.js?v=multi-chat-20260902-1"),
@@ -95,7 +95,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
 {
   const execution = fs.readFileSync(
     path.join(root, "src/RNAssistant.Office/Controller/AssistantController.ChatExecution.cs"), "utf8");
-  const liveComment = execution.indexOf("artifacts do not wait for run completion");
+  const liveComment = execution.indexOf("Kernel persistence precedes this callback");
   const checkpoint = execution.lastIndexOf("PersistRunCheckpoint(session, runId, phase);", liveComment);
   const liveProjection = execution.indexOf("ReportExternalChatState(chatStateChanged, session);", liveComment);
   const progress = execution.indexOf("ReportExternalProgress(progress, phase, message, activity);", liveProjection);
@@ -104,10 +104,10 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
 
   const confirmation = fs.readFileSync(
     path.join(root, "src/RNAssistant.Office/Controller/AssistantController.Agent.cs"), "utf8");
-  const confirmationCheckpoint = confirmation.indexOf("PersistRunCheckpoint(session, runId, phase);");
-  const confirmationProjection = confirmation.indexOf("ReportExternalChatState(chatStateChanged, session);", confirmationCheckpoint);
-  assert.ok(confirmationCheckpoint >= 0 && confirmationProjection > confirmationCheckpoint,
-    "confirmation continuation publishes the same live artifact projection");
+  const confirmationProjection = confirmation.indexOf("response = ChatState(session);");
+  const confirmationTrace = confirmation.indexOf("RunCausalTrace.Projected(\"ChatStateResponse\")", confirmationProjection);
+  assert.ok(confirmationProjection >= 0 && confirmationTrace > confirmationProjection,
+    "confirmation continuation materializes and traces the terminal chat projection");
   console.log("PASS artifact commit: tool-result artifacts publish before terminal response");
 }
 

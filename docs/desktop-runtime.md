@@ -45,6 +45,11 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   использует ROT fallback. Multi-instance enumeration остаётся best-effort;
   launcher/foreground `hwnd` является наиболее точным источником.
 - COM calls проходят через `DispatchedOfficeApplicationAdapter` и выделенный STA.
+- Фоновая синхронизация чатов в WebView использует catalog-only projection
+  `listChats`: summaries чатов/документов, active id и run view. Полный transcript,
+  context, artifacts и HTML workspace загружаются только через `init`, явный выбор
+  или действие чата, либо через `getChatState`, когда требуется обновить более
+  новую revision активного чата.
 - HTML bind/refresh выполняют вложенный Office source-read через exact bound
   `HostRuntime.ReadDocument`; document gate и owner STA не охватывают последующую
   HTML/CAS работу.

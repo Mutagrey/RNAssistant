@@ -286,7 +286,7 @@ function reportFocusState() {
   }
 
   var selection = window.getSelection ? window.getSelection() : null;
-  var hasSelection = !!(selection && !selection.isCollapsed && String(selection).length > 0);
+  var hasSelection = !!(selection && selection.rangeCount > 0 && !selection.isCollapsed);
   var wantsKeyboard = document.hasFocus() && (isKeyboardElement(document.activeElement) || hasSelection);
   if (state.lastReportedWantsKeyboard === wantsKeyboard) {
     return;
@@ -302,10 +302,13 @@ function reportFocusState() {
 
 function scheduleFocusStateReport() {
   if (state.focusReportTimer) {
-    window.clearTimeout(state.focusReportTimer);
+    return;
   }
 
-  state.focusReportTimer = window.setTimeout(reportFocusState, 0);
+  state.focusReportTimer = window.setTimeout(function () {
+    state.focusReportTimer = null;
+    reportFocusState();
+  }, 50);
 }
 
 if (window.chrome && window.chrome.webview) {

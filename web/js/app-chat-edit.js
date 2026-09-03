@@ -171,7 +171,9 @@ function applyEditedMessagePreview(target, text) {
 
 async function refreshChatAfterEditFailure(chatId) {
   try {
-    var response = await send("listChats", {});
+    var response = state.activeChatId === chatId && typeof loadChatState === "function"
+      ? await loadChatState(chatId)
+      : await send("listChats", {});
     if (state.activeChatId === chatId) {
       applyChatState(response);
     } else {

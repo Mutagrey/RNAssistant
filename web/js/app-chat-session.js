@@ -424,6 +424,42 @@ function chatNavigationSignature(payload) {
   });
 }
 
+function payloadActiveChatId(payload) {
+  payload = payload || {};
+  return payload.activeChatId || payload.ActiveChatId || "";
+}
+
+function catalogChatSummary(payload, id) {
+  var chats = (payload && (payload.chats || payload.Chats)) || [];
+  for (var index = 0; index < chats.length; index++) {
+    if (chatId(chats[index]) === id) return chats[index];
+  }
+  return null;
+}
+
+function catalogChatRevision(payload, id) {
+  var summary = catalogChatSummary(payload, id);
+  return summary ? window.RNAssistantRunViewState.chatRevision(summary) : null;
+}
+
+function shouldReloadChatDetailFromCatalog(payload) {
+  var responseChatId = payloadActiveChatId(payload);
+  if (!responseChatId || currentActiveSend()) return false;
+  if (responseChatId !== state.activeChatId) return true;
+  var revision = catalogChatRevision(payload, responseChatId);
+  if (revision === null) return false;
+  var known = Object.prototype.hasOwnProperty.call(state.chatProjectionRevisions || {}, responseChatId)
+    ? state.chatProjectionRevisions[responseChatId]
+    : null;
+  return known === null || revision > known;
+}
+
+async function loadChatState(chatIdValue) {
+  var targetChatId = chatIdValue || state.activeChatId || "";
+  if (!targetChatId) return initialize();
+  return send("getChatState", { chatId: targetChatId });
+}
+
 async function synchronizeChatState(force) {
   if (state.bridgeUnavailable || (!force && (document.hidden || !document.hasFocus()))) return;
   if (state.chatSyncPromise) {
@@ -441,11 +477,15 @@ async function synchronizeChatState(force) {
       if (navigationVersion === state.chatNavigationVersion &&
           stateApplyVersion === state.chatStateApplyVersion &&
           chatNavigationSignature(response) !== chatNavigationSignature(current)) {
-        var responseChatId = response.activeChatId || response.ActiveChatId || "";
-        if (currentActiveSend() && responseChatId === state.activeChatId) {
-          applyChatCatalogState(response);
-        } else {
-          applyChatState(response);
+        var responseChatId = payloadActiveChatId(response);
+        var reloadDetail = shouldReloadChatDetailFromCatalog(response);
+        applyChatCatalogState(response);
+        if (reloadDetail) {
+          var detailNavigationVersion = state.chatNavigationVersion || 0;
+          var detail = await loadChatState(responseChatId);
+          if (detailNavigationVersion === state.chatNavigationVersion && !currentActiveSend()) {
+            applyChatState(detail);
+          }
         }
       }
     } catch (error) {

@@ -327,7 +327,12 @@ namespace RNAssistant.Office
         public ChatStateResponse ListChats()
         {
             var session = _chatSessions.GetActiveSessionForOfficeState();
-            return ChatState(session);
+            return ChatCatalogState(session);
+        }
+
+        public ChatStateResponse GetChatState(string chatId = null)
+        {
+            return ChatState(LoadSession(chatId));
         }
 
         public ChatStateResponse CreateChat(string title)
@@ -573,6 +578,22 @@ namespace RNAssistant.Office
                 HtmlWorkspace = HtmlWorkspaceDto.From(
                     session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
                     session == null ? null : session.HtmlWorkspaceRecovery)
+            };
+        }
+
+        private ChatStateResponse ChatCatalogState(ChatSession session)
+        {
+            var activeId = session == null ? string.Empty : session.Id;
+            return new ChatStateResponse
+            {
+                SessionRevision = session == null ? 0 : session.Revision,
+                RunViewState = RunViewStateProjector.Create(session),
+                ActiveChatId = activeId,
+                ActiveChatModel = session == null ? string.Empty : session.Model,
+                ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
+                ActiveChatReasoning = session != null && session.ReasoningEnabled,
+                Chats = _chatSessions.GetChatSummaries(activeId),
+                Documents = ListOpenDocuments()
             };
         }
 

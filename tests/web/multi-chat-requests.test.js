@@ -71,7 +71,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-run.js"), "utf8
   console.log("PASS multi-chat: attachment submit barriers are per chat");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-chat-run.js?v=multi-chat-20260902-1"));
+  assert.ok(index.includes("app-chat-run.js?v=chat-sync-20260903-1"));
   console.log("OK 3/3");
 }()).catch(error => {
   console.error(error.stack || error);

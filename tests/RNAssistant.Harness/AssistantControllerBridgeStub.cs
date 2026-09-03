@@ -77,7 +77,12 @@ namespace RNAssistant.Office
                 Skills = EmptySkillLibrary()
             };
         }
-        public ChatStateResponse ListChats() { return ChatState(); }
+        public ChatStateResponse ListChats() { return ChatCatalogState(); }
+        public ChatStateResponse GetChatState(string chatId = null)
+        {
+            LastChatId = chatId;
+            return ChatState(null, chatId);
+        }
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
             LastChatId = request == null ? null : request.ChatId;
@@ -875,6 +880,16 @@ namespace RNAssistant.Office
                 Chats = new ChatSessionSummary[0],
                 Context = new DocumentContext(),
                 Messages = new ChatMessage[0]
+            };
+        }
+
+        private static ChatStateResponse ChatCatalogState(string chatId = null)
+        {
+            return new ChatStateResponse
+            {
+                ActiveChatId = chatId ?? string.Empty,
+                ActiveChatMode = "chat",
+                Chats = new ChatSessionSummary[0]
             };
         }
 
