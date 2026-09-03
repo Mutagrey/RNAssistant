@@ -49,6 +49,18 @@ namespace RNAssistant.Harness
             AssertEqual(1, bounded.VerifiedWrites, "effect evidence cannot overstate successful writes");
             AssertEqual(0, bounded.NoChangeWrites, "overlapping effect evidence is capped by runtime count");
             AssertEqual(1, bounded.UnknownEffects, "inconsistent source evidence is visible as unknown");
+
+            var failedNoChange = RunViewSession(new RunSummary(
+                "run-failed-no-change", "turn-failed-no-change", RunLifecycle.Completed,
+                new ToolCounts(writeError: 1), 1, 1, "Write failed.", null, null));
+            failedNoChange.Messages.Add(EffectMessage(
+                "run-failed-no-change", "failed-write", ToolEffectEvidence.VerifiedNoChange));
+            var failedView = RunViewStateProjector.Create(failedNoChange);
+            AssertEqual(RunViewHealth.Errors, failedView.ExecutionHealth,
+                "verified no-change on a failed write remains a definite error");
+            AssertEqual(1, failedView.FailedCalls, "failed write remains counted");
+            AssertEqual(0, failedView.UnknownEffects,
+                "failed verified-no-change evidence is not misclassified as unknown");
             RuntimeThrows<ArgumentException>(() => new RunViewState("invalid", "turn-invalid", "",
                 RunViewLifecycles.Completed, RunViewHealth.Clean, 0, 0, 0, 0, 0, 1,
                 null, null, "", DateTime.UtcNow));

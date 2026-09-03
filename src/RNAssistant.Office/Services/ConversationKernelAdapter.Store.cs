@@ -198,7 +198,8 @@ namespace RNAssistant.Office.Services
                     : summary.Reason == "iteration_limit" || summary.Reason == "tool_step_limit" ? "step_limit_reached" : summary.Reason,
                 ResultMessage = summary.AssistantMessage
             };
-            var message = AgentTranscript.CreateAssistantMessage(summary.AssistantMessage,
+            var message = AgentTranscript.CreateAssistantMessage(
+                ConversationRunProjection.AssistantMessage(summary),
                 diagnostic != null || _lastModel == null ? null : _lastModel.Completion, diagnostic, responseStatus);
             _session.Messages.Add(message);
         }
@@ -229,6 +230,25 @@ namespace RNAssistant.Office.Services
 
     internal static class ConversationRunProjection
     {
+        internal static string AssistantMessage(RunSummary summary)
+        {
+            if (summary == null) return string.Empty;
+            var message = summary.AssistantMessage ?? string.Empty;
+            if (summary.Lifecycle != RunLifecycle.Completed || summary.ToolCounts == null)
+                return message;
+            var errors = summary.ToolCounts.WriteError;
+            var unknown = summary.ToolCounts.WriteUnknown;
+            if (errors <= 0 && unknown <= 0) return message;
+            var notice = unknown > 0
+                ? "Проверка выполнения: состояние " + unknown +
+                    " операций записи осталось неизвестным. Успешное применение всех изменений не подтверждено."
+                : "Проверка выполнения: " + errors +
+                    " операций записи завершились ошибкой. Успешное применение всех изменений не подтверждено.";
+            return string.IsNullOrWhiteSpace(message)
+                ? notice
+                : message.TrimEnd() + "\n\n" + notice;
+        }
+
         internal static string Status(RunSummary summary)
         {
             if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation) return "waiting_confirmation";
@@ -243,7 +263,7 @@ namespace RNAssistant.Office.Services
             run.TurnId = summary.TurnId;
             run.Status = Status(summary);
             run.Phase = run.Status;
-            run.CurrentAction = summary.AssistantMessage;
+            run.CurrentAction = AssistantMessage(summary);
             run.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             run.IterationsUsed = summary.IterationsUsed;
             run.ToolStepsUsed = summary.ToolStepsUsed;

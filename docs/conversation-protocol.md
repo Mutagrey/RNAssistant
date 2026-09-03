@@ -443,6 +443,10 @@ clean.
 Narrative is preserved but cannot set either axis. Typed model failures end the
 invocation without fabricated tool errors; native provider refusal is locally
 classified as `failed / provider_refused`.
+When a completed model response follows write errors or unknown write effects, the
+application appends a runtime-owned warning to the visible and durable assistant
+message. It does not reinterpret model prose or change lifecycle, but an unsupported
+success claim is no longer shown without the authoritative execution-health caveat.
 
 Start/resume share accounting, limits and accepted-turn IDs. Pending approval
 consumes a tool-budget reservation, not an outcome; confirmation uses that
@@ -493,6 +497,8 @@ Migrated handlers remove this mapping at their switch; 4B removes the legacy
 model-result writer/readers, not the still-needed VBA/domain preparation paths.
 `VerifiedNoChange` and `VerifiedChange` are independent facts, not inferred from
 `WriteOk`, policy verification requirements or model wording.
+`VerifiedNoChange` attached to a failed write is accounted by that failed call and
+does not create an additional synthetic unknown effect in `RunViewState`.
 
 A new user turn starts fresh counts. Confirmation retains the logical turn's
 summary and counts its execution once; effect projection follows that stable

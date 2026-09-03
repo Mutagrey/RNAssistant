@@ -817,7 +817,10 @@ namespace RNAssistant.Harness
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "errors", 0, 1, 0);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after write error");
-                AssertEqual("Лист Report создан.", result.AssistantText, "false mutation claim is not filtered");
+                AssertContains(result.AssistantText, "операций записи завершились ошибкой",
+                    "runtime annotates a false success claim with authoritative write failure evidence");
+                AssertContains(session.Messages.Last().Content, "Успешное применение всех изменений не подтверждено",
+                    "authoritative failure notice enters accepted history");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "false completion enters accepted history");
             });
         }
@@ -879,7 +882,10 @@ namespace RNAssistant.Harness
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "unknown", 0, 0, 1);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after unknown write");
-                AssertEqual("Модуль Module1 обновлён.", result.AssistantText, "unverified mutation claim survives");
+                AssertContains(result.AssistantText, "состояние 1 операций записи осталось неизвестным",
+                    "runtime annotates an unverified mutation claim");
+                AssertContains(session.Messages.Last().Content, "Успешное применение всех изменений не подтверждено",
+                    "authoritative unknown-effect notice enters accepted history");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "unknown and completed coexist in history");
             });
         }

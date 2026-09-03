@@ -25,7 +25,10 @@ namespace RNAssistant.Core.Services
             var reportedNoChange = effects.Count(value => value == ToolEffectEvidence.VerifiedNoChange);
             var verified = Math.Min(reportedVerified, counts.WriteOk);
             var noChange = Math.Min(reportedNoChange, Math.Max(0, counts.WriteOk - verified));
-            var inconsistentEffects = (long)reportedVerified + reportedNoChange > counts.WriteOk;
+            var accountableNoChange = Math.Max(0, counts.WriteOk - verified) +
+                (long)counts.WriteError;
+            var inconsistentEffects = reportedVerified > counts.WriteOk ||
+                reportedNoChange > accountableNoChange;
             var unverified = Math.Max(0, counts.WriteOk - verified - noChange);
             var evidenceUnknown = effects.Count(value => value == ToolEffectEvidence.Unknown);
             var unknown = SaturatingAdd(Math.Max(counts.WriteUnknown, evidenceUnknown), unverified);

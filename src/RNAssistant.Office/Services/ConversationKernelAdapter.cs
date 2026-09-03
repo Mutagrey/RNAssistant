@@ -118,7 +118,7 @@ namespace RNAssistant.Office.Services
             var status = ConversationRunProjection.Status(summary);
             return new ChatTurnResult
             {
-                AssistantText = summary.AssistantMessage,
+                AssistantText = ConversationRunProjection.AssistantMessage(summary),
                 ToolResults = _projectedResults,
                 ContextUsage = _contextUsage,
                 WaitingForConfirmation = summary.Lifecycle == RunLifecycle.AwaitingConfirmation,
