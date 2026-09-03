@@ -9,15 +9,19 @@ namespace RNAssistant.Core.ModelProtocol
     // Status-free wire contract, separate from runtime lifecycle/effect projections.
     public sealed class ConversationResponse
     {
-        public const int ProtocolVersion = 4;
+        public const int ProtocolVersion = 5;
 
         public string Message { get; private set; }
+        public bool Final { get; private set; }
         public IReadOnlyList<ConversationToolCall> ToolCalls { get; private set; }
 
-        internal ConversationResponse(string message, IEnumerable<ConversationToolCall> calls)
+        internal ConversationResponse(string message, IEnumerable<ConversationToolCall> calls, bool final)
         {
+            var snapshot = (calls ?? new ConversationToolCall[0]).ToArray();
+            if (final && snapshot.Length > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
             Message = message;
-            ToolCalls = new List<ConversationToolCall>(calls).AsReadOnly();
+            Final = final;
+            ToolCalls = Array.AsReadOnly(snapshot);
         }
 
         // Use this canonical writer for model envelopes, not serialization of a runtime DTO.
@@ -26,6 +30,7 @@ namespace RNAssistant.Core.ModelProtocol
             return new JObject
             {
                 ["message"] = Message,
+                ["final"] = Final,
                 ["tool_calls"] = new JArray(ToolCalls.Select(call => new JObject
                 {
                     ["name"] = call.Name,

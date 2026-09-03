@@ -67,7 +67,7 @@ version check still apply.
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
 | Active wire / compatibility probes | `Program.AgentSafetyTests.cs` | `model compatibility:`, `agent: supports selectable`, `model protocol:` |
 | Prompt schema review / settings | `Program.ChatSettingsTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ContextBridgeTests.cs` | `settings:`, `bridge: typed settings`, `chat: prompt save` |
-| Conversation v4 contract/context | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v4:`, `protocol context:` |
+| Conversation v5 contract/context | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v5:`, `protocol context:` |
 | History/context preflight | `Program.AgentSafetyTests.cs` | `preflight`, `protocol context:`, `model protocol:` |
 | Resources and attachments | `Program.ResourceFabricTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.AttachmentTests.cs`; UI pre-dispatch ordering in `tests/web/attachment-ingestion-order.test.js` | `resources:`, `attachments:` |
 | Session storage and CAS | `Program.SessionEventStoreTests.cs`, `Program.CasMaintenanceTests.cs` | `storage:` |
@@ -323,9 +323,9 @@ this harness uses `AssistantControllerBridgeStub`. Scope/projection marker tests
 do not prove production bridge delivery or WebView rendering. See
 [trace evidence and boundaries](../../docs/stabilization/PHASE_1B_CAUSAL_TRACE.md).
 
-## Stabilization v4 contract / runtime IDs
+## Stabilization v5 contract / runtime IDs
 
-`conversation v4:` covers strict ID-less parser/schema/arguments, singleton
+`conversation v5:` covers strict ID-less parser/schema/arguments, singleton
 safety, schema transport and the separate accepted-history reader. Model-owned
 IDs are rejected; identical calls remain distinct ordered positions. `kernel:`
 checks runtime allocation, collisions/invalid allocator output before acceptance,
@@ -380,8 +380,9 @@ correction used schema 23 for prerequisite skill/tool selection, Task List lifec
 root tool arguments, dependency order and evidence-reconciled completion. Schema 24
 makes the six-stage operating workflow and prompt/skill/tool authority split
 explicit, strengthens all built-in skill completion criteria, and adds exact
-skill-reference-to-catalog validation. Current schema 25 tightens successful finish
-around closing active Task Lists and HTML bound-data render evidence. Tests
+skill-reference-to-catalog validation. Schema 25 tightens successful finish around
+closing active Task Lists and HTML bound-data render evidence. Current schema 26
+adds explicit v5 `final` intent and no-tool checkpoint behavior. Tests
 preserve, review, or reset saved older/future markers explicitly. JS review behavior
 is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
@@ -433,7 +434,7 @@ the fixed patch operation and raw backup identity from model arguments, resolves
 restore by readable target or latest-for-module inside runtime, and hides mutation/
 backup ids, hashes and guards from model results. Use `vba:`, the focused semantic
 contract case, the VBA Agent/resource/facade cases and the R61 inventory. Prompt
-schema 22 was the 11O5 boundary. Current schema 25 requires explicit prompt
+schema 22 was the 11O5 boundary. Current schema 26 requires explicit prompt
 review/reset before Agent/Plan execution; retained pre-switch calls still require a
 new chat/reset.
 

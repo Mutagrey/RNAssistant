@@ -80,6 +80,33 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static async Task KernelContinuesAfterNoToolCheckpoint()
+        {
+            var f = new KernelFixture(
+                new AgentResponseDraft("Составляю итог.", new ToolCallDraft[0], false),
+                KernelResponse());
+            var result = await f.RunAsync();
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "non-final empty calls do not finish the loop");
+            AssertEqual(2, f.Model.Requests.Count, "kernel asks the model for the final response after a no-tool checkpoint");
+            AssertEqual(2, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted),
+                "checkpoint and final response are both accepted");
+            AssertEqual("Done; all changes applied.", result.Summary.AssistantMessage,
+                "final response owns the terminal message");
+        }
+
+        private static async Task KernelFailsRepeatedNoToolCheckpoints()
+        {
+            var f = new KernelFixture(
+                new AgentResponseDraft("One.", new ToolCallDraft[0], false),
+                new AgentResponseDraft("Two.", new ToolCallDraft[0], false),
+                new AgentResponseDraft("Three.", new ToolCallDraft[0], false));
+            var result = await f.RunAsync();
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "repeated no-tool checkpoints fail closed");
+            AssertEqual("model_loop_stalled", result.Summary.Reason, "stalled no-tool loop has explicit reason");
+            AssertEqual(3, f.Model.Requests.Count, "stall is bounded");
+            AssertEqual(0, f.Tools.Calls.Count, "stalled checkpoint loop dispatches no tools");
+        }
+
         private static async Task KernelReadsAreSequentialAndBounded()
         {
             var f = new KernelFixture(KernelResponse(KernelCall("read"), KernelCall("read")), KernelResponse());

@@ -1,5 +1,8 @@
 # Conversation Response v4
 
+> **Superseded by [Conversation Response v5](CONVERSATION_RESPONSE_V5.md).**
+> This file is historical R29/v4 context, not the active runtime contract.
+
 Status: **R29 coordinated wire/history contract**. Response protocol is `4`;
 prompt schema is `13`. Product version is independent and unchanged by this switch.
 The [v3 specification](CONVERSATION_RESPONSE_V3.md) is historical, not a runtime

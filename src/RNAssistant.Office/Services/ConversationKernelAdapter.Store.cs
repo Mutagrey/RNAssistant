@@ -34,6 +34,9 @@ namespace RNAssistant.Office.Services
                     _stepMessage = fact.Response.Message;
                     // Persist the entire accepted batch before any dispatch. Callable
                     // pack membership changes only at the next model-step boundary.
+                    if (fact.Response.ToolCalls.Count == 0 && !fact.Response.Final)
+                        _modelSession.AppendNoToolCheckpoint(fact.Response.Message,
+                            _lastModel == null ? null : _lastModel.Completion);
                     for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
                         _modelSession.AppendToolCall(new AgentToolCall
                             { Id = fact.Response.ToolCalls[index].Id, Name = fact.Response.ToolCalls[index].Name,

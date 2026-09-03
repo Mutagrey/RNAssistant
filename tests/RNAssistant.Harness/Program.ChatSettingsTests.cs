@@ -378,7 +378,7 @@ namespace RNAssistant.Harness
                     "explicit reset persists the current prompt schema");
                 foreach (var instruction in new[] { defaults.SystemPrompt, defaults.ChatSystemPrompt, defaults.PlanSystemPrompt })
                 {
-                    AssertContains(instruction, "conversation-response-v4", "explicit reset installs actual v4 defaults");
+                    AssertContains(instruction, "conversation-response-v5", "explicit reset installs actual v5 defaults");
                     AssertContains(instruction, "`TOOL_RESULT` v1", "explicit reset installs Tool Result v1 in every mode");
                 }
                 AssertTrue(prompts(new AppSettings()).SequenceEqual(prompts(defaults)), "explicit cleared prompts and review select current defaults");
@@ -502,7 +502,7 @@ namespace RNAssistant.Harness
                 "complex Agent work creates a task list before execution");
             AssertContains(defaults.AgentToolsPrompt, "common.task_tracking` and `common.task_list_set",
                 "task tracking explains separate skill and tool-schema loading");
-            AssertContains(defaults.AgentToolsPrompt, "an empty `tool_calls` response is not a successful completion",
+            AssertContains(defaults.AgentToolsPrompt, "`final=true` with empty `tool_calls` is not a successful completion",
                 "tool policy prevents ending while task list is still active");
             AssertContains(defaults.AgentToolsPrompt, "never add an inner `arguments`",
                 "tool arguments are supplied at the schema root");

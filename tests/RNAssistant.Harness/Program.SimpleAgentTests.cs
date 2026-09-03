@@ -143,7 +143,22 @@ namespace RNAssistant.Harness
 
         private static string V4Envelope(params JObject[] calls)
         {
-            return new JObject { ["message"] = "Читаю.", ["tool_calls"] = new JArray(calls) }.ToString(Formatting.None);
+            return new JObject
+            {
+                ["message"] = "Читаю.",
+                ["final"] = calls == null || calls.Length == 0,
+                ["tool_calls"] = new JArray(calls ?? new JObject[0])
+            }.ToString(Formatting.None);
+        }
+
+        private static string V4EnvelopeWithFinal(bool final, params JObject[] calls)
+        {
+            return new JObject
+            {
+                ["message"] = "Читаю.",
+                ["final"] = final,
+                ["tool_calls"] = new JArray(calls ?? new JObject[0])
+            }.ToString(Formatting.None);
         }
 
         private static ConversationResponseParseResult ParseV4(string json, params ToolCatalogEntry[] tools)
@@ -156,10 +171,11 @@ namespace RNAssistant.Harness
         {
             foreach (var message in new[] { "Готово.", "", "  ", "Не удалось выполнить.\nНужен доступ.", "He said \"done\" \\ / \t" })
             {
-                var json = new JObject { ["message"] = message, ["tool_calls"] = new JArray() }.ToString(Formatting.None);
+                var json = new JObject { ["message"] = message, ["final"] = true, ["tool_calls"] = new JArray() }.ToString(Formatting.None);
                 var parsed = ParseV4(json);
-                AssertTrue(parsed.Success, "v4 accepts a string message without interpreting its wording");
+                AssertTrue(parsed.Success, "v5 accepts a string message without interpreting its wording");
                 AssertEqual(message, parsed.Response.Message, "message remains exact");
+                AssertTrue(parsed.Response.Final, "final answer intent is explicit");
                 AssertTrue(JToken.DeepEquals(JObject.Parse(json), JObject.Parse(parsed.Response.ToJson())), "status-free final round trip");
             }
             var tool = V4StructuredReadTool();
@@ -179,8 +195,9 @@ namespace RNAssistant.Harness
             AssertTrue(call.Response.ToolCalls[0].Arguments["items"] is JArray &&
                 call.Response.ToolCalls[0].Arguments["items"][0] is JObject,
                 "nested arrays and objects remain native JSON tokens");
+            AssertTrue(!call.Response.Final, "tool turns are not final answers");
             AssertTrue(JToken.DeepEquals(JObject.Parse(callJson), JObject.Parse(call.Response.ToJson())), "call round trip preserves arguments without assigning ids");
-            AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v4 DTO has no model or universal status");
+            AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v5 DTO has no model or universal status");
         }
 
         private static void ConversationV4RejectsUnknownRootFields()
@@ -193,9 +210,14 @@ namespace RNAssistant.Harness
                 AssertTrue(!parsed.Success && parsed.Response == null, "unknown root field rejected: " + field);
                 AssertContains(parsed.Error, field, "unknown field diagnostic");
             }
-            foreach (var json in new[] { "{}", "{\"message\":\"x\"}", "{\"tool_calls\":[]}",
-                "{\"message\":null,\"tool_calls\":[]}", "{\"message\":1,\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"tool_calls\":null}", "{\"message\":\"x\",\"tool_calls\":{}}" })
+            AssertTrue(!ParseV4(V4EnvelopeWithFinal(true, V4Call()), V4ReadTool()).Success,
+                "final answer intent cannot accompany a tool call");
+            foreach (var json in new[] { "{}", "{\"message\":\"x\"}", "{\"message\":\"x\",\"final\":true}",
+                "{\"message\":\"x\",\"tool_calls\":[]}", "{\"tool_calls\":[]}",
+                "{\"message\":null,\"final\":true,\"tool_calls\":[]}", "{\"message\":1,\"final\":true,\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"final\":null,\"tool_calls\":[]}", "{\"message\":\"x\",\"final\":\"true\",\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"final\":1,\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"final\":true,\"tool_calls\":null}", "{\"message\":\"x\",\"final\":true,\"tool_calls\":{}}" })
                 AssertTrue(!ParseV4(json).Success, "missing/wrong root type rejected: " + json);
         }
 
@@ -204,20 +226,20 @@ namespace RNAssistant.Harness
             foreach (var json in new[]
             {
                 "", "<html>Blocked</html>", "content rejected by protection", "[]", "null",
-                "```json\n{\"message\":\"x\",\"tool_calls\":[]}\n```",
-                "text {\"message\":\"x\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"tool_calls\":[]} {}",
-                "{\"message\":\"x\",\"message\":\"y\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",/*comment*/\"tool_calls\":[]}",
-                "{'message':'x','tool_calls':[]}",
-                "{message:\"x\",\"tool_calls\":[]}",
-                "{true:\"x\",\"message\":\"x\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"tool_calls\":[],}",
-                "{\"message\":\"line\nbreak\",\"tool_calls\":[]}",
-                "{\"message\":\"bad\\'escape\",\"tool_calls\":[]}",
-                "{\"message\":\"bad\\u12xx\",\"tool_calls\":[]}",
-                "{\"message\":\"x\",\"tool_calls\":[}",
-                "{\"message\":\"x\",\"tool_calls\":[{\"name\":\"test.read\",\"arguments\":{\"query\":\"A\",\"limit\":NaN}}]}"
+                "```json\n{\"message\":\"x\",\"final\":true,\"tool_calls\":[]}\n```",
+                "text {\"message\":\"x\",\"final\":true,\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"final\":true,\"tool_calls\":[]} {}",
+                "{\"message\":\"x\",\"message\":\"y\",\"final\":true,\"tool_calls\":[]}",
+                "{\"message\":\"x\",/*comment*/\"final\":true,\"tool_calls\":[]}",
+                "{'message':'x','final':true,'tool_calls':[]}",
+                "{message:\"x\",\"final\":true,\"tool_calls\":[]}",
+                "{true:\"x\",\"message\":\"x\",\"final\":true,\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"final\":true,\"tool_calls\":[],}",
+                "{\"message\":\"line\nbreak\",\"final\":true,\"tool_calls\":[]}",
+                "{\"message\":\"bad\\'escape\",\"final\":true,\"tool_calls\":[]}",
+                "{\"message\":\"bad\\u12xx\",\"final\":true,\"tool_calls\":[]}",
+                "{\"message\":\"x\",\"final\":true,\"tool_calls\":[}",
+                "{\"message\":\"x\",\"final\":false,\"tool_calls\":[{\"name\":\"test.read\",\"arguments\":{\"query\":\"A\",\"limit\":NaN}}]}"
             }) AssertTrue(!ParseV4(json, V4ReadTool()).Success, "non-JSON or incomplete envelope rejected: " + json);
 
             foreach (var number in new[] { "01", "+1", ".5", "0x10", "undefined", "Infinity", "1e999", "999999999999999999999999999999999" })
@@ -226,7 +248,7 @@ namespace RNAssistant.Harness
                     .Replace("\"NUMBER\"", number);
                 AssertTrue(!ParseV4(json, V4ReadTool()).Success, "non-JSON/non-finite number rejected: " + number);
             }
-            var escaped = ParseV4("{\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\",\"tool_calls\":[]}");
+            var escaped = ParseV4("{\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\",\"final\":true,\"tool_calls\":[]}");
             AssertTrue(escaped.Success, "standard Unicode and control escapes are accepted");
             var exactSource = "line 1\nconst escaped = \"\\n\";\nconst regex = /\\d+\\\\path/;";
             var exactWire = V4Envelope(V4Call(arguments: new JObject { ["query"] = exactSource }));
@@ -437,8 +459,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.WriteFileToolId),
-                    "{\"message\":\"Создаю локальный HTML.\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
-                    "{\"message\":\"Локальный HTML готов.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Создаю локальный HTML.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
+                    "{\"message\":\"Локальный HTML готов.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -510,8 +532,8 @@ namespace RNAssistant.Harness
                 };
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю подходящий skill.\",\"tool_calls\":[{\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
-                    "{\"message\":\"Инструкции учтены.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Читаю подходящий skill.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
+                    "{\"message\":\"Инструкции учтены.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -720,8 +742,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    "{\"message\":\"Лист Report создан.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Добавляю лист.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
+                    "{\"message\":\"Лист Report создан.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -768,9 +790,9 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
-                    "{\"message\":\"Лист Report создан.\",\"tool_calls\":[],\"executionSummary\":{\"ExecutionHealth\":\"clean\",\"WriteOk\":1000}}",
-                    "{\"message\":\"Лист Report создан.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Добавляю лист.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
+                    "{\"message\":\"Лист Report создан.\",\"final\":true,\"tool_calls\":[],\"executionSummary\":{\"ExecutionHealth\":\"clean\",\"WriteOk\":1000}}",
+                    "{\"message\":\"Лист Report создан.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -791,7 +813,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!adapter.HasSheet("Report"), "the claimed sheet was not created");
                 AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "failed write is not retried");
                 AssertContains(FlattenSimple(requests.Last()), "\"status\":\"error\"", "the final model request saw the error");
-                AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v4");
+                AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v5");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "errors", 0, 1, 0);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after write error");
@@ -817,13 +839,14 @@ namespace RNAssistant.Harness
                     new JObject
                     {
                         ["message"] = "Обновляю модуль.",
+                        ["final"] = false,
                         ["tool_calls"] = new JArray(new JObject
                         {
                             ["name"] = "common.vba_write_module",
                             ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
                         })
                     }.ToString(Formatting.None),
-                    "{\"message\":\"Модуль Module1 обновлён.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Модуль Module1 обновлён.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -892,13 +915,14 @@ namespace RNAssistant.Harness
                     new JObject
                     {
                         ["message"] = "Update module.",
+                        ["final"] = false,
                         ["tool_calls"] = new JArray(new JObject
                         {
                             ["name"] = "common.vba_write_module",
                             ["arguments"] = new JObject { ["moduleName"] = "Module1", ["code"] = intended }
                         })
                     }.ToString(Formatting.None),
-                    "{\"message\":\"Done.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Done.\",\"final\":true,\"tool_calls\":[]}"
                 }));
                 var trace = new ModelTracePersistenceService(EventStore(store));
                 var requestCount = 0;
@@ -1041,7 +1065,7 @@ namespace RNAssistant.Harness
                     calls++;
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"Лист Report создан.\",\"tool_calls\":[]}"
+                        Content = "{\"message\":\"Лист Report создан.\",\"final\":true,\"tool_calls\":[]}"
                     });
                 };
                 var session = NewSession(adapter);
@@ -1082,8 +1106,8 @@ namespace RNAssistant.Harness
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю листы.\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Готово.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Читаю листы.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"message\":\"Готово.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
@@ -1143,7 +1167,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<LlmCompletionResult>(new[]
                 {
                     new LlmCompletionResult { Content = invalid, ReasoningContent = "INVALID_REASONING_SENTINEL" },
-                    new LlmCompletionResult { Content = "{\"message\":\"Не могу выполнить этот запрос.\",\"tool_calls\":[]}" }
+                    new LlmCompletionResult { Content = "{\"message\":\"Не могу выполнить этот запрос.\",\"final\":true,\"tool_calls\":[]}" }
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -1177,13 +1201,13 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                const string invalidPair = "{\"status\":\"in_progress\",\"message\":\"Проверяю листы...\",\"tool_calls\":[]}";
+                const string invalidPair = "{\"status\":\"in_progress\",\"message\":\"Проверяю листы...\",\"final\":true,\"tool_calls\":[]}";
                 var responses = new Queue<string>(new[]
                 {
                     invalidPair,
                     LoadToolSchemaResponse("excel.inspect"),
-                    "{\"message\":\"Проверяю листы.\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Список листов проверен.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Проверяю листы.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"message\":\"Список листов проверен.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -1224,6 +1248,7 @@ namespace RNAssistant.Harness
                                 Content = JsonConvert.SerializeObject(new
                                 {
                                     message = terminalCase,
+                                    final = true,
                                     tool_calls = new object[0]
                                 })
                             }));
@@ -1239,11 +1264,11 @@ namespace RNAssistant.Harness
                     AssertEqual(AgentResponseStatuses.Completed, terminalResult.ResponseStatus,
                         "runtime projection does not infer a status from wording");
                     AssertEqual(RunViewLifecycles.Completed, terminalResult.RunViewState.Lifecycle,
-                        "empty calls end the model loop");
+                        "final empty calls end the model loop");
                     AssertEqual(AgentResponseProtocol.CurrentVersion, terminalResult.ResponseProtocolVersion,
                         "final record carries the active protocol version");
                     AssertTrue(ConversationResponseHistoryReader.Read(terminalSession.Messages.Last()).Success,
-                        "actual final history is a valid v4 form even with empty or question-like text");
+                        "actual final history is a valid v5 form even with empty or question-like text");
                 }
 
                 var limitedSession = NewSession(adapter);
@@ -1253,7 +1278,7 @@ namespace RNAssistant.Harness
                     (settings, messages, options, stream, cancellationToken) => Task.FromResult(
                         new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Проверяю ресурсы.\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}}]}",
+                            Content = "{\"message\":\"Проверяю ресурсы.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}}]}",
                             PromptTokens = 5
                         }));
                 var limitedResult = limitedService.ExecuteAsync(
@@ -1272,6 +1297,43 @@ namespace RNAssistant.Harness
                     "runtime step limit is stored as a diagnostic outcome");
                 AssertEqual(5, limitedSession.Messages.Sum(message => message.PromptTokens ?? 0),
                     "runtime diagnostic does not duplicate prior model usage");
+            });
+        }
+
+        private static void SimpleAgentNoToolCheckpointContinues()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var responses = new Queue<string>(new[]
+                {
+                    "{\"message\":\"Составляю итоговый отчет.\",\"final\":false,\"tool_calls\":[]}",
+                    "{\"message\":\"Итог готов.\",\"final\":true,\"tool_calls\":[]}"
+                });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var session = NewSession(adapter);
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent,
+                    "Составь итог.", session, NewContext(adapter), new AppSettings(),
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
+                    null).GetAwaiter().GetResult();
+
+                AssertEqual(2, requests.Count, "non-final empty calls ask the model for one more response");
+                AssertContains(FlattenSimple(requests[1]), "Составляю итоговый отчет.",
+                    "checkpoint is accepted into the next model request");
+                var checkpoint = session.Messages.Single(message => message.ProtocolMessage &&
+                    message.ResponseStatus == AgentResponseStatuses.InProgress &&
+                    (message.Content ?? string.Empty).Contains("Составляю итоговый отчет."));
+                var parsed = ConversationResponseHistoryReader.Read(checkpoint);
+                AssertTrue(parsed.Success && !parsed.Response.Final && parsed.Response.ToolCalls.Count == 0,
+                    "checkpoint is valid v5 history but not terminal");
+                AssertEqual("Итог готов.", result.AssistantText, "final response owns the visible terminal answer");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle,
+                    "final=true empty calls complete the run");
             });
         }
 
@@ -1331,7 +1393,7 @@ namespace RNAssistant.Harness
                         }
                         : new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Ответ принят.\",\"tool_calls\":[]}",
+                            Content = "{\"message\":\"Ответ принят.\",\"final\":true,\"tool_calls\":[]}",
                             ReasoningContent = "ACCEPTED_REASONING"
                         });
                 };
@@ -1395,7 +1457,7 @@ namespace RNAssistant.Harness
                 {
                     request = messages.ToList();
                     requestOptions = options;
-                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Готово.\",\"tool_calls\":[]}" });
+                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Готово.\",\"final\":true,\"tool_calls\":[]}" });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var promptSettings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema };
@@ -1479,8 +1541,8 @@ namespace RNAssistant.Harness
                 const string userText = "List workbook sheets.";
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю листы.\",\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Листы прочитаны.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Читаю листы.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
+                    "{\"message\":\"Листы прочитаны.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var requestOptions = new List<LlmRequestOptions>();
@@ -1769,8 +1831,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.office_run_macro"),
-                    "{\"message\":\"Запускаю выбранный макрос.\",\"tool_calls\":[{\"name\":\"common.office_run_macro\",\"arguments\":{\"macroName\":\"Module1.MigrateApiKey\",\"arguments\":[\"value\",2,true]}}]}",
-                    "{\"message\":\"Макрос выполнен.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Запускаю выбранный макрос.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.office_run_macro\",\"arguments\":{\"macroName\":\"Module1.MigrateApiKey\",\"arguments\":[\"value\",2,true]}}]}",
+                    "{\"message\":\"Макрос выполнен.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 var requestOptions = new List<LlmRequestOptions>();
@@ -1821,12 +1883,12 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Создаю два независимых листа.\",\"tool_calls\":[" +
+                    "{\"message\":\"Создаю два независимых листа.\",\"final\":false,\"tool_calls\":[" +
                     "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}," +
                     "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
-                    "{\"message\":\"Создаю первый лист.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}]}",
-                    "{\"message\":\"Создаю второй лист.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
-                    "{\"message\":\"Оба листа созданы.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Создаю первый лист.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}]}",
+                    "{\"message\":\"Создаю второй лист.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
+                    "{\"message\":\"Оба листа созданы.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 IReadOnlyList<ChatMessage> secondTurn = null;
                 var progressActivities = new List<ChatActivity>();
@@ -1894,11 +1956,11 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Добавляю лист.\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
+                    "{\"message\":\"Добавляю лист.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\"}}]}",
                     LoadToolSchemaResponse("common.skills_upsert"),
-                    "{\"message\":\"Сохраняю skill.\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Все изменения применены.\",\"tool_calls\":[]}",
-                    "{\"message\":\"Обычный новый ответ.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Сохраняю skill.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    "{\"message\":\"Все изменения применены.\",\"final\":true,\"tool_calls\":[]}",
+                    "{\"message\":\"Обычный новый ответ.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() }));
@@ -1935,9 +1997,9 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.skills_upsert"),
-                    "{\"message\":\"Создаю skill.\",\"tool_calls\":[" +
+                    "{\"message\":\"Создаю skill.\",\"final\":false,\"tool_calls\":[" +
                     "{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Skill сохранён.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Skill сохранён.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -2030,12 +2092,12 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.vba_apply_patch"),
-                    "{\"message\":\"Обновляю VBA.\",\"tool_calls\":[{" +
+                    "{\"message\":\"Обновляю VBA.\",\"final\":false,\"tool_calls\":[{" +
                         "\"name\":\"common.vba_apply_patch\",\"arguments\":{" +
                         "\"moduleName\":\"Module1\",\"patch\":[{" +
                         "\"find\":\"\\\"old\\\"\"," +
                         "\"text\":\"\\\"new\\\"\"}]}}]}",
-                    "{\"message\":\"Изменение отклонено как устаревшее.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Изменение отклонено как устаревшее.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion =
@@ -2119,8 +2181,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.skills_upsert"),
-                    "{\"message\":\"Создаю skill.\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.failure_test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Skill уже существует; выберу другой id.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Создаю skill.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.failure_test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
+                    "{\"message\":\"Skill уже существует; выберу другой id.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -2168,7 +2230,7 @@ namespace RNAssistant.Harness
                 {
                     calls++;
                     if (calls == 1) return Task.FromResult(new LlmCompletionResult { Content =
-                        "{\"message\":\"Read twice\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}},{\"name\":\"common.resources_find\",\"arguments\":{}}]}" });
+                        "{\"message\":\"Read twice\",\"final\":false,\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}},{\"name\":\"common.resources_find\",\"arguments\":{}}]}" });
                     var accepted = messages.Where(message => message.Role == "assistant" &&
                         message.ToolName == ResourceToolCatalog.FindToolId && message.AcceptedCallOrigin != null).ToList();
                     AssertEqual(2, accepted.Count, "both identical read positions remain in history");
@@ -2187,7 +2249,7 @@ namespace RNAssistant.Harness
                     AssertEqual(string.Join(",", ids.SelectMany(id => new[] { "assistant:" + id, "tool:" + id })),
                         string.Join(",", exchange.Select(message => message.Role + ":" + message.ToolCallId)),
                         "native tool calls stay paired in both live and reloaded request history");
-                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Done\",\"tool_calls\":[]}" });
+                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Done\",\"final\":true,\"tool_calls\":[]}" });
                 });
                 var session = NewSession(adapter);
                 var settingsForRun = new AppSettings { ToolResultRole = ToolResultRoles.Tool };
@@ -2332,8 +2394,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Проверяю доступные ресурсы.\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}}]}",
-                    "{\"message\":\"Ресурсы доступны.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Проверяю доступные ресурсы.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}}]}",
+                    "{\"message\":\"Ресурсы доступны.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var captured = new List<IReadOnlyList<ChatMessage>>();
                 var capturedOptions = new List<LlmRequestOptions>();
@@ -2416,10 +2478,10 @@ namespace RNAssistant.Harness
                     session, "Reference note", "conversation").Items.Single().Target;
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю заметку.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
-                    "{\"message\":\"Первый ответ.\",\"tool_calls\":[]}",
-                    "{\"message\":\"Перечитываю заметку.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
-                    "{\"message\":\"Второй ответ.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Читаю заметку.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
+                    "{\"message\":\"Первый ответ.\",\"final\":true,\"tool_calls\":[]}",
+                    "{\"message\":\"Перечитываю заметку.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
+                    "{\"message\":\"Второй ответ.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var captured = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>

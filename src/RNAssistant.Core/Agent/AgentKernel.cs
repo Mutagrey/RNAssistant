@@ -11,6 +11,7 @@ namespace RNAssistant.Core.Agent
 {
     public sealed class AgentKernel
     {
+        private const int MaximumConsecutiveNoToolCheckpoints = 3;
         private readonly IModelProtocol _model;
         private readonly IToolRuntime _tools;
         private readonly IRunStore _store;
@@ -119,7 +120,16 @@ namespace RNAssistant.Core.Agent
                 await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
                     state.Summary(), stepId, response: response)).ConfigureAwait(false);
                 if (response.ToolCalls.Count == 0)
-                    return await FinishAsync(state, RunLifecycle.Completed, "model_loop_ended", response.Message).ConfigureAwait(false);
+                {
+                    if (response.Final)
+                        return await FinishAsync(state, RunLifecycle.Completed, "model_loop_ended", response.Message).ConfigureAwait(false);
+                    state.NoToolCheckpoints++;
+                    if (state.NoToolCheckpoints >= MaximumConsecutiveNoToolCheckpoints)
+                        return await FinishAsync(state, RunLifecycle.Failed, "model_loop_stalled",
+                            "Model returned repeated non-final responses without tool calls.").ConfigureAwait(false);
+                    continue;
+                }
+                state.NoToolCheckpoints = 0;
 
                 for (var index = 0; index < response.ToolCalls.Count; index++)
                 {
@@ -152,7 +162,7 @@ namespace RNAssistant.Core.Agent
                     throw new InvalidOperationException("Runtime call id allocation returned an invalid or duplicate identity.");
                 calls.Add(new ToolCall(id, draft.Name, draft.ArgumentsJson));
             }
-            return new AgentResponse(response.Message, calls);
+            return new AgentResponse(response.Message, calls, response.Final);
         }
 
         private ToolPolicySnapshot[] ValidateResponse(AgentResponse response)
@@ -307,6 +317,7 @@ namespace RNAssistant.Core.Agent
             internal int ToolSteps;
             internal long Revision;
             internal PendingConfirmation Pending;
+            internal int NoToolCheckpoints;
 
             internal State(AgentRunRequest request)
             {

@@ -21,7 +21,7 @@ owners или dependencies. Не читай оба документа автом
 | Область | Владелец текущего контракта |
 |---|---|
 | Model loop, modes, tool result/effect | [Conversation protocol](conversation-protocol.md) |
-| Wire JSON v4 | [Conversation response v4](protocols/CONVERSATION_RESPONSE_V4.md) |
+| Wire JSON v5 | [Conversation response v5](protocols/CONVERSATION_RESPONSE_V5.md) |
 | Resources, URI, providers, ingestion | [Resource Fabric](resource-fabric.md) |
 | Tool catalog, schemas, authoring | [Tool Library](tool-library.md) |
 | Skills | [Skill Library](skills.md) |

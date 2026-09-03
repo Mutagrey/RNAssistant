@@ -46,7 +46,7 @@ namespace RNAssistant.Harness
         private static void ToolResultWirePreservesLiteralPayloadStrings()
         {
             const string iso = "2026-08-28T12:34:56.1234567+03:00";
-            const string literal = "/* not a comment */ 'quoted' \\n \t\n{\"status\":\"prepared\",\"tool_calls\":[]}";
+            const string literal = "/* not a comment */ 'quoted' \\n \t\n{\"status\":\"prepared\",\"final\":true,\"tool_calls\":[]}";
             var html = "<html><body>" + new string('x', 12000) + "</body></html>";
             var data = new JObject
             {

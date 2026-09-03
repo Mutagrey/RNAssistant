@@ -143,7 +143,7 @@ namespace RNAssistant.Office.Services
                 {
                     Name = call.Name,
                     Arguments = JObject.FromObject(call.Arguments ?? new Dictionary<string, object>())
-                } });
+                } }, false);
             var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
             protocolMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             protocolMessage.ToolResultProtocolVersion = ToolResultWire.CurrentVersion;
@@ -153,6 +153,17 @@ namespace RNAssistant.Office.Services
             protocolMessage.ToolCallId = call.Id;
             protocolMessage.AcceptedCallOrigin = origin;
             protocolMessage.ToolName = call.Name;
+            return protocolMessage;
+        }
+
+        public static ChatMessage CreateNoToolCheckpointMessage(string message, RNAssistant.Core.Llm.LlmCompletionResult completion)
+        {
+            var protocolMessage = AgentTranscript.CreateAssistantMessage(
+                ModelProtocolWire.Write(message ?? string.Empty, new ConversationToolCall[0], false),
+                completion,
+                null,
+                AgentResponseStatuses.InProgress);
+            protocolMessage.ProtocolMessage = true;
             return protocolMessage;
         }
 

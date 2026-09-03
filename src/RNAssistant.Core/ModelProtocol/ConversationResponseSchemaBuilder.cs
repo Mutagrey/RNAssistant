@@ -9,7 +9,7 @@ namespace RNAssistant.Core.ModelProtocol
 {
     public static class ConversationResponseSchemaBuilder
     {
-        public const string SchemaName = "rnassistant_conversation_response_v4";
+        public const string SchemaName = "rnassistant_conversation_response_v5";
         public const int MaximumToolCalls = 32;
 
         public static string Build(IEnumerable<ToolCatalogEntry> callableTools)
@@ -37,12 +37,17 @@ namespace RNAssistant.Core.ModelProtocol
             return new JObject
             {
                 ["type"] = "object",
-                ["description"] = "V4: only message/tool_calls and name/arguments. Runtime owns IDs, lifecycle and effects. " +
+                ["description"] = "V5: only message/final/tool_calls and name/arguments. Runtime owns IDs, lifecycle and effects. " +
                     "Writes, external, confirmation-required and unclassified calls are singleton; batch only independent reads. " +
-                    "Before [], check every requested deliverable against tool results; intermediate success is not completion.",
+                    "final=true means the user-facing answer is ready; it is not execution evidence.",
                 ["properties"] = new JObject
                 {
                     ["message"] = new JObject { ["type"] = "string", ["description"] = "User-facing message; its wording does not determine execution success." },
+                    ["final"] = new JObject
+                    {
+                        ["type"] = "boolean",
+                        ["description"] = "true only when message is the final answer and tool_calls is empty. false for tool turns and brief no-tool checkpoints."
+                    },
                     ["tool_calls"] = new JObject
                     {
                         ["type"] = "array",
@@ -52,10 +57,10 @@ namespace RNAssistant.Core.ModelProtocol
                             ["required"] = new JArray(), ["additionalProperties"] = false
                         },
                         ["maxItems"] = options.Count > 0 ? MaximumToolCalls : 0,
-                        ["description"] = "Calls to execute now. Use [] only when all requested deliverables are complete or blocked; [] proves no effect."
+                        ["description"] = "Calls to execute now. [] ends the loop only with final=true; with final=false it is a bounded checkpoint and proves no effect."
                     }
                 },
-                ["required"] = new JArray("message", "tool_calls"),
+                ["required"] = new JArray("message", "final", "tool_calls"),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
         }

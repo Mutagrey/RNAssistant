@@ -44,8 +44,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("outlook.create_draft"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"outlook.create_draft\",\"arguments\":{\"kind\":\"new\",\"body\":\"Replay\"}}]}",
-                    "{\"message\":\"Everything done\",\"tool_calls\":[]}"
+                    "{\"message\":\"Write\",\"final\":false,\"tool_calls\":[{\"name\":\"outlook.create_draft\",\"arguments\":{\"kind\":\"new\",\"body\":\"Replay\"}}]}",
+                    "{\"message\":\"Everything done\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var modelCalls = 0;
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
@@ -103,8 +103,8 @@ namespace RNAssistant.Harness
                     ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.None));
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Find chat resources.\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{\"scope\":\"conversation\"}}]}",
-                    "{\"message\":\"Resources listed.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Find chat resources.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{\"scope\":\"conversation\"}}]}",
+                    "{\"message\":\"Resources listed.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var modelCalls = 0;
                 var completedSaves = 0;
@@ -270,8 +270,8 @@ namespace RNAssistant.Harness
             return new Queue<string>(new[]
             {
                 LoadToolSchemaResponse("common.skills_upsert"),
-                "{\"message\":\"Create skill\",\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.replay_test\",\"description\":\"Replay test\",\"bodyMarkdown\":\"# Replay\"}}]}",
-                "{\"message\":\"Done\",\"tool_calls\":[]}"
+                "{\"message\":\"Create skill\",\"final\":false,\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.replay_test\",\"description\":\"Replay test\",\"bodyMarkdown\":\"# Replay\"}}]}",
+                "{\"message\":\"Done\",\"final\":true,\"tool_calls\":[]}"
             });
         }
 
@@ -321,7 +321,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}"
+                    "{\"message\":\"Write\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}"
                 });
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
@@ -372,8 +372,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Write\",\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}",
-                    "{\"message\":\"Done\",\"tool_calls\":[]}"
+                    "{\"message\":\"Write\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Once\"}}]}",
+                    "{\"message\":\"Done\",\"final\":true,\"tool_calls\":[]}"
                 });
                 Action injectConcurrentCommit = () =>
                 {
@@ -900,7 +900,7 @@ namespace RNAssistant.Harness
                     options.TraceSink = record => { throw new InvalidOperationException("optional acceptance trace failed"); };
                     return Task.FromResult(new LlmCompletionResult
                     {
-                        Content = "{\"message\":\"Answer.\",\"tool_calls\":[]}"
+                        Content = "{\"message\":\"Answer.\",\"final\":true,\"tool_calls\":[]}"
                     });
                 };
                 var final = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(

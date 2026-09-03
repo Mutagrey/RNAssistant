@@ -45,17 +45,23 @@ namespace RNAssistant.Core.ModelProtocol
                 return ConversationResponseParseResult.Fail("Conversation response is invalid JSON: " + ex.Message);
             }
 
-            var unsupported = root.Properties().FirstOrDefault(property => property.Name != "message" && property.Name != "tool_calls");
+            var unsupported = root.Properties().FirstOrDefault(property =>
+                property.Name != "message" && property.Name != "final" && property.Name != "tool_calls");
             if (unsupported != null)
                 return ConversationResponseParseResult.Fail("Conversation response contains unsupported root field: " + unsupported.Name + ".");
             if (root["message"] == null || root["message"].Type != JTokenType.String)
                 return ConversationResponseParseResult.Fail("Conversation response requires a string message field.");
+            if (root["final"] == null || root["final"].Type != JTokenType.Boolean)
+                return ConversationResponseParseResult.Fail("Conversation response requires a boolean final field.");
             var calls = root["tool_calls"] as JArray;
             if (calls == null)
                 return ConversationResponseParseResult.Fail("Conversation response requires a tool_calls array.");
             if (calls.Count > ConversationResponseSchemaBuilder.MaximumToolCalls)
                 return ConversationResponseParseResult.Fail("tool_calls exceeds the maximum of " +
                     ConversationResponseSchemaBuilder.MaximumToolCalls + " calls per response.");
+            var final = (bool)root["final"];
+            if (final && calls.Count > 0)
+                return ConversationResponseParseResult.Fail("final=true is valid only with an empty tool_calls array.");
 
             var parsedCalls = new List<ConversationToolCall>();
             foreach (var token in calls)
@@ -72,7 +78,7 @@ namespace RNAssistant.Core.ModelProtocol
                 call.Property("arguments").Value = JValue.CreateNull();
                 parsedCalls.Add(new ConversationToolCall { Name = name, Arguments = arguments });
             }
-            return ConversationResponseParseResult.Ok(new ConversationResponse((string)root["message"], parsedCalls));
+            return ConversationResponseParseResult.Ok(new ConversationResponse((string)root["message"], parsedCalls, final));
         }
 
         // Json.NET also accepts JavaScript syntax. Reject those extensions before its

@@ -31,7 +31,7 @@ namespace RNAssistant.Core.ModelProtocol
         {
             if (message == null || !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
                 message.Activity != null || message.ResponseProtocolVersion != ConversationResponse.ProtocolVersion)
-                return ConversationHistoryReadResult.Fail("History record is not an identified v4 assistant response.");
+                return ConversationHistoryReadResult.Fail("History record is not an identified v5 assistant response.");
 
             var nativeCalls = message.ToolCalls;
             if (nativeCalls != null && nativeCalls.Count > 0)
@@ -43,6 +43,7 @@ namespace RNAssistant.Core.ModelProtocol
                 var envelope = new JObject
                 {
                     ["message"] = message.Content ?? string.Empty,
+                    ["final"] = false,
                     ["tool_calls"] = new JArray(new JObject
                     {
                         ["name"] = message.ToolName,
@@ -66,7 +67,7 @@ namespace RNAssistant.Core.ModelProtocol
             if (!string.IsNullOrWhiteSpace(message.ToolCallId) || !string.IsNullOrWhiteSpace(message.ToolName) ||
                 message.AcceptedCallOrigin != null)
                 return ConversationHistoryReadResult.Fail("Plain assistant history has unexpected tool-call metadata.");
-            return ConversationHistoryReadResult.Ok(new AgentResponse(message.Content ?? string.Empty, new ToolCall[0]));
+            return ConversationHistoryReadResult.Ok(new AgentResponse(message.Content ?? string.Empty, new ToolCall[0], true));
         }
 
         private static ConversationHistoryReadResult FromMetadata(ChatMessage message, ConversationResponse response)
@@ -75,7 +76,7 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 if (!string.IsNullOrWhiteSpace(message.ToolCallId) || !string.IsNullOrWhiteSpace(message.ToolName) || message.AcceptedCallOrigin != null)
                     return ConversationHistoryReadResult.Fail("Final history has unexpected tool-call metadata.");
-                return ConversationHistoryReadResult.Ok(new AgentResponse(response.Message, new ToolCall[0]));
+                return ConversationHistoryReadResult.Ok(new AgentResponse(response.Message, new ToolCall[0], response.Final));
             }
             if (response.ToolCalls.Count != 1 || string.IsNullOrWhiteSpace(message.ToolCallId) ||
                 string.IsNullOrWhiteSpace(message.ToolName) || message.AcceptedCallOrigin == null)
@@ -86,7 +87,7 @@ namespace RNAssistant.Core.ModelProtocol
             return ConversationHistoryReadResult.Ok(new AgentResponse(response.Message, new[]
             {
                 new ToolCall(message.ToolCallId, call.Name, call.Arguments.ToString(Formatting.None))
-            }));
+            }, response.Final));
         }
     }
 }

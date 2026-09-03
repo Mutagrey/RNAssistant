@@ -91,7 +91,7 @@ Milestone WQ; local admission tests do not close them.
 
 There are three persisted modes and one structured execution service.
 
-- `Chat` uses `ConversationRunService` with `ChatSystemPrompt`, the shared conversation-response v4 `message + tool_calls[]` JSON contract, and only the two read-only `common.resources_find/read` tools. Runtime policy removes skills, Office tools, local mutations, and confirmation regardless of prompt wording.
+- `Chat` uses `ConversationRunService` with `ChatSystemPrompt`, the shared conversation-response v5 `message + final + tool_calls[]` JSON contract, and only the two read-only `common.resources_find/read` tools. Runtime policy removes skills, Office tools, local mutations, and confirmation regardless of prompt wording.
 - `Plan` uses the same loop with `PlanSystemPrompt`, read-only discovery, skills, typed user questions, a single revisioned Markdown plan document, and an optional temporary Task List. Runtime policy removes Office/shared mutations and confirmation. A ready plan is exact-revision validated internally, then handed to Agent as a semantic find/read instruction.
 - `Agent` uses the same service and transcript loop with progressive tool discovery, enabled skill metadata, confirmation, and policy-approved mutations. The full mode/session-filtered catalog stays local as execution authority; it is not injected into every prompt.
 
@@ -144,9 +144,9 @@ confirmation/replay retain IDs. ModelProtocol receives only the conservative
 batch-safety context, not a model-ID registry. Full-history and confirmation preflight precede
 controller preparation, manual compaction and pending consumption; incomplete
 CallContext cannot trigger a raw request or format repair. Saved prompts retain
-their text, while schema marker 13 requires explicit review of prior instructions.
-No old chat is converted/truncated automatically. See the [v4 contract and
-qualification gates](protocols/CONVERSATION_RESPONSE_V4.md#remaining-cutover-gates).
+their text, while schema marker 26 requires explicit review of prior instructions.
+No old chat is converted/truncated automatically. See the [v5 contract and
+qualification gates](protocols/CONVERSATION_RESPONSE_V5.md#remaining-gates).
 
 These values are internal correlation keys, not domain objects or another state
 machine:
@@ -255,7 +255,7 @@ See [conversation-protocol.md](conversation-protocol.md).
 ## Main code zones
 
 - `src/RNAssistant.Core/Llm`: HTTP transport, message construction, response/reasoning parsing, budgets.
-- `src/RNAssistant.Core/ModelProtocol/ConversationResponseParser.cs`: strict conversation-response v4 parser; it validates model drafts but neither assigns runtime call IDs nor executes tools.
+- `src/RNAssistant.Core/ModelProtocol/ConversationResponseParser.cs`: strict conversation-response v5 parser; it validates model drafts but neither assigns runtime call IDs nor executes tools.
 - `src/RNAssistant.Core/Tools/VbaPatchEngine.cs` and `VbaTextCanonicalizer.cs`: pure VBA text operations/representations, shared by parser/storage and Office consumers. JSON/tool mapping, COM, guards and journal orchestration stay outside; Phase 6A preserves algorithms and does not qualify production binding.
 - `src/RNAssistant.Office/AssistantRuntime.cs`: public application/UI lifetime façade for controller and pane construction/disposal; document/tool coordination remains in `Runtime`.
 - `src/RNAssistant.Office/Vba/VbaReader.cs`: единственный host-neutral owner internal VBA list/module command construction, deterministic name fallback and typed snapshot validation. Callers already hold the `HostRuntime` document gate; reader does not own target binding, mutation dispatch, journal persistence or Tool Result v1. Dynamic host COM/VBE now lives only in `src/RNAssistant.OfficeHosts/Vba/VbaProjectSupport*.cs`; Office consumes no host helper or duplicate backend.

@@ -25,13 +25,17 @@ namespace RNAssistant.Core.Agent
     public sealed class AgentResponseDraft
     {
         public string Message { get; private set; }
+        public bool Final { get; private set; }
         public IReadOnlyList<ToolCallDraft> ToolCalls { get; private set; }
 
-        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls)
+        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls, bool? final = null)
         {
             var snapshot = (calls ?? throw new ArgumentNullException(nameof(calls))).ToArray();
             if (snapshot.Any(call => call == null)) throw new ArgumentException("Calls cannot contain null.", nameof(calls));
+            var isFinal = final ?? snapshot.Length == 0;
+            if (isFinal && snapshot.Length > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
             Message = message ?? string.Empty;
+            Final = isFinal;
             ToolCalls = Array.AsReadOnly(snapshot);
         }
     }
@@ -57,13 +61,17 @@ namespace RNAssistant.Core.Agent
     public sealed class AgentResponse
     {
         public string Message { get; private set; }
+        public bool Final { get; private set; }
         public IReadOnlyList<ToolCall> ToolCalls { get; private set; }
 
-        public AgentResponse(string message, IEnumerable<ToolCall> calls)
+        public AgentResponse(string message, IEnumerable<ToolCall> calls, bool? final = null)
         {
             var snapshot = (calls ?? throw new ArgumentNullException(nameof(calls))).ToArray();
             if (snapshot.Any(call => call == null)) throw new ArgumentException("Calls cannot contain null.", nameof(calls));
+            var isFinal = final ?? snapshot.Length == 0;
+            if (isFinal && snapshot.Length > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
             Message = message ?? string.Empty;
+            Final = isFinal;
             ToolCalls = Array.AsReadOnly(snapshot);
         }
     }

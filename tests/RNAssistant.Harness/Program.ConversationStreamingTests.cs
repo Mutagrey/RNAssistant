@@ -42,7 +42,7 @@ namespace RNAssistant.Harness
                     "<think>" + thinking,
                     "</think>{\"mes",
                     "sage\":\"Привет\\nмир \\uD83D",
-                    "\\uDE00\",\"tool_calls\":[]}"
+                    "\\uDE00\",\"final\":true,\"tool_calls\":[]}"
                 };
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>
                 {
@@ -97,7 +97,7 @@ namespace RNAssistant.Harness
                     BuildDeltaSse("reasoning_content", "Размышление "),
                     BuildDeltaSse("reasoning", "продолжается."),
                     BuildDeltaSse("content", "{\"message\":\"Ответ"),
-                    BuildDeltaSse("content", ".\",\"tool_calls\":[]}"),
+                    BuildDeltaSse("content", ".\",\"final\":true,\"tool_calls\":[]}"),
                     "data: [DONE]\n\n"
                 });
                 LlmCompletionDelegate completion = (settings, messages, options, streamProgress, cancellationToken) =>
@@ -135,8 +135,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"status\":\"in_progress\",\"message\":\"Жил-был потоковый черновик.\",\"tool_calls\":[]}",
-                    "{\"message\":\"Исправлено.\",\"tool_calls\":[]}"
+                    "{\"status\":\"in_progress\",\"message\":\"Жил-был потоковый черновик.\",\"final\":true,\"tool_calls\":[]}",
+                    "{\"message\":\"Исправлено.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var thoughts = new Queue<string>(new[] { "Первая мысль.", "Исправленная мысль." });
                 var calls = 0;

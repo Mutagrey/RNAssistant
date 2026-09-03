@@ -143,7 +143,7 @@ namespace RNAssistant.Office.Services
             var expected = ModelProtocolWire.Parse(sentinel, tools, tools, context);
             if (!expected.Success) throw new InvalidOperationException("Invalid local compatibility sentinel: " + expected.Error);
             // Compare validated responses, not DTO serialization as a wire contract.
-            // Exact message/calls must match; the v4 parser rejects additional fields.
+            // Exact message/calls must match; the active parser rejects additional fields.
             return JToken.DeepEquals(JToken.FromObject(actual.Response), JToken.FromObject(expected.Response))
                 ? null : "Endpoint changed the required compatibility sentinel.";
         }

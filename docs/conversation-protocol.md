@@ -6,7 +6,12 @@ RNAssistant has three explicit modes and one `Core/Agent/AgentKernel` loop, invo
 - `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, exact native `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_save/restore/delete`, and an optional checklist through `common.task_list_set`. The question handler returns typed `AwaitingUser`; Plan and Task List mutations carry source-owned verified-write evidence. Message prose cannot pause a run. Office/shared mutations and confirmation are unavailable by runtime policy.
 - `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
-All modes return conversation-response v4: only `message` (string) and `tool_calls` (array); calls contain `name` and `arguments`, never a model-owned ID. The shared ModelProtocol boundary owns strict parsing/schema, bounded repair and provider compatibility; the kernel receives one validated draft, separate provider-native refusal, or typed failure. Model wording is never execution evidence.
+All modes return conversation-response v5: `message` (string), `final` (boolean)
+and `tool_calls` (array); calls contain `name` and `arguments`, never a
+model-owned ID. The shared ModelProtocol boundary owns strict parsing/schema,
+bounded repair and provider compatibility; the kernel receives one validated
+draft, separate provider-native refusal, or typed failure. Model wording and
+`final` are never execution evidence.
 
 Agent readiness precedes any domain read or mutation. The model first maps explicit deliverables,
 required source/current-artifact inspection, dependency order, applicable catalog skills
@@ -18,7 +23,12 @@ reconcile every deliverable and Task List step with result evidence. Validation/
 errors cannot be converted into success prose or justify silently replacing a richer
 artifact with a simplified placeholder.
 
-R29 switches client, prompts, schema, probes and accepted history together from v3 to v4. The model-ID parser/context path is removed; only the kernel creates accepted IDs. Full-history/context preflight rejects incompatible chats before preparation or confirmation; no historical migration or dual-write is performed. See the [canonical v4 contract](protocols/CONVERSATION_RESPONSE_V4.md).
+R29 switched client, prompts, schema, probes and accepted history together from v3
+to v4 and removed the model-ID parser/context path; only the kernel creates
+accepted IDs. R72 switches the active response intent contract from v4 to v5 by
+adding required `final`. Full-history/context preflight rejects incompatible
+chats before preparation or confirmation; no historical migration or dual-write is
+performed. See the [canonical v5 contract](protocols/CONVERSATION_RESPONSE_V5.md).
 
 ## Conversation context
 
@@ -61,7 +71,8 @@ analysis/compaction, and before confirmation consumes pending state. The neutral
 loop also guards direct entry/continuation before materialization. A mismatch is
 an actionable configuration error, not a model response to repair. Fixed endpoint
 probes remain available. This does not validate the user's instruction semantics;
-the active strict response parser remains authoritative. See [prompt review](protocols/CONVERSATION_RESPONSE_V4.md#saved-prompt-review).
+the active strict response parser remains authoritative. See
+[prompt review](protocols/CONVERSATION_RESPONSE_V5.md#history-and-prompts).
 
 Agent bootstrap schemas are `common.resources_find/read` and `common.capabilities_search/read`. The final R61 Excel Agent core adds the exact 15 built-in `excel.*` schemas plus routine VBA editing intents `common.vba_write_module` and `common.vba_apply_patch` (21 schemas total). Word and PowerPoint add the same two VBA editing schemas when present; their host tools remain optional. `common.vba_rename_module`, `common.vba_restore_backup`, `common.vba_delete_module` and `common.office_run_macro` require exact capability admission because they represent explicit identity, rollback, destructive or arbitrary-execution intent. Outlook Agent and other hosts keep only bootstrap unless an optional schema is admitted. Chat keeps only the two read-only resource schemas, while Plan keeps the four bootstrap schemas in core. These finite exact-ID profiles are intersected with the filtered run catalog. `RUNTIME_CONTEXT.capabilities.items` exposes the complete compact schema-free index of exact public runnable tool and enabled skill ids; it carries no catalog/package/descriptor revision. Already callable tools use `schemaLoaded:true`; unloaded tools and skills retain bounded selection metadata.
 
@@ -77,7 +88,7 @@ Format repair explicitly maps `$ contains unsupported property arguments` to a
 removed wrapper, moving declared fields up first only when necessary, and forbids
 repeating the rejected object unchanged.
 
-A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Successful resource/capability evidence is never replaced by a successful transport preview: the complete resource representation or capability body/chunk must fit together with request options and both reserves. Otherwise the projection returns explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 introduced readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion. Schema 24 made that contract an explicit Understand → Prepare → Inspect → Execute → Verify → Finish workflow and assigned non-overlapping authority: system prompt owns universal lifecycle, skill bodies own domain workflow/quality, and current tool descriptions/schemas own exact calls, arguments and evidence. Current schema 25 strengthens the finish gate: an open active Task List is unfinished work unless the final message explicitly reports why it could not be closed. Schema 25 also documents HTML table binding row-label aliases and visible render evidence before claiming refreshed data reached a dashboard. Schema 24 and any other older marker preserve stored text and require explicit review/reset before Agent/Plan execution.
+A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Successful resource/capability evidence is never replaced by a successful transport preview: the complete resource representation or capability body/chunk must fit together with request options and both reserves. Otherwise the projection returns explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 introduced readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion. Schema 24 made that contract an explicit Understand → Prepare → Inspect → Execute → Verify → Finish workflow and assigned non-overlapping authority: system prompt owns universal lifecycle, skill bodies own domain workflow/quality, and current tool descriptions/schemas own exact calls, arguments and evidence. Schema 25 strengthens the finish gate: an open active Task List is unfinished work unless the final message explicitly reports why it could not be closed, and documents HTML table binding row-label aliases plus visible render evidence before claiming refreshed data reached a dashboard. Current schema 26 adds the explicit v5 `final` response intent: only `final=true` with empty `tool_calls` finishes the model loop, while `final=false` with empty calls is a bounded checkpoint. Schema 25 and any other older marker preserve stored text and require explicit review/reset before Agent/Plan execution.
 
 Planning and execution tracking are separate. Exact native `common.plan_doc_save` accepts only the complete title/Markdown/status intent; runtime creates the active plan when absent or binds the exact active head and appends a guarded linear revision. `common.plan_doc_restore` accepts one user-visible version, while runtime resolves its exact source and current guard. `common.plan_doc_delete` has no arguments and retains the explicit-request guard plus removal tombstone semantics. `RUNTIME_CONTEXT.active_plan` exposes only current readable metadata, while the body is found and read through the semantic resource pair. `common.questions_ask` accepts prompt/options without question or option ids; runtime generates UI-only ids, and submitted answers return question text plus selected labels/free text. `common.task_list_set` has small typed `save` and `close` branches; runtime owns active-list and stable step ids while the model supplies the complete goal/ordered step state or terminal outcome. Model Tool Results omit all these internal identities and guards. A ready-plan handoff revalidates the exact selected revision internally, switches to Agent, and submits a semantic instruction to find/read the active plan; no URI enters the model request.
 
@@ -180,6 +191,7 @@ Tool call:
 ```json
 {
   "message": "Читаю диапазон.",
+  "final": false,
   "tool_calls": [
     {
       "name": "excel.read_range",
@@ -189,16 +201,27 @@ Tool call:
 }
 ```
 
+No-tool checkpoint:
+
+```json
+{
+  "message": "Составляю итог.",
+  "final": false,
+  "tool_calls": []
+}
+```
+
 Final answer:
 
 ```json
 {
   "message": "Готово.",
+  "final": true,
   "tool_calls": []
 }
 ```
 
-The v4 parser rejects every extra root/call field in both response modes. Each of at most 32 calls contains only an exact callable `name` and object `arguments`; `id` is forbidden. Duplicate JSON/argument names and unsupported JSON extensions are rejected. Rejected attempts execute nothing. The string `message` may be empty; text and punctuation never classify lifecycle or effects.
+The v5 parser rejects every extra root/call field in every response mode. Each of at most 32 calls contains only an exact callable `name` and object `arguments`; `id` is forbidden. Duplicate JSON/argument names and unsupported JSON extensions are rejected. Rejected attempts execute nothing. The string `message` may be empty; text, punctuation and `final` never classify effects.
 
 After whole-response validation, `AgentKernel` converts ID-less `ToolCallDraft` records to accepted `ToolCall` records. It allocates IDs once, before accepted persistence, confirmation and dispatch; IDs remain unique across the accepted user run. An allocator exception, invalid ID or collision fails before acceptance without asking the model to regenerate content. Identical calls still represent separate accepted positions; IDs do not authorize automatic retries or deduplicate effects.
 
@@ -256,8 +279,10 @@ history. A missing/incomplete snapshot fails with typed
 checks run before send/edit/retry preparation and manual compaction; confirmation
 also validates the accepted-turn seed before consuming pending state or executing
 the tool. Incompatible/unmarked history requires an explicit new chat or reset,
-without automatic truncation, conversion or deletion. The v4 parser enforces ID-less shape and singleton rules on every attempt; the kernel owns ID allocation. See the canonical
-[preflight and remaining gates](protocols/CONVERSATION_RESPONSE_V4.md#history-and-context-preflight).
+without automatic truncation, conversion or deletion. The v5 parser enforces
+ID-less shape, explicit final intent and singleton rules on every attempt; the
+kernel owns ID allocation. See the canonical
+[preflight and remaining gates](protocols/CONVERSATION_RESPONSE_V5.md#remaining-gates).
 
 The loop owns step ids, tool execution, summaries and presentation timing.
 `ConversationModelSession` appends accepted model messages; `AgentTranscript`
@@ -325,7 +350,7 @@ See [ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate
 - `user` (default) / `developer`: result JSON follows the `TOOL_RESULT:` prefix;
 - `tool`: the same raw JSON follows a matching `assistant.tool_calls` entry;
   that accepted-history entry carries the exact public tool id and only the
-  schema-valid semantic arguments accepted from conversation-response v4. RNAssistant
+  schema-valid semantic arguments accepted from conversation-response v5. RNAssistant
   does not advertise a second native function catalog. The result message contains
   exactly `role`, `tool_call_id` and `content`, with no message-level `name`; the
   same public id remains inside Tool Result v1 and local replay metadata. Stored
@@ -361,7 +386,7 @@ markers, roles, runtime ID/name pairing and one present result per accepted call
 within its user run, including suppressed/compacted history. Old result envelopes
 and old pending calls require an explicit new chat/reset before preparation or
 confirmation; no conversion, repair, fallback or automatic deletion is performed.
-Plain current-v4 history without tools can continue. Fork rebasing covers all three
+Plain current-v5 history without tools can continue. Fork rebasing covers all three
 roles without changing runtime IDs or resource revision; it rewrites the resource
 URI into the new chat scope. Missing terminal results
 alone do not invent a failure: in-flight calls and typed confirmation/user-input
@@ -383,7 +408,7 @@ optional projection; projection failure cannot erase a known effect or authorize
 R61/11O4 splits that family into exact core `common.skills_upsert/delete` and
 reference `common.skills_reference_upsert/delete` intents; mixed core/reference
 arguments are not replayable. Prompt schema 21 was that authoring boundary; current
-prompt schema is 25. Existing custom text and older markers are preserved until
+prompt schema is 26. Existing custom text and older markers are preserved until
 explicit review/reset. Built-in prompt authoring requires only model call
 name/arguments and assigns IDs to runtime (R31); matching `status=ok` alone does not
 prove that a document changed.
@@ -407,11 +432,14 @@ Phase 1B left the v2 response, retry limits and outcome behavior unchanged. See 
 `Core/Agent/AgentKernel` accepts generic messages through `IModelProtocol.SendAsync`.
 It does not own prompt composition, compaction, callable ToolPack/capability lifecycle, media or provider
 metadata. The materialized boundary above remains the current endpoint owner;
-its rename does not change the active v4 wire or retry behavior.
+its rename does not change the active v5 wire or retry behavior.
 
-`RunSummary` has independent lifecycle and execution health. Empty calls end the
-loop (`completed`), without certifying effects. Health comes only from immutable
-execution records: unknown write/external effect dominates errors, then clean.
+`RunSummary` has independent lifecycle and execution health. Only `final=true`
+with empty calls ends the loop (`completed`), without certifying effects.
+`final=false` with empty calls is accepted as a bounded no-tool checkpoint; three
+consecutive checkpoints fail as `model_loop_stalled`. Health comes only from
+immutable execution records: unknown write/external effect dominates errors, then
+clean.
 Narrative is preserved but cannot set either axis. Typed model failures end the
 invocation without fabricated tool errors; native provider refusal is locally
 classified as `failed / provider_refused`.

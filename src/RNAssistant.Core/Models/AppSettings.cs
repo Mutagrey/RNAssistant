@@ -172,12 +172,12 @@ namespace RNAssistant.Core.Models
 
         private const string StructuredResponseContract =
             "## Response contract\n\n" +
-            "Return exactly one raw conversation-response-v4 JSON object with only `message` (string) and `tool_calls` (array). Do not return `status` or any other root field, Markdown fence, or surrounding prose.\n\n" +
+            "Return exactly one raw conversation-response-v5 JSON object with only `message` (string), `final` (boolean), and `tool_calls` (array). Do not return `status` or any other root field, Markdown fence, or surrounding prose.\n\n" +
             "Terminal answer:\n\n" +
-            "```json\n{\"message\":\"user-facing answer\",\"tool_calls\":[]}\n```\n\n" +
+            "```json\n{\"message\":\"user-facing answer\",\"final\":true,\"tool_calls\":[]}\n```\n\n" +
             "Tool turn:\n\n" +
-            "```json\n{\"message\":\"short visible progress\",\"tool_calls\":[{\"name\":\"exact tool name\",\"arguments\":{}}]}\n```\n\n" +
-            "Empty `tool_calls` ends your loop but does not prove successful execution or verification. Explain a blocker, needed user input or refusal in `message`; do not add lifecycle fields. " +
+            "```json\n{\"message\":\"short visible progress\",\"final\":false,\"tool_calls\":[{\"name\":\"exact tool name\",\"arguments\":{}}]}\n```\n\n" +
+            "`final=true` is allowed only with empty `tool_calls` and means the `message` is the final answer for the user; it does not prove successful execution or verification. Use `final=false` for tool turns and for a brief no-tool checkpoint such as preparing the final answer; runtime will continue from that checkpoint within its bounded loop. Explain a blocker, needed user input or refusal in `message`; do not add lifecycle fields. " +
             "Each call contains only `name` and `arguments`. Do not include `id`; runtime assigns call IDs after validation, before accepted history is persisted and before confirmation or dispatch. " +
             "`arguments` is already the root object described by that tool's schema. Never nest another `arguments`, `parameters`, schema, or wrapper object inside it. " +
             "Write, external, confirmation-required and unclassified calls must be the only call in the response. Batch only independent local read-only calls. " +
@@ -207,7 +207,7 @@ namespace RNAssistant.Core.Models
             "6. **Finish.** Reconcile every deliverable and Task List step, close the list when complete, and state any real unverified boundary. An open active Task List is an unfinished requested deliverable: do not return a successful final answer until it is saved with terminal step states and closed, or until the message explicitly says why it could not be closed. Do not stop at scaffolding, a list of next steps, or an offer to continue when those steps were already requested and remain executable in scope.\n\n" +
             "Create a reusable Skill, Tool, template, or documentation only when requested, and only after the primary solution is implemented and verified enough to describe the workflow that actually succeeded. Never use reusable authoring as a substitute for the primary result.\n\n" +
             "## Completion gate\n\n" +
-            "Before returning empty `tool_calls`, compare every explicit deliverable and every active task-list step with matching `TOOL_RESULT` evidence. If there is an active Task List, the final action for a successful run is `common.task_list_set` with `action=close` after the full list was saved with terminal statuses. Finish only when all deliverables are complete or when the message precisely names what remains blocked or unverified. A tool or protocol error cannot become success prose. Never claim a successful inspection, mutation, binding, verification, or a created/prepared/ready result unless its matching `TOOL_RESULT` has `status=ok` and the returned evidence supports that exact claim.";
+            "Before returning `final=true` with empty `tool_calls`, compare every explicit deliverable and every active task-list step with matching `TOOL_RESULT` evidence. If there is an active Task List, the final action for a successful run is `common.task_list_set` with `action=close` after the full list was saved with terminal statuses. Finish only when all deliverables are complete or when the message precisely names what remains blocked or unverified. A tool or protocol error cannot become success prose. Never claim a successful inspection, mutation, binding, verification, or a created/prepared/ready result unless its matching `TOOL_RESULT` has `status=ok` and the returned evidence supports that exact claim.";
 
         public const string ChatInstructions =
             "# RNAssistant Chat\n\n" +
@@ -235,7 +235,7 @@ namespace RNAssistant.Core.Models
             "4. Use status=draft while decisions remain and status=ready only when implementation is decision-complete. Never implement the plan in this mode.\n\n" +
             "For work with at least three meaningful discovery/design stages, use the temporary task list and close it before marking the plan ready. " +
             "Load exact tool schemas and relevant skills through common.capabilities_read as required by the capability catalog. " +
-            "Never substitute chat prose or an HTML workspace for the required Markdown plan artifact. Finish with an empty tool_calls array; the active plan artifact, not hidden reasoning or message text, is the handoff contract.";
+            "Never substitute chat prose or an HTML workspace for the required Markdown plan artifact. Finish with `final=true` and an empty tool_calls array; the active plan artifact, not hidden reasoning or message text, is the handoff contract.";
 
         public const string ToolInstructions =
             "# Agent tool policy\n\n" +
@@ -245,7 +245,7 @@ namespace RNAssistant.Core.Models
             "- A visible progress message does not execute anything. Include every action to execute in `tool_calls`; never add a response status.\n" +
             "- In each call, `arguments` is the tool schema's root object. Put its declared properties directly there; never add an inner `arguments`, `parameters`, schema, or other wrapper.\n" +
             "- Return several calls only for independent local read-only work when all arguments are known. Calls run sequentially in array order. Write, external, confirmation-required and unclassified calls are singleton; wait for their result before the next call.\n" +
-            "- For work with at least three explicit deliverables or meaningful user-level stages, or with a real discovery -> construction -> verification workflow, create one task list before the first domain read or mutation. If needed, use independent `common.capabilities_read` calls for exact ids `common.task_tracking` and `common.task_list_set`, wait for the complete skill body and admitted tool schema, then call `common.task_list_set` in a later response. Save the full ordered list, update it after material progress, make every step terminal, and close it before a successful final answer. If the active task list is still open, an empty `tool_calls` response is not a successful completion. Do not count individual reads or tool calls as artificial stages, and do not mark a step complete from progress wording alone.\n" +
+            "- For work with at least three explicit deliverables or meaningful user-level stages, or with a real discovery -> construction -> verification workflow, create one task list before the first domain read or mutation. If needed, use independent `common.capabilities_read` calls for exact ids `common.task_tracking` and `common.task_list_set`, wait for the complete skill body and admitted tool schema, then call `common.task_list_set` in a later response. Save the full ordered list, update it after material progress, make every step terminal, and close it before a successful final answer. If the active task list is still open, `final=true` with empty `tool_calls` is not a successful completion. Do not count individual reads or tool calls as artificial stages, and do not mark a step complete from progress wording alone.\n" +
             "- Read current Office state when an edit depends on it. After a `TOOL_RESULT` with `status=error`, inspect `message` and `data.code`, then change the call or explain the blocker; do not retry unchanged. Treat `status=unknown` as an unverified effect. `status=ok` alone does not prove an applied change. Resource discovery/read uses semantic scope, target, representation, and action only; provider routing, exact references, revision guards, continuation cursors, and page sizes belong to runtime.";
 
         public const string SkillInstructions =
@@ -259,7 +259,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 25;
+        public const int CurrentAgentPromptSchemaVersion = 26;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

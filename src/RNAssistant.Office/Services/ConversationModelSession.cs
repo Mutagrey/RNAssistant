@@ -102,6 +102,13 @@ namespace RNAssistant.Office.Services
             _messages.Add(accepted);
         }
 
+        internal void AppendNoToolCheckpoint(string message, LlmCompletionResult completion)
+        {
+            var accepted = AgentJsonProtocol.CreateNoToolCheckpointMessage(message, completion);
+            _session.Messages.Add(accepted);
+            _messages.Add(accepted);
+        }
+
         internal void AppendConfirmedResult(ToolInvocation command, ToolResultMaterialization result)
         {
             // The callable pack was reconstructed from the durable turn event before

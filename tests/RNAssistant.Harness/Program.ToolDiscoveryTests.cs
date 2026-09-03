@@ -479,10 +479,10 @@ namespace RNAssistant.Harness
                 const string optionalId = "common.html_workspace_write_file";
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Создаю сразу.\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
+                    "{\"message\":\"Создаю сразу.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
                     LoadToolSchemaResponse(optionalId),
-                    "{\"message\":\"Создаю после admission.\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
-                    "{\"message\":\"HTML создан.\",\"tool_calls\":[]}"
+                    "{\"message\":\"Создаю после admission.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
+                    "{\"message\":\"HTML создан.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var options = new List<LlmRequestOptions>();
@@ -1125,7 +1125,7 @@ namespace RNAssistant.Harness
                     executor.GetControllerTools().Where(tool => tool.Id == CapabilityToolCatalog.ReadToolId)
                         .Concat(new[] { optional }));
                 CapabilityCatalogService.BindReadSchema(catalog, null);
-                var settings = new AppSettings { ContextWindowOverrideTokens = 16384, MaxTokens = 1024, AutoCompressContext = true };
+                var settings = new AppSettings { ContextWindowOverrideTokens = 24576, MaxTokens = 1024, AutoCompressContext = true };
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "compaction-run", TurnId = "compaction-turn" };
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Inspect the tool before continuing." });

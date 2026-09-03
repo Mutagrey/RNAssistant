@@ -256,11 +256,12 @@ Paste, drag-and-drop and the paperclip use one chat-scoped staging path. Sending
 message commits the bytes and exact resource reference before the model request.
 Existing artifacts remain reference-first and are read explicitly when needed.
 
-The model returns conversation-response v4. A tool turn contains one or more calls:
+The model returns conversation-response v5. A tool turn contains one or more calls:
 
 ```json
 {
   "message": "Read the table before editing.",
+  "final": false,
   "tool_calls": [
     {
       "name": "excel.read_range",
@@ -275,15 +276,17 @@ confirmation-required calls are singleton. The model supplies only `name` and
 `arguments`; runtime owns call IDs, document binding, revisions, cursors, guards,
 confirmation and effect evidence.
 
-An empty `tool_calls` array ends the model loop but does not prove that a document
-changed. Tool results use `ok`, `error` or `unknown`; a possible unverified external
-effect is never retried automatically. Office tools execute locally and remain
-subject to exact schemas, policy, confirmation, bounds and read-back.
+Only `final:true` with an empty `tool_calls` array ends the model loop; `final:false`
+with empty calls is a bounded checkpoint. Neither final intent nor message wording
+proves that a document changed. Tool results use `ok`, `error` or `unknown`; a
+possible unverified external effect is never retried automatically. Office tools
+execute locally and remain subject to exact schemas, policy, confirmation, bounds
+and read-back.
 
 Accepted history, confirmation and cumulative limits survive restart. Interrupted
-effects recover conservatively without replay. The exact v4 envelope and retry
+effects recover conservatively without replay. The exact v5 envelope and retry
 rules are documented in the
-[v4 contract](docs/protocols/CONVERSATION_RESPONSE_V4.md) and
+[v5 contract](docs/protocols/CONVERSATION_RESPONSE_V5.md) and
 [conversation protocol](docs/conversation-protocol.md).
 
 ## HTML Workspace

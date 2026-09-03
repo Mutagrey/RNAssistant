@@ -1,13 +1,14 @@
 using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.ModelProtocol
 {
     // One active wire contract for model attempts, transcript envelopes and probes.
-    // No version selection or historical fallback: all active responses use v4.
+    // No version selection or historical fallback: all active responses use v5.
     public static class ModelProtocolWire
     {
         public static LlmRequestOptions CreateRequestOptions(string responseMode, IEnumerable<ToolCatalogEntry> tools)
@@ -28,9 +29,10 @@ namespace RNAssistant.Core.ModelProtocol
             return new ConversationResponseParser().Parse(content, callableTools, runnableCatalog, context);
         }
 
-        public static string Write(string message, IEnumerable<ConversationToolCall> calls)
+        public static string Write(string message, IEnumerable<ConversationToolCall> calls, bool? final = null)
         {
-            return new ConversationResponse(message ?? string.Empty, calls ?? new ConversationToolCall[0]).ToJson();
+            var snapshot = (calls ?? new ConversationToolCall[0]).ToArray();
+            return new ConversationResponse(message ?? string.Empty, snapshot, final ?? snapshot.Length == 0).ToJson();
         }
     }
 }
