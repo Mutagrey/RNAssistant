@@ -42,7 +42,7 @@ namespace RNAssistant.Office.Tools
                 "Mutates document: Delete an existing StdModule or ClassModule. Runtime reads it, validates the type, and creates a rollback backup; no separate read call is required. Document modules and UserForms are not deleted.",
                 ModuleNameSchema(), ToolEffect.Write, ToolVerification.Tool);
             yield return Projection(RunMacro,
-                "May execute arbitrary VBA code: Run any existing macro by its exact Office Application.Run name without a manifest or allowlist. Available in Excel, Word, and PowerPoint. The macro may affect files or external state; use only when execution is requested and inspect state after the call.",
+                "May execute arbitrary VBA code: Run an existing macro in the exact bound Excel, Word, or PowerPoint document without a manifest or allowlist. Pass module/procedure name; runtime replaces any incoming document qualifier with the bound document name before Office Application.Run. The macro may affect files or external state; use only when execution is requested and inspect state after the call.",
                 RunMacroSchema(), ToolEffect.External, ToolVerification.None);
         }
 

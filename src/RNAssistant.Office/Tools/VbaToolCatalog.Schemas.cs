@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Tools
         private static string RunMacroSchema()
         {
             return "{\"type\":\"object\",\"properties\":{" +
-                "\"macroName\":{\"type\":\"string\",\"description\":\"Exact macro name accepted by the current Office Application.Run, optionally qualified by document and module.\",\"minLength\":1,\"maxLength\":512}," +
+                "\"macroName\":{\"type\":\"string\",\"description\":\"Exact module and procedure name in the bound document. Any incoming document qualifier is replaced by runtime before Office Application.Run.\",\"minLength\":1,\"maxLength\":512}," +
                 "\"arguments\":{\"type\":\"array\",\"description\":\"Optional positional String, integer, number, boolean, or null arguments in declaration order.\",\"items\":{\"type\":[\"string\",\"integer\",\"number\",\"boolean\",\"null\"]},\"maxItems\":30}}," +
                 "\"required\":[\"macroName\"],\"additionalProperties\":false}";
         }
