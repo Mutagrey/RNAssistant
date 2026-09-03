@@ -55,6 +55,10 @@ capture one complete `ToolPackageSource` v1. Its deterministic content revision 
 separate from the manifest package version and is pinned with the native handler in
 the accepted run. Library actions return typed result v1 with status, source revision,
 dispatch and effect evidence; PascalCase/legacy result fallbacks are unsupported.
+Model and Library upsert paths both carry `components` as one native `JArray` of
+component `JObject` values into `ToolAuthoringService`; they never serialize and
+reparse that argument. A quoted/stringified array is an `invalid_arguments` failure
+before preparation or storage.
 Since 11T10 the existing Tools editor also uses lowercase
 `rnassistant.toolLibrary` v1 and explicit revision-guarded create/update/rename/
 delete mutation DTOs through the same `ToolAuthoringService` as model authoring.

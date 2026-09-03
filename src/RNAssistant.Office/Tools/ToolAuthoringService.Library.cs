@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
@@ -208,16 +208,15 @@ namespace RNAssistant.Office.Tools
                 ["description"] = tool.Description ?? string.Empty,
                 ["parameters"] = tool.ArgumentSchemaJson ?? string.Empty,
                 ["executor"] = "vba",
-                ["components"] = JsonConvert.SerializeObject(
-                    (tool.Components ??
-                        new List<ToolPackageComponentDefinition>())
+                ["components"] = new JArray((tool.Components ??
+                    new List<ToolPackageComponentDefinition>())
                     .Where(component => component != null)
-                    .Select(component => new
+                    .Select(component => new JObject
                     {
-                        name = component.Name,
-                        type = component.Type,
-                        fileName = component.FileName,
-                        code = component.Code
+                        ["name"] = component.Name,
+                        ["type"] = component.Type,
+                        ["fileName"] = component.FileName,
+                        ["code"] = component.Code
                     })),
                 ["readme"] = tool.Readme ?? string.Empty,
                 ["enabled"] = tool.Enabled,

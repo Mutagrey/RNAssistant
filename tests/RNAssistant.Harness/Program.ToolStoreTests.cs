@@ -764,6 +764,21 @@ namespace RNAssistant.Harness
                         ToolAuthoringCatalog.UpsertToolId).HandlerId,
                     "tool upsert binding");
 
+                var stringifiedComponents = ExecuteToolAuthoringNative(
+                    native, ToolAuthoringCatalog.UpsertToolId,
+                    new JObject
+                    {
+                        ["id"] = "excel.stringified_components",
+                        ["components"] = "[]"
+                    });
+                AssertEqual(ToolExecutionOutcome.Error,
+                    stringifiedComponents.Outcome,
+                    "stringified components fail before authoring preparation");
+                AssertEqual("invalid_arguments",
+                    (string)JObject.Parse(
+                        stringifiedComponents.Result.DataJson)["code"],
+                    "malformed component shape keeps the runtime error code");
+
                 var command = new ToolInvocation { ToolId = "common.tools_upsert" };
                 command.Arguments["id"] = "excel.generated_report";
                 var authored = CustomTool("Excel", "excel.generated_report");

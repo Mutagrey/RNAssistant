@@ -68,8 +68,7 @@ namespace RNAssistant.Office.Tools
             IDictionary<string, object> arguments)
         {
             var id = ToolArgumentReader.String(arguments, "id", string.Empty);
-            var components = ReadComponents(ToolArgumentReader.String(
-                arguments, "components", "[]"));
+            var components = ReadComponents(arguments);
             var tool = NormalizeVbaEntryCode(new ToolCatalogEntry
             {
                 Id = id,
@@ -126,7 +125,8 @@ namespace RNAssistant.Office.Tools
             SetBool(arguments, "mutatesLocalState", value => tool.MutatesLocalState = value);
             SetBool(arguments, "agentCanRun", value => tool.AgentCanRun = value);
             if (HasArgument(arguments, "riskLevel")) tool.RiskLevel = ReadInt(arguments, "riskLevel", tool.RiskLevel);
-            if (HasArgument(arguments, "components")) tool.Components = ReadComponents(ToolArgumentReader.String(arguments, "components", "[]"));
+            if (HasArgument(arguments, "components"))
+                tool.Components = ReadComponents(arguments);
             return NormalizeVbaEntryCode(tool);
         }
 
@@ -149,23 +149,23 @@ namespace RNAssistant.Office.Tools
             return tool;
         }
 
-        private static List<ToolPackageComponentDefinition> ReadComponents(string json)
+        private static List<ToolPackageComponentDefinition> ReadComponents(
+            IDictionary<string, object> arguments)
         {
-            if (string.IsNullOrWhiteSpace(json)) return new List<ToolPackageComponentDefinition>();
-            try
-            {
-                return JArray.Parse(json).OfType<JObject>().Select(component => new ToolPackageComponentDefinition
+            object raw;
+            var components = arguments != null &&
+                arguments.TryGetValue("components", out raw)
+                ? raw as JArray : null;
+            if (components == null)
+                return new List<ToolPackageComponentDefinition>();
+            return components.OfType<JObject>()
+                .Select(component => new ToolPackageComponentDefinition
                 {
                     Name = (string)component["name"],
                     Type = (string)component["type"],
                     FileName = (string)component["fileName"],
                     Code = (string)component["code"] ?? string.Empty
                 }).ToList();
-            }
-            catch (JsonException)
-            {
-                return new List<ToolPackageComponentDefinition>();
-            }
         }
 
         private static JObject ToolPayload(ToolCatalogEntry tool)

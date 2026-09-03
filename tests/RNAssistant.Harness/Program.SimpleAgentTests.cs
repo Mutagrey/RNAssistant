@@ -616,17 +616,34 @@ namespace RNAssistant.Harness
             AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error), "explicit null remains valid");
 
             var tableCommand = new ToolInvocation();
-            tableCommand.Arguments["values"] = new Newtonsoft.Json.Linq.JArray(
+            var nativeValues = new Newtonsoft.Json.Linq.JArray(
                 new Newtonsoft.Json.Linq.JArray("A", "B"),
                 new Newtonsoft.Json.Linq.JArray("C", "D"),
                 new Newtonsoft.Json.Linq.JArray("E", "F"));
+            tableCommand.Arguments["values"] = nativeValues;
             ResolvedTableArguments table;
             AssertTrue(TableArgumentResolver.TryResolve(tableCommand, 2, 2, out table, out error), "table dimensions are inferred");
             AssertEqual(3, table.Rows, "inferred table rows");
             AssertEqual(2, table.Columns, "inferred table columns");
+            AssertTrue(ReferenceEquals(nativeValues, table.Values),
+                "native table values are not stringified and reparsed");
             tableCommand.Arguments["rows"] = 2;
             AssertTrue(!TableArgumentResolver.TryResolve(tableCommand, 2, 2, out table, out error), "undersized explicit table dimensions fail before COM");
             AssertContains(error, "omit", "table dimension recovery hint");
+            var stringifiedTable = new ToolInvocation();
+            stringifiedTable.Arguments["values"] = "[[\"A\"]]";
+            AssertTrue(!TableArgumentResolver.TryResolve(stringifiedTable, 2, 2,
+                    out table, out error),
+                "stringified table values are rejected");
+            AssertEqual("values must be a native two-dimensional JSON array.",
+                error, "malformed table shape has a stable diagnostic");
+            var malformedRows = new ToolInvocation();
+            malformedRows.Arguments["values"] = new JArray("A");
+            AssertTrue(!TableArgumentResolver.TryResolve(malformedRows, 2, 2,
+                    out table, out error),
+                "table values require native row arrays");
+            AssertEqual("values must contain only row arrays.", error,
+                "malformed row shape has a stable diagnostic");
 
             tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\"}},\"required\":[],\"additionalProperties\":false}";
             AssertTrue(!ToolSchemaSupport.TryParse(tool, out schema, out error), "undocumented argument is rejected");

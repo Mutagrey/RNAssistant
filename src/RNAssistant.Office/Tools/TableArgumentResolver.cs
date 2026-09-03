@@ -1,6 +1,5 @@
 using RNAssistant.Core.Tools;
 using System;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 
@@ -27,16 +26,15 @@ namespace RNAssistant.Office.Tools
             command = command ?? new ToolInvocation();
 
             JArray values = null;
-            var valuesJson = ToolArgumentReader.String(command.Arguments, "values", string.Empty);
-            if (!string.IsNullOrWhiteSpace(valuesJson))
+            object rawValues;
+            if (command.Arguments != null &&
+                command.Arguments.TryGetValue("values", out rawValues) &&
+                rawValues != null)
             {
-                try
+                values = rawValues as JArray;
+                if (values == null)
                 {
-                    values = JArray.Parse(valuesJson);
-                }
-                catch (JsonException ex)
-                {
-                    error = "values must be a native two-dimensional JSON array: " + ex.Message;
+                    error = "values must be a native two-dimensional JSON array.";
                     return false;
                 }
             }
