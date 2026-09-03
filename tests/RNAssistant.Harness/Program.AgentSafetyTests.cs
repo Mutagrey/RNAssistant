@@ -1390,10 +1390,10 @@ namespace RNAssistant.Harness
                 var exactReplace = patchSchema.SelectToken(
                     "properties.tool_calls.items.anyOf[0].properties.arguments.properties.patch.items") as JObject;
                 AssertTrue(exactReplace != null, "patch schema exposes one exact replacement contract");
-                AssertEqual("replace", (string)exactReplace.SelectToken("properties.op.enum[0]"),
-                    "exact replacement is the only VBA patch operation");
-                AssertEqual(3, ((JObject)exactReplace["properties"]).Properties().Count(),
-                    "exact replacement exposes only op, find, and text");
+                AssertTrue(exactReplace.SelectToken("properties.op") == null,
+                    "constant VBA patch operation is runtime-owned");
+                AssertEqual(2, ((JObject)exactReplace["properties"]).Properties().Count(),
+                    "exact replacement exposes only find and text");
                 AssertTrue(exactReplace.SelectToken("properties.startLine") == null &&
                     exactReplace.SelectToken("properties.pattern") == null,
                     "line-number and regex patch fields are absent from the model schema");
@@ -1403,19 +1403,20 @@ namespace RNAssistant.Harness
                 var restoreVariants = restoreSchema.SelectToken(
                     "properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
                 AssertEqual(2, restoreVariants == null ? 0 : restoreVariants.Count,
-                    "restore schema requires either backup id or module name");
-                var backupVariant = restoreVariants.OfType<JObject>().Single(item =>
-                    item.SelectToken("properties.backupId.type").Type == JTokenType.String);
-                var optionalRestoreModuleType = backupVariant.SelectToken("properties.moduleName.type") as JArray;
-                AssertTrue(optionalRestoreModuleType != null && optionalRestoreModuleType.Values<string>().Contains("null"),
-                    "irrelevant restore selector is nullable in strict output");
+                    "restore schema requires either readable target or module name");
+                var targetVariant = restoreVariants.OfType<JObject>().Single(item =>
+                    item.SelectToken("properties.target.type").Type == JTokenType.String);
+                AssertTrue(targetVariant.SelectToken("properties.moduleName") == null,
+                    "readable-target branch cannot mix the latest-module selector");
+                AssertTrue(restoreSchema.SelectToken(
+                        "properties.tool_calls.items.anyOf[0].properties.arguments.properties.backupId") == null,
+                    "raw backup id is absent from the model schema");
 
                 var strictPatchArguments = new JObject
                 {
                     ["moduleName"] = "Module1",
                     ["patch"] = new JArray(new JObject
                     {
-                        ["op"] = "replace",
                         ["find"] = "Old",
                         ["text"] = "New"
                     })
@@ -1425,7 +1426,7 @@ namespace RNAssistant.Harness
                 AssertTrue(ToolSchemaSupport.TryParse(patchTool, out runtimePatchSchema, out parseError),
                     "runtime patch schema parses: " + parseError);
                 ToolSchemaSupport.RemoveOptionalNulls(strictPatchArguments, runtimePatchSchema);
-                AssertEqual(3, ((JObject)((JArray)strictPatchArguments["patch"])[0]).Properties().Count(),
+                AssertEqual(2, ((JObject)((JArray)strictPatchArguments["patch"])[0]).Properties().Count(),
                     "exact patch arguments remain unchanged by strict normalization");
             });
         }

@@ -103,12 +103,112 @@ namespace RNAssistant.Office.Tools
                     ? null
                     : new VbaPatchOperationRequest
                     {
-                        Operation = (string)item["op"],
+                        Operation = "replace",
                         Find = (string)item["find"],
                         Text = (string)item["text"]
                     });
             }
             return operations;
+        }
+
+        private VbaNativeOutcome ResolveRestoreIntent(
+            IDictionary<string, object> arguments,
+            out string backupId,
+            out string moduleName)
+        {
+            backupId = string.Empty;
+            moduleName = ToolArgumentReader.String(
+                arguments, "moduleName", string.Empty).Trim();
+            var target = ToolArgumentReader.String(
+                arguments, "target", string.Empty).Trim();
+            if (target.Length == 0) return null;
+
+            IReadOnlyList<VbaModuleBackup> backups;
+            try
+            {
+                backups = LoadBackups();
+            }
+            catch (VbaJournalException ex)
+            {
+                return VbaNativeOutcome.Error(
+                    ex.Message,
+                    "vba_backup_unavailable",
+                    false);
+            }
+
+            var matches = BackupIntentTargets(backups)
+                .Where(item => string.Equals(
+                    item.Item2,
+                    target,
+                    StringComparison.Ordinal))
+                .Take(2)
+                .ToArray();
+            if (matches.Length == 0)
+            {
+                return VbaNativeOutcome.Error(
+                    "The selected VBA backup target is no longer available. Run common.resources_find with scope=backups and choose one exact returned target.",
+                    "vba_backup_target_not_found",
+                    true);
+            }
+            if (matches.Length > 1)
+            {
+                return VbaNativeOutcome.Error(
+                    "The selected VBA backup target is ambiguous. Run common.resources_find with scope=backups and choose one exact returned target.",
+                    "vba_backup_target_ambiguous",
+                    false);
+            }
+
+            backupId = matches[0].Item1.BackupId;
+            moduleName = matches[0].Item1.ModuleName;
+            return null;
+        }
+
+        internal string BackupSemanticTarget(string backupId)
+        {
+            backupId = (backupId ?? string.Empty).Trim();
+            var matches = BackupIntentTargets(LoadBackups())
+                .Where(item => string.Equals(
+                    item.Item1.BackupId,
+                    backupId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToArray();
+            if (matches.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    "The selected VBA backup is no longer available.");
+            }
+            return matches[0].Item2;
+        }
+
+        private IReadOnlyList<VbaModuleBackup> LoadBackups()
+        {
+            if (_vbaJournalStore == null) return new VbaModuleBackup[0];
+            return _vbaJournalStore.List(
+                _adapter.HostName, _adapter.DocumentKey);
+        }
+
+        private static IReadOnlyList<Tuple<VbaModuleBackup, string>> BackupIntentTargets(
+            IEnumerable<VbaModuleBackup> backups)
+        {
+            var values = (backups ?? new VbaModuleBackup[0])
+                .Where(item => item != null)
+                .ToArray();
+            var duplicates = values
+                .Where(item => item != null)
+                .GroupBy(
+                    VbaResourceProvider.BackupSemanticBaseTarget,
+                    StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Count(),
+                    StringComparer.OrdinalIgnoreCase);
+            return values.Select(item => Tuple.Create(
+                item,
+                VbaResourceProvider.BackupSemanticTarget(
+                    item,
+                    duplicates[VbaResourceProvider.BackupSemanticBaseTarget(item)] > 1)))
+                .ToArray();
         }
 
         private static VbaWholeModuleWriteMode WholeModuleWriteMode(string mode)

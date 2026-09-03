@@ -362,6 +362,11 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.ToolId(suffix);
         }
 
+        internal string VbaBackupSemanticTarget(string backupId)
+        {
+            return _vbaExecutor.BackupSemanticTarget(backupId);
+        }
+
         public void ObserveVbaHash(ChatSession session, string moduleName, string codeSha256)
         {
             _vbaExecutor.ObserveExpectedHash(session, moduleName, codeSha256);

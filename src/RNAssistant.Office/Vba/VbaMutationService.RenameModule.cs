@@ -21,7 +21,7 @@ namespace RNAssistant.Office.Vba
                 string.IsNullOrWhiteSpace(requestedTargetName))
             {
                 return RenameGuardFailure(VbaMutationOutcome.Error(
-                    "moduleName and newModuleName are required for mode=rename.",
+                    "moduleName and newModuleName are required for VBA rename.",
                     null,
                     "vba_module_name_required",
                     true));
@@ -128,7 +128,7 @@ namespace RNAssistant.Office.Vba
             if (string.IsNullOrWhiteSpace(sourceName) || string.IsNullOrWhiteSpace(targetName))
             {
                 return VbaMutationOutcome.Error(
-                    "moduleName and newModuleName are required for mode=rename.",
+                    "moduleName and newModuleName are required for VBA rename.",
                     null,
                     "vba_module_name_required",
                     true);

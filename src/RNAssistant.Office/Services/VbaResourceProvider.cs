@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -174,7 +175,7 @@ namespace RNAssistant.Office.Services
                 Reference = new ResourceRef(BackupUri(session, backup.BackupId), backup.CodeSha256),
                 Provider = ProviderName,
                 Kind = BackupKind,
-                Title = backup.ModuleName + " backup " + backup.CreatedUtc.ToString("u"),
+                Title = BackupTitle(backup),
                 MimeType = "text/x-vba; charset=utf-8",
                 Mutable = false,
                 ByteLength = backup.CodeByteLength,
@@ -189,6 +190,41 @@ namespace RNAssistant.Office.Services
             descriptor.Metadata["componentType"] = backup.ComponentType ?? string.Empty;
             descriptor.Metadata["mutationId"] = backup.MutationId ?? string.Empty;
             return descriptor;
+        }
+
+        internal static string BackupSemanticBaseTarget(VbaModuleBackup backup)
+        {
+            return ResourceGatewayService.IntentBaseTarget(
+                BackupSemanticDescriptor(backup));
+        }
+
+        internal static string BackupSemanticTarget(
+            VbaModuleBackup backup,
+            bool duplicate)
+        {
+            return ResourceGatewayService.IntentTarget(
+                BackupSemanticDescriptor(backup), duplicate);
+        }
+
+        private static ResourceDescriptor BackupSemanticDescriptor(
+            VbaModuleBackup backup)
+        {
+            backup = backup ?? new VbaModuleBackup();
+            return new ResourceDescriptor
+            {
+                Kind = BackupKind,
+                Title = BackupTitle(backup),
+                CreatedUtc = backup.CreatedUtc
+            };
+        }
+
+        private static string BackupTitle(VbaModuleBackup backup)
+        {
+            backup = backup ?? new VbaModuleBackup();
+            return (backup.ModuleName ?? string.Empty) + " backup " +
+                backup.CreatedUtc.ToUniversalTime().ToString(
+                    "yyyy-MM-dd HH:mm:ss.fffffff'Z'",
+                    CultureInfo.InvariantCulture);
         }
 
         private List<VbaResourceModule> LoadModules()

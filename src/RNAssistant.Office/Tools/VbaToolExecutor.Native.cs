@@ -100,10 +100,8 @@ namespace RNAssistant.Office.Tools
                     toolId, arguments, state, correlation, true,
                     cancellationToken);
             }
-            else if (string.Equals(toolId, VbaToolCatalog.WriteModule,
-                StringComparison.Ordinal) && string.Equals(
-                    ToolArgumentReader.String(arguments, "mode", "upsert"),
-                    "rename", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(toolId, VbaToolCatalog.RenameModule,
+                StringComparison.Ordinal))
             {
                 var prepared = _mutationService.PrepareRenameGuard(
                     new VbaRenameGuardRequest
@@ -143,11 +141,15 @@ namespace RNAssistant.Office.Tools
             }
             else
             {
+                string backupId;
+                var selectorError = ResolveRestoreIntent(
+                    arguments, out backupId, out moduleName);
+                if (selectorError != null)
+                    return VbaNativePreparation.Failed(selectorError);
                 var prepared = _mutationService.PrepareRestoreGuard(
                     new VbaRestoreGuardRequest
                     {
-                        BackupId = ToolArgumentReader.String(
-                            arguments, "backupId", string.Empty),
+                        BackupId = backupId,
                         ModuleName = moduleName,
                         Correlation = correlation
                     });
@@ -282,8 +284,8 @@ namespace RNAssistant.Office.Tools
                     Correlation = correlation
                 }, cancellationToken);
 
-            var mode = ToolArgumentReader.String(arguments, "mode", "upsert");
-            if (string.Equals(mode, "rename", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(toolId, VbaToolCatalog.RenameModule,
+                StringComparison.Ordinal))
                 return _mutationService.RenameModule(new VbaRenameRequest
                 {
                     ModuleName = state.ModuleName,
@@ -292,6 +294,7 @@ namespace RNAssistant.Office.Tools
                     Guard = state.Guard,
                     Correlation = correlation
                 }, cancellationToken);
+            var mode = ToolArgumentReader.String(arguments, "mode", "upsert");
             return _mutationService.WriteWholeModule(
                 new VbaWholeModuleWriteRequest
                 {

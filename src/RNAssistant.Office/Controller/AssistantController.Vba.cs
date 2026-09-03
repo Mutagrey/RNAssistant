@@ -203,10 +203,24 @@ namespace RNAssistant.Office
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_restore_backup") };
-            if (!string.IsNullOrWhiteSpace(backupId)) command.Arguments["backupId"] = backupId;
-            if (!string.IsNullOrWhiteSpace(moduleName)) command.Arguments["moduleName"] = moduleName;
             return WithReservedSession(LoadSession(null), session =>
             {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(backupId))
+                        command.Arguments["target"] =
+                            _toolExecutor.VbaBackupSemanticTarget(backupId);
+                    else if (!string.IsNullOrWhiteSpace(moduleName))
+                        command.Arguments["moduleName"] = moduleName;
+                }
+                catch (Exception ex)
+                {
+                    return ToolRunResult.Error(
+                        ex.Message,
+                        null,
+                        "vba_backup_target_not_found",
+                        true);
+                }
                 var result = _toolExecutor.ExecuteManual(command, tools,
                     settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();

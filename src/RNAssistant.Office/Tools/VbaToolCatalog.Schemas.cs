@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -26,87 +24,67 @@ namespace RNAssistant.Office.Tools
 
         private static string WriteModuleSchema()
         {
-            var moduleName = new JObject
-            {
-                ["type"] = "string",
-                ["description"] = "Existing or intended VBA component name. Invalid new names are normalized deterministically only when creating.",
-                ["minLength"] = 1,
-                ["maxLength"] = 255
-            };
-            var code = new JObject
-            {
-                ["type"] = "string",
-                ["description"] = "Complete VBA source or MSForm code-behind, never source reconstructed from a truncated read or partial context. Empty text intentionally clears or creates an empty component."
-            };
-            var componentType = new JObject
-            {
-                ["type"] = "string",
-                ["description"] = "Type used only when the write branch creates a component.",
-                ["default"] = "StdModule",
-                ["enum"] = new JArray("StdModule", "ClassModule", "MSForm")
-            };
-            var writeMode = new JObject
-            {
-                ["type"] = "string",
-                ["description"] = "Write behavior: upsert updates or creates; createOnly/updateOnly guard existence.",
-                ["default"] = "upsert",
-                ["enum"] = new JArray("upsert", "createOnly", "updateOnly")
-            };
-            var newModuleName = new JObject
-            {
-                ["type"] = "string",
-                ["description"] = "Requested destination name for mode=rename. Runtime normalizes it and rejects collisions.",
-                ["minLength"] = 1,
-                ["maxLength"] = 255
-            };
-            var renameMode = new JObject
-            {
-                ["type"] = "string",
-                ["description"] = "Select the atomic rename branch; code and componentType are not accepted in this branch.",
-                ["enum"] = new JArray("rename")
-            };
-            Func<JObject, string[], JObject> variant = (properties, required) => new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = new JArray(required),
-                ["additionalProperties"] = false
-            };
             return new JObject
             {
                 ["type"] = "object",
                 ["properties"] = new JObject
                 {
-                    ["moduleName"] = moduleName,
-                    ["code"] = code,
-                    ["componentType"] = componentType,
+                    ["moduleName"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Existing or intended VBA component name. Invalid new names are normalized deterministically only when creating.",
+                        ["minLength"] = 1,
+                        ["maxLength"] = 255
+                    },
+                    ["code"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Complete VBA source or MSForm code-behind, never source reconstructed from a truncated read or partial context. Empty text intentionally clears or creates an empty component."
+                    },
+                    ["componentType"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Type used only when creating a component.",
+                        ["default"] = "StdModule",
+                        ["enum"] = new JArray("StdModule", "ClassModule", "MSForm")
+                    },
                     ["mode"] = new JObject
                     {
                         ["type"] = "string",
-                        ["description"] = "Choose whole-source write semantics or the explicit rename branch.",
+                        ["description"] = "Write behavior: upsert updates or creates; createOnly/updateOnly guard existence.",
                         ["default"] = "upsert",
-                        ["enum"] = new JArray("upsert", "createOnly", "updateOnly", "rename")
-                    },
-                    ["newModuleName"] = newModuleName
+                        ["enum"] = new JArray("upsert", "createOnly", "updateOnly")
+                    }
                 },
-                ["required"] = new JArray(),
-                ["additionalProperties"] = false,
-                ["anyOf"] = new JArray
+                ["required"] = new JArray("moduleName", "code"),
+                ["additionalProperties"] = false
+            }.ToString(Formatting.None);
+        }
+
+        private static string RenameModuleSchema()
+        {
+            return new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject
                 {
-                    variant(new JObject
+                    ["moduleName"] = new JObject
                     {
-                        ["moduleName"] = moduleName.DeepClone(),
-                        ["code"] = code.DeepClone(),
-                        ["componentType"] = componentType.DeepClone(),
-                        ["mode"] = writeMode
-                    }, new[] { "moduleName", "code" }),
-                    variant(new JObject
+                        ["type"] = "string",
+                        ["description"] = "Existing VBA component name.",
+                        ["minLength"] = 1,
+                        ["maxLength"] = 255
+                    },
+                    ["newModuleName"] = new JObject
                     {
-                        ["moduleName"] = moduleName.DeepClone(),
-                        ["newModuleName"] = newModuleName.DeepClone(),
-                        ["mode"] = renameMode
-                    }, new[] { "moduleName", "newModuleName", "mode" })
-                }
+                        ["type"] = "string",
+                        ["description"] = "Requested destination name. Runtime normalizes it deterministically and rejects collisions.",
+                        ["minLength"] = 1,
+                        ["maxLength"] = 255
+                    }
+                },
+                ["required"] = new JArray("moduleName", "newModuleName"),
+                ["additionalProperties"] = false
             }.ToString(Formatting.None);
         }
 
@@ -114,23 +92,27 @@ namespace RNAssistant.Office.Tools
         {
             Func<JObject> properties = () => new JObject
             {
-                ["backupId"] = new JObject
+                ["target"] = new JObject
                 {
                     ["type"] = "string",
-                    ["description"] = "Exact rollback backup identifier from provider vba, kind vba-backup resource metadata.",
+                    ["description"] = "Exact readable VBA backup target returned by common.resources_find with scope=backups.",
                     ["minLength"] = 1
                 },
                 ["moduleName"] = new JObject
                 {
                     ["type"] = "string",
-                    ["description"] = "VBA component whose latest backup is selected when backupId is omitted.",
-                    ["minLength"] = 1
+                    ["description"] = "VBA component whose latest available backup should be restored.",
+                    ["minLength"] = 1,
+                    ["maxLength"] = 255
                 }
             };
             Func<string, JObject> variant = required => new JObject
             {
                 ["type"] = "object",
-                ["properties"] = properties(),
+                ["properties"] = new JObject
+                {
+                    [required] = properties()[required]
+                },
                 ["required"] = new JArray(required),
                 ["additionalProperties"] = false
             };
@@ -140,7 +122,7 @@ namespace RNAssistant.Office.Tools
                 ["properties"] = properties(),
                 ["required"] = new JArray(),
                 ["additionalProperties"] = false,
-                ["anyOf"] = new JArray(variant("backupId"), variant("moduleName"))
+                ["anyOf"] = new JArray(variant("target"), variant("moduleName"))
             }.ToString(Formatting.None);
         }
 
@@ -157,12 +139,17 @@ namespace RNAssistant.Office.Tools
                 ["type"] = "string",
                 ["description"] = "Exact replacement text. Runtime does not trim boundary newlines; it only converts LF/CRLF to the module's current newline style. Empty text deletes find. For insertion, repeat find in text with the new block before or after it."
             };
-            var exactReplace = PatchOperationSchema(
-                "replace",
-                "Replace one exact unique current source block. Missing or ambiguous source is rejected without writing; an already-satisfied identical replacement is skipped.",
-                new JObject { ["find"] = find, ["text"] = text },
-                "find",
-                "text");
+            var exactReplace = new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject
+                {
+                    ["find"] = find,
+                    ["text"] = text
+                },
+                ["required"] = new JArray("find", "text"),
+                ["additionalProperties"] = false
+            };
             return new JObject
             {
                 ["type"] = "object",
@@ -187,24 +174,6 @@ namespace RNAssistant.Office.Tools
                 ["required"] = new JArray("moduleName", "patch"),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
-        }
-
-        private static JObject PatchOperationSchema(string operation, string description, JObject properties, params string[] required)
-        {
-            properties = properties ?? new JObject();
-            properties.AddFirst(new JProperty("op", new JObject
-            {
-                ["type"] = "string",
-                ["description"] = description,
-                ["enum"] = new JArray(operation)
-            }));
-            return new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = new JArray(new[] { "op" }.Concat(required ?? new string[0])),
-                ["additionalProperties"] = false
-            };
         }
 
     }

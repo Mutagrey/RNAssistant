@@ -43,7 +43,6 @@ namespace RNAssistant.Harness
                 var staleAgent = executor.ExecuteManual(
                     Command("common.vba_apply_patch", "moduleName", "Module1", "patch", new JArray(new JObject
                     {
-                        ["op"] = "replace",
                         ["find"] = "B",
                         ["text"] = "C"
                     })),

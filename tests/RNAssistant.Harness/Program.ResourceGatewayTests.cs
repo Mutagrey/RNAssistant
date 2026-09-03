@@ -1706,10 +1706,9 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var renamed = executor.ExecuteManual(
                     Command(
-                        "common.vba_write_module",
+                        "common.vba_rename_module",
                         "moduleName", "ResourceModule",
-                        "newModuleName", "ResourceModuleRenamed",
-                        "mode", "rename"),
+                        "newModuleName", "ResourceModuleRenamed"),
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,

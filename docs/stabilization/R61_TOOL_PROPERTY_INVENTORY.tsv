@@ -14,7 +14,7 @@ common.html_data_write	Excel,Outlook,PowerPoint,Word	agent	html.data.write.v1	77
 common.html_workspace_apply_patch	Excel,Outlook,PowerPoint,Word	agent	html.workspace.apply.patch.v1	61fbb8be7006efd11728272be60d0c70a43f6cc030ed1d960c31d577a6c82320	patch,patch[].find,patch[].op,patch[].text,path	-
 common.html_workspace_delete	Excel,Outlook,PowerPoint,Word	agent	html.workspace.delete.v1	940955ecdfe292487031f5d8dcf248567399df6855aee77d3b794ed90d154235	target	-
 common.html_workspace_write_file	Excel,Outlook,PowerPoint,Word	agent	html.workspace.write.file.v1	7c6e00fa99c737f1e5d9da838903fc6a2e9b7f6e24049db688b6dcec296ab9a4	content,path	-
-common.office_run_macro	Excel,PowerPoint,Word	agent	vba.public.office.run.macro.v1	7f298d822bbe1223838c4370e1a4f974c8c3ff5691a9bf436c946d5fc80b49b6	arguments,macroName	-
+common.office_run_macro	Excel,PowerPoint,Word	agent	vba.public.office.run.macro.intent.v2	7f298d822bbe1223838c4370e1a4f974c8c3ff5691a9bf436c946d5fc80b49b6	arguments,macroName	-
 common.plan_doc_delete	Excel,Outlook,PowerPoint,Word	plan	conversation.plan.document.delete.intent.v2	ef754f8f3ffdaba9aaf78a8d5e83cf272f0cdeabb2b35d4b34a42d3c21802209		-
 common.plan_doc_restore	Excel,Outlook,PowerPoint,Word	plan	conversation.plan.document.restore.intent.v2	130065387f93614a5b8edc51ab62cb112ba7583ba4597e87557b9db3fd61a7aa	version	-
 common.plan_doc_save	Excel,Outlook,PowerPoint,Word	plan	conversation.plan.document.save.intent.v2	b21aec6988876c0799d15900073fc01e67694ee848465bca46b65b905f23f599	markdown,status,title	-
@@ -31,10 +31,11 @@ common.task_list_set	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.task-
 common.tools_definition_read	Excel,Outlook,PowerPoint,Word	agent	tools.definition-read.exact.v1	21ea6285afadb996876b0eb6996083e4669ddd5c5d1bf2152f22702bfacac873	id	id=semantic-tool-identity
 common.tools_delete	Excel,Outlook,PowerPoint,Word	agent	tools.delete.v1	cbd5d6cea98d691b451fc498391377bc2eb1b6c0cd266cdf71690c37c5709008	id	id=semantic-tool-identity
 common.tools_upsert	Excel,Outlook,PowerPoint,Word	agent	tools.upsert.intent.v1	04e51515aae633d2034480c8484c6d9c2ecaceac297f568f26fa643a48470e8e	components,components[].code,components[].name,components[].type,doNotUseWhen,id,limitations,mode,readme,useWhen	id=semantic-tool-identity
-common.vba_apply_patch	Excel,PowerPoint,Word	agent	vba.public.vba.apply.patch.v1	0ffc265383088b48acea560fa4ddc8b977452d179b7503f781028ce9a7e79646	moduleName,patch,patch[].find,patch[].op,patch[].text	patch[].op=runtime-constant-remove
-common.vba_delete_module	Excel,PowerPoint,Word	agent	vba.public.vba.delete.module.v1	749c4354b6a7405b31fa38d657c38b25ee9406647148f04785c5610851b99e49	moduleName	-
-common.vba_restore_backup	Excel,PowerPoint,Word	agent	vba.public.vba.restore.backup.v1	8c707e62fefe606ea001c68136e0bc5006a0123439e23eab288c02a3ed13529d	backupId,moduleName	backupId=runtime-resolve-readable-candidate
-common.vba_write_module	Excel,PowerPoint,Word	agent	vba.public.vba.write.module.v1	be4249fa25620b7a2f5eaf8a679d190c62469ed661437a8466bbe53ef3906f07	code,componentType,mode,moduleName,newModuleName	mode=semantic-split-rename
+common.vba_apply_patch	Excel,PowerPoint,Word	agent	vba.public.vba.apply.patch.intent.v2	84edee5e19a4277f433cb6f58f31255e042855962506e3563c485219e44dd45c	moduleName,patch,patch[].find,patch[].text	-
+common.vba_delete_module	Excel,PowerPoint,Word	agent	vba.public.vba.delete.module.intent.v2	749c4354b6a7405b31fa38d657c38b25ee9406647148f04785c5610851b99e49	moduleName	-
+common.vba_rename_module	Excel,PowerPoint,Word	agent	vba.public.vba.rename.module.intent.v1	3550e5187387d7bf5abb062e329101ec2c4fcc24008be7a49117361d158d4a01	moduleName,newModuleName	-
+common.vba_restore_backup	Excel,PowerPoint,Word	agent	vba.public.vba.restore.backup.intent.v2	75459477b31e3090f28d356625b944af7a8cd751cc31e8e8df72e71bfc2a77c5	moduleName,target	-
+common.vba_write_module	Excel,PowerPoint,Word	agent	vba.public.vba.write.module.intent.v2	6f00ddc8aceeb79044734115969ae1f7db9a23bf3b24d5b21dd811656724c679	code,componentType,mode,moduleName	-
 excel.add_sheet	Excel	agent	excel.sheet.add.v1	99d883fd3b627f9ce92f8bd3b765f210719c7deed42c1ceade44176371e7e7d1	name	-
 excel.add_table	Excel	agent	excel.table.add.v1	1397379d5db933b10b9acb2c3a86dd8ebcf401ca1ed408986ae6b3e6913b3ea1	hasHeaders,name,sheet,sourceRange,style	-
 excel.clear_range	Excel	agent	excel.range.clear.v1	6e1b384e54e44bddcb193e2808d6afb5bff6411486d2e03b2de9416e8056ee3a	address,clearWhat,sheet	-

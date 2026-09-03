@@ -39,6 +39,7 @@ namespace RNAssistant.Office.Services
         private static readonly HashSet<string> VbaCoreToolIds = ExactIds(
             "common.vba_restore_backup",
             "common.vba_write_module",
+            "common.vba_rename_module",
             "common.vba_apply_patch",
             "common.vba_delete_module",
             "common.office_run_macro");

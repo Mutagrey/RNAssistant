@@ -72,7 +72,7 @@ namespace RNAssistant.Office.Vba
                     new VbaPackageMutationPreparation
                     {
                         Operation = "rename",
-                        PackageId = ToolId("vba_write_module") + ":rename",
+                        PackageId = ToolId("vba_rename_module"),
                         PackageVersion = "1",
                         SessionOnly = false,
                         RetainBackups = false,

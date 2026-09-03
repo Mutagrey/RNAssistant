@@ -53,7 +53,6 @@ namespace RNAssistant.Harness
 
                 var patch = new JArray(new JObject
                 {
-                    ["op"] = "replace",
                     ["find"] = "Dim oldValue As Long\noldValue = 1",
                     ["text"] = "Dim newValue As Long\nnewValue = 1"
                 });

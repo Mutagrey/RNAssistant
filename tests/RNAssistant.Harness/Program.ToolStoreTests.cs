@@ -111,6 +111,7 @@ namespace RNAssistant.Harness
                         HasTool(tools, ResourceToolCatalog.FindToolId),
                         host + " exposes shared resource reads");
                     AssertTrue(HasTool(tools, "common.vba_write_module"), host + " exposes common VBA upsert");
+                    AssertTrue(HasTool(tools, "common.vba_rename_module"), host + " exposes common VBA rename");
                     AssertTrue(HasTool(tools, "common.vba_apply_patch"), host + " exposes common VBA patch");
                     AssertTrue(!HasTool(tools, "common.vba_read_module") &&
                         !HasTool(tools, "common.vba_search_code") &&
@@ -120,7 +121,7 @@ namespace RNAssistant.Harness
                         !HasTool(tools, "common.vba_replace_text") &&
                         !HasTool(tools, "common.vba_create_module"), host + " omits redundant public aliases");
                     var vbaTools = tools.Where(tool => (tool.Id ?? string.Empty).StartsWith("common.vba_", StringComparison.OrdinalIgnoreCase)).ToList();
-                    AssertEqual(4, vbaTools.Count, host + " exposes only the four mutation-specific VBA tools");
+                    AssertEqual(5, vbaTools.Count, host + " exposes only the five mutation-specific VBA tools");
                     AssertTrue(vbaTools.All(tool => string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)), host + " VBA facade is host-neutral");
                     AssertTrue(!HasTool(tools, host.ToLowerInvariant() + ".vba_apply_patch"), host + " does not publish a host-specific patch facade");
                     var hostPrefix = host.ToLowerInvariant() + ".";

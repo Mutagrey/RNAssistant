@@ -30,9 +30,25 @@ namespace RNAssistant.Office.Tools
 
         internal static ToolBinding BindingFor(string toolId)
         {
-            if (!VbaToolCatalog.Owns(toolId)) return null;
-            return new ToolBinding("vba.public." +
-                toolId.Substring("common.".Length).Replace('_', '.') + ".v1");
+            if (string.Equals(toolId, VbaToolCatalog.RestoreBackup,
+                StringComparison.Ordinal))
+                return new ToolBinding("vba.public.vba.restore.backup.intent.v2");
+            if (string.Equals(toolId, VbaToolCatalog.WriteModule,
+                StringComparison.Ordinal))
+                return new ToolBinding("vba.public.vba.write.module.intent.v2");
+            if (string.Equals(toolId, VbaToolCatalog.RenameModule,
+                StringComparison.Ordinal))
+                return new ToolBinding("vba.public.vba.rename.module.intent.v1");
+            if (string.Equals(toolId, VbaToolCatalog.ApplyPatch,
+                StringComparison.Ordinal))
+                return new ToolBinding("vba.public.vba.apply.patch.intent.v2");
+            if (string.Equals(toolId, VbaToolCatalog.DeleteModule,
+                StringComparison.Ordinal))
+                return new ToolBinding("vba.public.vba.delete.module.intent.v2");
+            if (string.Equals(toolId, VbaToolCatalog.RunMacro,
+                StringComparison.Ordinal))
+                return new ToolBinding("vba.public.office.run.macro.intent.v2");
+            return null;
         }
 
         public Task<ToolPreparationResult> PrepareAsync(

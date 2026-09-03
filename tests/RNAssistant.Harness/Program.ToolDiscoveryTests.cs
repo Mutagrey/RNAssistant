@@ -794,7 +794,7 @@ namespace RNAssistant.Harness
                 foreach (var id in new[]
                 {
                     "common.vba_restore_backup", "common.vba_write_module", "common.vba_apply_patch",
-                    "common.vba_delete_module", "common.office_run_macro"
+                    "common.vba_rename_module", "common.vba_delete_module", "common.office_run_macro"
                 })
                     AssertTrue(toolPack.Tools.Any(tool => tool.Id == id), "VBA core includes exact public tool " + id);
                 AssertTrue(!toolPack.Tools.Any(tool => tool.Id == "fixture.dynamic_1"),

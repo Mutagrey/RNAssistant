@@ -502,6 +502,7 @@ namespace RNAssistant.Harness
 
                 Test("vba: reader validates typed snapshots", VbaReaderValidatesTypedSnapshots),
                 Test("vba: public tools use native runtime", VbaPublicToolsUseNativeRuntime),
+                Test("vba: semantic intent contracts isolate runtime state", VbaSemanticIntentContractsAreStrict),
                 Test("vba: mutation service owns apply patch", VbaMutationServiceOwnsApplyPatch),
                 Test("vba: whole write service owns workflow", VbaWholeModuleWriteServiceOwnsWorkflow),
                 Test("vba: delete service owns workflow", VbaDeleteModuleServiceOwnsWorkflow),
@@ -519,7 +520,7 @@ namespace RNAssistant.Harness
                 Test("vba: queued guard reads wait for mutation", VbaQueuedGuardReadsWaitForMutation),
                 Test("vba: create rejects confirmation race", VbaCreateRejectsConfirmationRace),
                 Test("vba: write upserts and normalizes name", VbaWriteUpsertsAndNormalizesName),
-                Test("vba: write rename is strict and atomic", VbaWriteRenameIsStrictAndAtomic),
+                Test("vba: rename intent is strict and atomic", VbaRenameIntentIsStrictAndAtomic),
                 Test("vba: rename rejects confirmation races", VbaRenameRejectsConfirmationRace),
                 Test("vba: rename service owns workflow", VbaRenameServiceOwnsWorkflow),
                 Test("vba: rename fault matrix classifies effects", VbaRenameFaultMatrixClassifiesEffects),

@@ -1381,6 +1381,7 @@ namespace RNAssistant.Harness
                     .ToList();
                 AssertTrue(callableNames.Contains("common.vba_apply_patch", StringComparer.OrdinalIgnoreCase) &&
                     callableNames.Contains("common.vba_write_module", StringComparer.OrdinalIgnoreCase) &&
+                    callableNames.Contains("common.vba_rename_module", StringComparer.OrdinalIgnoreCase) &&
                     callableNames.Contains("common.vba_delete_module", StringComparer.OrdinalIgnoreCase),
                     "public VBA mutation schemas are complete in the VBA core");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_create_module\"", StringComparison.Ordinal) < 0,
@@ -1859,7 +1860,7 @@ namespace RNAssistant.Harness
                     "{\"message\":\"Обновляю VBA.\",\"tool_calls\":[{" +
                         "\"name\":\"common.vba_apply_patch\",\"arguments\":{" +
                         "\"moduleName\":\"Module1\",\"patch\":[{" +
-                        "\"op\":\"replace\",\"find\":\"\\\"old\\\"\"," +
+                        "\"find\":\"\\\"old\\\"\"," +
                         "\"text\":\"\\\"new\\\"\"}]}}]}",
                     "{\"message\":\"Изменение отклонено как устаревшее.\",\"tool_calls\":[]}"
                 });

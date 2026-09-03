@@ -56,6 +56,7 @@ version check still apply.
 | Exact HTML binding checkpoint/recovery/export and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ContextBridgeTests.cs`; UI contract in `tests/web/html-workspace-export.test.js` | `html export:`, `tools: html workspace updates session`, `bridge: typed html export` |
 | R61 HTML semantic schemas, accepted-read binding, automatic preflight and model-result/history isolation | `Program.HtmlWorkspaceToolTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs`; UI policy check in `tests/web/html-workspace-export.test.js` | `html tools:`, `tools: html workspace updates session`, `tools: html source`, `tools: R61 built-in contract inventory` |
 | R61 Prompt/Tool/Skill semantic authoring, installed-package review and replay isolation | `Program.ChatSettingsTests.cs`, `Program.ToolStoreTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs` | `tools: authoring intents are semantic`, `tools: validate payload without saving`, `chat: prompt save preserves global model`, `tools: agent CRUD preserves omitted fields`, `skills: CRUD preserves omitted fields`, `tools: R61 built-in contract inventory` |
+| R61 VBA/macro semantic intents, runtime-owned patch/backup state and replay/result isolation | `Program.VbaPromptTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.ToolStoreTests.cs`, `Program.ToolContractAuditTests.cs` | `vba: semantic intent contracts isolate runtime state`, `vba:`, `agent: exposes safe VBA editing tools`, `resources: live Office and VBA are bounded and guarded`, `tools: VBA facade is common across hosts`, `tools: R61 built-in contract inventory` |
 | Plan exact Markdown lineage, restore/removal and pinned-URI handoff | `Program.PlanModeTests.cs`; UI restore/preflight/handoff contract in `tests/web/plan-document.test.js` | `plan document:`, `plan mode:` |
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
 | Immutable run/UI projection and ordering | `Program.RunViewStateTests.cs`, replay/recovery in `Program.SessionEventStoreTests.cs`, boundary check in `Program.ProjectStructureTests.cs`; static UI in `tests/web/run-view-state.test.js` | `run view:`, `kernel replay:`, `kernel recovery:`, `architecture:` |
@@ -279,7 +280,7 @@ confirmation and effect evidence across continuation and faults. See
 `vba: rename` covers the direct typed owner, both-name/source-type confirmation
 guard, prepare/backend/read-back/terminal faults, cancellation boundaries,
 post-prepare collision and read-only recovery of complete-before,
-complete-intended and mixed states. `vba: write rename is strict and atomic` keeps
+complete-intended and mixed states. `vba: rename intent is strict and atomic` keeps
 the public schema/result/journal projection regression, while `vba: COM rename`
 checks component identity plus source hash/type CAS in the shared host helper. The
 full `vba:` slice retains module/package/VBE and serialized reconciliation coverage.
@@ -372,7 +373,8 @@ the semantic Resource/Capability boundary; R61/11O2 uses schema 18 for semantic
 questions, Plan documents and Task Lists; R61/11O3 uses schema 19 for semantic HTML
 authoring and accepted-read binding; the user-requested R61/11O1 correction uses
 schema 20 for whole resource reads and the direct bound VBA-project target;
-R61/11O4 uses schema 21 for semantic Prompt/Tool/Skill authoring. Tests
+R61/11O4 uses schema 21 for semantic Prompt/Tool/Skill authoring; R61/11O5 uses
+schema 22 for semantic VBA/macro intents. Tests
 preserve, review, or reset saved older/future markers explicitly. JS review behavior
 is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
@@ -412,7 +414,15 @@ package source/docs, and splits Skill core/reference mutations. Runtime derives
 manifest metadata, applies conservative authority and rejects plumbing-shaped
 custom arguments without `Domain identity rationale:` both on validation and load.
 Use the focused authoring filters in the matrix above plus the R61 inventory.
-Current prompt schema 21 requires a new chat/reset for retained pre-switch calls.
+Prompt schema 21 was the 11O4 boundary; its retained calls remain valid only when
+they also satisfy every later switched-family contract.
+
+R61/11O5 separates identity-preserving VBA rename from whole-source write, removes
+the fixed patch operation and raw backup identity from model arguments, resolves
+restore by readable target or latest-for-module inside runtime, and hides mutation/
+backup ids, hashes and guards from model results. Use `vba:`, the focused semantic
+contract case, the VBA Agent/resource/facade cases and the R61 inventory. Current
+prompt schema 22 requires a new chat/reset for retained pre-switch calls.
 
 ## Full suite
 

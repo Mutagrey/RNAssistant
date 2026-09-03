@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
@@ -69,6 +70,11 @@ namespace RNAssistant.Office.Services
             {
                 RemoveAuthoringRuntimeState(data);
             }
+            else if (IsVbaResult(wire.Name))
+            {
+                message = SanitizeVbaMessage(message, data);
+                RemoveVbaRuntimeState(data);
+            }
             else
             {
                 RemoveCapabilityRuntimeState(data);
@@ -115,7 +121,7 @@ namespace RNAssistant.Office.Services
         {
             if (IsResourceResult(name) || IsCapabilityResult(name) ||
                 IsPlanningResult(name) || IsHtmlResult(name) ||
-                IsAuthoringResult(name)) return name;
+                IsAuthoringResult(name) || IsVbaResult(name)) return name;
             return null;
         }
 
@@ -157,6 +163,19 @@ namespace RNAssistant.Office.Services
                     return false;
                 case "common.tools_validate":
                     error = "Tool validation is internal to upsert and Library in 11O4.";
+                    return false;
+                case "common.vba_inspect":
+                case "common.vba_list_modules":
+                case "common.vba_read_module":
+                case "common.vba_read_lines":
+                case "common.vba_search_code":
+                case "common.vba_create_module":
+                case "common.vba_replace_text":
+                case "common.vba_list_backups":
+                case "excel.run_macro":
+                case "word.run_macro":
+                case "powerpoint.run_macro":
+                    error = "Legacy VBA discovery, mutation, and host macro ids are not part of the semantic public catalog.";
                     return false;
                 case ResourceToolCatalog.FindToolId:
                     schema = ResourceFindToolHandler.Descriptor.ParametersJson;
@@ -217,6 +236,14 @@ namespace RNAssistant.Office.Services
                 case SkillAuthoringCatalog.ReferenceDeleteToolId:
                     schema = SkillAuthoringCatalog.SchemaFor(call.Name);
                     break;
+                case VbaToolCatalog.RestoreBackup:
+                case VbaToolCatalog.WriteModule:
+                case VbaToolCatalog.RenameModule:
+                case VbaToolCatalog.ApplyPatch:
+                case VbaToolCatalog.DeleteModule:
+                case VbaToolCatalog.RunMacro:
+                    schema = VbaToolCatalog.SchemaFor(call.Name);
+                    break;
                 default:
                     return true;
             }
@@ -275,6 +302,11 @@ namespace RNAssistant.Office.Services
             return PromptToolCatalog.Owns(name) ||
                 ToolAuthoringCatalog.Owns(name) ||
                 SkillAuthoringCatalog.Owns(name);
+        }
+
+        private static bool IsVbaResult(string name)
+        {
+            return VbaToolCatalog.Owns(name);
         }
 
         private static JToken ParseData(string value)
@@ -412,6 +444,122 @@ namespace RNAssistant.Office.Services
             var array = token as JArray;
             if (array == null) return;
             foreach (var item in array) RemoveAuthoringRuntimeState(item);
+        }
+
+        private static void RemoveVbaRuntimeState(JToken token)
+        {
+            var value = token as JObject;
+            if (value != null)
+            {
+                foreach (var property in value.Properties().ToList())
+                {
+                    if (IsVbaRuntimeField(property.Name)) property.Remove();
+                    else RemoveVbaRuntimeState(property.Value);
+                }
+                return;
+            }
+            var array = token as JArray;
+            if (array == null) return;
+            foreach (var item in array) RemoveVbaRuntimeState(item);
+        }
+
+        private static string SanitizeVbaMessage(string message, JToken data)
+        {
+            var result = message ?? string.Empty;
+            foreach (var value in VbaRuntimeValues(data)
+                .Where(item => item.Length >= 4)
+                .Distinct(StringComparer.Ordinal)
+                .OrderByDescending(item => item.Length))
+            {
+                result = result.Replace(value, "[runtime value]");
+            }
+            result = Regex.Replace(result,
+                "rna://[^\\s\\\"'<>]+", "[runtime resource]",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            result = Regex.Replace(result,
+                @"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])", "[runtime hash]",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            result = Regex.Replace(result,
+                @"(?<![0-9a-f])(?:[0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(?![0-9a-f])",
+                "[runtime id]",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return result;
+        }
+
+        private static IEnumerable<string> VbaRuntimeValues(JToken token)
+        {
+            var value = token as JObject;
+            if (value != null)
+            {
+                foreach (var property in value.Properties())
+                {
+                    if (IsVbaRuntimeField(property.Name))
+                    {
+                        foreach (var item in VbaStringValues(property.Value))
+                            yield return item;
+                    }
+                    else
+                    {
+                        foreach (var item in VbaRuntimeValues(property.Value))
+                            yield return item;
+                    }
+                }
+                yield break;
+            }
+            var array = token as JArray;
+            if (array == null) yield break;
+            foreach (var child in array)
+            {
+                foreach (var item in VbaRuntimeValues(child)) yield return item;
+            }
+        }
+
+        private static IEnumerable<string> VbaStringValues(JToken token)
+        {
+            var value = token as JValue;
+            if (value != null)
+            {
+                if (value.Type == JTokenType.String &&
+                    !string.IsNullOrEmpty((string)value))
+                    yield return (string)value;
+                yield break;
+            }
+            if (token == null) yield break;
+            foreach (var child in token.Children())
+            {
+                foreach (var item in VbaStringValues(child)) yield return item;
+            }
+        }
+
+        private static bool IsVbaRuntimeField(string name)
+        {
+            var source = name ?? string.Empty;
+            var internalId = string.Equals(source, "id",
+                    StringComparison.OrdinalIgnoreCase) ||
+                source.EndsWith("Id", StringComparison.Ordinal) ||
+                source.EndsWith("ID", StringComparison.Ordinal) ||
+                source.EndsWith("Ids", StringComparison.Ordinal) ||
+                source.EndsWith("IDs", StringComparison.Ordinal) ||
+                source.EndsWith("_id", StringComparison.OrdinalIgnoreCase) ||
+                source.EndsWith("_ids", StringComparison.OrdinalIgnoreCase);
+            var normalized = source
+                .Replace("_", string.Empty)
+                .ToLowerInvariant();
+            return internalId ||
+                normalized.Contains("hash") ||
+                normalized.Contains("sha256") ||
+                normalized.Contains("revision") ||
+                normalized.Contains("cursor") ||
+                normalized.Contains("offset") ||
+                normalized.Contains("guard") ||
+                normalized.Contains("fingerprint") ||
+                normalized.EndsWith("uri", StringComparison.Ordinal) ||
+                normalized == "etag" ||
+                normalized == "op" ||
+                normalized == "journaled" ||
+                normalized == "packagejournaled" ||
+                normalized == "journalstatus" ||
+                normalized == "terminalrecorded";
         }
 
         private static void RemoveProperties(JObject value, params string[] names)

@@ -123,8 +123,8 @@ namespace RNAssistant.Office.Vba
             if (request.DryRun)
             {
                 return VbaMutationOutcome.Ok(
-                    "Dry run: would restore VBA backup " + backup.BackupId +
-                    " to " + backup.ModuleName + ".",
+                    "Dry run: would restore the selected VBA backup to " +
+                    backup.ModuleName + ".",
                     operationData);
             }
 
@@ -171,7 +171,7 @@ namespace RNAssistant.Office.Vba
                     return _verifier.VerifyModuleWrite(
                         backup.ModuleName,
                         backup.Code,
-                        "VBA backup restored: " + backup.BackupId,
+                        "VBA backup restored to " + backup.ModuleName + ".",
                         new JObject
                         {
                             ["backupId"] = backup.BackupId,
