@@ -99,15 +99,19 @@ There are three persisted modes and one structured execution service.
 
 `ConversationPromptComposer` selects the editable mode instruction, then appends one dynamic `RUNTIME_CONTEXT` containing mode, readable document state, current callable schemas, complete compact `capabilities.items`, user context and bounded semantic resource targets. Document keys, `ResourceRef` values and catalog/package/descriptor revisions are omitted. Callable capability membership is public id/kind plus `schemaLoaded`; unloaded tools and skills retain bounded selection metadata. Chat receives an empty capability catalog. Agent/Plan bootstrap is the four semantic resource/capability tools. `common.capabilities_search/read` have exact native handlers; runtime validates hidden descriptor/package revisions and projects stale evidence as error. Complete tool reads may stage one atomic optional extension, whose exact before/after state stays only in durable events while `TOOL_PACK_STATE` exposes public ids and admission outcome. One shared admission calculation covers messages, request options, repair overhead and continuation reserve. No execution touch or LRU eviction changes membership. Strict response JSON Schema comes from the same callable set. Confirmation, compaction and restart reconstruct authority from the exact durable chain; raw read results never grant it.
 
-R61/11O is the mandatory post-migration audit of that model-facing surface. 11O1–11O5
+R61/11O is the mandatory post-migration audit of that model-facing surface. 11O1–11O7
 have atomically switched Resources + Capabilities, planning, HTML,
-Prompt/Tool/Skill authoring and VBA/macro host-neutral; each remaining slice
-must similarly reduce its public schema to semantic intent while the same
+Prompt/Tool/Skill authoring and VBA/macro, minimized the mode/host core, and
+completed the Tool Library UX host-neutral. Every public schema now carries
+semantic intent while the same
 ToolRuntime receives runtime-owned exact target, reference, guard and continuation
 state. Durable `ResourceRef` provenance is retained, but the model and Library test
 form do not fabricate URI/UUID/revision/cursor values. Human built-in documentation
-is a UI-only selected-tool detail and is excluded from descriptors, capability
-context/results and token accounting. See [Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61).
+is fetched by exact id/revision as a UI-only selected-tool detail and is excluded
+from compact list payloads, descriptors, capability context/results, ToolPack
+revision and token accounting. Library reference continuation uses one bounded
+in-memory session clone and never persists opaque state into the active chat. See
+[Tool Library R61](tool-library.md#mandatory-all-tool-contract-audit-r61).
 
 Editable general/tool/skill Agent, Plan, Chat, title, compaction, and attachment-analysis prompts are stored as Markdown. Their instruction role (`developer`/`system`/`user`) is independent from the shared response format (`json_object`/strict `json_schema`) and tool-result role (`user`/`developer`/matched `tool`). Protocol repair and compatibility-probe instructions remain fixed.
 

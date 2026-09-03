@@ -208,6 +208,8 @@ namespace RNAssistant.Harness
                 Test("model protocol: oversized prompt stops before dispatch", ModelProtocolStopsBeforeOversizedRequest),
                 Test("tools: strict schema validates metadata and constraints", StrictToolSchemaValidatesMetadataAndConstraints),
                 Test("tools: controller catalog uses strict schemas", ControllerToolCatalogUsesStrictSchemas),
+                Test("tools: built-in documentation is UI-only", ToolLibraryDocumentationIsUiOnly),
+                Test("tools: Library continuation keeps runtime state internal", ToolLibraryContinuationKeepsRuntimeStateInternal),
                 Test("tools: discovery is complete and exact", ToolDiscoveryIsCompleteAndLoadsExactSchema),
                 Test("tool pack: snapshot pins complete contracts", ToolPackSnapshotPinsCompleteContracts),
                 Test("tool pack: runtime uses one captured authority", ToolPackRuntimeUsesCapturedAuthority),

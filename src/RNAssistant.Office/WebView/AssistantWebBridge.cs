@@ -266,6 +266,10 @@ namespace RNAssistant.Office.WebView
                     case "getTools":
                         responsePayload = _controller.GetTools();
                         break;
+                    case "getToolDocumentation":
+                        responsePayload = _controller.GetToolDocumentation(
+                            Payload<ToolLibraryDocumentationRequest>(payload));
+                        break;
                     case "saveTools":
                         var saveTools = Payload<SaveToolsPayload>(payload);
                         responsePayload = _controller.SaveTools(saveTools);

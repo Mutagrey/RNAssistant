@@ -40,6 +40,8 @@ namespace RNAssistant.Office
         public string LastContextReference { get; private set; }
         public string LastContextText { get; private set; }
         public string LastToolsJson { get; private set; }
+        public string LastToolDocumentationId { get; private set; }
+        public string LastToolDocumentationRevision { get; private set; }
         public string LastSkillsJson { get; private set; }
         public string LastSkillReferenceId { get; private set; }
         public string LastSkillReferencePath { get; private set; }
@@ -287,6 +289,29 @@ namespace RNAssistant.Office
 
         public InitResponse ClearRuntimeData() { return Initialize(); }
         public ToolLibraryResponse GetTools() { return EmptyToolLibrary(); }
+        public ToolLibraryDocumentationResponse GetToolDocumentation(
+            ToolLibraryDocumentationRequest request)
+        {
+            if (request == null ||
+                request.Type != ToolLibraryDocumentationRequest.ContractType ||
+                request.ContractVersion !=
+                    ToolLibraryResponse.CurrentContractVersion ||
+                string.IsNullOrWhiteSpace(request.ToolId) ||
+                string.IsNullOrWhiteSpace(request.ExpectedRevision))
+                throw new InvalidOperationException(
+                    "Unsupported Tool Library documentation contract.");
+            LastToolDocumentationId = request.ToolId;
+            LastToolDocumentationRevision = request.ExpectedRevision;
+            return new ToolLibraryDocumentationResponse
+            {
+                Type = ToolLibraryDocumentationResponse.ContractType,
+                ContractVersion =
+                    ToolLibraryResponse.CurrentContractVersion,
+                ToolId = request.ToolId,
+                Revision = request.ExpectedRevision,
+                Markdown = "# " + request.ToolId
+            };
+        }
         public ToolLibraryMutationResponse SaveTools(SaveToolsPayload payload)
         {
             if (payload == null || payload.Type != SaveToolsPayload.ContractType ||

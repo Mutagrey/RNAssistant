@@ -38,7 +38,7 @@
   <link rel="stylesheet" href="css/app-trajectory.css?v=run-journal-20260829-1">
   <link rel="stylesheet" href="css/app-run-journal.css?v=runtime-diagnostics-20260901-1">
   <link rel="stylesheet" href="css/app-qualification.css?v=qualification-center-20260831-1">
-  <link rel="stylesheet" href="css/app-tools.css?v=json-viewer-20260829-1">
+  <link rel="stylesheet" href="css/app-tools.css?v=library-ux-20260903-1">
   <link rel="stylesheet" href="css/app-vba.css?v=vba-completion-20260903-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=json-viewer-20260829-1">
@@ -341,11 +341,15 @@
               <div class="tool-editor-page hidden" data-tool-page-view="test">
                 <div class="editor-section-head"><div><strong>Проверка инструмента</strong><span>Аргументы и локальный результат</span></div></div>
                 <div id="toolRunArgsVisual" class="structured-editor"></div>
-                <details class="advanced-json"><summary>Аргументы JSON</summary><textarea id="toolRunArgsInput" rows="7" spellcheck="false">{}</textarea></details>
-                <div class="tool-test-actions"><button class="secondary" id="dryRunToolButton" type="button">Проверить</button><button class="primary" id="runToolButton" type="button">Запустить</button></div>
+                <details class="advanced-json" id="toolRunAdvancedJson"><summary>Аргументы JSON</summary><div class="json-editor-toolbar"><span>Расширенный режим</span><button class="secondary" id="applyToolRunJsonButton" type="button">Применить JSON</button></div><textarea id="toolRunArgsInput" rows="7" spellcheck="false">{}</textarea></details>
+                <div class="editor-inline-error" id="toolRunArgsError" role="alert"></div>
+                <div class="tool-test-actions"><button class="secondary" id="dryRunToolButton" type="button">Проверить</button><button class="primary" id="runToolButton" type="button">Запустить</button><button class="secondary" id="nextToolPageButton" type="button" hidden>Далее</button></div>
                 <div class="tool-run-output is-text" id="toolRunOutput" aria-live="polite"></div>
               </div>
-              <div class="tool-editor-page hidden" data-tool-page-view="docs"><label>README / заметки<textarea id="toolReadmeInput" rows="16" spellcheck="false" placeholder="Заметки по использованию и реализации"></textarea></label></div>
+              <div class="tool-editor-page tool-docs-page hidden" data-tool-page-view="docs">
+                <div id="toolReadmeEditor"><label>README / заметки<textarea id="toolReadmeInput" rows="16" spellcheck="false" placeholder="Заметки по использованию и реализации"></textarea></label></div>
+                <div class="tool-built-in-docs hidden" id="toolBuiltInDocs"><div class="setting-note" id="toolDocumentationStatus" aria-live="polite"></div><article class="markdown tool-documentation-markdown" id="toolDocumentationMarkdown"></article></div>
+              </div>
             </div>
           </section>
         </div>
@@ -1043,9 +1047,10 @@
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-list.js?v=resource-navigation-20260826-1"></script>
-  <script src="js/app-tools-structured.js?v=library-dirty-20260825-1"></script>
-  <script src="js/app-tools-actions.js?v=tool-contract-20260901-1"></script>
-  <script src="js/app-tools.js?v=tool-contract-20260901-1"></script>
+  <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
+  <script src="js/app-tools-actions.js?v=library-ux-20260903-1"></script>
+  <script src="js/app-tools-documentation.js?v=library-ux-20260903-1"></script>
+  <script src="js/app-tools.js?v=library-ux-20260903-1"></script>
   <script src="js/app-skills.js?v=skill-contract-20260901-1"></script>
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
   <script src="js/app-vba-actions.js?v=userform-20260824-1"></script>

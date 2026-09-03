@@ -223,6 +223,8 @@
     <Compile Include="Services\ToolResultMaterialization.cs" />
     <Compile Include="Services\ToolRunResultFactory.cs" />
     <Compile Include="Services\ToolResultHistoryReader.cs" />
+    <Compile Include="Services\ToolLibraryDocumentationService.cs" />
+    <Compile Include="Services\ToolLibraryTestSessionService.cs" />
     <Compile Include="Services\ModelToolResultProjection.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\ConversationRunService.cs" />

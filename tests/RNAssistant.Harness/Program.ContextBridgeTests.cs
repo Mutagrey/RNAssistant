@@ -764,6 +764,10 @@ namespace RNAssistant.Harness
                 "{\"id\":\"b6\",\"type\":\"saveTools\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.toolLibraryMutationRequest\",\"contractVersion\":1,\"mutations\":[{\"kind\":\"upsert\",\"baseId\":\"\",\"expectedRevision\":\"\",\"id\":\"excel.custom\",\"host\":\"Excel\",\"name\":\"Custom\",\"description\":\"Custom.\",\"argumentSchemaJson\":\"{}\",\"executor\":\"vba\",\"enabled\":true,\"components\":[]}]}}")
                 .GetAwaiter()
                 .GetResult();
+            var documentationResponseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"b6-docs\",\"type\":\"getToolDocumentation\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.toolLibraryDocumentationRequest\",\"contractVersion\":1,\"toolId\":\"excel.inspect\",\"expectedRevision\":\"exact-revision\"}}")
+                .GetAwaiter()
+                .GetResult();
             var skillsResponseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"b7\",\"type\":\"saveSkills\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.skillLibraryMutationRequest\",\"contractVersion\":1,\"mutations\":[{\"kind\":\"upsert\",\"baseId\":\"\",\"expectedRevision\":\"\",\"id\":\"common.review\",\"host\":\"Common\",\"name\":\"Review\",\"description\":\"Review.\",\"version\":\"1.0.0\",\"bodyMarkdown\":\"# Review\",\"enabled\":true}]}}")
                 .GetAwaiter()
@@ -782,6 +786,7 @@ namespace RNAssistant.Harness
                 .GetResult();
 
             AssertTrue(JObject.Parse(toolsResponseJson)["ok"].Value<bool>(), "tools bridge response ok");
+            AssertTrue(JObject.Parse(documentationResponseJson)["ok"].Value<bool>(), "tool documentation bridge response ok");
             AssertTrue(JObject.Parse(skillsResponseJson)["ok"].Value<bool>(), "skills bridge response ok");
             AssertTrue(JObject.Parse(readReferenceJson)["ok"].Value<bool>(), "skill reference read bridge response ok");
             AssertTrue(JObject.Parse(saveReferenceJson)["ok"].Value<bool>(), "skill reference save bridge response ok");
@@ -794,6 +799,14 @@ namespace RNAssistant.Harness
             AssertEqual("rnassistant.toolLibraryMutationResult",
                 JObject.Parse(toolsResponseJson)["payload"]["type"].Value<string>(),
                 "tool bridge result contract");
+            AssertEqual("rnassistant.toolLibraryDocumentation",
+                JObject.Parse(documentationResponseJson)["payload"]["type"].Value<string>(),
+                "tool documentation result contract");
+            AssertEqual("excel.inspect", controller.LastToolDocumentationId,
+                "tool documentation exact id");
+            AssertEqual("exact-revision",
+                controller.LastToolDocumentationRevision,
+                "tool documentation revision guard");
             AssertEqual("rnassistant.skillReferenceResult",
                 JObject.Parse(saveReferenceJson)["payload"]["type"].Value<string>(),
                 "skill reference result contract");

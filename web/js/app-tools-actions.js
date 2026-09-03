@@ -7,6 +7,39 @@
     });
   }
 
+  function requireToolRunResult(result) {
+    if (!result || result.type !== "rnassistant.toolRunResult" ||
+        result.contractVersion !== 1 || typeof result.success !== "boolean" ||
+        ["ok", "error", "unknown", "awaiting_confirmation", "awaiting_user", "cancelled"].indexOf(result.status) < 0 ||
+        typeof result.message !== "string" ||
+        result.dataJson !== null && typeof result.dataJson !== "string" ||
+        typeof result.toolStepsConsumed !== "number" ||
+        result.code !== null && typeof result.code !== "string" ||
+        result.retryable !== null && typeof result.retryable !== "boolean" ||
+        result.pendingId !== null && typeof result.pendingId !== "string" ||
+        result.catalogRevision !== null && typeof result.catalogRevision !== "string") {
+      throw new Error("Tool Library получила несовместимый ToolRunResult v1.");
+    }
+    return result;
+  }
+
+  function continuationFrom(tool, args, result) {
+    if (!tool || tool.Id !== "common.capabilities_read" ||
+        !args || typeof args.id !== "string" || !args.id ||
+        typeof args.referencePath !== "string" || !args.referencePath ||
+        result.status !== "ok" || !result.dataJson) return null;
+    try {
+      var data = JSON.parse(result.dataJson);
+      return data && data.kind === "reference" && data.id === args.id &&
+        data.path === args.referencePath && data.hasMore === true &&
+        data.complete !== true
+        ? { toolId: tool.Id, id: args.id, referencePath: args.referencePath }
+        : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   function create(options) {
     options = options || {};
     var state = options.state;
@@ -67,7 +100,7 @@
       }
     }
 
-    async function runSelected(dryRun) {
+    async function runSelected(dryRun, semanticNext) {
       if (!options.validateSelected()) {
         options.log("Исправьте JSON инструмента перед запуском.", "warning");
         return;
@@ -76,18 +109,23 @@
       var tool = state.tools[state.selectedToolIndex];
       if (!tool) return;
 
-      var runButtonId = dryRun ? "dryRunToolButton" : "runToolButton";
+      var runButtonId = semanticNext ? "nextToolPageButton" : dryRun ? "dryRunToolButton" : "runToolButton";
       options.setBusy(runButtonId, true);
-      options.setTextOutput(dryRun ? "Проверка..." : "Выполняю...");
+      options.setTextOutput(semanticNext ? "Читаю следующую часть..." : dryRun ? "Проверка..." : "Выполняю...");
       try {
-        var response = await options.send("runTool", {
+        var args = semanticNext ? options.readNextArguments() : options.readRunArguments();
+        if (options.setContinuation) options.setContinuation(null);
+        var response = requireToolRunResult(await options.send("runTool", {
           toolId: tool.Id,
-          arguments: options.readRunArguments(),
+          arguments: args,
           dryRun: !!dryRun
-        });
+        }));
         options.setJsonOutput(response);
-        options.logToolResult(dryRun ? "Проверка инструмента" : "Запуск инструмента", tool.Id, response);
+        if (options.setContinuation) options.setContinuation(continuationFrom(tool, args, response));
+        options.logToolResult(semanticNext ? "Продолжение чтения" : dryRun ? "Проверка инструмента" : "Запуск инструмента", tool.Id, response);
+        return response;
       } catch (error) {
+        if (options.setContinuation) options.setContinuation(null);
         options.setTextOutput(error.detail || error.message);
         options.log(error.message, "error");
       } finally {
@@ -128,6 +166,7 @@
 
     return {
       installVba: function () { return changeVbaInstallation("installVbaTool"); },
+      next: function () { return runSelected(false, true); },
       run: function () { return runSelected(false); },
       save: saveTools,
       uninstallVba: function () { return changeVbaInstallation("uninstallVbaTool"); },

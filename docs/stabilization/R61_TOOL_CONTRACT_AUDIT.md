@@ -426,13 +426,13 @@ R61 не закрывается только schema snapshot-тестами. М�
 7. **Done host-neutral 11O6:** минимальный mode/host core пересчитан по
    deterministic eval evidence; optional exact schemas остаются доступны через
    capability admission, policy/binding/effect не меняются.
-8. Добавить UI-only built-in documentation, typed Library Test и исправить
-   Implementation/Test layout.
+8. **Done host-neutral 11O7:** UI-only built-in documentation загружается по exact
+   id/revision, typed Library Test строится из effective schema, semantic `Next`
+   хранит continuation только в bounded isolated runtime session, а
+   Implementation/Test layout остаётся внутри right pane.
 9. Собрать final live-provider, Windows WebView2/Office и WQ-PACK evidence только на
    post-cutover catalog.
 
-Ближайший шаг — 11O7 UI-only built-in documentation, typed Library Test и
-Implementation/Test layout. Накопленные Windows rebuild, live-provider и WebView2
-gates остаются обязательными для final WQ, но по §16.1 не блокируют следующий
-dependency-safe host-neutral подэтап. Phase 12 до полного R61 и qualification не
-начинается.
+Ближайший шаг — final post-cutover Windows rebuild, live-provider, WQ-PACK и
+WebView2/Office qualification, включая 11O7 narrow-pane/continuation UX и
+накопленные R62/R63 retests. Phase 12 до этой qualification не начинается.

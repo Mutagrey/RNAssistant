@@ -5,16 +5,59 @@ using System.Linq;
 using System.Threading;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        private readonly ToolLibraryTestSessionService
+            _toolLibraryTestSessions = new ToolLibraryTestSessionService();
+
         public ToolLibraryResponse GetTools()
         {
             return ToolLibraryResponse.From(
                 _toolCatalog.GetVisibleTools());
+        }
+
+        public ToolLibraryDocumentationResponse GetToolDocumentation(
+            ToolLibraryDocumentationRequest request)
+        {
+            if (request == null || !string.Equals(request.Type,
+                    ToolLibraryDocumentationRequest.ContractType,
+                    StringComparison.Ordinal) ||
+                request.ContractVersion !=
+                    ToolLibraryResponse.CurrentContractVersion ||
+                string.IsNullOrWhiteSpace(request.ToolId) ||
+                string.IsNullOrWhiteSpace(request.ExpectedRevision))
+            {
+                throw new InvalidOperationException(
+                    "Unsupported or incomplete Tool Library documentation contract.");
+            }
+            var matches = _toolExecutor.GetHostTools()
+                .Concat(_toolExecutor.GetControllerTools())
+                .Where(tool => tool != null && tool.BuiltIn &&
+                    string.Equals(tool.Id, request.ToolId,
+                        StringComparison.Ordinal)).ToArray();
+            if (matches.Length != 1 || !matches[0].BuiltIn)
+                throw new InvalidOperationException(
+                    "Built-in tool documentation was not found for the exact id.");
+            var tool = matches[0];
+            var revision = ToolAuthoringService.LibraryRevision(tool);
+            if (!string.Equals(revision, request.ExpectedRevision,
+                    StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Tool documentation revision is stale. Refresh Tool Library.");
+            return new ToolLibraryDocumentationResponse
+            {
+                Type = ToolLibraryDocumentationResponse.ContractType,
+                ContractVersion =
+                    ToolLibraryResponse.CurrentContractVersion,
+                ToolId = tool.Id,
+                Revision = revision,
+                Markdown = ToolLibraryDocumentationService.Build(tool)
+            };
         }
 
         public ToolLibraryMutationResponse SaveTools(
@@ -373,6 +416,17 @@ namespace RNAssistant.Office
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
             if (dryRun)
             {
+                if (string.Equals(toolId,
+                        CapabilityToolCatalog.ReadToolId,
+                        StringComparison.Ordinal))
+                {
+                    return _toolLibraryTestSessions.Execute(
+                        session,
+                        command,
+                        manualSnapshot => _toolExecutor.ExecuteManual(
+                            command, tools, settings, true, true,
+                            manualSnapshot, cancellationToken));
+                }
                 return _toolExecutor.ExecuteManual(
                     command,
                     tools,
@@ -387,9 +441,12 @@ namespace RNAssistant.Office
             {
                 // Read-only library checks do not modify chat state and may safely use an
                 // isolated snapshot while the active chat is waiting on the model/tools.
-                var manualSnapshot = OfficeToolExecutor.CreateIsolatedManualSession(session);
-                return _toolExecutor.ExecuteManual(command, tools, settings,
-                    false, true, manualSnapshot, cancellationToken);
+                return _toolLibraryTestSessions.Execute(
+                    session,
+                    command,
+                    manualSnapshot => _toolExecutor.ExecuteManual(
+                        command, tools, settings, false, true,
+                        manualSnapshot, cancellationToken));
             }
 
             if (_chatRuns.IsExternallyRunning(session.Id))

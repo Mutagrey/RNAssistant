@@ -7,6 +7,29 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class ToolLibraryDocumentationRequest
+    {
+        public const string ContractType =
+            "rnassistant.toolLibraryDocumentationRequest";
+
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("contractVersion")] public int ContractVersion { get; set; }
+        [JsonProperty("toolId")] public string ToolId { get; set; }
+        [JsonProperty("expectedRevision")] public string ExpectedRevision { get; set; }
+    }
+
+    public sealed class ToolLibraryDocumentationResponse
+    {
+        public const string ContractType =
+            "rnassistant.toolLibraryDocumentation";
+
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("contractVersion")] public int ContractVersion { get; set; }
+        [JsonProperty("toolId")] public string ToolId { get; set; }
+        [JsonProperty("revision")] public string Revision { get; set; }
+        [JsonProperty("markdown")] public string Markdown { get; set; }
+    }
+
     public sealed class SaveToolsPayload
     {
         public const string ContractType =
@@ -159,7 +182,7 @@ namespace RNAssistant.Office.Contracts
                 CanSourceHtmlData = tool.CanSourceHtmlData,
                 AgentCanRun = tool.AgentCanRun,
                 Code = tool.Code ?? string.Empty,
-                Readme = tool.Readme ?? string.Empty,
+                Readme = tool.BuiltIn ? string.Empty : tool.Readme ?? string.Empty,
                 Enabled = tool.Enabled,
                 BuiltIn = tool.BuiltIn,
                 RiskLevel = tool.RiskLevel,

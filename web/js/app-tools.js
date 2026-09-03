@@ -118,6 +118,11 @@ var toolStructuredEditor = window.RNAssistantToolStructuredEditor.create({
   state: state,
   markDirty: markToolLibraryDirty
 });
+var toolDocumentation = window.RNAssistantToolDocumentation.create({
+  state: state,
+  send: send,
+  log: log
+});
 var toolActions = window.RNAssistantToolActions.create({
   state: state,
   send: send,
@@ -132,10 +137,12 @@ var toolActions = window.RNAssistantToolActions.create({
   parseLibrary: toolLibraryItemsFromContract,
   reconcile: reconcileToolLibraryCatalog,
   readTools: readTools,
+  readNextArguments: toolStructuredEditor.readNextArguments,
   readRunArguments: toolStructuredEditor.readRunArguments,
   renderTools: renderTools,
   renderEditor: renderToolEditor,
   acceptSaved: acceptToolLibraryState,
+  setContinuation: setToolRunContinuation,
   log: log,
   logToolResult: logToolResult
 });
@@ -172,6 +179,16 @@ function renderToolRunJson(value) {
 
 function renderTools() {
   renderInstructions();
+}
+
+function setToolRunContinuation(continuation) {
+  var tool = state.tools[state.selectedToolIndex] || null;
+  var valid = !!(continuation && tool && continuation.toolId === tool.Id);
+  state.toolRunContinuation = valid ? continuation : null;
+  var button = $("nextToolPageButton");
+  if (!button) return;
+  button.hidden = !valid;
+  button.disabled = !valid;
 }
 
 function emptyToolSchema() {
@@ -459,7 +476,12 @@ function applyToolEditorPage() {
   var page = state.toolEditorPage || "main";
   Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.classList.toggle("active", button.getAttribute("data-tool-page") === page); });
   Array.prototype.slice.call(document.querySelectorAll("[data-tool-page-view]")).forEach(function (view) { view.classList.toggle("hidden", view.getAttribute("data-tool-page-view") !== page); });
-  if (typeof refreshCodeEditors === "function") refreshCodeEditors();
+  var refresh = function () {
+    if (typeof refreshCodeEditors === "function") refreshCodeEditors();
+  };
+  if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(refresh);
+  else refresh();
+  toolDocumentation.ensure();
 }
 
 function renderToolEditor() {
@@ -468,6 +490,7 @@ function renderToolEditor() {
   var builtIn = !!(skill && skill.BuiltIn);
   var documentLocal = !!(skill && String(skill.Scope || skill.scope || "").toLowerCase() === "document");
   var readOnly = builtIn || documentLocal;
+  setToolRunContinuation(null);
   state.toolBuilderReadOnly = disabled || readOnly;
   var isVba = !!(skill && String(skill.Executor || "").toLowerCase() === "vba");
   var panel = $("toolEditorPanel");
@@ -505,6 +528,7 @@ function renderToolEditor() {
   $("toolComponentTypeInput").value = component && (component.Type === "ClassModule" || component.Type === "MSForm") ? component.Type : "StdModule";
   $("toolCodeInput").value = component ? (component.Code || "") : (skill ? (skill.Code || "") : "");
   $("toolReadmeInput").value = skill ? (skill.Readme || "") : "";
+  toolDocumentation.prepare(skill);
   $("toolPackageMeta").textContent = skill ? [
     "scope=" + (skill.Scope || "global"),
     "version=" + (skill.PackageVersion || "—"),
@@ -545,6 +569,7 @@ function renderToolEditor() {
     $(id).disabled = disabled || readOnly;
   });
   $("toolRunArgsInput").disabled = disabled;
+  $("applyToolRunJsonButton").disabled = disabled;
   if (typeof setCodeEditorReadOnly === "function") {
     setCodeEditorReadOnly("toolSchemaInput", disabled || readOnly);
     setCodeEditorReadOnly("toolRunArgsInput", disabled);
@@ -836,6 +861,7 @@ function bindToolActions() {
 
   $("dryRunToolButton").addEventListener("click", toolActions.validate);
   $("runToolButton").addEventListener("click", toolActions.run);
+  $("nextToolPageButton").addEventListener("click", toolActions.next);
 
   $("copyToolContextButton").addEventListener("click", function () {
     copyText(selectedToolContext());

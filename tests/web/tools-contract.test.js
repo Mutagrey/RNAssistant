@@ -8,6 +8,8 @@ const vm = require("node:vm");
 const root = path.join(__dirname, "../..");
 const source = fs.readFileSync(path.join(root,
   "web/js/app-tools.js"), "utf8");
+const documentationSource = fs.readFileSync(path.join(root,
+  "web/js/app-tools-documentation.js"), "utf8");
 const chatStateSource = fs.readFileSync(path.join(root,
   "web/js/app-chat-state.js"), "utf8");
 const chatSessionSource = fs.readFileSync(path.join(root,
@@ -31,6 +33,9 @@ context.RNAssistantToolStructuredEditor = {
   })
 };
 context.RNAssistantToolActions = { create: () => ({}) };
+vm.runInContext(fs.readFileSync(path.join(root,
+  "web/js/app-tools-documentation.js"), "utf8"), context,
+{ filename: "app-tools-documentation.js" });
 vm.runInContext(source, context, { filename: "app-tools.js" });
 
 function component() {
@@ -128,8 +133,31 @@ function library(tools) {
 }
 
 {
+  const tool = { Id: "excel.inspect", Revision: "d".repeat(64) };
+  const markdown = context.RNAssistantToolDocumentation.fromContract({
+    type: "rnassistant.toolLibraryDocumentation",
+    contractVersion: 1,
+    toolId: tool.Id,
+    revision: tool.Revision,
+    markdown: "# excel.inspect"
+  }, tool);
+  assert.equal(markdown, "# excel.inspect");
+  assert.throws(() => context.RNAssistantToolDocumentation.fromContract({
+    type: "rnassistant.toolLibraryDocumentation",
+    contractVersion: 1,
+    toolId: tool.Id,
+    revision: "stale",
+    markdown: "# stale"
+  }, tool), /typed contract/);
+  assert.match(documentationSource, /getToolDocumentation/);
+  assert.match(documentationSource, /expectedRevision:\s*tool\.Revision/);
+  assert.ok(index.includes("id=\"toolDocumentationMarkdown\""));
+  console.log("PASS tool contract: built-in documentation uses exact UI-only id/revision boundary");
+}
+
+{
   assert.ok(index.includes(
-    "app-tools.js?v=tool-contract-20260901-1"));
+    "app-tools.js?v=library-ux-20260903-1"));
   assert.equal(/StoragePath|storagePath/.test(source), false);
   assert.match(source, /expectedRevision/);
   assert.match(source, /toolLibraryMutationRequestType/);
@@ -141,4 +169,4 @@ function library(tools) {
   console.log("PASS tool contract: shipped UI has no path identity or unversioned response fallback");
 }
 
-console.log("OK 4/4");
+console.log("OK 5/5");

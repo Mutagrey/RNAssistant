@@ -64,7 +64,8 @@ immutable history.
 
 ## Mandatory all-tool contract audit (R61)
 
-The full catalog is not yet accepted as the final user/model contract. R61/11O1
+The post-cutover catalog is complete host-neutral but is not yet Windows-qualified
+as the final candidate. R61/11O1
 corrected Resources + Capabilities host-neutral, 11O2 corrected planning, and 11O3
 corrected HTML authoring/data binding. HTML inspection and active selection are now
 internal; file/data writes are separate, patch/delete are semantic, and bind reuses
@@ -76,8 +77,10 @@ corrected Prompt/Tool/Skill authoring: one-key prompt save, three exact tool-pac
 operations, separate skill-core/reference mutations, internal validation and
 runtime-owned conservative authority. 11O5 corrected VBA/macro: write and rename
 are separate, patch operation and raw backup identity are internal, and restore
-selects a readable target or latest-for-module. Core-pack and the typed Library
-test/UI slices remain open.
+selects a readable target or latest-for-module. 11O6 minimized the mode/host core,
+and 11O7 completed UI-only built-in documentation, schema-aware Library Test and
+responsive Implementation/Test containment. Final live-provider, WQ-PACK and real
+Windows WebView2/Office evidence remains open.
 
 The concrete failure attribution, state-ownership decisions, merge/split rules
 and required model evals are recorded in
@@ -161,20 +164,19 @@ argument schema. It covers purpose, target selection, semantic arguments, defaul
 types/enums/bounds, confirmation/effect semantics, result and common error examples,
 limitations and a safe Library test recipe.
 
-The existing `Readme` surface may be populated only after contract tests prove that
-built-in documentation is absent from `ConversationPromptComposer.BuildDescription`,
-model tool descriptors, `RUNTIME_CONTEXT`, capability search/read, Tool Result and
-request-token accounting. Changing built-in documentation must not change the
-executable ToolPack registration or model capability-catalog revision. Library list
-payloads remain compact; full Markdown is loaded only for the selected exact tool
-through a UI-only detail projection. If the existing field cannot satisfy those
-boundaries, a separate Library documentation DTO is introduced before content is
-added.
+Built-in `Readme` remains empty in the compact Library projection. Contract tests
+prove that generated documentation is absent from
+`ConversationPromptComposer.BuildDescription`, model tool descriptors,
+`RUNTIME_CONTEXT`, capability search/read, Tool Result and request-token accounting;
+it cannot change executable ToolPack registration or model capability-catalog
+revision. Full Markdown is generated and loaded only for the selected exact
+built-in id/revision through the separate
+`rnassistant.toolLibraryDocumentation*` v1 UI detail DTO. Custom package
+README/provenance remains package-owned.
 
 Model-facing descriptions stay short and operational. `UseWhen`, `DoNotUseWhen`
 and limitations are audited for selection value rather than copied from the human
-manual. Custom package README/provenance remains package-owned and is not
-automatically injected into model context.
+manual. Custom package README is not automatically injected into model context.
 
 ## Library test form and layout
 
@@ -227,8 +229,10 @@ WebView2, not inferred from a desktop browser screenshot.
    cursor or internal id outside the two explicit public-id/correlation exceptions.
    Harness fixtures create and retain exact state behind runtime; scenarios cannot
    inject it through scripted model arguments.
-6. Populate and verify UI-only documentation for every built-in tool, then switch
-   the typed test form and fix both reported layouts with focused browser tests.
+6. **Done host-neutral (11O7):** populate and verify UI-only documentation for every
+   built-in tool, switch the typed test form and fix both reported layouts with
+   focused browser tests. Exact Markdown is fetched only for the selected id/revision;
+   semantic `Next` retains its opaque state in a bounded isolated runtime session.
 7. Qualify the final exact catalog with live providers and Windows WebView2/Office.
    Earlier evidence for a changed schema/catalog cannot close WQ-PACK or release.
 

@@ -51,6 +51,11 @@
   #toolEditorPanel {
     overflow: hidden;
   }
+
+  #toolEditorPanel .library-editor-scroll {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
 }
 
 @media (max-width: 560px) {
@@ -84,9 +89,28 @@
   #toolEditorPanel {
     overflow: hidden;
   }
+
+  .library-editor-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .library-editor-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 480px) {
+  .component-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .component-toolbar label,
+  .component-toolbar button {
+    grid-column: 1;
+  }
+
   .tabs {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));

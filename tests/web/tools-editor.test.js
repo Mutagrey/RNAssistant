@@ -37,7 +37,7 @@ const context = vm.createContext({
   }
 });
 context.window = context;
-for (const file of ["app-tools-structured.js", "app-tools-actions.js", "app-tools.js"]) {
+for (const file of ["app-tools-structured.js", "app-tools-actions.js", "app-tools-documentation.js", "app-tools.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 context.bindToolActions();
